@@ -1,0 +1,2 @@
+# Version catalog is kept at gradle/libs.versions.toml.
+# This root file exists because the initial project request explicitly asked for libs.versions.toml.

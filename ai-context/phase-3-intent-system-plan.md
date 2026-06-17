@@ -48,21 +48,21 @@ The local matcher must be fast, deterministic, offline-first, and safe. LLM-base
 
 ## Current Step
 
-Current implementation step: `3.0.1`.
+Current implementation step: `3.1.1`.
 
 ## Atomic Implementation Checklist
 
 ### 3.0 Foundation alignment
 
-- [ ] `3.0.1` Add `OperationResult<T>` and shared error categories in `core/common` or `domain`.
+- [x] `3.0.1` Add `OperationResult<T>` and shared error categories in `core/common` or `domain`.
 - [ ] `3.0.2` Update repository and use-case contracts touched by Phase 3 to return `OperationResult<T>` instead of throwing to UI.
-- [ ] `3.0.3` Add non-sensitive logging hooks for `OperationResult` failures.
-- [ ] `3.0.4` Add fake `OperationResult` test helpers for domain and data tests.
+- [x] `3.0.3` Add non-sensitive logging hooks for `OperationResult` failures.
+- [x] `3.0.4` Add fake `OperationResult` test helpers for domain and data tests.
 
 ### 3.1 Navigation foundation
 
-- [ ] `3.1.1` Add route constants for launcher, assistant, settings, and permission education destinations.
-- [ ] `3.1.2` Add a single `NavHost` in the `app` module.
+- [x] `3.1.1` Add route constants for launcher, assistant, settings, and permission education destinations.
+- [x] `3.1.2` Add a single `NavHost` in the `app` module.
 - [ ] `3.1.3` Wire feature composable destinations without direct feature-to-feature dependencies.
 - [ ] `3.1.4` Add `NavigationEvent` flow from ViewModels to the app-level `NavHost`.
 - [ ] `3.1.5` Add safe fallback navigation to launcher home for unavailable destinations.

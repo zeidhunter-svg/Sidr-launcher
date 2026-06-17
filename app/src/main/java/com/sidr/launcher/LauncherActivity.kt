@@ -3,9 +3,11 @@ package com.sidr.launcher
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.ui.Modifier
+import com.sidr.launcher.navigation.AppNavHost
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -14,8 +16,8 @@ class LauncherActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
-                Surface {
-                    Text(text = "Sidr Launcher")
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    AppNavHost()
                 }
             }
         }

@@ -63,8 +63,8 @@ Current implementation step: `3.1.1`.
 
 - [x] `3.1.1` Add route constants for launcher, assistant, settings, and permission education destinations.
 - [x] `3.1.2` Add a single `NavHost` in the `app` module.
-- [ ] `3.1.3` Wire feature composable destinations without direct feature-to-feature dependencies.
-- [ ] `3.1.4` Add `NavigationEvent` flow from ViewModels to the app-level `NavHost`.
+- [x] `3.1.3` Wire feature composable destinations without direct feature-to-feature dependencies.
+- [x] `3.1.4` Add `NavigationEvent` flow from ViewModels to the app-level `NavHost`.
 - [ ] `3.1.5` Add safe fallback navigation to launcher home for unavailable destinations.
 
 ### 3.2 Persistence foundation

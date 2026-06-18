@@ -1,5 +1,6 @@
 package com.sidr.launcher.navigation
 
+import android.util.Log
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -15,6 +16,44 @@ import com.sidr.launcher.feature.assistant.AssistantScreen
 import com.sidr.launcher.feature.launcher.LauncherScreen
 import com.sidr.launcher.feature.launcher.LauncherViewModel
 
+private const val TAG = "AppNavHost"
+
+/**
+ * Handles a [NavigationEvent] safely:
+ * - [NavigationEvent.NavigateTo]: attempts to navigate to [event.route]; if the route is not
+ *   registered in the graph (throws [IllegalArgumentException]), falls back to
+ *   [Routes.Launcher.ROUTE] with popUpTo + launchSingleTop to avoid a growing back stack.
+ * - [NavigationEvent.NavigateBack]: calls [NavHostController.popBackStack]; if it returns false
+ *   (already at the root / no back stack entry), does nothing — avoids an infinite loop.
+ *
+ * Pass this helper to every [LaunchedEffect] that collects a NavigationEvent flow so the
+ * fallback logic is not duplicated per destination.
+ */
+private fun handleNavigationEvent(
+    navController: NavHostController,
+    event: NavigationEvent,
+) {
+    when (event) {
+        is NavigationEvent.NavigateTo -> {
+            try {
+                navController.navigate(event.route)
+            } catch (e: IllegalArgumentException) {
+                Log.w(TAG, "Unknown route '${event.route}', falling back to launcher home", e)
+                navController.navigate(Routes.Launcher.ROUTE) {
+                    popUpTo(Routes.Launcher.ROUTE) { inclusive = false }
+                    launchSingleTop = true
+                }
+            }
+        }
+        NavigationEvent.NavigateBack -> {
+            val popped = navController.popBackStack()
+            if (!popped) {
+                Log.d(TAG, "popBackStack() returned false — already at root, ignoring NavigateBack")
+            }
+        }
+    }
+}
+
 @Composable
 fun AppNavHost(
     modifier: Modifier = Modifier,
@@ -29,10 +68,7 @@ fun AppNavHost(
             val viewModel: LauncherViewModel = hiltViewModel()
             LaunchedEffect(viewModel.navigationEvents) {
                 viewModel.navigationEvents.collect { event ->
-                    when (event) {
-                        is NavigationEvent.NavigateTo -> navController.navigate(event.route)
-                        NavigationEvent.NavigateBack -> navController.popBackStack()
-                    }
+                    handleNavigationEvent(navController, event)
                 }
             }
             LauncherScreen(viewModel = viewModel)

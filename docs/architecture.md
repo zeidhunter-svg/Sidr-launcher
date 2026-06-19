@@ -56,26 +56,41 @@ Memory ceilings:
 ## Module layout
 
 ```text
-app/                         Android launcher app, single NavHost, composition root
-core/                        Shared utilities and platform abstractions
-core/ui/                     Design system, Compose components, theme
-core/common/                 Result types, dispatchers, logging contracts
-core/android/                Android-specific helpers, capability checks, DeviceProfile
-core/data/                   DataStore, Room, encrypted storage abstractions
-core/navigation/             Route contracts and navigation events
-domain/                      Pure domain models, repositories, use cases
-data/                        Repository implementations and data sources
-data/ai-cloud/               Ktor cloud AI client and streaming adapter
-data/ai-local/               ONNX NLU, embeddings, local AI interfaces
-feature/launcher/            Home screen and launcher interactions
-feature/assistant/           Text/voice AI command UI and SpeechInputSource abstraction
-feature/suggestions/         Context-aware suggestions UI
-feature/settings/            Settings and permission education UI
+app/                          Android launcher app, single NavHost, composition root, DI graph
+core/                         Cross-cutting utilities and platform abstractions (kept thin)
+core/ui/                      Design system, Compose components, theme
+core/common/                  Presentation/state contracts: UiState, dispatchers, logging contracts,
+                              navigation contracts (Routes, NavigationEvent)
+core/android/                 Android helpers, DeviceProfile detection, PackageManager access,
+                              SpeechInputSource Android implementation
+core/testing/                 Shared fakes and test fixtures (planned)
+domain/                       Pure Kotlin: models, repository interfaces, use cases, OperationResult,
+                              IntentMatcher / GenerativeAiEngine ports, DeviceCapability + routing policy
+data/                         Repository implementations and data sources
+data/repository/              Launcher repositories (InstalledApps, preferences, intent match history),
+                              rule-based matcher, Android ActionExecutor, Room + DataStore (planned)
+data/ai-cloud/                Ktor cloud AI client and streaming adapter
+data/ai-local/                ONNX NLU, embeddings, local inference (interface-gated, ONNX isolated)
+feature/launcher/             Home screen, app grid, command input, launcher interactions
+feature/assistant/            Text/voice AI command UI and SpeechInputSource abstraction
+feature/suggestions/          Context-aware suggestions UI
+feature/settings/             Settings UI (planned; inline placeholder until created)
+feature/permission_education/ Permission education UI (planned; inline placeholder until created)
+build-logic/                  Gradle convention plugins (planned)
 ```
 
 Exact module names may be adjusted during setup, but dependencies must preserve Clean Architecture boundaries.
 
-`SpeechInputSource` abstracts Android `SpeechRecognizer` behind a testable interface in `feature/assistant` or `core/android`. It must have a no-op or fake implementation for tests and devices without available speech services.
+**Target-structure decisions (resolved):**
+
+- `OperationResult` / `OperationError` are **domain** contracts (not `core/common`). The domain layer must not depend on `core/*`.
+- `core/data` is dropped. Persistence (Room, DataStore, encrypted storage) lives in the `data/` layer, not in `core`, to keep `core` thin and avoid a god-storage module.
+- `data/repository` is the single host for launcher repositories, the rule-based `IntentMatcher` implementation, and the Android `ActionExecutor`.
+- Route contracts (`Routes`, `NavigationEvent`) stay in `core/common` for now. Extract a dedicated `core/navigation` module when destinations grow beyond the current set, when a non-`feature`/non-`app` module needs them, or when build profiling shows `core/common` as a recompilation hotspot.
+- `core/testing` (shared fakes/fixtures) and `build-logic` (Gradle convention plugins) are planned additions, created on first need.
+- `feature/settings` and `feature/permission_education` are planned; until created, their destinations remain inline placeholders in `AppNavHost`.
+
+`SpeechInputSource` is a **domain** interface that abstracts Android `SpeechRecognizer`; its Android implementation lives in `core/android`. It must have a no-op or fake implementation (in `core/testing`) for tests and devices without available speech services.
 
 `core/android` owns device capability detection:
 
@@ -92,14 +107,17 @@ enum class DeviceProfile {
 ## Dependency direction
 
 ```text
-app -> feature/* -> domain
-app -> data/* -> domain
-data/* -> core/*
-feature/* -> core/ui, core/common, core/navigation
-domain -> Kotlin stdlib / coroutines only
+app        -> feature/*, data/*, core/*
+feature/*  -> domain, core/ui, core/common
+data/*     -> domain, core/common, core/android   (data/ai-local additionally -> ONNX)
+core/android -> core/common
+core/ui      -> core/common
+domain     -> Kotlin stdlib / coroutines only
 ```
 
-The domain layer must not depend on Android, Compose, Ktor, Hilt, Room, DataStore, WorkManager, or ONNX.
+The domain layer must not depend on Android, Compose, Ktor, Hilt, Room, DataStore, WorkManager, ONNX, **or on `core/*`**. `OperationResult` / `OperationError` are domain contracts and live in `domain`.
+
+> Known deviation (corrected in Block A of the Phase 3 plan): the current code holds `OperationResult` / `OperationError` in `core/common`, and `domain/build.gradle.kts` declares `implementation(project(":core:common"))`. This `domain -> core/common` edge violates the rule above and is the first fix scheduled.
 
 Feature modules expose route constants and composable destinations, but must not directly depend on other feature modules.
 
@@ -254,7 +272,7 @@ Rules:
 
 ## Error handling
 
-Repository and use case operations return `OperationResult<T>` and must not throw exceptions to UI.
+Repository and use case operations return `OperationResult<T>` (owned by `domain`) and must not throw exceptions to UI.
 
 Error categories:
 

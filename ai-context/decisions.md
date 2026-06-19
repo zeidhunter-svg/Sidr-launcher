@@ -64,3 +64,31 @@ Start with documentation and compile-ready skeleton only. Add business logic in 
 - `NavigationEvent.NavigateTo`: wraps `navController.navigate(route)` in a `try/catch` for `IllegalArgumentException`. If the route is not registered in the graph, logs a warning (non-sensitive: only the route string is logged, never user content) and navigates to `Routes.Launcher.ROUTE` with `popUpTo(Routes.Launcher.ROUTE) { inclusive = false }` + `launchSingleTop = true` to avoid back-stack accumulation.
 - `NavigationEvent.NavigateBack`: calls `navController.popBackStack()`; if it returns `false` (already at root), logs a debug message and does nothing — no forced re-navigation that could cause an infinite loop.
 - The helper is written for reuse: every future `LaunchedEffect` block collecting a `NavigationEvent` flow calls `handleNavigationEvent(...)` instead of duplicating the logic.
+
+## Structure and sequencing decisions
+
+### ADR 2026-06-19 — `OperationResult` ownership moves to `domain`
+- Decision: `OperationResult<T>` and `OperationError` are **domain** contracts and must live in `:domain`, not `:core:common`.
+- Context: they currently sit in `:core:common` (`com.sidr.launcher.core.common.result`), and `domain/build.gradle.kts` declares `implementation(project(":core:common"))`. This creates a `domain -> core/common` edge that violates the rule `domain -> Kotlin stdlib / coroutines only`.
+- Rationale: the error categories (`NetworkError`, `AiUnavailable`, `PermissionDenied`, `DeviceNotCapable`, `UnknownError`) are domain semantics; use cases and repository interfaces (which return `OperationResult`) are domain-owned. The "in `core/common` or `domain`" choice from checklist `3.0.1` is resolved in favor of `domain`.
+- Consequence: `core/common` keeps `UiState`, dispatchers, logging, and navigation contracts only. `ResultLogger` must be decoupled so the move introduces **no** new `core/common -> domain` edge (primitive-based logging, or relocate the logging port to `domain`).
+- Scheduled as **Block A** of `ai-context/phase-3-intent-system-plan.md`.
+- **Done 2026-06-19 (Block A complete, A1–A6):** `OperationResult` / `OperationError` moved to
+  `:domain` (`com.sidr.launcher.domain.result`); `domain/build.gradle.kts` now depends on
+  stdlib + coroutines only (`implementation(project(":core:common"))` removed). Logging kept in
+  `core/common` and decoupled to non-sensitive primitives — `ResultLogger.logFailure(category:
+  FailureCategory, retryable, context)` with a new `FailureCategory` enum; the `logIfFailure`
+  bridge (which spanned both modules) was dropped — it had no callers and returns in the layer
+  depending on both (`:data:repository`, Block B). `TestFixtures` moved with the result types
+  (relocates to `:core:testing` in B4). A3 had nothing to convert: `:domain` had no source files
+  yet, so no throwing contract existed; the "return `OperationResult`, never throw to UI" rule
+  applies to the contracts added in Blocks B–D. Verified: `./gradlew :domain:dependencies`
+  (compileClasspath = `kotlin-stdlib` + `kotlinx-coroutines-core` only) and
+  `./gradlew assembleDebug` both green. No new `core/common -> domain` edge.
+
+### ADR 2026-06-19 — Phase 2 skipped / reordered into a minimal slice
+- Decision: Phase 2 (launcher shell) is **not** run as a separate phase. Its navigation half was already absorbed into `3.1.x`; its product floor — `InstalledAppsRepository`, app grid, command input, offline app launch — is folded into Phase 3 as a **minimal P2 slice** (Block B).
+- Context: Phase 3's intent system cannot reach acceptance without Phase 2's installed-apps repository and command input (e.g. `open telegram` cannot resolve or launch). The skip deferred an unavoidable dependency rather than removing it.
+- Rationale: the launcher core (home + app grid + app launch) is the product floor; the intent pipeline is meaningless without it. Building the minimal slice now unblocks `3.4.8`/`3.4.11`/`3.4.13`.
+- Consequence: full launcher-shell polish stays deferred; Room/DataStore persistence and intent-match-history are frozen to Phase 4; `feature/settings` and `feature/permission_education` remain inline placeholders until created.
+- Active plan: `ai-context/phase-3-intent-system-plan.md` (Blocks A → D). Session summary in root `CLAUDE.md`.

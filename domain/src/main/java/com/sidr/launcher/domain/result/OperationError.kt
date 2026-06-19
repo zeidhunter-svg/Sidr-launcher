@@ -1,4 +1,4 @@
-package com.sidr.launcher.core.common.result
+package com.sidr.launcher.domain.result
 
 sealed interface OperationError {
     data class NetworkError(val retryable: Boolean = true) : OperationError

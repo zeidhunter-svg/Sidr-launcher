@@ -7,6 +7,6 @@ kotlin {
 }
 
 dependencies {
-    implementation(project(":core:common"))
+    // domain is pure Kotlin: stdlib + coroutines only. No core/*, no Android. (Block A / A2)
     implementation(libs.coroutines.core)
 }

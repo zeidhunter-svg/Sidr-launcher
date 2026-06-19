@@ -1,4 +1,4 @@
-package com.sidr.launcher.core.common.result
+package com.sidr.launcher.domain.result
 
 sealed interface OperationResult<out T> {
     data class Success<T>(val value: T) : OperationResult<T>

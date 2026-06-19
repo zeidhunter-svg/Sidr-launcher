@@ -1,7 +1,11 @@
 package com.sidr.launcher.core.common.result
 
 class NoOpResultLogger : ResultLogger {
-    override fun logFailure(error: OperationError, context: String?) {
+    override fun logFailure(
+        category: FailureCategory,
+        retryable: Boolean,
+        context: String?,
+    ) {
         // no-op: logging not wired yet
     }
 }

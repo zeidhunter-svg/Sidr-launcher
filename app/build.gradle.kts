@@ -45,6 +45,7 @@ dependencies {
     implementation(project(":domain"))
     implementation(project(":data:ai-cloud"))
     implementation(project(":data:ai-local"))
+    implementation(project(":data:repository"))
     implementation(project(":feature:launcher"))
     implementation(project(":feature:assistant"))
     implementation(project(":feature:suggestions"))

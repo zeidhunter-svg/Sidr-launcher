@@ -7,7 +7,9 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":domain"))
+
     implementation(libs.coroutines.core)
-    // JSR-330 annotations (@Qualifier, @Inject) — no DI framework, just the marker API.
-    implementation(libs.javax.inject)
+    implementation(libs.junit4)
+    implementation(libs.coroutines.test)
 }

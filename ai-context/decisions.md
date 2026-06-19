@@ -86,6 +86,23 @@ Start with documentation and compile-ready skeleton only. Add business logic in 
   (compileClasspath = `kotlin-stdlib` + `kotlinx-coroutines-core` only) and
   `./gradlew assembleDebug` both green. No new `core/common -> domain` edge.
 
+### ADR 2026-06-19 — Block B complete (minimal P2 slice)
+- **Done 2026-06-19 (Block B, B1–B7):** Created `:data:repository` module; implemented
+  `InstalledAppsRepositoryImpl` over `PackageManager` (launchable-apps query, fully offline,
+  API 33+ gate for `ResolveInfoFlags`); defined `InstalledApp` + `InstalledAppsRepository`
+  in `:domain`; bootstrapped `:core:testing` with `FakeInstalledAppsRepository`. Added
+  `UiState<T>` / `UiError` to `:core:common` (no `domain` dep added — `UiError` is a UI
+  type; ViewModel maps `OperationError → UiError` internally). `@IoDispatcher` qualifier in
+  `core:common` via JSR-330 (`javax.inject`). `LauncherViewModel` extended: two independent
+  flows — `navigationEvents` (Channel, unchanged) and `uiState: StateFlow<UiState<LauncherUiState>>`
+  plus `commandInput: StateFlow<String>`. `LauncherScreen` rebuilt: `Box(weight(1f))` for the
+  app grid, always-visible `CommandInputBar` with `imePadding()`. Icons loaded async via
+  `rememberAppIcon` (`LaunchedEffect` + `Dispatchers.IO`, catches `NameNotFoundException`).
+  Tap-to-launch and command-submit are stubs (replaced in D2/D3). Hilt graph: `DispatcherModule`
+  + `RepositoryModule` in `:app`; `feature:launcher` has no edge to `:data:repository`.
+  Verified: `assembleDebug` green (275 tasks), `testDebugUnitTest` green, `:domain`
+  compileClasspath = stdlib + coroutines only.
+
 ### ADR 2026-06-19 — Phase 2 skipped / reordered into a minimal slice
 - Decision: Phase 2 (launcher shell) is **not** run as a separate phase. Its navigation half was already absorbed into `3.1.x`; its product floor — `InstalledAppsRepository`, app grid, command input, offline app launch — is folded into Phase 3 as a **minimal P2 slice** (Block B).
 - Context: Phase 3's intent system cannot reach acceptance without Phase 2's installed-apps repository and command input (e.g. `open telegram` cannot resolve or launch). The skip deferred an unavoidable dependency rather than removing it.

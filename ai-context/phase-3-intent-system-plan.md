@@ -61,20 +61,20 @@ demoable MVP loop. Do not start Block D before B and C land.
 
 ## Block B — Minimal P2 slice (product floor; unblocks app launch)
 
-- [ ] `B1` Create `:data:repository` module. Dependencies: `domain`, `core/common`,
+- [x] `B1` Create `:data:repository` module. Dependencies: `domain`, `core/common`,
       `core/android`. Register in `settings.gradle.kts`.
-- [ ] `B2` Define `InstalledApp` domain model + `InstalledAppsRepository` interface
+- [x] `B2` Define `InstalledApp` domain model + `InstalledAppsRepository` interface
       (`suspend fun getInstalledApps(): OperationResult<List<InstalledApp>>`) in `domain`.
-- [ ] `B3` Implement `InstalledAppsRepository` over `PackageManager` (launchable-apps query,
+- [x] `B3` Implement `InstalledAppsRepository` over `PackageManager` (launchable-apps query,
       fully offline) in `:data:repository`.
-- [ ] `B4` Add a fake `InstalledAppsRepository` for previews/tests. Bootstrap `core/testing`
+- [x] `B4` Add a fake `InstalledAppsRepository` for previews/tests. Bootstrap `core/testing`
       here if it does not exist yet.
-- [ ] `B5` `feature/launcher`: build the home shell — app grid rendered from
+- [x] `B5` `feature/launcher`: build the home shell — app grid rendered from
       `LauncherViewModel` via `StateFlow<UiState>`; offline app launch (through executor, see
       D2). No business logic in composables.
-- [ ] `B6` `feature/launcher`: add the text command-input field bound to `LauncherViewModel`
+- [x] `B6` `feature/launcher`: add the text command-input field bound to `LauncherViewModel`
       (submits to a temporary stub handler until D3 lands).
-- [ ] `B7` DI: provide the `InstalledAppsRepository` binding in the `app` Hilt graph.
+- [x] `B7` DI: provide the `InstalledAppsRepository` binding in the `app` Hilt graph.
 
 ---
 

@@ -14,14 +14,17 @@ Execute the **reordered Phase 3 checklist** in
 [ai-context/phase-3-intent-system-plan.md](ai-context/phase-3-intent-system-plan.md),
 Blocks A → D:
 
-- **A — Emergency fix.** Move `OperationResult` / `OperationError` from `core/common` →
-  `domain`; drop the `domain -> core/common` edge; restore domain purity.
-- **B — Minimal P2 slice.** Create `:data:repository`, `InstalledAppsRepository`
-  (PackageManager, offline), app grid + command input. (P2 was skipped; this is its
-  product floor, folded into Phase 3.)
-- **C — Pure-domain intent core.** Intent/action models, `IntentMatcher`, normalization,
-  `IntentConfidencePolicy` (behind interface), action resolver + table-driven JVM tests.
-- **D — MVP loop.** `HandleUserCommandUseCase` → type `open telegram` → app launches.
+- **A ✅ done.** `OperationResult` / `OperationError` moved to `domain`; `domain → core/common`
+  edge removed; domain depends only on stdlib + coroutines.
+- **B ✅ done.** `:data:repository` created; `InstalledAppsRepository` (PackageManager, offline);
+  app grid + command input in `feature/launcher`; `:core:testing` bootstrapped.
+- **C ✅ done.** `LauncherIntent` / `ExecutableAction` / `IntentCandidate` contracts;
+  `IntentMatcher` port + `IntentMatchResult`; `CommandNormalizer`; `DefaultIntentConfidencePolicy`
+  (class, overridable); `RuleBasedIntentMatcher` (`:data:repository`, Android-free);
+  `IntentActionResolver` (domain use case); 65 table-driven JVM tests, all green.
+- **D — MVP loop (active).** `HandleUserCommandUseCase` → type `open telegram` → app launches.
+  Requires: `ActionExecutor` contract (domain) + Android impl (`:data:repository`), DI wiring,
+  UI integration in `feature/launcher`.
 - **Frozen (Phase 4+):** Room / DataStore, intent-match-history, permission-education module.
 
 MVP done = `open telegram` resolves + launches offline; low-confidence never auto-executes;
@@ -29,11 +32,13 @@ MVP done = `open telegram` resolves + launches offline; low-confidence never aut
 
 ## Status snapshot
 
-- P0 ✅ docs/decisions · P1 ✅ compile-ready skeleton · **P2 ⏭ skipped, reordered into
-  Phase 3 Block B** · P3 foundation `3.0.1`–`3.1.5` ✅ (result types + navigation).
-- **Known defect (fixed in Block A):** `OperationResult` sits in `core/common`, so
-  `domain/build.gradle.kts` has `implementation(project(":core:common"))` →
-  `domain -> core/common` violates the dependency graph.
+- P0 ✅ docs/decisions · P1 ✅ compile-ready skeleton · P2 ⏭ reordered into Block B ✅ ·
+  P3 foundation `3.0.1`–`3.1.5` ✅ (result types + navigation).
+- Block A ✅ `OperationResult`/`OperationError` in `domain`; `domain → core/common` edge gone.
+- Block B ✅ `:data:repository`, `InstalledAppsRepositoryImpl`, app grid, command input,
+  `:core:testing` with `FakeInstalledAppsRepository`.
+- Block C ✅ full intent domain — contracts, normalizer, rule-based matcher, resolver, 65 tests.
+- **Block D — in progress.** Next: `ActionExecutor`, `HandleUserCommandUseCase`, DI, UI wiring.
 
 ## Hard rules
 
@@ -52,10 +57,11 @@ MVP done = `open telegram` resolves + launches offline; low-confidence never aut
 |---|---|
 | Domain models (`InstalledApp`, `LauncherIntent`, `ExecutableAction`, `IntentMatchResult`, `AiChunk`) | `domain` |
 | Repository & use-case interfaces (`InstalledAppsRepository`, `HandleUserCommandUseCase`) | `domain` |
-| `OperationResult` / `OperationError` | `domain` *(migrating from `core/common`)* |
+| `OperationResult` / `OperationError` | `domain` |
 | Ports: `IntentMatcher`, `IntentConfidencePolicy`, `GenerativeAiEngine` | `domain` |
+| `ActionExecutor` contract + `ActionExecutionResult` *(Block D)* | `domain` |
 | `DeviceCapability` model + AI routing policy | `domain` |
-| Rule-based matcher impl, `InstalledAppsRepository` impl, Android `ActionExecutor` | `data/repository` |
+| Rule-based matcher impl, `InstalledAppsRepository` impl, Android `ActionExecutor` impl | `data/repository` |
 | Room / DataStore *(Phase 4)* | `data/repository` |
 | Cloud AI client (Ktor) | `data/ai-cloud` |
 | ONNX NLU / embeddings | `data/ai-local` |
@@ -63,7 +69,7 @@ MVP done = `open telegram` resolves + launches offline; low-confidence never aut
 | `Routes`, `NavigationEvent` | `core/common` *(→ `core/navigation` on trigger)* |
 | `DeviceProfile` detection, `PackageManager` access, `SpeechInputSource` Android impl | `core/android` |
 | Design system / theme | `core/ui` |
-| Test fakes / fixtures | `core/testing` *(planned)* |
+| Test fakes / fixtures | `core/testing` |
 | Single `NavHost`, composition root, Hilt graph | `app` |
 | Gradle convention plugins | `build-logic` *(planned)* |
 
@@ -76,8 +82,6 @@ MVP done = `open telegram` resolves + launches offline; low-confidence never aut
 
 ## Do not
 
-- Don't physically move/refactor Kotlin until the new session starts coding — the planning
-  context is fixed; coding is the next step.
 - Don't add Room / DataStore / permission-education in this slice (frozen → Phase 4).
 - Don't create `core/data` (dropped from the target structure).
 - Don't fold generative AI into the `IntentMatcher` contract.

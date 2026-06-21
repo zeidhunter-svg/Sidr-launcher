@@ -108,24 +108,27 @@ demoable MVP loop. Do not start Block D before B and C land.
 
 ---
 
-## Block D — MVP loop integration (the demoable slice)
+## Block D — MVP loop integration (the demoable slice) ✅ DONE 2026-06-21
 
-- [ ] `D1` Define the `ActionExecutor` contract + `ActionExecutionResult` (success /
-      failure-with-safe-message / needs-confirmation / unsupported / no-match) in `domain`.
-- [ ] `D2` Implement the Android `ActionExecutor` in `:data:repository`: launch via
-      `PackageManager` launch intents; catch `ActivityNotFoundException` / `SecurityException`;
-      return structured failures. No sensitive permissions in this slice.
-- [ ] `D3` Implement `HandleUserCommandUseCase` in `domain`: normalize → match → confidence
-      gate → resolve → execute-when-safe → `OperationResult`. No exceptions to UI.
-- [ ] `D4` Wire `feature/launcher` command input → `HandleUserCommandUseCase`; render results;
-      clear input on success.
-- [ ] `D5` Safe fallback behavior: empty (hint), unknown (show examples), low-confidence (ask
-      for specificity), ambiguous (app suggestions), execution failure (concise message). No
-      silent failures, no unsafe auto-execution.
-- [ ] `D6` DI wiring: `IntentMatcher`, normalizer, `IntentConfidencePolicy`, action resolver,
-      `ActionExecutor`, `HandleUserCommandUseCase`, `InstalledAppsRepository`.
-- [ ] `D7` Verify: `./gradlew assembleDebug` and `./gradlew testDebugUnitTest`. The launcher
-      shell must not regress.
+- [x] `D1` `ActionExecutor` port + `ActionExecutionResult` in `domain`. **Truncated to
+      `Success / Failure(safeMessage) / Unsupported`** — `needs-confirmation` / `no-match` are
+      routing outcomes owned by `CommandOutcome`, not the executor (see ADR Block D).
+- [x] `D2` Android `AndroidActionExecutor` in `:data:repository`: `getLaunchIntentForPackage` +
+      `FLAG_ACTIVITY_NEW_TASK`; web search via `ACTION_VIEW`; `ActivityNotFoundException` /
+      `SecurityException` → `ActionExecutionResult.Failure`. No sensitive permissions.
+- [x] `D3` `HandleUserCommandUseCase` in `domain`: normalize → match → confidence gate → resolve
+      → execute-when-safe. Returns a single `CommandOutcome`; technical failures → `Failed(safe
+      message)`, never throws to UI. 19 JVM tests on fakes.
+- [x] `D4` Wired `feature/launcher`: `onCommandSubmitted` → use case; `onAppClicked` → executor
+      directly; `applyOutcome` exhaustive `when` (12 variants, no `else`); input cleared on
+      `Executed / OpenAssistant / ShowApps / ClearInput`. `OpenAssistant` → `navigateTo` via Channel.
+- [x] `D5` Safe fallback `CommandFeedback` UI: hint / examples / clarify / tappable ambiguity
+      candidates / concise failure message. No silent failures, no unsafe auto-execution.
+- [x] `D6` DI: `IntentBindsModule` (`@Binds ActionExecutor`) + `IntentProvidesModule` (`@Provides`
+      matcher / policy / resolver / use case). `CommandNormalizer` is an `object` (static, not bound).
+- [x] `D7` Verified: `assembleDebug` + `testDebugUnitTest --rerun-tasks` green; Block B not
+      regressed; `feature/launcher` has no `:data:repository` edge; `domain` stays Android-free.
+      **Live launch verified on device (SM-A325F, Android 13).**
 
 ---
 

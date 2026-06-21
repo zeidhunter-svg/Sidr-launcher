@@ -136,6 +136,88 @@ Start with documentation and compile-ready skeleton only. Add business logic in 
 - `:domain:dependencies --configuration compileClasspath` → `kotlin-stdlib` + `kotlinx-coroutines-core` only ✓
 - `./gradlew assembleDebug` → BUILD SUCCESSFUL (275 tasks) ✓
 
+### ADR 2026-06-21 — Block D complete (MVP loop: text → action → app launch)
+
+**Done 2026-06-21 (Block D, D1–D7). Phase 3 closed.**
+
+**New files in `:domain` (`com.sidr.launcher.domain.intent`):**
+- `ActionExecutor.kt` — port `suspend fun execute(action): ActionExecutionResult` + sealed
+  `ActionExecutionResult` (D1). Android-free; impl lives in `:data:repository`.
+- `CommandOutcome.kt` — the single UI outcome type (D3); 12 variants: `Empty, Executed, NoOp,
+  Message, NeedsConfirmation(candidates), Suggest(intent, confidence), LowConfidence,
+  Unknown(input), Failed(message), OpenAssistant, ShowApps, ClearInput`.
+- `HandleUserCommandUseCase.kt` — orchestrator `normalize → empty? → match → confidence gate →
+  route → execute-when-safe` (D3).
+
+**New files in `:core:testing`:** `FakeIntentMatcher.kt`, `FakeActionExecutor.kt` (records
+executed actions so tests assert the executor is NOT invoked for routing-only outcomes).
+
+**New test in `:domain`:** `HandleUserCommandUseCaseTest.kt` — 19 tests (`:domain:test`), on
+`FakeInstalledAppsRepository` + `FakeIntentMatcher` + `FakeActionExecutor`.
+
+**New file in `:data:repository` (`com.sidr.launcher.data.repository.intent`):**
+- `AndroidActionExecutor.kt` (D2) — launch via `getLaunchIntentForPackage` + `FLAG_ACTIVITY_NEW_TASK`
+  from `@ApplicationContext`; web search via `ACTION_VIEW` (`// TODO: configurable search provider`,
+  hardcoded Google for this slice); `ActivityNotFoundException` / `SecurityException` →
+  `ActionExecutionResult.Failure(safeMessage)`, never crashes. No sensitive permissions.
+
+**Changes in `:feature:launcher`:**
+- `CommandFeedback.kt` (D5) — transient UI model: `None / Message / Suggestion / Ambiguous(candidates)`.
+- `LauncherViewModel.kt` (D4) — injects `HandleUserCommandUseCase` + `ActionExecutor` (both **domain**
+  ports — no `feature → data` edge); third independent flow `commandFeedback: StateFlow<CommandFeedback>`;
+  `onCommandSubmitted` → use case; `onAppClicked` → executor **directly** (app already known, no matching);
+  `applyOutcome` maps all 12 `CommandOutcome` variants with an **exhaustive `when`, no `else`**.
+- `LauncherScreen.kt` (D5) — renders `CommandFeedback` (message/suggestion + tappable ambiguity
+  candidates that launch via `onAppClicked`).
+
+**Changes in `:app` (D6):** `IntentBindsModule` (abstract, `@Binds ActionExecutor ←
+AndroidActionExecutor`) + `IntentProvidesModule` (object, `@Provides` for `IntentMatcher =
+RuleBasedIntentMatcher()`, `IntentConfidencePolicy = DefaultIntentConfidencePolicy()`,
+`IntentActionResolver`, `HandleUserCommandUseCase`). `CommandNormalizer` is an `object` (static call,
+not provided). Mirrors `DispatcherModule` / `RepositoryModule`.
+
+**Decision — truncated `ActionExecutionResult`:** modeled as `Success / Failure(safeMessage) /
+Unsupported(action)` only. The plan's literal D1 also listed `needs-confirmation` / `no-match`; these
+were **deliberately omitted** — they are routing outcomes decided by the use case *before* execution,
+so they live in `CommandOutcome`, not in the executor result. Putting them in both would create the
+two overlapping result types the Block D invariant forbids. `ActionExecutionResult` (executor
+vocabulary) and `CommandOutcome` (UI vocabulary) are distinct, and both are distinct from
+`OperationResult` (technical success/failure).
+
+**Routing decisions (the core of Block D — not everything goes to the executor):**
+- Confidence gate via `IntentConfidencePolicy`: `≥ 0.85` resolve+execute; `0.50..<0.85` →
+  `Suggest` (no auto-execute); `< 0.50` → `Unknown` (if `UnknownIntent`) else `LowConfidence`.
+- `LaunchAppAction` / `OpenSearchAction` → `ActionExecutor`. `AmbiguousAppAction` → `NeedsConfirmation`
+  (never executed). `ShowMessageAction` → `Message`. `OpenLauncherSettingsAction` → stub `Message`
+  (no settings module; never reaches Android). `NoOpAction` → `NoOp` (no input clear).
+- `SimpleCommandIntent` is routed **before** the resolver (the resolver collapses command identity):
+  `OPEN_ASSISTANT` → `CommandOutcome.OpenAssistant` (VM calls `navigateTo(Routes.Assistant.ROUTE)` via
+  the existing 3.1.x `Channel`; the route string is supplied by the **VM**, never the domain),
+  `SHOW_APPS` → `ShowApps`, `CLEAR` → `ClearInput`, `HELP` → `Message`. None go through the executor.
+- Business outcomes (ambiguous, not-found, low/medium confidence, unknown) flow through a successful
+  `CommandOutcome`, never `OperationResult.Failure`. Technical failures from the resolver/executor →
+  `CommandOutcome.Failed(safeMessage)`; the use case never throws to UI.
+- `commandInput` is physically cleared (`_commandInput.value = ""`) only on `Executed`,
+  `OpenAssistant`, `ShowApps`, `ClearInput`.
+
+**DI packaging fix:** the first attempt used a single `IntentModule` with a nested
+`@Module`-annotated `companion object`; Hilt rejected it (*"IntentModule.Companion is listed as a
+module, but it is a companion object class"*) and `assembleDebug` failed. Resolved by splitting into
+two top-level modules (`IntentBindsModule` + `IntentProvidesModule`); bindings unchanged.
+
+**`IntentMatcher` / `GenerativeAiEngine` stay separate** — Block D added no generation port and did
+not touch AI; the two-port invariant holds.
+
+**Verification:**
+- `./gradlew assembleDebug` → BUILD SUCCESSFUL.
+- `./gradlew testDebugUnitTest --rerun-tasks` → green (Block B not regressed; new Phase-2 VM tests +
+  Phase-1 use-case tests executed, not NO-SOURCE).
+- `grep -rn "data.repository" feature/launcher/src/` → empty; `feature/launcher/build.gradle.kts` has
+  no `:data:repository` edge ✓.
+- `grep -rn "import android" domain/src/` → empty; `:domain` remains stdlib + coroutines only ✓.
+- **Live launch verified on device (SM-A325F, Android 13):** `open <app>` and grid tap launch apps
+  offline; unknown command → fallback UI, no crash; `clear` clears input.
+
 ### ADR 2026-06-19 — Phase 2 skipped / reordered into a minimal slice
 - Decision: Phase 2 (launcher shell) is **not** run as a separate phase. Its navigation half was already absorbed into `3.1.x`; its product floor — `InstalledAppsRepository`, app grid, command input, offline app launch — is folded into Phase 3 as a **minimal P2 slice** (Block B).
 - Context: Phase 3's intent system cannot reach acceptance without Phase 2's installed-apps repository and command input (e.g. `open telegram` cannot resolve or launch). The skip deferred an unavoidable dependency rather than removing it.

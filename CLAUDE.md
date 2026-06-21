@@ -10,25 +10,34 @@ The offline launcher core (home, app grid, app launch) must work fully without A
 
 ## Current goal (active work)
 
-Execute the **reordered Phase 3 checklist** in
-[ai-context/phase-3-intent-system-plan.md](ai-context/phase-3-intent-system-plan.md),
-Blocks A → D:
+**Phase 3 is DONE (Blocks A → D, 2026-06-21).** The MVP loop works: type `open telegram` →
+resolves + launches offline; tap a grid app → launches; unknown → fallback UI, no crash.
+**Live launch verified on device (SM-A325F, Android 13).** `assembleDebug` +
+`testDebugUnitTest` green. Details in
+[ai-context/phase-3-intent-system-plan.md](ai-context/phase-3-intent-system-plan.md) and the
+Block D ADR in [ai-context/decisions.md](ai-context/decisions.md).
 
-- **A ✅ done.** `OperationResult` / `OperationError` moved to `domain`; `domain → core/common`
-  edge removed; domain depends only on stdlib + coroutines.
-- **B ✅ done.** `:data:repository` created; `InstalledAppsRepository` (PackageManager, offline);
-  app grid + command input in `feature/launcher`; `:core:testing` bootstrapped.
-- **C ✅ done.** `LauncherIntent` / `ExecutableAction` / `IntentCandidate` contracts;
-  `IntentMatcher` port + `IntentMatchResult`; `CommandNormalizer`; `DefaultIntentConfidencePolicy`
-  (class, overridable); `RuleBasedIntentMatcher` (`:data:repository`, Android-free);
-  `IntentActionResolver` (domain use case); 65 table-driven JVM tests, all green.
-- **D — MVP loop (active).** `HandleUserCommandUseCase` → type `open telegram` → app launches.
-  Requires: `ActionExecutor` contract (domain) + Android impl (`:data:repository`), DI wiring,
-  UI integration in `feature/launcher`.
-- **Frozen (Phase 4+):** Room / DataStore, intent-match-history, permission-education module.
+**Next: Phase 4 — persistence, state & navigation hardening** (see
+[docs/roadmap.md](docs/roadmap.md)): DataStore preferences / feature flags / device-profile
+cache; Room-backed usage history, suggestion-ranking history, **intent-match-history**; feature
+modules touch persistence only through repositories; harden `UiState` / navigation / recoverable
+errors. The permission-education module + request flows (deferred from Phase 3) land here too.
 
-MVP done = `open telegram` resolves + launches offline; low-confidence never auto-executes;
-`./gradlew assembleDebug` + unit tests pass.
+Phase 3 result, Blocks A → D:
+
+- **A ✅** `OperationResult` / `OperationError` in `domain`; `domain → core/common` edge removed.
+- **B ✅** `:data:repository`; `InstalledAppsRepository` (PackageManager, offline); app grid +
+  command input in `feature/launcher`; `:core:testing` bootstrapped.
+- **C ✅** `LauncherIntent` / `ExecutableAction` / `IntentCandidate`; `IntentMatcher` +
+  `IntentMatchResult`; `CommandNormalizer`; `DefaultIntentConfidencePolicy`; `RuleBasedIntentMatcher`
+  (`:data:repository`, Android-free); `IntentActionResolver`; 65 JVM tests.
+- **D ✅** `ActionExecutor` port + truncated `ActionExecutionResult` + `CommandOutcome` (12
+  variants) + `HandleUserCommandUseCase` (domain); `AndroidActionExecutor` (`:data:repository`);
+  VM wiring + `CommandFeedback` fallback UI (`feature/launcher`); DI via `IntentBindsModule` +
+  `IntentProvidesModule` (`:app`). Routing: low/medium never auto-executes; navigation + CLEAR +
+  SHOW_APPS + ambiguity never go through the executor.
+
+**Still frozen until their Phase-4 slice:** Room / DataStore, intent-match-history.
 
 ## Status snapshot
 
@@ -38,7 +47,9 @@ MVP done = `open telegram` resolves + launches offline; low-confidence never aut
 - Block B ✅ `:data:repository`, `InstalledAppsRepositoryImpl`, app grid, command input,
   `:core:testing` with `FakeInstalledAppsRepository`.
 - Block C ✅ full intent domain — contracts, normalizer, rule-based matcher, resolver, 65 tests.
-- **Block D — in progress.** Next: `ActionExecutor`, `HandleUserCommandUseCase`, DI, UI wiring.
+- Block D ✅ MVP loop — `ActionExecutor` + `CommandOutcome` + `HandleUserCommandUseCase`,
+  `AndroidActionExecutor`, VM wiring + `CommandFeedback`, DI split modules. Live-verified on device.
+- **Phase 3 CLOSED (2026-06-21). Active next: Phase 4** (persistence / state / nav hardening).
 
 ## Hard rules
 

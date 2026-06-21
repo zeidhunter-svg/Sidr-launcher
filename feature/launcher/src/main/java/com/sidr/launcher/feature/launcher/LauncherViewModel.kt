@@ -6,6 +6,13 @@ import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.di.IoDispatcher
 import com.sidr.launcher.core.common.navigation.NavigationEvent
+import com.sidr.launcher.core.common.navigation.Routes
+import com.sidr.launcher.domain.intent.ActionExecutionResult
+import com.sidr.launcher.domain.intent.ActionExecutor
+import com.sidr.launcher.domain.intent.CommandOutcome
+import com.sidr.launcher.domain.intent.ExecutableAction
+import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
+import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.domain.result.OperationError
@@ -24,6 +31,8 @@ import javax.inject.Inject
 @HiltViewModel
 class LauncherViewModel @Inject constructor(
     private val installedAppsRepository: InstalledAppsRepository,
+    private val handleUserCommand: HandleUserCommandUseCase,
+    private val actionExecutor: ActionExecutor,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
 
@@ -47,6 +56,10 @@ class LauncherViewModel @Inject constructor(
     private val _commandInput = MutableStateFlow("")
     val commandInput: StateFlow<String> = _commandInput.asStateFlow()
 
+    // ── Command feedback — transient result of the last submitted command ──
+    private val _commandFeedback = MutableStateFlow<CommandFeedback>(CommandFeedback.None)
+    val commandFeedback: StateFlow<CommandFeedback> = _commandFeedback.asStateFlow()
+
     init {
         loadApps()
     }
@@ -69,14 +82,96 @@ class LauncherViewModel @Inject constructor(
 
     fun onCommandChanged(text: String) {
         _commandInput.value = text
+        // Editing a new command clears stale feedback.
+        _commandFeedback.value = CommandFeedback.None
     }
 
     fun onCommandSubmitted(text: String) {
-        // TODO: wired to HandleUserCommandUseCase in D3/D4
+        viewModelScope.launch {
+            applyOutcome(handleUserCommand.handle(text))
+        }
     }
 
+    /** Tap-to-launch from the grid (or from an ambiguity suggestion): the app is already known, */
+    /** so launch it directly through the executor — no matching needed. Does not touch input. */
     fun onAppClicked(app: InstalledApp) {
-        // TODO: replaced by ActionExecutor in D2
+        viewModelScope.launch {
+            val action = ExecutableAction.LaunchAppAction(
+                packageName = app.packageName,
+                activityName = app.activityName,
+            )
+            _commandFeedback.value = when (val result = actionExecutor.execute(action)) {
+                is ActionExecutionResult.Success -> CommandFeedback.None
+                is ActionExecutionResult.Failure -> CommandFeedback.Message(result.safeMessage)
+                is ActionExecutionResult.Unsupported -> CommandFeedback.Message(GENERIC_ERROR)
+            }
+        }
+    }
+
+    fun dismissFeedback() {
+        _commandFeedback.value = CommandFeedback.None
+    }
+
+    // ── CommandOutcome → UI — exhaustive when, no else branch ──────────────
+    // Add a new branch here whenever CommandOutcome gains a new variant.
+    private fun applyOutcome(outcome: CommandOutcome) {
+        when (outcome) {
+            CommandOutcome.Empty ->
+                _commandFeedback.value = CommandFeedback.Message("Type a command, e.g. \"open telegram\"")
+
+            CommandOutcome.Executed -> {
+                _commandInput.value = ""
+                _commandFeedback.value = CommandFeedback.None
+            }
+
+            CommandOutcome.NoOp ->
+                _commandFeedback.value = CommandFeedback.None
+
+            is CommandOutcome.Message ->
+                _commandFeedback.value = CommandFeedback.Message(outcome.text)
+
+            is CommandOutcome.NeedsConfirmation ->
+                _commandFeedback.value = CommandFeedback.Ambiguous(outcome.candidates)
+
+            is CommandOutcome.Suggest ->
+                _commandFeedback.value = CommandFeedback.Suggestion(describe(outcome.intent))
+
+            CommandOutcome.LowConfidence ->
+                _commandFeedback.value =
+                    CommandFeedback.Message("Didn't catch that — try being more specific")
+
+            is CommandOutcome.Unknown ->
+                _commandFeedback.value =
+                    CommandFeedback.Message("Unknown command. Try: open <app>, search <query>")
+
+            is CommandOutcome.Failed ->
+                _commandFeedback.value = CommandFeedback.Message(outcome.message)
+
+            CommandOutcome.OpenAssistant -> {
+                _commandInput.value = ""
+                _commandFeedback.value = CommandFeedback.None
+                // Route string belongs to the UI layer — the domain only said "OpenAssistant".
+                navigateTo(Routes.Assistant.ROUTE)
+            }
+
+            CommandOutcome.ShowApps -> {
+                _commandInput.value = ""
+                _commandFeedback.value = CommandFeedback.None
+            }
+
+            CommandOutcome.ClearInput -> {
+                _commandInput.value = ""
+                _commandFeedback.value = CommandFeedback.None
+            }
+        }
+    }
+
+    private fun describe(intent: LauncherIntent): String = when (intent) {
+        is LauncherIntent.LaunchAppIntent -> "Did you mean to open \"${intent.displayNameQuery}\"?"
+        is LauncherIntent.SearchIntent -> "Search the web for \"${intent.query}\"?"
+        is LauncherIntent.OpenSettingsIntent -> "Open settings?"
+        is LauncherIntent.SimpleCommandIntent -> "Run that command?"
+        is LauncherIntent.UnknownIntent -> "Try a different command"
     }
 
     // ── OperationError → UiError — exhaustive when, no else branch ─────────
@@ -87,5 +182,9 @@ class LauncherViewModel @Inject constructor(
         is OperationError.PermissionDenied -> UiError.Message("Permission denied: $permission")
         is OperationError.DeviceNotCapable -> UiError.Message("Not supported: $feature")
         is OperationError.UnknownError     -> UiError.Unknown
+    }
+
+    private companion object {
+        const val GENERIC_ERROR = "Something went wrong. Please try again."
     }
 }

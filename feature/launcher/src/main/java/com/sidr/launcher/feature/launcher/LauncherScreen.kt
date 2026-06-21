@@ -54,6 +54,7 @@ fun LauncherScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val commandInput by viewModel.commandInput.collectAsStateWithLifecycle()
+    val feedback by viewModel.commandFeedback.collectAsStateWithLifecycle()
 
     Column(
         modifier = modifier
@@ -73,6 +74,13 @@ fun LauncherScreen(
             }
         }
 
+        // Command feedback — fallback UI for the last submitted command (above the input bar)
+        CommandFeedbackArea(
+            feedback = feedback,
+            onCandidateClick = viewModel::onAppClicked,
+            onDismiss = viewModel::dismissFeedback,
+        )
+
         // Command input — always visible; imePadding() on the Column keeps it above keyboard
         CommandInputBar(
             value = commandInput,
@@ -80,6 +88,71 @@ fun LauncherScreen(
             onSubmit = viewModel::onCommandSubmitted,
         )
     }
+}
+
+// ── Command feedback ────────────────────────────────────────────────────────
+
+@Composable
+private fun CommandFeedbackArea(
+    feedback: CommandFeedback,
+    onCandidateClick: (InstalledApp) -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    when (feedback) {
+        CommandFeedback.None -> Unit
+
+        is CommandFeedback.Message -> FeedbackText(
+            text = feedback.text,
+            onDismiss = onDismiss,
+            modifier = modifier,
+        )
+
+        is CommandFeedback.Suggestion -> FeedbackText(
+            text = feedback.text,
+            onDismiss = onDismiss,
+            modifier = modifier,
+        )
+
+        is CommandFeedback.Ambiguous -> Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            Text(
+                text = "Did you mean:",
+                style = MaterialTheme.typography.labelMedium,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            feedback.candidates.forEach { app ->
+                Text(
+                    text = app.label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onCandidateClick(app) }
+                        .padding(vertical = 8.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FeedbackText(
+    text: String,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onDismiss)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    )
 }
 
 // ── Private composables ────────────────────────────────────────────────────

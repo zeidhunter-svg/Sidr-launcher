@@ -80,30 +80,31 @@ demoable MVP loop. Do not start Block D before B and C land.
 
 ## Block C — Pure-domain intent core (no Android, no persistence; parallel to B)
 
-- [ ] `C1` Review/refine intent/action/command contracts; avoid the Android `Intent` name
+- [x] `C1` Review/refine intent/action/command contracts; avoid the Android `Intent` name
       collision (`LauncherIntent`, `ExecutableAction`, `IntentCandidate`).
-- [ ] `C2` Define intent types: `LaunchAppIntent`, `SearchIntent`, `OpenSettingsIntent`,
+- [x] `C2` Define intent types: `LaunchAppIntent`, `SearchIntent`, `OpenSettingsIntent`,
       `SimpleCommandIntent`, `UnknownIntent`.
-- [ ] `C3` Define action types: `LaunchAppAction`, `OpenSearchAction`,
-      `OpenLauncherSettingsAction`, `ShowMessageAction`, `NoOpAction`.
-- [ ] `C4` Define the `IntentMatcher` port + `IntentMatchResult` (normalized input, best
+- [x] `C3` Define action types: `LaunchAppAction`, `OpenSearchAction`,
+      `OpenLauncherSettingsAction`, `ShowMessageAction`, `NoOpAction`, `AmbiguousAppAction`.
+- [x] `C4` Define the `IntentMatcher` port + `IntentMatchResult` (normalized input, best
       candidate, confidence, alternatives, `source = RULE_BASED`, optional debug reason) in
       `domain`. Explicitly document that the future `GenerativeAiEngine` (`Flow<AiChunk>`) is a
       **separate** port — do not fold generation into the matcher contract.
-- [ ] `C5` Implement command normalization (trim, collapse spaces, stable-locale lowercase,
+- [x] `C5` Implement command normalization (trim, collapse spaces, stable-locale lowercase,
       keep original input for display/diagnostics; no destructive transforms).
-- [ ] `C6` Implement the rule-based matcher in `:data:repository`: `open/launch/start <app>`,
+- [x] `C6` Implement the rule-based matcher in `:data:repository`: `open/launch/start <app>`,
       `search/find/google <query>`, settings phrases, simple commands (`show apps`, `clear`,
       `help`). Prefer exact prefixes; weak/partial → lower confidence; empty/unsupported →
       `UnknownIntent`.
-- [ ] `C7` Define `IntentConfidencePolicy` **behind an interface** (defaults
+- [x] `C7` Define `IntentConfidencePolicy` **behind an interface** (defaults
       `AUTO_EXECUTE = 0.85`, `SUGGEST = 0.50`) so thresholds can later be overridden per
       `DeviceProfile` / feature flag without changing the domain.
-- [ ] `C8` Implement the action resolver (`LauncherIntent -> ExecutableAction`). Resolve
+- [x] `C8` Implement the action resolver (`LauncherIntent -> ExecutableAction`). Resolve
       `LaunchAppIntent` only when the app is resolved via `InstalledAppsRepository`; ambiguous
-      names → suggestions, never auto-launch.
-- [ ] `C9` Table-driven JVM unit tests (no Android): normalization, app-launch / search /
+      names → `AmbiguousAppAction(candidates)`, never auto-launch.
+- [x] `C9` Table-driven JVM unit tests (no Android): normalization, app-launch / search /
       settings / unknown matching, confidence thresholds, resolver behavior.
+      65 tests total, 0 failures.
 
 ---
 

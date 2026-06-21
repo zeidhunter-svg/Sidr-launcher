@@ -103,6 +103,39 @@ Start with documentation and compile-ready skeleton only. Add business logic in 
   Verified: `assembleDebug` green (275 tasks), `testDebugUnitTest` green, `:domain`
   compileClasspath = stdlib + coroutines only.
 
+### ADR 2026-06-21 — Block C complete (pure-domain intent core)
+
+**Done 2026-06-21 (Block C, C1–C9).**
+
+**New files in `:domain` (`com.sidr.launcher.domain.intent`):**
+- `LauncherIntent.kt` — sealed interface + `SearchTarget` enum + `SimpleCommand` enum (C1/C2)
+- `ExecutableAction.kt` — sealed interface incl. `AmbiguousAppAction(query, candidates: List<InstalledApp>)` (C3)
+- `IntentCandidate.kt` — `(intent, confidence, debugReason?)` (C1)
+- `IntentMatcher.kt` — port interface + `IntentMatchResult` + `MatcherSource { RULE_BASED, NLU }` (C4). KDoc explicitly forbids folding `GenerativeAiEngine` into this port.
+- `IntentConfidencePolicy.kt` — interface with default methods (C7)
+- `DefaultIntentConfidencePolicy.kt` — `class` with constructor params (`autoExecuteThreshold=0.85f`, `suggestThreshold=0.50f`); overridable per DeviceProfile/feature-flag (C7)
+- `CommandNormalizer.kt` — `object`, trim+collapse+`lowercase(Locale.ROOT)` (C5)
+- `IntentActionResolver.kt` — use case; `OperationResult.Failure` only for technical repo errors; normal outcomes (`AmbiguousAppAction`, `ShowMessageAction("not found")`) are `Success` (C8)
+
+**New file in `:data:repository` (`com.sidr.launcher.data.repository.intent`):**
+- `RuleBasedIntentMatcher.kt` — Android-free; implements `IntentMatcher`; rules: launch-verb → `LaunchAppIntent`, search-verb → `SearchIntent`, bare-keyword → `OpenSettingsIntent` / `SimpleCommandIntent`, fallback → `UnknownIntent` (C6)
+
+**Product decision — verb always wins:** `"open settings"` / `"launch settings"` → `LaunchAppIntent("settings")`, NOT `OpenSettingsIntent`. Documented in test and KDoc. Resolver returns `ShowMessageAction("not found")` if no app matches. To refine in Block D.
+
+**`MatcherSource.AI` intentionally absent** — prevents silent merger of intent-matching and generation ports.
+
+**Test results (C9):**
+- `CommandNormalizerTest` — 10 tests, 0 failures (`:domain:test`)
+- `IntentConfidencePolicyTest` — 15 tests, 0 failures (`:domain:test`)
+- `IntentActionResolverTest` — 16 tests, 0 failures (`:domain:test`); uses `FakeInstalledAppsRepository` from `:core:testing`
+- `RuleBasedIntentMatcherTest` — 24 tests, 0 failures (`:data:repository:testDebugUnitTest`)
+- **Total: 65 tests, 0 failures, 0 skipped**
+
+**Verification:**
+- `grep -rn "import android" domain/src/` → empty (exit 1) ✓
+- `:domain:dependencies --configuration compileClasspath` → `kotlin-stdlib` + `kotlinx-coroutines-core` only ✓
+- `./gradlew assembleDebug` → BUILD SUCCESSFUL (275 tasks) ✓
+
 ### ADR 2026-06-19 — Phase 2 skipped / reordered into a minimal slice
 - Decision: Phase 2 (launcher shell) is **not** run as a separate phase. Its navigation half was already absorbed into `3.1.x`; its product floor — `InstalledAppsRepository`, app grid, command input, offline app launch — is folded into Phase 3 as a **minimal P2 slice** (Block B).
 - Context: Phase 3's intent system cannot reach acceptance without Phase 2's installed-apps repository and command input (e.g. `open telegram` cannot resolve or launch). The skip deferred an unavoidable dependency rather than removing it.

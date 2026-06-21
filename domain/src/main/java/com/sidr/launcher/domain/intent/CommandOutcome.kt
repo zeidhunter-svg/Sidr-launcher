@@ -1,0 +1,53 @@
+package com.sidr.launcher.domain.intent
+
+import com.sidr.launcher.domain.model.InstalledApp
+
+/**
+ * The single outcome type returned by [HandleUserCommandUseCase] to the UI.
+ *
+ * It is the UI vocabulary — distinct from [ActionExecutionResult] (the executor vocabulary) and
+ * from [com.sidr.launcher.domain.result.OperationResult] (technical success/failure). Normal
+ * business outcomes (ambiguity, "not found", low confidence, unknown) are modeled here as
+ * regular variants, NOT as failures. Only real technical failures map to [Failed].
+ *
+ * Android-free: navigation is expressed as [OpenAssistant] (a domain intent), never a
+ * :core:common route string — the ViewModel translates it to a navigation event.
+ */
+sealed interface CommandOutcome {
+
+    /** Empty input — show a hint, do nothing. */
+    data object Empty : CommandOutcome
+
+    /** A side-effecting action ran successfully — the UI should clear the command input. */
+    data object Executed : CommandOutcome
+
+    /** A safe action that intentionally does nothing — input is left untouched (no clear). */
+    data object NoOp : CommandOutcome
+
+    /** A user-facing message: HELP examples, settings stub, "not found", or [ExecutableAction.ShowMessageAction]. */
+    data class Message(val text: String) : CommandOutcome
+
+    /** Query matched 2+ apps — render [candidates] as tappable suggestions; nothing executed. */
+    data class NeedsConfirmation(val candidates: List<InstalledApp>) : CommandOutcome
+
+    /** Medium confidence (0.50..<0.85) — suggest/confirm, do not auto-execute. */
+    data class Suggest(val intent: LauncherIntent, val confidence: Float) : CommandOutcome
+
+    /** Below the suggest threshold and not an [LauncherIntent.UnknownIntent] — ask the user to be specific. */
+    data object LowConfidence : CommandOutcome
+
+    /** Unrecognized input — show usage examples. [input] is the original raw text. */
+    data class Unknown(val input: String) : CommandOutcome
+
+    /** A technical failure occurred; [message] is safe to display (no PII/stack). */
+    data class Failed(val message: String) : CommandOutcome
+
+    /** Navigate to the assistant — the ViewModel maps this to its navigation Channel. */
+    data object OpenAssistant : CommandOutcome
+
+    /** Show the full app grid — handled by the ViewModel/UI, not the executor. */
+    data object ShowApps : CommandOutcome
+
+    /** Clear the command input — handled by the ViewModel, not the executor. */
+    data object ClearInput : CommandOutcome
+}

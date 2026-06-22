@@ -1,0 +1,4 @@
+# Room exported schemas (Fork 2 — committed to VCS).
+# Populated on the first build that defines @Database (Block F, step F4):
+# one <database-version>.json per SidrDatabase version, e.g. 1.json.
+# Rule: change an entity -> bump version + add Migration + commit the new golden schema here.

@@ -1,6 +1,6 @@
 # CLAUDE.md — Sidr Launcher
 
-Session digest. Read this first, then `ai-context/phase-3-intent-system-plan.md`.
+Session digest. Read this first, then `ai-context/phase-4-plan.md` (active: Block F).
 
 ## What this is
 
@@ -23,8 +23,9 @@ Preferences foundation — `UserPreferences`/`FeatureFlags`/`DeviceProfileCacheE
 + 4 repos (`Flow` read / `OperationResult` write), impls over one `DataStore<Preferences>`,
 `PersistenceProvidesModule`+`PersistenceBindsModule` in `:app`, 4 fakes, 14 JVM tests green
 (round-trip survives simulated restart). Privacy inventory enforced by a key-name guard test.
-**Next: Block F — Room** (usage / suggestion-ranking / intent-match history). Details in the
-Block E ADR in [ai-context/decisions.md](ai-context/decisions.md).
+`assembleDebug` + `testDebugUnitTest` green. **Next: Block F — Room** (usage / suggestion-ranking
+/ intent-match history). Details in the Block E ADR in
+[ai-context/decisions.md](ai-context/decisions.md).
 
 Phase 3 result, Blocks A → D:
 
@@ -40,7 +41,8 @@ Phase 3 result, Blocks A → D:
   `IntentProvidesModule` (`:app`). Routing: low/medium never auto-executes; navigation + CLEAR +
   SHOW_APPS + ambiguity never go through the executor.
 
-**Still frozen until their Phase-4 slice:** Room / DataStore, intent-match-history.
+**Still frozen until their Phase-4 slice:** Room + intent-match-history (Block F),
+permission-education (G), hardening (H). DataStore unfrozen in Block E.
 
 ## Status snapshot
 
@@ -79,7 +81,10 @@ Phase 3 result, Blocks A → D:
 | `ActionExecutor` contract + `ActionExecutionResult` *(Block D)* | `domain` |
 | `DeviceCapability` model + AI routing policy | `domain` |
 | Rule-based matcher impl, `InstalledAppsRepository` impl, Android `ActionExecutor` impl | `data/repository` |
-| Room / DataStore *(Phase 4)* | `data/repository` |
+| Pref domain models (`UserPreferences`, `FeatureFlags`, `DeviceProfileCacheEntry`, `CachedSuggestion`) + their repo interfaces *(Block E ✅)* | `domain` |
+| DataStore Preferences impls + `PreferencesMapper` + `PreferencesKeys` *(Block E ✅)* | `data/repository` |
+| History domain models (`AppUsageRecord`, `SuggestionRankingRecord`, `IntentMatchRecord`) + repo interfaces (`UsageHistoryRepository`, `SuggestionRankingRepository`, `IntentMatchHistoryRepository`) *(Block F)* | `domain` |
+| Room entities, DAOs, `SidrDatabase`, `TypeConverters`, `migrations/`, mappers *(Block F)* | `data/repository` |
 | Cloud AI client (Ktor) | `data/ai-cloud` |
 | ONNX NLU / embeddings | `data/ai-local` |
 | `UiState`, dispatchers, logging contracts | `core/common` |
@@ -93,12 +98,19 @@ Phase 3 result, Blocks A → D:
 ## Source of truth
 
 - Architecture & target module structure: [docs/architecture.md](docs/architecture.md)
-- Active checklist: [ai-context/phase-3-intent-system-plan.md](ai-context/phase-3-intent-system-plan.md)
+  **OUT OF SYNC** — reflects pre-Phase-4 layout; `EncryptedSharedPreferences` still mentioned
+  (deprecated, Fork 1 defers secrets to Phase 5). Sync scheduled: Block H, step H6. Until then
+  the authoritative sources are: this file + [ai-context/phase-4-plan.md](ai-context/phase-4-plan.md)
+  + [ai-context/decisions.md](ai-context/decisions.md).
+- Active checklist: [ai-context/phase-4-plan.md](ai-context/phase-4-plan.md) *(Block F — active)*
+- Closed checklist: [ai-context/phase-3-intent-system-plan.md](ai-context/phase-3-intent-system-plan.md)
+  *(Phase 3 closed 2026-06-21)*
 - Decisions log: [ai-context/decisions.md](ai-context/decisions.md)
 - Roadmap: [docs/roadmap.md](docs/roadmap.md)
 
 ## Do not
 
-- Don't add Room / DataStore / permission-education in this slice (frozen → Phase 4).
+- Don't start Room / permission-education / hardening ahead of their block (F/G/H). DataStore
+  is done (Block E); extend it, don't re-scaffold it.
 - Don't create `core/data` (dropped from the target structure).
 - Don't fold generative AI into the `IntentMatcher` contract.

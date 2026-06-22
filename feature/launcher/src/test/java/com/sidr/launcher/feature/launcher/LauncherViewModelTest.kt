@@ -3,9 +3,15 @@ package com.sidr.launcher.feature.launcher
 import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.testing.FakeActionExecutor
+import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeIntentMatcher
 import com.sidr.launcher.core.testing.FakeUsageHistoryRepository
+import com.sidr.launcher.domain.preferences.FeatureFlagRepository
+import com.sidr.launcher.domain.preferences.FeatureFlags
+import com.sidr.launcher.domain.result.OperationResult
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import com.sidr.launcher.domain.history.AppUsageRecord
 import com.sidr.launcher.domain.intent.ActionExecutionResult
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
@@ -15,8 +21,10 @@ import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.result.OperationError
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -36,11 +44,14 @@ class LauncherViewModelTest {
     private val fakeMatcher = FakeIntentMatcher()
     private val fakeExecutor = FakeActionExecutor()
     private val fakeUsageRepo = FakeUsageHistoryRepository()
+    // Default: usageHistoryEnabled = true so existing recording tests remain valid.
+    private val fakeFlagRepo = FakeFeatureFlagRepository(FeatureFlags(usageHistoryEnabled = true))
     private val useCase = HandleUserCommandUseCase(
         matcher = fakeMatcher,
         resolver = IntentActionResolver(fakeRepo),
         executor = fakeExecutor,
         confidencePolicy = DefaultIntentConfidencePolicy(),
+        recordingScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob()),
     )
 
     @Before
@@ -59,11 +70,14 @@ class LauncherViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun buildViewModel() = LauncherViewModel(
+    private fun buildViewModel(
+        flagRepo: FeatureFlagRepository = fakeFlagRepo,
+    ) = LauncherViewModel(
         installedAppsRepository = fakeRepo,
         handleUserCommand = useCase,
         actionExecutor = fakeExecutor,
         usageHistoryRepository = fakeUsageRepo,
+        featureFlagRepository = flagRepo,
         ioDispatcher = testDispatcher,
     )
 
@@ -395,4 +409,58 @@ class LauncherViewModelTest {
         assertEquals(CommandFeedback.None, vm.commandFeedback.value)
         assertEquals(1, fakeExecutor.callCount)
     }
+
+    // ── Feature-flag gate for usage recording (Block F remediation) ───────────
+
+    @Test
+    fun `onAppClicked does not record usage when usageHistoryEnabled is false`() =
+        runTest(testDispatcher) {
+            val vm = buildViewModel(
+                flagRepo = FakeFeatureFlagRepository(FeatureFlags(usageHistoryEnabled = false))
+            )
+
+            vm.onAppClicked(InstalledApp("org.telegram.messenger", "Telegram"))
+            advanceUntilIdle()
+
+            // Launch still happens; only the history write is suppressed.
+            assertEquals(1, fakeExecutor.callCount)
+            assertTrue(
+                "No usage recording expected when flag is false",
+                fakeUsageRepo.recordedLaunches.isEmpty(),
+            )
+        }
+
+    @Test
+    fun `onAppClicked records usage when usageHistoryEnabled is true`() =
+        runTest(testDispatcher) {
+            val vm = buildViewModel(
+                flagRepo = FakeFeatureFlagRepository(FeatureFlags(usageHistoryEnabled = true))
+            )
+
+            vm.onAppClicked(InstalledApp("org.telegram.messenger", "Telegram"))
+            advanceUntilIdle()
+
+            assertEquals(listOf("org.telegram.messenger"), fakeUsageRepo.recordedLaunches)
+        }
+
+    @Test
+    fun `recordUsage swallows non-cancellation error from getFlags`() =
+        runTest(testDispatcher) {
+            val throwingFlagRepo = object : FeatureFlagRepository {
+                override fun getFlags(): Flow<FeatureFlags> =
+                    flow { throw RuntimeException("flag read error") }
+                override suspend fun updateFlags(flags: FeatureFlags): OperationResult<Unit> =
+                    OperationResult.Success(Unit)
+            }
+            val vm = buildViewModel(flagRepo = throwingFlagRepo)
+
+            vm.onAppClicked(InstalledApp("org.telegram.messenger", "Telegram"))
+            advanceUntilIdle()
+
+            // Launch still happened; the flag-read error is swallowed by the catch-all.
+            assertEquals(1, fakeExecutor.callCount)
+            assertEquals(CommandFeedback.None, vm.commandFeedback.value)
+            // No usage recorded — flag could not be read.
+            assertTrue(fakeUsageRepo.recordedLaunches.isEmpty())
+        }
 }

@@ -1,8 +1,10 @@
 package com.sidr.launcher.di
 
+import com.sidr.launcher.core.common.di.ApplicationScope
 import com.sidr.launcher.data.repository.intent.RuleBasedIntentMatcher
 import com.sidr.launcher.domain.history.IntentMatchHistoryRepository
 import com.sidr.launcher.domain.intent.ActionExecutor
+import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
@@ -13,6 +15,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineScope
 import javax.inject.Singleton
 
 /**
@@ -47,11 +50,15 @@ object IntentProvidesModule {
         executor: ActionExecutor,
         confidencePolicy: IntentConfidencePolicy,
         intentMatchHistory: IntentMatchHistoryRepository,
+        featureFlagRepository: FeatureFlagRepository,
+        @ApplicationScope recordingScope: CoroutineScope,
     ): HandleUserCommandUseCase = HandleUserCommandUseCase(
         matcher = matcher,
         resolver = resolver,
         executor = executor,
         confidencePolicy = confidencePolicy,
         intentMatchHistory = intentMatchHistory,
+        featureFlagRepository = featureFlagRepository,
+        recordingScope = recordingScope,
     )
 }

@@ -288,7 +288,156 @@ configurable `errorToReturn`.
   empty. `:domain:dependencies` compileClasspath = `kotlin-stdlib` + `kotlinx-coroutines-core`
   only. `feature/*` has no edge into `:data:*`.
 
-**Frozen, untouched:** Room (Block F), permission-education (G), hardening (H), secrets (Ph5).
+**Frozen, untouched:** permission-education (G), hardening (H), secrets (Ph5).
+
+### ADR 2026-06-22 — Block F complete (Room persistence: history tables, redaction, migration runway)
+
+**Done 2026-06-22 (Block F, F1–F8). Second Phase-4 execution round. Forks 2, 4, 8 honoured.**
+
+**New files in `:domain` (`com.sidr.launcher.domain.history`):**
+- `AppUsageRecord`, `SuggestionRankingRecord`, `IntentMatchRecord` — pure data classes, no Room.
+- `IntentMatchType` enum: `LAUNCH_APP / SEARCH / OPEN_SETTINGS / SIMPLE_COMMAND / UNKNOWN`.
+- Repo interfaces `UsageHistoryRepository`, `SuggestionRankingRepository`,
+  `IntentMatchHistoryRepository` — reads `Flow<List<T>>`, writes `suspend → OperationResult<Unit>`.
+
+**New files in `:data:repository` (`…data.repository.db`):**
+- `entity/`: `AppUsageEntity`, `SuggestionRankingEntity`, `IntentMatchEntity` with `@ColumnInfo`
+  names matching `RoomColumnNames`.
+- `dao/`: `AppUsageDao` (abstract, `@Transaction` upsert), `SuggestionRankingDao`, `IntentMatchDao`.
+- `SidrDatabase` (`@Database` version=1, `exportSchema=true`); golden schema
+  `schemas/com.sidr.launcher.data.repository.db.SidrDatabase/1.json` committed to VCS.
+- `converter/IntentMatchTypeConverter` — `String ↔ IntentMatchType`, defensive `→ UNKNOWN`.
+- `mapper/IntentMatchMapper` — **redaction**: `SEARCH` → `"search"`, `UNKNOWN` → `"unknown"`;
+  `LAUNCH_APP / OPEN_SETTINGS / SIMPLE_COMMAND` stored as-is (closed vocabulary).
+- `mapper/AppUsageMapper`, `mapper/SuggestionRankingMapper` — plain entity↔domain.
+- `RoomColumnNames` — mirrors `PreferencesKeys.ALL_KEY_NAMES` for the privacy guard test.
+- 3 `*RepositoryImpl` over injected DAOs + `@IoDispatcher`; retention caps enforced on every write:
+  `MAX_USAGE_ROWS=200`, `MAX_RANKING_ROWS=100`, `MAX_INTENT_MATCH_ROWS=200`; oldest/lowest-scored
+  pruned. I/O exceptions caught → `OperationError.UnknownError`, `CancellationException` re-thrown.
+- `migrations/` package seeded (empty runway); rule: entity change → version bump + Migration +
+  new golden schema.
+
+**Changes in `:domain` (`…domain.intent`):**
+- `HandleUserCommandUseCase`: added optional `intentMatchHistory: IntentMatchHistoryRepository? = null`
+  + `now: () -> Long`; `recordMatch(...)` called after match, before confidence gate; soft-wrapped
+  (Failure discarded; `Throwable` swallowed except `CancellationException`). 12 `CommandOutcome`
+  branches unchanged; 5 new tests for write/soft-wrap behaviour.
+
+**Changes in `:feature:launcher`:**
+- `LauncherViewModel` injects `UsageHistoryRepository` (domain interface — no `feature→data` edge);
+  grid sorted via `combine(...).stateIn(Eagerly)` by `launchCount DESC, lastUsedEpochMs DESC`;
+  apps with no history keep original order; `onAppClicked` records usage on `Success`, soft-wrapped.
+  7 new VM tests.
+
+**New files in `:app/di`:**
+- `DatabaseModule` (object — `@Provides @Singleton SidrDatabase` via `Room.databaseBuilder`,
+  `fallbackToDestructiveMigration` only if `BuildConfig.DEBUG`; release fails loudly).
+- `HistoryBindsModule` (abstract — `@Binds` ×3).
+- `IntentProvidesModule` updated: passes real `IntentMatchHistoryRepository` to `HandleUserCommandUseCase`.
+
+**New fakes in `:core:testing`:**
+- `FakeSuggestionRankingRepository`, `FakeIntentMatchHistoryRepository` — `MutableStateFlow`-backed,
+  `errorToReturn`, recorded-calls list, `setRecords()`. Note: fakes do NOT apply redaction
+  (redaction is a data-layer invariant; tested via real impl + in-memory DB).
+
+**Tests (F8):**
+- `UsageHistoryRepositoryImplTest` (4 tests), `SuggestionRankingRepositoryImplTest` (4 tests),
+  `IntentMatchHistoryRepositoryImplTest` (7 tests including 5 redaction cases) — Robolectric
+  `@RunWith(RobolectricTestRunner)`, in-memory `SidrDatabase`, `allowMainThreadQueries()`.
+- `RoomColumnNamesGuardTest` (2 tests) — asserts no column name contains a forbidden term
+  (same denylist as `PrivacyInventoryGuardTest`; table names exempted as structural identifiers).
+- `MigrationTest` in `androidTest` — `MigrationTestHelper` creates DB v1 from golden schema;
+  run manually: `./gradlew :data:repository:connectedDebugAndroidTest`.
+- Total new JVM tests: 17. No regressions (Block C/D/E tests still green).
+- `testImplementation(libs.androidx.test.ext.junit)` added to `:data:repository` to bring in
+  `androidx.test.core` for `ApplicationProvider` in Robolectric tests.
+
+**Decisions made during execution:**
+- **KSP/kapt hybrid (Fork 8):** Room on KSP (`com.google.devtools.ksp` 2.0.21-1.0.28), Hilt on
+  kapt. Fix for classloader issue (google/dagger#3965): `ksp { apply false }` in root
+  `build.gradle.kts` alongside `kotlin-kapt` and `hilt` plugin declarations.
+- **Schema lifecycle (Fork 2):** `exportSchema=true`, `room.schemaLocation → data/repository/schemas/`,
+  `schemas/1.json` committed. `fallbackToDestructiveMigration` in `DatabaseModule` gated on
+  `BuildConfig.DEBUG` (all three history tables are recreatable; release never silently wipes).
+- **Robolectric (Fork 7):** added `testImplementation(libs.robolectric)` (4.14.1) to
+  `:data:repository`. `testOptions { unitTests { isIncludeAndroidResources = true } }` required.
+  Migration baseline test in `androidTest` (needs device; not in JVM CI).
+- **Redaction principle (Fork 3):** *Intent-match redaction rule: match types carrying arbitrary
+  user content (SEARCH, UNKNOWN) store a placeholder, never the content; structurally-bounded
+  types (LAUNCH_APP, OPEN_SETTINGS, SIMPLE_COMMAND) are stored as-is. Every new intent type must
+  be classified by this rule.* Single enforcement point: `IntentMatchMapper.toEntity`. Domain model
+  is unaware of the policy.
+- **Retention (Fork 3):** row-count cap enforced in `*RepositoryImpl` on every write (WorkManager
+  still frozen to Ph6/9). Pruning direction: usage/intent-match → oldest by timestamp; ranking →
+  lowest-scored.
+- **Optional intent-match write:** `HandleUserCommandUseCase` accepts `intentMatchHistory` as a
+  nullable default parameter; `null` in tests that don't care; real impl wired in DI.
+
+**Verification:**
+- `./gradlew assembleDebug` → BUILD SUCCESSFUL (277 tasks).
+- `./gradlew testDebugUnitTest --rerun-tasks` → BUILD SUCCESSFUL (17 new + all prior tests green).
+- `grep -rn "import android\|androidx.room" domain/src/` → empty. `:domain:dependencies`
+  compileClasspath = `kotlin-stdlib` + `kotlinx-coroutines-core` only.
+- `feature/*` has no edge into `:data:*` (grep guard).
+- Redaction test confirmed: SEARCH "search cats" → stored as "search"; UNKNOWN free text → "unknown".
+- Column privacy guard: all 12 column names pass the denylist (voice/query/search/… all absent).
+
+**Frozen, untouched:** permission-education (G), hardening (H), `architecture.md` sync (H6),
+secrets (Ph5), WorkManager (Ph6/9), cloud AI, ONNX, voice.
+
+**Follow-up note (2026-06-22) — flag-gating remediation and androidTest baseline:**
+
+*Feature-flag gate (remediation):* Both behavioral-history writes were found to be unconditional
+at Block F close — neither `LauncherViewModel.recordUsage` nor `HandleUserCommandUseCase.recordMatch`
+checked `FeatureFlags.usageHistoryEnabled` before writing. Fixed in a follow-up pass before
+moving to Block G:
+- **Single flag, both paths:** `usageHistoryEnabled` gates both usage-history (VM) and
+  intent-match-history (use case). No second flag introduced.
+- **`HandleUserCommandUseCase`:** added `featureFlagRepository: FeatureFlagRepository? = null`
+  (nullable, follows existing `intentMatchHistory` pattern — zero breakage for callers without
+  a flag repo). Inside the soft-wrapped `recordMatch`, calls `featureFlagRepository?.getFlags()
+  ?.first()?.usageHistoryEnabled`; returns early (skip write) if false or if no repo provided.
+  Flag check is inside the existing try-catch — any flag-read failure silently skips the record.
+- **`LauncherViewModel`:** injected `FeatureFlagRepository`; `recordUsage` calls
+  `featureFlagRepository.getFlags().first().usageHistoryEnabled` inside the existing try-catch;
+  returns early if false.
+- **DI:** `IntentProvidesModule.provideHandleUserCommandUseCase` now receives and wires
+  `FeatureFlagRepository`.
+- **Latency:** both checks are inside soft-wrapped side-effect paths, not on the critical
+  outcome path. `getFlags().first()` reads from DataStore's in-memory cache after startup
+  (fast, no disk I/O on warm reads). The `CommandOutcome` return type and all 12 branches
+  are unchanged.
+- **Tests added:** 2 flag-gate tests in `HandleUserCommandUseCaseTest` (flag=false → no record,
+  flag=true → records, outcome identical either way) + 2 in `LauncherViewModelTest`
+  (flag=false → no `recordedLaunches`, flag=true → records). VM tests default `fakeFlagRepo`
+  to `usageHistoryEnabled=true` so all prior recording tests remain valid.
+- Total: `HandleUserCommandUseCaseTest` 25 tests (0 failures); `LauncherViewModelTest` 24 tests
+  (0 failures). `assembleDebug` + all JVM unit tests green. Domain = stdlib+coroutines only.
+
+*Follow-up fix 2026-06-23 — Fix 1 (fire-and-forget) + Fix 2 (CancellationException):*
+Two correctness issues in the Block F flag-gating code were fixed. **Fix 1:** `recordMatch` was
+called inline (`await`) inside `handle()`, so every command waited on a DataStore read + DB write
+before returning `CommandOutcome`. Fixed by adding `recordingScope: CoroutineScope` to
+`HandleUserCommandUseCase` (default `CoroutineScope(SupervisorJob())`; DI provides
+`@ApplicationScope @Singleton CoroutineScope(SupervisorJob() + @IoDispatcher)` via a new provider
+in `DispatcherModule`; the `@ApplicationScope` qualifier lives in `core/common/di`). The call in
+`handle()` is now `recordingScope.launch { recordMatch(...) }` — the `CommandOutcome` is returned
+before the record completes. **Fix 2:** `LauncherViewModel.recordUsage` had `catch (_: Throwable)`
+wrapping `featureFlagRepository.getFlags().first()`, swallowing `CancellationException` from the
+`getFlags` suspension. Fixed with `catch (e: CancellationException) { throw e }` before the
+catch-all (import added). `HandleUserCommandUseCase.recordMatch` already had this guard from the
+prior pass. **Tests:** recording tests in `HandleUserCommandUseCaseTest` use
+`CoroutineScope(Dispatchers.Unconfined + SupervisorJob())` as the `recordingScope` — the unconfined
+dispatcher runs the launched coroutine in-place through the fake (no real suspension points), so
+assertions follow `handle()` immediately with no scheduler advancement. One new test added:
+`flag-read throws non-cancellation — outcome unaffected, record skipped` (use case); one new test
+added: `recordUsage swallows non-cancellation error from getFlags` (ViewModel). Total: 67 domain
+JVM tests, 25 launcher JVM tests, 0 failures. `assembleDebug` green.
+
+*androidTest migration baseline:* `MigrationTest` executed on SM-A325F (Android 13, 2026-06-22).
+`./gradlew :data:repository:connectedDebugAndroidTest` → **2 tests, BUILD SUCCESSFUL**. The v1
+schema runway is proven on a real device. Note: test method names use camelCase (spaces in
+backtick method names are rejected by pre-DEX-040 android toolchain).
 
 ### ADR 2026-06-19 — Phase 2 skipped / reordered into a minimal slice
 - Decision: Phase 2 (launcher shell) is **not** run as a separate phase. Its navigation half was already absorbed into `3.1.x`; its product floor — `InstalledAppsRepository`, app grid, command input, offline app launch — is folded into Phase 3 as a **minimal P2 slice** (Block B).

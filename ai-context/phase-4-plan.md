@@ -256,21 +256,21 @@ Phase-3 pipeline.
 - `:feature:launcher`: grid may sort by usage recency/frequency (consumes usage history).
 - `:core:testing`: fakes for the three history repositories.
 
-**Steps:**
-- [ ] `F1` Fork 8 (KSP/kapt) decision approved → configure the processor; Room into catalog +
+**Steps:** *(F1–F8 complete 2026-06-22; follow-up fixes 2026-06-23 — see decisions.md "ADR Block F" + "Follow-up fix 2026-06-23")*
+- [x] `F1` Fork 8 (KSP/kapt) decision approved → configure the processor; Room into catalog +
       build file; `exportSchema=true`, schemaLocation, `schemas/` dir.
-- [ ] `F2` Entities + DAOs + `SidrDatabase` (version=1) + `TypeConverters`; `migrations/` package
+- [x] `F2` Entities + DAOs + `SidrDatabase` (version=1) + `TypeConverters`; `migrations/` package
       seeded (empty runway) + bump/Migration/golden-schema rule.
-- [ ] `F3` Entity↔domain mappers (Fork 4); Room annotations stay inside `:data:repository`
+- [x] `F3` Entity↔domain mappers (Fork 4); Room annotations stay inside `:data:repository`
       (grep guard).
-- [ ] `F4` `*RepositoryImpl` with retention (cap + age-pruning on write, Fork 3); I/O →
+- [x] `F4` `*RepositoryImpl` with retention (cap + age-pruning on write, Fork 3); I/O →
       `OperationResult`, never throws.
-- [ ] `F5` Integration: `HandleUserCommandUseCase` writes `IntentMatchRecord` (normalized text +
+- [x] `F5` Integration: `HandleUserCommandUseCase` writes `IntentMatchRecord` (normalized text +
       type + confidence + ts only, no raw voice — Fork 3).
-- [ ] `F6` Consume usage history in the `feature/launcher` grid (recency/frequency sort) —
+- [x] `F6` Consume usage history in the `feature/launcher` grid (recency/frequency sort) —
       demoable slice.
-- [ ] `F7` DI: database/DAO/repo in `:app`.
-- [ ] `F8` Tests: Robolectric DAO/repo round-trip + retention; `androidTest` `MigrationTest`
+- [x] `F7` DI: database/DAO/repo in `:app`.
+- [x] `F8` Tests: Robolectric DAO/repo round-trip + retention; `androidTest` `MigrationTest`
       (v1 baseline + helper wired); privacy inventory guard test (no forbidden fields).
 
 **Acceptance criteria:**

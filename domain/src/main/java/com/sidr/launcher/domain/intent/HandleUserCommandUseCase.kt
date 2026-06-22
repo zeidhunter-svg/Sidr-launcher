@@ -3,8 +3,13 @@ package com.sidr.launcher.domain.intent
 import com.sidr.launcher.domain.history.IntentMatchHistoryRepository
 import com.sidr.launcher.domain.history.IntentMatchRecord
 import com.sidr.launcher.domain.history.IntentMatchType
+import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.result.OperationResult
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * Use case: turns raw user command text into a single [CommandOutcome] for the UI.
@@ -30,6 +35,14 @@ class HandleUserCommandUseCase(
     private val intentMatchHistory: IntentMatchHistoryRepository? = null,
     // Injectable clock for deterministic tests; defaults to wall-clock.
     private val now: () -> Long = { System.currentTimeMillis() },
+    // Flag gate — when provided, recording is skipped unless usageHistoryEnabled is true.
+    // Default-null preserves backward compatibility: existing callers without the flag still record.
+    private val featureFlagRepository: FeatureFlagRepository? = null,
+    // Required: scope on which history records are launched fire-and-forget. In production DI
+    // provides @ApplicationScope (SupervisorJob + IoDispatcher, singleton). Tests inject an
+    // Unconfined scope. No default — an unscoped CoroutineScope(SupervisorJob()) would land on
+    // Dispatchers.Default with no lifecycle, leaking work on every command.
+    private val recordingScope: CoroutineScope,
 ) {
 
     suspend fun handle(rawInput: String): CommandOutcome {
@@ -40,9 +53,10 @@ class HandleUserCommandUseCase(
         val intent = match.best.intent
         val confidence = match.best.confidence
 
-        // Best-effort history write — placed BEFORE the confidence gate so suggest, low-confidence
-        // and unknown matches are all captured. Never affects the outcome below.
-        recordMatch(normalized, intent, confidence)
+        // Fire-and-forget: record on the injected scope so the I/O never delays the outcome.
+        // Placed BEFORE the confidence gate so suggest, low-confidence and unknown matches are
+        // all captured. Never affects the outcome below.
+        recordingScope.launch { recordMatch(normalized, intent, confidence) }
 
         // ── Confidence gate — runs before any resolution or execution ────────
         if (confidencePolicy.isLowConfidence(confidence)) {
@@ -96,8 +110,10 @@ class HandleUserCommandUseCase(
     }
 
     /**
-     * Records the match as a side effect. A null repository (default) is a no-op. The
-     * OperationResult is intentionally discarded and any throwable is swallowed — a failed or
+     * Records the match as a side effect. A null repository (default) is a no-op.
+     * When [featureFlagRepository] is provided, recording is skipped unless
+     * [com.sidr.launcher.domain.preferences.FeatureFlags.usageHistoryEnabled] is true.
+     * The OperationResult is intentionally discarded and any throwable is swallowed — a failed or
      * unavailable history write must NEVER turn a command into [CommandOutcome.Failed] or throw.
      * Arbitrary-content match types (SEARCH, UNKNOWN) are redacted downstream in the data-layer
      * mapper (Fork 3); the use case passes the normalized text and the structural match type only.
@@ -105,6 +121,10 @@ class HandleUserCommandUseCase(
     private suspend fun recordMatch(normalized: String, intent: LauncherIntent, confidence: Float) {
         val repo = intentMatchHistory ?: return
         try {
+            // Gate: if a flag repo is wired, skip the write when the flag is disabled.
+            if (featureFlagRepository != null &&
+                !featureFlagRepository.getFlags().first().usageHistoryEnabled
+            ) return
             repo.recordMatch(
                 IntentMatchRecord(
                     normalizedText = normalized,

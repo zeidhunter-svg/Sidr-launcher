@@ -21,6 +21,21 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    testOptions {
+        unitTests {
+            // Required for Robolectric to resolve Android resources in JVM unit tests.
+            isIncludeAndroidResources = true
+        }
+    }
+
+    sourceSets {
+        // Expose the exported Room schemas as androidTest assets so MigrationTestHelper can
+        // validate the golden schema (Fork 2 / Block F, step F8.5).
+        getByName("androidTest") {
+            assets.srcDirs(files("$projectDir/schemas"))
+        }
+    }
 }
 
 kotlin {
@@ -55,6 +70,7 @@ dependencies {
     testImplementation(libs.junit4)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.ext.junit)
     testImplementation(project(":core:testing"))
 
     androidTestImplementation(libs.room.testing)

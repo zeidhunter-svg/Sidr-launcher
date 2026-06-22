@@ -1,6 +1,6 @@
 # CLAUDE.md — Sidr Launcher
 
-Session digest. Read this first, then `ai-context/phase-4-plan.md` (active: Block F).
+Session digest. Read this first, then `ai-context/phase-4-plan.md` (active: Block G).
 
 ## What this is
 
@@ -23,8 +23,15 @@ Preferences foundation — `UserPreferences`/`FeatureFlags`/`DeviceProfileCacheE
 + 4 repos (`Flow` read / `OperationResult` write), impls over one `DataStore<Preferences>`,
 `PersistenceProvidesModule`+`PersistenceBindsModule` in `:app`, 4 fakes, 14 JVM tests green
 (round-trip survives simulated restart). Privacy inventory enforced by a key-name guard test.
-`assembleDebug` + `testDebugUnitTest` green. **Next: Block F — Room** (usage / suggestion-ranking
-/ intent-match history). Details in the Block E ADR in
+**Block F DONE (2026-06-22):** Room persistence — 3 history domain models + repo interfaces
+(`AppUsageRecord`/`SuggestionRankingRecord`/`IntentMatchRecord` + `IntentMatchType`) in `:domain`;
+Room entities, DAOs, `SidrDatabase` (v1, `exportSchema=true`), `TypeConverters`, mappers with
+**SEARCH/UNKNOWN redaction** (query content never stored), 3 `*RepositoryImpl` with retention-caps
+(200/100/200), `DatabaseModule`+`HistoryBindsModule` in `:app`; intent-match write live in
+`HandleUserCommandUseCase`; grid sorts by usage recency/frequency; 2 fakes in `:core:testing`;
+17 new JVM tests (Robolectric DAO/repo + redaction + column-privacy guard) green. Golden schema
+`schemas/1.json` committed; `MigrationTestHelper` runway in `androidTest`.
+`assembleDebug` + `testDebugUnitTest` green. **Next: Block G — permission-education.** Details in
 [ai-context/decisions.md](ai-context/decisions.md).
 
 Phase 3 result, Blocks A → D:
@@ -41,8 +48,8 @@ Phase 3 result, Blocks A → D:
   `IntentProvidesModule` (`:app`). Routing: low/medium never auto-executes; navigation + CLEAR +
   SHOW_APPS + ambiguity never go through the executor.
 
-**Still frozen until their Phase-4 slice:** Room + intent-match-history (Block F),
-permission-education (G), hardening (H). DataStore unfrozen in Block E.
+**Still frozen until their Phase-4 slice:** permission-education (G), hardening (H).
+DataStore unfrozen in Block E; Room unfrozen in Block F.
 
 ## Status snapshot
 
@@ -57,7 +64,17 @@ permission-education (G), hardening (H). DataStore unfrozen in Block E.
 - **Phase 3 CLOSED (2026-06-21).**
 - **Phase 4 Block E ✅ (2026-06-22)** — DataStore Preferences: domain models + 4 repo interfaces,
   impls + mappers (`@Serializable` DTO stays in `:data:repository`), DI split modules, fakes, 14
-  JVM tests. Privacy key-name guard green. **Active next: Block F (Room).**
+  JVM tests. Privacy key-name guard green.
+- **Phase 4 Block F ✅ (2026-06-22, fixes 2026-06-23)** — Room: 3 history domain models + interfaces
+  in `:domain`; entities + DAOs + `SidrDatabase` (v1) + mappers with SEARCH/UNKNOWN redaction + 3
+  `*RepositoryImpl` (retention 200/100/200) in `:data:repository`; `DatabaseModule`+`HistoryBindsModule`
+  in `:app`; intent-match write live in use case; usage-sorted grid; 2 fakes + 17 new JVM tests
+  (Robolectric + column-privacy guard) green; `MigrationTestHelper` v1 baseline verified on SM-A325F
+  (Android 13); both history writes gated behind `FeatureFlags.usageHistoryEnabled` (4 flag-gate tests).
+  Follow-up (2026-06-23): `recordMatch` moved off critical path via `recordingScope.launch {}` (injected
+  `@ApplicationScope CoroutineScope`, required param, no lifecycle-less default); `CancellationException`
+  re-thrown in `LauncherViewModel.recordUsage`; 2 more tests; 67 domain + 25 launcher JVM, 0 failures.
+  **Active next: Block G (permission-education).**
 
 ## Hard rules
 
@@ -102,7 +119,7 @@ permission-education (G), hardening (H). DataStore unfrozen in Block E.
   (deprecated, Fork 1 defers secrets to Phase 5). Sync scheduled: Block H, step H6. Until then
   the authoritative sources are: this file + [ai-context/phase-4-plan.md](ai-context/phase-4-plan.md)
   + [ai-context/decisions.md](ai-context/decisions.md).
-- Active checklist: [ai-context/phase-4-plan.md](ai-context/phase-4-plan.md) *(Block F — active)*
+- Active checklist: [ai-context/phase-4-plan.md](ai-context/phase-4-plan.md) *(Block G — active)*
 - Closed checklist: [ai-context/phase-3-intent-system-plan.md](ai-context/phase-3-intent-system-plan.md)
   *(Phase 3 closed 2026-06-21)*
 - Decisions log: [ai-context/decisions.md](ai-context/decisions.md)

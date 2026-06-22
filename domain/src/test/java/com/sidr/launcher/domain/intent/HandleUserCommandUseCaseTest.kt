@@ -1,15 +1,22 @@
 package com.sidr.launcher.domain.intent
 
 import com.sidr.launcher.core.testing.FakeActionExecutor
+import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeIntentMatcher
 import com.sidr.launcher.domain.history.IntentMatchHistoryRepository
+import com.sidr.launcher.domain.preferences.FeatureFlagRepository
+import com.sidr.launcher.domain.preferences.FeatureFlags
 import com.sidr.launcher.domain.history.IntentMatchRecord
 import com.sidr.launcher.domain.history.IntentMatchType
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -31,6 +38,7 @@ class HandleUserCommandUseCaseTest {
         resolver = resolver,
         executor = fakeExecutor,
         confidencePolicy = policy,
+        recordingScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob()),
     )
 
     @Before fun setUp() {
@@ -214,9 +222,12 @@ class HandleUserCommandUseCaseTest {
 
     // ── Intent-match history recording (Block F, F5) — best-effort side effect ─
 
+    // Unconfined scope: fakes have no real suspension points, so recording runs in-place before handle() returns (future hardening: runTest + scheduler control).
+
     @Test fun `match is recorded with normalized text, type and confidence`() = runTest {
         val history = RecordingIntentMatchHistory()
-        val useCaseWithHistory = useCaseWith(history, fixedNow = 1234L)
+        val useCaseWithHistory = useCaseWith(history, fixedNow = 1234L,
+            recordingScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
         fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
         matcherReturns(LauncherIntent.LaunchAppIntent("telegram"), 0.90f)
 
@@ -232,7 +243,8 @@ class HandleUserCommandUseCaseTest {
 
     @Test fun `suggest and low-confidence matches are still recorded`() = runTest {
         val history = RecordingIntentMatchHistory()
-        val useCaseWithHistory = useCaseWith(history)
+        val useCaseWithHistory = useCaseWith(history,
+            recordingScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
         matcherReturns(LauncherIntent.LaunchAppIntent("teleg"), 0.60f) // medium → Suggest
 
         assertTrue(useCaseWithHistory.handle("teleg") is CommandOutcome.Suggest)
@@ -244,7 +256,8 @@ class HandleUserCommandUseCaseTest {
         val history = RecordingIntentMatchHistory(
             result = OperationResult.Failure(OperationError.UnknownError("db down"))
         )
-        val useCaseWithHistory = useCaseWith(history)
+        val useCaseWithHistory = useCaseWith(history,
+            recordingScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
         fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
         matcherReturns(LauncherIntent.LaunchAppIntent("telegram"), 0.90f)
 
@@ -255,10 +268,12 @@ class HandleUserCommandUseCaseTest {
 
     @Test fun `history write that throws does not break the command outcome`() = runTest {
         val history = RecordingIntentMatchHistory(throwOnRecord = true)
-        val useCaseWithHistory = useCaseWith(history)
+        val useCaseWithHistory = useCaseWith(history,
+            recordingScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
         fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
         matcherReturns(LauncherIntent.LaunchAppIntent("telegram"), 0.90f)
 
+        // Exception is swallowed inside recordMatch's catch; outcome is unaffected.
         assertEquals(CommandOutcome.Executed, useCaseWithHistory.handle("open telegram"))
     }
 
@@ -268,6 +283,55 @@ class HandleUserCommandUseCaseTest {
         matcherReturns(LauncherIntent.LaunchAppIntent("telegram"), 0.90f)
 
         assertEquals(CommandOutcome.Executed, useCase.handle("open telegram"))
+    }
+
+    // ── Feature-flag gate (Block F remediation) ──────────────────────────────
+
+    @Test fun `flag disabled — match is NOT recorded even when history repo is wired`() = runTest {
+        val history = RecordingIntentMatchHistory()
+        val flagRepo = FakeFeatureFlagRepository(FeatureFlags(usageHistoryEnabled = false))
+        val uc = useCaseWith(history, featureFlagRepository = flagRepo,
+            recordingScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
+        fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
+        matcherReturns(LauncherIntent.LaunchAppIntent("telegram"), 0.90f)
+
+        val outcome = uc.handle("open telegram")
+
+        assertEquals(CommandOutcome.Executed, outcome) // outcome identical — flag does not change routing
+        assertTrue("Recording must be skipped when usageHistoryEnabled=false", history.recorded.isEmpty())
+    }
+
+    @Test fun `flag enabled — match IS recorded`() = runTest {
+        val history = RecordingIntentMatchHistory()
+        val flagRepo = FakeFeatureFlagRepository(FeatureFlags(usageHistoryEnabled = true))
+        val uc = useCaseWith(history, featureFlagRepository = flagRepo,
+            recordingScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
+        fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
+        matcherReturns(LauncherIntent.LaunchAppIntent("telegram"), 0.90f)
+
+        val outcome = uc.handle("open telegram")
+
+        assertEquals(CommandOutcome.Executed, outcome)
+        assertEquals(1, history.recorded.size)
+    }
+
+    @Test fun `flag-read throws non-cancellation — outcome unaffected, record skipped`() = runTest {
+        val history = RecordingIntentMatchHistory()
+        val throwingFlagRepo = object : FeatureFlagRepository {
+            override fun getFlags(): Flow<FeatureFlags> =
+                flow { throw RuntimeException("flag read error") }
+            override suspend fun updateFlags(flags: FeatureFlags): OperationResult<Unit> =
+                OperationResult.Success(Unit)
+        }
+        val uc = useCaseWith(history, featureFlagRepository = throwingFlagRepo,
+            recordingScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob()))
+        fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
+        matcherReturns(LauncherIntent.LaunchAppIntent("telegram"), 0.90f)
+
+        val outcome = uc.handle("open telegram")
+
+        assertEquals(CommandOutcome.Executed, outcome)
+        assertTrue("Record must be skipped when getFlags() throws", history.recorded.isEmpty())
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
@@ -280,6 +344,8 @@ class HandleUserCommandUseCaseTest {
     private fun useCaseWith(
         history: IntentMatchHistoryRepository,
         fixedNow: Long = 0L,
+        featureFlagRepository: FeatureFlagRepository? = null,
+        recordingScope: CoroutineScope,
     ) = HandleUserCommandUseCase(
         matcher = fakeMatcher,
         resolver = resolver,
@@ -287,6 +353,8 @@ class HandleUserCommandUseCaseTest {
         confidencePolicy = policy,
         intentMatchHistory = history,
         now = { fixedNow },
+        featureFlagRepository = featureFlagRepository,
+        recordingScope = recordingScope,
     )
 
     /** Local test double — the shared :core:testing fake lands in F8. */

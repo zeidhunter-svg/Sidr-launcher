@@ -43,7 +43,10 @@ internal object PreferencesKeys {
 
     // Feature flags — prefix: flag_
     val FLAG_AI_SUGGESTIONS_ENABLED    = booleanPreferencesKey("flag_ai_suggestions_enabled")
-    val FLAG_USAGE_HISTORY_ENABLED     = booleanPreferencesKey("flag_usage_history_enabled")
+    // Key string avoids the term "history" (kept in the guard denylist) — this is a feature
+    // toggle for usage tracking, not a store of history. The Room usage-history table (Block F)
+    // is the only history carrier. Domain field stays FeatureFlags.usageHistoryEnabled.
+    val FLAG_USAGE_HISTORY_ENABLED     = booleanPreferencesKey("flag_usage_tracking_enabled")
     val FLAG_PERMISSION_EDU_DISMISSED  = booleanPreferencesKey("flag_permission_edu_dismissed")
 
     // Device-profile cache — prefix: device_

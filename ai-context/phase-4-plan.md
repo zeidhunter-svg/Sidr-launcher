@@ -191,8 +191,8 @@ the `domain-interface ↔ data-impl+mapping` pattern. **First execution round.**
 - `:core:testing`: `FakeUserPreferencesRepository`, `FakeFeatureFlagRepository`,
   `FakeDeviceProfileCacheRepository`, `FakeSuggestionsCacheRepository`.
 
-**Steps:**
-- [ ] `E1` Privacy inventory (Fork 3) — split **three categories explicitly**, do not collapse
+**Steps:** *(E1–E8 complete 2026-06-22 — see decisions.md "ADR Block E")*
+- [x] `E1` Privacy inventory (Fork 3) — split **three categories explicitly**, do not collapse
       to "no secrets":
       - **Allowed in DataStore:** preferences, feature flags, device-profile cache,
         last-known suggestions.
@@ -209,15 +209,15 @@ the `domain-interface ↔ data-impl+mapping` pattern. **First execution round.**
       and document the field-by-field "cached / not cached" split next to the model. This keeps
       "last-known suggestions" a UI-repaint cache, not a behavioral-history store (that's Room's
       intent-match/usage tables, with their own constraints).
-- [ ] `E2` Add DataStore to the catalog + `:data:repository/build.gradle.kts`.
-- [ ] `E3` Domain models + repo interfaces (`Flow` on read, `OperationResult` on write).
-- [ ] `E4` `Impl` ×4 over Preferences DataStore + mappers; writes return `OperationResult`, I/O
+- [x] `E2` Add DataStore to the catalog + `:data:repository/build.gradle.kts`.
+- [x] `E3` Domain models + repo interfaces (`Flow` on read, `OperationResult` on write).
+- [x] `E4` `Impl` ×4 over Preferences DataStore + mappers; writes return `OperationResult`, I/O
       exceptions caught → `OperationError`, never thrown.
-- [ ] `E5` `DeviceProfileCacheRepository`: caches the computed `DeviceProfile` (the detector
+- [x] `E5` `DeviceProfileCacheRepository`: caches the computed `DeviceProfile` (the detector
       stays in `core/android`; only the cache lives here).
-- [ ] `E6` DI `PersistenceModule` in `:app`; confirm `feature/*` gains no edge into `:data:*`.
-- [ ] `E7` Fakes in `:core:testing`.
-- [ ] `E8` Tests: DataStore on a tmp file / `TestScope` (Fork 7) — round-trip, defaults, `Flow`
+- [x] `E6` DI `PersistenceModule` in `:app`; confirm `feature/*` gains no edge into `:data:*`.
+- [x] `E7` Fakes in `:core:testing`.
+- [x] `E8` Tests: DataStore on a tmp file / `TestScope` (Fork 7) — round-trip, defaults, `Flow`
       observation. No new test dependency (Robolectric not needed for E).
 
 **Acceptance criteria:**

@@ -17,11 +17,14 @@ resolves + launches offline; tap a grid app → launches; unknown → fallback U
 [ai-context/phase-3-intent-system-plan.md](ai-context/phase-3-intent-system-plan.md) and the
 Block D ADR in [ai-context/decisions.md](ai-context/decisions.md).
 
-**Next: Phase 4 — persistence, state & navigation hardening** (see
-[docs/roadmap.md](docs/roadmap.md)): DataStore preferences / feature flags / device-profile
-cache; Room-backed usage history, suggestion-ranking history, **intent-match-history**; feature
-modules touch persistence only through repositories; harden `UiState` / navigation / recoverable
-errors. The permission-education module + request flows (deferred from Phase 3) land here too.
+**Phase 4 — persistence, state & navigation hardening** (Blocks E → H, see
+[ai-context/phase-4-plan.md](ai-context/phase-4-plan.md)). **Block E DONE (2026-06-22):** DataStore
+Preferences foundation — `UserPreferences`/`FeatureFlags`/`DeviceProfileCacheEntry`/`CachedSuggestion`
++ 4 repos (`Flow` read / `OperationResult` write), impls over one `DataStore<Preferences>`,
+`PersistenceProvidesModule`+`PersistenceBindsModule` in `:app`, 4 fakes, 14 JVM tests green
+(round-trip survives simulated restart). Privacy inventory enforced by a key-name guard test.
+**Next: Block F — Room** (usage / suggestion-ranking / intent-match history). Details in the
+Block E ADR in [ai-context/decisions.md](ai-context/decisions.md).
 
 Phase 3 result, Blocks A → D:
 
@@ -49,7 +52,10 @@ Phase 3 result, Blocks A → D:
 - Block C ✅ full intent domain — contracts, normalizer, rule-based matcher, resolver, 65 tests.
 - Block D ✅ MVP loop — `ActionExecutor` + `CommandOutcome` + `HandleUserCommandUseCase`,
   `AndroidActionExecutor`, VM wiring + `CommandFeedback`, DI split modules. Live-verified on device.
-- **Phase 3 CLOSED (2026-06-21). Active next: Phase 4** (persistence / state / nav hardening).
+- **Phase 3 CLOSED (2026-06-21).**
+- **Phase 4 Block E ✅ (2026-06-22)** — DataStore Preferences: domain models + 4 repo interfaces,
+  impls + mappers (`@Serializable` DTO stays in `:data:repository`), DI split modules, fakes, 14
+  JVM tests. Privacy key-name guard green. **Active next: Block F (Room).**
 
 ## Hard rules
 

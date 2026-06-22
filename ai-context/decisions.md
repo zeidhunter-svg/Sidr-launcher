@@ -218,6 +218,78 @@ not touch AI; the two-port invariant holds.
 - **Live launch verified on device (SM-A325F, Android 13):** `open <app>` and grid tap launch apps
   offline; unknown command → fallback UI, no crash; `clear` clears input.
 
+### ADR 2026-06-22 — Block E complete (DataStore Preferences foundation)
+
+**Done 2026-06-22 (Block E, E1–E8). First Phase-4 execution round. Forks 1/3/4 honoured.**
+
+**New files in `:domain` (`com.sidr.launcher.domain.preferences`):**
+- `UserPreferences` (`themeName="system"`, `commandInputEnabled=true`), `FeatureFlags`
+  (`aiSuggestionsEnabled`/`usageHistoryEnabled`/`permissionEducationDismissed`, all `false`),
+  `DeviceProfileCacheEntry` (`isLowEndDevice`, `cachedAtEpochMs`), `CachedSuggestion`
+  (`label`, `actionId`) — all pure data classes, **no `@Serializable`** (annotation is a
+  data-layer concern).
+- Repo interfaces `UserPreferencesRepository`, `FeatureFlagRepository`,
+  `DeviceProfileCacheRepository`, `SuggestionsCacheRepository` — reads `Flow<T>`, writes
+  `suspend → OperationResult<Unit>`. `:domain` stays stdlib + coroutines (guard verified).
+
+**New files in `:data:repository` (`…data.repository.preferences`):**
+- `PreferencesKeys.kt` — **E1 privacy-inventory anchor comment** (allowed / forbidden / deferred
+  + `CachedSuggestion` field-by-field "cached/not-cached" split); 9 prefixed keys
+  (`user_`/`flag_`/`device_`/`sug_`); `ALL_KEY_NAMES` set + `MAX_CACHED_SUGGESTIONS=5`.
+- `PreferencesMapper.kt` — pure `Preferences ↔ domain` mapping; holds `@Serializable`
+  `CachedSuggestionDto` (private) so the domain model stays annotation-free; reads fall back to
+  domain defaults on missing keys.
+- 4 `*RepositoryImpl` over one injected `DataStore<Preferences>` + `@IoDispatcher`; reads
+  `dataStore.data.catch{IOException→emptyPreferences()}.map{…}`; writes `withContext(io){ try
+  edit … catch IOException → OperationError.UnknownError }`. **Never throws to caller.**
+
+**New files in `:app/di`:** `PersistenceProvidesModule` (object — `@Provides @Singleton
+DataStore<Preferences>` via `PreferenceDataStoreFactory`, file `sidr_preferences`, scope =
+`@IoDispatcher + SupervisorJob`) + `PersistenceBindsModule` (abstract — `@Binds` ×4). Split
+into two modules for the same Hilt reason as Block D (can't mix `@Binds`/`@Provides`). `:app`
+gained `datastore-preferences` for the DataStore types.
+
+**New fakes in `:core:testing`:** `FakeUserPreferencesRepository`, `FakeFeatureFlagRepository`,
+`FakeDeviceProfileCacheRepository`, `FakeSuggestionsCacheRepository` — `MutableStateFlow`-backed,
+configurable `errorToReturn`.
+
+**Decisions made during execution:**
+- **Suggestions serialised as JSON, not a delimiter** — labels may contain `|||`, quotes,
+  newlines; a string-split scheme would corrupt. `kotlinx-serialization-json` was already in the
+  catalog (not a new dep); added the plugin + lib to `:data:repository` only. Test round-trips a
+  label with `||| "quotes"` + newline.
+- **`DeviceProfileCacheEntry` is a primitive projection, not a `DeviceProfile` alias** — the
+  domain `DeviceProfile`/capability model isn't formalised yet; flattened booleans avoid a
+  premature dependency and serialise cleanly. When `DeviceProfile` lands, only the mapper +
+  interface change; the DataStore keys are stable. Nullable `Flow<…?>` distinguishes "no cache
+  yet" from defaults (gated by a `device_has_cache` marker key).
+- **`PrivacyInventory` object dropped from `:domain`** — it would be inert documentation in the
+  pure module. Inventory lives as the `PreferencesKeys` anchor comment; the guard test runs over
+  the real key *strings*.
+- **`supportsVoiceInput` removed from the cache entry** — voice is frozen to Phase 7, and the
+  key name `device_supports_voice_input` would collide with the `"voice"` denylist term. Field +
+  key both dropped; `"voice"` stays an effective guard term.
+- **`PrivacyInventoryGuardTest` checks key *values*, not Kotlin names** — asserts no key string
+  (`"user_theme_name"`) contains a forbidden term (`voice/query/search/location/calendar/history/
+  conversation/message/transcript/secret/token/api`). `"key"` deliberately excluded (redundant
+  with secret/token/api, would false-match). The test surfaced a real collision:
+  `flag_usage_history_enabled` matched `"history"` → key string renamed to
+  `flag_usage_tracking_enabled` (domain field `usageHistoryEnabled` unchanged; Room remains the
+  only history carrier). Denylist kept intact.
+
+**Verification:**
+- `:data:repository:testDebugUnitTest` → 14 preference tests green (round-trip incl.
+  simulated process-restart via scope-cancel + reopen on the same tmp file; defaults; nullable
+  cache + `clearCache`; bounded list; JSON special-char round-trip; privacy guard). Executed,
+  not NO-SOURCE.
+- `./gradlew assembleDebug` → BUILD SUCCESSFUL (Hilt graph with both new modules).
+- `./gradlew testDebugUnitTest` → BUILD SUCCESSFUL (no regressions).
+- `grep -rn "import android" domain/src/` and `grep -rn "androidx.datastore" domain/src/` →
+  empty. `:domain:dependencies` compileClasspath = `kotlin-stdlib` + `kotlinx-coroutines-core`
+  only. `feature/*` has no edge into `:data:*`.
+
+**Frozen, untouched:** Room (Block F), permission-education (G), hardening (H), secrets (Ph5).
+
 ### ADR 2026-06-19 — Phase 2 skipped / reordered into a minimal slice
 - Decision: Phase 2 (launcher shell) is **not** run as a separate phase. Its navigation half was already absorbed into `3.1.x`; its product floor — `InstalledAppsRepository`, app grid, command input, offline app launch — is folded into Phase 3 as a **minimal P2 slice** (Block B).
 - Context: Phase 3's intent system cannot reach acceptance without Phase 2's installed-apps repository and command input (e.g. `open telegram` cannot resolve or launch). The skip deferred an unavoidable dependency rather than removing it.

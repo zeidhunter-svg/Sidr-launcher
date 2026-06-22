@@ -1,6 +1,10 @@
 package com.sidr.launcher.domain.intent
 
+import com.sidr.launcher.domain.history.IntentMatchHistoryRepository
+import com.sidr.launcher.domain.history.IntentMatchRecord
+import com.sidr.launcher.domain.history.IntentMatchType
 import com.sidr.launcher.domain.result.OperationResult
+import kotlinx.coroutines.CancellationException
 
 /**
  * Use case: turns raw user command text into a single [CommandOutcome] for the UI.
@@ -21,6 +25,11 @@ class HandleUserCommandUseCase(
     private val resolver: IntentActionResolver,
     private val executor: ActionExecutor,
     private val confidencePolicy: IntentConfidencePolicy,
+    // Optional best-effort sink for intent-match history (Block F). Default-null keeps every
+    // existing construction/test valid and makes recording strictly opt-in.
+    private val intentMatchHistory: IntentMatchHistoryRepository? = null,
+    // Injectable clock for deterministic tests; defaults to wall-clock.
+    private val now: () -> Long = { System.currentTimeMillis() },
 ) {
 
     suspend fun handle(rawInput: String): CommandOutcome {
@@ -30,6 +39,10 @@ class HandleUserCommandUseCase(
         val match = matcher.match(normalized)
         val intent = match.best.intent
         val confidence = match.best.confidence
+
+        // Best-effort history write — placed BEFORE the confidence gate so suggest, low-confidence
+        // and unknown matches are all captured. Never affects the outcome below.
+        recordMatch(normalized, intent, confidence)
 
         // ── Confidence gate — runs before any resolution or execution ────────
         if (confidencePolicy.isLowConfidence(confidence)) {
@@ -80,6 +93,39 @@ class HandleUserCommandUseCase(
         is ActionExecutionResult.Success -> CommandOutcome.Executed
         is ActionExecutionResult.Failure -> CommandOutcome.Failed(result.safeMessage)
         is ActionExecutionResult.Unsupported -> CommandOutcome.Failed(SAFE_FAILURE_MESSAGE)
+    }
+
+    /**
+     * Records the match as a side effect. A null repository (default) is a no-op. The
+     * OperationResult is intentionally discarded and any throwable is swallowed — a failed or
+     * unavailable history write must NEVER turn a command into [CommandOutcome.Failed] or throw.
+     * Arbitrary-content match types (SEARCH, UNKNOWN) are redacted downstream in the data-layer
+     * mapper (Fork 3); the use case passes the normalized text and the structural match type only.
+     */
+    private suspend fun recordMatch(normalized: String, intent: LauncherIntent, confidence: Float) {
+        val repo = intentMatchHistory ?: return
+        try {
+            repo.recordMatch(
+                IntentMatchRecord(
+                    normalizedText = normalized,
+                    matchType = intent.toMatchType(),
+                    confidence = confidence.toDouble(),
+                    timestampEpochMs = now(),
+                )
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            // Swallow — history is non-critical; the command already has its outcome.
+        }
+    }
+
+    private fun LauncherIntent.toMatchType(): IntentMatchType = when (this) {
+        is LauncherIntent.LaunchAppIntent     -> IntentMatchType.LAUNCH_APP
+        is LauncherIntent.SearchIntent        -> IntentMatchType.SEARCH
+        is LauncherIntent.OpenSettingsIntent  -> IntentMatchType.OPEN_SETTINGS
+        is LauncherIntent.SimpleCommandIntent -> IntentMatchType.SIMPLE_COMMAND
+        is LauncherIntent.UnknownIntent       -> IntentMatchType.UNKNOWN
     }
 
     private companion object {

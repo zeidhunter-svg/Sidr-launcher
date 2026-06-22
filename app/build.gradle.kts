@@ -26,6 +26,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
 }
@@ -65,6 +66,7 @@ dependencies {
     implementation(libs.navigation.compose)
 
     implementation(libs.datastore.preferences)
+    implementation(libs.room.runtime)
 
     debugImplementation(libs.compose.ui.tooling)
 }

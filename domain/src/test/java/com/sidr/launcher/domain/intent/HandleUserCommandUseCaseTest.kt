@@ -3,8 +3,14 @@ package com.sidr.launcher.domain.intent
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeIntentMatcher
+import com.sidr.launcher.domain.history.IntentMatchHistoryRepository
+import com.sidr.launcher.domain.history.IntentMatchRecord
+import com.sidr.launcher.domain.history.IntentMatchType
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.result.OperationError
+import com.sidr.launcher.domain.result.OperationResult
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -206,10 +212,96 @@ class HandleUserCommandUseCaseTest {
         assertEquals(0, fakeExecutor.callCount)
     }
 
+    // ── Intent-match history recording (Block F, F5) — best-effort side effect ─
+
+    @Test fun `match is recorded with normalized text, type and confidence`() = runTest {
+        val history = RecordingIntentMatchHistory()
+        val useCaseWithHistory = useCaseWith(history, fixedNow = 1234L)
+        fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
+        matcherReturns(LauncherIntent.LaunchAppIntent("telegram"), 0.90f)
+
+        val outcome = useCaseWithHistory.handle("open telegram")
+
+        assertEquals(CommandOutcome.Executed, outcome) // outcome unaffected by recording
+        val record = history.recorded.single()
+        assertEquals("open telegram", record.normalizedText)
+        assertEquals(IntentMatchType.LAUNCH_APP, record.matchType)
+        assertEquals(0.90, record.confidence, 0.0001)
+        assertEquals(1234L, record.timestampEpochMs)
+    }
+
+    @Test fun `suggest and low-confidence matches are still recorded`() = runTest {
+        val history = RecordingIntentMatchHistory()
+        val useCaseWithHistory = useCaseWith(history)
+        matcherReturns(LauncherIntent.LaunchAppIntent("teleg"), 0.60f) // medium → Suggest
+
+        assertTrue(useCaseWithHistory.handle("teleg") is CommandOutcome.Suggest)
+        assertEquals(1, history.recorded.size)
+        assertEquals(0.60, history.recorded.single().confidence, 0.0001)
+    }
+
+    @Test fun `history write Failure does not break the command outcome`() = runTest {
+        val history = RecordingIntentMatchHistory(
+            result = OperationResult.Failure(OperationError.UnknownError("db down"))
+        )
+        val useCaseWithHistory = useCaseWith(history)
+        fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
+        matcherReturns(LauncherIntent.LaunchAppIntent("telegram"), 0.90f)
+
+        // Still executes; the failed write is swallowed, never becomes Failed.
+        assertEquals(CommandOutcome.Executed, useCaseWithHistory.handle("open telegram"))
+        assertEquals(1, history.recorded.size)
+    }
+
+    @Test fun `history write that throws does not break the command outcome`() = runTest {
+        val history = RecordingIntentMatchHistory(throwOnRecord = true)
+        val useCaseWithHistory = useCaseWith(history)
+        fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
+        matcherReturns(LauncherIntent.LaunchAppIntent("telegram"), 0.90f)
+
+        assertEquals(CommandOutcome.Executed, useCaseWithHistory.handle("open telegram"))
+    }
+
+    @Test fun `null history repository is a no-op and does not affect outcome`() = runTest {
+        // The default useCase has no history repo; recording must be skipped silently.
+        fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
+        matcherReturns(LauncherIntent.LaunchAppIntent("telegram"), 0.90f)
+
+        assertEquals(CommandOutcome.Executed, useCase.handle("open telegram"))
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private fun matcherReturns(intent: LauncherIntent, confidence: Float) {
         fakeMatcher.intentToReturn = intent
         fakeMatcher.confidenceToReturn = confidence
+    }
+
+    private fun useCaseWith(
+        history: IntentMatchHistoryRepository,
+        fixedNow: Long = 0L,
+    ) = HandleUserCommandUseCase(
+        matcher = fakeMatcher,
+        resolver = resolver,
+        executor = fakeExecutor,
+        confidencePolicy = policy,
+        intentMatchHistory = history,
+        now = { fixedNow },
+    )
+
+    /** Local test double — the shared :core:testing fake lands in F8. */
+    private class RecordingIntentMatchHistory(
+        private val result: OperationResult<Unit> = OperationResult.Success(Unit),
+        private val throwOnRecord: Boolean = false,
+    ) : IntentMatchHistoryRepository {
+        val recorded = mutableListOf<IntentMatchRecord>()
+
+        override fun getMatchRecords(): Flow<List<IntentMatchRecord>> = flowOf(recorded.toList())
+
+        override suspend fun recordMatch(record: IntentMatchRecord): OperationResult<Unit> {
+            recorded += record
+            if (throwOnRecord) throw RuntimeException("boom")
+            return result
+        }
     }
 }

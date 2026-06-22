@@ -7,6 +7,8 @@ import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.di.IoDispatcher
 import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
+import com.sidr.launcher.domain.history.AppUsageRecord
+import com.sidr.launcher.domain.history.UsageHistoryRepository
 import com.sidr.launcher.domain.intent.ActionExecutionResult
 import com.sidr.launcher.domain.intent.ActionExecutor
 import com.sidr.launcher.domain.intent.CommandOutcome
@@ -22,9 +24,13 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -33,6 +39,8 @@ class LauncherViewModel @Inject constructor(
     private val installedAppsRepository: InstalledAppsRepository,
     private val handleUserCommand: HandleUserCommandUseCase,
     private val actionExecutor: ActionExecutor,
+    // Domain interface — injected from :app via Hilt. No feature→data edge.
+    private val usageHistoryRepository: UsageHistoryRepository,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
 
@@ -49,16 +57,38 @@ class LauncherViewModel @Inject constructor(
     }
 
     // ── App-list state ─────────────────────────────────────────────────────
-    private val _uiState = MutableStateFlow<UiState<LauncherUiState>>(UiState.Loading)
-    val uiState: StateFlow<UiState<LauncherUiState>> = _uiState.asStateFlow()
+    // Raw load result; null = loading not yet complete.
+    private val _rawAppsResult = MutableStateFlow<OperationResult<List<InstalledApp>>?>(null)
+
+    // Derived state: combines the loaded app list with live usage records so the grid
+    // re-sorts automatically whenever a launch is recorded (F6 demo slice).
+    val uiState: StateFlow<UiState<LauncherUiState>> = _rawAppsResult
+        .filterNotNull()
+        .combine(
+            usageHistoryRepository.getUsageRecords().catch { emit(emptyList()) }
+        ) { appsResult, usageRecords ->
+            when (appsResult) {
+                is OperationResult.Failure -> UiState.Error(appsResult.error.toUiError())
+                is OperationResult.Success -> {
+                    val sorted = sortByUsage(appsResult.value, usageRecords)
+                    if (sorted.isEmpty()) UiState.Empty
+                    else UiState.Success(LauncherUiState(apps = sorted))
+                }
+            }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = UiState.Loading,
+        )
 
     // ── Command input — independent of app-list loading ────────────────────
     private val _commandInput = MutableStateFlow("")
-    val commandInput: StateFlow<String> = _commandInput.asStateFlow()
+    val commandInput: StateFlow<String> = _commandInput
 
     // ── Command feedback — transient result of the last submitted command ──
     private val _commandFeedback = MutableStateFlow<CommandFeedback>(CommandFeedback.None)
-    val commandFeedback: StateFlow<CommandFeedback> = _commandFeedback.asStateFlow()
+    val commandFeedback: StateFlow<CommandFeedback> = _commandFeedback
 
     init {
         loadApps()
@@ -66,15 +96,7 @@ class LauncherViewModel @Inject constructor(
 
     private fun loadApps() {
         viewModelScope.launch(ioDispatcher) {
-            _uiState.value = UiState.Loading
-            _uiState.value = when (val result = installedAppsRepository.getInstalledApps()) {
-                is OperationResult.Success -> {
-                    val apps = result.value
-                    if (apps.isEmpty()) UiState.Empty
-                    else UiState.Success(LauncherUiState(apps = apps))
-                }
-                is OperationResult.Failure -> UiState.Error(result.error.toUiError())
-            }
+            _rawAppsResult.value = installedAppsRepository.getInstalledApps()
         }
     }
 
@@ -100,10 +122,18 @@ class LauncherViewModel @Inject constructor(
                 packageName = app.packageName,
                 activityName = app.activityName,
             )
-            _commandFeedback.value = when (val result = actionExecutor.execute(action)) {
+            val result = actionExecutor.execute(action)
+            _commandFeedback.value = when (result) {
                 is ActionExecutionResult.Success -> CommandFeedback.None
                 is ActionExecutionResult.Failure -> CommandFeedback.Message(result.safeMessage)
                 is ActionExecutionResult.Unsupported -> CommandFeedback.Message(GENERIC_ERROR)
+            }
+            // Record usage only on a successful launch — soft-wrapped, never blocks the launch.
+            // Command-executed launches (CommandOutcome.Executed) are not tracked here because
+            // the package name is not available at the ViewModel boundary; a future slice can
+            // extend HandleUserCommandUseCase to carry it in the outcome.
+            if (result is ActionExecutionResult.Success) {
+                recordUsage(app.packageName)
             }
         }
     }
@@ -163,6 +193,31 @@ class LauncherViewModel @Inject constructor(
                 _commandInput.value = ""
                 _commandFeedback.value = CommandFeedback.None
             }
+        }
+    }
+
+    // ── Usage-aware grid sort ───────────────────────────────────────────────
+    // Apps with usage history rise to the top (by launchCount then lastUsedEpochMs).
+    // Apps without history keep their original relative order as the fallback.
+    private fun sortByUsage(
+        apps: List<InstalledApp>,
+        usageRecords: List<AppUsageRecord>,
+    ): List<InstalledApp> {
+        if (usageRecords.isEmpty()) return apps
+        val byPackage = usageRecords.associateBy { it.packageName }
+        val (withHistory, withoutHistory) = apps.partition { byPackage.containsKey(it.packageName) }
+        val sorted = withHistory.sortedWith(
+            compareByDescending<InstalledApp> { byPackage[it.packageName]!!.launchCount }
+                .thenByDescending { byPackage[it.packageName]!!.lastUsedEpochMs }
+        )
+        return sorted + withoutHistory
+    }
+
+    private suspend fun recordUsage(packageName: String) {
+        try {
+            usageHistoryRepository.recordLaunch(packageName, System.currentTimeMillis())
+        } catch (_: Throwable) {
+            // Non-critical — launch already completed successfully.
         }
     }
 

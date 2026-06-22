@@ -7,19 +7,19 @@ import com.sidr.launcher.domain.history.IntentMatchType
 internal object IntentMatchMapper {
 
     // ─── PRIVACY — Fork 3 / Block F ──────────────────────────────────────────
-    // For SEARCH matches, normalizedText contains the user's query argument (e.g. "search cats").
-    // We store ONLY the verb prefix — query content is never written to the database.
-    // For all other match types, normalizedText is structural (e.g. "open telegram") and safe.
+    // Classification principle: redact every match type that carries ARBITRARY user content
+    // (SEARCH = query argument, UNKNOWN = unrecognized free text); store only a placeholder for
+    // those. Structurally-bounded types (LAUNCH_APP / OPEN_SETTINGS / SIMPLE_COMMAND) resolve to a
+    // closed vocabulary and are kept as-is. New intent types must be classified by this rule.
     // This is the single enforcement point; the domain model (IntentMatchRecord) is unaware.
-    private const val SEARCH_REDACTED = "search"
+    private val REDACTED_PLACEHOLDER: Map<IntentMatchType, String> = mapOf(
+        IntentMatchType.SEARCH to "search",
+        IntentMatchType.UNKNOWN to "unknown",
+    )
     // ─────────────────────────────────────────────────────────────────────────
 
     fun toEntity(record: IntentMatchRecord): IntentMatchEntity = IntentMatchEntity(
-        normalizedText = if (record.matchType == IntentMatchType.SEARCH) {
-            SEARCH_REDACTED
-        } else {
-            record.normalizedText
-        },
+        normalizedText = REDACTED_PLACEHOLDER[record.matchType] ?: record.normalizedText,
         matchType = record.matchType,
         confidence = record.confidence,
         timestampEpochMs = record.timestampEpochMs,

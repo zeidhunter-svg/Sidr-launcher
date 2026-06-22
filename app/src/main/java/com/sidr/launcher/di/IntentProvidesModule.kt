@@ -1,6 +1,7 @@
 package com.sidr.launcher.di
 
 import com.sidr.launcher.data.repository.intent.RuleBasedIntentMatcher
+import com.sidr.launcher.domain.history.IntentMatchHistoryRepository
 import com.sidr.launcher.domain.intent.ActionExecutor
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
@@ -45,10 +46,12 @@ object IntentProvidesModule {
         resolver: IntentActionResolver,
         executor: ActionExecutor,
         confidencePolicy: IntentConfidencePolicy,
+        intentMatchHistory: IntentMatchHistoryRepository,
     ): HandleUserCommandUseCase = HandleUserCommandUseCase(
         matcher = matcher,
         resolver = resolver,
         executor = executor,
         confidencePolicy = confidencePolicy,
+        intentMatchHistory = intentMatchHistory,
     )
 }

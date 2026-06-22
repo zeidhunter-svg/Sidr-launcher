@@ -5,6 +5,8 @@ import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeIntentMatcher
+import com.sidr.launcher.core.testing.FakeUsageHistoryRepository
+import com.sidr.launcher.domain.history.AppUsageRecord
 import com.sidr.launcher.domain.intent.ActionExecutionResult
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
 import com.sidr.launcher.domain.intent.ExecutableAction
@@ -33,6 +35,7 @@ class LauncherViewModelTest {
     private val fakeRepo = FakeInstalledAppsRepository()
     private val fakeMatcher = FakeIntentMatcher()
     private val fakeExecutor = FakeActionExecutor()
+    private val fakeUsageRepo = FakeUsageHistoryRepository()
     private val useCase = HandleUserCommandUseCase(
         matcher = fakeMatcher,
         resolver = IntentActionResolver(fakeRepo),
@@ -47,16 +50,20 @@ class LauncherViewModelTest {
 
     @After
     fun tearDown() {
-        Dispatchers.resetMain()
+        // Reset StateFlow-backed fakes BEFORE resetMain — mutating a MutableStateFlow
+        // tries to dispatch to Main, which must still be the test dispatcher at that point.
         fakeRepo.reset()
         fakeMatcher.reset()
         fakeExecutor.reset()
+        fakeUsageRepo.reset()
+        Dispatchers.resetMain()
     }
 
     private fun buildViewModel() = LauncherViewModel(
         installedAppsRepository = fakeRepo,
         handleUserCommand = useCase,
         actionExecutor = fakeExecutor,
+        usageHistoryRepository = fakeUsageRepo,
         ioDispatcher = testDispatcher,
     )
 
@@ -81,6 +88,7 @@ class LauncherViewModelTest {
 
             val state = vm.uiState.value
             assertTrue("Expected Success after advance, got $state", state is UiState.Success)
+            // No usage history → original order preserved
             assertEquals(fakeRepo.appsToReturn, (state as UiState.Success).data.apps)
         }
 
@@ -277,5 +285,114 @@ class LauncherViewModelTest {
         val feedback = vm.commandFeedback.value
         assertTrue(feedback is CommandFeedback.Message)
         assertEquals("Couldn't open that app.", (feedback as CommandFeedback.Message).text)
+    }
+
+    // ── Usage-aware grid sort (F6) ─────────────────────────────────────────
+
+    @Test
+    fun `apps with usage history appear before apps without`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp("com.example.a", "Alpha"),
+            InstalledApp("com.example.b", "Beta"),
+            InstalledApp("com.example.c", "Gamma"),
+        )
+        fakeUsageRepo.setRecords(listOf(
+            AppUsageRecord("com.example.c", lastUsedEpochMs = 1000L, launchCount = 3),
+        ))
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        val apps = (vm.uiState.value as UiState.Success).data.apps
+        assertEquals("com.example.c", apps[0].packageName) // has history → first
+        // Alpha and Beta maintain their original relative order
+        assertEquals("com.example.a", apps[1].packageName)
+        assertEquals("com.example.b", apps[2].packageName)
+    }
+
+    @Test
+    fun `apps with higher launch count rank above lower count`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp("com.example.a", "Alpha"),
+            InstalledApp("com.example.b", "Beta"),
+        )
+        fakeUsageRepo.setRecords(listOf(
+            AppUsageRecord("com.example.a", lastUsedEpochMs = 2000L, launchCount = 2),
+            AppUsageRecord("com.example.b", lastUsedEpochMs = 3000L, launchCount = 5),
+        ))
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        val apps = (vm.uiState.value as UiState.Success).data.apps
+        assertEquals("com.example.b", apps[0].packageName) // higher count wins
+        assertEquals("com.example.a", apps[1].packageName)
+    }
+
+    @Test
+    fun `equal launch count uses recency as tiebreaker`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp("com.example.a", "Alpha"),
+            InstalledApp("com.example.b", "Beta"),
+        )
+        fakeUsageRepo.setRecords(listOf(
+            AppUsageRecord("com.example.a", lastUsedEpochMs = 1000L, launchCount = 3),
+            AppUsageRecord("com.example.b", lastUsedEpochMs = 5000L, launchCount = 3),
+        ))
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        val apps = (vm.uiState.value as UiState.Success).data.apps
+        assertEquals("com.example.b", apps[0].packageName) // more recent wins
+        assertEquals("com.example.a", apps[1].packageName)
+    }
+
+    @Test
+    fun `no usage history — original order preserved`() = runTest(testDispatcher) {
+        val appsInOrder = listOf(
+            InstalledApp("com.example.a", "Alpha"),
+            InstalledApp("com.example.b", "Beta"),
+            InstalledApp("com.example.c", "Gamma"),
+        )
+        fakeRepo.appsToReturn = appsInOrder
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        assertEquals(appsInOrder, (vm.uiState.value as UiState.Success).data.apps)
+    }
+
+    // ── Usage recording (F6) ───────────────────────────────────────────────
+
+    @Test
+    fun `successful tap-to-launch records usage for the launched package`() =
+        runTest(testDispatcher) {
+            val vm = buildViewModel()
+
+            vm.onAppClicked(InstalledApp("org.telegram.messenger", "Telegram"))
+            advanceUntilIdle()
+
+            assertEquals(listOf("org.telegram.messenger"), fakeUsageRepo.recordedLaunches)
+        }
+
+    @Test
+    fun `failed tap-to-launch does not record usage`() = runTest(testDispatcher) {
+        fakeExecutor.resultToReturn = ActionExecutionResult.Failure("Couldn't open.")
+        val vm = buildViewModel()
+
+        vm.onAppClicked(InstalledApp("com.missing", "Missing"))
+        advanceUntilIdle()
+
+        assertTrue(fakeUsageRepo.recordedLaunches.isEmpty())
+    }
+
+    @Test
+    fun `usage recording failure does not affect launch feedback`() = runTest(testDispatcher) {
+        fakeUsageRepo.errorToReturn = OperationError.UnknownError("db down")
+        val vm = buildViewModel()
+
+        vm.onAppClicked(InstalledApp("org.telegram.messenger", "Telegram"))
+        advanceUntilIdle()
+
+        // Launch succeeds; feedback is None despite the history write failing
+        assertEquals(CommandFeedback.None, vm.commandFeedback.value)
+        assertEquals(1, fakeExecutor.callCount)
     }
 }

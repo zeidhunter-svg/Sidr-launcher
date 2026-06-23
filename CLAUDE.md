@@ -1,6 +1,7 @@
 # CLAUDE.md — Sidr Launcher
 
-Session digest. Read this first, then `ai-context/phase-4-plan.md` (active: Block H).
+Session digest. Read this first. **Phase 4 is DONE (Blocks E → H, 2026-06-23).** Next per
+[docs/roadmap.md](docs/roadmap.md) = **Phase 5 (cloud AI)** — not yet started, needs its own plan.
 
 ## What this is
 
@@ -38,8 +39,15 @@ in `:core:android`; per-feature `PermissionPrefsRepositoryImpl` over DataStore (
 `perm_dismissed_wallpaper`); education ≠ request (Fork 5); live `SET_WALLPAPER` trigger from a
 launcher "Wallpaper" button; denial disables only that feature, core never blocked.
 **`BIND_ACCESSIBILITY_SERVICE` not requested/educated (Ph8).** 2 fakes + 12 new JVM tests green.
-`assembleDebug` + `testDebugUnitTest --rerun-tasks` green. **Next: Block H — hardening.** Details in
-[ai-context/decisions.md](ai-context/decisions.md).
+**Block H DONE (2026-06-23):** hardening + docs-sync — `UiState.Error(retryable)` + `retry()`
+(H2, no process restart); `commandInput` via `SavedStateHandle` (H3 process-death restore);
+`refreshStatus()` made upgrade-only (H-b, never downgrades `PERMANENTLY_DENIED`); privacy guard
+extended to Room **table names** (H-a); temporary home-screen "Wallpaper" button removed (H4);
+nav safe-fallback + kill→reopen verified on device (H5); `docs/architecture.md` synced to the real
+3-flow `LauncherViewModel` design + Forks 1/2/8/9 (H6). Content-restore half of Fork 6 deferred to
+Ph7 (no Ph4 display surface). `assembleDebug` + `testDebugUnitTest --rerun-tasks` green.
+**Phase 4 closed; next = Phase 5 (cloud AI).** Details in
+[ai-context/decisions.md](ai-context/decisions.md) ("ADR Block H").
 
 Phase 3 result, Blocks A → D:
 
@@ -55,8 +63,9 @@ Phase 3 result, Blocks A → D:
   `IntentProvidesModule` (`:app`). Routing: low/medium never auto-executes; navigation + CLEAR +
   SHOW_APPS + ambiguity never go through the executor.
 
-**Still frozen until their Phase-4 slice:** hardening (H). DataStore unfrozen in Block E; Room
-unfrozen in Block F; permission-education delivered in Block G.
+**All Phase-4 slices delivered:** DataStore (E), Room (F), permission-education (G), hardening (H).
+**Frozen to Phase 5+:** secrets (Ph5), cloud AI (Ph5), ONNX (Ph6), voice + context-suggestions
+(Ph7), accessibility (Ph8), WorkManager (Ph6/9), full Hilt→KSP migration (Ph9).
 
 ## Status snapshot
 
@@ -87,7 +96,17 @@ unfrozen in Block F; permission-education delivered in Block G.
   `:core:android`; per-feature `PermissionPrefsRepositoryImpl` over DataStore (`perm_dismissed_wallpaper`);
   education ≠ request (Fork 5) with a live `SET_WALLPAPER` trigger from a launcher "Wallpaper" button;
   denial disables only that feature, core never blocked; accessibility deferred (Ph8). 2 fakes + 12 JVM
-  tests green. **Active next: Block H (hardening).**
+  tests green.
+- **Phase 4 Block H ✅ (2026-06-23)** — hardening + docs-sync (Fork 6 + Fork 9): `UiState.Error` gained
+  `retryable: Boolean = false` + `LauncherViewModel.retry()` (no process restart, retry action not in the
+  data class); `commandInput` backed by `SavedStateHandle` (process-death restore); `refreshStatus()`
+  upgrade-only (never downgrades `PERMANENTLY_DENIED`, partial fix — revisit Ph7/`RECORD_AUDIO`); privacy
+  guard extended to Room **table names** (hand-synced `TABLE_NAMES`); temporary home-screen wallpaper
+  button removed (entry returns with `feature/settings`); nav safe-fallback latent (no bad route in Ph4)
+  + kill→reopen verified on device (PID change, input restored, no crash); content-restore half of Fork 6
+  deferred to Ph7 (no display surface yet). `docs/architecture.md` synced to the real 3-flow
+  `LauncherViewModel`. `assembleDebug` + 105 JVM tests green. **Phase 4 CLOSED (Blocks E → H). Next =
+  Phase 5 (cloud AI).**
 
 ## Hard rules
 
@@ -132,19 +151,20 @@ unfrozen in Block F; permission-education delivered in Block G.
 ## Source of truth
 
 - Architecture & target module structure: [docs/architecture.md](docs/architecture.md)
-  **OUT OF SYNC** — reflects pre-Phase-4 layout; `EncryptedSharedPreferences` still mentioned
-  (deprecated, Fork 1 defers secrets to Phase 5). Sync scheduled: Block H, step H6. Until then
-  the authoritative sources are: this file + [ai-context/phase-4-plan.md](ai-context/phase-4-plan.md)
-  + [ai-context/decisions.md](ai-context/decisions.md).
-- Active checklist: [ai-context/phase-4-plan.md](ai-context/phase-4-plan.md) *(Block H — active)*
-- Closed checklist: [ai-context/phase-3-intent-system-plan.md](ai-context/phase-3-intent-system-plan.md)
+  **IN SYNC** as of Block H6 (2026-06-23) — real 3-flow `LauncherViewModel`, `UiState.Error(retryable)`,
+  per-feature permission education + upgrade-only `refreshStatus()`, Forks 1/2/8/9 reflected.
+  `EncryptedSharedPreferences` documented as deprecated/not used (Fork 1 defers secrets to Phase 5).
+- Closed checklists: [ai-context/phase-4-plan.md](ai-context/phase-4-plan.md) *(Phase 4 closed,
+  Blocks E → H, 2026-06-23)* · [ai-context/phase-3-intent-system-plan.md](ai-context/phase-3-intent-system-plan.md)
   *(Phase 3 closed 2026-06-21)*
 - Decisions log: [ai-context/decisions.md](ai-context/decisions.md)
-- Roadmap: [docs/roadmap.md](docs/roadmap.md)
+- Roadmap: [docs/roadmap.md](docs/roadmap.md) *(Phase 5 = cloud AI, next — not yet planned)*
 
 ## Do not
 
-- Don't start hardening (Block H) ahead of schedule. DataStore (E), Room (F) and
-  permission-education (G) are done; extend them, don't re-scaffold them.
+- Don't start Phase 5 (cloud AI) ahead of its own approved plan. Phase 4 (E → H) is closed;
+  extend the existing persistence/hardening, don't re-scaffold it.
 - Don't create `core/data` (dropped from the target structure).
 - Don't fold generative AI into the `IntentMatcher` contract.
+- Don't re-introduce `EncryptedSharedPreferences` — deprecated; secrets land in Phase 5 via a
+  `SecureSecretStore` port (Fork 1).

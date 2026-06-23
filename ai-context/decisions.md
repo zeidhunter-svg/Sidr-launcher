@@ -573,6 +573,113 @@ sync (H6); accessibility + its consent (Ph8); request flow for `RECORD_AUDIO`/`R
 4. **Legacy global dismissed flag.** Consider removing the now-superseded global
    `flag_permission_edu_dismissed` key/field (replaced by the per-feature `PermissionPrefsRepository`).
 
+### ADR 2026-06-23 — Block H complete (hardening + docs-sync; Phase 4 closed)
+
+**Done 2026-06-23 (Block H, steps H-a, H-b, H-c, H1–H6). Final Phase-4 execution round. Fork 6 + Fork 9 honoured.**
+
+**Per-step summary:**
+- **H-a — Privacy guard strengthened to table names.** `RoomColumnNamesGuardTest` now scans Room
+  **table names** as well as column names against the forbidden-term denylist (was column-only at
+  Block F). `RoomColumnNames` carries a hand-listed `TABLE_NAMES` set checked against the `@Entity`
+  table names. (`RoomColumnNames.kt` + `RoomColumnNamesGuardTest.kt`, commit `b67b5a8`.)
+- **H-b — `refreshStatus()` made upgrade-only.** `PermissionEducationViewModel.refreshStatus()`
+  previously overwrote status unconditionally with `permissionChecker.status(feature)` (which can
+  only return GRANTED/DENIED), silently downgrading `PERMANENTLY_DENIED → DENIED` on re-check.
+  Now a re-check may only move **up to GRANTED** and never overwrites an existing
+  `PERMANENTLY_DENIED`. Test added asserting `PERMANENTLY_DENIED` survives a refresh.
+- **H-c — Error-mapping audit.** `OperationError → UiError → UiState.Error(retryable)` wired with the
+  category retryability from `architecture.md` (Network/Unknown → retryable; AiUnavailable/
+  PermissionDenied/DeviceNotCapable → not button-retryable).
+- **H1 — VM single-source-of-truth audit.** `LauncherViewModel` confirmed to expose orthogonal
+  flows (one source per concern), correct `Empty` handling, no business logic in composables.
+  `PermissionEducationViewModel` keeps its plain data-class state by design (see decisions below).
+- **H2 — Recoverable errors.** `UiState.Error` gained `retryable: Boolean = false`; the retry
+  **action** is deliberately *not* carried in the data class (no lambda → equality /
+  `distinctUntilChanged` stay intact). `LauncherViewModel.retry()` re-triggers the app load, cancels
+  any in-flight load (latest-wins), and routes `null` → `Loading` so a retry is visible. (`UiState.kt`,
+  `LauncherViewModel.kt`, commit `b67b5a8`.)
+- **H3 — Process-death restoration.** `commandInput` backed by `SavedStateHandle`
+  (`KEY_COMMAND_INPUT`) so the typed text survives process death; `commandFeedback` stays ephemeral
+  (transient last-command result, intentionally not restored).
+- **H4 — Navigation + temporary-button removal.** The temporary home-screen "Wallpaper" demo button
+  was removed from `LauncherScreen` (replaced by a `NOTE` comment); the `permission_education`
+  destination stays routed with the 3.1.5 safe-fallback. (commit `7156ab1`.)
+- **H5 — On-device acceptance.** Real kill→reopen on device: PID changed, `commandInput` restored
+  from `SavedStateHandle`; the navigation safe-fallback (unavailable destination → Launcher home)
+  was exercised via a temporary trigger and observed in logcat — **no crash**. (No user-reachable
+  bad route exists in Ph4, so the fallback was driven by a temporary trigger only.)
+- **H6 — Docs-sync + Phase-4 close (this step).** `docs/architecture.md` brought to the real
+  Phase-4 state (Fork 9); this ADR written; Block H checked off in `phase-4-plan.md`; `CLAUDE.md`
+  advanced to "Phase 4 complete (E–H)". No production code / schema / contract / UX change in H6 —
+  the doc was stale, not the code.
+
+**`architecture.md` items reconciled in H6 (was-vs-now):**
+- **`LauncherUiState`** — doc showed a single composite `LauncherUiState { apps, suggestions,
+  inputState, aiState }`. Reality: `LauncherViewModel` exposes **three orthogonal flows** —
+  `uiState: StateFlow<UiState<LauncherUiState>>` (grid; `LauncherUiState` is just `(apps)`),
+  `commandInput: StateFlow<String>` (SavedStateHandle-backed), `commandFeedback:
+  StateFlow<CommandFeedback>` (ephemeral) — plus a `navigationEvents` `Channel`. Documented as
+  single-source-per-concern, **not** a violation. `suggestions` (Ph7) and `aiState` (Ph5) are
+  **unbuilt**; `LauncherUiState` grows a field/flow when those phases land.
+- **`UiState.Error`** — documented the new `retryable: Boolean = false` (H2) and the
+  property-of-state-in-context semantics (decided by the VM, not by `UiError`).
+- **Permissions** — documented the per-feature education model (Block G) + the upgrade-only
+  `refreshStatus()` behavior (H-b) and the `PERMANENTLY_DENIED`-derivability caveat.
+- DataStore / Room shapes were already current in the doc from the Block E/F passes; no further drift.
+
+**Decisions (with rationale + phase-tie) — the 7 carry-forward notes folded in:**
+1. **`TABLE_NAMES` hand-sync limit (H-a).** Table names are **hand-listed** in `RoomColumnNames`
+   against `@Entity`; the guard test is a denylist scan, not an automatic reflection of the schema.
+   The golden-schema `androidTest` (`MigrationTestHelper`) is the structural backstop. **Rule:**
+   any future phase that adds a table must update `TABLE_NAMES`. (Tie: Block F privacy inventory /
+   Fork 3.)
+2. **`refreshStatus()` upgrade-only is a *partial* fix (H-b).** It never downgrades
+   `PERMANENTLY_DENIED → DENIED`, but `PERMANENTLY_DENIED` is derivable **only** from the request
+   callback (`shouldShowRequestPermissionRationale`), never from `checkSelfPermission`. Adequate for
+   the current `SET_WALLPAPER` (normal-permission) scope; **must be revisited at Ph7 with the first
+   dangerous permission (`RECORD_AUDIO`).**
+3. **`architecture.md` `LauncherUiState` stale → fixed in H6.** The aspirational composite was
+   replaced with the real 3-flow design; `suggestions`/`aiState` are unbuilt (Ph7/Ph5) and the state
+   grows when they land. (Tie: Fork 9.)
+4. **`PermissionEducation` plain-state exception — deliberate, don't "correct" it.**
+   `PermissionEducationViewModel` uses a plain data-class `PermissionEducationUiState`, **not**
+   `UiState<T>`, because it has no async load and no empty/error surface to model. This is an
+   intentional exception to the "every VM exposes `UiState<T>`" pattern, not an oversight.
+5. **Cache-restore half of Fork 6 deferred to Ph7.** `SuggestionsCacheRepository` (Block E) exists
+   but has **no display surface** in Ph4 — wiring its content-restore now would repaint nothing.
+   **Reconciliation rule for Ph7:** `SavedStateHandle` owns transient input/route; the DataStore
+   cache owns content first-paint; a fresh load **supersedes** the cached repaint, never merged.
+   (Tie: Fork 6 process-death restoration, content half.)
+6. **Wallpaper button removed (H4).** The temporary home-screen demo button is gone (product
+   decision). The `permission_education` destination stays routed but has **no on-screen entry**
+   until `feature/settings` (the launcher-settings UI phase) builds a real entry point.
+7. **Navigation safe-fallback latent in Ph4 (H5).** `handleNavigationEvent`'s unavailable-destination
+   fallback to Launcher home is verified (on-device via a temporary trigger, since no user-reachable
+   bad route exists in Ph4). It stays **latent** until deep-links / new routes arrive.
+
+(Also noted at Block G, task 4: the legacy global `flag_permission_edu_dismissed` key is superseded
+by the per-feature `PermissionPrefsRepository`. Left in place — harmless, still Block-E-tested — as
+an optional future cleanup; not actioned in Block H to avoid a key removal with no functional gain.)
+
+**H5 on-device acceptance result:** real kill→reopen on device — **PID changed and `commandInput`
+restored**; navigation fallback observed in logcat; **no crash**.
+
+**Verification (H6 final wrap-up — actual output pasted in the H6 report):**
+- `./gradlew assembleDebug` → BUILD SUCCESSFUL.
+- `./gradlew testDebugUnitTest --rerun-tasks` → green.
+- `grep -rn "import android" domain/src/` → empty; `:domain:dependencies` compileClasspath =
+  `kotlin-stdlib` + `kotlinx-coroutines-core` only.
+- `grep -rn "data.repository" feature/launcher/src/` → empty; no `feature→feature` / `feature→data`
+  edges (feature modules depend only on `core:common`/`core:ui`/`domain` + `testImplementation
+  core:testing`).
+
+**Phase 4 closed (Blocks E → H, 2026-06-23).** Next per roadmap = **Phase 5 (cloud AI)**.
+
+**Frozen, untouched (Phase 5+):** secrets / `SecureSecretStore` (Ph5), cloud AI (Ph5), ONNX (Ph6),
+voice + `SpeechInputSource` + context-suggestion pipeline (Ph7), accessibility + its consent (Ph8),
+WorkManager (Ph6/9), full Hilt→KSP migration (Ph9), `feature/settings` module, request flow for
+`RECORD_AUDIO`/`READ_CALENDAR`/`ACCESS_FINE_LOCATION` (dormant, education-only).
+
 ### ADR 2026-06-19 — Phase 2 skipped / reordered into a minimal slice
 - Decision: Phase 2 (launcher shell) is **not** run as a separate phase. Its navigation half was already absorbed into `3.1.x`; its product floor — `InstalledAppsRepository`, app grid, command input, offline app launch — is folded into Phase 3 as a **minimal P2 slice** (Block B).
 - Context: Phase 3's intent system cannot reach acceptance without Phase 2's installed-apps repository and command input (e.g. `open telegram` cannot resolve or launch). The skip deferred an unavoidable dependency rather than removing it.

@@ -349,17 +349,20 @@ navigation and `UiState` consistency; sync `architecture.md` (Fork 9).
   1/2/8) — **step H6**.
 - Tests: offline/error/retry paths, process-death restoration.
 
-**Steps:**
-- [ ] `H1` Audit all VMs: single source of truth, correct `Empty`, zero business logic in
-      composables.
-- [ ] `H2` Recoverable errors: full `OperationError → UiError → UiState.Error(retryable)` +
-      retry action without restart (categories from `architecture.md`).
-- [ ] `H3` Process-death restoration: `SavedStateHandle` for transient UI; content restore from
-      the DataStore cache.
-- [ ] `H4` Navigation: safe-fallback for new destinations (G), back-stack, single `NavHost`.
-- [ ] `H5` Tests: induced repo error → retry without restart; kill→reopen → state restored.
-- [ ] `H6` **Docs-sync** `architecture.md` ↔ actual module layout + Fork 1/2/8 decisions
-      (Fork 9). Update `CLAUDE.md`/`decisions.md` with Phase 4 ADRs.
+**Steps:** *(H-a…H6 complete 2026-06-23 — see decisions.md "ADR Block H". Phase 4 closed.)*
+- [x] `H1` Audit all VMs: single source of truth, correct `Empty`, zero business logic in
+      composables. (`PermissionEducationViewModel` keeps a plain data-class state by design.)
+- [x] `H2` Recoverable errors: full `OperationError → UiError → UiState.Error(retryable)` +
+      `retry()` without restart (categories from `architecture.md`; retry action not in the data class).
+- [x] `H3` Process-death restoration: `SavedStateHandle` for `commandInput`; content restore from
+      the DataStore cache deferred to Ph7 (no Ph4 display surface — `SuggestionsCacheRepository` exists,
+      reconciliation rule recorded).
+- [x] `H4` Navigation: safe-fallback for new destinations (G), back-stack, single `NavHost`;
+      temporary home-screen wallpaper button removed.
+- [x] `H5` Tests + on-device acceptance: retry without restart; kill→reopen → PID change +
+      `commandInput` restored; nav fallback observed in logcat, no crash.
+- [x] `H6` **Docs-sync** `architecture.md` ↔ actual module layout + Forks 1/2/8/9; `CLAUDE.md` +
+      `decisions.md` updated with the Phase 4 ADRs. Phase 4 closed (E → H).
 
 **Acceptance criteria:**
 - A repository error (DataStore/Room) → a recoverable `UiState.Error` with retry, no process

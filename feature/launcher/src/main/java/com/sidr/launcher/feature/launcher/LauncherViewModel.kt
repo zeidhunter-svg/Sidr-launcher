@@ -30,7 +30,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -67,12 +66,15 @@ class LauncherViewModel @Inject constructor(
     // Derived state: combines the loaded app list with live usage records so the grid
     // re-sorts automatically whenever a launch is recorded (F6 demo slice).
     val uiState: StateFlow<UiState<LauncherUiState>> = _rawAppsResult
-        .filterNotNull()
         .combine(
             usageHistoryRepository.getUsageRecords().catch { emit(emptyList()) }
         ) { appsResult, usageRecords ->
             when (appsResult) {
-                is OperationResult.Failure -> UiState.Error(appsResult.error.toUiError())
+                // null = not loaded yet (initial or mid-retry) → Loading, so a retry visibly
+                // flashes Loading → content rather than freezing on the stale error.
+                null -> UiState.Loading
+                is OperationResult.Failure ->
+                    UiState.Error(appsResult.error.toUiError(), retryable = appsResult.error.isRetryable())
                 is OperationResult.Success -> {
                     val sorted = sortByUsage(appsResult.value, usageRecords)
                     if (sorted.isEmpty()) UiState.Empty
@@ -102,6 +104,15 @@ class LauncherViewModel @Inject constructor(
         viewModelScope.launch(ioDispatcher) {
             _rawAppsResult.value = installedAppsRepository.getInstalledApps()
         }
+    }
+
+    /**
+     * Re-attempt the app-list load after a recoverable [UiState.Error] — no process restart.
+     * Resetting to null returns the screen to [UiState.Loading] before the reload emits its result.
+     */
+    fun retry() {
+        _rawAppsResult.value = null
+        loadApps()
     }
 
     // ── UI actions ─────────────────────────────────────────────────────────
@@ -245,6 +256,18 @@ class LauncherViewModel @Inject constructor(
         is OperationError.PermissionDenied -> UiError.Message("Permission denied: $permission")
         is OperationError.DeviceNotCapable -> UiError.Message("Not supported: $feature")
         is OperationError.UnknownError     -> UiError.Unknown
+    }
+
+    // Whether re-running the load could plausibly succeed (per architecture.md error categories).
+    // Network/Unknown are offered a retry ("generic recovery"); PermissionDenied/DeviceNotCapable/
+    // AiUnavailable are not button-fixable — granting/capability/fallback are handled elsewhere.
+    // Exhaustive when, no else — add a branch when OperationError gains a subtype.
+    private fun OperationError.isRetryable(): Boolean = when (this) {
+        is OperationError.NetworkError     -> true
+        is OperationError.UnknownError     -> true
+        is OperationError.AiUnavailable    -> false
+        is OperationError.PermissionDenied -> false
+        is OperationError.DeviceNotCapable -> false
     }
 
     private companion object {

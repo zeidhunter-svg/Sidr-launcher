@@ -82,7 +82,11 @@ fun LauncherScreen(
             when (val state = uiState) {
                 is UiState.Loading -> LoadingContent()
                 is UiState.Empty -> EmptyContent()
-                is UiState.Error -> ErrorContent(state.error)
+                is UiState.Error -> ErrorContent(
+                    error = state.error,
+                    retryable = state.retryable,
+                    onRetry = viewModel::retry,
+                )
                 is UiState.Success -> AppGrid(
                     apps = state.data.apps,
                     onAppClick = viewModel::onAppClicked,
@@ -283,6 +287,8 @@ private fun EmptyContent(modifier: Modifier = Modifier) {
 @Composable
 private fun ErrorContent(
     error: UiError,
+    retryable: Boolean,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val message = when (error) {
@@ -294,10 +300,18 @@ private fun ErrorContent(
         contentAlignment = Alignment.Center,
         modifier = modifier.fillMaxSize(),
     ) {
-        Text(
-            text = message,
-            color = MaterialTheme.colorScheme.error,
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = message,
+                color = MaterialTheme.colorScheme.error,
+            )
+            if (retryable) {
+                TextButton(onClick = onRetry) { Text("Retry") }
+            }
+        }
     }
 }
 

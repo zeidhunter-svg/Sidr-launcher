@@ -128,4 +128,36 @@ class PermissionEducationViewModelTest {
 
         assertEquals(PermissionStatus.GRANTED, viewModel.uiState.value.status)
     }
+
+    @Test
+    fun `refreshStatus never downgrades PERMANENTLY_DENIED to DENIED`() = runTest {
+        val viewModel = vm()
+        advanceUntilIdle()
+
+        // Drive the VM into PERMANENTLY_DENIED via the request callback (the only source for it).
+        viewModel.onPermissionResult(granted = false, canRequestAgain = false)
+        assertEquals(PermissionStatus.PERMANENTLY_DENIED, viewModel.uiState.value.status)
+
+        // The checker (over checkSelfPermission) can only report DENIED here — a refresh must NOT
+        // silently downgrade the permanently-denied status.
+        checker.setStatus(PermissionFeature.WALLPAPER, PermissionStatus.DENIED)
+        viewModel.refreshStatus()
+
+        assertEquals(PermissionStatus.PERMANENTLY_DENIED, viewModel.uiState.value.status)
+    }
+
+    @Test
+    fun `refreshStatus still upgrades PERMANENTLY_DENIED to GRANTED`() = runTest {
+        val viewModel = vm()
+        advanceUntilIdle()
+
+        viewModel.onPermissionResult(granted = false, canRequestAgain = false)
+        assertEquals(PermissionStatus.PERMANENTLY_DENIED, viewModel.uiState.value.status)
+
+        // If the user grants it in system Settings, a refresh must reflect the live grant.
+        checker.setStatus(PermissionFeature.WALLPAPER, PermissionStatus.GRANTED)
+        viewModel.refreshStatus()
+
+        assertEquals(PermissionStatus.GRANTED, viewModel.uiState.value.status)
+    }
 }

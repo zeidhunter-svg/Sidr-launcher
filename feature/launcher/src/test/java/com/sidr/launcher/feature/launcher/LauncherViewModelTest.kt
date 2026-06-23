@@ -5,6 +5,7 @@ import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
+import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeIntentMatcher
 import com.sidr.launcher.core.testing.FakeUsageHistoryRepository
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
@@ -21,6 +22,7 @@ import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.result.OperationError
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -32,6 +34,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -51,7 +54,10 @@ class LauncherViewModelTest {
         resolver = IntentActionResolver(fakeRepo),
         executor = fakeExecutor,
         confidencePolicy = DefaultIntentConfidencePolicy(),
-        recordingScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob()),
+        // Share the test scheduler: the use case's fire-and-forget intent-match recording (null
+        // history here → no-op) is flushed by the same advanceUntilIdle() the VM tests already use,
+        // rather than relying on Dispatchers.Unconfined to run in-place (Block H, step H-c).
+        recordingScope = CoroutineScope(testDispatcher + SupervisorJob()),
     )
 
     @Before
@@ -188,6 +194,93 @@ class LauncherViewModelTest {
             "Expected UiError.Message, got ${(state as UiState.Error).error}",
             state.error is UiError.Message,
         )
+    }
+
+    // ── Recoverable errors + retry (Block H, H2) ───────────────────────────
+
+    @Test
+    fun `NetworkError is retryable`() = runTest(testDispatcher) {
+        fakeRepo.errorToReturn = OperationError.NetworkError(retryable = true)
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        val state = vm.uiState.value
+        assertTrue("Expected Error, got $state", state is UiState.Error)
+        assertTrue("NetworkError should be retryable", (state as UiState.Error).retryable)
+    }
+
+    @Test
+    fun `UnknownError is retryable`() = runTest(testDispatcher) {
+        fakeRepo.errorToReturn = OperationError.UnknownError()
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        val state = vm.uiState.value
+        assertTrue("Expected Error, got $state", state is UiState.Error)
+        assertTrue("UnknownError should be retryable", (state as UiState.Error).retryable)
+    }
+
+    @Test
+    fun `PermissionDenied is NOT retryable`() = runTest(testDispatcher) {
+        // Proves the mapping, not just the happy path: granting (not a retry button) is the fix.
+        fakeRepo.errorToReturn = OperationError.PermissionDenied("QUERY_ALL_PACKAGES")
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        val state = vm.uiState.value
+        assertTrue("Expected Error, got $state", state is UiState.Error)
+        assertFalse("PermissionDenied must not be retryable", (state as UiState.Error).retryable)
+    }
+
+    @Test
+    fun `retry after a failure shows Loading then Success without restart`() = runTest(testDispatcher) {
+        // A repo whose first load fails (retryable) and whose retry parks on a gate, so Loading is
+        // the settled state while the reload is in flight — letting us assert the transient cleanly.
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val gatedRepo = object : InstalledAppsRepository {
+            override suspend fun getInstalledApps(): OperationResult<List<InstalledApp>> {
+                calls++
+                return if (calls == 1) {
+                    OperationResult.Failure(OperationError.NetworkError(retryable = true))
+                } else {
+                    gate.await() // hold the reload so the screen settles on Loading
+                    OperationResult.Success(listOf(InstalledApp("com.example.one", "One")))
+                }
+            }
+        }
+        val vm = LauncherViewModel(
+            installedAppsRepository = gatedRepo,
+            handleUserCommand = useCase,
+            actionExecutor = fakeExecutor,
+            usageHistoryRepository = fakeUsageRepo,
+            featureFlagRepository = fakeFlagRepo,
+            ioDispatcher = testDispatcher,
+        )
+        advanceUntilIdle()
+        assertTrue("Expected Error after first load", vm.uiState.value is UiState.Error)
+
+        // User taps Retry on the SAME ViewModel instance (no process/VM restart).
+        vm.retry()
+        advanceUntilIdle() // null→Loading is processed; the reload is parked on gate.await()
+
+        // Resetting to null returns the combine to Loading — using the still-held usage records
+        // without racing them into a stale Error/Success emission.
+        assertTrue(
+            "Expected Loading while the reload is in flight, got ${vm.uiState.value}",
+            vm.uiState.value is UiState.Loading,
+        )
+
+        gate.complete(Unit) // release the reload
+        advanceUntilIdle()
+
+        val state = vm.uiState.value
+        assertTrue("Expected Success after retry reload, got $state", state is UiState.Success)
+        assertEquals(
+            listOf(InstalledApp("com.example.one", "One")),
+            (state as UiState.Success).data.apps,
+        )
+        assertEquals("Repo should be hit twice: initial load + retry", 2, calls)
     }
 
     // ── commandInput independence ──────────────────────────────────────────

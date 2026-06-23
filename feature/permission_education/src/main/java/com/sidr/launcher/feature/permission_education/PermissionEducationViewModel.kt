@@ -56,9 +56,30 @@ class PermissionEducationViewModel @Inject constructor(
         }
     }
 
-    /** Re-check the live permission status (e.g. after returning from the system Settings screen). */
+    /**
+     * Re-check the live permission status (e.g. after returning from the system Settings screen).
+     *
+     * Upgrade-only: a re-check may only move the status **up to [PermissionStatus.GRANTED]**; it must
+     * never overwrite an existing [PermissionStatus.PERMANENTLY_DENIED] with [PermissionStatus.DENIED].
+     * The [PermissionChecker] runs over `checkSelfPermission`, which can report only GRANTED/DENIED —
+     * it cannot observe permanent denial (that is derivable only from the request callback's
+     * `shouldShowRequestPermissionRationale`, see [onPermissionResult]). An unconditional overwrite
+     * would therefore silently downgrade a permanently-denied feature back to merely-denied on every
+     * refresh. This guard is a *partial* fix sized to the current SET_WALLPAPER (normal-permission)
+     * scope; it must be revisited when the first dangerous permission lands (`RECORD_AUDIO`, Ph7).
+     */
     fun refreshStatus() {
-        _uiState.update { it.copy(status = permissionChecker.status(feature)) }
+        val checked = permissionChecker.status(feature)
+        _uiState.update { current ->
+            val next = when {
+                // A live grant always wins (e.g. the user granted it in system Settings).
+                checked == PermissionStatus.GRANTED -> PermissionStatus.GRANTED
+                // Preserve the stronger existing status: never downgrade PERMANENTLY_DENIED → DENIED.
+                current.status == PermissionStatus.PERMANENTLY_DENIED -> PermissionStatus.PERMANENTLY_DENIED
+                else -> checked
+            }
+            current.copy(status = next)
+        }
     }
 
     /**

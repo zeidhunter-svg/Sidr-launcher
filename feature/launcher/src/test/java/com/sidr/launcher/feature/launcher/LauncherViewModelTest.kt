@@ -4,6 +4,7 @@ import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
+import androidx.lifecycle.SavedStateHandle
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeIntentMatcher
@@ -78,6 +79,7 @@ class LauncherViewModelTest {
 
     private fun buildViewModel(
         flagRepo: FeatureFlagRepository = fakeFlagRepo,
+        savedStateHandle: SavedStateHandle = SavedStateHandle(),
     ) = LauncherViewModel(
         installedAppsRepository = fakeRepo,
         handleUserCommand = useCase,
@@ -85,6 +87,7 @@ class LauncherViewModelTest {
         usageHistoryRepository = fakeUsageRepo,
         featureFlagRepository = flagRepo,
         ioDispatcher = testDispatcher,
+        savedStateHandle = savedStateHandle,
     )
 
     // ── App list loading ───────────────────────────────────────────────────
@@ -256,6 +259,7 @@ class LauncherViewModelTest {
             usageHistoryRepository = fakeUsageRepo,
             featureFlagRepository = fakeFlagRepo,
             ioDispatcher = testDispatcher,
+            savedStateHandle = SavedStateHandle(),
         )
         advanceUntilIdle()
         assertTrue("Expected Error after first load", vm.uiState.value is UiState.Error)
@@ -281,6 +285,88 @@ class LauncherViewModelTest {
             (state as UiState.Success).data.apps,
         )
         assertEquals("Repo should be hit twice: initial load + retry", 2, calls)
+    }
+
+    @Test
+    fun `double-tap retry hits the repo once and resolves cleanly`() = runTest(testDispatcher) {
+        // First load fails (retryable).
+        fakeRepo.errorToReturn = OperationError.NetworkError(retryable = true)
+        val vm = buildViewModel()
+        advanceUntilIdle()
+        assertTrue("Expected Error after first load", vm.uiState.value is UiState.Error)
+        assertEquals("Initial load is one hit", 1, fakeRepo.callCount)
+
+        // Failure clears; the user double-taps Retry before the scheduler runs the reload.
+        fakeRepo.errorToReturn = null
+        fakeRepo.appsToReturn = listOf(InstalledApp("com.example.one", "One"))
+        vm.retry()
+        vm.retry()
+
+        advanceUntilIdle()
+
+        // The second retry cancels the first's not-yet-started load: exactly one reload runs.
+        val state = vm.uiState.value
+        assertTrue("Expected Success, got $state", state is UiState.Success)
+        assertEquals(
+            listOf(InstalledApp("com.example.one", "One")),
+            (state as UiState.Success).data.apps,
+        )
+        assertEquals("Double-tap retry must hit the repo once for the retry, not twice", 2, fakeRepo.callCount)
+    }
+
+    // ── Process-death restoration (Block H, H3) ────────────────────────────
+
+    @Test
+    fun `typed command input is restored after process death`() = runTest(testDispatcher) {
+        val handle = SavedStateHandle()
+        val vm1 = buildViewModel(savedStateHandle = handle)
+        vm1.onCommandChanged("open te")
+        advanceUntilIdle()
+
+        // Simulate process death: a fresh ViewModel restored from the SAME SavedStateHandle.
+        val vm2 = buildViewModel(savedStateHandle = handle)
+        advanceUntilIdle()
+
+        assertEquals("open te", vm2.commandInput.value)
+    }
+
+    @Test
+    fun `command feedback is NOT restored after process death`() = runTest(testDispatcher) {
+        val handle = SavedStateHandle()
+        val vm1 = buildViewModel(savedStateHandle = handle)
+        vm1.onCommandSubmitted("") // Empty outcome → sets a transient feedback Message
+        advanceUntilIdle()
+        assertTrue(
+            "Sanity: feedback should be set on vm1",
+            vm1.commandFeedback.value is CommandFeedback.Message,
+        )
+
+        // A relaunched VM restores input but must NOT resurrect the ephemeral last-command result.
+        val vm2 = buildViewModel(savedStateHandle = handle)
+        advanceUntilIdle()
+
+        assertEquals(CommandFeedback.None, vm2.commandFeedback.value)
+    }
+
+    @Test
+    fun `clearing input persists through SavedStateHandle`() = runTest(testDispatcher) {
+        // Post-migration: the clear-on-Executed path must write through the handle, not a stale field.
+        val handle = SavedStateHandle()
+        fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
+        fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent("telegram")
+        fakeMatcher.confidenceToReturn = 0.90f
+        val vm = buildViewModel(savedStateHandle = handle)
+        vm.onCommandChanged("open telegram")
+        assertEquals("open telegram", vm.commandInput.value)
+
+        vm.onCommandSubmitted("open telegram") // Executed → clears input
+        advanceUntilIdle()
+        assertEquals("", vm.commandInput.value)
+
+        // The clear was written to the handle: a VM restored from it also starts empty.
+        val vmRestored = buildViewModel(savedStateHandle = handle)
+        advanceUntilIdle()
+        assertEquals("", vmRestored.commandInput.value)
     }
 
     // ── commandInput independence ──────────────────────────────────────────

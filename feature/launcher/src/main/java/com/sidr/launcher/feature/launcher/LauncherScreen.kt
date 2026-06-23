@@ -8,7 +8,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,7 +45,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
-import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.domain.model.InstalledApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -65,17 +63,9 @@ fun LauncherScreen(
             .fillMaxSize()
             .imePadding(),
     ) {
-        // User-initiated trigger for the wallpaper feature (Block G). Tapping navigates to the
-        // permission-education destination — the permission is never requested at startup. The
-        // route string is supplied by the UI layer; the VM only forwards the NavigationEvent.
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-        ) {
-            TextButton(onClick = { viewModel.navigateTo(Routes.PermissionEducation.ROUTE) }) {
-                Text("Wallpaper")
-            }
-        }
+        // NOTE (Block H, H4): the temporary home-screen "Wallpaper" demo button was removed here.
+        // The permission-education destination stays registered in AppNavHost and reachable by
+        // route; a real entry point (launcher settings / home long-press) lands in a later phase.
 
         // Switching area — expands to fill available space above the input bar
         Box(modifier = Modifier.weight(1f)) {

@@ -1,5 +1,6 @@
 package com.sidr.launcher.feature.launcher
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sidr.launcher.core.common.UiError
@@ -23,6 +24,7 @@ import com.sidr.launcher.domain.result.OperationResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,6 +47,9 @@ class LauncherViewModel @Inject constructor(
     private val usageHistoryRepository: UsageHistoryRepository,
     private val featureFlagRepository: FeatureFlagRepository,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    // Survives process death — the user's typed command text is restored on relaunch (H3).
+    // Hilt auto-provides this for @HiltViewModel; tests pass a SavedStateHandle() directly.
+    private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     // ── Navigation events (Channel pattern from 3.1.x — unchanged) ────────
@@ -89,19 +94,32 @@ class LauncherViewModel @Inject constructor(
         )
 
     // ── Command input — independent of app-list loading ────────────────────
-    private val _commandInput = MutableStateFlow("")
-    val commandInput: StateFlow<String> = _commandInput
+    // Backed by SavedStateHandle so the typed text survives process death (H3). Every writer
+    // goes through setCommandInput(...) so the handle stays the single source of truth.
+    val commandInput: StateFlow<String> = savedStateHandle.getStateFlow(KEY_COMMAND_INPUT, "")
+
+    private fun setCommandInput(text: String) {
+        savedStateHandle[KEY_COMMAND_INPUT] = text
+    }
 
     // ── Command feedback — transient result of the last submitted command ──
     private val _commandFeedback = MutableStateFlow<CommandFeedback>(CommandFeedback.None)
     val commandFeedback: StateFlow<CommandFeedback> = _commandFeedback
+
+    // Tracks the in-flight app load so a new load (init or retry) cancels the previous one.
+    private var loadJob: Job? = null
 
     init {
         loadApps()
     }
 
     private fun loadApps() {
-        viewModelScope.launch(ioDispatcher) {
+        // Cancel any in-flight load first: rapid retries (double-tap) must not run parallel reloads.
+        // Only the latest attempt's result is ever applied; a redundant not-yet-started load never
+        // reaches the repository, and one already suspended mid-call is cancelled with its result
+        // discarded — so the screen sees a single clean Loading → Success/Error, no flicker.
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch(ioDispatcher) {
             _rawAppsResult.value = installedAppsRepository.getInstalledApps()
         }
     }
@@ -118,7 +136,7 @@ class LauncherViewModel @Inject constructor(
     // ── UI actions ─────────────────────────────────────────────────────────
 
     fun onCommandChanged(text: String) {
-        _commandInput.value = text
+        setCommandInput(text)
         // Editing a new command clears stale feedback.
         _commandFeedback.value = CommandFeedback.None
     }
@@ -165,7 +183,7 @@ class LauncherViewModel @Inject constructor(
                 _commandFeedback.value = CommandFeedback.Message("Type a command, e.g. \"open telegram\"")
 
             CommandOutcome.Executed -> {
-                _commandInput.value = ""
+                setCommandInput("")
                 _commandFeedback.value = CommandFeedback.None
             }
 
@@ -193,19 +211,19 @@ class LauncherViewModel @Inject constructor(
                 _commandFeedback.value = CommandFeedback.Message(outcome.message)
 
             CommandOutcome.OpenAssistant -> {
-                _commandInput.value = ""
+                setCommandInput("")
                 _commandFeedback.value = CommandFeedback.None
                 // Route string belongs to the UI layer — the domain only said "OpenAssistant".
                 navigateTo(Routes.Assistant.ROUTE)
             }
 
             CommandOutcome.ShowApps -> {
-                _commandInput.value = ""
+                setCommandInput("")
                 _commandFeedback.value = CommandFeedback.None
             }
 
             CommandOutcome.ClearInput -> {
-                _commandInput.value = ""
+                setCommandInput("")
                 _commandFeedback.value = CommandFeedback.None
             }
         }
@@ -272,5 +290,7 @@ class LauncherViewModel @Inject constructor(
 
     private companion object {
         const val GENERIC_ERROR = "Something went wrong. Please try again."
+        // SavedStateHandle key for the typed command text (H3 process-death restoration).
+        const val KEY_COMMAND_INPUT = "command_input"
     }
 }

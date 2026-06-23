@@ -5,8 +5,10 @@ import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +26,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,6 +46,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
+import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.domain.model.InstalledApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -61,6 +65,18 @@ fun LauncherScreen(
             .fillMaxSize()
             .imePadding(),
     ) {
+        // User-initiated trigger for the wallpaper feature (Block G). Tapping navigates to the
+        // permission-education destination — the permission is never requested at startup. The
+        // route string is supplied by the UI layer; the VM only forwards the NavigationEvent.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            TextButton(onClick = { viewModel.navigateTo(Routes.PermissionEducation.ROUTE) }) {
+                Text("Wallpaper")
+            }
+        }
+
         // Switching area — expands to fill available space above the input bar
         Box(modifier = Modifier.weight(1f)) {
             when (val state = uiState) {

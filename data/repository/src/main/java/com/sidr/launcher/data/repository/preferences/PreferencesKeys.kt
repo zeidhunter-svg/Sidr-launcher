@@ -62,6 +62,16 @@ internal object PreferencesKeys {
     // List<CachedSuggestionDto> via kotlinx-serialization inside the mapper.
     val SUG_CACHED_LIST_JSON = stringPreferencesKey("sug_cached_list_json")
 
+    // Permission-education dismissed flags — prefix: perm_ (Block G, Fork 5)
+    // Per-feature "don't ask again / dismissed" state. Only requestable features are persisted;
+    // a dormant feature has no request flow and thus no dismissed state, so it gets no key.
+    // Only WALLPAPER is live in Phase 4 → exactly one key here today. Keys for the dangerous
+    // dormant features (voice/calendar/location) are deliberately NOT created — both because
+    // there is nothing to dismiss yet and because their names would collide with the privacy
+    // denylist. Per-feature granularity supersedes the legacy global flag_permission_edu_dismissed
+    // (kept above for Block E compatibility; the global flag is no longer the source of truth).
+    val PERM_DISMISSED_WALLPAPER = booleanPreferencesKey("perm_dismissed_wallpaper")
+
     // All DataStore key name strings — used exclusively by PrivacyInventoryGuardTest
     // to assert no key name contains a forbidden term (tests the *value* "user_theme_name",
     // not the Kotlin variable name USER_THEME_NAME).
@@ -75,6 +85,7 @@ internal object PreferencesKeys {
         DEVICE_CACHED_AT_EPOCH_MS.name,
         DEVICE_HAS_CACHE.name,
         SUG_CACHED_LIST_JSON.name,
+        PERM_DISMISSED_WALLPAPER.name,
     )
 
     const val MAX_CACHED_SUGGESTIONS = 5

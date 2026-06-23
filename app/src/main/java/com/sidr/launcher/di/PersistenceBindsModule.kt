@@ -2,8 +2,10 @@ package com.sidr.launcher.di
 
 import com.sidr.launcher.data.repository.preferences.DeviceProfileCacheRepositoryImpl
 import com.sidr.launcher.data.repository.preferences.FeatureFlagRepositoryImpl
+import com.sidr.launcher.data.repository.preferences.PermissionPrefsRepositoryImpl
 import com.sidr.launcher.data.repository.preferences.SuggestionsCacheRepositoryImpl
 import com.sidr.launcher.data.repository.preferences.UserPreferencesRepositoryImpl
+import com.sidr.launcher.domain.permission.PermissionPrefsRepository
 import com.sidr.launcher.domain.preferences.DeviceProfileCacheRepository
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.preferences.SuggestionsCacheRepository
@@ -45,4 +47,11 @@ abstract class PersistenceBindsModule {
     abstract fun bindSuggestionsCacheRepository(
         impl: SuggestionsCacheRepositoryImpl,
     ): SuggestionsCacheRepository
+
+    // Block G — per-feature permission-education "dismissed" flag, DataStore-backed.
+    @Binds
+    @Singleton
+    abstract fun bindPermissionPrefsRepository(
+        impl: PermissionPrefsRepositoryImpl,
+    ): PermissionPrefsRepository
 }

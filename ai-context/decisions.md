@@ -439,6 +439,140 @@ JVM tests, 25 launcher JVM tests, 0 failures. `assembleDebug` green.
 schema runway is proven on a real device. Note: test method names use camelCase (spaces in
 backtick method names are rejected by pre-DEX-040 android toolchain).
 
+### ADR 2026-06-23 — Block G complete (permission-education module + request flow)
+
+**Done 2026-06-23 (Block G, G1–G7). Third Phase-4 execution round. Fork 5 honoured.**
+
+**Pre-flight (Block F carry-over) — both verified before starting, no fix needed:**
+- `recordMatch`'s `getFlags().first()` is off the critical path: it runs inside
+  `recordingScope.launch { recordMatch(...) }` (`HandleUserCommandUseCase.handle`), so the
+  `CommandOutcome` returns without waiting on the DataStore read.
+- `CancellationException` re-thrown before the catch-all in both
+  `HandleUserCommandUseCase.recordMatch` and `LauncherViewModel.recordUsage`.
+
+**New module:** `:feature:permission_education` (Compose + Hilt; deps `core:common`, `core:ui`,
+`domain` only — no `feature→feature`, no `feature→data`). Registered in `settings.gradle.kts`;
+`:app` depends on it.
+
+**New files in `:domain` (`com.sidr.launcher.domain.permission`):**
+- `PermissionFeature` — enum `WALLPAPER(requestable=true)` + dormant `VOICE_INPUT`,
+  `CALENDAR_SUGGESTIONS`, `LOCATION_SUGGESTIONS` (`requestable=false`). **No accessibility entry.**
+  Pure: carries no manifest permission strings.
+- `PermissionStatus` — `GRANTED / DENIED / PERMANENTLY_DENIED`.
+- `PermissionChecker` — port; `status(feature): PermissionStatus`.
+- `PermissionPrefsRepository` — port; `isDismissed(feature): Flow<Boolean>` /
+  `setDismissed(feature, dismissed): OperationResult<Unit>`.
+
+**New file in `:core:android` (`…core.android.permission`):**
+- `AndroidPermissionChecker` — plain class (no Hilt annotations) over
+  `ContextCompat.checkSelfPermission`; the single place mapping `PermissionFeature` → manifest
+  permission string. Returns GRANTED/DENIED only. `core/android/build.gradle.kts` gained
+  `implementation(project(":domain"))`.
+
+**New files in `:data:repository` (`…data.repository.preferences`):**
+- `PermissionPrefsRepositoryImpl` over the shared `DataStore<Preferences>` + `@IoDispatcher`;
+  reads fall back on `IOException`, writes catch `IOException` → `OperationError`, never throw.
+- `PreferencesKeys`: added `PERM_DISMISSED_WALLPAPER = "perm_dismissed_wallpaper"` (+ in
+  `ALL_KEY_NAMES`); only the requestable feature has a key.
+
+**New files in `:feature:permission_education`:**
+- `PermissionEducationViewModel` (`@HiltViewModel`) — single `StateFlow<PermissionEducationUiState>`;
+  reads status via the port, persists dismissed via the repo, refines DENIED→PERMANENTLY_DENIED
+  from the request callback. No Android types.
+- `PermissionEducationScreen` — rationale always shown (no dialog); system dialog launched only on
+  CTA for a requestable feature via `ActivityResultContracts.RequestPermission`; on grant launches
+  the wallpaper picker (`ACTION_SET_WALLPAPER`); permanently-denied → "Open settings"; "Don't show
+  again" → `onDismissForever`; "Back" via the navhost safe-fallback. Android glue (activity
+  unwrap, intents) is UI-layer only.
+- `PermissionRationale` + `rationaleFor(feature)` — display copy per feature (incl. dormant);
+  no accessibility copy.
+
+**Changes in `:app`:**
+- `AppNavHost` — `Routes.PermissionEducation.ROUTE` now renders `PermissionEducationScreen`
+  (placeholder removed); `onBack` reuses `handleNavigationEvent(..., NavigateBack)` (3.1.5).
+- `PermissionModule` (object) — `@Provides PermissionChecker = AndroidPermissionChecker(context)`.
+- `PersistenceBindsModule` — `@Binds PermissionPrefsRepository ← PermissionPrefsRepositoryImpl`.
+- `AndroidManifest.xml` — `<uses-permission android:name="android.permission.SET_WALLPAPER" />`.
+
+**Change in `:feature:launcher`:** `LauncherScreen` adds a "Wallpaper" `TextButton` →
+`viewModel.navigateTo(Routes.PermissionEducation.ROUTE)`. The user-initiated trigger; the route
+string stays in the UI layer, the VM only forwards the `NavigationEvent`. No new VM logic.
+
+**New fakes in `:core:testing`:** `FakePermissionChecker` (per-feature settable status),
+`FakePermissionPrefsRepository` (`MutableStateFlow`-backed, `errorToReturn`, recorded `setCalls`).
+
+**Decisions made during execution (Fork 5 left these open):**
+- **`PermissionChecker` port lives in `:domain`, impl in `core/android`.** A feature module cannot
+  depend on `core/android` (allowed deps: `domain`/`core:ui`/`core:common`), so the contract had to
+  be a domain port for the VM to use it; the Android impl is provided from `:app`.
+- **`AndroidPermissionChecker` is Hilt-annotation-free**, constructed in `:app`'s `PermissionModule`,
+  so `core/android` stays DI-framework-free (it has no Hilt dependency).
+- **Per-feature `PermissionPrefsRepository`, not the legacy global flag.** Block E pre-provisioned a
+  single `FeatureFlags.permissionEducationDismissed`; a global boolean conflates features and
+  contradicts "a denial disables exactly one feature". The new repo is per-feature. The legacy
+  global flag/key is left in place (untouched, still tested by Block E) but is no longer the source
+  of truth — flagged for a possible Block H cleanup.
+- **Only requestable features get a DataStore key.** Dormant features have no request flow, so
+  nothing to dismiss; `isDismissed` emits `false` and `setDismissed` is a no-op `Success`. This also
+  avoids the privacy-guard denylist collisions that keys like `perm_dismissed_voice_input` /
+  `…_calendar…` / `…_location…` would trigger. Concrete key today: `perm_dismissed_wallpaper` (clean).
+- **SET_WALLPAPER is a *normal* permission → no real OS dialog.** On a manifest-declared build the
+  checker reports GRANTED and the request contract returns granted without UI. The live demo
+  therefore exercises education → request-contract → feature reaction (wallpaper picker); the
+  denial / permanently-denied mechanics are real code paths covered by VM unit tests with the fake
+  checker (they can't be reproduced on-device for a normal permission). Documented as the intended
+  Fork-5 behaviour, not a gap.
+- **Single live feature wired into the VM (`WALLPAPER`).** A nav-arg/`SavedStateHandle` route into
+  the VM is deferred to when a second feature has a live request flow (noted for Block H/Ph7).
+
+**Tests (G7) — all JVM, no new instrumented tests:**
+- `PermissionEducationViewModelTest` (`:feature:permission_education`) — **8 tests**: initial status
+  from checker + requestable; granted→GRANTED; denied+ask-again→DENIED (feature off, still
+  requestable); denied+no-ask→PERMANENTLY_DENIED; `onDismissForever` persists per-feature + marks
+  state; previously-dismissed reflected on init; dismiss swallows a persistence error;
+  `refreshStatus` re-reads checker.
+- `PermissionPrefsRepositoryImplTest` (`:data:repository`) — **4 tests**: default not-dismissed;
+  set→read round-trip; survives simulated process restart (scope-cancel + reopen on same tmp file);
+  dormant feature is no-op Success + never bleeds into the wallpaper flag.
+- `PrivacyInventoryGuardTest` re-run green with the new key in `ALL_KEY_NAMES`.
+- Total new G JVM tests: **12**. No regressions across the suite.
+- **No `androidTest` produced for Block G** (all paths covered by JVM/fakes) → no device run required.
+
+**Verification (actual output):**
+- `./gradlew assembleDebug` → BUILD SUCCESSFUL in 35s (312 tasks; new module + Hilt graph compile).
+- `./gradlew testDebugUnitTest --rerun-tasks` → BUILD SUCCESSFUL in 1m 1s (221 tasks executed;
+  12 new tests green, prior tests green).
+- `./gradlew :feature:permission_education:testDebugUnitTest :data:repository:testDebugUnitTest`
+  → BUILD SUCCESSFUL (8 + 4 reported in test-results XML, 0 failures/0 errors).
+- Guards: `grep -rn "import android" domain/src/` empty; `grep -rn "androidx\." domain/src/` empty;
+  `:domain:dependencies` compileClasspath = `kotlin-stdlib` + `kotlinx-coroutines-core` only; no
+  `feature→data` / `feature→feature` edges; `BIND_ACCESSIBILITY_SERVICE` appears only in
+  "intentionally absent" comments (never requested, never educated).
+
+**Frozen, untouched:** hardening (H) incl. `UiState`/retry/`SavedStateHandle`/`architecture.md`
+sync (H6); accessibility + its consent (Ph8); request flow for `RECORD_AUDIO`/`READ_CALENDAR`/
+`ACCESS_FINE_LOCATION` (dormant, education-only); secrets (Ph5); WorkManager (Ph6/9).
+
+**Carry-forward tasks for Block H (decided 2026-06-23, do not act until the owning H step):**
+1. **Privacy guard — table names.** Strengthen the guard to also scan Room **table names**, not just
+   column names (deferred from Block F).
+2. **Wallpaper trigger relocation.** The home-screen `TextButton("Wallpaper")` in `LauncherScreen` is
+   a **temporary demo hook, not final UI** (confirmed by product). Block H: remove the home-screen
+   button and relocate the wallpaper entry to launcher settings / a home long-press menu. Leave it in
+   place until the H step that owns navigation/UI.
+3. **`refreshStatus()` permanent-denied downgrade — real bug, not just a missing test.**
+   `PermissionEducationViewModel.refreshStatus()` currently overwrites status unconditionally with
+   `permissionChecker.status(feature)`, which can only return GRANTED/DENIED — so it silently
+   downgrades a `PERMANENTLY_DENIED` status to `DENIED` on re-check (e.g. returning from system
+   Settings). Block H: change `refreshStatus()` so it may **only upgrade to GRANTED** and never
+   overwrites a `PERMANENTLY_DENIED` with `DENIED`; add a test asserting `PERMANENTLY_DENIED` survives
+   a refresh. **ADR note:** `PERMANENTLY_DENIED` is only derivable from the request callback
+   (`shouldShowRequestPermissionRationale`), never from `checkSelfPermission`; this upgrade-only guard
+   is a **partial** fix adequate for the current SET_WALLPAPER (normal-permission) scope and **must be
+   revisited when the first dangerous permission lands (`RECORD_AUDIO`, Ph7)**.
+4. **Legacy global dismissed flag.** Consider removing the now-superseded global
+   `flag_permission_edu_dismissed` key/field (replaced by the per-feature `PermissionPrefsRepository`).
+
 ### ADR 2026-06-19 — Phase 2 skipped / reordered into a minimal slice
 - Decision: Phase 2 (launcher shell) is **not** run as a separate phase. Its navigation half was already absorbed into `3.1.x`; its product floor — `InstalledAppsRepository`, app grid, command input, offline app launch — is folded into Phase 3 as a **minimal P2 slice** (Block B).
 - Context: Phase 3's intent system cannot reach acceptance without Phase 2's installed-apps repository and command input (e.g. `open telegram` cannot resolve or launch). The skip deferred an unavoidable dependency rather than removing it.

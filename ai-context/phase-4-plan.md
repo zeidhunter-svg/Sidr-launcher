@@ -307,18 +307,20 @@ Phase-3 pipeline.
   placeholder; ActivityResult launcher wiring; DI bindings.
 - `:core:testing`: fake `PermissionChecker` / `PermissionPrefsRepository`.
 
-**Steps:**
-- [ ] `G1` Create `:feature:permission_education`, register in `settings.gradle.kts`,
+**Steps:** *(G1–G7 complete 2026-06-23 — see decisions.md "ADR Block G")*
+- [x] `G1` Create `:feature:permission_education`, register in `settings.gradle.kts`,
       dependency direction `app → feature → domain/core` (no `feature→feature`, no `feature→data`).
-- [ ] `G2` `PermissionFeature`/`PermissionStatus` in domain; `PermissionChecker` in `core/android`.
-- [ ] `G3` Separate education (rationale screen, no system dialog) from request (dialog on
+- [x] `G2` `PermissionFeature`/`PermissionStatus` in domain; `PermissionChecker` (port in domain,
+      `AndroidPermissionChecker` impl in `core/android`).
+- [x] `G3` Separate education (rationale screen, no system dialog) from request (dialog on
       feature trigger) — Fork 5.
-- [ ] `G4` Live `SET_WALLPAPER` trigger: education → request → feature reaction; denial disables
+- [x] `G4` Live `SET_WALLPAPER` trigger: education → request → feature reaction; denial disables
       exactly that feature, core not blocked.
-- [ ] `G5` "Don't ask again / dismissed" via DataStore (Block E).
-- [ ] `G6` `AppNavHost`: replace the inline placeholder with a real destination + safe-fallback
+- [x] `G5` "Don't ask again / dismissed" via DataStore (Block E) — per-feature
+      `PermissionPrefsRepository`.
+- [x] `G6` `AppNavHost`: replace the inline placeholder with a real destination + safe-fallback
       (3.1.5).
-- [ ] `G7` Tests: VM on fake `PermissionChecker`/prefs; granted/denied/permanently-denied paths;
+- [x] `G7` Tests: VM on fake `PermissionChecker`/prefs; granted/denied/permanently-denied paths;
       core not blocked on denial.
 
 **Acceptance criteria:**

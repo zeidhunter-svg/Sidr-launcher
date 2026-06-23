@@ -50,6 +50,7 @@ dependencies {
     implementation(project(":feature:launcher"))
     implementation(project(":feature:assistant"))
     implementation(project(":feature:suggestions"))
+    implementation(project(":feature:permission_education"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

@@ -15,6 +15,7 @@ import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.feature.assistant.AssistantScreen
 import com.sidr.launcher.feature.launcher.LauncherScreen
 import com.sidr.launcher.feature.launcher.LauncherViewModel
+import com.sidr.launcher.feature.permission_education.PermissionEducationScreen
 
 private const val TAG = "AppNavHost"
 
@@ -83,9 +84,14 @@ fun AppNavHost(
             Text(text = "Settings")
         }
 
-        // No feature:permission_education module yet — inline placeholder until module is created
+        // Real destination (Block G) — replaces the former inline placeholder. The screen owns
+        // its own request flow; navigating back uses the same safe-fallback helper as every node.
         composable(Routes.PermissionEducation.ROUTE) {
-            Text(text = "Permission Education")
+            PermissionEducationScreen(
+                onBack = {
+                    handleNavigationEvent(navController, NavigationEvent.NavigateBack)
+                },
+            )
         }
     }
 }

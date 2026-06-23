@@ -3,6 +3,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Optional, normal permission for the wallpaper feature (Block G). Granted at install;
+         requested through the education flow, never at startup. -->
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
 
     <queries>
         <intent>

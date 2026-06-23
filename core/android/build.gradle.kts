@@ -23,5 +23,8 @@ kotlin {
 
 dependencies {
     implementation(project(":core:common"))
+    // PermissionChecker port lives in :domain (a feature can't depend on core/android);
+    // core/android provides its Android impl. :domain is pure, so no cycle is introduced.
+    implementation(project(":domain"))
     implementation(libs.androidx.core.ktx)
 }

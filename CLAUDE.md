@@ -1,6 +1,6 @@
 # CLAUDE.md — Sidr Launcher
 
-Session digest. Read this first, then `ai-context/phase-4-plan.md` (active: Block G).
+Session digest. Read this first, then `ai-context/phase-4-plan.md` (active: Block H).
 
 ## What this is
 
@@ -31,7 +31,14 @@ Room entities, DAOs, `SidrDatabase` (v1, `exportSchema=true`), `TypeConverters`,
 `HandleUserCommandUseCase`; grid sorts by usage recency/frequency; 2 fakes in `:core:testing`;
 17 new JVM tests (Robolectric DAO/repo + redaction + column-privacy guard) green. Golden schema
 `schemas/1.json` committed; `MigrationTestHelper` runway in `androidTest`.
-`assembleDebug` + `testDebugUnitTest` green. **Next: Block G — permission-education.** Details in
+**Block G DONE (2026-06-23):** permission-education — new `:feature:permission_education` module
+(Compose + Hilt) replaces the `AppNavHost` placeholder; `PermissionFeature`/`PermissionStatus` +
+`PermissionChecker`/`PermissionPrefsRepository` ports in `:domain`; `AndroidPermissionChecker`
+in `:core:android`; per-feature `PermissionPrefsRepositoryImpl` over DataStore (key
+`perm_dismissed_wallpaper`); education ≠ request (Fork 5); live `SET_WALLPAPER` trigger from a
+launcher "Wallpaper" button; denial disables only that feature, core never blocked.
+**`BIND_ACCESSIBILITY_SERVICE` not requested/educated (Ph8).** 2 fakes + 12 new JVM tests green.
+`assembleDebug` + `testDebugUnitTest --rerun-tasks` green. **Next: Block H — hardening.** Details in
 [ai-context/decisions.md](ai-context/decisions.md).
 
 Phase 3 result, Blocks A → D:
@@ -48,8 +55,8 @@ Phase 3 result, Blocks A → D:
   `IntentProvidesModule` (`:app`). Routing: low/medium never auto-executes; navigation + CLEAR +
   SHOW_APPS + ambiguity never go through the executor.
 
-**Still frozen until their Phase-4 slice:** permission-education (G), hardening (H).
-DataStore unfrozen in Block E; Room unfrozen in Block F.
+**Still frozen until their Phase-4 slice:** hardening (H). DataStore unfrozen in Block E; Room
+unfrozen in Block F; permission-education delivered in Block G.
 
 ## Status snapshot
 
@@ -74,7 +81,13 @@ DataStore unfrozen in Block E; Room unfrozen in Block F.
   Follow-up (2026-06-23): `recordMatch` moved off critical path via `recordingScope.launch {}` (injected
   `@ApplicationScope CoroutineScope`, required param, no lifecycle-less default); `CancellationException`
   re-thrown in `LauncherViewModel.recordUsage`; 2 more tests; 67 domain + 25 launcher JVM, 0 failures.
-  **Active next: Block G (permission-education).**
+- **Phase 4 Block G ✅ (2026-06-23)** — permission-education: new `:feature:permission_education`
+  module (Compose + Hilt) replacing the `AppNavHost` placeholder; `PermissionFeature`/`PermissionStatus`
+  + `PermissionChecker`/`PermissionPrefsRepository` ports in `:domain`; `AndroidPermissionChecker` in
+  `:core:android`; per-feature `PermissionPrefsRepositoryImpl` over DataStore (`perm_dismissed_wallpaper`);
+  education ≠ request (Fork 5) with a live `SET_WALLPAPER` trigger from a launcher "Wallpaper" button;
+  denial disables only that feature, core never blocked; accessibility deferred (Ph8). 2 fakes + 12 JVM
+  tests green. **Active next: Block H (hardening).**
 
 ## Hard rules
 
@@ -102,6 +115,10 @@ DataStore unfrozen in Block E; Room unfrozen in Block F.
 | DataStore Preferences impls + `PreferencesMapper` + `PreferencesKeys` *(Block E ✅)* | `data/repository` |
 | History domain models (`AppUsageRecord`, `SuggestionRankingRecord`, `IntentMatchRecord`) + repo interfaces (`UsageHistoryRepository`, `SuggestionRankingRepository`, `IntentMatchHistoryRepository`) *(Block F)* | `domain` |
 | Room entities, DAOs, `SidrDatabase`, `TypeConverters`, `migrations/`, mappers *(Block F)* | `data/repository` |
+| Permission contracts (`PermissionFeature`, `PermissionStatus`, `PermissionChecker`, `PermissionPrefsRepository`) *(Block G)* | `domain` |
+| `AndroidPermissionChecker` impl *(Block G)* | `core/android` |
+| `PermissionPrefsRepositoryImpl` (DataStore) *(Block G)* | `data/repository` |
+| Permission-education UI (`PermissionEducationScreen`/`ViewModel`, rationale, request flow) *(Block G)* | `feature/permission_education` |
 | Cloud AI client (Ktor) | `data/ai-cloud` |
 | ONNX NLU / embeddings | `data/ai-local` |
 | `UiState`, dispatchers, logging contracts | `core/common` |
@@ -119,7 +136,7 @@ DataStore unfrozen in Block E; Room unfrozen in Block F.
   (deprecated, Fork 1 defers secrets to Phase 5). Sync scheduled: Block H, step H6. Until then
   the authoritative sources are: this file + [ai-context/phase-4-plan.md](ai-context/phase-4-plan.md)
   + [ai-context/decisions.md](ai-context/decisions.md).
-- Active checklist: [ai-context/phase-4-plan.md](ai-context/phase-4-plan.md) *(Block G — active)*
+- Active checklist: [ai-context/phase-4-plan.md](ai-context/phase-4-plan.md) *(Block H — active)*
 - Closed checklist: [ai-context/phase-3-intent-system-plan.md](ai-context/phase-3-intent-system-plan.md)
   *(Phase 3 closed 2026-06-21)*
 - Decisions log: [ai-context/decisions.md](ai-context/decisions.md)
@@ -127,7 +144,7 @@ DataStore unfrozen in Block E; Room unfrozen in Block F.
 
 ## Do not
 
-- Don't start Room / permission-education / hardening ahead of their block (F/G/H). DataStore
-  is done (Block E); extend it, don't re-scaffold it.
+- Don't start hardening (Block H) ahead of schedule. DataStore (E), Room (F) and
+  permission-education (G) are done; extend them, don't re-scaffold them.
 - Don't create `core/data` (dropped from the target structure).
 - Don't fold generative AI into the `IntentMatcher` contract.

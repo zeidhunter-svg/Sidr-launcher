@@ -680,6 +680,94 @@ voice + `SpeechInputSource` + context-suggestion pipeline (Ph7), accessibility +
 WorkManager (Ph6/9), full Hilt→KSP migration (Ph9), `feature/settings` module, request flow for
 `RECORD_AUDIO`/`READ_CALENDAR`/`ACCESS_FINE_LOCATION` (dormant, education-only).
 
+### ADR 2026-06-24 — Block I complete (multi-provider AI domain contracts)
+
+**Done 2026-06-24 (Block I, I1–I5). First Phase-5 execution round. Forks P5-2/3/5/6 honoured.**
+
+**Pre-flight (repo-truth check) — all confirmed, no plan patch needed:**
+- AI contracts absent in `:domain` (only the KDoc reference in `IntentMatcher.kt`).
+- `OperationResult`/`OperationError` at `com.sidr.launcher.domain.result` (port returns depend on it).
+- `:domain` compile classpath = `kotlin-stdlib` + `kotlinx-coroutines-core` only.
+- `:core:testing` is a **JVM** module (no Android variants) — the prompt's
+  `:core:testing:compileDebugSources` verification command doesn't exist; used `:core:testing:classes`
+  (covered transitively by `assembleDebug` anyway). Noted for future Phase-5 prompts.
+
+**New files in `:domain` (`com.sidr.launcher.domain.ai`):**
+- `AiProviderId` / `AiModelId` — `@JvmInline value class` over `String`, **opaque** (no vendor enum).
+- `AiRequest` / `AiMessage` / `AiRole(USER, ASSISTANT)` — content-only; `system` top-level; `model`
+  nullable (= engine/router default); `stopSequences`; **no sampling params** (`temperature`/`top_p`/
+  `top_k` are a per-adapter concern — some models 400 on them).
+- `AiChunk` (sealed: `Text(delta)` / `Completed(stopReason, usage?)` / `Failed(error)`) +
+  `AiStopReason(COMPLETE, MAX_TOKENS, STOP_SEQUENCE, REFUSAL, OTHER)` + `AiUsage`.
+- `AiError` (sealed: `Offline`, `MissingCredentials`, `Unauthorized`, `RateLimited(retryAfterMs?)`,
+  `Timeout`, `Network(detail?)`, `ServerError(statusCode?)`, `InvalidRequest(detail?)`, `Unknown(detail?)`).
+- `GenerativeAiEngine` (`fun generate(request): Flow<AiChunk>`) + `GenerativeRouter : GenerativeAiEngine`.
+- `AiChunks.assembleText(Iterable<AiChunk>): String` (pure helper).
+
+**New files in `:domain` (`…domain.security`):** `SecretKey` value class; `SecureSecretStore`
+(`suspend get/put/remove → OperationResult`, **never throws**); `SecretKeys.apiKey(provider) =
+SecretKey("ai_api_key_${provider.value}")` (per-provider).
+
+**New file in `:domain` (`…domain.connectivity`):** `ConnectivityChecker` (`isOnline()` +
+`connectivity: Flow<Boolean>`).
+
+**New fakes in `:core:testing`:** `FakeGenerativeAiEngine` (scripted `List<AiChunk>` and/or a
+per-request `script` lambda; records `lastRequest`; optional `delayBetweenChunksMs`),
+`FakeSecureSecretStore` (`MutableMap`-backed, `errorToReturn`, `put`/`remove` call logs),
+`FakeConnectivityChecker` (`MutableStateFlow`-backed, settable `online`).
+
+**Decisions made during execution (multi-provider properties — the point of the block):**
+- **Opaque `AiProviderId`/`AiModelId`, not enums.** A new provider is addable later as a new
+  `GenerativeAiEngine` impl + provider id + key entry, with **zero `:domain` change**.
+- **No sampling params in the domain request.** Sampling is model-specific (HTTP 400 risk) and lives
+  only inside the adapter (Block K) — keeps `:domain` wire-agnostic.
+- **Refusal is a *success* terminal (`AiStopReason.REFUSAL` inside `AiChunk.Completed`), not an
+  `AiError`.** A reached-but-declined model is not a transport failure.
+- **Terminal-failure-as-value.** Expected failures are emitted as a terminal `AiChunk.Failed(AiError)`
+  and the flow then completes normally — implementations must NOT throw expected errors to the
+  collector (the `Flow` analog of "`OperationResult`, never throw to UI"). KDoc'd on the port + fakes.
+- **`AiError` carries no secret/raw-content fields** — only safe diagnostic hints (`detail`,
+  `statusCode`, `retryAfterMs`). KDoc records the intended later UI retryability mapping (Offline/
+  Network/Timeout/RateLimited/ServerError/Unknown → retryable; MissingCredentials/Unauthorized → not
+  button-retryable; InvalidRequest → not retryable) without building it (Block N).
+- **Generic per-provider `SecureSecretStore`.** Not AI-specific; keyed so providers never collide.
+- **Vendor-neutrality guard made *literally* clean.** The acceptance grep `anthropic|openai|gemini|
+  claude` over `domain/src/` initially matched **KDoc examples + test-data strings only** (no
+  production type/field/logic named a vendor — those references were illustrating opacity). To make
+  the guard pass literally (a clearer contract than "is this comment a violation?"), vendor tokens
+  were scrubbed to generic placeholders (`cloud-default`/`cloud-compatible`/`provider-c`/`…`) in KDoc
+  and tests; the vendor↔stop-reason mapping detail rightly belongs in the Block K adapter, not `:domain`.
+- **`SecretKeys` privacy guard uses the *content* subset of the Phase-4 denylist.** The full denylist
+  includes `api`/`secret`/`token`, which would false-match a credential slot name like `ai_api_key_*`.
+  Those terms are **inherent** to a secret-store keyspace (the encrypted value lives in Keystore, not a
+  plaintext store), so `SecretKeysTest` guards only the user-**content** terms (voice/query/search/
+  location/calendar/history/conversation/message/transcript) — still catches a content term sneaking in
+  via a provider id (e.g. `voicebot`). Documented in the test KDoc.
+
+**Tests (I5) — `:domain` JVM, no Android:**
+- `AiChunksTest` (4): delta concatenation in order; ignores `Completed`/`Failed`; empty cases;
+  refusal-as-stop-reason.
+- `SecretKeysTest` (3): per-provider stability; per-provider distinctness; content-denylist guard.
+- `FakeGenerativeAiEngineTest` (3): scripted collect + `lastRequest` record; `Failed` delivered as a
+  value (collector doesn't throw); per-request `script` lambda.
+- Total: 10 new JVM tests, 0 failures. No regressions.
+
+**Verification (actual output):**
+- `./gradlew :domain:dependencies --configuration compileClasspath` → `kotlin-stdlib` +
+  `kotlinx-coroutines-core` only.
+- `grep -rn "import android" domain/src/` → empty (exit 1).
+- `grep -rn "androidx\.\|io\.ktor\|kotlinx\.serialization" domain/src/` → empty (exit 1).
+- `grep -rn "anthropic\|openai\|gemini\|claude" -i domain/src/` → empty (exit 1) after the scrub.
+- `./gradlew :domain:test :core:testing:classes assembleDebug` → BUILD SUCCESSFUL; the three new test
+  suites reported `tests="4|3|3" failures="0" errors="0"`.
+- `IntentMatcher` / `HandleUserCommandUseCase` / all Phase-3 intent code untouched (two-port invariant
+  holds); no new Gradle deps / catalog entries; no DI wiring; `:feature:assistant` untouched.
+
+**Frozen, untouched (later Phase-5 blocks):** `SecureSecretStore` Keystore impl (J); Ktor Anthropic
+adapter + SSE (K); `PromptContextBuilder` + outbound guard (L); `GenerativeRouter` impl + static
+fallback + `GenerateReplyUseCase` + `ConnectivityChecker` Android impl (M); assistant streaming UI +
+inline key entry (N); OpenAI-compatible adapter (post-N fast-follow).
+
 ### ADR 2026-06-19 — Phase 2 skipped / reordered into a minimal slice
 - Decision: Phase 2 (launcher shell) is **not** run as a separate phase. Its navigation half was already absorbed into `3.1.x`; its product floor — `InstalledAppsRepository`, app grid, command input, offline app launch — is folded into Phase 3 as a **minimal P2 slice** (Block B).
 - Context: Phase 3's intent system cannot reach acceptance without Phase 2's installed-apps repository and command input (e.g. `open telegram` cannot resolve or launch). The skip deferred an unavoidable dependency rather than removing it.

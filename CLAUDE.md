@@ -1,7 +1,8 @@
 # CLAUDE.md — Sidr Launcher
 
-Session digest. Read this first. **Phase 4 is DONE (Blocks E → H, 2026-06-23).** Next per
-[docs/roadmap.md](docs/roadmap.md) = **Phase 5 (cloud AI)** — not yet started, needs its own plan.
+Session digest. Read this first. **Phase 4 is DONE (Blocks E → H, 2026-06-23).** **Phase 5 (cloud AI,
+multi-provider) is UNDERWAY — Block I done (2026-06-24); next = Block J.** Plan +
+forks: [ai-context/phase-5-plan.md](ai-context/phase-5-plan.md).
 
 ## What this is
 
@@ -105,8 +106,16 @@ Phase 3 result, Blocks A → D:
   button removed (entry returns with `feature/settings`); nav safe-fallback latent (no bad route in Ph4)
   + kill→reopen verified on device (PID change, input restored, no crash); content-restore half of Fork 6
   deferred to Ph7 (no display surface yet). `docs/architecture.md` synced to the real 3-flow
-  `LauncherViewModel`. `assembleDebug` + 105 JVM tests green. **Phase 4 CLOSED (Blocks E → H). Next =
-  Phase 5 (cloud AI).**
+  `LauncherViewModel`. `assembleDebug` + 105 JVM tests green. **Phase 4 CLOSED (Blocks E → H).**
+- **Phase 5 Block I ✅ (2026-06-24)** — multi-provider AI domain contracts (pure): `domain.ai`
+  (`AiProviderId`/`AiModelId` opaque value classes, `AiRequest`/`AiMessage`/`AiRole` with **no sampling
+  params**, `AiChunk`+`AiStopReason`(refusal = success terminal)+`AiUsage`, `AiError`,
+  `GenerativeAiEngine`+`GenerativeRouter`, `AiChunks.assembleText`), `domain.security`
+  (`SecureSecretStore`+`SecretKey`+`SecretKeys.apiKey(provider)`, per-provider, `OperationResult`/never
+  throws), `domain.connectivity` (`ConnectivityChecker`); 3 fakes in `:core:testing`; 10 new JVM tests
+  green. Vendor-neutral (grep `anthropic|openai|gemini|claude` over `domain/src/` empty); `:domain`
+  stays stdlib+coroutines; no new deps; intent code + `feature/assistant` untouched. Details:
+  decisions.md "ADR Block I". **Next = Block J (secure secret storage).**
 
 ## Hard rules
 
@@ -158,7 +167,9 @@ Phase 3 result, Blocks A → D:
   Blocks E → H, 2026-06-23)* · [ai-context/phase-3-intent-system-plan.md](ai-context/phase-3-intent-system-plan.md)
   *(Phase 3 closed 2026-06-21)*
 - Decisions log: [ai-context/decisions.md](ai-context/decisions.md)
-- Roadmap: [docs/roadmap.md](docs/roadmap.md) *(Phase 5 = cloud AI, next — not yet planned)*
+- Active checklist: [ai-context/phase-5-plan.md](ai-context/phase-5-plan.md) *(Phase 5 cloud AI,
+  multi-provider — Block I done 2026-06-24, Block J next; forks decided 2026-06-24)*
+- Roadmap: [docs/roadmap.md](docs/roadmap.md)
 
 ## Do not
 

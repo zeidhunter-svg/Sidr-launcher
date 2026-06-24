@@ -72,6 +72,17 @@ internal object PreferencesKeys {
     // (kept above for Block E compatibility; the global flag is no longer the source of truth).
     val PERM_DISMISSED_WALLPAPER = booleanPreferencesKey("perm_dismissed_wallpaper")
 
+    // AI provider config — prefix: ai_provider_ (Block K).
+    // NON-SECRET part of the active provider: opaque id, chat-completions base URL, free-text model,
+    // optional display name. The API key is NOT here — it lives in the Keystore-backed
+    // SecureSecretStore (separate sidr_secrets store), keyed by SecretKeys.apiKey(providerId).
+    // These names are denylist-clean: none contains a forbidden term (note "ai_provider" has no
+    // "api" substring), so they ARE inventoried below and stay under the privacy guard.
+    val AI_PROVIDER_ID           = stringPreferencesKey("ai_provider_id")
+    val AI_PROVIDER_BASE_URL     = stringPreferencesKey("ai_provider_base_url")
+    val AI_PROVIDER_MODEL        = stringPreferencesKey("ai_provider_model")
+    val AI_PROVIDER_DISPLAY_NAME = stringPreferencesKey("ai_provider_display_name")
+
     // All DataStore key name strings — used exclusively by PrivacyInventoryGuardTest
     // to assert no key name contains a forbidden term (tests the *value* "user_theme_name",
     // not the Kotlin variable name USER_THEME_NAME).
@@ -86,6 +97,10 @@ internal object PreferencesKeys {
         DEVICE_HAS_CACHE.name,
         SUG_CACHED_LIST_JSON.name,
         PERM_DISMISSED_WALLPAPER.name,
+        AI_PROVIDER_ID.name,
+        AI_PROVIDER_BASE_URL.name,
+        AI_PROVIDER_MODEL.name,
+        AI_PROVIDER_DISPLAY_NAME.name,
     )
 
     const val MAX_CACHED_SUGGESTIONS = 5

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Block K: HTTPS-only egress. Cloud AI talks to a user-configured base URL; cleartext is forbidden
+  app-wide (the adapter additionally rejects any non-https:// base URL). No domain overrides — there
+  is no legitimate cleartext destination.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

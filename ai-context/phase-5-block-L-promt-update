@@ -1,0 +1,191 @@
+Отлично. Вот обновленная версия промта, в которую я аккуратно вшил все три улучшения (Java-рефлексию для тестов, case-insensitive сканирование и жесткий `toString()` для `AiError`).
+
+Эти изменения сделают защиту fail-closed абсолютно непробиваемой. Можешь смело копировать этот текст и передавать его Sonnet 4.6.
+
+---
+
+# Phase 5 — Block L execution prompt: Prompt/context builder + outbound privacy guard (pure)
+
+> **Run this block on Sonnet 4.6** (pure builder + positive allow-list + guard tests — well-specified,
+> mechanical). Plan + diff review on Opus.
+> Scope = **Block L only.** Block I (+ provider-config addendum) is done — that is the *only* dependency.
+> **Pure JVM, can run in parallel** with Block K/M (shares no files). Do not start M/N. Do not build
+> `GenerateReplyUseCase` (that is Block M).
+
+## Role & context
+
+Sidr Launcher, Phase 5. Block L builds the **outbound side** of generation: a pure `PromptContextBuilder`
+that assembles an `AiRequest` (the Block-I contract) from the **minimal** context allowed to leave the
+device, plus two guard tests that make the privacy posture **fail closed**.
+
+Fork P5-3 (decided): **positive allow-list** — only explicitly listed context may go out, so any future
+context addition fails closed until someone deliberately allow-lists it. **Today the assistant input is
+essentially the user's typed command — keep it that way.** No device/usage/calendar/location/history
+context is assembled. A separate guard mirrors the Phase-4 privacy key-name guard: the API key and raw
+prompt never leak into logs / `toString` / the outbound `AiError` surface.
+
+This block is **pure**: everything lands in `:domain` (stdlib + coroutines only). No Android, no Ktor,
+no serialization, no `kotlin-reflect`.
+
+## Pre-flight — verify before coding (repo-truth check)
+
+* [ ] **No builder exists yet.** `grep -rni "PromptContext\|ContextBuilder\|OutboundContext"` over the
+repo is empty → Block L *creates*, doesn't extend.
+* [ ] **Block-I contracts are exactly:** `AiRequest(messages: List<AiMessage>, system: String?, maxOutputTokens: Int, model: AiModelId?, stopSequences: List<String>)`, `AiMessage(role: AiRole, content: String)`, `AiRole{USER, ASSISTANT}`; `AiError` is a sealed interface whose only fields are
+safe diagnostics (`detail`/`statusCode`/`retryAfterMs`) — **no secret/raw-content field** (Block I
+already guaranteed this; L adds a regression guard, it does not re-shape `AiError`).
+* [ ] **`:domain` is stdlib + coroutines only.** Production code must be completely reflection-free
+(no `kotlin-reflect`). Standard `java.lang.reflect` is permitted **only in test sources** for structural assertions.
+* [ ] **Phase-4 denylist precedent** (reuse the same family of terms): `voice, query, search, location, calendar, history, conversation, message, transcript, secret, token, api` (+ add the context-leak
+family `usage, contacts, sms, email, clipboard`). Note the subtlety below about *where* it is scanned.
+
+## Hard invariants (do NOT violate)
+
+* **`:domain` stays pure** (stdlib + coroutines; guard-verified). No Android / Ktor / serialization / `kotlin-reflect`. No new deps.
+* The builder produces a **minimal** `AiRequest`: a single `USER` message = the user's command, a vetted
+**static** system prompt, generation limits. **Nothing else is assembled** — no device, usage,
+calendar, location, history, contacts, or clipboard context.
+* **Positive allow-list, fail-closed:** the set of context categories the builder may emit is an explicit
+declared allow-list; adding a category is a deliberate, reviewed change. Anything not allow-listed must
+not reach an `AiRequest`.
+* **Denylist is scanned over non-user-controlled text only** (the static system prompt, field-name
+inventories, allow-list category names) — **never over the user's typed command**, which is legitimate
+free text and may contain any word (e.g. "open my calendar"). Scanning user content would false-positive
+and is wrong. All denylist scans must be **case-insensitive** (`ignoreCase = true`).
+* **No key / raw prompt in any log / crash / analytics / `toString` of the outbound surface.** The API
+key never lives in `AiRequest` or `AiError` (it is in `SecureSecretStore` / the adapter's Authorization
+header — Blocks J/K). L proves the outbound domain types cannot carry a credential.
+* `IntentMatcher` / `HandleUserCommandUseCase` / `feature/*` untouched. Do not touch K/M/N artifacts
+(no engine, no router, no use-case, no UI). `GenerativeAiEngine` is not invoked here.
+
+## Out of scope (built later — do not touch)
+
+`GenerateReplyUseCase` + router + static fallback + `ConnectivityChecker` (M) · the Ktor engine /
+SSE / config-repo impl (K) · assistant UI + provider-settings form (N) · multi-turn session history
+(if ever needed, a deliberate future allow-list addition — transient, never persisted — decided in N).
+
+## Design decisions (bake these in)
+
+1. **`PromptContextBuilder` (pure class, `domain.ai`).**
+```kotlin
+class PromptContextBuilder(
+    private val systemPrompt: String = DEFAULT_SYSTEM_PROMPT,
+    private val maxOutputTokens: Int = DEFAULT_MAX_OUTPUT_TOKENS,
+) {
+    /** Assembles the MINIMAL outbound request: one USER message + a static system prompt. No
+     * device/usage/calendar/location/history context is added (Fork P5-3, fail-closed). The
+     * userCommand is passed through verbatim and is the ONLY user-controlled content that leaves. */
+    fun build(userCommand: String): AiRequest =
+        AiRequest(
+            messages = listOf(AiMessage(AiRole.USER, userCommand)),
+            system = systemPrompt,
+            maxOutputTokens = maxOutputTokens,
+        )
+    companion object {
+        const val DEFAULT_SYSTEM_PROMPT = "<short, static, context-free assistant instruction>"
+        const val DEFAULT_MAX_OUTPUT_TOKENS = 512   // phone-reasonable guidance, not a hard pin
+    }
+}
+
+```
+
+
+* `DEFAULT_SYSTEM_PROMPT`: a short, **static, context-free** instruction (e.g. identify as the Sidr
+launcher assistant, answer concisely). It must contain **no** denylist term and **no** device/user
+context. No model name baked in (free-text model is config — Block K). `model` is left `null` (the
+engine/router uses its configured default); do not pin a model here.
+* Keep the public surface tiny: `build(userCommand)` only. No overload that accepts a context bag —
+adding context is a deliberate future change, not an open door.
+
+
+2. **`OutboundContextPolicy` (object, `domain.ai`) — the explicit allow-list + denylists.**
+```kotlin
+object OutboundContextPolicy {
+    /** Positive allow-list: the ONLY context categories permitted to leave the device. Adding an
+     * entry is a privacy decision (Fork P5-3). Forbidden categories are deliberately ABSENT. */
+    enum class AllowedContext { USER_COMMAND, STATIC_SYSTEM_PROMPT, GENERATION_LIMITS }
+    val ALLOWED: Set<AllowedContext> = setOf(
+        AllowedContext.USER_COMMAND,
+        AllowedContext.STATIC_SYSTEM_PROMPT,
+        AllowedContext.GENERATION_LIMITS,
+    )
+    /** Forbidden CONTEXT-source terms (Phase-4 family + context-leak family). Scanned over the
+     * static system prompt + the field/category inventories — NEVER over the user command. */
+    val FORBIDDEN_CONTEXT_TERMS: List<String> = listOf(
+        "voice","location","calendar","history","conversation","transcript",
+        "usage","contacts","sms","email","clipboard",
+    )
+    /** Credential terms. Scanned over OUTBOUND_FIELD_NAMES to prove no field can carry a key. */
+    val CREDENTIAL_TERMS: List<String> = listOf("secret","token","apikey","api_key","bearer","authorization","credential","password")
+    /** Hand-synced inventory of AiRequest's outbound field names.
+     * RULE: adding a field to AiRequest requires updating this set — the guard enforces it stays
+     * credential-free. */
+    val OUTBOUND_FIELD_NAMES: Set<String> = setOf("messages","system","maxOutputTokens","model","stopSequences")
+}
+
+```
+
+
+* Keep the `query/search/message/token/api` Phase-4 terms out of lists where they would false-match a
+legitimate token (e.g. "message" collides with `AiMessage`/`messages`, "api" with nothing here but
+beware): choose the term lists so the guards are meaningful and don't vacuously fail. Document any
+term deliberately excluded and why (mirror the Phase-4 `"key"`-excluded note).
+
+
+3. **Guards & Reflection.** Production code is strictly `kotlin-reflect` and `java.lang.reflect` free. However, in the **test source** (`OutboundSecretLeakGuardTest`), you MUST use standard Java reflection (`AiRequest::class.java.declaredFields`) to assert that `OUTBOUND_FIELD_NAMES` exactly matches the actual class fields of `AiRequest` to prevent manual desync. Denylist matching must be `ignoreCase = true`.
+
+## Steps
+
+* [ ] `L1` `PromptContextBuilder` + `OutboundContextPolicy` in `domain.ai` (per decisions 1–2). Pure.
+* [ ] `L2` `AiRequestGuardTest` (`domain/src/test`, JVM):
+- `ALLOWED` contains no forbidden context category (structural: none of the allow-listed
+categories is a forbidden source).
+- `DEFAULT_SYSTEM_PROMPT` (and any builder-injected static text) contains **no**
+`FORBIDDEN_CONTEXT_TERMS` (case-insensitive denylist scan over static text only).
+- **Pass-through / no-injection:** `build("<<SENTINEL_CMD>>")` yields exactly one `USER` message
+whose content `== "<<SENTINEL_CMD>>"` (verbatim, unmodified), `system == DEFAULT_SYSTEM_PROMPT`,
+`model == null`, no extra messages, no `ASSISTANT`/system-as-message smuggling. Proves the
+builder adds no hidden context.
+- **User content is allowed through:** `build("open my calendar")` keeps "calendar" in the USER
+message (assert the denylist is NOT applied to user content — a regression guard against an
+over-eager filter that would corrupt legitimate commands).
+* [ ] `L3` `OutboundSecretLeakGuardTest` (`domain/src/test`, JVM):
+- `OUTBOUND_FIELD_NAMES` contains no `CREDENTIAL_TERMS` substring (no `AiRequest` field can carry a
+key) — **assert via Java reflection** (`declaredFields.map { it.name }`) that the inventory exactly matches `AiRequest`'s real fields.
+- **Explicit `toString()` requirement:** Ensure `AiError` variants explicitly override `toString()` to strictly format their output, preventing implicit property leakage. Each `AiError` variant constructed with a **safe** `detail` has a `toString()` that does **not** contain a planted secret sentinel (the sentinel was never inserted — proves the surface has no place to hold it) and contains no `CREDENTIAL_TERMS` field name.
+- An `AiRequest` built from a sentinel command + a sentinel "FAKE-KEY" never placed in it →
+`toString()` excludes "FAKE-KEY" (the key has no field to live in).
+* [ ] `L4` Verification + guards (below); ADR; advance `CLAUDE.md` to Block L.
+
+## Verification (run and paste actual output)
+
+```bash
+./gradlew :domain:test                                           # builder + both guard suites green
+./gradlew :domain:dependencies --configuration compileClasspath  # stdlib + coroutines ONLY (no reflect)
+grep -rn "import android\|io.ktor\|kotlinx.serialization\|kotlin.reflect" domain/src/main/   # empty (production stays pure)
+grep -rni "anthropic\|openai\|gemini\|claude" domain/src/         # empty (vendor-neutral domain intact)
+./gradlew assembleDebug                                          # green (nothing else perturbed)
+# confirm: no GenerativeAiEngine call, no GenerateReplyUseCase, no K/M/N file touched
+grep -rn "GenerateReplyUseCase\|Router\|GenerativeAiEngine" domain/src/main/java/com/sidr/launcher/domain/ai/PromptContextBuilder.kt  # empty
+
+```
+
+## Acceptance criteria
+
+* `PromptContextBuilder.build(command)` produces a minimal `AiRequest`: one `USER` message = the command
+(verbatim), a static context-free system prompt, generation limits, `model == null`; nothing else
+assembled.
+* The positive allow-list (`OutboundContextPolicy.ALLOWED`) holds only the three vetted categories; the
+case-insensitive denylist guard (over static text + field-name inventory, never over user content) is green and would
+fail if a forbidden context source or a credential-named field were introduced.
+* The secret-leak guard uses Java reflection to enforce sync and proves the outbound surface (`AiRequest` + `AiError` explicit `toString()`) cannot carry the key or raw prompt in any field or `toString`.
+* `:domain` stays pure (stdlib + coroutines; no `kotlin-reflect` in `main/`) and vendor-neutral; no new deps;
+`IntentMatcher`/`HandleUserCommandUseCase`/`feature/*`/K-M-N artifacts untouched.
+* ADR `Block L complete` in `decisions.md` (builder shape + minimal context, positive-allow-list +
+fail-closed rationale, denylist-scanned-over-static-text-not-user-content subtlety, reflection-synced guards in test + the "adding an AiRequest field updates OUTBOUND_FIELD_NAMES" rule, explicit `toString` on `AiError`, default system-prompt + token guidance, verification output); `CLAUDE.md` advanced; Block L checked off in `phase-5-plan.md`. **Next = Block M** (router + static fallback + `GenerateReplyUseCase`, consumes K + L).
+
+## Agent model
+
+**Sonnet 4.6** — pure builder + allow-list + guard tests, well-specified and mechanical. Review the
+denylist-term choices + the pass-through/no-injection assertions on Opus (the one subtle spot is
+scanning static text vs. user content).

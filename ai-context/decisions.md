@@ -763,10 +763,225 @@ per-request `script` lambda; records `lastRequest`; optional `delayBetweenChunks
 - `IntentMatcher` / `HandleUserCommandUseCase` / all Phase-3 intent code untouched (two-port invariant
   holds); no new Gradle deps / catalog entries; no DI wiring; `:feature:assistant` untouched.
 
-**Frozen, untouched (later Phase-5 blocks):** `SecureSecretStore` Keystore impl (J); Ktor Anthropic
-adapter + SSE (K); `PromptContextBuilder` + outbound guard (L); `GenerativeRouter` impl + static
-fallback + `GenerateReplyUseCase` + `ConnectivityChecker` Android impl (M); assistant streaming UI +
-inline key entry (N); OpenAI-compatible adapter (post-N fast-follow).
+**Frozen, untouched (later Phase-5 blocks):** `SecureSecretStore` Keystore impl (J); Ktor
+OpenAI-compatible adapter + SSE (K); `PromptContextBuilder` + outbound guard (L); `GenerativeRouter`
+impl + static fallback + `GenerateReplyUseCase` + `ConnectivityChecker` Android impl (M); assistant
+streaming UI + provider-settings form (N); native Anthropic adapter (optional post-N fast-follow).
+
+**Block I addendum (2026-06-24) — provider-config contract; plan re-oriented to OpenAI-compatible-first.**
+Additive only — **existing Block I files unmodified**. Added the pure provider-config contract the
+"the user pastes any API + picks any model" goal needs: `AiProviderConfig` (`providerId`, `baseUrl`,
+`modelId`, `displayName?`) + `AiProviderConfigRepository` (`activeConfig(): Flow<AiProviderConfig?>` /
+`setActiveConfig`/`clearActiveConfig` → `OperationResult`, never throws) in `…domain.ai`; single
+active config for Phase 5; the API key is **not** here (stays in `SecureSecretStore`). New fake
+`FakeAiProviderConfigRepository` in `:core:testing` + a round-trip JVM test (`AiProviderConfigRepositoryTest`:
+default `null`; `setActiveConfig` → `activeConfig` emits + recorded; `clearActiveConfig` → `null`).
+Same purity as Block I — no vendor / "openai-compatible" string literal in `:domain`; the
+`anthropic|openai|gemini|claude` grep guard over `domain/src/` stays empty; no new deps; DataStore
+impl deferred to **Block K**. `phase-5-plan.md` re-oriented: **OpenAI-compatible adapter = Block K
+(first/primary), free-text model (no hardcoded model/catalog), provider-config + key-in-Keystore in
+scope, network-security-config moved J→K**; native Anthropic = optional fast-follow after Block N.
+Status unchanged: **Block I (+ addendum) done; next = Block J.**
+
+### ADR 2026-06-24 — Block J complete (Keystore-backed SecureSecretStore, BYOK)
+
+**Done 2026-06-24 (Block J, J1–J5). Second Phase-5 execution round. Forks P5-1/7/8/9 honoured.**
+First real on-device secret; un-defers Fork 1.
+
+**New files in `:data:repository` (`com.sidr.launcher.data.repository.security`):**
+- `SecretCipher` (interface) + `EncryptedBlob` (`iv` + `ciphertext`, content-based equality) — the
+  **single crypto seam** (Fork 7). `encrypt` may throw (→ store maps to `Failure`); `decrypt` returns
+  `null` for an *unusable* secret (key invalidated / missing / corrupt blob), never throws on those.
+  Data-layer detail, **not** a domain type. Public (so `:app` Hilt `@Binds` can see it — `internal`
+  would be invisible across the Gradle module boundary).
+- `KeystoreSecretCipher @Inject constructor()` — the only Keystore-touching class. **AES-256-GCM** key
+  in `AndroidKeyStore` (alias `sidr_secret_aead_v1`, `BLOCK_MODE_GCM`, `ENCRYPTION_PADDING_NONE`,
+  256-bit, `setUserAuthenticationRequired(false)`); fresh random 12-byte GCM IV per encryption,
+  `GCMParameterSpec(128, iv)` on decrypt. **StrongBox attempted, falls back** on
+  `StrongBoxUnavailableException` (common on API 28). `KeyPermanentlyInvalidatedException` /
+  `GeneralSecurityException` (AEAD bad tag, bad IV) → `decrypt` returns `null`.
+- `SecureSecretStoreImpl @Inject constructor(@SecretsDataStore DataStore<Preferences>, SecretCipher,
+  @IoDispatcher CoroutineDispatcher)` — orchestrates cipher + the dedicated store. Each `SecretKey`
+  maps to one entry holding the Base64 `iv:ciphertext` blob. `get` decrypt-fail / invalidation /
+  corrupt / unreadable → `Success(null)` **and clears the entry** (re-enter); `put`/`remove` encrypt or
+  I/O failure → `Failure(UnknownError)`; **never throws**, `CancellationException` re-thrown.
+- `@SecretsDataStore` qualifier (`@Retention(BINARY)`) marking the dedicated `sidr_secrets` store.
+
+**New files in `:app/di`:** `SecretsProvidesModule` (object — `@Provides @Singleton @SecretsDataStore
+DataStore<Preferences>` over file **`sidr_secrets`**, own `CoroutineScope(io + SupervisorJob)`) +
+`SecretsBindsModule` (abstract — `@Binds SecureSecretStore ← SecureSecretStoreImpl`, `@Binds
+SecretCipher ← KeystoreSecretCipher`). Split per the recurring Hilt `@Provides`/`@Binds` rule (Blocks
+D/E).
+
+**Decisions made during execution:**
+- **Dedicated `sidr_secrets` DataStore (the key cross-block decision, Fork 8/privacy).** Encrypted
+  blobs live in a **separate** file, qualified with `@SecretsDataStore`, **not** Block E's
+  `sidr_preferences`. Rationale: the credential-named keys (`ai_api_key_<provider>`, which contain the
+  denylist terms `api`/`key`) never enter `PreferencesKeys.ALL_KEY_NAMES`, so the Phase-4
+  `PrivacyInventoryGuardTest` stays green by construction, and the secrets file holds only
+  Keystore-ciphertext. **`ALL_KEY_NAMES` was NOT extended; the Block E DataStore instance is NOT
+  reused.**
+- **`java.util.Base64`, not `android.util.Base64`** (API 26+, minSdk 28). Works on-device **and** in
+  pure-JVM unit tests, so `SecureSecretStoreImplTest` needs **no Robolectric** — it runs the real
+  `SecureSecretStoreImpl` over a temp-file DataStore (the Block E `createTestDataStore` helper) with a
+  `FakeSecretCipher`.
+- **`FakeSecretCipher` lives in `:data:repository` test sources, NOT `:core:testing` (deviation from the
+  J4 prompt bullet).** `:core:testing` is a JVM-only module depending only on `:domain`; it **cannot**
+  depend on the Android `:data:repository` where the data-internal `SecretCipher` type lives. Placing
+  the fake in `:data:repository/src/test` is the only correct option given the module graph and keeps
+  the cipher seam out of `:domain` (Fork 7 intent preserved).
+- **`setUserAuthenticationRequired(false)` + threat model.** A launcher assistant can't prompt for
+  lockscreen/biometric on every secret read. The key is extraction-resistant in Keystore but
+  app-readable without user auth — correct for the BYOK "protect the user's *own* key on a non-rooted
+  device" model (it does **not** defend a rooted/compromised device), and it sidesteps most
+  invalidation paths. A backend-proxy impl can later replace the whole port with no domain/UI change.
+- **`get` is resilient, never `Failure`.** Read I/O failure follows the codebase
+  `.catch{IOException→emptyPreferences()}` convention (→ `Success(null)`); decrypt/corrupt →
+  `Success(null)` + clear. Only `put`/`remove` (writes) surface `Failure`. Upstream interprets `null`
+  as "no usable secret, re-enter".
+
+**Tests (J4):**
+- `:data:repository` JVM (`SecureSecretStoreImplTest`, **9 tests, pure JVM, no Robolectric**):
+  put→get round-trip; empty→null; two-provider isolation; `remove` isolation; simulated process
+  restart (scope-cancel + reopen same temp file); key-invalidation → `null` **+ entry cleared**
+  (re-`get` with a healthy cipher still `null`); corrupt-blob → `null` no crash; encrypt-fail → `put`
+  `Failure`; `put` re-throws `CancellationException`. Uses `FakeSecretCipher`.
+- `:data:repository` `androidTest` (`SecretStoreInstrumentedTest`, 3 tests) against the **real**
+  `KeystoreSecretCipher`: put → restart → get returns value; two-provider isolation + `remove`;
+  StrongBox-fallback path round-trips without crash. **Compiles; requires a connected device/emulator
+  to run** (`./gradlew :data:repository:connectedDebugAndroidTest`, like the Phase-4 `MigrationTest`) —
+  **not executed in this environment (no device attached); to be run on SM-A325F.**
+
+**Verification (actual output):**
+- `./gradlew :data:repository:testDebugUnitTest --tests "...security.*"` → `SecureSecretStoreImplTest`
+  `tests="9" failures="0" errors="0"`.
+- `./gradlew assembleDebug` → BUILD SUCCESSFUL (full Hilt graph with both new modules + qualified
+  second DataStore).
+- `./gradlew :data:repository:compileDebugAndroidTestSources` → BUILD SUCCESSFUL (instrumented test
+  compiles).
+- `./gradlew testDebugUnitTest --rerun-tasks` → BUILD SUCCESSFUL (full JVM regression, no
+  regressions; `PrivacyInventoryGuardTest` `tests="2" failures="0"`).
+- `grep -rni "EncryptedSharedPreferences|security-crypto"` over `*.kt`/`*.kts`/`*.toml` → empty (ESP
+  forbidden).
+- `grep -rn "import android" domain/src/` → empty; `:domain:dependencies` compileClasspath =
+  `kotlin-stdlib` + `kotlinx-coroutines-core` only. `:domain` and `feature/*` untouched by Block J; no
+  `feature → data` edge.
+- `grep -rniE "Log\.|println"` over the security package → empty (no key/ciphertext ever logged).
+- Secrets keys absent from `PreferencesKeys` / `ALL_KEY_NAMES` (dedicated `sidr_secrets` store).
+
+**Frozen, untouched (later Phase-5 blocks):** OpenAI-compatible Ktor engine + SSE + `AiProviderConfig`
+DataStore impl + network-security-config (K); `PromptContextBuilder` + outbound guard (L);
+`GenerativeRouter` impl + static fallback + `GenerateReplyUseCase` + `ConnectivityChecker` Android impl
+(M); assistant streaming UI + provider-settings form (N); native Anthropic adapter (optional post-N
+fast-follow). **Next = Block K.**
+
+### ADR 2026-06-24 — Block K complete (OpenAI-compatible cloud engine: SSE → Flow<AiChunk>)
+
+**Done 2026-06-24 (Block K, K0–K6). Third Phase-5 execution round. Fork P5-2 honoured.** First and
+primary generative adapter: streams from any OpenAI-compatible `chat/completions` endpoint
+(OpenRouter / Google's OpenAI endpoint / Together / Groq / local Ollama / LM Studio / OpenAI itself).
+Logic was fully MockEngine-tested against the Block-I ports; Block J's real key impl is not gated on it.
+
+**New files in `:data:ai-cloud` (`com.sidr.launcher.data.aicloud`):**
+- `OpenAiCompatibleGenerativeAiEngine` (provider-neutral name — it's the OpenAI-*compatible* adapter,
+  not "OpenAI") implementing the **unchanged** `GenerativeAiEngine` port. Reads base URL + free-text
+  model from `AiProviderConfigRepository`, key from `SecureSecretStore`; constructor also takes the
+  injected `HttpClient`, `@IoDispatcher`, and (defaulted) first-token + idle timeout constants. Private
+  top-level `@Serializable` wire DTOs (`ChatCompletionRequest`/`ChatMessageDto`/`StreamChunk`/
+  `StreamChoice`/`DeltaDto`/`UsageDto`) — never domain types. `companion.DEFAULT_LIGHT_MODEL` is a
+  Block-N UI hint only; the engine never falls back to it (model is always the user's config value).
+
+**New files in `:data:repository` (`com.sidr.launcher.data.repository.ai`):**
+- `AiProviderConfigRepositoryImpl` — the Block-I-addendum contract's DataStore impl, over the **shared
+  `sidr_preferences`** store (NOT `:data:ai-cloud`, which is the Hilt-free HTTP client with no DataStore
+  dep — the plan's Block-K file list was loose here; corrected). `activeConfig()` emits `null` until the
+  three required keys (id, base URL, model) are all present; reads fall back on `IOException`, writes
+  return `OperationResult` and never throw. 4 keys added to `PreferencesKeys` + `ALL_KEY_NAMES`.
+
+**New files in `:app/di`:** `AiCloudProvidesModule` (object — `@Provides @Singleton HttpClient` over
+the Ktor **Android** engine + a `@CloudEngine`-qualified `@Provides` constructing the engine) +
+`CloudEngine` qualifier. `AiProviderConfigRepositoryImpl` bound in the existing `PersistenceBindsModule`.
+
+**Decisions made during execution:**
+- **Wire shape:** `POST {baseUrl}/chat/completions`, `Authorization: Bearer <key>`,
+  `Accept: text/event-stream`, streaming SSE. **Input sanitization at the boundary:** base URL, key,
+  and model are `.trim()`-ed (a trailing newline in a pasted key causes a baffling 401), trimmed values
+  still kept out of logs.
+- **Robust URL join:** `baseUrl.removeSuffix("/") + "/chat/completions"` — preserves a user's `.../v1`
+  segment (never *replaces* the path, the `URLBuilder.path(...)` trap).
+- **Minimal request body, no sampling:** only `model`/`messages`/`max_tokens`/`stream:true` (+ `stop`
+  when non-empty). `temperature`/`top_p`/`top_k` are **absent from the DTO** so they can't be serialized
+  (widest backend compatibility). `Json { encodeDefaults=true; explicitNulls=false }` keeps `stream:true`
+  and drops `stop` when null. `system` (when non-blank) becomes the **leading** `role:"system"` message;
+  USER/ASSISTANT → `"user"`/`"assistant"`. `AiRequest.model` overrides the config model when present.
+- **No hardcoded model / no fixed model list:** the model is the user's free-text `AiModelId`, sent
+  verbatim. `< 2000ms` first-token is guidance, not a pin.
+- **Manual SSE parse over `response.bodyAsChannel()` + `readUTF8Line()`** (no `bodyAsText()`, no
+  `ktor-client-sse` dep). Per `data:` line: `[DONE]`/EOF ends the stream; emit `AiChunk.Text(delta)`
+  only when content is non-empty (role-only first delta emits nothing); blank/`event:`/`id:`/`:` lines
+  ignored; a single unparseable line is skipped (not a teardown). `finish_reason`/final `usage` are
+  captured **even off a content-empty terminal delta** (we don't `continue` past it).
+- **Stop-reason mapping:** `stop→COMPLETE`, `length→MAX_TOKENS`, `content_filter` (or a `delta.refusal`)
+  `→REFUSAL` (**success terminal**, never an `AiError`), else `OTHER`. **Refusal is sticky** — a refusal
+  seen on an earlier chunk wins over a later `finish_reason:"stop"` (tracked via a `refused` flag, fixed
+  after a test caught the overwrite). End of stream → exactly one terminal `Completed(stopReason, usage?)`.
+- **Error → `AiError` taxonomy, each a terminal `AiChunk.Failed`:** no config or no/`Failure` key →
+  `MissingCredentials` (socket never opened); `401/403→Unauthorized`; `429→RateLimited(retryAfterMs)`
+  (parses delta-seconds **and** HTTP-date, `null` on a bad header, never throws); `5xx→ServerError(code)`;
+  other `4xx→InvalidRequest`; `IOException→Network`; `UnknownHost`/`ConnectException→Offline`;
+  per-read deadline→`Timeout`; else `Unknown`. `AiError.detail` is a safe token only
+  (`http_<code>`, exception `simpleName`, `base_url_not_https`) — never a URL/body/key.
+- **HTTPS-only:** a non-`https://` base URL is rejected (`InvalidRequest`, no raw URL in `detail`, socket
+  never opened); app-level `network_security_config.xml` (`cleartextTrafficPermitted="false"`,
+  referenced from the manifest) forbids cleartext egress.
+- **Streaming timeout model:** first-token + idle-between-chunks deadlines via `withTimeoutOrNull` around
+  **each read** (timeout vs clean-EOF distinguished by the `withTimeoutOrNull` result, not by a null
+  line) — **no Ktor `requestTimeoutMillis`** (it would abort a long but legitimate stream); the provided
+  `HttpClient` sets connect/socket timeouts only.
+- **Cancellation propagates, never swallowed:** the cold `flow {}` runs `preparePost(...).execute { … }`
+  and emits inside it (no nested `withContext`/`launch`), `.flowOn(ioDispatcher)`. The mapping
+  `try/catch` re-throws `CancellationException` first and catches narrow types (`UnknownHostException`/
+  `ConnectException`/`IOException`) before a final guarded `Exception`. Collection-cancel cancels the
+  flow coroutine → aborts the in-flight Ktor request.
+- **DI / cold path:** `:data:ai-cloud` stays **Hilt-free** (the engine is a plain class `@Provides`-
+  constructed in `:app`; this required adding `ktor-client-core`/`-android` to `:app` — the composition
+  root — so the `HttpClient` `@Provides` can name the type). The engine is `@CloudEngine`-qualified now
+  so Block M's `GenerativeRouter` can take the unqualified slot; nothing injects it yet, so no AI/HTTP is
+  built on the launcher cold path.
+
+**Tests / verification (actual output):**
+- `./gradlew :data:ai-cloud:testDebugUnitTest` → **20 tests, 0 failures** (Ktor MockEngine): happy
+  stream (ordered `Text` + single `Completed(COMPLETE)`, `finish_reason` captured off the content-empty
+  delta, `assembleText` reconstructs); usage population; request assertion (base URL + `Bearer`,
+  body has `model`/`messages`/`max_tokens`/`stream:true` and **no** `temperature`/`top_p`/`top_k`,
+  leading `system`, verbatim free-text model); `content_filter`→`REFUSAL`, `delta.refusal`→`REFUSAL`,
+  `length`→`MAX_TOKENS`; `401/403→Unauthorized`, `429`+`Retry-After`→`RateLimited(2000)`, 429-no-header
+  →`null`, `5xx→ServerError`, `4xx→InvalidRequest`, `IOException→Network` (detail = `"IOException"`,
+  no URL), `UnknownHost→Offline`; missing-key / store-`Failure` / null-config → `MissingCredentials`
+  with **no socket opened**; non-`https://`→`InvalidRequest` (no raw URL); first-token deadline→`Timeout`
+  (real dispatcher, suspending channel); cancellation aborts collection with **no terminal emitted**
+  (segmented/suspending `ByteChannel`).
+- *Test-harness note:* the parsing/error tests run the engine on a **real** `Dispatchers.IO` (not
+  `UnconfinedTestDispatcher`) — under `runTest` virtual time the auto-advancing clock spuriously fires
+  the real-channel-read `withTimeoutOrNull`; a real dispatcher makes the deadline real-time and
+  deterministic. Timeout/cancellation tests use `runBlocking` + real suspension.
+- `./gradlew :data:repository:testDebugUnitTest` → green incl. `AiProviderConfigRepositoryImplTest`
+  (null-until-configured; set→read round-trip; no-display-name; clear→null; survives simulated restart)
+  and `PrivacyInventoryGuardTest` (2 tests) green with the 4 new `ai_provider_*` keys (denylist-clean —
+  none contains `api`).
+- `./gradlew assembleDebug` → BUILD SUCCESSFUL (full Hilt graph + `network_security_config`).
+- `./gradlew testDebugUnitTest --rerun-tasks` → BUILD SUCCESSFUL (full JVM regression, no regressions).
+- `grep -rni "anthropic|openai|gemini|claude" domain/src/` → empty; `grep -rn "import android|io.ktor|
+  kotlinx.serialization" domain/src/` → empty; `:domain:dependencies` compileClasspath = stdlib +
+  coroutines only. `grep -rniE "Log\.|println" data/ai-cloud/src/main/` → empty (no key/prompt/body
+  logged). Catalog gained **only** `ktor-client-mock` (test-only); no new runtime dep, no
+  `ktor-client-sse`. `:data:ai-cloud` has no Hilt, no `:core:android` edge.
+
+**Frozen, untouched (later Phase-5 blocks):** `PromptContextBuilder` + outbound allow-list guard (L);
+`StaticFallbackEngine` + `GenerativeRouter` impl + `ConnectivityChecker` Android impl +
+`GenerateReplyUseCase` (M); assistant streaming UI + provider-settings form (N); native Anthropic
+adapter (optional post-N fast-follow). `IntentMatcher` / `HandleUserCommandUseCase` / `feature/*`
+untouched. **Next = Block M** (router + static fallback; L may run earlier/parallel as pure JVM).
 
 ### ADR 2026-06-19 — Phase 2 skipped / reordered into a minimal slice
 - Decision: Phase 2 (launcher shell) is **not** run as a separate phase. Its navigation half was already absorbed into `3.1.x`; its product floor — `InstalledAppsRepository`, app grid, command input, offline app launch — is folded into Phase 3 as a **minimal P2 slice** (Block B).

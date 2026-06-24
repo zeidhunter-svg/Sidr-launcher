@@ -1,10 +1,12 @@
 package com.sidr.launcher.di
 
+import com.sidr.launcher.data.repository.ai.AiProviderConfigRepositoryImpl
 import com.sidr.launcher.data.repository.preferences.DeviceProfileCacheRepositoryImpl
 import com.sidr.launcher.data.repository.preferences.FeatureFlagRepositoryImpl
 import com.sidr.launcher.data.repository.preferences.PermissionPrefsRepositoryImpl
 import com.sidr.launcher.data.repository.preferences.SuggestionsCacheRepositoryImpl
 import com.sidr.launcher.data.repository.preferences.UserPreferencesRepositoryImpl
+import com.sidr.launcher.domain.ai.AiProviderConfigRepository
 import com.sidr.launcher.domain.permission.PermissionPrefsRepository
 import com.sidr.launcher.domain.preferences.DeviceProfileCacheRepository
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
@@ -54,4 +56,12 @@ abstract class PersistenceBindsModule {
     abstract fun bindPermissionPrefsRepository(
         impl: PermissionPrefsRepositoryImpl,
     ): PermissionPrefsRepository
+
+    // Block K — non-secret active AI provider config (id + base URL + free-text model), DataStore-backed
+    // over the shared sidr_preferences store. The API key is held separately in SecureSecretStore.
+    @Binds
+    @Singleton
+    abstract fun bindAiProviderConfigRepository(
+        impl: AiProviderConfigRepositoryImpl,
+    ): AiProviderConfigRepository
 }

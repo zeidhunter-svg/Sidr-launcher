@@ -31,22 +31,27 @@ Run order: do this check, note any deltas, then execute the Block I prompt.
 
 ## Core stance for this phase
 
-The generative pipeline is **provider-neutral by construction**. Anthropic is the *first adapter*,
-not a baked-in assumption. `:domain` names no vendor, no wire format, no sampling params. Adding a
-second provider later (an **OpenAI-compatible** adapter covers OpenAI / OpenRouter / Together / Groq /
-local llama.cpp / Ollama with one configurable base URL) must require **zero `:domain` changes** —
-only a new `GenerativeAiEngine` impl + a new `AiProviderId` + a key entry.
+The generative pipeline is **provider-neutral by construction**. `:domain` names no vendor, no wire
+format, no sampling params. The product end-goal is that **the user pastes any API (base URL + key)
+and picks any model (a free-text model string)** — no per-vendor code. The lingua franca that
+delivers this is the **OpenAI-compatible** endpoint (OpenRouter, Google's OpenAI endpoint, Together,
+Groq, local Ollama / LM Studio, OpenAI itself).
 
-For Phase 5 we build the vendor-neutral seam + **one** real adapter (Anthropic). The
-OpenAI-compatible adapter is a **planned fast-follow right after Block N** (not optional) — a second
-adapter is the only real test that the seam is actually vendor-neutral and not leaking Anthropic
-assumptions. It is kept out of the Phase-5 close only so Block K isn't widened to two wire formats
-before the first one ships on device.
+So the OpenAI-compatible adapter is the **first and primary** adapter — it is **Block K**. A native
+Anthropic adapter (its own `x-api-key` / SSE shape) is an **optional fast-follow after Block N**, only
+needed if a user wants to paste `sk-ant-…` directly against `api.anthropic.com`; otherwise Anthropic
+models are already reachable today via an OpenAI-compatible provider like OpenRouter through the
+Block-K adapter. Adding any further native provider later must require **zero `:domain` changes** —
+only a new `GenerativeAiEngine` impl + a new `AiProviderId` + the provider config + a key entry.
 
 ## In scope (unfreezing what Phase 4 deferred)
 
 - **Secrets:** `SecureSecretStore` port (domain) + first real on-device implementation (Fork 1 is
-  un-deferred here). Per-provider keyed.
+  un-deferred here). Per-provider keyed. The **API key stays in Keystore** (Block J).
+- **Non-secret provider config:** active provider id + base URL + free-text model string, persisted
+  in DataStore (Block E pattern). Domain contract `AiProviderConfig` + `AiProviderConfigRepository`
+  (built in the Block I addendum, 2026-06-24); its DataStore impl lands in Block K. The key is **not**
+  here — it lives in Keystore (`SecureSecretStore`).
 - **Cloud AI:** Ktor client + streaming adapter (`Flow<AiChunk>`), provider behind a port.
 - **Prompt/context builder** with privacy allow-list.
 - **Routing seam + static fallback** behind an ordered router (ONNX slot reserved for Ph6).
@@ -77,7 +82,7 @@ before the first one ships on device.
 ```
 I  AI domain contracts (pure)      — vendor-neutral seam; nothing else compiles against AI without it
 J  Secure secret storage           — first real on-device secret; K needs a key source
-K  Cloud engine (Anthropic adapter)— SSE → Flow<AiChunk>; testable via Ktor MockEngine against the port
+K  Cloud engine (OpenAI-compatible) — SSE → Flow<AiChunk>; testable via Ktor MockEngine against the port
 L  Prompt/context builder + guard  — pure; minimal outbound context + privacy allow-list
 M  Routing seam + static fallback  — GenerateReplyUseCase + StaticFallbackEngine + ordered router
 N  Assistant UI + key entry + close — streaming screen, inline key entry, docs-sync, ADRs, phase close
@@ -109,18 +114,23 @@ backend infra at this stage; BYOK removes the in-APK-key risk by definition). Th
 port keeps it reversible — a proxy-backed impl swaps in later behind the same port with no domain/UI
 change. `EncryptedSharedPreferences` stays forbidden (deprecated at security-crypto 1.1.0-alpha07).
 
-### Fork P5-2 — Provider/contract — **recommend: vendor-neutral port, Anthropic first adapter**
+### Fork P5-2 — Provider/contract — **recommend: vendor-neutral port, OpenAI-compatible first adapter**
 - Domain port `GenerativeAiEngine` is provider-neutral (Block I). Provider/model are opaque
   (`AiProviderId`/`AiModelId`).
-- First adapter: **Anthropic Messages API, raw Ktor SSE** (`content_block_delta`/`text_delta`;
-  `x-api-key` + `anthropic-version`). Provider lives behind the port.
-- **Request body is model-aware** (a per-model capability map): Opus 4.7/4.8 reject
-  `temperature`/`top_p`/`top_k` (HTTP 400) and force adaptive thinking; other models differ. A fixed
-  JSON shape will 400 — the adapter selects the allowed shape per model.
-- **Decided (2026-06-24):** **default model = Haiku 4.5** (`claude-haiku-4-5-20251001`) for the
-  `< 2000ms` first-token budget + cost; Opus 4.8 (`claude-opus-4-8`) is opt-in. **Anthropic-only
-  closes Phase 5; the OpenAI-compatible adapter is a planned fast-follow right after Block N.** Verify
-  live model strings at build time (they move).
+- First adapter: **OpenAI-compatible** (Block K) — `POST {baseUrl}/chat/completions`,
+  `Authorization: Bearer <key>`, SSE streaming via `choices[].delta.content` + terminal
+  `data: [DONE]`. One configurable base URL reaches OpenRouter / Google's OpenAI endpoint / Together /
+  Groq / local Ollama / LM Studio / OpenAI itself. Provider lives behind the port.
+- **No hardcoded model and no hardcoded model catalog.** The model is a **user-set free-text string**
+  (`AiModelId`), read from `AiProviderConfigRepository`. The adapter sends a **minimal request body**
+  (`messages`, `model`, `max_tokens`, `stream:true`) and **omits sampling params by default** for the
+  widest backend compatibility (some models 400 on `temperature`/`top_p`/`top_k`).
+- **Decided (2026-06-24, re-oriented):** ship a sensible **light** default model **string** + a UI
+  hint "prefer light/fast models on a phone"; the `< 2000ms` first-token figure stays **guidance**,
+  not a hard model pin. **The OpenAI-compatible adapter closes Phase 5 (Block K, first/primary); a
+  native Anthropic adapter is an optional fast-follow after Block N** — only needed for pasting
+  `sk-ant-…` directly against `api.anthropic.com`; Anthropic is otherwise reachable today via an
+  OpenAI-compatible provider (e.g. OpenRouter). Verify live model strings at build time (they move).
 
 ### Fork P5-3 — Prompt / outbound privacy — **recommend: pure builder + positive allow-list + guards**
 - `PromptContextBuilder` is pure (`:domain` or pure data class), assembling **minimal context**.
@@ -166,8 +176,9 @@ later; no dedicated `:data:secrets` module at this stage.
   (3.0.1) — **not new**.
 - **Ktor MockEngine** (test source set of `:data:ai-cloud`) — **genuinely new**, test-only.
 - **Tink** — only if chosen over raw Keystore in Fork P5-1; recommend raw Keystore (no new dep).
-- **Network security config** — XML + manifest, **no dependency**; HTTPS-only, `api.anthropic.com`
-  (and any configured base URL) the only cleartext-forbidden egress.
+- **Network security config** — XML + manifest, **no dependency**; HTTPS-only. It concerns the HTTP
+  client, so it is added in **Block K** (not Block J); the user-configured base URL must be `https://`
+  and cleartext egress is forbidden.
 - `EncryptedSharedPreferences` / `security-crypto` — **forbidden** (deprecated).
 
 ---
@@ -203,6 +214,16 @@ green; no new deps; intent code untouched.
 
 *(Execution prompt for this block is already drafted: `phase-5-block-I-prompt.md`.)*
 
+**Addendum (2026-06-24, additive — Block I files unmodified):** added the pure provider-config
+contract the "any API" goal needs — `AiProviderConfig` (`providerId`, `baseUrl`, `modelId`,
+`displayName?`) + `AiProviderConfigRepository` (`activeConfig(): Flow<AiProviderConfig?>` /
+`setActiveConfig → OperationResult` / `clearActiveConfig → OperationResult`) in `…domain.ai`. Single
+active config for Phase 5 (multi-config later); reads `Flow`, writes `OperationResult`, never throws.
+The key is **not** here — it stays in `SecureSecretStore`. New fake
+`FakeAiProviderConfigRepository` in `:core:testing` + a round-trip JVM test. **The DataStore impl is
+NOT built here — it lands in Block K.** Same purity rules as Block I (no vendor / "openai-compatible"
+literal in `:domain`; the grep guard stays empty).
+
 ---
 
 ## Block J — Secure secret storage (first on-device secret)
@@ -211,15 +232,15 @@ green; no new deps; intent code untouched.
 **Depends on:** I (port). Fork 1/8/9 fixed.
 
 **New files:** `SecureSecretStoreImpl` in `:data:repository` (or `core/android` per Fork 8) over
-Android Keystore AES-GCM (or Tink) + persisted ciphertext; `:app` DI provider; manifest/XML
-network-security-config (HTTPS-only).
+Android Keystore AES-GCM (or Tink) + persisted ciphertext; `:app` DI provider. (Network-security-config
+is **not** here — it concerns the HTTP client and lands in Block K.)
 
 **Steps:**
 - [ ] `J1` Keystore-backed AES-GCM impl: key in Keystore (hardware-backed where available), IV managed,
       ciphertext persisted; `get/put/remove → OperationResult`, never throws.
 - [ ] `J2` Key-invalidation handling: `KeyPermanentlyInvalidatedException` (lockscreen/biometric change)
       → a defined "secret lost, re-enter" path, not a crash. StrongBox/API-28-vs-34 differences handled.
-- [ ] `J3` DI provider in `:app`; network-security-config added.
+- [ ] `J3` DI provider in `:app`. (Network-security-config is added in Block K, with the HTTP client.)
 - [ ] `J4` Tests: `androidTest` (real Keystore — Robolectric/JVM cannot fake Keystore) for round-trip +
       per-provider isolation + invalidation path; on-device run like the Phase-4 `MigrationTest`.
 
@@ -228,30 +249,53 @@ logs; no ESP; `androidTest` green on device.
 
 ---
 
-## Block K — Cloud engine (Anthropic adapter; SSE → Flow<AiChunk>)
+## Block K — Cloud engine — OpenAI-compatible adapter (configurable base URL + key + model)
 
-**Goal:** `CloudGenerativeAiEngine` (Anthropic) in `:data:ai-cloud`, full failure mapping.
-**Depends on:** I (contracts), J (key source) — but logic is MockEngine-testable against the port.
-Fork 2 fixed.
+**Goal:** `CloudGenerativeAiEngine` (OpenAI-compatible) in `:data:ai-cloud`, full failure mapping,
+driven entirely by user config (base URL + free-text model) + a Keystore key.
+**Depends on:** I (contracts + the addendum's `AiProviderConfig`), J (key source) — but logic is
+MockEngine-testable against the ports. Fork 2 fixed.
 
-**New files (`:data:ai-cloud`):** Anthropic adapter (Ktor SSE client), model-aware request builder,
-SSE-event → `AiChunk` mapper, HTTP/error → `AiError` mapper, `stop_reason` → `AiStopReason` mapper;
-`:app` DI; Ktor MockEngine test deps.
+**New files (`:data:ai-cloud`):** OpenAI-compatible adapter (Ktor SSE client), minimal request builder,
+SSE-`delta` → `AiChunk` mapper, HTTP/error → `AiError` mapper, `finish_reason` → `AiStopReason` mapper;
+`AiProviderConfigRepository` **DataStore impl** (the Block-I-addendum contract — active provider id +
+base URL + model string; Block E pattern); `:app` DI; network-security-config (XML + manifest,
+HTTPS-only); Ktor MockEngine test deps.
 
 **Steps:**
-- [ ] `K1` Ktor SSE client to the Messages endpoint; `x-api-key` + `anthropic-version`; key fetched via
-      `SecureSecretStore`; HTTPS-only.
-- [ ] `K2` Model-aware request body (capability map): omit sampling params for Opus 4.7/4.8; default
-      model = Haiku 4.5 (dated string), configurable.
-- [ ] `K3` SSE parse → `AiChunk.Text` deltas + terminal `Completed(stopReason)`; `refusal` → REFUSAL.
-- [ ] `K4` Failure mapping → `AiError` (offline/timeout/401/429/5xx/4xx/unknown), emitted as terminal
+- [x] `K1` Ktor SSE client to `POST {baseUrl}/chat/completions`; `Authorization: Bearer <key>`; base URL
+      + model read from `AiProviderConfigRepository`, key fetched via `SecureSecretStore`. **HTTPS-only**
+      (reject a non-`https://` base URL); network-security-config enforces no cleartext egress.
+- [x] `K2` **Minimal request body**: `messages`, `model` (the free-text `AiModelId`), `max_tokens`,
+      `stream:true`. **Omit sampling params by default** (`temperature`/`top_p`/`top_k`) for widest
+      backend compatibility. No hardcoded model / catalog — model comes from config; ship a light
+      default string + a "prefer light/fast models on a phone" UI hint (the `< 2000ms` first-token
+      budget is guidance, not a hard pin).
+- [x] `K3` SSE parse → `AiChunk.Text` from `choices[].delta.content` deltas + terminal
+      `Completed(stopReason)` from `finish_reason`; terminal `data: [DONE]` ends the stream;
+      a `refusal`/content-filter finish → REFUSAL (success terminal).
+- [x] `K4` Failure mapping → `AiError` (offline/timeout/401/429/5xx/4xx/unknown), emitted as terminal
       `AiChunk.Failed`; first-token + idle timeouts; cold-flow cancellation aborts the request.
-- [ ] `K5` Tests: Ktor MockEngine — happy stream, mid-stream error, refusal, 401/429/timeout mapping,
-      cancellation; against a `FakeSecureSecretStore`.
+- [x] `K5` Tests: Ktor MockEngine — happy stream, mid-stream error, refusal, 401/429/timeout mapping,
+      cancellation; against `FakeSecureSecretStore` + `FakeAiProviderConfigRepository`. DataStore-impl
+      round-trip test for `AiProviderConfigRepository`.
 
-**Acceptance:** a scripted SSE stream maps to the right `AiChunk` sequence; every error path yields a
-terminal `AiError`, never an uncaught throw; cancelling collection cancels the call; no Ktor/SSE term
-leaks into `:domain`.
+**Status: Block K DONE (2026-06-24).** `OpenAiCompatibleGenerativeAiEngine` in `:data:ai-cloud`
+(manual SSE, no `ktor-client-sse`); `AiProviderConfigRepositoryImpl` in **`:data:repository`** over the
+shared `sidr_preferences` store (+ 4 `ai_provider_*` keys, privacy-guard-clean); `@CloudEngine` engine
++ `HttpClient` providers + `network_security_config` in `:app`. 20 MockEngine tests + 4 config-repo
+tests + full regression green; domain stays vendor-neutral/pure; only `ktor-client-mock` added (test).
+See decisions.md "ADR Block K". **Next = Block M.**
+
+**Acceptance:** a scripted SSE stream maps to the right `AiChunk` sequence; the request targets the
+configured base URL + free-text model with no sampling params; every error path yields a terminal
+`AiError`, never an uncaught throw; cancelling collection cancels the call; non-`https://` base URL is
+rejected; no Ktor/SSE term leaks into `:domain`.
+
+*(Execution prompt for this block is drafted: `phase-5-block-K-prompt.md`. Two repo-truth corrections
+baked in there: the `AiProviderConfigRepository` DataStore impl lands in **`:data:repository`** (not
+`:data:ai-cloud`, which is the Hilt-free HTTP client with no DataStore dep); SSE is parsed **manually**
+over the response channel so **Ktor MockEngine stays the only new dep** — no `ktor-client-sse`.)*
 
 ---
 
@@ -267,17 +311,24 @@ leaks into `:domain`.
 
 **Acceptance:** builder produces minimal requests; guards green; pure (`:domain` purity intact).
 
+*(Execution prompt for this block is drafted: `phase-5-block-L-prompt.md`. Pure JVM in `:domain`,
+depends only on Block I — runnable in parallel with K/M. Key precision baked in: the privacy denylist is
+scanned over **static text + a hand-synced field inventory, never over the user's command**; guards are
+**reflection-free** (no `kotlin-reflect`), mirroring the Phase-4 hand-synced guards.)*
+
 ---
 
 ## Block M — Routing seam + static fallback
 
-**Goal:** `GenerateReplyUseCase` + `StaticFallbackEngine` + ordered `GenerativeRouter`.
+**Goal:** `GenerateReplyUseCase` + `StaticFallbackEngine` + ordered `GenerativeRouter` over the
+OpenAI-compatible cloud engine + static fallback.
 **Depends on:** I, K, L. Fork 4/6/7 fixed.
 
 **Steps:**
 - [ ] `M1` `StaticFallbackEngine` (canned reply, no network) implementing `GenerativeAiEngine`.
-- [ ] `M2` `DefaultGenerativeRouter`: ordered cloud→static, selecting via `ConnectivityChecker` +
-      `SecureSecretStore`; reserved ONNX slot (Ph6). Pure where possible (ports + engine list).
+- [ ] `M2` `DefaultGenerativeRouter`: ordered **OpenAI-compatible cloud → static**, selecting via
+      `ConnectivityChecker` + `SecureSecretStore` (+ provider config present); reserved ONNX slot (Ph6).
+      Pure where possible (ports + engine list).
 - [ ] `M3` `ConnectivityChecker` Android impl in `core/android` + DI.
 - [ ] `M4` `GenerateReplyUseCase` (`Flow<AiChunk>`) in `:domain`; DI wires router as the engine.
 - [ ] `M5` Tests: offline → static; online+key → cloud; online+no-key → static (or a clear key-needed
@@ -286,19 +337,30 @@ leaks into `:domain`.
 **Acceptance:** routing picks the right engine per connectivity/key; ONNX can insert later with no
 rewrite; matching pipeline unchanged.
 
+*(Execution prompt for this block is drafted: `phase-5-block-M-prompt.md`. Precision baked in: router +
+static engine live in **`:data:repository`** and depend only on the `GenerativeAiEngine` port + domain
+ports (no data→data edge; cloud + future ONNX injected from `:app`); selection is **at collection time**
+(latest-wins) with the ONNX slot **ahead of cloud**; no-key/no-config/offline → **static**; the use case
+consumes the **single unqualified** `GenerativeAiEngine` (the router) while cloud/fallback are qualified;
+the Block-K cloud engine must be `@CloudEngine`-tagged (coordinate). Connectivity glue stays Hilt-free +
+not unit-tested in `core/android`, per the `AndroidPermissionChecker` precedent.)*
+
 ---
 
 ## Block N — Assistant streaming UI + key entry + docs-sync/close
 
-**Goal:** real `:feature:assistant` streaming screen, minimal inline key entry, phase close.
+**Goal:** real `:feature:assistant` streaming screen, minimal inline provider-settings form (base URL
++ key + model), phase close.
 **Depends on:** I–M. Fork 5 fixed.
 
 **Steps:**
 - [ ] `N1` `AssistantViewModel`: `Flow<AiChunk>` (UI-collected) + `StateFlow<UiState<AssistantStatus>>`
       + `retry()`; adopts the ADR-3.1.4 `NavigationEvent` pattern.
 - [ ] `N2` `AssistantScreen`: streaming render, error/retry, refusal rendering; no business logic.
-- [ ] `N3` Minimal inline API-key entry (masked, never logged, off the launcher cold path); relocate to
-      `feature/settings` later (Block-G wallpaper-button precedent).
+- [ ] `N3` Minimal inline **provider-settings** form on the assistant screen: **base URL + API key +
+      model string** (key field masked, never logged, off the launcher cold path). Config saved via
+      `AiProviderConfigRepository`; key saved via `SecureSecretStore`. Relocate to `feature/settings`
+      later (Block-G wallpaper-button precedent).
 - [ ] `N4` `AppNavHost` real assistant destination + safe-fallback (3.1.5).
 - [ ] `N5` On-device acceptance: real streaming reply; offline → static fallback; cancel mid-stream;
       retry without restart.
@@ -309,6 +371,15 @@ rewrite; matching pipeline unchanged.
 **Acceptance:** typing in the assistant streams a real reply; offline degrades to static fallback; the
 launcher core remains fully offline; key never logged; docs match reality.
 
+*(Execution prompt for this block is drafted: `phase-5-block-N-prompt.md`. Precision baked in:
+`:feature:assistant` gains Hilt (copy the `permission_education` build); the VM's 3 deps are domain ports
+already bound by J/K/M so **no new `:app` DI**; the stream is **collected in `viewModelScope`** (resolves
+the Fork-P5-5 "UI-collected vs retry()-latest-wins vs config-change" tension — survives rotation, aborts
+on screen-leave, `retry()` cancels in-flight) with **refusal = success terminal**; the masked key goes
+straight to `SecureSecretStore` and is **never displayed back/logged/in state**; `providerId` is
+host-derived; `MissingCredentials`/`Unauthorized` → a "set up provider" CTA, not a dead retry. N6 fixes
+`roadmap.md:49` ESP→Keystore. **Closes Phase 5.** Review the VM streaming/cancellation design on Opus.)*
+
 ---
 
 ## Frozen / pushed forward (Phase 6+)
@@ -318,9 +389,11 @@ launcher core remains fully offline; key never logged; docs match reality.
 - Voice / `SpeechInputSource` + context-suggestion pipeline → **Ph7**.
 - Accessibility + its consent → **Ph8**.
 - Backend proxy as the secret model (if not chosen in Fork 1) → swap behind the same port, later.
-- OpenAI-compatible adapter → **planned fast-follow right after Block N** (validates the vendor-neutral
-  seam); further providers later, behind the same port.
-- `:feature:settings` module (future home of the relocated key entry) → when needed.
+- Native Anthropic adapter (its own `x-api-key` / SSE shape) → **optional fast-follow after Block N**,
+  behind the same `GenerativeAiEngine` port — only needed for pasting `sk-ant-…` directly against
+  `api.anthropic.com` (Anthropic is otherwise reachable via an OpenAI-compatible provider in Block K).
+  Additional native providers later, same port.
+- `:feature:settings` module (future home of the relocated provider-settings form) → when needed.
 - Full Hilt→KSP migration → **Ph9**.
 
 ## Demoable milestones (like `open telegram` for Phase 3)
@@ -351,7 +424,7 @@ and reviewing the result on Opus is the cost-effective default.
 |---|---|---|
 | **I** — AI contracts | **Opus 4.8** *(Sonnet 4.6 acceptable)* | Foundation everything compiles against; multi-provider neutrality + refusal-as-stop-reason + terminal-failure-as-value decided here. Shapes are pinned in the prompt, so Sonnet *can* execute it — but a wrong contract is the most expensive mistake, so prefer Opus for round 1. |
 | **J** — Secret storage | **Opus 4.8** | Keystore crypto + key-invalidation / StrongBox / API-28 edge cases. Security correctness, hard to test, costly to get wrong. Don't cheap out on crypto. |
-| **K** — Cloud engine | **Opus 4.8** | SSE parsing, `Flow` cancellation/backpressure, first-token + idle timeouts, model-aware request body, full error→`AiError` taxonomy. The most intricate runtime block. |
+| **K** — Cloud engine | **Opus 4.8** | SSE parsing (OpenAI-compatible `delta` + `[DONE]`), `Flow` cancellation/backpressure, first-token + idle timeouts, config-driven request, full error→`AiError` taxonomy. Still the most intricate runtime block — the wire format changed, the difficulty did not. |
 | **L** — Prompt builder + guards | **Sonnet 4.6** | Pure builder + positive allow-list + guard tests. Well-specified, mechanical. |
 | **M** — Routing + fallback | **Sonnet 4.6** *(review router on Opus)* | Bounded and well-specified; the one subtle spot is the router selection order (cloud-if-online+key → static, ONNX slot reserved) — review that part on Opus. |
 | **N** — Assistant UI + close | **Sonnet 4.6** | Compose UI + DI wiring + docs-sync, all pattern-following from prior blocks. The streaming-collection VM is a known pattern; escalate to Opus only if on-device cancellation misbehaves. |
@@ -360,10 +433,15 @@ and reviewing the result on Opus is the cost-effective default.
 
 1. **P5-1 — key storage:** BYOK + on-device Keystore AES-GCM (scoped interim); no proxy now; reversible
    via the `SecureSecretStore` port; no dev key in the APK; ESP forbidden.
-2. **P5-2 — model + adapters:** default Haiku 4.5, Opus 4.8 opt-in; **Anthropic-only closes Phase 5**,
-   **OpenAI-compatible adapter is a planned fast-follow right after Block N** (validates the seam).
-3. **P5-8 — secret impl module:** `:data:repository` (`…data.repository.security`).
-4. **Key-entry surface:** minimal inline entry in the assistant now (masked, never logged, off the
-   launcher cold path); relocate to `feature/settings` later (Block-G wallpaper-button precedent).
+2. **P5-2 — model + adapters (re-oriented 2026-06-24):** **no hardcoded model / catalog** — model is a
+   user-set free-text `AiModelId`; ship a light default string + a "prefer light/fast models" hint
+   (`< 2000ms` first-token is guidance, not a pin). **OpenAI-compatible adapter is Block K, first and
+   primary, and closes Phase 5**; native Anthropic is an **optional fast-follow after Block N** (only
+   for pasting `sk-ant-…` directly; Anthropic is reachable via an OpenAI-compatible provider already).
+3. **P5-8 — secret impl module:** `:data:repository` (`…data.repository.security`). Non-secret provider
+   config (`AiProviderConfigRepository`) is DataStore-backed (Block E pattern), impl in Block K.
+4. **Key-entry surface:** minimal inline **provider-settings** form in the assistant now (base URL + key
+   + model; key masked, never logged, off the launcher cold path); config via `AiProviderConfigRepository`,
+   key via `SecureSecretStore`; relocate to `feature/settings` later (Block-G wallpaper-button precedent).
 5. **First execution round:** **Block I only** (matches the Phase-4 "Block E only" gating). Prompt =
    `phase-5-block-I-prompt.md`.

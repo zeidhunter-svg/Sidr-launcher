@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew :domain:test :core:testing:classes assembleDebug -q)",
+      "Bash(./gradlew :domain:test --tests \"com.sidr.launcher.domain.ai.AiProviderConfigRepositoryTest\" --rerun-tasks -q)",
+      "Bash(echo \"--- exit: $? ---\")",
+      "Bash(awk '/^\\\\[libraries\\\\]/{f=1} /^\\\\[plugins\\\\]/{f=0} f' gradle/libs.versions.toml)",
+      "Bash(./gradlew :data:ai-cloud:testDebugUnitTest :data:repository:testDebugUnitTest)"
+    ]
+  }
+}

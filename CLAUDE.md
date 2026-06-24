@@ -1,8 +1,10 @@
 # CLAUDE.md — Sidr Launcher
 
 Session digest. Read this first. **Phase 4 is DONE (Blocks E → H, 2026-06-23).** **Phase 5 (cloud AI,
-multi-provider) is UNDERWAY — Block I done (2026-06-24); next = Block J.** Plan +
-forks: [ai-context/phase-5-plan.md](ai-context/phase-5-plan.md).
+multi-provider) is UNDERWAY — Block I (+ addendum) + Block J + Block K done (2026-06-24); next = Block M**
+(L may run earlier/parallel as pure JVM). Plan re-oriented to **OpenAI-compatible-first** (Block K =
+first/primary adapter, now built; native Anthropic = optional fast-follow after Block N). Plan + forks:
+[ai-context/phase-5-plan.md](ai-context/phase-5-plan.md).
 
 ## What this is
 
@@ -115,7 +117,42 @@ Phase 3 result, Blocks A → D:
   throws), `domain.connectivity` (`ConnectivityChecker`); 3 fakes in `:core:testing`; 10 new JVM tests
   green. Vendor-neutral (grep `anthropic|openai|gemini|claude` over `domain/src/` empty); `:domain`
   stays stdlib+coroutines; no new deps; intent code + `feature/assistant` untouched. Details:
-  decisions.md "ADR Block I". **Next = Block J (secure secret storage).**
+  decisions.md "ADR Block I". **Addendum (2026-06-24):** added pure `AiProviderConfig` +
+  `AiProviderConfigRepository` (`…domain.ai`) for user-configurable providers (base URL + free-text
+  model; key stays in `SecureSecretStore`) + fake + round-trip test; plan re-oriented to
+  OpenAI-compatible-first.
+- **Phase 5 Block J ✅ (2026-06-24)** — Keystore-backed `SecureSecretStore` (BYOK, per-provider).
+  `:data.repository.security`: `SecretCipher`+`EncryptedBlob` crypto seam (Fork 7); `KeystoreSecretCipher`
+  (AES-256-GCM in `AndroidKeyStore`, alias `sidr_secret_aead_v1`, StrongBox-with-fallback,
+  `userAuthRequired=false`); `SecureSecretStoreImpl` over a **dedicated `sidr_secrets` DataStore**
+  (`@SecretsDataStore` qualifier — separate file from Block E's `sidr_preferences`, so credential keys
+  never enter the privacy-guarded `ALL_KEY_NAMES`); `get` decrypt-fail/invalidation/corrupt →
+  `Success(null)` + clear-entry, `put`/`remove` → `Failure` on I/O, never throws, `CancellationException`
+  re-thrown. `java.util.Base64` (no Robolectric). DI: `SecretsProvidesModule`+`SecretsBindsModule` in
+  `:app`. `FakeSecretCipher` + **9 JVM tests** (pure JVM) green; `SecretStoreInstrumentedTest` (3 tests,
+  real Keystore) **compiles — device run pending on SM-A325F**. ESP/security-crypto absent; no secret
+  logged; `PrivacyInventoryGuardTest` green; `:domain`/`feature` untouched. Details: decisions.md
+  "ADR Block J".
+- **Phase 5 Block K ✅ (2026-06-24)** — OpenAI-compatible cloud engine (SSE → `Flow<AiChunk>`).
+  `:data:ai-cloud` (Hilt-free, no `:core:android` edge): `OpenAiCompatibleGenerativeAiEngine` streams any
+  OpenAI-compatible `chat/completions` endpoint — base URL + free-text model from
+  `AiProviderConfigRepository`, key from `SecureSecretStore`, `Authorization: Bearer`. **Minimal body**
+  (`model`/`messages`/`max_tokens`/`stream:true`, `system` leading), **no sampling params** (absent from
+  the private `@Serializable` DTOs); robust URL join (`removeSuffix("/")+"/chat/completions"`, keeps
+  `/v1`); inputs trimmed; **HTTPS-only** (non-`https://`→`InvalidRequest`, socket never opened).
+  **Manual SSE** over `bodyAsChannel()`+`readUTF8Line()` (no `ktor-client-sse`): `Text` deltas, terminal
+  `Completed(stopReason,usage?)` at `[DONE]`/EOF; `finish_reason` captured off the content-empty terminal
+  delta; `content_filter`/`delta.refusal`→`REFUSAL` (**sticky**, success terminal). Full `AiError`
+  taxonomy as terminal `Failed` (MissingCredentials/Unauthorized/RateLimited(Retry-After
+  delta+date)/ServerError/InvalidRequest/Network/Offline/Timeout/Unknown); `detail` safe-only. Per-read
+  first-token + idle `withTimeoutOrNull` (**no `requestTimeoutMillis`**); cold `flow{}` + `execute{}` +
+  `flowOn`, `CancellationException` re-thrown (collection-cancel aborts the request).
+  `AiProviderConfigRepositoryImpl` lives in **`:data:repository`** over the shared `sidr_preferences`
+  store (+ 4 denylist-clean `ai_provider_*` keys in `ALL_KEY_NAMES`); `@CloudEngine` engine + `HttpClient`
+  (Android) providers in `:app` (`AiCloudProvidesModule`), config-repo bound in `PersistenceBindsModule`;
+  `network_security_config.xml` (no cleartext) wired in the manifest. 20 MockEngine tests + 4 config-repo
+  tests + full regression green; domain vendor-neutral/pure; only `ktor-client-mock` added (test-only).
+  Details: decisions.md "ADR Block K". **Next = Block M (router + static fallback).**
 
 ## Hard rules
 
@@ -168,7 +205,7 @@ Phase 3 result, Blocks A → D:
   *(Phase 3 closed 2026-06-21)*
 - Decisions log: [ai-context/decisions.md](ai-context/decisions.md)
 - Active checklist: [ai-context/phase-5-plan.md](ai-context/phase-5-plan.md) *(Phase 5 cloud AI,
-  multi-provider — Block I done 2026-06-24, Block J next; forks decided 2026-06-24)*
+  multi-provider — Blocks I/J/K done 2026-06-24, Block M next (L parallelizable); forks decided 2026-06-24)*
 - Roadmap: [docs/roadmap.md](docs/roadmap.md)
 
 ## Do not

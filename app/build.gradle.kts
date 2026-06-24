@@ -69,5 +69,10 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation(libs.room.runtime)
 
+    // Block K: the cloud-AI HttpClient is provided here (composition root) and injected into the
+    // :data:ai-cloud engine, which stays Hilt-free. Only the client/engine types cross into :app DI.
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.android)
+
     debugImplementation(libs.compose.ui.tooling)
 }

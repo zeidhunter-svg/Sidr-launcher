@@ -1,4 +1,4 @@
-# Phase 5 — Block N execution prompt: Assistant streaming UI + provider-settings form + phase close
+## Phase 5 — Block N execution prompt: Assistant streaming UI + provider-settings form + phase close
 
 > **Run this block on Sonnet 4.6** (Compose UI + DI wiring + docs-sync, all pattern-following from prior
 > blocks). **Escalate to Opus only if on-device cancellation/streaming misbehaves.** Plan + diff review
@@ -88,12 +88,21 @@ NOTE) · multi-turn conversation history · voice input (Ph7) · ONNX (Ph6) · n
 
        private var streamJob: Job? = null
        private var lastPrompt: String? = null
-       // init: observe providerConfig.activeConfig() → reflect base-url/model + a `keySet` flag in state
+       // init: observe providerConfig.activeConfig() → reflect base-url/model + a `keySet` flag in state.
+       //   keySet is derived per emit: config → providerId → secretStore.get(apiKey(providerId)) →
+       //   boolean(non-blank). ONLY the boolean reaches state (never the key value), and it is
+       //   RECOMPUTED on every activeConfig() re-emit so switching base-URL/host (new providerId, new
+       //   key slot) never shows a stale "key set ✓" from the previous provider's slot.
        fun send(prompt: String) { /* cancel streamJob; launch in viewModelScope; collect chunks */ }
        fun retry() { lastPrompt?.let(::send) }     // latest-wins via the cancel in send()
        fun saveProvider(baseUrl: String, model: String, apiKey: String) { /* see decision 3 */ }
    }
    ```
+   - **No `SavedStateHandle` here (deliberate).** Unlike the launcher (H3 restores `commandInput` via
+     `SavedStateHandle`), the assistant does **not** persist prompt/reply across process death —
+     `lastPrompt` is a plain field, transient by design — and the **key must never touch
+     `SavedStateHandle`**. Call this out in the ADR as an intentional deviation from the H3 precedent,
+     not an oversight.
    - `AssistantUiState(reply: String = "", status: AssistantStatus = Idle, form: ProviderFormState)` —
      a **plain data class** (the `PermissionEducationViewModel` precedent: a VM may hold plain state when
      there is no async-load/empty surface to model with `UiState<T>`). `status` is a sealed
@@ -123,16 +132,24 @@ NOTE) · multi-turn conversation history · voice input (Ph7) · ONNX (Ph6) · n
      `PasswordVisualTransformation`). Pre-fill base URL + model from `activeConfig()`; **never** pre-fill
      the key — show "key set ✓ / replace key" from the `keySet` boolean only.
    - `saveProvider(baseUrl, model, apiKey)`: derive a stable `providerId` from the base-URL host
-     (e.g. `AiProviderId(host.lowercase())`) so switching endpoints keeps isolated key slots; validate
+     (e.g. `AiProviderId(host.lowercase())`) so switching endpoints keeps isolated key slots. **Pin the
+     normalization rule in the ADR and make it deterministic** — host only, lowercased, port and
+     userinfo/path stripped — and ensure it agrees with how Block K parses the base URL (so the eligibility
+     gate and the request target never disagree). For Phase 5 (single active config) two providers sharing
+     a host collapsing to one key slot is acceptable; document it, don't over-engineer. Validate
      `https://` (reject otherwise with an inline error — defense-in-depth with Block K);
      `providerConfig.setActiveConfig(AiProviderConfig(providerId, baseUrl, AiModelId(model), displayName
      = host))`; **if** `apiKey.isNotBlank()` → `secretStore.put(SecretKeys.apiKey(providerId), apiKey)`.
      Map any `OperationResult.Failure` to an inline form error. **Never log the key.**
    - `AiError → UiError` + `isButtonRetryable()` mapping per the Block-I KDoc table (Offline/Network/
      Timeout/RateLimited/ServerError/Unknown → retryable; MissingCredentials/Unauthorized/InvalidRequest
-     → not button-retryable). Place it next to the existing `OperationError.toUiError()` (check its
-     module — likely `core/common`) or as a small `:feature:assistant` mapper; do not leak a key/raw
-     prompt into `UiError`.
+     → not button-retryable). **This mapper lives in `:feature:assistant`, NOT in `core/common`.**
+     Per ADR Block B, `UiError` is in `core/common` **with no `domain` dep by design**, and the existing
+     `OperationError → UiError` mapping happens **in the VM/feature layer**, not in `core/common`. Since
+     `AiError` is a `domain` type, putting the mapper in `core/common` would add a forbidden
+     `core/common → domain` edge — so keep it feature-local (next to the VM, which legitimately sees both
+     `domain` and `core/common`). Verify where `OperationError.toUiError()` actually lives before
+     mirroring it — it is not `core/common`. Do not leak a key/raw prompt into `UiError`.
 4. **`AppNavHost` real destination (N4).** Replace `composable(Routes.Assistant.ROUTE) { AssistantScreen() }`
    with the launcher pattern:
    ```kotlin
@@ -179,6 +196,12 @@ Requires a real provider configured on-device (paste a base URL + key + a light 
 - **airplane mode → static fallback** reply (graceful, no crash);
 - **cancel mid-stream** (navigate back) aborts the request; **retry** re-streams without app restart;
 - **no key configured → "set up provider" CTA**, not a crash; key entry is masked.
+- **The two behaviors the Fork-P5-5 resolution actually buys (check both explicitly):**
+  - **rotate mid-stream → the request is NOT restarted** and the accumulated `reply` survives (VM +
+    its `StateFlow` outlive config-change);
+  - **navigate back mid-stream → the request IS aborted** (destination popped → VM `onCleared` →
+    `viewModelScope` cancelled → the cold Ktor flow tears down). A logcat with no continued network
+    traffic after back confirms it.
 *(If no device is available in the execution environment, compile + JVM-test must still pass; record the
 device run as pending, like the Block-J androidTest.)*
 
@@ -195,9 +218,15 @@ device run as pending, like the Block-J androidTest.)*
   AES-GCM via `SecureSecretStore` (BYOK; backend proxy a later drop-in behind the same port)**; note
   OpenAI-compatible BYOK + free-text model.
 - **`decisions.md`**: ADR `Block N complete` (VM-collected streaming + Fork-P5-5 resolution, plain-state
-  rationale, refusal-as-success, key-never-displayed/logged, host-derived providerId, https-validate,
-  CTA-not-retry for credentials, navhost wiring) **+ a short Phase-5 close summary** (Blocks I–N).
-- **`CLAUDE.md`**: advance to **Phase 5 complete (Blocks I → N)**; next per roadmap.
+  rationale, refusal-as-success, key-never-displayed/logged + **deliberate no-`SavedStateHandle`** vs the
+  H3 precedent, host-derived providerId **+ its pinned normalization rule**, https-validate,
+  CTA-not-retry for credentials, navhost wiring, **`AiError→UiError` mapper kept feature-local to avoid a
+  `core/common→domain` edge**) **+ a short Phase-5 close summary** (Blocks I–N). **Honest close:** the
+  summary must explicitly list the on-device items still **pending** a device run (Block-J `androidTest`
+  round-trip + the N5 acceptance) rather than implying they passed — frame it "code + JVM green; on-device
+  acceptance pending device run", exactly as Block J was recorded.
+- **`CLAUDE.md`**: advance to **Phase 5 complete (Blocks I → N)** — with the same explicit
+  on-device-pending caveat (J + N5) in the snapshot, not a blanket "verified on device"; next per roadmap.
 - **`phase-5-plan.md`**: check off Block N; mark **Phase 5 closed**.
 
 ## Verification (run and paste actual output)
@@ -207,6 +236,8 @@ device run as pending, like the Block-J androidTest.)*
 ./gradlew assembleDebug                                         # full Hilt graph + real assistant node
 ./gradlew testDebugUnitTest --rerun-tasks                       # full JVM regression
 grep -rn "data.repository\|data.aicloud" feature/assistant/src/  # empty (no feature→data edge)
+grep -rn "com.sidr.launcher.feature\." feature/assistant/src/main/  # empty (no feature→feature edge)
+grep -rn "SavedStateHandle" feature/assistant/src/main/         # empty (key/prompt deliberately not persisted)
 grep -rniE "Log\.|println" feature/assistant/src/main/          # no key/prompt logging (manual review of any hit)
 grep -rn "import android" domain/src/                          # empty (domain untouched)
 git diff --stat -- domain/src/main/java/com/sidr/launcher/domain/intent/HandleUserCommandUseCase.kt  # no change
@@ -226,8 +257,3 @@ git diff --stat -- domain/src/main/java/com/sidr/launcher/domain/intent/HandleUs
   ADR `Block N` + Phase-5 close in `decisions.md`; `CLAUDE.md` = **Phase 5 complete (I → N)**;
   `phase-5-plan.md` Block N checked + phase closed. Full JVM regression green; `assembleDebug` green.
 
-## Agent model
-
-**Sonnet 4.6** — Compose + DI wiring + docs-sync, all pattern-following. **Review the VM streaming-
-collection + cancellation/retry design on Opus** (the Fork-P5-5 resolution is the one non-mechanical
-decision); escalate execution to Opus only if on-device cancellation misbehaves.

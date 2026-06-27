@@ -320,9 +320,20 @@ over the response channel so **Ktor MockEngine stays the only new dep** — no `
 **Depends on:** I. Fork 3 fixed. (Pure JVM — can run early/parallel.)
 
 **Steps:**
-- [ ] `L1` `PromptContextBuilder` (pure) → `AiRequest`; positive allow-list (only listed fields out).
-- [ ] `L2` `AiRequestGuardTest`: no calendar/location/usage/raw-history reaches the request.
-- [ ] `L3` Secret-not-in-logs guard test: key absent from any log/`toString` surface.
+- [x] `L1` `PromptContextBuilder` (pure) → `AiRequest`; positive allow-list (only listed fields out).
+- [x] `L2` `AiRequestGuardTest`: no calendar/location/usage/raw-history reaches the request.
+- [x] `L3` Secret-not-in-logs guard test: key absent from any log/`toString` surface.
+
+**Status: Block L DONE (2026-06-27).** Pure `PromptContextBuilder` (`build(userCommand)` only →
+minimal `AiRequest`: one verbatim `USER` message + static `DEFAULT_SYSTEM_PROMPT` + `maxOutputTokens=512`,
+`model=null`) + `OutboundContextPolicy` (positive allow-list `{USER_COMMAND, STATIC_SYSTEM_PROMPT,
+GENERATION_LIMITS}` + `FORBIDDEN_CONTEXT_TERMS`/`CREDENTIAL_TERMS` + hand-synced `OUTBOUND_FIELD_NAMES`/
+`AIERROR_FIELD_NAMES`) in `…domain.ai`; 11 reflection-free JVM tests (`AiRequestGuardTest` 5 +
+`OutboundSecretLeakGuardTest` 6) green, 91 domain total. Denylist scanned over **static text + field
+inventories, never user content**; `token` excluded (collides with `maxOutputTokens`); credential terms
+scanned over field-name inventories (not rendered `toString`) to avoid the `MissingCredentials`/"credential"
+vacuous collision. `:domain` stays stdlib+coroutines/vendor-neutral; no new deps. See decisions.md
+"ADR Block L". **Next = Block M.**
 
 **Acceptance:** builder produces minimal requests; guards green; pure (`:domain` purity intact).
 
@@ -340,48 +351,50 @@ OpenAI-compatible cloud engine + static fallback.
 **Depends on:** I, K, L. Fork 4/6/7 fixed.
 
 **Steps:**
-- [ ] `M1` `StaticFallbackEngine` (canned reply, no network) implementing `GenerativeAiEngine`.
-- [ ] `M2` `DefaultGenerativeRouter`: ordered **OpenAI-compatible cloud → static**, selecting via
+- [x] `M1` `StaticFallbackEngine` (canned reply, no network) implementing `GenerativeAiEngine`.
+- [x] `M2` `DefaultGenerativeRouter`: ordered **OpenAI-compatible cloud → static**, selecting via
       `ConnectivityChecker` + `SecureSecretStore` (+ provider config present); reserved ONNX slot (Ph6).
       Pure where possible (ports + engine list).
-- [ ] `M3` `ConnectivityChecker` Android impl in `core/android` + DI.
-- [ ] `M4` `GenerateReplyUseCase` (`Flow<AiChunk>`) in `:domain`; DI wires router as the engine.
-- [ ] `M5` Tests: offline → static; online+key → cloud; online+no-key → static (or a clear key-needed
+- [x] `M3` `ConnectivityChecker` Android impl in `core/android` + DI.
+- [x] `M4` `GenerateReplyUseCase` (`Flow<AiChunk>`) in `:domain`; DI wires router as the engine.
+- [x] `M5` Tests: offline → static; online+key → cloud; online+no-key → static (or a clear key-needed
       signal); `HandleUserCommandUseCase` proven untouched.
+
+**Status: Block M DONE (2026-06-27).** `StaticFallbackEngine` + `DefaultGenerativeRouter` in
+`…data.repository.ai`; `AndroidConnectivityChecker` in `core/android/connectivity/`; `GenerateReplyUseCase`
+in `…domain.ai`; `@FallbackEngine` + `ConnectivityModule` + `GenerationProvidesModule` in `:app`;
+`ACCESS_NETWORK_STATE` in manifest; `core/android` gains `coroutines.core`. 7 router tests + 6 use-case
+tests green; full JVM regression green; `assembleDebug` green (single unqualified engine binding);
+domain pure; no data→data edge. See decisions.md "ADR Block M". **Next = Block N.**
 
 **Acceptance:** routing picks the right engine per connectivity/key; ONNX can insert later with no
 rewrite; matching pipeline unchanged.
 
-*(Execution prompt for this block is drafted: `phase-5-block-M-prompt.md`. Precision baked in: router +
-static engine live in **`:data:repository`** and depend only on the `GenerativeAiEngine` port + domain
-ports (no data→data edge; cloud + future ONNX injected from `:app`); selection is **at collection time**
-(latest-wins) with the ONNX slot **ahead of cloud**; no-key/no-config/offline → **static**; the use case
-consumes the **single unqualified** `GenerativeAiEngine` (the router) while cloud/fallback are qualified;
-the Block-K cloud engine must be `@CloudEngine`-tagged (coordinate). Connectivity glue stays Hilt-free +
-not unit-tested in `core/android`, per the `AndroidPermissionChecker` precedent.)*
-
 ---
 
 ## Block N — Assistant streaming UI + key entry + docs-sync/close
+
+**Status: Block N DONE (2026-06-27). Phase 5 CLOSED.** Code + JVM (262 tests) green; `assembleDebug`
+green; on-device acceptance (N5) pending SM-A325F device run (no device in execution environment).
 
 **Goal:** real `:feature:assistant` streaming screen, minimal inline provider-settings form (base URL
 + key + model), phase close.
 **Depends on:** I–M. Fork 5 fixed.
 
 **Steps:**
-- [ ] `N1` `AssistantViewModel`: `Flow<AiChunk>` (UI-collected) + `StateFlow<UiState<AssistantStatus>>`
-      + `retry()`; adopts the ADR-3.1.4 `NavigationEvent` pattern.
-- [ ] `N2` `AssistantScreen`: streaming render, error/retry, refusal rendering; no business logic.
-- [ ] `N3` Minimal inline **provider-settings** form on the assistant screen: **base URL + API key +
+- [x] `N1` `AssistantViewModel`: `Flow<AiChunk>` collected in `viewModelScope` + `StateFlow<AssistantUiState>`
+      + `retry()` (latest-wins); adopts the ADR-3.1.4 `NavigationEvent` pattern.
+- [x] `N2` `AssistantScreen`: streaming render, error/retry, refusal rendering; no business logic.
+- [x] `N3` Minimal inline **provider-settings** form on the assistant screen: **base URL + API key +
       model string** (key field masked, never logged, off the launcher cold path). Config saved via
       `AiProviderConfigRepository`; key saved via `SecureSecretStore`. Relocate to `feature/settings`
       later (Block-G wallpaper-button precedent).
-- [ ] `N4` `AppNavHost` real assistant destination + safe-fallback (3.1.5).
+- [x] `N4` `AppNavHost` real assistant destination + `LaunchedEffect(navigationEvents)` + safe-fallback (3.1.5).
 - [ ] `N5` On-device acceptance: real streaming reply; offline → static fallback; cancel mid-stream;
-      retry without restart.
-- [ ] `N6` **Docs-sync + close:** `architecture.md` (AI pipeline as built), **`roadmap.md`** (fix the
-      Phase-5 line that still says `EncryptedSharedPreferences` → Keystore/proxy via `SecureSecretStore`),
-      `CLAUDE.md` status, ADRs in `decisions.md`. Phase 5 closed.
+      retry without restart. **PENDING device run on SM-A325F** (no device in execution environment).
+- [x] `N6` **Docs-sync + close:** `architecture.md` (AI pipeline as built + SecureSecretStore built),
+      **`roadmap.md`** (fixed Phase-5 line: ESP → Keystore AES-GCM via `SecureSecretStore`),
+      `CLAUDE.md` status (Phase 5 complete), ADRs in `decisions.md`. Phase 5 closed.
 
 **Acceptance:** typing in the assistant streams a real reply; offline degrades to static fallback; the
 launcher core remains fully offline; key never logged; docs match reality.

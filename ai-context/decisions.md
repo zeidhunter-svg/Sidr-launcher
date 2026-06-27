@@ -1002,6 +1002,338 @@ default; the existing "just over → `Timeout`" test stays). **Unchanged:** SSE 
 request body (still no sampling params), refusal stickiness, cancellation, DI structure; no new dep. Verified:
 `:data:ai-cloud:testDebugUnitTest` 21 tests green; `assembleDebug` + `testDebugUnitTest --rerun-tasks` green.
 
+### ADR 2026-06-27 — Block L complete (prompt/context builder + outbound privacy guards, pure)
+
+**Done 2026-06-27 (Block L, L1–L4). Fourth Phase-5 execution round (pure JVM, parallelizable with
+K/M). Fork P5-3 honoured.** The outbound side of generation: a pure `PromptContextBuilder` assembling
+the **minimal** `AiRequest` (the Block-I contract) that may leave the device, plus two reflection-free
+guard tests that make the privacy posture **fail-closed**. Everything lands in `:domain` (stdlib +
+coroutines only); no new deps; `IntentMatcher`/`HandleUserCommandUseCase`/`feature/*`/K-M-N artifacts
+untouched. `GenerativeAiEngine` is **not** invoked here.
+
+**New files in `:domain` (`com.sidr.launcher.domain.ai`):**
+- `PromptContextBuilder` — pure class, public surface is `build(userCommand)` **only** (no
+  context-bag overload — adding context must be a deliberate edit, not an open door). Produces a
+  minimal `AiRequest`: **one `USER` message = the command verbatim**, the static `DEFAULT_SYSTEM_PROMPT`
+  (a short, context-free, vendor-neutral instruction — no model pinned), `maxOutputTokens = 512`
+  (phone-reasonable guidance, not a hard pin), `model = null` (engine/router uses its configured
+  default). Nothing else is assembled — no device/usage/calendar/location/history/contacts/clipboard.
+- `OutboundContextPolicy` — the explicit **positive allow-list** + denylists, hand-synced inventories
+  (Phase-4 `ALL_KEY_NAMES`/`TABLE_NAMES` precedent): `AllowedContext{USER_COMMAND, STATIC_SYSTEM_PROMPT,
+  GENERATION_LIMITS}` + `ALLOWED`; `FORBIDDEN_CONTEXT_TERMS`; `CREDENTIAL_TERMS`; `OUTBOUND_FIELD_NAMES`
+  (AiRequest's 5 fields); `AIERROR_FIELD_NAMES` (AiError's 3 safe-diagnostic fields).
+
+**New files in `:domain/src/test`:** `AiRequestGuardTest` (5 tests), `OutboundSecretLeakGuardTest`
+(6 tests) — **11 new, reflection-free, pure JVM.**
+
+**Decisions made during execution:**
+- **Positive allow-list, fail-closed (Fork P5-3):** only the three vetted categories may leave; a
+  future context source that isn't allow-listed cannot reach an `AiRequest`. The builder's tiny
+  surface enforces this structurally (no context bag), and `AiRequestGuardTest` pins `ALLOWED` to
+  exactly those three so an un-reviewed addition fails the build.
+- **Denylist scanned over non-user-controlled text ONLY** — the static system prompt + the
+  field/category-name inventories — **never over the user's typed command**. The user command is
+  legitimate free text and may contain any word; a regression test (`build("open my calendar")` keeps
+  "calendar") guards against an over-eager filter that would corrupt legitimate commands.
+- **`token` deliberately EXCLUDED from `CREDENTIAL_TERMS`** (documented in the policy + the test):
+  the legitimate outbound field `maxOutputTokens` contains the substring `token`, so a substring scan
+  with `token` present would **vacuously** fail on a non-credential field — exactly the Phase-4
+  `key`-excluded precedent (a term dropped because it collides with a legitimate identifier). The
+  retained family (`secret`/`apikey`/`api_key`/`bearer`/`authorization`/`credential`/`password`) still
+  fires if a real credential-named field is ever added. Other Phase-4 terms also dropped to avoid
+  vacuous matches: `query`/`search` (the request legitimately concerns the user's query), `message`
+  (collides with `AiMessage`/`messages`), `system` (a legitimate field + category name).
+- **Credential terms scanned over field-name INVENTORIES, not rendered `toString()`** — a refinement
+  beyond the prompt's literal "scan `AiError.toString()`", flagged during Opus review: `AiError`'s safe
+  diagnostic variant name **`MissingCredentials` legitimately contains "credential"**, so scanning the
+  rendered variant string for credential terms would vacuously fail (the same collision class as
+  `maxOutputTokens`/"token"; the prompt only checked the `authorization`⊄`Unauthorized` non-collision
+  and missed this one). Resolution: credential terms are scanned over the hand-synced
+  `OUTBOUND_FIELD_NAMES` / `AIERROR_FIELD_NAMES` (the meaningful "no field can carry a key" check,
+  mirroring Phase-4 `TABLE_NAMES`), while the rendered `toString()` of every `AiRequest`/`AiError`
+  variant is scanned only for a **planted secret sentinel** that was never inserted — proving the
+  surface has no place to hold it. This keeps "credential" useful (no field collision) without a
+  vacuous failure.
+- **Hand-synced inventory rule:** `OUTBOUND_FIELD_NAMES` mirrors `AiRequest`'s real fields and
+  `AIERROR_FIELD_NAMES` mirrors `AiError`'s; a test asserts each set equals the expected names, so
+  **adding a field to `AiRequest`/`AiError` forces an inventory update** (and re-runs the credential
+  scan). Reflection-free throughout (no `kotlin-reflect`), per the `:domain` purity invariant.
+- **No-injection proof:** `build("<<SENTINEL_CMD>>")` yields exactly one `USER` message with verbatim
+  content, `system == DEFAULT_SYSTEM_PROMPT`, `model == null`, empty `stopSequences` — no
+  ASSISTANT/system-as-message smuggling, no hidden context.
+
+**Tests / verification (actual output):**
+- `./gradlew :domain:test --rerun-tasks` → **BUILD SUCCESSFUL**; `AiRequestGuardTest` 5 + 
+  `OutboundSecretLeakGuardTest` 6 = 11 new, 0 failures; **91 domain tests total**, 0 failures.
+- `./gradlew :domain:dependencies --configuration compileClasspath` → stdlib + kotlinx-coroutines
+  **only** (no `kotlin-reflect`, no Ktor, no serialization, no Android).
+- `grep -rn "import android|io.ktor|kotlinx.serialization|kotlin.reflect" domain/src/` → empty.
+- `grep -rni "anthropic|openai|gemini|claude" domain/src/` → empty (vendor-neutral domain intact;
+  the bonus prompt-names-no-vendor assertion was removed because its literals would have broken this
+  guard).
+- `grep -rn "GenerateReplyUseCase|Router|GenerativeAiEngine" …/ai/PromptContextBuilder.kt` → empty
+  (no K/M/N artifact referenced).
+- `./gradlew assembleDebug` → BUILD SUCCESSFUL (nothing else perturbed).
+
+**Frozen, untouched (later Phase-5 blocks):** assistant streaming UI + provider-settings form (N);
+native Anthropic adapter (optional post-N fast-follow). Multi-turn session history, if ever needed,
+is a deliberate future allow-list addition (transient, never persisted — decided in N).
+**Next = Block M** (router + static fallback + `GenerateReplyUseCase`, consumes K + L) → **now done; next = Block N.**
+
+---
+
+### ADR Block M (2026-06-27) — Routing seam + static fallback + GenerateReplyUseCase
+
+**Scope:** Block M — `StaticFallbackEngine` + `DefaultGenerativeRouter` + `AndroidConnectivityChecker`
++ `GenerateReplyUseCase` + DI wiring + manifest permission. Depends on I, K, L (all green).
+`HandleUserCommandUseCase` and the intent/matching pipeline are **untouched**. Matching ≠ generation.
+
+**Module placement — `:data:repository`:**
+`StaticFallbackEngine` and `DefaultGenerativeRouter` live in `…data.repository.ai` (same `ai` sub-package
+as `AiProviderConfigRepositoryImpl`). Rationale: both are Android-free pure-collaborator classes with no
+Ktor dep; `:data:repository` is the "pure implementation" module (`RuleBasedIntentMatcher` precedent).
+`:data:ai-cloud` stays strictly the Ktor cloud adapter. No data→data edge: the router takes
+`GenerativeAiEngine` constructor params (the port), never imports a concrete engine type. `:app` supplies
+the qualified instances positionally via `GenerationProvidesModule`.
+
+**Qualifier placement — `@FallbackEngine` co-located with `@CloudEngine` in `:app`:**
+`@CloudEngine` was already defined in `:app/di/CloudEngine.kt` (Block K). `@FallbackEngine` is added
+right next to it in `:app/di/FallbackEngine.kt`. Neither annotation appears in `:data:repository`;
+`DefaultGenerativeRouter` constructor params are plain `GenerativeAiEngine` types, with `:app` supplying
+the correct instances positionally.
+
+**Router design — ordered selection, latest-wins, never throws:**
+`DefaultGenerativeRouter.generate(request)` is a cold `flow { emitAll(selectEngine().generate(request)) }`.
+Selection runs inside the cold flow (not at construction), so connectivity/key/config changes between
+calls are respected (latest-wins). `selectEngine()` order:
+1. **Ph6 ONNX slot** — reserved ahead of cloud via a comment; inserting a local ONNX engine later
+   requires adding one check ahead of cloud with no edit to the cloud/static branches.
+2. **Cloud** — iff `isOnline()` AND `activeConfig().firstOrNull()` is non-null AND
+   `SecureSecretStore.get(SecretKeys.apiKey(providerId))` returns a non-blank `Success` value.
+3. **Static fallback** — always eligible.
+
+`firstOrNull()` used (not `first()`) for `activeConfig()` — `first()` throws on an empty flow;
+`firstOrNull()` is belt-and-suspenders against a future non-emitting config impl. A `Failure` from the
+secret store is treated as "no usable key → static". Neither `selectEngine()` nor `canUseCloud()`
+throws expected errors — terminal-failure-as-value is preserved end to end.
+
+**Double-read (eligibility gate + engine re-read at request time) is intentional:** the router reads
+config to get `providerId` for the key eligibility check; the cloud engine re-reads config at request
+time for the actual base URL/model. This double read is the correct design: the eligibility gate must
+happen before the engine is selected, and the engine must read fresh config when the request is built.
+
+**`StaticFallbackEngine`:** emits `AiChunk.Text(STATIC_REPLY)` + `AiChunk.Completed(COMPLETE)`.
+Context-free (does not echo `request` content). Never emits `AiChunk.Failed` — fallback is always a
+graceful success terminal. `STATIC_REPLY` is a constant: "I can't reach an AI service right now —
+check your connection or set up a provider in settings."
+
+**`AndroidConnectivityChecker` — Hilt-free, not unit-tested in `core/android`:**
+Plain class in `core/android/connectivity/`; constructed in `:app`'s `ConnectivityModule`
+(`@ApplicationContext Context`), mirroring `AndroidPermissionChecker` / `PermissionModule`. Uses
+`ConnectivityManager.activeNetwork` + `getNetworkCapabilities(…).hasCapability(NET_CAPABILITY_INTERNET
++ NET_CAPABILITY_VALIDATED)` for `isOnline()`; `callbackFlow` over `registerDefaultNetworkCallback`
+(current state on subscription, then `onAvailable`/`onLost`/`onCapabilitiesChanged`; `awaitClose`
+unregisters) + `conflate()` + `distinctUntilChanged()` for `connectivity: Flow<Boolean>`. No test
+deps in `core/android`; router logic fully covered via `FakeConnectivityChecker`.
+`core/android/build.gradle.kts` gains `implementation(libs.coroutines.core)` (for `callbackFlow`).
+
+**DI — single unqualified `GenerativeAiEngine` binding:**
+`GenerationProvidesModule` in `:app`:
+- `@FallbackEngine GenerativeAiEngine` → `StaticFallbackEngine()`
+- `GenerativeRouter` → `DefaultGenerativeRouter(cloud=@CloudEngine, fallback=@FallbackEngine, …)`
+- unqualified `GenerativeAiEngine` → the `GenerativeRouter` (the only unqualified binding; no Hilt
+  ambiguity because `@CloudEngine` and `@FallbackEngine` are qualified; `GenerateReplyUseCase`
+  receives the router without a qualifier)
+- `PromptContextBuilder` → `PromptContextBuilder()` (plain default)
+- `GenerateReplyUseCase(engine=unqualified, promptContextBuilder)` (domain use case)
+`ConnectivityModule` provides `ConnectivityChecker → AndroidConnectivityChecker(context)`.
+Manifest: `ACCESS_NETWORK_STATE` added (normal install-time permission; no runtime dialog).
+Nothing on the launcher cold path — all bindings are lazy singletons.
+
+**`GenerateReplyUseCase` (pure `:domain`):**
+`fun generate(userCommand: String): Flow<AiChunk> = engine.generate(promptContextBuilder.build(userCommand))`.
+Depends only on `GenerativeAiEngine` (port) + `PromptContextBuilder` (both `:domain`). The router type
+is invisible here. No Android, no Ktor.
+
+**Tests / verification (actual output):**
+- `./gradlew :data:repository:testDebugUnitTest` → **BUILD SUCCESSFUL** (`DefaultGenerativeRouterTest`
+  7 cases: offline→static, online+key→cloud, online+no-key→static, online+no-config→static,
+  key-read-failure→static, latest-wins re-evaluation, cancellation; static-fallback terminal shape).
+- `./gradlew :domain:test` → **BUILD SUCCESSFUL** (`GenerateReplyUseCaseTest` 6 cases: streams
+  chunks, builder output reaches engine, one USER message verbatim, static system prompt, null model,
+  denylist-term in user command passes through unmodified; **96 domain tests total**, 0 failures).
+- `./gradlew assembleDebug` → **BUILD SUCCESSFUL** (Hilt graph validates; one unqualified
+  `GenerativeAiEngine` binding; no duplicate-binding errors).
+- `./gradlew testDebugUnitTest --rerun-tasks` → **BUILD SUCCESSFUL** (full regression green; intent
+  pipeline untouched).
+- `grep -rn "import android|io.ktor" domain/src/` → **empty** (domain purity intact).
+- `./gradlew :domain:dependencies --configuration compileClasspath` → `kotlin-stdlib` +
+  `kotlinx-coroutines-core` **only** (no Ktor, no Android, no serialization).
+- `grep -rni "OpenAiCompatible|CloudGenerativeAiEngine|aicloud|data.aicloud" data/repository/src/main/` →
+  **empty** (no data→data edge; router references port only).
+- `ls data/repository/src/main/…/ai/` → `AiProviderConfigRepositoryImpl.kt` +
+  `DefaultGenerativeRouter.kt` + `StaticFallbackEngine.kt` (correct location confirmed).
+- `git diff --stat -- domain/src/…/HandleUserCommandUseCase.kt` → **no output** (untouched).
+
+**Next = Block N** (assistant streaming UI + provider-settings form + phase close).
+
+### ADR Block N (2026-06-27) — Assistant streaming UI + provider-settings form + Phase 5 close
+
+**Scope:** `:feature:assistant` — real streaming screen, inline provider-settings form, navhost
+wiring, JVM tests. Phase 5 (Blocks I → N) closed.
+
+**`AssistantViewModel` design decisions:**
+
+- **VM-collected streaming (Fork P5-5 resolution).** The `Flow<AiChunk>` is collected inside
+  `viewModelScope.launch {}`, not in the UI. This resolves the Fork-P5-5 tension between
+  "UI-collected" and "retry()-latest-wins" and "config-change":
+  - Rotation does **not** restart the stream — the VM and its `StateFlow` outlive config-change.
+  - Screen-leave **aborts** the stream — `onCleared` cancels `viewModelScope`, which cancels the cold
+    Ktor flow (tears down the HTTP request).
+  - `retry()` = latest-wins: `streamJob?.cancel()` then relaunch in `viewModelScope`.
+  - Unit-testable: tests drive `viewModelScope` via `UnconfinedTestDispatcher` / `runTest`.
+
+- **No `SavedStateHandle` (deliberate deviation from H3).** `LauncherViewModel` uses
+  `SavedStateHandle` to restore `commandInput` across process death (H3). The assistant does NOT:
+  `lastPrompt` is a transient plain field, not persisted — there is no "in-progress reply" that
+  should survive process death. More critically, **the API key must never touch `SavedStateHandle`**
+  (it would be serialized to the saved-state Bundle, which can be logged by the OS). Annotated in
+  code and KDoc so this deviation is not confused for an oversight.
+
+- **Plain-state data class (not `UiState<T>`).** `AssistantUiState` is a plain `data class` (like
+  `PermissionEducationViewModel` — Block G precedent). There is no async load / empty surface that
+  warrants `UiState.Loading` / `UiState.Empty` — the assistant surface is always ready; only the
+  streaming status changes. `status: AssistantStatus { Idle / Streaming / Done(refused) / Error(…) }`
+  expresses the "separate status" of Fork P5-5 as a field in the single `StateFlow`.
+
+- **Refusal = success terminal.** `AiChunk.Completed(REFUSAL)` → `AssistantStatus.Done(refused=true)`.
+  Rendered as a normal (declined) reply with a subtle note. Not an error, not retryable.
+
+- **`AiError → UiError` mapper is feature-local.** Per ADR Block B, `UiError` lives in `core:common`
+  with **no domain dep by design**. Placing the `AiError → UiError` mapper in `core:common` would add
+  a forbidden `core/common → domain` edge. The mapper lives next to `AssistantViewModel` in
+  `:feature:assistant`, which legitimately sees both `domain` and `core:common`.
+
+- **`MissingCredentials` / `Unauthorized` → CTA, not retry button.** `AssistantStatus.Error` gains a
+  `showProviderCta: Boolean` flag. The fix for a credential error is updating provider settings, not
+  repeating the same request. The CTA opens the inline form; `retryable = false` suppresses the Retry
+  button for these cases.
+
+**Provider-settings form + `saveProvider` decisions:**
+
+- **`providerId` normalization rule (pinned):** derived from the base-URL host component only —
+  `URI(trimmedUrl).host.lowercase()`, port and userinfo/path stripped. Example:
+  `https://OpenRouter.ai/api/v1` → `AiProviderId("openrouter.ai")`. This rule agrees with how Block K
+  parses the base URL (the eligibility gate and the request target never disagree). For Phase 5
+  (single active config), two providers sharing a host collapse to one key slot — acceptable and
+  documented here; not over-engineered.
+
+- **`https://` validation is defense-in-depth.** Block K already rejects non-`https://` base URLs at
+  the request level; the form adds a second check so the error surfaces inline (before a request is
+  ever attempted), not after the first stream attempt.
+
+- **Key is never displayed / logged / in state.** The key field (`PasswordVisualTransformation`) goes
+  straight to `SecureSecretStore.put()` and is dropped from memory. `ProviderFormState` holds only a
+  `keySet: Boolean` (recomputed on every `activeConfig()` emit so switching providers never shows a
+  stale "key set ✓" from a previous slot). `AssistantUiState.toString()` cannot contain the key value.
+
+**NavHost wiring (N4):** follows the launcher pattern — `hiltViewModel()` + `LaunchedEffect` on
+`navigationEvents` + `handleNavigationEvent(navController, it)` (3.1.5 safe-fallback already present).
+
+**Tests (14 JVM, `:feature:assistant`):** stream accumulation; Done on COMPLETE; Done(refused=true)
+on REFUSAL; Error(retryable=false, showProviderCta=true) for Unauthorized/MissingCredentials;
+Error(retryable=true) for Network; Error(retryable=false, showProviderCta=false) for InvalidRequest;
+retry() re-sends same prompt; retry() with no prior send is safe; saveProvider persists config+key;
+blank key skips put; non-https → inline error + nothing persisted; providerId normalized from host;
+null config → blank baseUrl (form shown prominently); config update reflected in form state.
+
+**Verification (actual output):**
+- `./gradlew :feature:assistant:testDebugUnitTest` → **BUILD SUCCESSFUL** (14 tests, 0 failures).
+- `./gradlew assembleDebug` → **BUILD SUCCESSFUL** (Hilt graph valid; real assistant destination).
+- `./gradlew testDebugUnitTest --rerun-tasks` → **BUILD SUCCESSFUL** (262 total JVM tests, 0 failures).
+- `grep -rn "^import com.sidr.launcher.feature\." feature/assistant/src/main/` → **empty** (no feature→feature).
+- `grep -rn "^import.*SavedStateHandle" feature/assistant/src/main/` → **empty** (not imported).
+- `grep -rn "^import android" domain/src/` → **empty** (domain untouched).
+- `git diff --stat -- domain/src/…/HandleUserCommandUseCase.kt` → **no output** (untouched).
+
+**On-device acceptance (N5):** code + JVM green. On-device run **pending** on SM-A325F (no device
+available in execution environment). Items pending device: (1) Block-J `SecretStoreInstrumentedTest`
+(real Keystore round-trip + per-provider isolation + invalidation path, compiles), (2) Block-N N5
+(streaming reply, airplane-mode → static fallback, cancel/retry, key entry, rotation mid-stream,
+navigate-back cancellation). Both recorded as pending, not assumed passed.
+
+---
+
+### Phase 5 close summary (Blocks I → N, 2026-06-24 – 2026-06-27)
+
+| Block | Deliverable | Status |
+|---|---|---|
+| I | AI domain contracts (pure) + addendum (AiProviderConfig/Repo) | Done |
+| J | Keystore-backed `SecureSecretStore` (BYOK, AES-256-GCM) | Done (device run pending) |
+| K | `OpenAiCompatibleGenerativeAiEngine` (SSE → `Flow<AiChunk>`) + `AiProviderConfigRepositoryImpl` | Done |
+| L | `PromptContextBuilder` + `OutboundContextPolicy` (positive allow-list, privacy guards) | Done |
+| M | `DefaultGenerativeRouter` + `StaticFallbackEngine` + `GenerateReplyUseCase` + `AndroidConnectivityChecker` | Done |
+| N | `AssistantViewModel` + `AssistantScreen` + provider-settings form + navhost wiring + docs-sync | Done (device run pending) |
+
+**What was built:** vendor-neutral, streaming, provider-configurable generative pipeline — BYOK model
+(user pastes any OpenAI-compatible base URL + key + free-text model); cloud → static fallback; privacy
+guards (positive allow-list, no key/raw-prompt in logs); streaming UI that survives rotation and
+aborts on back-navigation. `:domain` stays pure Kotlin (stdlib + coroutines); no feature→data edges.
+
+**What is pending a device run:** Block-J `SecretStoreInstrumentedTest` (real Keystore; compiles) +
+Block-N N5 on-device acceptance (streaming, offline, cancel/retry, rotation) — run on SM-A325F before
+considering Phase 5 fully closed for on-device scenarios.
+
+**What is frozen to later phases:** ONNX (Ph6), voice (Ph7), native Anthropic adapter (optional
+post-N fast-follow), backend-proxy secret impl (swaps in behind `SecureSecretStore`),
+`:feature:settings` (provider form relocates there).
+
+### ADR 2026-06-27 — Phase 6 (Local NLU + embeddings) forks decided, plan agreed, NO block started
+- **Status:** planning round only — no production Kotlin, no `build.gradle.kts`/catalog edits this round.
+  Deliverable = `ai-context/phase-6-local-nlu-plan.md` (Blocks **O → R**, continuing the alphabet).
+  First execution round gated to **Block O only**. Mirrors the Phase-5 "forks-before-code" discipline.
+- **Pre-flight repo-truth deltas found (codegraph + grep, not docs):**
+  - `:data:ai-local` is an **empty scaffold that already wires `onnxruntime-android` 1.20.0** (no `.kt`
+    sources, no `:core:android` edge) — ONNX is **not** merely "planned"; Block P only adds source.
+  - **`DeviceProfile`/`DeviceCapability` detection does NOT exist** — only `architecture.md`'s snippet +
+    the flattened `DeviceProfileCacheEntry` cache DTO; `core/android` has only Permission/Connectivity
+    checkers. The `DeviceProfileCacheEntry` KDoc's "*detector lives in :core:android*" is aspirational.
+    **Phase 6 builds `DeviceProfile`/`DeviceCapability` + detector from scratch** (model `:domain`,
+    detector `:core:android`). Gating hangs entirely on this.
+  - WorkManager / `hilt-work` are **absent** from the catalog → the only genuinely new deps.
+  - `MatcherSource.NLU` is the reserved second source; `IntentMatcher` (≠ `GenerativeAiEngine`) is the
+    port a local NLU classifier implements; the `DefaultGenerativeRouter` "ONNX slot" is **comment-only**
+    and belongs to the **generative** router (Phase 6 does **not** fill it).
+- **Forks decided (full rationale in the plan §"Fork decisions"):**
+  1. **ONNX scope** = NLU / classification / embeddings only, **not generation**; generative router slot
+     stays reserved; Block R fixes the `architecture.md:169,192` "NLU/generation" wording bug.
+  2. **NLU composition** = pure `LayeredIntentMatcher` (in `:data:repository`, port-only, no data→data
+     edge): rule-first `< 10ms` fast path, NLU consulted only on low confidence, merged via
+     `IntentConfidencePolicy`; **`HandleUserCommandUseCase` untouched** (DI binding swap only).
+  3. **Model provisioning** = WorkManager download (not bundled) + internal storage + **SHA-256 verify
+     against a pinned hash before any load** (quarantine→atomic rename); no unverified model loaded.
+  4. **Gating** = single pure `LocalInferenceGate` over a newly-built `DeviceProfile`/`DeviceCapability`;
+     `LOW_END` never loads ONNX, `MID_RANGE` conditional, `HIGH_END` enabled.
+  5. **NNAPI** = opportunistic EP + deterministic CPU fallback, init-failure degrades (no crash),
+     confined to `:data:ai-local`; ⚠ exact `ai.onnxruntime` Java signatures re-verified at Block P
+     (context7's ONNX Android-Java coverage was thin — Python-skewed).
+  6. **Embeddings** = `TextEmbedder` **port only**, impl deferred to Phase 7 (no consumer yet).
+  7. **WorkManager** = `CoroutineWorker`+`@HiltWorker`, battery/storage-not-low constraints, **no
+     `LOW_END` background**, idempotent + cancellable, no foreground service (verified via context7).
+  8. **Testing** = interface-gate everything; JVM fakes in `:core:testing` (JVM-only); real ONNX only in
+     `androidTest` on SM-A325F; `< 150ms` MID_RANGE is a **device-pending** acceptance item.
+  9. **Lifecycle/memory** = lazy single shared session, never on cold start, closed on
+     `onTrimMemory`/gate-off, per-profile heap ceilings respected.
+  10. **Privacy** = on-device inference only (network solely for download); inputs never
+      persisted/sent/logged; Block F redaction holds; no unverified-source load.
+  11. **Deps** = ONNX already in catalog (pin 1.20.0; upstream 1.25.0 deferred); **new = WorkManager +
+      `hilt-work`**; `:data:ai-local` gains a `:core:android` edge; full ONNX R8/ProGuard frozen to **Ph9**;
+      `EncryptedSharedPreferences`/`security-crypto` remain forbidden.
+- **Tooling note:** WorkManager/Hilt-WorkManager API verified current via context7 (`/androidx/androidx`:
+  `@HiltWorker`/`HiltWorkerFactory`/`Configuration.Provider`/`Constraints.Builder` with
+  `setRequiresBatteryNotLow`/`setRequiresStorageNotLow`). ONNX Android-Java surface **not** well covered
+  by context7 → flagged for execution-time Javadoc verification, not pinned from memory.
+
 ### ADR 2026-06-19 — Phase 2 skipped / reordered into a minimal slice
 - Decision: Phase 2 (launcher shell) is **not** run as a separate phase. Its navigation half was already absorbed into `3.1.x`; its product floor — `InstalledAppsRepository`, app grid, command input, offline app launch — is folded into Phase 3 as a **minimal P2 slice** (Block B).
 - Context: Phase 3's intent system cannot reach acceptance without Phase 2's installed-apps repository and command input (e.g. `open telegram` cannot resolve or launch). The skip deferred an unavoidable dependency rather than removing it.

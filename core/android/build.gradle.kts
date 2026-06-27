@@ -27,4 +27,5 @@ dependencies {
     // core/android provides its Android impl. :domain is pure, so no cycle is introduced.
     implementation(project(":domain"))
     implementation(libs.androidx.core.ktx)
+    implementation(libs.coroutines.core)
 }

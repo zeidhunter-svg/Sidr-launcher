@@ -13,6 +13,7 @@ import androidx.navigation.compose.rememberNavController
 import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.feature.assistant.AssistantScreen
+import com.sidr.launcher.feature.assistant.AssistantViewModel
 import com.sidr.launcher.feature.launcher.LauncherScreen
 import com.sidr.launcher.feature.launcher.LauncherViewModel
 import com.sidr.launcher.feature.permission_education.PermissionEducationScreen
@@ -76,7 +77,11 @@ fun AppNavHost(
         }
 
         composable(Routes.Assistant.ROUTE) {
-            AssistantScreen()
+            val vm: AssistantViewModel = hiltViewModel()
+            LaunchedEffect(vm.navigationEvents) {
+                vm.navigationEvents.collect { handleNavigationEvent(navController, it) }
+            }
+            AssistantScreen(viewModel = vm)
         }
 
         // No feature:settings module yet — inline placeholder until module is created

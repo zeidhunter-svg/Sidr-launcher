@@ -16,11 +16,11 @@ Sidr Launcher is an AI-first Android launcher for Android 9+ (API 28+) that lets
 - Streaming responses use one unified contract: `Flow<AiChunk>`.
 - Accessibility features are optional and require explicit user consent.
 - API keys must never be stored in source code or plain `SharedPreferences`.
-- Secret/API-key storage is **deferred to Phase 5 (Fork 1)**: Phase 4 persists no secrets, so no secret
-  store is introduced yet. `EncryptedSharedPreferences` is **not** the chosen mechanism — it is
-  deprecated ("no longer recommended"). When a real key exists (cloud/ONNX), a `SecureSecretStore` port
-  is added in `domain` and the impl (Tink AEAD + Android Keystore, or a backend proxy) chosen then.
-  DataStore (Block E) holds **non-secret data only**.
+- Secret/API-key storage: `SecureSecretStore` port (`domain.security`) is **built** (Phase 5, Block J).
+  Impl: Keystore AES-256-GCM, dedicated `sidr_secrets` DataStore (separate from the privacy-guarded
+  `sidr_preferences` store), BYOK model — the user pastes their own provider key; a backend-proxy impl
+  swaps in later behind the same port. `EncryptedSharedPreferences` is deprecated and is **not** used.
+  DataStore (Block E) holds **non-secret data only** (provider config = base URL + model, not the key).
 - API keys must not appear in logs, analytics events, or crash reports.
 - Keep business logic independent from Android framework APIs where possible.
 
@@ -146,22 +146,52 @@ Deep link support must cover:
 
 ## AI execution pipeline
 
-1. User enters text or voice command.
-2. Input is normalized and passed to a local fast matcher.
-3. If confidence is sufficient, execute mapped intent.
-4. If confidence is low, route to AI engine selection.
-5. Cloud AI handles generative reasoning by default.
-6. Optional local runtime can be used only when device capability and model availability allow it.
-7. All engines stream output as `Flow<AiChunk>`.
-8. Final action is confirmed or executed depending on risk level.
+**Intent matching** (Phase 3, built) and **generative AI** (Phase 5, built) are two separate
+pipelines that share no code. Matching ≠ generation; `HandleUserCommandUseCase` is untouched by the
+generative path.
+
+### Intent matching (offline, fast)
+
+1. User enters text command in the launcher.
+2. Input is normalized and passed to the `RuleBasedIntentMatcher` (offline, `< 10ms`).
+3. If confidence is sufficient, the mapped intent is executed via `HandleUserCommandUseCase`.
+4. `SimpleCommand.OPEN_ASSISTANT` routes to the assistant screen; the generative pipeline starts there.
+
+### Generative AI (assistant screen, Phase 5)
+
+The assistant screen drives the generative pipeline via `GenerateReplyUseCase`:
+
+1. User enters a prompt on the `AssistantScreen`.
+2. `GenerateReplyUseCase.generate(command)` builds a minimal `AiRequest` via `PromptContextBuilder`
+   (positive allow-list: only the verbatim user command + a static system prompt; no calendar /
+   location / history / device context assembled — fail-closed privacy guard).
+3. `DefaultGenerativeRouter` selects the engine in order:
+   - **ONNX slot** (reserved; local NLU/generation, Phase 6)
+   - **Cloud** (`OpenAiCompatibleGenerativeAiEngine`) — if online + provider config present + non-blank
+     key in Keystore. Sends `POST {baseUrl}/chat/completions` (configurable base URL, free-text model,
+     `Authorization: Bearer <key>`, `stream: true`). Parses SSE `choices[].delta.content` deltas.
+   - **Static fallback** (`StaticFallbackEngine`) — always available, canned conversational reply.
+4. `Flow<AiChunk>` is collected in `AssistantViewModel` (inside `viewModelScope` — survives rotation,
+   aborted on screen-leave, latest-wins `retry()`).
+5. `AssistantScreen` renders streaming text from `StateFlow<AssistantUiState>`.
+
+Terminal events are **values, not exceptions**: `Completed(stopReason)` or `Failed(AiError)`;
+`REFUSAL` is a success terminal (the model declined), not an error. All `AiError` subtypes are
+mapped to `UiError` in the feature layer — the domain type never reaches the UI directly.
+
+**Provider config** (base URL + free-text model string) is persisted in DataStore via
+`AiProviderConfigRepository`. The **API key** is persisted in Keystore via `SecureSecretStore`
+(BYOK, per-provider slot keyed by the host component of the base URL). The inline provider-settings
+form on the assistant screen is the Phase 5 key-entry surface; it relocates to `:feature:settings`
+in a later phase.
 
 When the primary path fails, fallback order is:
 
 ```text
-rule matcher
-  -> local ONNX, if model is available and device is capable
-  -> cloud AI, if connected and key is available
-  -> static conversational fallback
+rule matcher (offline, always)
+  -> ONNX (reserved, Ph6 — local NLU/generation)
+  -> cloud AI (if online + config + key present)
+  -> static conversational fallback (always available)
 ```
 
 Each step must fail gracefully without crashing or blocking launcher functionality.
@@ -204,8 +234,11 @@ val commandFeedback: StateFlow<CommandFeedback>    // transient last-command res
 data class LauncherUiState(val apps: List<InstalledApp>)
 ```
 
-`suggestions` (Ph7 context pipeline) and `aiState` (Ph5 generative) are **unbuilt** — `LauncherUiState`
-grows (a new field/flow, decided then) when those phases land. The `SuggestionsCacheRepository` (Block E)
+`suggestions` (Ph7 context pipeline) is **unbuilt** — `LauncherUiState` grows when that phase lands.
+Generative AI (Ph5) is **built and lives on the assistant screen**, NOT folded into `LauncherUiState`
+(`aiState` was never added): `AssistantViewModel` holds its own `StateFlow<AssistantUiState>` with
+`reply`, `status` (`Streaming`/`Done`/`Error`), and `form` (provider config); `LauncherViewModel`
+is not touched by the generative pipeline. The `SuggestionsCacheRepository` (Block E)
 is the future cold-start repaint source; its content-restore activates with the Ph7 suggestions surface
 (reconciliation rule: SavedStateHandle owns transient input/route, the DataStore cache owns content
 first-paint, a fresh load supersedes the cached repaint — never merged).
@@ -342,9 +375,11 @@ API keys:
 
 - Never stored in source code or version control.
 - Never stored in plain `SharedPreferences`.
-- **Phase 4 stores no secrets** (Fork 1). A `SecureSecretStore` (Tink AEAD + Keystore, or a backend
-  proxy) is introduced in Phase 5 when a real key exists. `EncryptedSharedPreferences` is deprecated
-  and is **not** the chosen mechanism.
+- `SecureSecretStore` is **built** (Phase 5, Block J). Impl: AES-256-GCM in the Android Keystore
+  (`AndroidKeyStore` provider, `sidr_secret_aead_v1` alias, StrongBox-with-fallback), ciphertext
+  persisted in a dedicated `sidr_secrets` DataStore. BYOK model — no developer key in the APK;
+  backend-proxy impl swaps in later behind the same port. `EncryptedSharedPreferences` is deprecated
+  and is **not** used.
 - Never logged or included in crash reports.
 
 User data:

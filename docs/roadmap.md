@@ -46,7 +46,8 @@
 - Implement Ktor cloud AI client.
 - Add streaming adapter using `Flow<AiChunk>`.
 - Add prompt/context builder with privacy constraints.
-- Add API key storage through `EncryptedSharedPreferences` or backend proxy.
+- Add API key storage via `SecureSecretStore` (Keystore AES-256-GCM, BYOK; backend proxy a later
+  drop-in behind the same port). OpenAI-compatible adapter with configurable base URL + free-text model.
 - Add error, retry, timeout, offline, and static fallback states.
 
 ## Phase 6: Local NLU and embeddings

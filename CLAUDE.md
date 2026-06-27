@@ -1,10 +1,15 @@
 # CLAUDE.md — Sidr Launcher
 
 Session digest. Read this first. **Phase 4 is DONE (Blocks E → H, 2026-06-23).** **Phase 5 (cloud AI,
-multi-provider) is UNDERWAY — Block I (+ addendum) + Block J + Block K done (2026-06-24); next = Block M**
-(L may run earlier/parallel as pure JVM). Plan re-oriented to **OpenAI-compatible-first** (Block K =
-first/primary adapter, now built; native Anthropic = optional fast-follow after Block N). Plan + forks:
-[ai-context/phase-5-plan.md](ai-context/phase-5-plan.md).
+multi-provider) is DONE — Blocks I → N complete (2026-06-24 – 2026-06-27).** Code + JVM green;
+on-device acceptance **pending** device run on SM-A325F (Block-J `SecretStoreInstrumentedTest` +
+Block-N N5 streaming/offline/cancel/rotation).
+**Phase 6 (Local NLU + embeddings, Blocks O → R) is PLANNED — forks decided 2026-06-27, plan agreed, NO
+block started.** Plan + forks: [ai-context/phase-6-local-nlu-plan.md](ai-context/phase-6-local-nlu-plan.md)
+(see ADR "2026-06-27 — Phase 6 forks decided" in decisions.md). First execution round gated to **Block O
+only**. Key pre-flight delta: `DeviceProfile`/`DeviceCapability` detection does **not** exist yet (only the
+`DeviceProfileCacheEntry` DTO) — Phase 6 builds it from scratch; `:data:ai-local` already wires ONNX 1.20.0
+but has zero sources. Phase 5 plan: [ai-context/phase-5-plan.md](ai-context/phase-5-plan.md).
 
 ## What this is
 
@@ -153,6 +158,53 @@ Phase 3 result, Blocks A → D:
   `network_security_config.xml` (no cleartext) wired in the manifest. 20 MockEngine tests + 4 config-repo
   tests + full regression green; domain vendor-neutral/pure; only `ktor-client-mock` added (test-only).
   Details: decisions.md "ADR Block K". **Next = Block M (router + static fallback).**
+- **Phase 5 Block L ✅ (2026-06-27)** — prompt/context builder + outbound privacy guards (pure, `:domain`).
+  `…domain.ai`: `PromptContextBuilder` (public `build(userCommand)` **only** — no context-bag overload)
+  → minimal `AiRequest` = **one verbatim `USER` message** + static `DEFAULT_SYSTEM_PROMPT` (short,
+  context-free, vendor-neutral, no model pinned) + `maxOutputTokens=512` (guidance) + `model=null`;
+  nothing else assembled (no device/usage/calendar/location/history/contacts/clipboard). `OutboundContextPolicy`
+  = **positive allow-list** `{USER_COMMAND, STATIC_SYSTEM_PROMPT, GENERATION_LIMITS}` (fail-closed, Fork
+  P5-3) + `FORBIDDEN_CONTEXT_TERMS`/`CREDENTIAL_TERMS` + hand-synced `OUTBOUND_FIELD_NAMES`/`AIERROR_FIELD_NAMES`
+  (Phase-4 `TABLE_NAMES` precedent). Denylist scanned over **static text + field inventories, NEVER user
+  content** (regression test keeps "calendar" in a user command); `token` excluded (collides with
+  `maxOutputTokens`); credential terms scanned over field-name inventories **not rendered `toString`**
+  (avoids the `MissingCredentials`/"credential" vacuous collision — a refinement past the prompt's literal
+  toString scan); leak guard scans `toString` only for a planted sentinel. 11 reflection-free JVM tests
+  (`AiRequestGuardTest` 5 + `OutboundSecretLeakGuardTest` 6) green, **91 domain total**; `:domain` stays
+  stdlib+coroutines/vendor-neutral; no new deps; `IntentMatcher`/`HandleUserCommandUseCase`/`feature/*`/
+  K-M-N untouched. Details: decisions.md "ADR Block L". **Next = Block M (router + static fallback,
+  consumes K + L).**
+- **Phase 5 Block M ✅ (2026-06-27)** — routing seam + static fallback + `GenerateReplyUseCase`.
+  `:data.repository.ai`: `StaticFallbackEngine` (canned reply, no network, always `Completed`);
+  `DefaultGenerativeRouter : GenerativeRouter` — cold `flow { emitAll(selectEngine().generate(request)) }`,
+  ordered **ONNX slot (reserved) → cloud (online + config + non-blank key) → static** (latest-wins,
+  selection at collection time; `firstOrNull()` on config flow; `Failure` from secret store → static;
+  never throws expected errors). `core/android/connectivity/AndroidConnectivityChecker` (Hilt-free,
+  `callbackFlow` + `conflate` + `distinctUntilChanged`, `ACCESS_NETWORK_STATE` added to manifest);
+  `GenerateReplyUseCase` in `:domain` (`generate(command)` = `engine.generate(builder.build(command))`);
+  `@FallbackEngine` qualifier co-located with `@CloudEngine` in `:app`; `GenerationProvidesModule`
+  (fallback + router + unqualified-engine→router + builder + use case); `ConnectivityModule`. No
+  data→data edge (router refs port only); single unqualified `GenerativeAiEngine` binding (the router);
+  `HandleUserCommandUseCase` untouched; `:domain` pure; `core/android` gains `coroutines.core`.
+  7 router tests + 6 use-case tests green; **full JVM regression green** (96 domain total); `assembleDebug`
+  green (Hilt graph valid). Details: decisions.md "ADR Block M".
+- **Phase 5 Block N ✅ (2026-06-27)** — assistant streaming UI + provider-settings form + phase close.
+  `:feature:assistant` gains Hilt (`kapt` + `hilt.android` + `hilt.navigation.compose` etc., mirroring
+  `permission_education`). `AssistantViewModel` (`@HiltViewModel`, 3 domain-port deps):
+  `Flow<AiChunk>` collected in `viewModelScope` (survives rotation, aborted on back-nav, latest-wins
+  `retry()`); `AssistantUiState(reply, status, form)` in a single `StateFlow`; `status` =
+  `AssistantStatus {Idle/Streaming/Done(refused)/Error(error,retryable,showProviderCta)}`; refusal =
+  `Done(refused=true)` (success terminal, not an error); credential errors → `showProviderCta=true`
+  (CTA, not Retry); `AiError→UiError` mapper feature-local (prevents `core/common→domain` edge).
+  **No `SavedStateHandle`** (deliberate — key must never touch saved state; prompt/reply are transient;
+  see decisions.md "ADR Block N"). `saveProvider`: `providerId` derived from host (lowercase, path
+  stripped), `https://`-validated, config written to `AiProviderConfigRepository`, key to
+  `SecureSecretStore` (blank key skips put); key never logged/in state/displayed back. `AssistantScreen`
+  pure render: first-run form when no config; streaming chat + expandable provider form when configured.
+  `AppNavHost`: real `hiltViewModel()` destination + `LaunchedEffect(navigationEvents)` + safe-fallback.
+  14 JVM tests green; **262 total JVM tests**; `assembleDebug` green. On-device (N5) + Block-J
+  `androidTest` **pending** SM-A325F device run. Details: decisions.md "ADR Block N + Phase 5 close".
+  **Phase 5 CLOSED (Blocks I → N). Next = Phase 6 (ONNX NLU).**
 
 ## Hard rules
 
@@ -185,6 +237,7 @@ Phase 3 result, Blocks A → D:
 | `PermissionPrefsRepositoryImpl` (DataStore) *(Block G)* | `data/repository` |
 | Permission-education UI (`PermissionEducationScreen`/`ViewModel`, rationale, request flow) *(Block G)* | `feature/permission_education` |
 | Cloud AI client (Ktor) | `data/ai-cloud` |
+| `PromptContextBuilder` + `OutboundContextPolicy` (outbound allow-list/guards) *(Block L)* | `domain` |
 | ONNX NLU / embeddings | `data/ai-local` |
 | `UiState`, dispatchers, logging contracts | `core/common` |
 | `Routes`, `NavigationEvent` | `core/common` *(→ `core/navigation` on trigger)* |
@@ -205,7 +258,7 @@ Phase 3 result, Blocks A → D:
   *(Phase 3 closed 2026-06-21)*
 - Decisions log: [ai-context/decisions.md](ai-context/decisions.md)
 - Active checklist: [ai-context/phase-5-plan.md](ai-context/phase-5-plan.md) *(Phase 5 cloud AI,
-  multi-provider — Blocks I/J/K done 2026-06-24, Block M next (L parallelizable); forks decided 2026-06-24)*
+  multi-provider — Blocks I/J/K done 2026-06-24, Block L done 2026-06-27, Block M next; forks decided 2026-06-24)*
 - Roadmap: [docs/roadmap.md](docs/roadmap.md)
 
 ## Do not

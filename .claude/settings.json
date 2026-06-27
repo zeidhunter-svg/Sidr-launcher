@@ -5,7 +5,20 @@
       "Bash(./gradlew :domain:test --tests \"com.sidr.launcher.domain.ai.AiProviderConfigRepositoryTest\" --rerun-tasks -q)",
       "Bash(echo \"--- exit: $? ---\")",
       "Bash(awk '/^\\\\[libraries\\\\]/{f=1} /^\\\\[plugins\\\\]/{f=0} f' gradle/libs.versions.toml)",
-      "Bash(./gradlew :data:ai-cloud:testDebugUnitTest :data:repository:testDebugUnitTest)"
+      "Bash(./gradlew :data:ai-cloud:testDebugUnitTest :data:repository:testDebugUnitTest)",
+      "mcp__codegraph__*"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "codegraph prompt-hook"
+          }
+        ]
+      }
     ]
   }
 }

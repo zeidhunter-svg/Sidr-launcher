@@ -202,11 +202,18 @@ later; no dedicated `:data:secrets` module at this stage.
 `FakeConnectivityChecker`.
 
 **Steps:**
-- [ ] `I1` `domain.ai` contracts per the shapes above; refusal = stop reason, failures = terminal value.
-- [ ] `I2` `domain.security` generic per-provider secret store port.
-- [ ] `I3` `domain.connectivity` port.
-- [ ] `I4` Fakes in `:core:testing`.
-- [ ] `I5` JVM tests: `assembleText`; `SecretKeys` stability + privacy-denylist check; fake-engine collect.
+- [x] `I1` `domain.ai` contracts per the shapes above; refusal = stop reason, failures = terminal value.
+- [x] `I2` `domain.security` generic per-provider secret store port.
+- [x] `I3` `domain.connectivity` port.
+- [x] `I4` Fakes in `:core:testing`.
+- [x] `I5` JVM tests: `assembleText`; `SecretKeys` stability + privacy-denylist check; fake-engine collect.
+
+**Status: Block I DONE (2026-06-24).** `domain.ai` (`AiProviderId`/`AiModelId`, `AiRequest`/`AiMessage`/
+`AiRole`, `AiChunk`+`AiStopReason`(refusal=success terminal)+`AiUsage`, `AiError`, `GenerativeAiEngine`+
+`GenerativeRouter`, `AiChunks.assembleText`), `domain.security` (`SecureSecretStore`+`SecretKeys`),
+`domain.connectivity` (`ConnectivityChecker`); 3 fakes; 10 JVM tests green; grep guard empty; no new deps.
+**Addendum:** added `AiProviderConfig` + `AiProviderConfigRepository` + fake (DataStore impl deferred to
+Block K). See decisions.md "ADR Block I".
 
 **Acceptance:** `:domain` stays stdlib+coroutines (guard); **no vendor name / wire term / sampling
 param anywhere in `:domain`** (grep guard for `anthropic|openai|gemini|claude`); fakes compile; tests
@@ -236,13 +243,21 @@ Android Keystore AES-GCM (or Tink) + persisted ciphertext; `:app` DI provider. (
 is **not** here — it concerns the HTTP client and lands in Block K.)
 
 **Steps:**
-- [ ] `J1` Keystore-backed AES-GCM impl: key in Keystore (hardware-backed where available), IV managed,
+- [x] `J1` Keystore-backed AES-GCM impl: key in Keystore (hardware-backed where available), IV managed,
       ciphertext persisted; `get/put/remove → OperationResult`, never throws.
-- [ ] `J2` Key-invalidation handling: `KeyPermanentlyInvalidatedException` (lockscreen/biometric change)
+- [x] `J2` Key-invalidation handling: `KeyPermanentlyInvalidatedException` (lockscreen/biometric change)
       → a defined "secret lost, re-enter" path, not a crash. StrongBox/API-28-vs-34 differences handled.
-- [ ] `J3` DI provider in `:app`. (Network-security-config is added in Block K, with the HTTP client.)
-- [ ] `J4` Tests: `androidTest` (real Keystore — Robolectric/JVM cannot fake Keystore) for round-trip +
+- [x] `J3` DI provider in `:app`. (Network-security-config is added in Block K, with the HTTP client.)
+- [x] `J4` Tests: `androidTest` (real Keystore — Robolectric/JVM cannot fake Keystore) for round-trip +
       per-provider isolation + invalidation path; on-device run like the Phase-4 `MigrationTest`.
+
+**Status: Block J DONE (2026-06-24).** `:data.repository.security`: `SecretCipher`+`EncryptedBlob` seam,
+`KeystoreSecretCipher` (AES-256-GCM in `AndroidKeyStore`, StrongBox-with-fallback), `SecureSecretStoreImpl`
+over a **dedicated `sidr_secrets` DataStore** (`@SecretsDataStore`, so credential keys never enter the
+privacy-guarded `ALL_KEY_NAMES`); never throws, `CancellationException` re-thrown. DI split modules in
+`:app`. `FakeSecretCipher` + **9 pure-JVM tests** green. ⚠️ `SecretStoreInstrumentedTest` (3 tests, real
+Keystore) **compiles but the on-device run is still pending** on the SM-A325F — it must run before Block
+N's on-device acceptance. ESP/security-crypto absent; no secret logged. See decisions.md "ADR Block J".
 
 **Acceptance:** a stored key survives process restart; two providers' keys don't collide; no key in
 logs; no ESP; `androidTest` green on device.

@@ -350,6 +350,29 @@ class OpenAiCompatibleGenerativeAiEngineTest {
     }
 
     @Test
+    fun `first token arriving just under the deadline still completes normally`() = runBlocking {
+        // Guards against a future over-tight first-token default: a first token that arrives within the
+        // deadline must yield the normal Text…/Completed(COMPLETE) sequence, not a spurious Timeout.
+        val channel = ByteChannel(autoFlush = true)
+        val writerJob = launch(Dispatchers.IO) {
+            delay(150) // well under the 1000ms first-token deadline used below
+            channel.writeStringUtf8("""data: {"choices":[{"delta":{"content":"Hi"}}]}""" + "\n\n")
+            channel.writeStringUtf8("""data: {"choices":[{"delta":{},"finish_reason":"stop"}]}""" + "\n\n")
+            channel.writeStringUtf8("data: [DONE]\n\n")
+            channel.flush()
+            channel.close()
+        }
+        val mock = MockEngine { respond(channel as ByteReadChannel, HttpStatusCode.OK, sseHeaders) }
+
+        val chunks = engine(mock, dispatcher = Dispatchers.IO, firstTokenMs = 1_000L, idleMs = 1_000L)
+            .generate(request).toList()
+
+        assertEquals(AiChunk.Text("Hi"), chunks.first())
+        assertEquals(AiChunk.Completed(AiStopReason.COMPLETE), chunks.last())
+        writerJob.join()
+    }
+
+    @Test
     fun `cancelling collection aborts the request and emits no terminal`() = runBlocking {
         val firstArrived = CompletableDeferred<Unit>()
         val channel = ByteChannel(autoFlush = true)

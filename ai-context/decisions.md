@@ -983,6 +983,25 @@ the Ktor **Android** engine + a `@CloudEngine`-qualified `@Provides` constructin
 adapter (optional post-N fast-follow). `IntentMatcher` / `HandleUserCommandUseCase` / `feature/*`
 untouched. **Next = Block M** (router + static fallback; L may run earlier/parallel as pure JVM).
 
+**Addendum 2026-06-27 (Block K hardening — timeout realism, no behaviour change).** Recorded the final
+streaming-deadline values and made them robust for the first *real* network round-trip (every K test is
+MockEngine; the first live call is Block N). **`DEFAULT_FIRST_TOKEN_TIMEOUT_MS` and
+`DEFAULT_IDLE_TIMEOUT_MS` raised `15_000` → `20_000`** — these are *transport* deadlines, **explicitly
+decoupled in KDoc from the `< 2000ms` first-token perf figure**, which is Block-N UI guidance about
+choosing a light/fast model (Fork P5-2 "guidance, not a pin"), not a network limit; 20 s absorbs
+OpenRouter routing/queueing, free-tier latency, and local Ollama / LM Studio cold starts (a ~2 s deadline
+would have spuriously `Timeout`-ed the first real reply). **`HttpClient` audit (`AiCloudProvidesModule`):
+unchanged values, `connectTimeoutMillis=15_000`, `socketTimeoutMillis=30_000`, `requestTimeoutMillis`
+absent — confirmed correct against the Ktor 3.0.1 `HttpTimeout` contract (context7-verified): Ktor's
+`socketTimeoutMillis` bounds the *inactivity between two data packets* (the same quantity the manual idle
+deadline bounds), so it must stay `>= DEFAULT_IDLE_TIMEOUT_MS` (30 s > 20 s → pure backstop, the engine's
+manual `withTimeoutOrNull` owns the semantics); `requestTimeoutMillis` bounds the *whole call* and would
+abort a long but legitimate stream, so it stays unset.** Added one MockEngine regression test (first token
+arriving just under the deadline → normal `Text…/Completed(COMPLETE)`, guarding against a future over-tight
+default; the existing "just over → `Timeout`" test stays). **Unchanged:** SSE parsing, `AiError` taxonomy,
+request body (still no sampling params), refusal stickiness, cancellation, DI structure; no new dep. Verified:
+`:data:ai-cloud:testDebugUnitTest` 21 tests green; `assembleDebug` + `testDebugUnitTest --rerun-tasks` green.
+
 ### ADR 2026-06-19 — Phase 2 skipped / reordered into a minimal slice
 - Decision: Phase 2 (launcher shell) is **not** run as a separate phase. Its navigation half was already absorbed into `3.1.x`; its product floor — `InstalledAppsRepository`, app grid, command input, offline app launch — is folded into Phase 3 as a **minimal P2 slice** (Block B).
 - Context: Phase 3's intent system cannot reach acceptance without Phase 2's installed-apps repository and command input (e.g. `open telegram` cannot resolve or launch). The skip deferred an unavoidable dependency rather than removing it.

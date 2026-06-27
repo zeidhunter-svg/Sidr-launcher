@@ -36,8 +36,12 @@ object AiCloudProvidesModule {
     fun provideAiHttpClient(): HttpClient = HttpClient(Android) {
         install(HttpTimeout) {
             connectTimeoutMillis = CONNECT_TIMEOUT_MS
+            // socketTimeoutMillis (Ktor: max inactivity between two data packets) must stay
+            // >= the engine's DEFAULT_IDLE_TIMEOUT_MS (20 s) so the engine's manual idle deadline —
+            // not Ktor — tears down a silently-dead stream. 30 s > 20 s, so it's a pure backstop.
             socketTimeoutMillis = SOCKET_TIMEOUT_MS
-            // requestTimeoutMillis intentionally omitted — see class doc.
+            // requestTimeoutMillis intentionally omitted — it bounds the WHOLE call (send → full
+            // response) and would abort a long but legitimate stream. See class doc.
         }
     }
 

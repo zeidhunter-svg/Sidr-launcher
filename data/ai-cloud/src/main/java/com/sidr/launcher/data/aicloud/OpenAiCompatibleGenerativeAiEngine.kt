@@ -59,9 +59,19 @@ class OpenAiCompatibleGenerativeAiEngine(
     private val secretStore: SecureSecretStore,
     private val configRepository: AiProviderConfigRepository,
     private val ioDispatcher: CoroutineDispatcher,
-    /** First-token deadline (guidance, tied to the 2000ms budget; generous for slow models). */
+    /**
+     * Transport deadline for the **first** SSE line. This is a *network* deadline — deliberately
+     * decoupled from the `< 2000ms` first-token figure in the perf budget, which is Block-N **UI
+     * guidance** about choosing a light/fast model, NOT a network limit. Real providers (OpenRouter
+     * routing/queueing, free tiers, local Ollama / LM Studio cold start) routinely take 5–30 s to
+     * first token, so this is generous; see [DEFAULT_FIRST_TOKEN_TIMEOUT_MS].
+     */
     private val firstTokenTimeoutMs: Long = DEFAULT_FIRST_TOKEN_TIMEOUT_MS,
-    /** Idle-between-chunks deadline. */
+    /**
+     * Transport deadline for the silence **between** chunks once streaming has started. Also a network
+     * deadline. The injected client's `socketTimeoutMillis` (inactivity between packets) must stay
+     * `>=` this so the manual deadline — not Ktor — owns the semantics; see [DEFAULT_IDLE_TIMEOUT_MS].
+     */
     private val idleTimeoutMs: Long = DEFAULT_IDLE_TIMEOUT_MS,
 ) : GenerativeAiEngine {
 
@@ -211,8 +221,12 @@ class OpenAiCompatibleGenerativeAiEngine(
         baseUrl.removeSuffix("/") + "/chat/completions"
 
     companion object {
-        const val DEFAULT_FIRST_TOKEN_TIMEOUT_MS = 15_000L
-        const val DEFAULT_IDLE_TIMEOUT_MS = 15_000L
+        // Realistic *network* deadlines, NOT the `< 2000ms` first-token perf figure (that is a UI hint
+        // about model choice, Fork P5-2 "guidance, not a pin"). 20 s absorbs OpenRouter routing/queueing,
+        // free-tier latency, and local Ollama / LM Studio cold starts. The injected client's
+        // socketTimeoutMillis must stay >= DEFAULT_IDLE_TIMEOUT_MS (see AiCloudProvidesModule).
+        const val DEFAULT_FIRST_TOKEN_TIMEOUT_MS = 20_000L
+        const val DEFAULT_IDLE_TIMEOUT_MS = 20_000L
 
         /**
          * A light/fast model suggestion for the Block-N provider-settings UI hint only. The engine

@@ -86,6 +86,10 @@ new-deps accounting, never the block structure.
   list; CPU is the deterministic fallback), but **the exact Java method signatures must be re-verified
   against the `ai.onnxruntime` Javadoc at Block P execution time** (flagged in Fork P6-5). This is the
   same discipline as the Phase-5 Ktor `HttpTimeout` reconciliation: do not pin the Java API from memory.
+  **Web-verified 2026-06-27 (platform reality, drives Fork P6-5):** NNAPI was **deprecated in Android 15**
+  (Google steers on-device ML to TFLite-in-Play-Services / GPU delegate), and the **ORT NNAPI EP is only
+  available on API 29+ and is silently ignored on API 28** — the launcher targets API 28+, so on Android 9
+  the NNAPI EP never activates regardless. Hence CPU is the deterministic default and NNAPI is opportunistic.
 
 Run order: this check is done; execute the Block O prompt next.
 
@@ -100,7 +104,7 @@ generative LLM runtime (`decisions.md:16-18`). The local model is a **second `In
 low-confidence**, so the `< 10ms` rule fast path and every Phase-3 test stay exactly as they are.
 
 Everything ONNX is **isolated in `:data:ai-local`** and **capability-gated by a single `DeviceProfile`
-gate**: `LOW_END` never loads ONNX (rule + cloud only); `MID_RANGE` loads it only when a verified model
+gate *policy***: `LOW_END` never loads ONNX (rule + cloud only); `MID_RANGE` loads it only when a verified model
 is present and thermals/battery allow; `HIGH_END` enables it. The model is **downloaded and
 integrity-verified by WorkManager** (battery-aware, never on `LOW_END`, idempotent, cancellable) and
 **no model is ever loaded from an unverified source**. The session is **lazy** (never on launcher cold
@@ -117,8 +121,9 @@ pipeline, not the generative one.
 - **Local-AI domain contracts (pure):** `IntentClassifier` and `TextEmbedder` ports;
   `DeviceProfile` + `DeviceCapability` model (formalised at last); `ModelId` / `ModelAvailability`
   contracts; a pure **capability-gating policy**. (Block O)
-- **ONNX runtime integration** in `:data:ai-local`: lazy single session, **opportunistic NNAPI EP with
-  deterministic CPU fallback**, tensor I/O, lifecycle/memory. Implements `IntentClassifier`. (Block P)
+- **ONNX runtime integration** in `:data:ai-local`: lazy single session, **deterministic CPU default +
+  opportunistic NNAPI (API 29+, off-by-default until proven)**, tensor I/O, lifecycle/memory. Implements
+  `IntentClassifier`. (Block P)
 - **`DeviceProfile` detection** in `:core:android` (RAM/cores/NNAPI-availability/thermal/battery), the
   **single gate**, **model management** (on-disk store + availability surface), and **WorkManager
   download + SHA-256 verification** with battery-aware constraints. (Block Q)
@@ -140,7 +145,7 @@ pipeline, not the generative one.
   blocks startup; `LOW_END` never loads it. `feature/*` has no edge into `:data:*` (only domain ports,
   injected from `:app`).
 - **Performance budgets are hard** (`architecture.md:45-58`): rule match `< 10ms` preserved (NLU only on
-  low-confidence); ONNX inference `< 150ms` on `MID_RANGE` (**device measurement**, not a JVM assert);
+  low-confidence); ONNX inference `< 150ms` on `MID_RANGE` (measured on the **CPU path**; **device measurement**, not a JVM assert);
   per-profile heap ceilings (LOW_END `< 80MB` → no ONNX, MID_RANGE `< 150MB`, HIGH_END `< 250MB`);
   graceful degrade (→ rule/cloud) when a model is missing/unverified.
 - **WorkManager:** **no `LOW_END` background work by default**, battery-saver respected, idempotent +
@@ -221,33 +226,67 @@ both injected as the `IntentMatcher` port).
 ### Fork P6-4 — `DeviceProfile` gating — **decided: single pure gate, building `DeviceProfile` from scratch**
 Because `DeviceProfile` **does not exist** (pre-flight delta), Phase 6 **creates** it:
 - `:domain` (Block O): `enum class DeviceProfile { LOW_END, MID_RANGE, HIGH_END }` +
-  `DeviceCapability` (RAM bytes, CPU cores, NNAPI-available, thermal-OK, battery-OK, online) +
+  `DeviceCapability` (RAM bytes, CPU cores, NNAPI-available, thermal-OK, battery-OK) +
   a **pure** `LocalInferenceGate` policy: `fun allowsLocalNlu(profile, capability, availability): Boolean`.
+  **`online` is irrelevant to `allowsLocalNlu`** (local NLU needs no network), so the gate function must
+  **not** take it; `online` may remain on `DeviceCapability` for other consumers, but the gate never reads it.
 - `:core:android` (Block Q): `AndroidDeviceProfiler` produces `DeviceProfile`/`DeviceCapability`
   (precedent: `AndroidConnectivityChecker`); `PreferencesMapper` maps `DeviceProfile ↔
   DeviceProfileCacheEntry` (the existing flattened cache DTO) with no new DataStore keys.
-- **Single gate, one decision point:** `LOW_END` → never loads ONNX (rule + cloud only); `MID_RANGE` →
-  ONNX **iff** model available **and** thermals/battery OK; `HIGH_END` → enabled (still gated by model
-  availability + thermals/battery). The gate is consulted in exactly one place — the DI that decides
-  whether the bound NLU secondary is the real `OnnxIntentClassifier` or the `NoOpIntentClassifier`, and
-  whether the download worker may be enqueued. No second gating site.
+- **Single gate *policy*, evaluated at two moments (not "one DI site").** The rule lives in exactly one
+  pure function — `LocalInferenceGate.allowsLocalNlu(profile, capability, availability)` — but its
+  inputs split by volatility:
+  - **Static inputs — evaluated once at DI/graph time:** `DeviceProfile` (`LOW_END` never loads ONNX) +
+    model `availability`. These decide whether the bound NLU secondary is the real
+    `OnnxIntentClassifier` or the `NoOpIntentClassifier`, and whether the download worker may be enqueued.
+  - **Dynamic inputs — re-evaluated at inference time inside `OnnxIntentClassifier`:** `thermalOk` /
+    `batteryOk` change at runtime; a static binding cannot react to them. Before loading/running the
+    session the classifier calls the **same** pure gate with fresh capability — if it returns `false`
+    (thermal throttle / battery-saver) it returns a low-confidence/empty result so `LayeredIntentMatcher`
+    falls back to the rule path, and the session is closed (Fork P6-9).
+  One policy, one rule, two evaluation moments — **no second policy and no duplicated decision logic**.
+- `LOW_END` → never loads ONNX (rule + cloud only); `MID_RANGE` → ONNX **iff** model available **and**
+  thermals/battery OK; `HIGH_END` → enabled (still gated by model availability + thermals/battery).
+- Phase 6 effectively uses **LOW_END-vs-rest**: `MID_RANGE` and `HIGH_END` share the same effective gate
+  (model available + thermal/battery OK), and the three-way split is **forward-looking** — it is not yet
+  differentiating MID from HIGH.
 
-### Fork P6-5 — NNAPI / execution provider — **decided: opportunistic NNAPI, deterministic CPU fallback, inside `:data:ai-local`**
-The session appends the **NNAPI execution provider** when available and **always** retains **CPU as the
-deterministic fallback** (ORT EPs are an ordered list — verified concept via context7). **If NNAPI init
-fails** (`OrtException` on `addNnapi`, unsupported op, old API level) → **catch, build a CPU-only
-session, log a non-PII warning, never crash**. All of this is **contained in `:data:ai-local`** — no EP
-detail leaks to other modules. ⚠ **The exact `ai.onnxruntime` Java signatures
-(`OrtSession.SessionOptions().addNnapi(EnumSet<NNAPIFlags>)`, `OrtEnvironment.getEnvironment()`,
-`OnnxTensor.createTensor`) must be re-verified against the `ai.onnxruntime` Javadoc at Block P
-execution** — context7's Android-Java coverage was thin (see pre-flight). NNAPI ships inside the
-`onnxruntime-android` AAR, so **no extra dependency**.
+### Fork P6-5 — NNAPI / execution provider — **decided: CPU is the default deterministic path; NNAPI is an opportunistic bonus on a narrow API window, off-by-default until proven, inside `:data:ai-local`**
+
+**Repo/platform reality (web-verified 2026-06-27):** **NNAPI was deprecated in Android 15** (Google
+steers on-device ML to TFLite-in-Play-Services / TFLite GPU delegate). The **ONNX Runtime NNAPI EP is
+only available on API level 29+ and is silently ignored on API 28 and below** — and the launcher
+targets **API 28+**, so on Android 9 the NNAPI EP never activates regardless. In the middle window
+(API 29–34) NNAPI is real but **vendor-driver-provided and historically unstable**: unsupported ops are
+offloaded to a CPU reference (often *slower*) and some SoCs return *incorrect* results.
+
+**Decision:**
+- **CPU EP is the deterministic default.** ORT EPs are an ordered list with CPU always retained; the
+  session is correct and usable on CPU alone on every supported device. The `< 150ms` MID_RANGE budget
+  is **measured on the CPU path**.
+- **NNAPI is appended opportunistically only on API 29+** (skipped by construction on API 28 — the EP
+  would be ignored anyway). It is best-effort acceleration, **not** a dependency.
+- **Two failure modes, both handled.** (a) *Init failure* — `addNnapi` throws / op unsupported → catch,
+  build a CPU-only session, log a non-PII warning, never crash. (b) *Init-success-but-degraded* — a
+  session that builds with NNAPI but runs slower/wrong is the **real** risk and the one a naive
+  "catch init exception" misses. Phase 6 therefore keeps **NNAPI off by default, behind a
+  build/profile flag**, and only enables it per-device after the Block-P device run (SM-A325F + any
+  target SoC) shows it is **faster *and* correct** against the CPU baseline.
+- All EP detail is **contained in `:data:ai-local`** — no EP leaks to other modules. NNAPI ships inside
+  the `onnxruntime-android` AAR → **no extra dependency**.
+- ⚠ The exact `ai.onnxruntime` Java signatures (`OrtSession.SessionOptions().addNnapi(EnumSet<NNAPIFlags>)`,
+  `OrtEnvironment.getEnvironment()`, `OnnxTensor.createTensor`) must still be **re-verified against the
+  `ai.onnxruntime` Javadoc at Block P** — context7's Android-Java coverage was thin (see pre-flight).
+- **Migration note (frozen-forward):** because NNAPI is deprecated, the long-term acceleration path is
+  TFLite-in-Play-Services / GPU delegate (or an ORT successor EP); revisited in a later hardening
+  phase, not Phase 6.
 
 ### Fork P6-6 — Embeddings — **decided: ship the `TextEmbedder` PORT ONLY; defer the impl (no consumer yet)**
 Phase 6's real consumer is **intent classification**, not embeddings. Block F's
 `SuggestionRankingRepository` is a row-count-capped history store, **not** a semantic-ranking surface;
 semantic suggestion ranking is **Phase 7 (contextual suggestions)**. **Decision:** define `TextEmbedder`
-(`suspend fun embed(text): FloatArray` or `OperationResult<FloatArray>`) + a **fake** in `:core:testing`
+(`suspend fun embed(text): OperationResult<FloatArray>` — the codebase-wide "OperationResult, never
+throw" invariant) + a **fake** in `:core:testing`
 in Block O, and **do not build an ONNX embedder impl** this phase — building a producer with no reader is
 forbidden by the prompt's discipline. The impl lands when Phase 7's ranking consumes it, behind the same
 port, with zero domain change.
@@ -261,7 +300,8 @@ port, with zero domain change.
   default (too restrictive for a one-shot small model), but **battery-saver respected**.
 - **No `LOW_END` background by default:** the **gate is checked before `enqueueUniqueWork`** — `LOW_END`
   never schedules the worker. **Idempotent:** the worker no-ops if a verified model already exists.
-  **Cancellable:** `enqueueUniqueWork(KEEP/REPLACE)` + cooperative cancellation in `doWork`. **No
+  **Cancellable:** `enqueueUniqueWork(KEEP)` (don't restart an in-flight download) + cooperative
+  cancellation in `doWork`. **No
   foreground service** (`architecture.md` background-processing rules).
 - **Flow:** download → SHA-256 verify (Fork P6-3) → atomic mark-available → availability surfaced to the
   gate (file presence + a small DataStore/`ModelAvailabilityRepository` flag). New deps in Fork P6-11.
@@ -285,7 +325,10 @@ enqueue/idempotency logic against fakes.
   (`AutoCloseable`), guarded for concurrent `run`.
 - **Closed under memory pressure** — register `ComponentCallbacks2.onTrimMemory(TRIM_MEMORY_*)` (in
   `:app` or via a lifecycle hook) to **close** the session and free native memory; it lazily re-inits on
-  the next gated inference. Also close when the gate flips off (e.g. thermal throttle).
+  the next gated inference. The session is **also** closed when the **dynamic gate re-evaluation in Fork
+  P6-4** returns `false` (thermal throttle / battery-saver, checked inside the classifier before each
+  inference) — same `LocalInferenceGate` re-check, no new mechanism — lazily re-initing on the next
+  gated inference.
 - **Per-profile heap ceilings respected** (LOW_END `< 80MB` never loads; MID `< 150MB`; HIGH `< 250MB`).
 
 ### Fork P6-10 — Privacy — **decided: on-device only, no input persisted/logged, network only for download**
@@ -313,6 +356,41 @@ and logs no input.
   (`-keep class ai.onnxruntime.** { *; }`); the **full release rule set + memory profiling on `LOW_END`**
   stay frozen to **Ph9**. Debug builds (this phase's target) need no keep rules.
 - **`security-crypto` / `EncryptedSharedPreferences`** — remain **forbidden** (deprecated).
+
+### Open questions (gating — must be closed before the owning block)
+
+1. **Model + tokenizer + label-set selection (gates Block P) — RESOLVED 2026-06-28.**
+   - **Base model:** a **BERT-Mini / TinyBERT-4L-class** encoder (e.g. `google/bert_uncased_L-4_H-256`
+     or TinyBERT-4L), **fine-tuned** for sequence classification on a small in-repo dataset of
+     launcher-style commands, **dynamic int8** quantized, exported to ONNX at an opset **ORT 1.20.0
+     supports** (≤ ~22 — pin + verify at export). Target artifact ~6–15 MB. Chosen for the smallest
+     download/load and a comfortable margin under the `< 150ms` MID_RANGE CPU budget; a 7-class task
+     does not need a larger backbone. (MobileBERT int8 ~25MB is the fallback only if accuracy on our
+     dataset is insufficient.)
+   - **Tokenizer:** **BERT WordPiece, uncased `vocab.txt` (30522)** — MUST equal the base model's
+     tokenizer; shipped as an asset alongside the model. No approximation; a minimal Kotlin WordPiece
+     implementation (or a vetted lib) in `:data:ai-local`.
+   - **Label set (7 classes, argmax → `LauncherIntent`):**
+     `LAUNCH_APP` → `LaunchAppIntent(displayNameQuery = <heuristic slot>)`;
+     `SEARCH` → `SearchIntent(query = <heuristic slot>, target = WEB)`;
+     `OPEN_SETTINGS` → `OpenSettingsIntent()`;
+     `SHOW_APPS` → `SimpleCommandIntent(SHOW_APPS)`;
+     `HELP` → `SimpleCommandIntent(HELP)`;
+     `OPEN_ASSISTANT` → `SimpleCommandIntent(OPEN_ASSISTANT)`;
+     `UNKNOWN` → `UnknownIntent`. **`CLEAR` is NOT a class** — "clear input" is a fixed UI phrase the
+     rule matcher already nails; left rule-only.
+   - **Slot-filling is heuristic, NOT modeled.** A sequence classifier emits the intent *family* only;
+     the app-name / query string for `LAUNCH_APP` / `SEARCH` is derived by stripping a leading
+     verb/filler, else passing the whole normalized input as the slot, which `IntentActionResolver`
+     fuzzy-matches against installed apps. A joint intent+slot model is **frozen-forward (Phase 7+)**.
+   - **Pipeline deliverable:** an **offline** fine-tune → int8-quantize → ONNX-export script/notebook
+     in-repo (NOT app code) authoring a small labeled launcher-command dataset across the 7 classes;
+     it produces the artifact + `vocab.txt` that Block Q downloads + SHA-256-verifies. The pinned hash
+     and host are Open Question #2 (Block Q).
+2. **Model download source / hosting (gates Block Q).** Fork P6-3 pins a SHA-256 hash but a pinned hash
+   is meaningless without a pinned artifact, and Phase 5 deliberately chose **no backend** (BYOK). The
+   host (CDN / GitHub release / object store) must be decided before Block Q wires the download worker;
+   until then the worker has no URL.
 
 ---
 
@@ -365,8 +443,11 @@ tokenizer/label-map helper matching the chosen model; `:data:ai-local/src/androi
 Build: add `:core:android` edge (+ minimal ONNX keep rule note, deferred to Ph9 for full rules).
 
 **Steps:**
-- [ ] `P1` `OnnxSessionFactory`: `OrtEnvironment` + `SessionOptions`; **append NNAPI EP if available**,
-      **always keep CPU fallback**; **catch NNAPI init failure → CPU-only session, no crash**. ⚠ verify
+- [ ] `P1` `OnnxSessionFactory`: `OrtEnvironment` + `SessionOptions`; **CPU is the deterministic default
+      — always kept**; **append NNAPI EP only on API 29+** (skipped by construction on API 28); handle
+      **both** failure modes per Fork P6-5 — (a) *init failure* → catch → CPU-only session, no crash, and
+      (b) *init-success-but-degraded* → **NNAPI off by default** behind a build/profile flag until the
+      Block-P device run proves it **faster *and* correct** vs the CPU baseline. ⚠ verify
       `ai.onnxruntime` Java signatures against the Javadoc first.
 - [ ] `P2` `OnnxIntentClassifier`: **lazy** session (first inference only, never cold start); **single
       shared** session; input tokenization → `OnnxTensor`; `session.run` → output → `IntentMatchResult`
@@ -398,9 +479,12 @@ session to gate). Forks 3/4/7/11 fixed.
 - `:core:android`: `AndroidDeviceProfiler : DeviceProfileProvider` (RAM via `ActivityManager.MemoryInfo`,
   cores via `Runtime.availableProcessors`, NNAPI-availability heuristic, thermal via `PowerManager`,
   battery via `BatteryManager`/`PowerManager.isPowerSaveMode`).
-- `:data:repository` (or `:data:ai-local`): `ModelStore` (internal-storage paths, quarantine→atomic
-  rename), `Sha256Verifier`, `ModelAvailabilityRepositoryImpl` (DataStore flag + file presence),
-  `ModelDownloadWorker : CoroutineWorker` (`@HiltWorker`), `ModelManager` (enqueue-if-gated + idempotent).
+- `:data:ai-local`: `ModelStore` (internal-storage paths, quarantine→atomic rename), `Sha256Verifier`,
+  `ModelDownloadWorker : CoroutineWorker` (`@HiltWorker`), `ModelManager` (enqueue-if-gated + idempotent)
+  — they handle model files for ONNX and the module is already gaining the `:core:android` edge for
+  `Context`.
+- `:data:repository`: `ModelAvailabilityRepositoryImpl` (DataStore flag + file presence) — persistence-layer
+  precedent.
 - `:app`: `Configuration.Provider` + `HiltWorkerFactory` wiring; DI for profiler/store/worker; catalog +
   module deps for WorkManager + `hilt-work`.
 
@@ -419,7 +503,8 @@ session to gate). Forks 3/4/7/11 fixed.
       accept/reject; idempotent re-run; availability flips on verified rename. Worker logic tested via
       fakes; no real ONNX.
 
-**Acceptance:** `DeviceProfile` is produced and cached; the gate is the **single** decision site;
+**Acceptance:** `DeviceProfile` is produced and cached; the gate policy is the **single** source of the
+rule (static inputs at DI, dynamic thermal/battery re-checked at inference — Fork P6-4);
 `LOW_END` never enqueues download or loads ONNX; a corrupt/unmatched download is rejected and never
 loaded; worker is idempotent + cancellable + battery-aware + no foreground service; new deps limited to
 WorkManager + `hilt-work`.
@@ -478,6 +563,8 @@ Phase-3 "open telegram" / Phase-5 "airplane → static fallback".
   (`roadmap.md:81`).
 - **WorkManager beyond model download** (suggestion pre-compute, history cleanup) → **Ph7/9**.
 - **ONNX version bump 1.20.0 → current** → deferred, its own change + device validation.
+- **NNAPI deprecation / migration to TFLite-in-Play-Services or GPU delegate** → later hardening phase
+  (NNAPI deprecated in Android 15; Phase 6 keeps CPU-default with opportunistic NNAPI on API 29+).
 - **Model signature verification** (beyond SHA-256 checksum) → later hardening.
 - **Full Hilt→KSP migration** → **Ph9** (Phase 6 keeps the Room-KSP / Hilt-kapt hybrid; `hilt-work`
   runs via kapt).
@@ -526,8 +613,10 @@ docs). Independent of which model executes, do **planning + diff review on Opus*
 4. **P6-4 — Gating:** build `DeviceProfile`/`DeviceCapability` from scratch (model in `:domain`, detector
    in `:core:android`); **single** pure `LocalInferenceGate`; `LOW_END` never loads ONNX, `MID_RANGE`
    conditional, `HIGH_END` enabled.
-5. **P6-5 — NNAPI:** opportunistic NNAPI EP + **deterministic CPU fallback**, init failure degrades
-   (never crashes), confined to `:data:ai-local`; Java signatures re-verified at Block P.
+5. **P6-5 — NNAPI:** **CPU is the deterministic default**; NNAPI opportunistic on **API 29+ only**,
+   **off-by-default until a device run proves it faster-and-correct**; **both** init-failure and
+   degraded-success handled; NNAPI **deprecated (Android 15) → migration noted frozen-forward**; exact
+   `ai.onnxruntime` Java signatures re-verified at Block P; confined to `:data:ai-local`.
 6. **P6-6 — Embeddings:** **`TextEmbedder` port only**, impl deferred to Phase 7 (no consumer yet).
 7. **P6-7 — WorkManager:** `CoroutineWorker`+`@HiltWorker`, battery/storage-not-low constraints,
    **no `LOW_END` background**, idempotent + cancellable, no foreground service.

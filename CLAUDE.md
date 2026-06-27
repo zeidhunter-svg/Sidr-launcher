@@ -4,10 +4,14 @@ Session digest. Read this first. **Phase 4 is DONE (Blocks E → H, 2026-06-23).
 multi-provider) is DONE — Blocks I → N complete (2026-06-24 – 2026-06-27).** Code + JVM green;
 on-device acceptance **pending** device run on SM-A325F (Block-J `SecretStoreInstrumentedTest` +
 Block-N N5 streaming/offline/cancel/rotation).
-**Phase 6 (Local NLU + embeddings, Blocks O → R) is PLANNED — forks decided 2026-06-27, plan agreed, NO
-block started.** Plan + forks: [ai-context/phase-6-local-nlu-plan.md](ai-context/phase-6-local-nlu-plan.md)
-(see ADR "2026-06-27 — Phase 6 forks decided" in decisions.md). First execution round gated to **Block O
-only**. Key pre-flight delta: `DeviceProfile`/`DeviceCapability` detection does **not** exist yet (only the
+**Phase 6 (Local NLU + embeddings, Blocks O → R) is IN PROGRESS — Block O complete (2026-06-27).**
+Block O delivered: `DeviceProfile`/`DeviceCapability`/`DeviceProfileProvider` + `LocalInferenceGate`
+(pure gate policy) + `domain.ai.local` ports (`ModelId`, `ModelAvailability`, `ModelAvailabilityRepository`,
+`TextEmbedder` port-only) + 4 JVM fakes + 22 new JVM tests (284 total, 0 failures). Port-topology
+decision: NLU rides the existing `IntentMatcher` port — **no parallel `IntentClassifier` created**.
+Next = **Block P** (ONNX runtime in `:data:ai-local`; gated on open question: model + tokenizer +
+label-set selection). Plan + forks: [ai-context/phase-6-local-nlu-plan.md](ai-context/phase-6-local-nlu-plan.md)
+(ADR "Block O complete" in decisions.md). Key pre-flight note that is now resolved: `DeviceProfile`/`DeviceCapability` detection did **not** exist (only the
 `DeviceProfileCacheEntry` DTO) — Phase 6 builds it from scratch; `:data:ai-local` already wires ONNX 1.20.0
 but has zero sources. Phase 5 plan: [ai-context/phase-5-plan.md](ai-context/phase-5-plan.md).
 
@@ -205,6 +209,18 @@ Phase 3 result, Blocks A → D:
   14 JVM tests green; **262 total JVM tests**; `assembleDebug` green. On-device (N5) + Block-J
   `androidTest` **pending** SM-A325F device run. Details: decisions.md "ADR Block N + Phase 5 close".
   **Phase 5 CLOSED (Blocks I → N). Next = Phase 6 (ONNX NLU).**
+- **Phase 6 Block O ✅ (2026-06-27)** — local-AI domain contracts + `DeviceProfile`/`DeviceCapability`
+  model + gating policy. `domain.ai.local`: `ModelId`, `ModelAvailability`, `ModelAvailabilityRepository`,
+  `TextEmbedder` (port-only, impl deferred Phase 7). `domain.device`: `DeviceProfile` (enum
+  `LOW_END/MID_RANGE/HIGH_END`), `DeviceCapability` (ramBytes/cpuCores/nnapiAvailable/thermalOk/
+  batteryOk; **no `online` field** — owned by `ConnectivityChecker`), `DeviceProfileProvider` port,
+  `LocalInferenceGate` (pure policy: LOW_END→false always; MID/HIGH→true iff Available+thermalOk+
+  batteryOk). Port-topology: **NLU rides the existing `IntentMatcher` port**; no parallel
+  `IntentClassifier` created. 4 fakes in `:core:testing` (`NoOpIntentMatcher`, `FakeTextEmbedder`,
+  `FakeModelAvailabilityRepository`, `FakeDeviceProfileProvider`). 22 new JVM tests (**284 total**, 0
+  failures); purity guard green; all greps clean; intent pipeline untouched.
+  Details: decisions.md "ADR 2026-06-27 — Block O complete". **Next = Block P** (gated on model +
+  tokenizer + label-set selection — open question must be resolved first).
 
 ## Hard rules
 
@@ -226,7 +242,8 @@ Phase 3 result, Blocks A → D:
 | `OperationResult` / `OperationError` | `domain` |
 | Ports: `IntentMatcher`, `IntentConfidencePolicy`, `GenerativeAiEngine` | `domain` |
 | `ActionExecutor` contract + `ActionExecutionResult` *(Block D)* | `domain` |
-| `DeviceCapability` model + AI routing policy | `domain` |
+| `DeviceProfile`/`DeviceCapability` model + `DeviceProfileProvider` port + `LocalInferenceGate` *(Block O ✅)* | `domain` |
+| `ModelId`/`ModelAvailability`/`ModelAvailabilityRepository`/`TextEmbedder` port *(Block O ✅)* | `domain` |
 | Rule-based matcher impl, `InstalledAppsRepository` impl, Android `ActionExecutor` impl | `data/repository` |
 | Pref domain models (`UserPreferences`, `FeatureFlags`, `DeviceProfileCacheEntry`, `CachedSuggestion`) + their repo interfaces *(Block E ✅)* | `domain` |
 | DataStore Preferences impls + `PreferencesMapper` + `PreferencesKeys` *(Block E ✅)* | `data/repository` |

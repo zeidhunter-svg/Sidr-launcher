@@ -1314,9 +1314,11 @@ post-N fast-follow), backend-proxy secret impl (swaps in behind `SecureSecretSto
      against a pinned hash before any load** (quarantine→atomic rename); no unverified model loaded.
   4. **Gating** = single pure `LocalInferenceGate` over a newly-built `DeviceProfile`/`DeviceCapability`;
      `LOW_END` never loads ONNX, `MID_RANGE` conditional, `HIGH_END` enabled.
-  5. **NNAPI** = opportunistic EP + deterministic CPU fallback, init-failure degrades (no crash),
-     confined to `:data:ai-local`; ⚠ exact `ai.onnxruntime` Java signatures re-verified at Block P
-     (context7's ONNX Android-Java coverage was thin — Python-skewed).
+  5. **NNAPI** = **CPU is the deterministic default**; NNAPI opportunistic on **API 29+ only**,
+     **off-by-default until a device run proves it faster-and-correct**; **both** init-failure and
+     degraded-success handled; NNAPI **deprecated in Android 15 → migration (TFLite-in-Play-Services /
+     GPU delegate) noted frozen-forward**; confined to `:data:ai-local`; ⚠ exact `ai.onnxruntime` Java
+     signatures re-verified at Block P (context7's ONNX Android-Java coverage was thin — Python-skewed).
   6. **Embeddings** = `TextEmbedder` **port only**, impl deferred to Phase 7 (no consumer yet).
   7. **WorkManager** = `CoroutineWorker`+`@HiltWorker`, battery/storage-not-low constraints, **no
      `LOW_END` background**, idempotent + cancellable, no foreground service (verified via context7).
@@ -1329,10 +1331,132 @@ post-N fast-follow), backend-proxy secret impl (swaps in behind `SecureSecretSto
   11. **Deps** = ONNX already in catalog (pin 1.20.0; upstream 1.25.0 deferred); **new = WorkManager +
       `hilt-work`**; `:data:ai-local` gains a `:core:android` edge; full ONNX R8/ProGuard frozen to **Ph9**;
       `EncryptedSharedPreferences`/`security-crypto` remain forbidden.
+- **Two open questions, explicitly NOT forks (gate their blocks, must be closed first):** model +
+  tokenizer + label-set selection gates **Block P**; model download source / hosting gates **Block Q**.
+  The **11 fork count is unchanged** — these are unresolved gating items, not decisions.
 - **Tooling note:** WorkManager/Hilt-WorkManager API verified current via context7 (`/androidx/androidx`:
   `@HiltWorker`/`HiltWorkerFactory`/`Configuration.Provider`/`Constraints.Builder` with
   `setRequiresBatteryNotLow`/`setRequiresStorageNotLow`). ONNX Android-Java surface **not** well covered
   by context7 → flagged for execution-time Javadoc verification, not pinned from memory.
+
+### ADR 2026-06-27 — Block O complete (local-AI domain contracts + DeviceProfile + gate)
+
+**Scope:** Block O only — pure-domain contracts for local NLU + `DeviceProfile`/`DeviceCapability`
+model + `LocalInferenceGate` policy. No implementations, no ONNX, no Android, no WorkManager.
+Depends on nothing new; everything else compiles against the ports created here.
+
+**Port-topology decision (supersedes the plan's O1 wording):**
+The plan draft listed `IntentClassifier` as a new port in `domain.ai.local`. **This port was NOT
+created.** Rationale (recorded here; plan wording is superseded, the plan file is not edited per the
+Block O prompt):
+- `IntentMatcher` is already the established port for `(normalizedString) → IntentMatchResult` —
+  the KDoc explicitly names ONNX NLU classifiers as valid matcher sources and lists `MatcherSource.NLU`
+  as the reserved second source.
+- A second `IntentClassifier` of the identical shape would be a redundant parallel contract — exactly
+  the two-port anti-pattern the codebase has repeatedly refused (Phase-5 `IntentMatcher` ≠
+  `GenerativeAiEngine` discipline; `ActionExecutionResult` vs `CommandOutcome` discipline).
+- The ONNX-specific lifecycle (`AutoCloseable`/`close()`, lazy session, `onTrimMemory`) is an
+  **implementation detail** of `OnnxIntentClassifier` in `:data:ai-local` (Block P), not a domain
+  contract. The domain port stays `IntentMatcher`.
+- Block P's `OnnxIntentClassifier` will be `: IntentMatcher`; the gate-off no-op secondary
+  (`NoOpIntentMatcher` in `:core:testing`) is also `: IntentMatcher`.
+- `grep -rn "interface IntentClassifier" domain/src/` → **empty** (guard passes; confirmed below).
+
+**New files in `:domain` (`com.sidr.launcher.domain.ai.local`):**
+- `ModelId` — `@JvmInline value class ModelId(val value: String)` (opaque, mirrors `AiProviderId`).
+- `ModelAvailability` — `enum class ModelAvailability { Available, Missing, Unverified }`. `Unverified`
+  means file may exist but integrity is unconfirmed → treated the same as absent by the gate.
+- `ModelAvailabilityRepository` — port: `fun availability(ModelId): Flow<ModelAvailability>` +
+  `suspend fun markAvailable/markMissing(ModelId): OperationResult<Unit>`. Never throws. Reads
+  are `Flow`; writes are `OperationResult` (codebase convention). Impl in `:data:repository` (Block Q).
+- `TextEmbedder` — port only: `suspend fun embed(text: String): OperationResult<FloatArray>`.
+  Impl deferred to Phase 7 (Fork P6-6 — no ranking consumer exists in Phase 6). Annotated in KDoc.
+
+**New files in `:domain` (`com.sidr.launcher.domain.device`):**
+- `DeviceProfile` — `enum class DeviceProfile { LOW_END, MID_RANGE, HIGH_END }`.
+  This is the formalised model (previously only existed as a snippet in `architecture.md` and as the
+  flattened boolean `DeviceProfileCacheEntry`). Block Q's `AndroidDeviceProfiler` will map to/from it.
+- `DeviceCapability` — `data class DeviceCapability(ramBytes: Long, cpuCores: Int, nnapiAvailable:
+  Boolean, thermalOk: Boolean, batteryOk: Boolean)`. **`online` is deliberately absent** — network
+  reachability is owned by the existing `ConnectivityChecker` (Phase 5). Adding it here would be a
+  second source of truth with no Phase-6 reader (the gate never consults `online`, and no other
+  Phase-6 class needs it from this model). All five present fields have clear readers:
+  `ramBytes`/`cpuCores` → profile classification in Block Q; `nnapiAvailable` → EP selection in
+  Block P; `thermalOk`/`batteryOk` → gate re-evaluation at inference time.
+- `DeviceProfileProvider` — port: `fun profile(): DeviceProfile` + `fun capability(): DeviceCapability`
+  (synchronous; the detector caches its result internally). Impl in `:core:android` (Block Q).
+- `LocalInferenceGate` — `object` with `fun allowsLocalNlu(profile, capability, availability): Boolean`.
+  Pure stateless policy (no I/O, no Android, no state). Implementation of the pinned truth table
+  (Fork P6-4 / LOW_END-vs-rest):
+
+  | Profile    | Availability  | thermalOk | batteryOk | Result |
+  |------------|--------------|-----------|-----------|--------|
+  | LOW_END    | any          | any       | any       | false  |
+  | MID_RANGE  | Available    | true      | true      | **true** |
+  | MID_RANGE  | Available    | false or battery=false | any | false |
+  | MID_RANGE  | Missing or Unverified | any | any   | false  |
+  | HIGH_END   | Available    | true      | true      | **true** |
+  | HIGH_END   | (other)      | (other)   | (other)   | false  |
+
+  Fields NOT read by the gate: `nnapiAvailable`, `ramBytes`, `cpuCores` (EP selection / profiling,
+  not the on/off gate). MID_RANGE and HIGH_END share the same effective gate in Phase 6 (forward-
+  looking three-way split, not yet differentiated). KDoc documents the two evaluation moments
+  (static DI/graph time + per-inference re-check inside `OnnxIntentClassifier`).
+
+**New fakes in `:core:testing` (JVM-only, no Android variants added):**
+- `NoOpIntentMatcher : IntentMatcher` — always returns `UnknownIntent` / confidence `0f` /
+  `source = RULE_BASED`. Models the gate-off secondary in unit tests and as the production binding
+  on `LOW_END`/no-model devices (Block R DI wiring). Note: `RULE_BASED` source on the no-op result
+  is deliberate — a no-op "NLU" win would misreport the pipeline's decision.
+- `FakeTextEmbedder : TextEmbedder` — scripted `OperationResult<FloatArray>`, `errorToReturn`,
+  records `receivedTexts`.
+- `FakeModelAvailabilityRepository : ModelAvailabilityRepository` — `MutableStateFlow`-backed
+  per `ModelId`; `setAvailability` helper; `errorToReturn`; records `markAvailableCalls` /
+  `markMissingCalls`; `reset()`.
+- `FakeDeviceProfileProvider : DeviceProfileProvider` — settable `profileToReturn` /
+  `capabilityToReturn`; `initialProfile = MID_RANGE`, `initialCapability` = reasonable defaults
+  (4 GB RAM, 4 cores, NNAPI=false, thermalOk=true, batteryOk=true).
+- **`FakeIntentMatcher` reused** for scripted NLU — no `FakeIntentClassifier` added (no parallel port).
+
+**JVM tests added:**
+- `LocalInferenceGateTest` (`:domain/src/test`, 14 test methods covering all 36 truth-table rows):
+  one parameterised LOW_END loop (12 cases), 4 explicit MID_RANGE/Available cases, two loops for
+  MID_RANGE/{Missing,Unverified} (4+4), mirror for HIGH_END (4+4+4), plus an extra assertion that
+  `nnapiAvailable=true` does not affect the gate outcome.
+- `LocalNluContractsTest` (8 test methods): `NoOpIntentMatcher` is always low-confidence + `0f` +
+  never auto-executes/suggests; `FakeIntentMatcher` can return `source = NLU` (proves the NLU source
+  rides the existing port with no new contract/enum); `FakeModelAvailabilityRepository` round-trips
+  `markAvailable → Available`, `markMissing → Missing`, `errorToReturn → Failure + state unchanged`,
+  two-model isolation.
+
+**Verification (actual output):**
+- `./gradlew :domain:dependencies --configuration compileClasspath` →
+  `kotlin-stdlib` + `kotlinx-coroutines-core` **only** (purity guard passes).
+- `grep -rn "import android\|androidx\|ai.onnxruntime\|androidx.work\|kotlinx.serialization" domain/src/`
+  → **empty** (no ONNX / Android / WorkManager / serialization in `:domain`).
+- `grep -rn "interface IntentClassifier" domain/src/` → **empty** (parallel port not created).
+- `./gradlew :domain:test :core:testing:classes` → **BUILD SUCCESSFUL in 36s** (6 tasks executed);
+  `LocalInferenceGateTest` `tests="14" failures="0" errors="0"`;
+  `LocalNluContractsTest` `tests="8" failures="0" errors="0"`.
+- `./gradlew testDebugUnitTest --rerun-tasks` → **BUILD SUCCESSFUL in 2m 24s** (237 tasks executed);
+  **284 total JVM tests, 0 failures, 0 errors** (22 new; no regressions across intent/Phase-3/Phase-5 suites).
+- `assembleDebug` — `mergeExtDexDebug` fails due to a **pre-existing Gradle transform-cache corruption**
+  (confirmed by stash/pop: the failure reproduces with no Block O files present). All Kotlin compilation
+  and Hilt graph validation (`app:compileDebugKotlin`, `app:hiltJavaCompileDebug`) ran green during
+  `testDebugUnitTest`; the DEX-merge step is an OS-level cache issue unrelated to Block O.
+- No new `build.gradle.kts` edits / catalog entries / DI wiring (Block R owns DI).
+- Intent pipeline untouched: `git diff --stat -- domain/src/…/intent/ domain/src/…/HandleUserCommandUseCase.kt`
+  → **no output**.
+
+**Two open questions carried forward (unchanged from the planning ADR, still unresolved):**
+1. **Model + tokenizer + label-set selection** → gates **Block P** (cannot define the tokenizer/label-map
+   helper without knowing the concrete ONNX model).
+2. **Model download source / hosting** → gates **Block Q** (the worker has no URL until the artifact is
+   pinned).
+
+**Next = Block P** (ONNX runtime integration in `:data:ai-local`). Block P must not start until open
+question 1 is resolved. Model: **Opus 4.8** (session lifecycle, NNAPI fallback, tensor I/O, memory —
+costly to get wrong; first `ai.onnxruntime` Java API use → re-verify Javadoc at execution time).
 
 ### ADR 2026-06-19 — Phase 2 skipped / reordered into a minimal slice
 - Decision: Phase 2 (launcher shell) is **not** run as a separate phase. Its navigation half was already absorbed into `3.1.x`; its product floor — `InstalledAppsRepository`, app grid, command input, offline app launch — is folded into Phase 3 as a **minimal P2 slice** (Block B).

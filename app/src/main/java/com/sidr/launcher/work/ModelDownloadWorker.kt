@@ -27,10 +27,14 @@ class ModelDownloadWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result = when (provisioner.provision()) {
         ProvisionResult.Provisioned, ProvisionResult.AlreadyAvailable -> Result.success()
-        // Transient (network/IO) — WorkManager retries with the request's backoff policy.
+        // Transient (network down / 5xx / timeout) — WorkManager retries with the backoff policy.
         ProvisionResult.TransientFailure -> Result.retry()
-        // Permanent — a bad/unpinned hash will not fix itself by retrying the same artifact.
-        ProvisionResult.VerificationFailed, ProvisionResult.NotConfigured -> Result.failure()
+        // Permanent — a 4xx/non-HTTPS URL, a SHA-256 mismatch, or an unpinned config will not fix
+        // itself by retrying the same artifact; failing avoids a retry storm.
+        ProvisionResult.PermanentFailure,
+        ProvisionResult.VerificationFailed,
+        ProvisionResult.NotConfigured,
+        -> Result.failure()
     }
 
     companion object {

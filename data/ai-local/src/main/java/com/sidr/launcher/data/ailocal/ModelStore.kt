@@ -1,6 +1,7 @@
 package com.sidr.launcher.data.ailocal
 
 import com.sidr.launcher.data.ailocal.provision.Sha256Verifier
+import com.sidr.launcher.domain.ai.local.ModelFilePresence
 import com.sidr.launcher.domain.ai.local.ModelId
 import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
@@ -34,7 +35,7 @@ class ModelStore(
     private val rootDir: File,
     private val vocabOpener: (ModelId) -> InputStream?,
     private val verifier: Sha256Verifier = Sha256Verifier(),
-) : LocalModelFiles {
+) : LocalModelFiles, ModelFilePresence {
 
     private val readyDir: File get() = File(rootDir, READY_DIR)
     private val quarantineDir: File get() = File(rootDir, QUARANTINE_DIR)
@@ -96,6 +97,9 @@ class ModelStore(
     override fun modelFile(modelId: ModelId): File? = readyFile(modelId).takeIf { it.isFile }
 
     override fun vocabStream(modelId: ModelId): InputStream? = vocabOpener(modelId)
+
+    // ── ModelFilePresence ─────────────────────────────────────────────────────────
+    override fun isModelPresent(modelId: ModelId): Boolean = readyFile(modelId).isFile
 
     private companion object {
         const val READY_DIR = "models"

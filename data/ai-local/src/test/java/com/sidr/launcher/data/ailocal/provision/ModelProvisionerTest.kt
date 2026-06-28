@@ -70,16 +70,29 @@ class ModelProvisionerTest {
     }
 
     @Test
-    fun `transient download failure leaves no ready file and availability not Available`() = runTest {
+    fun `transient download failure (retryable) maps to TransientFailure and leaves no ready file`() = runTest {
         val store = store()
         val avail = FakeModelAvailabilityRepository()
-        val downloader = FakeModelDownloader(bytes).apply { failWith = OperationError.NetworkError() }
+        // NetworkError(retryable = true) — network/5xx/timeout → worker should retry.
+        val downloader = FakeModelDownloader(bytes).apply { failWith = OperationError.NetworkError(retryable = true) }
 
         assertEquals(ProvisionResult.TransientFailure, ModelProvisioner(store, downloader, avail, config()).provision())
         assertNull(store.modelFile(modelId))
         // Transient failure leaves availability untouched (a WorkManager retry will try again); the
         // fake's default is Unverified and the gate treats Unverified == not-Available.
         assertEquals(ModelAvailability.Unverified, avail.availability(modelId).first())
+        assertTrue(avail.markAvailableCalls.isEmpty())
+    }
+
+    @Test
+    fun `permanent download failure (non-retryable) maps to PermanentFailure`() = runTest {
+        val store = store()
+        val avail = FakeModelAvailabilityRepository()
+        // NetworkError(retryable = false) models a 4xx/non-HTTPS → worker should fail, not retry.
+        val downloader = FakeModelDownloader(bytes).apply { failWith = OperationError.NetworkError(retryable = false) }
+
+        assertEquals(ProvisionResult.PermanentFailure, ModelProvisioner(store, downloader, avail, config()).provision())
+        assertNull(store.modelFile(modelId))
         assertTrue(avail.markAvailableCalls.isEmpty())
     }
 

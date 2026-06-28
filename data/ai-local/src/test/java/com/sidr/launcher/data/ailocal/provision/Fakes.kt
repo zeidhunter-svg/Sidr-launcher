@@ -1,5 +1,6 @@
 package com.sidr.launcher.data.ailocal.provision
 
+import com.sidr.launcher.domain.ai.local.ModelDownloader
 import com.sidr.launcher.domain.ai.local.ModelId
 import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
@@ -7,10 +8,12 @@ import kotlinx.coroutines.awaitCancellation
 import java.io.File
 
 /**
- * Test fakes for the `:data:ai-local`-internal provisioning ports. These ports are NOT domain ports,
- * and `:core:testing` is a pure `kotlin.jvm` module that cannot depend on this Android library — so
- * the fakes live in this module's test source set (the reused domain fakes
- * `FakeDeviceProfileProvider` / `FakeModelAvailabilityRepository` stay in `:core:testing`).
+ * Test fakes for the provisioning collaborators, kept in this module's **test source set** (not a
+ * published module — P2-8). [FakeModelDownloadScheduler] fakes a `:data:ai-local`-internal port, so it
+ * must live here. [FakeModelDownloader] fakes the [ModelDownloader] **domain** port (relocated in the
+ * P2-4 rework), so it is eligible for promotion to `:core:testing` — **defer that to Block R**, only
+ * if R's tests need it; today the sole consumer is this module's `ModelProvisionerTest`. The reused
+ * domain fakes `FakeDeviceProfileProvider` / `FakeModelAvailabilityRepository` stay in `:core:testing`.
  */
 class FakeModelDownloader(
     /** Bytes written to the destination on a successful download; null + no [failWith] → success-empty. */

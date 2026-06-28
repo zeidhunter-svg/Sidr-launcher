@@ -1572,6 +1572,186 @@ gated on Open Question #2 — model hosting/URL). Block R wires `LayeredIntentMa
 the `:app` trim-hook registration + the NLU↔rule confidence-calibration decision + docs-sync + close.
 **Phase 6 NOT closed (Block R closes it).**
 
+### ADR 2026-06-28 — Block Q complete (DeviceProfile detector + ModelStore/SHA-256 verify + WorkManager download gating)
+
+**Scope:** Block Q only — `AndroidDeviceProfiler` (+ pure classifier/cache mapping), `ModelStore`
+(quarantine → SHA-256 verify → atomic rename, implements P's `LocalModelFiles`), `Sha256Verifier`,
+`ModelDownloader`/`ModelDownloadScheduler` ports, `ModelProvisioner`, `ModelManager` (gate-before-
+enqueue), `ModelDownloadWorker` (`@HiltWorker`), `KtorModelDownloader` + `WorkManagerModelDownloadScheduler`,
+`ModelAvailabilityRepositoryImpl`, the WorkManager + `hilt-work` deps + `:app` `Configuration.Provider`/
+`HiltWorkerFactory` wiring. Does **NOT** do the `LayeredIntentMatcher`, the unqualified-`IntentMatcher`
+DI swap, the `:app` `onTrimMemory`→`SessionLifecycle.releaseResources()` registration, the runtime
+`ensureModel()` trigger, or `TextEmbedder` — all **Block R** / Phase 7.
+
+**§0 OQ#2 branch taken — NOT resolved (expected).** Model download source/hosting is still open, so
+the *entire* mechanism is built and JVM-tested against fakes this block; only the live download stays
+inert. `ModelDownloadConfig` is the single device/release-pending seam: `INTENT_NLU_PENDING` has blank
+`url`/`expectedSha256` (`TODO(OQ#2)`) so `isPinned == false`, and both `ModelManager.ensureModel()`
+and `ModelProvisioner.provision()` short-circuit (`NotConfigured`) — genuinely inert, pointing nowhere
+real. **Device/release-pending:** the live download + the real artifact's pinned URL/SHA-256, plus the
+`AndroidDeviceProfiler` Android-API reads + thermal/battery transitions (instrumented) on SM-A325F.
+
+**Pre-flight deltas vs the prompt:** (1) `DeviceProfileCacheRepository` + impl + the `device_*`
+DataStore keys + `PreferencesMapper` round-trip **already existed** (Block E groundwork) — Q1 reuses
+them, adds no profile keys. (2) The Ktor `HttpClient` is provided in **`:app`** (engine is Hilt-free),
+so "where HTTP lives" for DI = `:app`. (3) `:data:ai-local` allowed edges are
+`:domain, :core:common, :core:android, ONNX` only (no HTTP/WorkManager module edge).
+
+**Profile thresholds (§5.A, pure `DeviceProfileClassifier`):** measured against
+`ActivityManager.MemoryInfo.totalMem` (reports below nominal). `LOW_END` = `totalMem < 2.5 GB` **or**
+`< 4` cores; `HIGH_END` = `≥ 5.5 GB` **and** `≥ 8` cores; else `MID_RANGE` (SM-A325F 4 GB/8-core →
+MID). `capability(...)`: `nnapiAvailable = sdkInt ≥ 29` (hint only — NNAPI stays off-by-default,
+Block P); `thermalOk = getCurrentThermalStatus() < SEVERE(3)` with a `-1` no-signal sentinel on
+API < 29 (reads OK); `batteryOk = !isPowerSaveMode`. Android reads behind `AndroidDeviceProfiler`;
+the mappings are pure + JVM-tested.
+
+**Lossy cache (§5.B):** `DeviceProfileCacheMapping` maps `LOW_END ↔ isLowEndDevice=true`,
+`MID|HIGH ↔ false`; `profileFromCache` returns `MID_RANGE` for the "not low-end" bucket. Accepted —
+Phase 6's effective gate is LOW_END-vs-rest. `AndroidDeviceProfiler` caches `profile()` in memory and
+write-throughs to `DeviceProfileCacheRepository` via `@ApplicationScope` (fire-and-forget, never blocks
+the synchronous read); `capability()` is re-read every call (thermal/battery move).
+
+**Vocab (§5.D): bundled, not downloaded.** `vocab.txt` (uncased, 30522) lives in
+`:data:ai-local/src/main/assets/nlu/` (small, static, version-locked to `WordPieceTokenizer` → no
+second download/hash, can't drift). `ModelStore` resolves vocab via an injected `vocabOpener` seam
+(assets in prod, fake stream in tests) and the **model** from `noBackupFilesDir/models/`. The real
+asset is device/training-pending (OQ#1/#2); `vocabStream` returns null when absent → degrade.
+
+**Download HTTP (§5.E): port, not an edge.** `ModelDownloader` port in `:data:ai-local`; the
+Ktor-backed `KtorModelDownloader` lives in **`:app`** (reuses the existing `HttpClient`, HTTPS-only,
+streams to file, re-throws `CancellationException`) — no HTTP edge into `:data:ai-local`, no data→data
+edge. Bound via `ModelProvisionBindsModule`.
+
+**Worker placement — deliberate deviation from prompt §3:** the `@HiltWorker` `ModelDownloadWorker`
+shell lives in **`:app`** (composition root, already kapt + Hilt, and where `Configuration.Provider`/
+`HiltWorkerFactory` must live) rather than `:data:ai-local` — avoids converting `:data:ai-local` into a
+kapt/Hilt-processing module for a ~15-line shell. All correctness-critical logic
+(download→verify→promote→mark, idempotency, cancellation) stays in `:data:ai-local`'s JVM-tested
+`ModelProvisioner`; the worker only maps `ProvisionResult → Result.success/retry/failure`. Same reason
+the provisioning-port fakes (`FakeModelDownloader`, `FakeModelDownloadScheduler`) live in
+`:data:ai-local/src/test`, not `:core:testing` (a pure `kotlin.jvm` module that can't depend on this
+Android library); the reused domain fakes (`FakeDeviceProfileProvider`, `FakeModelAvailabilityRepository`)
+stay in `:core:testing`.
+
+**§6.A enqueue-gate-static-only (conscious choice):** `ModelManager.ensureModel()` enqueues iff
+`profile != LOW_END && availability != Available` (+ `config.isPinned`). It deliberately does **NOT**
+fold transient `thermalOk`/`batteryOk` into the enqueue decision — a momentary battery-saver at start
+must never *permanently* prevent the one-shot download from being *scheduled*. Runtime battery/storage
+is handled by the WorkManager **constraints** (defer, not abort); thermal/battery for *inference* is the
+per-inference `LocalInferenceGate.allowsLocalNlu(...)` re-check already inside `OnnxIntentClassifier`
+(Block P). One policy, evaluated for the right inputs at the right moment — not a second policy.
+
+**No-unverified invariant:** `ModelStore.promote` verifies the quarantine file against the pinned hash
+**before** an atomic `Files.move(ATOMIC_MOVE, REPLACE_EXISTING)` (same-FS fallback) into the ready path;
+verify-fail deletes quarantine and leaves ready untouched. `modelFile()` returns the ready file only,
+so the classifier can never load an unverified artifact (disk presence is also the real load-time gate,
+backstopping the DataStore availability flag).
+
+**Availability persistence:** `ModelAvailabilityRepositoryImpl` (`:data:repository`) over the shared
+`sidr_preferences` store — a `stringSet` key `model_available_ids` (denylist-clean; added to
+`ALL_KEY_NAMES`, privacy guard green). Persists `Available` (id present) vs `Missing` (absent);
+`Unverified` is never written (it's the on-disk integrity concept; the gate treats Missing/Unverified
+alike). Worker calls `markAvailable` only after verify+promote.
+
+**WorkManager (context7-verified, not memory):** `@HiltWorker` + `@AssistedInject(@Assisted Context,
+@Assisted WorkerParameters)`; `HiltWorkerFactory` injected into `SidrLauncherApp : Configuration.Provider`
+(Kotlin `override val workManagerConfiguration`); manifest removes the default
+`androidx.work.WorkManagerInitializer` meta-data on `androidx.startup.InitializationProvider`
+(`tools:node="remove"`, `RemoveWorkManagerInitializer` lint). `enqueueUniqueWork(name, KEEP, request)`;
+constraints `setRequiredNetworkType(CONNECTED)` + `setRequiresBatteryNotLow(true)` +
+`setRequiresStorageNotLow(true)` (no requires-charging); `setBackoffCriteria(EXPONENTIAL, 30s)`; no
+foreground service; `CoroutineWorker` cooperative cancellation. **Versions:** `androidx.work` 2.10.0
+(`work-runtime-ktx`), `androidx.hilt` 1.2.0 (`hilt-work` + `hilt-compiler` via the **kapt** path in `:app`).
+
+**Build/deps:** new deps = WorkManager + `hilt-work` (+ androidx hilt-compiler kapt) **only**, all in
+`:app`; `:core:android` gains a `testImplementation(junit4)` for the pure-mapping tests. No new
+`:data:ai-local` edge; `ai.onnxruntime` still confined to the two Block-P shell files (grep clean —
+new files reference it only in comments); `:domain` untouched + pure.
+
+**Verification:** `:core:android` + `:data:ai-local` + `:data:repository` `testDebugUnitTest` green;
+full `testDebugUnitTest` + `assembleDebug` **BUILD SUCCESSFUL, 0 failures** (Hilt graph incl.
+`@HiltWorker`/`Configuration.Provider`/the full provisioning chain validated). **29 new JVM tests**
+(Sha256Verifier 4, ModelStore 4, ModelProvisioner 6, ModelManager 4, DeviceProfileClassifier 5,
+DeviceProfileCacheMapping 3, ModelAvailabilityRepositoryImpl 3).
+
+**Next = Block R** (`LayeredIntentMatcher` + unqualified-`IntentMatcher` DI swap + R2.5 `:app`
+`onTrimMemory`→`SessionLifecycle.releaseResources()` + the runtime `ensureModel()` trigger + R1 NLU↔rule
+confidence calibration + docs-sync + close). **Phase 6 NOT closed (Block R closes it).**
+
+#### Rework before close (2026-06-28) — review items P1-1…P2-8
+
+Eight review items applied before closing Q. Where a rework supersedes a statement above, the rework wins.
+
+- **P1-1 (context7-verified WM init, not from-memory).** Re-ran context7 (`/androidx/androidx`):
+  `androidx.work.Configuration.Provider` exposes the Kotlin **`workManagerConfiguration` property**
+  (+ Java `getWorkManagerConfiguration()`); `WorkManagerInitializer implements androidx.startup.Initializer<WorkManager>`
+  and the `RemoveWorkManagerInitializer` lint requires removing it once the Application is a
+  `Configuration.Provider`. Verified init path (matches the shipped code):
+  ```kotlin
+  @HiltAndroidApp
+  class SidrLauncherApp : Application(), Configuration.Provider {
+      @Inject lateinit var workerFactory: HiltWorkerFactory
+      override val workManagerConfiguration: Configuration
+          get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
+  }
+  ```
+  ```xml
+  <provider android:name="androidx.startup.InitializationProvider"
+      android:authorities="${applicationId}.androidx-startup"
+      android:exported="false" tools:node="merge">
+      <meta-data android:name="androidx.work.WorkManagerInitializer"
+          android:value="androidx.startup" tools:node="remove" />
+  </provider>
+  ```
+  Coordinates confirmed: `androidx.work:work-runtime-ktx:2.10.0`, `androidx.hilt:hilt-work:1.2.0` +
+  `androidx.hilt:hilt-compiler:1.2.0` (kapt). `@HiltWorker` + `@AssistedInject(@Assisted Context, @Assisted WorkerParameters)`.
+- **P1-2 (availability cross-checks disk, not just the marker).** New `domain.ai.local.ModelFilePresence`
+  port (`isModelPresent(modelId): Boolean`), implemented by `ModelStore`. `ModelAvailabilityRepositoryImpl`
+  now returns the **conjunction**: marker set ∧ file present → `Available`; file present ∧ unmarked →
+  `Unverified` (self-heals a crash between atomic-rename and `markAvailable` — next provision re-marks);
+  else `Missing`. A marker-set-but-file-missing reads **not-Available** (gate degrades). All three Block-O
+  states now reachable; no `data→data` edge (both sides depend on the domain port). New JVM tests:
+  marker-but-missing→Missing, present-but-unmarked→Unverified.
+- **P1-3 (vocab.txt on the pending list).** The real **`vocab.txt` (uncased, 30522, byte-matched to the
+  exported tokenizer)** is now an explicit OQ#1 device/release-pending artifact in this ADR + CLAUDE.md —
+  it ships bundled in `assets/nlu/` and is a silent release-blocker if dropped.
+- **P2-4 (download impl out of `:app`).** **Supersedes §5.E.** The `ModelDownloader` port moved to
+  **`:domain`** (`domain.ai.local`, stdlib-only `java.io.File` signature); `KtorModelDownloader` moved to
+  **`:data:ai-cloud`** as a plain class (Block-K engine pattern), `@Provides`-constructed in `:app` with
+  the shared cloud `HttpClient`. This honors the reviewer's intent (impl in the Ktor module, unit-tested)
+  **without** the `:data:ai-cloud → :data:ai-local` edge that "port stays in `:data:ai-local`" would have
+  forced (that violates the no-`data→data`-edge rule). `:app` now holds only DI bindings. New
+  `KtorModelDownloaderTest` (MockEngine): non-HTTPS rejected with **zero requests issued**, 200 streams to
+  file, 4xx→permanent, 5xx→transient.
+- **P2-5 (fail-fast half-pinned config).** `ModelDownloadConfig` `init { require(url.isBlank() == expectedSha256.isBlank()) }`
+  — a `url` without a hash (or vice versa) throws at construction. Test asserts both half-pinned forms throw.
+- **P2-6 (storage is `noBackupFilesDir`).** Confirmed: `provideModelStore` passes `context.noBackupFilesDir`
+  as `rootDir`; `ModelStore` nests both `models/` (ready) and `models/.quarantine/` under it. A
+  re-downloadable, hash-verified blob never enters cloud auto-backup. (No code change — confirmation.)
+- **P2-7 (retry taxonomy defined now).** `KtorModelDownloader` classifies failures via
+  `OperationError.NetworkError.retryable`: 4xx/non-HTTPS → `retryable=false`, 5xx/network/timeout →
+  `retryable=true`. `ModelProvisioner.provision()` maps these to `ProvisionResult.PermanentFailure` vs
+  `TransientFailure`; SHA-256 mismatch → `VerificationFailed`. `ModelDownloadWorker.doWork()`:
+  Transient→`Result.retry`, {Permanent, VerificationFailed, NotConfigured}→`Result.failure` (no retry storm
+  on a bad pinned URL once OQ#2 lands). New JVM tests cover both `provision()` branches.
+- **P2-8 (fakes location + R-promotion).** `:data:ai-local/src/test` is a **test source set, not a published
+  module**. `FakeModelDownloadScheduler` fakes a `:data:ai-local`-internal port → stays here.
+  `FakeModelDownloader` now fakes the **domain** `ModelDownloader` port → eligible for promotion to
+  `:core:testing`; **deferred to Block R**, only if R's tests consume it (today the sole consumer is this
+  module's `ModelProvisionerTest`).
+
+**Post-rework verification:** `:domain` + `:data:ai-local` + `:data:ai-cloud` + `:data:repository`
+`testDebugUnitTest` green; full `testDebugUnitTest` + `assembleDebug` **BUILD SUCCESSFUL, 0 failures**
+(Hilt graph re-validated after the `ModelDownloader`/`ModelFilePresence` rewiring). **Block Q JVM tests
+now 39** (+10: ModelDownloadConfig 3, KtorModelDownloader 4, ModelProvisioner +1, ModelAvailabilityRepositoryImpl +2).
+Guards re-asserted: `ai.onnxruntime` still confined to `OnnxIntentClassifier`/`OnnxSessionFactory`;
+`:domain` pure; `:data:ai-local` gains no edge; `:data:ai-cloud` has **no** `:data:ai-local` edge (port in
+`:domain`); new deps still only WorkManager + hilt-work.
+
+**Device/release-pending (updated):** the live download + the real artifact's pinned URL/SHA-256 (OQ#2);
+**the real `vocab.txt` (30522, byte-matched to the exported tokenizer) — OQ#1**; the `AndroidDeviceProfiler`
+Android-API reads + thermal/battery transitions (instrumented) on SM-A325F.
+
 ### ADR 2026-06-19 — Phase 2 skipped / reordered into a minimal slice
 - Decision: Phase 2 (launcher shell) is **not** run as a separate phase. Its navigation half was already absorbed into `3.1.x`; its product floor — `InstalledAppsRepository`, app grid, command input, offline app launch — is folded into Phase 3 as a **minimal P2 slice** (Block B).
 - Context: Phase 3's intent system cannot reach acceptance without Phase 2's installed-apps repository and command input (e.g. `open telegram` cannot resolve or launch). The skip deferred an unavoidable dependency rather than removing it.

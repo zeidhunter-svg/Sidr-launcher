@@ -3,14 +3,17 @@ package com.sidr.launcher.di
 import android.content.Context
 import com.sidr.launcher.core.android.device.AndroidDeviceProfiler
 import com.sidr.launcher.core.common.di.ApplicationScope
+import com.sidr.launcher.core.common.di.IoDispatcher
+import com.sidr.launcher.data.aicloud.KtorModelDownloader
 import com.sidr.launcher.data.ailocal.LocalModelFiles
 import com.sidr.launcher.data.ailocal.ModelStore
 import com.sidr.launcher.data.ailocal.provision.ModelDownloadConfig
 import com.sidr.launcher.data.ailocal.provision.ModelDownloadScheduler
-import com.sidr.launcher.data.ailocal.provision.ModelDownloader
 import com.sidr.launcher.data.ailocal.provision.ModelManager
 import com.sidr.launcher.data.ailocal.provision.ModelProvisioner
 import com.sidr.launcher.domain.ai.local.ModelAvailabilityRepository
+import com.sidr.launcher.domain.ai.local.ModelDownloader
+import com.sidr.launcher.domain.ai.local.ModelFilePresence
 import com.sidr.launcher.domain.ai.local.ModelId
 import com.sidr.launcher.domain.device.DeviceProfileProvider
 import com.sidr.launcher.domain.preferences.DeviceProfileCacheRepository
@@ -19,15 +22,19 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import io.ktor.client.HttpClient
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import java.io.IOException
 import java.io.InputStream
 import javax.inject.Singleton
 
 /**
- * Block Q — produces the local-model provisioning graph (Phase 6). Concrete wiring only; the
- * port→impl bindings (`ModelDownloader`, `ModelDownloadScheduler`) live in [ModelProvisionBindsModule]
- * because Hilt forbids mixing `@Provides` and `@Binds` in one module.
+ * Block Q — produces the local-model provisioning graph (Phase 6). Concrete `@Provides` wiring; the
+ * one `@Binds` port→impl binding (`ModelDownloadScheduler`, an `@Inject` class) lives in
+ * [ModelProvisionBindsModule] because Hilt forbids mixing `@Provides` and `@Binds` in one module. The
+ * [ModelDownloader] impl is a plain class in `:data:ai-cloud` (the Block-K engine pattern), so it is
+ * `@Provides`-constructed here with the shared cloud `HttpClient`.
  *
  * Nothing here is on the launcher cold path: the model-availability gate, the device profiler and the
  * download mechanism are only consumed by the (Block R) `OnnxIntentClassifier` and the WorkManager
@@ -75,6 +82,22 @@ object ModelProvisionProvidesModule {
     @Provides
     @Singleton
     fun provideLocalModelFiles(modelStore: ModelStore): LocalModelFiles = modelStore
+
+    /** Disk-presence cross-check for the availability repo (P1-2) — same [ModelStore] instance. */
+    @Provides
+    @Singleton
+    fun provideModelFilePresence(modelStore: ModelStore): ModelFilePresence = modelStore
+
+    /**
+     * The Ktor [ModelDownloader] impl lives in `:data:ai-cloud` (HTTP module) as a plain class —
+     * constructed here with the shared cloud [HttpClient] (provided in `AiCloudProvidesModule`).
+     */
+    @Provides
+    @Singleton
+    fun provideModelDownloader(
+        httpClient: HttpClient,
+        @IoDispatcher ioDispatcher: CoroutineDispatcher,
+    ): ModelDownloader = KtorModelDownloader(httpClient = httpClient, ioDispatcher = ioDispatcher)
 
     @Provides
     @Singleton

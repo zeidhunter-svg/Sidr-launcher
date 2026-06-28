@@ -2,6 +2,9 @@ package com.sidr.launcher.data.ailocal.provision
 
 import com.sidr.launcher.data.ailocal.ModelStore
 import com.sidr.launcher.domain.ai.local.ModelAvailabilityRepository
+import com.sidr.launcher.domain.ai.local.ModelDownloader
+import com.sidr.launcher.domain.result.OperationError
+import com.sidr.launcher.domain.result.OperationResult
 import kotlinx.coroutines.CancellationException
 
 /**
@@ -13,6 +16,11 @@ import kotlinx.coroutines.CancellationException
  * Idempotent, and never exposes an unverified file (the [ModelStore] enforces verify-before-promote).
  * [CancellationException] is **not** caught — a stopped worker's cancellation propagates so the
  * download aborts cooperatively without flipping availability or promoting a partial file.
+ *
+ * **Retry taxonomy (P2-7):** a download failure is split by [OperationError.NetworkError.retryable]
+ * — transient (network/5xx/timeout) → [ProvisionResult.TransientFailure] (worker retries); permanent
+ * (4xx/non-HTTPS) → [ProvisionResult.PermanentFailure] (worker fails). A SHA-256 mismatch is always
+ * permanent ([ProvisionResult.VerificationFailed]).
  */
 class ModelProvisioner(
     private val store: ModelStore,
@@ -23,7 +31,8 @@ class ModelProvisioner(
     suspend fun provision(): ProvisionResult {
         val modelId = config.modelId
 
-        // Idempotent no-op: a verified model already on disk just (re)asserts availability.
+        // Idempotent no-op: a verified model already on disk just (re)asserts availability. This also
+        // self-heals a crash between atomic-rename and markAvailable (file present, marker missing).
         if (store.modelFile(modelId) != null) {
             availability.markAvailable(modelId)
             return ProvisionResult.AlreadyAvailable
@@ -35,25 +44,22 @@ class ModelProvisioner(
         }
 
         val quarantine = store.quarantineFile(modelId)
-        val download = try {
-            downloader.download(config.url, quarantine)
-        } catch (c: CancellationException) {
-            throw c
-        }
-        if (download is com.sidr.launcher.domain.result.OperationResult.Failure) {
-            // Transient (network/IO) — drop the partial file and let WorkManager retry with backoff.
+        val download = downloader.download(config.url, quarantine) // CancellationException propagates
+        if (download is OperationResult.Failure) {
             store.deleteQuarantine(modelId)
-            return ProvisionResult.TransientFailure
+            val error = download.error
+            val transient = error is OperationError.NetworkError && error.retryable
+            return if (transient) ProvisionResult.TransientFailure else ProvisionResult.PermanentFailure
         }
 
-        // Verify + atomically promote. A hash mismatch is a permanent failure (re-downloading the
-        // same pinned artifact will not fix a bad pin); availability stays not-Available.
+        // Verify + atomically promote. A hash mismatch is permanent — re-downloading the same pinned
+        // artifact will not fix a bad pin; availability stays not-Available.
         return when (store.promote(modelId, config.expectedSha256)) {
-            is com.sidr.launcher.domain.result.OperationResult.Success -> {
+            is OperationResult.Success -> {
                 availability.markAvailable(modelId)
                 ProvisionResult.Provisioned
             }
-            is com.sidr.launcher.domain.result.OperationResult.Failure -> {
+            is OperationResult.Failure -> {
                 availability.markMissing(modelId)
                 ProvisionResult.VerificationFailed
             }
@@ -64,13 +70,14 @@ class ModelProvisioner(
 /**
  * Outcome of [ModelProvisioner.provision], mapped by the worker:
  *  - [Provisioned] / [AlreadyAvailable] → `Result.success`
- *  - [TransientFailure]                 → `Result.retry`
- *  - [VerificationFailed] / [NotConfigured] → `Result.failure` (no point retrying the same pin)
+ *  - [TransientFailure]                 → `Result.retry` (network/5xx/timeout — backoff)
+ *  - [PermanentFailure] / [VerificationFailed] / [NotConfigured] → `Result.failure` (no point retrying)
  */
 enum class ProvisionResult {
     Provisioned,
     AlreadyAvailable,
     TransientFailure,
+    PermanentFailure,
     VerificationFailed,
     NotConfigured,
 }

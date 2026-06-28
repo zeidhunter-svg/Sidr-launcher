@@ -23,6 +23,16 @@ data class ModelDownloadConfig(
     /** Lowercase hex SHA-256 of the pinned artifact. Blank until OQ#2 closes. */
     val expectedSha256: String,
 ) {
+    init {
+        // Fail-fast on a half-pinned config: a `url` without an `expectedSha256` (or vice versa)
+        // would let an unverifiable artifact slip past `isPinned` the moment OQ#2 closes. Either
+        // both are blank (inert, OQ#2-pending) or both are set (fully pinned) — never one of each.
+        require(url.isBlank() == expectedSha256.isBlank()) {
+            "Half-pinned ModelDownloadConfig: url and expectedSha256 must both be set or both blank " +
+                "(url blank=${url.isBlank()}, sha blank=${expectedSha256.isBlank()})"
+        }
+    }
+
     /** True only once a real artifact + its hash are pinned (OQ#2 resolved). */
     val isPinned: Boolean
         get() = url.isNotBlank() && expectedSha256.isNotBlank()

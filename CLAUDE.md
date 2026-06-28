@@ -4,8 +4,34 @@ Session digest. Read this first. **Phase 4 is DONE (Blocks E → H, 2026-06-23).
 multi-provider) is DONE — Blocks I → N complete (2026-06-24 – 2026-06-27).** Code + JVM green;
 on-device acceptance **pending** device run on SM-A325F (Block-J `SecretStoreInstrumentedTest` +
 Block-N N5 streaming/offline/cancel/rotation).
-**Phase 6 (Local NLU + embeddings, Blocks O → R) is IN PROGRESS — Blocks O + P complete (O 2026-06-27,
-P 2026-06-28).** Block O delivered the pure domain contracts (`DeviceProfile`/`DeviceCapability`/
+**Phase 6 (Local NLU + embeddings, Blocks O → R) is IN PROGRESS — Blocks O + P + Q complete (O 2026-06-27,
+P + Q 2026-06-28).** **Block Q delivered model-management + download gating:** pure
+`DeviceProfileClassifier` (`(ram,cores)→DeviceProfile`: LOW_END `<2.5 GB` or `<4` cores, HIGH_END `≥5.5 GB`
++ `≥8` cores, else MID) + `DeviceProfileCacheMapping` (lossy LOW_END-vs-rest) + `AndroidDeviceProfiler :
+DeviceProfileProvider` (`:core:android`, write-through to the **pre-existing** `DeviceProfileCacheRepository`,
+capability re-read per call); `ModelStore` (quarantine→SHA-256-verify→atomic-rename, implements P's
+`LocalModelFiles`, **never exposes an unverified file**, bundled-vocab `assets/nlu/` seam) +
+`Sha256Verifier` + `ModelProvisioner` + `ModelManager` (**enqueue-gate-static-only** §6.A:
+`profile≠LOW_END && availability≠Available && config.isPinned`; thermal/battery NOT in the enqueue
+decision — they're WorkManager constraints + the per-inference re-check inside `OnnxIntentClassifier`) +
+`ModelDownloader` port (**`:domain`**, rework P2-4) + `ModelFilePresence` port (`:domain`, rework P1-2) +
+`ModelDownloadScheduler` port (`:data:ai-local`); `ModelAvailabilityRepositoryImpl` (`:data:repository`,
+`model_available_ids` stringSet **cross-checked against `ModelFilePresence` disk truth** → all 3 Block-O
+states reachable, marker-but-missing reads not-Available; privacy-guard green); `@HiltWorker
+ModelDownloadWorker` (shell) + `WorkManagerModelDownloadScheduler` + `SidrLauncherApp :
+Configuration.Provider`/`HiltWorkerFactory` + manifest WorkManagerInitializer removal (in `:app`);
+`KtorModelDownloader` (HTTPS-only, **retry taxonomy** 4xx/non-HTTPS→permanent, 5xx/network→transient) is a
+plain class in **`:data:ai-cloud`** (`@Provides`-wired in `:app`, reuses the cloud `HttpClient`) — keeps
+`:data:ai-local` kapt/HTTP-free and adds **no `data→data` edge** (port in `:domain`); correctness logic
+stays in the JVM-tested `ModelProvisioner`. **OQ#2 NOT resolved (expected):**
+`ModelDownloadConfig.INTENT_NLU_PENDING` is the single inert seam (blank URL/hash, `TODO(OQ#2)`; `init`
+`require` rejects a half-pinned config); whole mechanism JVM-tested vs fakes, live download +
+`AndroidDeviceProfiler` reads device/release-pending on SM-A325F. New deps = WorkManager 2.10.0 +
+hilt-work 1.2.0 only; `ai.onnxruntime` still confined to P's two shell files; `:domain` untouched. **39
+new JVM tests** (0 failures); full `testDebugUnitTest` + `assembleDebug` green. **P's three seams
+(`DeviceProfileProvider`/`ModelAvailabilityRepository`/`LocalModelFiles`) now have prod impls →
+`OnnxIntentClassifier` is bindable; Block R does the bind + trim-hook + `ensureModel()` trigger.**
+Block O delivered the pure domain contracts (`DeviceProfile`/`DeviceCapability`/
 `DeviceProfileProvider` + `LocalInferenceGate` + `domain.ai.local` ports + fakes; NLU rides the existing
 `IntentMatcher` port — **no parallel `IntentClassifier`**). **Block P delivered the ONNX runtime in
 `:data:ai-local`:** `OnnxIntentClassifier : IntentMatcher` (`source = NLU`; lazy + single + Mutex-guarded
@@ -22,10 +48,11 @@ byte-exact vs an independent golden, `IntentLabelMapper` softmax/label-map + con
 NLU softmax confidence **uncalibrated** vs rule scale (open Q → Block R); `assembleDebug` + full JVM
 regression green. **Device-pending:** real `intent.onnx`/`vocab.txt` training + P5 SM-A325F run (no
 torch/onnx/network here). `:app` trim-hook registration + DI binding deferred to Q/R (classifier not
-bindable until Q's impls exist). Next = **Block Q** (DeviceProfile detector + ModelStore + SHA-256 +
-WorkManager; gated on Open Question #2 — model hosting). Plan + forks:
-[ai-context/phase-6-local-nlu-plan.md](ai-context/phase-6-local-nlu-plan.md) (ADRs "Block O complete" +
-"Block P complete" in decisions.md). Phase 5 plan: [ai-context/phase-5-plan.md](ai-context/phase-5-plan.md).
+bindable until Q's impls exist; Q delivered them — see above). Next = **Block R** (`LayeredIntentMatcher` +
+unqualified-`IntentMatcher` DI swap + `:app` `onTrimMemory`→`SessionLifecycle.releaseResources()` + the
+runtime `ensureModel()` trigger + NLU↔rule confidence calibration + docs-sync + **Phase 6 close**). Plan + forks:
+[ai-context/phase-6-local-nlu-plan.md](ai-context/phase-6-local-nlu-plan.md) (ADRs "Block O complete",
+"Block P complete", "Block Q complete" in decisions.md). Phase 5 plan: [ai-context/phase-5-plan.md](ai-context/phase-5-plan.md).
 
 ## What this is
 
@@ -263,6 +290,47 @@ Phase 3 result, Blocks A → D:
   vs rule scale → open Q to **Block R**. Details: decisions.md "ADR 2026-06-28 — Block P complete".
   **Next = Block Q** (DeviceProfile detector + ModelStore + SHA-256 + WorkManager; gated on Open
   Question #2 — model hosting/URL). **Phase 6 NOT closed (Block R closes it).**
+- **Phase 6 Block Q ✅ (2026-06-28)** — DeviceProfile detector + model management + WorkManager download
+  gating. **OQ#2 branch = NOT resolved (expected):** `ModelDownloadConfig.INTENT_NLU_PENDING` is the
+  single inert device/release-pending seam (blank URL/hash, `TODO(OQ#2)`, `isPinned=false`); the whole
+  mechanism is JVM-tested vs fakes now, live download device-pending. `:core:android`: pure
+  `DeviceProfileClassifier` (`(ram,cores)→DeviceProfile`; LOW_END `<2.5 GB` or `<4` cores, HIGH_END
+  `≥5.5 GB`+`≥8` cores) + `(rawSignals)→DeviceCapability` (`nnapiAvailable=sdk≥29` hint, `thermalOk=status<SEVERE`
+  w/ `-1` no-signal sentinel, `batteryOk=!powerSave`) + `DeviceProfileCacheMapping` (lossy LOW_END-vs-rest)
+  + `AndroidDeviceProfiler : DeviceProfileProvider` (in-mem profile cache + write-through to the
+  **pre-existing** `DeviceProfileCacheRepository` via `@ApplicationScope`; capability re-read per call) +
+  `testImplementation(junit4)`. `:data:ai-local`: `ModelStore` (quarantine→SHA-256-verify→atomic
+  `Files.move(ATOMIC_MOVE)`→ready, **never exposes unverified**, implements P's `LocalModelFiles`, vocab
+  via injected `vocabOpener`/bundled `assets/nlu/`, also implements `ModelFilePresence`) + `Sha256Verifier`
+  + `ModelDownloadScheduler` port + `ModelProvisioner` (`provision()`→`ProvisionResult`; idempotent,
+  re-throws cancellation, permanent-vs-transient) + `ModelManager.ensureModel()` (**enqueue-gate-static-only §6.A**:
+  `profile≠LOW_END && availability≠Available && config.isPinned` — thermal/battery are WM constraints +
+  the per-inference re-check inside `OnnxIntentClassifier`, NOT the enqueue decision). `:domain` (rework):
+  `ModelDownloader` + `ModelFilePresence` ports. `:data:repository`: `ModelAvailabilityRepositoryImpl`
+  (shared `sidr_preferences`, `model_available_ids` stringSet **cross-checked vs `ModelFilePresence` disk
+  truth** → all 3 Block-O states reachable, marker-but-missing = not-Available; `ALL_KEY_NAMES`, privacy
+  guard green). `:data:ai-cloud` (rework): `KtorModelDownloader` plain class (HTTPS-only, retry taxonomy
+  4xx/non-HTTPS→permanent / 5xx/network→transient, `@Provides`-wired in `:app`). `:app`: `@HiltWorker
+  ModelDownloadWorker` (thin shell → `ModelProvisioner`, maps to `Result.success/retry/failure`, no
+  foreground service) + `WorkManagerModelDownloadScheduler` (`enqueueUniqueWork` KEEP + CONNECTED/
+  battery-not-low/storage-not-low constraints + EXPONENTIAL 30s backoff) + `SidrLauncherApp :
+  Configuration.Provider`/`HiltWorkerFactory` + manifest `WorkManagerInitializer` removal
+  (`tools:node="remove"`) + DI (`ModelProvisionProvidesModule`/`ModelProvisionBindsModule`,
+  availability bound in `PersistenceBindsModule`). **Deliberate deviations (documented):** the `@HiltWorker`
+  shell lives in `:app` (composition root, already kapt+Hilt) and the port fakes in `:data:ai-local-test`,
+  to keep `:data:ai-local` kapt/HTTP-free; the runtime `ensureModel()` trigger is deferred to Block R
+  (pairs with classifier consumption; inert under OQ#2). New deps = `androidx.work` 2.10.0 + `androidx.hilt`
+  1.2.0 (`hilt-work` + compiler via kapt in `:app`) **only** (context7-verified). `:data:ai-local` gains no
+  edge; `:data:ai-cloud` has **no `:data:ai-local` edge** (ports in `:domain`); `ai.onnxruntime` still
+  confined to P's two shell files; `:domain` pure. **39 new JVM tests, 0 failures**; full
+  `testDebugUnitTest` + `assembleDebug` **BUILD SUCCESSFUL**. **Reworked before close (review P1-1…P2-8):**
+  context7-verified WM init pasted in ADR; availability disk cross-check (P1-2); downloader moved to
+  `:data:ai-cloud` (P2-4); half-pinned-config `require` (P2-5); `noBackupFilesDir` confirmed (P2-6); retry
+  taxonomy (P2-7). **Device/release-pending:** live download + real artifact URL/SHA-256 (OQ#2); **real
+  `vocab.txt` (30522, byte-matched to the exported tokenizer) — OQ#1**; `AndroidDeviceProfiler` Android-API
+  reads + thermal/battery transitions (SM-A325F). P's three seams now have prod impls →
+  `OnnxIntentClassifier` bindable. Details: decisions.md "ADR 2026-06-28 — Block Q complete" + its
+  "Rework before close" subsection. **Next = Block R** (binds the classifier; closes Phase 6).
 
 ## Hard rules
 
@@ -298,6 +366,12 @@ Phase 3 result, Blocks A → D:
 | Cloud AI client (Ktor) | `data/ai-cloud` |
 | `PromptContextBuilder` + `OutboundContextPolicy` (outbound allow-list/guards) *(Block L)* | `domain` |
 | ONNX NLU / embeddings | `data/ai-local` |
+| `ModelDownloader` port + `ModelFilePresence` port *(Block Q ✅, rework)* | `domain` |
+| `ModelStore`/`Sha256Verifier`/`ModelProvisioner`/`ModelManager` + `ModelDownloadScheduler` port + `ModelDownloadConfig` *(Block Q ✅)* | `data/ai-local` |
+| `AndroidDeviceProfiler` + pure `DeviceProfileClassifier`/`DeviceProfileCacheMapping` *(Block Q ✅)* | `core/android` |
+| `ModelAvailabilityRepositoryImpl` (marker + disk cross-check) *(Block Q ✅)* | `data/repository` |
+| `KtorModelDownloader` (HTTPS-only, retry taxonomy) *(Block Q ✅, rework)* | `data/ai-cloud` |
+| `ModelDownloadWorker` (`@HiltWorker`) / `WorkManagerModelDownloadScheduler` + `Configuration.Provider`/`HiltWorkerFactory` *(Block Q ✅)* | `app` |
 | `UiState`, dispatchers, logging contracts | `core/common` |
 | `Routes`, `NavigationEvent` | `core/common` *(→ `core/navigation` on trigger)* |
 | `DeviceProfile` detection, `PackageManager` access, `SpeechInputSource` Android impl | `core/android` |

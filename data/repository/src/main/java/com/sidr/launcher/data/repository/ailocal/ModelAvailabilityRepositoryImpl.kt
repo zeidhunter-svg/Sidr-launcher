@@ -8,6 +8,7 @@ import com.sidr.launcher.core.common.di.IoDispatcher
 import com.sidr.launcher.data.repository.preferences.PreferencesKeys
 import com.sidr.launcher.domain.ai.local.ModelAvailability
 import com.sidr.launcher.domain.ai.local.ModelAvailabilityRepository
+import com.sidr.launcher.domain.ai.local.ModelFilePresence
 import com.sidr.launcher.domain.ai.local.ModelId
 import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
@@ -21,21 +22,25 @@ import javax.inject.Inject
 
 /**
  * DataStore-backed [ModelAvailabilityRepository] over the shared `sidr_preferences` store (Block E
- * pattern). Availability is persisted as a set of verified [ModelId] values under
- * [PreferencesKeys.MODEL_AVAILABLE_IDS]; the download worker calls [markAvailable] only **after** the
- * artifact's SHA-256 has been verified and atomically promoted by `ModelStore`.
+ * pattern), **cross-checked against on-disk presence** ([ModelFilePresence], P1-2).
  *
- * Two states are persisted — [ModelAvailability.Available] (id present) and [ModelAvailability.Missing]
- * (absent). [ModelAvailability.Unverified] is never written: the on-disk gate is the real load-time
- * guard (`LocalModelFiles.modelFile()` returns null if the verified file is gone), so this flag is the
- * reactive *projection* of availability, not a second integrity source. The gate treats Missing and
- * Unverified identically, so a stale-but-present flag with a deleted file still degrades safely.
+ * The persisted marker (`model_available_ids`) records that the worker verified + promoted a model;
+ * [ModelFilePresence] reports whether the verified file is still physically present. The availability
+ * surface is the **conjunction**, so all three Block-O states are reachable and the
+ * "no unverified model ever loaded" invariant holds even if the marker and disk drift:
  *
- * Reads expose a [Flow] (falling back to defaults on [IOException]); writes return [OperationResult]
- * and never throw — codebase-wide convention.
+ *  - marker set **and** file present → [ModelAvailability.Available]
+ *  - file present **but** unmarked   → [ModelAvailability.Unverified] (e.g. a crash between
+ *    `ModelStore.promote`'s atomic-rename and `markAvailable`; the next provision run re-marks it)
+ *  - otherwise (file gone with a stale marker, or never present) → [ModelAvailability.Missing]
+ *
+ * A marker-set-but-file-missing thus reads as **not** Available — the gate degrades to the rule path
+ * rather than trusting a stale flag. Reads expose a [Flow] (falling back to defaults on [IOException]);
+ * writes return [OperationResult] and never throw.
  */
 class ModelAvailabilityRepositoryImpl @Inject constructor(
     private val dataStore: DataStore<Preferences>,
+    private val filePresence: ModelFilePresence,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ModelAvailabilityRepository {
 
@@ -43,8 +48,13 @@ class ModelAvailabilityRepositoryImpl @Inject constructor(
         dataStore.data
             .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
             .map { prefs ->
-                val ids = prefs[PreferencesKeys.MODEL_AVAILABLE_IDS] ?: emptySet()
-                if (modelId.value in ids) ModelAvailability.Available else ModelAvailability.Missing
+                val marked = modelId.value in (prefs[PreferencesKeys.MODEL_AVAILABLE_IDS] ?: emptySet())
+                val present = filePresence.isModelPresent(modelId)
+                when {
+                    marked && present -> ModelAvailability.Available
+                    present -> ModelAvailability.Unverified
+                    else -> ModelAvailability.Missing
+                }
             }
 
     override suspend fun markAvailable(modelId: ModelId): OperationResult<Unit> =

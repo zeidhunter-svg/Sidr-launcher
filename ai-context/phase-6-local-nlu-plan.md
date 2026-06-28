@@ -523,19 +523,39 @@ reconcile the docs to as-built, and close Phase 6.
 
 **New files:** `LayeredIntentMatcher : IntentMatcher` in `:data:repository` (composes the `IntentMatcher`
 port + `IntentConfidencePolicy`); `:app` DI — `@RuleMatcher`/`@NluMatcher` qualified providers +
-gate-driven selection of real `OnnxIntentClassifier` vs `NoOpIntentClassifier` for the secondary; the
-unqualified `IntentMatcher` binding becomes `LayeredIntentMatcher`.
+gate-driven selection of real `OnnxIntentClassifier` vs `NoOpIntentMatcher` for the secondary; the
+unqualified `IntentMatcher` binding becomes `LayeredIntentMatcher`; an `:app` `ComponentCallbacks2`
+that forwards `onTrimMemory` to the bound matcher's `SessionLifecycle` seam (Block P deliverable).
+
+> **OPEN QUESTION carried from Block P — NLU↔rule confidence is NOT calibrated.** Block P emits raw
+> softmax confidence (typically 0.6–0.99) gated by a hardcoded `OnnxModelSpec.confidenceFloor = 0.60`;
+> `RuleBasedIntentMatcher` uses a hand-tuned scale (0.10/0.30/0.90/0.95). A mechanical "higher
+> confidence wins" under one `IntentConfidencePolicy` (suggest 0.50 / autoExecute 0.85) will
+> **systematically over-pick NLU**, and the window `[0.60, 0.85)` yields an NLU result that clears
+> `suggest` but not `autoExecute` — only acceptable if intended. **R must make this a conscious
+> decision** (source-aware policy / per-source thresholds / NLU down-scaling), not the default merge.
 
 **Steps:**
 - [ ] `R1` `LayeredIntentMatcher`: rule-first; return rule verbatim when not low-confidence (NLU never
-      called, `< 10ms` preserved); on low-confidence consult NLU and pick the higher-confidence result.
+      called, `< 10ms` preserved); on low-confidence consult NLU. **Merge policy is the conscious
+      decision above — do NOT ship a raw "higher-confidence wins" against an uncalibrated NLU scale.**
+      Decide + record: source-aware thresholds (or NLU confidence down-scaling) so the `[0.60, 0.85)`
+      window behaves intentionally; settle whether `confidenceFloor` stays in `OnnxModelSpec` or moves
+      to the policy. JVM-test the chosen rule explicitly.
 - [ ] `R2` DI: qualified `@RuleMatcher`(=`RuleBasedIntentMatcher`) + `@NluMatcher`(=gate ? `OnnxIntentClassifier`
-      : `NoOpIntentClassifier`) → `LayeredIntentMatcher` as the unqualified `IntentMatcher`.
+      : `NoOpIntentMatcher`) → `LayeredIntentMatcher` as the unqualified `IntentMatcher`.
       **`HandleUserCommandUseCase` and `IntentProvidesModule.provideHandleUserCommandUseCase` only see
       the swapped binding — no use-case code change.**
+- [ ] `R2.5` **(Fork P6-9 hard invariant — do NOT drop):** register a `ComponentCallbacks2` in `:app`
+      whose `onTrimMemory(TRIM_MEMORY_*)` calls `SessionLifecycle.releaseResources()` on the bound
+      `@NluMatcher` (cast/inject the `SessionLifecycle` seam from `:data:ai-local`; `:app` already deps
+      `:data:ai-local`). Deferred from Block P only because the classifier wasn't bindable until Q's
+      `DeviceProfileProvider`/`ModelAvailabilityRepository`/`LocalModelFiles` impls existed — the seam
+      + teardown logic already exist (P3). Without this the "close session under memory pressure"
+      invariant is unmet.
 - [ ] `R3` JVM tests: rule-high-confidence → NLU never invoked (verified via a counting fake) + identical
-      outcome to Phase 3; rule-low + NLU-high → NLU wins (`source = NLU`); gate-off (NoOp secondary) →
-      behaviour identical to rule-only; **all Phase-3 intent tests still green**.
+      outcome to Phase 3; rule-low + NLU-high → NLU wins per the **calibrated** R1 rule (`source = NLU`);
+      gate-off (NoOp secondary) → behaviour identical to rule-only; **all Phase-3 intent tests still green**.
 - [ ] `R4` **Docs-sync:** fix `architecture.md:169,192` ONNX-slot wording (NLU/classification, generative
       slot still reserved); document the as-built local-NLU pipeline (`DeviceProfile`, gate, ONNX
       isolation, WorkManager download/verify); update the Contract→Owner table for the new ports/owners.
@@ -544,7 +564,9 @@ unqualified `IntentMatcher` binding becomes `LayeredIntentMatcher`.
 
 **Acceptance:** the rule fast path and every Phase-3 test are unchanged; a rules-missed phrase resolves
 via NLU when the gate is on; gate-off devices behave exactly as today; `HandleUserCommandUseCase`
-untouched; docs match reality; `assembleDebug` + full JVM regression green (ONNX device run pending).
+untouched; **the NLU↔rule merge is a recorded, calibrated decision (not raw higher-wins) and JVM-tested**;
+**`onTrimMemory → SessionLifecycle.releaseResources()` is wired in `:app` (Fork P6-9)**; docs match
+reality; `assembleDebug` + full JVM regression green (ONNX device run pending).
 
 **Demoable milestone:** "open telegram" still resolves on the `< 10ms` rule path (NLU not consulted);
 "fire up the camera" (no rule) routes through NLU and resolves on a gated device — the Phase-6 analog of

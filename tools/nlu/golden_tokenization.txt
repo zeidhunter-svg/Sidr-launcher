@@ -1,0 +1,8 @@
+maxLen	12
+b3BlbiBjYW1lcmE=	[CLS] open camera [SEP]	2 4 5 3 0 0 0 0 0 0 0 0	1 1 1 1 0 0 0 0 0 0 0 0	0 0 0 0 0 0 0 0 0 0 0 0
+c2V0dGluZ3M=	[CLS] set ##ting ##s [SEP]	2 6 7 8 3 0 0 0 0 0 0 0	1 1 1 1 1 0 0 0 0 0 0 0	0 0 0 0 0 0 0 0 0 0 0 0
+Q2Fmw6k=	[CLS] cafe [SEP]	2 9 3 0 0 0 0 0 0 0 0 0	1 1 1 0 0 0 0 0 0 0 0 0	0 0 0 0 0 0 0 0 0 0 0 0
+b3BlbiE=	[CLS] open ! [SEP]	2 4 10 3 0 0 0 0 0 0 0 0	1 1 1 1 0 0 0 0 0 0 0 0	0 0 0 0 0 0 0 0 0 0 0 0
+eHl6enk=	[CLS] [UNK] [SEP]	2 1 3 0 0 0 0 0 0 0 0 0	1 1 1 0 0 0 0 0 0 0 0 0	0 0 0 0 0 0 0 0 0 0 0 0
+ICBPUEVOICAgQ2FtZXJhICA=	[CLS] open camera [SEP]	2 4 5 3 0 0 0 0 0 0 0 0	1 1 1 1 0 0 0 0 0 0 0 0	0 0 0 0 0 0 0 0 0 0 0 0
+cGxheSBtdXNpYyBhbmQgcGxheSBzb21lIG11c2ljIG5vdyBwbGVhc2Ugc2hvdyBhcHBzIG9wZW4gY2FtZXJh	[CLS] play music and play some music now please show apps [SEP]	2 15 16 17 15 18 16 19 20 25 26 3	1 1 1 1 1 1 1 1 1 1 1 1	0 0 0 0 0 0 0 0 0 0 0 0

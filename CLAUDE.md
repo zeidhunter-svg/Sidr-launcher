@@ -4,16 +4,28 @@ Session digest. Read this first. **Phase 4 is DONE (Blocks E → H, 2026-06-23).
 multi-provider) is DONE — Blocks I → N complete (2026-06-24 – 2026-06-27).** Code + JVM green;
 on-device acceptance **pending** device run on SM-A325F (Block-J `SecretStoreInstrumentedTest` +
 Block-N N5 streaming/offline/cancel/rotation).
-**Phase 6 (Local NLU + embeddings, Blocks O → R) is IN PROGRESS — Block O complete (2026-06-27).**
-Block O delivered: `DeviceProfile`/`DeviceCapability`/`DeviceProfileProvider` + `LocalInferenceGate`
-(pure gate policy) + `domain.ai.local` ports (`ModelId`, `ModelAvailability`, `ModelAvailabilityRepository`,
-`TextEmbedder` port-only) + 4 JVM fakes + 22 new JVM tests (284 total, 0 failures). Port-topology
-decision: NLU rides the existing `IntentMatcher` port — **no parallel `IntentClassifier` created**.
-Next = **Block P** (ONNX runtime in `:data:ai-local`; gated on open question: model + tokenizer +
-label-set selection). Plan + forks: [ai-context/phase-6-local-nlu-plan.md](ai-context/phase-6-local-nlu-plan.md)
-(ADR "Block O complete" in decisions.md). Key pre-flight note that is now resolved: `DeviceProfile`/`DeviceCapability` detection did **not** exist (only the
-`DeviceProfileCacheEntry` DTO) — Phase 6 builds it from scratch; `:data:ai-local` already wires ONNX 1.20.0
-but has zero sources. Phase 5 plan: [ai-context/phase-5-plan.md](ai-context/phase-5-plan.md).
+**Phase 6 (Local NLU + embeddings, Blocks O → R) is IN PROGRESS — Blocks O + P complete (O 2026-06-27,
+P 2026-06-28).** Block O delivered the pure domain contracts (`DeviceProfile`/`DeviceCapability`/
+`DeviceProfileProvider` + `LocalInferenceGate` + `domain.ai.local` ports + fakes; NLU rides the existing
+`IntentMatcher` port — **no parallel `IntentClassifier`**). **Block P delivered the ONNX runtime in
+`:data:ai-local`:** `OnnxIntentClassifier : IntentMatcher` (`source = NLU`; lazy + single + Mutex-guarded
+session on `Dispatchers.Default`, per-inference `LocalInferenceGate` re-check, `AutoCloseable` +
+`SessionLifecycle` seam with transient-vs-sustained teardown, graceful degrade, no user text logged) +
+`OnnxSessionFactory` (CPU default + opportunistic NNAPI on API 29+ behind `OnnxRuntimeFlags`, both
+Fork-P6-5 failure modes handled, test seam) + a **pure JVM-tested P2a layer** (`WordPieceTokenizer`
+byte-exact vs an independent golden, `IntentLabelMapper` softmax/label-map + confidence escape,
+`SlotExtractor`, `NluLabel`, `OnnxModelSpec`) + `LocalModelFiles` seam (Q implements) + P0 pipeline in
+`tools/nlu/` + device-pending `androidTest`. Open Question #1 (model/tokenizer/7-label set) RESOLVED
+2026-06-28: BERT-Mini int8, WordPiece uncased vocab, 7 classes (`CLEAR` rule-only, slots heuristic).
+21 new JVM tests (0 failures); ONNX confined to two shell files; pinned I/O contract
+(`input_ids`/`attention_mask`[/`token_type_ids` if declared] int64 `[1,32]`, `logits` float `[1,7]`);
+NLU softmax confidence **uncalibrated** vs rule scale (open Q → Block R); `assembleDebug` + full JVM
+regression green. **Device-pending:** real `intent.onnx`/`vocab.txt` training + P5 SM-A325F run (no
+torch/onnx/network here). `:app` trim-hook registration + DI binding deferred to Q/R (classifier not
+bindable until Q's impls exist). Next = **Block Q** (DeviceProfile detector + ModelStore + SHA-256 +
+WorkManager; gated on Open Question #2 — model hosting). Plan + forks:
+[ai-context/phase-6-local-nlu-plan.md](ai-context/phase-6-local-nlu-plan.md) (ADRs "Block O complete" +
+"Block P complete" in decisions.md). Phase 5 plan: [ai-context/phase-5-plan.md](ai-context/phase-5-plan.md).
 
 ## What this is
 
@@ -221,6 +233,36 @@ Phase 3 result, Blocks A → D:
   failures); purity guard green; all greps clean; intent pipeline untouched.
   Details: decisions.md "ADR 2026-06-27 — Block O complete". **Next = Block P** (gated on model +
   tokenizer + label-set selection — open question must be resolved first).
+- **Phase 6 Block P ✅ (2026-06-28)** — ONNX runtime in `:data:ai-local` (platform-risk block). Open
+  Question #1 resolved: BERT-Mini/TinyBERT-4L int8, WordPiece **uncased** vocab, **7 classes**
+  (`NluLabel` argmax order LAUNCH_APP/SEARCH/OPEN_SETTINGS/SHOW_APPS/HELP/OPEN_ASSISTANT/UNKNOWN;
+  `CLEAR` rule-only; slots heuristic). **P2a pure, ONNX-free, JVM-tested:** `WordPieceTokenizer`
+  (faithful HF BasicTokenizer+Wordpiece; byte-exact vs an **independent** stdlib reference golden —
+  the #1 silent-failure guard), `IntentLabelMapper` (softmax→argmax→label→`IntentMatchResult` +
+  **confidence escape** at floor 0.60 / argmax==UNKNOWN), `SlotExtractor` (verb/filler strip),
+  `NluLabel`, `OnnxModelSpec`. **P2b/P3/P4 thin shell** `OnnxIntentClassifier : IntentMatcher`
+  (`source = NLU`): lazy + single + `Mutex`-serialized session on `Dispatchers.Default`;
+  **per-inference** `LocalInferenceGate.allowsLocalNlu` re-check with fresh `capability()` (Fork P6-4
+  moment 2); files resolved via `LocalModelFiles` seam (Q impl) **before** any `OrtEnvironment` call so
+  missing model/vocab degrades JVM-testably; tensors + `OrtSession.Result` in `use{}`; any failure →
+  lowest-confidence result, never thrown; **no user text logged**. **Lifecycle:** `AutoCloseable` +
+  `SessionLifecycle` ONNX-free seam (`:app onTrimMemory` wiring deferred to Q/R — classifier not
+  bindable until Q's impls exist); **transient gate-off keeps the session, sustained (debounced ~30s)
+  + trim tears it down**, re-inits lazily; `runMutex.tryLock()` + `pendingTeardown` avoids closing
+  mid-run. **P1** `OnnxSessionFactory`: **CPU deterministic default** + NNAPI appended only when
+  `nnapiEnabled && sdkInt>=29` (flag in `OnnxRuntimeFlags`, off by default; both init-failure and
+  degraded-success handled; `nnapiEnabled`/`sdkInt` test seams for P5 path comparison). Pinned I/O:
+  `input_ids`+`attention_mask`[+`token_type_ids` iff declared] int64 `[1,32]`, `logits` float `[1,7]`
+  read by index 0. **P0** `tools/nlu/` (out of source sets): stdlib golden generator (ran), placeholder
+  + train/export scripts (device-pending — no torch/onnx/net). ONNX Java surface re-verified vs the
+  bundled 1.20.0 AAR (`javap`). `:core:android` edge added; **no new dep**. ONNX confined to two shell
+  files (`OnnxIntentClassifier`/`OnnxSessionFactory`) — grep clean incl. pure layer; `:domain`
+  untouched; no network on inference path; generative router slot + intent/Phase-3/5 untouched. **21
+  new JVM tests, 0 failures**; `androidTest` compiles (device-pending, Assume-skips w/o asset);
+  `assembleDebug` (clean baseline) + full JVM regression green. NLU softmax confidence **uncalibrated**
+  vs rule scale → open Q to **Block R**. Details: decisions.md "ADR 2026-06-28 — Block P complete".
+  **Next = Block Q** (DeviceProfile detector + ModelStore + SHA-256 + WorkManager; gated on Open
+  Question #2 — model hosting/URL). **Phase 6 NOT closed (Block R closes it).**
 
 ## Hard rules
 

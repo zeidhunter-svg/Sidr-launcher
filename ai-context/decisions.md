@@ -1458,6 +1458,120 @@ Block O prompt):
 question 1 is resolved. Model: **Opus 4.8** (session lifecycle, NNAPI fallback, tensor I/O, memory —
 costly to get wrong; first `ai.onnxruntime` Java API use → re-verify Javadoc at execution time).
 
+### ADR 2026-06-28 — Block P complete (ONNX runtime integration in `:data:ai-local`)
+
+**Scope:** Block P only — the lazy/single/memory-safe `OnnxIntentClassifier` + `OnnxSessionFactory`
++ the pure tokenizer/label-map/slot layer + the P0 offline model pipeline + the device-pending
+`androidTest`. Does NOT wire the DI binding swap, `LayeredIntentMatcher`, the `:app` trim-hook
+registration, the `DeviceProfile` detector, `ModelStore`/SHA-256/WorkManager download, or the
+`TextEmbedder` impl — those are Blocks Q/R / Phase 7.
+
+**Pre-flight gate.** The known Gradle **transform-cache corruption**
+(`/home/ali/.gradle/caches/8.10.2/transforms/*/metadata.bin` unreadable) was cleared (delete
+`transforms` + `fileHashes` + project `.gradle/8.10.2`, **kill all daemons** — a stale IDLE daemon
+recreated the corrupt registrations) and a **green `assembleDebug` baseline** was confirmed
+(`--no-daemon`, BUILD SUCCESSFUL) before any P code. Block P then keeps `assembleDebug` green
+(it adds real Android source + the `:core:android` edge).
+
+**ONNX Java surface re-verified against the bundled AAR** (`onnxruntime-android-1.20.0.aar` →
+`classes.jar`, `javap`), not memory/context7 (whose Android-Java coverage was thin): `OrtEnvironment.getEnvironment()`
+(AutoCloseable singleton); `createSession(byte[], SessionOptions)`; `OrtSession.SessionOptions()` +
+`addNnapi(EnumSet<ai.onnxruntime.providers.NNAPIFlags>)` (+ no-arg) + `addCPU(boolean)`;
+`session.run(Map<String, OnnxTensorLike>) → OrtSession.Result` (AutoCloseable, `.get(int)`/`.get(String)`);
+`OnnxTensor.createTensor(OrtEnvironment, Object)` (used for `long[][]` = int64 `[1, maxLen]`);
+`OnnxValue.getValue()` (float `[1,7]` → `float[][]`). `NNAPIFlags = {USE_FP16, USE_NCHW, CPU_DISABLED, CPU_ONLY}`.
+
+**Topology correction (matches Block O ADR):** there is **no `IntentClassifier` port**.
+`OnnxIntentClassifier : IntentMatcher` returns `IntentMatchResult(source = MatcherSource.NLU)`. The
+gate-off no-op is the existing `NoOpIntentMatcher` (`:core:testing`). No parallel port created.
+
+**Model / tokenizer / 7-label set (Open Question #1, resolved 2026-06-28):** BERT-Mini/TinyBERT-4L-class
+encoder fine-tuned for 7-class sequence classification, dynamic int8, ONNX opset ≤ 22; BERT **WordPiece
+uncased `vocab.txt` (30522)** shipped beside the model. Labels in **argmax-index order**
+(`NluLabel`): `0 LAUNCH_APP, 1 SEARCH, 2 OPEN_SETTINGS, 3 SHOW_APPS, 4 HELP, 5 OPEN_ASSISTANT,
+6 UNKNOWN` → mapped to `LaunchAppIntent/SearchIntent/OpenSettingsIntent/SimpleCommandIntent(SHOW_APPS|
+HELP|OPEN_ASSISTANT)/UnknownIntent`. **`CLEAR` is not a class** (rule-only). **Slots are heuristic**
+(verb/filler strip in the pure mapper, not modeled); joint intent+slot frozen to Phase 7+.
+
+**Pinned input/shape contract (`OnnxModelSpec`):** inputs `input_ids` + `attention_mask`
+[+ `token_type_ids` **only if the model declares it** — checked via `session.inputNames`], all
+**int64 `[1, maxLen]`**; sequence axis treated as **fixed `max_len = 32`** (the tokenizer always
+pads/truncates to exactly `[1,32]`, valid for fixed-32 or dynamic exports); output `logits` float
+`[1,7]` read **by index 0** (name-independent). The `tools/nlu/` placeholder model matches these
+names/dtypes/axes exactly so swapping in the real model needs no Kotlin change.
+
+**P2a — pure, ONNX-free, JVM-tested** (`nlu/`): `WordPieceTokenizer` (faithful HF BasicTokenizer
+`do_lower_case` + WordpieceTokenizer — clean/CJK/lower/NFD-accent-strip/punct-split, greedy `##`
+longest-match, `[UNK]`); `IntentLabelMapper` (softmax→argmax→label→`IntentMatchResult`);
+`SlotExtractor`; `NluLabel`; `OnnxModelSpec`. **Confidence escape (mandatory):** argmax == UNKNOWN
+**or** max-softmax < `confidenceFloor` (0.60) → lowest-confidence `UnknownIntent(source = NLU)` so
+Block R's `LayeredIntentMatcher` falls back to rule. **NLU softmax confidence is NOT calibrated** to
+the rule-confidence scale — the merge policy is an **open question carried to Block R**.
+
+**P2b/P3/P4 — thin ONNX shell** (`OnnxIntentClassifier`): lazy session (first gated `match()` only,
+never cold start); single shared session serialized by a `Mutex`; inference on `Dispatchers.Default`;
+`session.run` not cooperatively cancellable (noted). **Per-inference gate** re-calls the **same**
+`LocalInferenceGate.allowsLocalNlu(...)` with fresh `capability()` (Fork P6-4 moment 2) → degrade on
+thermal/battery/availability. **Files resolved (`LocalModelFiles` seam, Q implements) BEFORE any
+`OrtEnvironment` call**, so a missing model/vocab degrades without loading native (and is JVM-testable).
+Every per-inference tensor + `OrtSession.Result` wrapped in `use{}`/`close()`. **Graceful degrade:**
+any load/tokenize/run failure → lowest-confidence result, never thrown; **no user text logged**
+(reasons only).
+
+**Session lifecycle (P3) — transient vs sustained teardown rule:** a **transient** gate-off
+(thermal/battery flicker) only **skips one inference and keeps the session**. The session is torn
+down only on (a) `releaseResources()` (the `SessionLifecycle` ONNX-free seam, wired from `:app`'s
+`onTrimMemory` in Q/R — `:app` already deps `:data:ai-local`; not wired in P because the classifier
+isn't bindable until Q provides the `DeviceProfileProvider`/`ModelAvailabilityRepository`/`LocalModelFiles`
+impls) and (b) **sustained** gate-off (debounced ~30s). Teardown is guarded by `runMutex.tryLock()`;
+if a run holds it, a `pendingTeardown` flag defers teardown to the run's `finally`. Re-inits lazily.
+
+**NNAPI (Fork P6-5):** `OnnxSessionFactory` keeps **CPU as the deterministic default** (the `<150ms`
+MID_RANGE budget is the CPU path); appends NNAPI **only when `nnapiEnabled` AND `sdkInt >= 29`**
+(skipped by construction on API 28). Flag location pinned in **`OnnxRuntimeFlags`**
+(`NNAPI_ENABLED_BY_DEFAULT = false`); `nnapiEnabled`/`sdkInt` are **constructor seams** so P5 can
+force NNAPI on to compare paths. (a) init failure → catch → CPU-only session, non-PII warn, no crash;
+(b) init-success-but-degraded → off-by-default until the device run proves it faster **and** correct.
+
+**P0 offline pipeline (`tools/nlu/`, out of Gradle source sets):** `gen_golden_vectors.py`
+(**stdlib-only** independent reference of the HF tokenizer → `golden_tokenization.{json,txt}` over a
+curated `vocab.mini.txt` exercising whole-word/`##`/`[UNK]`/accent/punct/truncation);
+`make_placeholder_model.py` (valid `intent.onnx` with the exact contract, needs `onnx`);
+`train_export.py` (fine-tune→int8→export + min-accuracy gate + confusion matrix, needs torch/transformers/net).
+This environment has **no torch/transformers/onnx/network**, so the **real** `intent.onnx` + real
+`vocab.txt` (30522) + HF-regenerated golden vectors are a **device-pending acceptance item** (Block J
+precedent). The mini-vocab golden set validates the Kotlin tokenizer's algorithm now, offline.
+
+**Freshly-downloaded model only picked up after restart:** model `availability` is read from
+`ModelAvailabilityRepository` per inference, but the bound secondary impl (real `OnnxIntentClassifier`
+vs `NoOpIntentMatcher`) is decided at **graph time** by the static gate (profile + availability) in
+Block R. A model that finishes downloading mid-session flips `Available` but the bound impl does not
+change until the next process start. **Deliberate, not a bug** (Fork P6-4 static-vs-dynamic split);
+revisit trigger = if model downloads become frequent enough that a same-session pickup matters.
+
+**Testing (Fork P6-8):** ONNX can't run on the JVM. **21 new JVM tests, 0 failures**
+(`WordPieceTokenizerGoldenTest` 3 — byte-exact vs the independent golden; `IntentLabelMapperTest` 7;
+`SlotExtractorTest` 5; `OnnxIntentClassifierGateTest` 6 — gate-off LOW_END/thermal/battery/availability
++ gate-on-missing-file degrade + release-safety, all without a real session). `unitTests.isReturnDefaultValues
+= true` so the no-session degrade paths' `android.util.Log` calls don't throw under JVM. Real session
+only in `androidTest` (`OnnxIntentClassifierInstrumentedTest`, **compiles**; Assume-skips when the
+model asset is absent; **device-pending** SM-A325F run records `<150ms` CPU latency + NNAPI→CPU path).
+
+**Build/deps:** `:data:ai-local` gains the `:core:android` edge (per the plan) + test deps
+(`junit4`, `coroutines-test`, `:core:testing`); **no new ONNX dep** (1.20.0 already wired); no R8 keep
+rule needed for the debug target (frozen to Ph9). `:domain` untouched; ONNX confined to the two shell
+files (`OnnxIntentClassifier`, `OnnxSessionFactory`) — grep clean elsewhere incl. the pure layer; no
+network on the inference path; intent/Phase-3/5 code + generative router's reserved slot untouched.
+
+**Verification:** `:data:ai-local:testDebugUnitTest` BUILD SUCCESSFUL (21/21);
+`:data:ai-local:compileDebugAndroidTestKotlin` BUILD SUCCESSFUL; full `testDebugUnitTest` +
+`assembleDebug` **BUILD SUCCESSFUL, 0 failures/errors**.
+
+**Next = Block Q** (DeviceProfile detector + ModelStore + SHA-256 verify + WorkManager download;
+gated on Open Question #2 — model hosting/URL). Block R wires `LayeredIntentMatcher` + the DI swap +
+the `:app` trim-hook registration + the NLU↔rule confidence-calibration decision + docs-sync + close.
+**Phase 6 NOT closed (Block R closes it).**
+
 ### ADR 2026-06-19 — Phase 2 skipped / reordered into a minimal slice
 - Decision: Phase 2 (launcher shell) is **not** run as a separate phase. Its navigation half was already absorbed into `3.1.x`; its product floor — `InstalledAppsRepository`, app grid, command input, offline app launch — is folded into Phase 3 as a **minimal P2 slice** (Block B).
 - Context: Phase 3's intent system cannot reach acceptance without Phase 2's installed-apps repository and command input (e.g. `open telegram` cannot resolve or launch). The skip deferred an unavoidable dependency rather than removing it.

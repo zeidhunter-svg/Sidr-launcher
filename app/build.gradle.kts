@@ -66,6 +66,13 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
     implementation(libs.navigation.compose)
 
+    // Block Q: WorkManager (one-shot model download) + Hilt @HiltWorker support. The worker shell,
+    // HiltWorkerFactory and Configuration.Provider live here (composition root, already kapt+Hilt);
+    // the correctness-critical provisioning logic stays in :data:ai-local (ModelProvisioner).
+    implementation(libs.work.runtime.ktx)
+    implementation(libs.androidx.hilt.work)
+    kapt(libs.androidx.hilt.compiler)
+
     implementation(libs.datastore.preferences)
     implementation(libs.room.runtime)
 

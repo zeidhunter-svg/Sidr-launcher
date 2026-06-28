@@ -7,6 +7,8 @@ activityCompose = "1.9.3"
 lifecycle = "2.8.7"
 hilt = "2.52"
 hiltNavigationCompose = "1.2.0"
+androidxHilt = "1.2.0"
+work = "2.10.0"
 navigationCompose = "2.8.5"
 coroutines = "1.9.0"
 datastore = "1.1.1"
@@ -39,6 +41,11 @@ hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt"
 hilt-compiler = { module = "com.google.dagger:hilt-compiler", version.ref = "hilt" }
 hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigationCompose" }
+
+# Block Q — WorkManager (one-shot model download) + Hilt worker injection (processor via kapt).
+work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
+androidx-hilt-work = { module = "androidx.hilt:hilt-work", version.ref = "androidxHilt" }
+androidx-hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref = "androidxHilt" }
 
 coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }

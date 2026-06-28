@@ -28,4 +28,8 @@ dependencies {
     implementation(project(":domain"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.coroutines.core)
+
+    // Block Q: JVM unit tests for the pure device-profile classifier + cache mapping
+    // (the Android-API reads in AndroidDeviceProfiler stay device/instrumented-pending).
+    testImplementation(libs.junit4)
 }

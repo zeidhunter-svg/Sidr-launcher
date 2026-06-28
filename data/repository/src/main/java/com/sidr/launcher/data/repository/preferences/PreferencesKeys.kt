@@ -3,6 +3,7 @@ package com.sidr.launcher.data.repository.preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PRIVACY INVENTORY — Block E, Step E1 (Fork 3)
@@ -83,6 +84,14 @@ internal object PreferencesKeys {
     val AI_PROVIDER_MODEL        = stringPreferencesKey("ai_provider_model")
     val AI_PROVIDER_DISPLAY_NAME = stringPreferencesKey("ai_provider_display_name")
 
+    // Local-NLU model availability — prefix: model_ (Block Q).
+    // Set of ModelId.value strings whose on-disk `.onnx` artifact has been SHA-256-verified and
+    // promoted by the download worker (the observable signal the OnnxIntentClassifier gate reads).
+    // Carries no user data — only opaque model identifiers; the name is denylist-clean (no forbidden
+    // term). Disk presence is the real load-time gate (LocalModelFiles.modelFile() returns null when
+    // a file is gone); this flag is just the reactive availability projection.
+    val MODEL_AVAILABLE_IDS = stringSetPreferencesKey("model_available_ids")
+
     // All DataStore key name strings — used exclusively by PrivacyInventoryGuardTest
     // to assert no key name contains a forbidden term (tests the *value* "user_theme_name",
     // not the Kotlin variable name USER_THEME_NAME).
@@ -101,6 +110,7 @@ internal object PreferencesKeys {
         AI_PROVIDER_BASE_URL.name,
         AI_PROVIDER_MODEL.name,
         AI_PROVIDER_DISPLAY_NAME.name,
+        MODEL_AVAILABLE_IDS.name,
     )
 
     const val MAX_CACHED_SUGGESTIONS = 5

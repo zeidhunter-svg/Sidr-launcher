@@ -374,10 +374,12 @@ and logs no input.
      **zero contract change**. (Western users can command in English; an unknown native language degrades
      to rule → cloud, so local language coverage is an optimization, not a correctness requirement.)
    - **Base model = a multilingual WordPiece *teacher*, not the shipped model:**
-     **`bert-base-multilingual-uncased`** (12-layer, ~110M params, WordPiece, ~110k shared vocab,
-     **uncased** — its lower-case + accent-strip preprocessing matches `WordPieceTokenizer` exactly, so
-     **no tokenizer change**). Naive mBERT is **rejected** as the shipped model (~110M, dominated by a
-     ~110k-row embedding table → won't meet `<150ms` on SM-A325F). The shipped model is produced (Stage 2)
+     **`bert-base-multilingual-uncased`** (12-layer, **~168M params** — corrected; Google's README cited
+     the English BERT-Base figure; reproducible count is 168M, ~half of which is the embedding table,
+     WordPiece, ~110k shared vocab, **uncased** — its lower-case + accent-strip preprocessing matches
+     `WordPieceTokenizer` exactly, so **no tokenizer change**). Naive mBERT is **rejected** as the shipped
+     model (~168M, dominated by a ~110k-row embedding table → won't meet `<150ms` on SM-A325F; the
+     embedding-table-is-the-dominant-mass justification is even stronger at 168M than the incorrect 110M). The shipped model is produced (Stage 2)
      by compressing it: **(1) vocab-prune** the embedding table to en/ar/tr/ru + the launcher domain
      (~110k → ~20–30k; the dominant size lever, WordPiece algorithm unchanged), **(2) layer-distill** to a
      ~2–4-layer student (the latency lever), **(3) int8**. `<150ms` on SM-A325F is a **hard Stage-2 go/no-go
@@ -414,11 +416,11 @@ and logs no input.
 
 | Item | Value |
 |---|---|
-| Teacher (Stage 2, not shipped raw) | `bert-base-multilingual-uncased` (WordPiece, uncased, ~110k vocab) |
+| Teacher (Stage 2, not shipped raw) | `bert-base-multilingual-uncased` (~168M params, WordPiece, uncased, ~110k vocab) |
 | Shipped model | teacher **vocab-pruned → layer-distilled → int8** (en/ar/tr/ru + launcher domain) |
 | Tokenizer | BERT WordPiece, **uncased**; vocab-size-agnostic Kotlin impl (no change) |
 | `vocab.txt` | pruned multilingual, **data-driven size ~20–30k** (en/ar/tr/ru); bundled asset |
-| `OnnxModelSpec.vocabSize` | provisional `VOCAB_SIZE_PENDING` sentinel; set to the pruned line count at Stage 2 (hand-synced to `assert_onnx_contract`) |
+| `OnnxModelSpec.vocabSize` | provisional `VOCAB_SIZE_PENDING` sentinel; **set manually at Stage 2** to the pruned line count; `assert_onnx_contract` is the data-driven cross-check that hard-fails on any desync |
 | `maxLen` | **48** (provisional; agglutinative tr / Arabic fragment more) |
 | Inputs / output | `input_ids`+`attention_mask`[+`token_type_ids` if declared] int64 `[1,48]`; `logits` float `[1,7]` |
 | Labels (7, language-independent) | LAUNCH_APP, SEARCH, OPEN_SETTINGS, SHOW_APPS, HELP, OPEN_ASSISTANT, UNKNOWN — **unchanged** |

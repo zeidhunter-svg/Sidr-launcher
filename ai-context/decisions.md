@@ -1802,10 +1802,15 @@ WordPiece path can't meet it, fall back to the non-transformer classifier rather
 + Arabic fragment into more wordpieces/word). `vocabSize` = **data-driven**, not a literal: `OnnxModelSpec`
 now carries a `VOCAB_SIZE_PENDING` sentinel (the pruned `vocab.txt` doesn't exist yet), and
 `tools/nlu/train_export.py:assert_onnx_contract` **derives** vocab size from the produced `vocab.txt` line
-count and hard-fails unless `model_embedding_rows == len(vocab) == OnnxModelSpec.vocabSize` +
-`[1, maxLen]` input shape. `OnnxModelSpec.vocabSize` is set **manually at Stage 2** to the produced
-line count; `assert_onnx_contract` is the data-driven cross-check that hard-fails on any desync
-(the Phase-4 `TABLE_NAMES` precedent — an invariant enforced by a tool, not assumed). **The 7 labels
+count (`sum(1 for _ in open(vocab))` — line-iteration, no trailing-newline off-by-one) and hard-fails
+unless `model_embedding_rows == len(vocab.txt lines)` + the `[1, maxLen]` I/O shape. It then **prints**
+that number with "set `OnnxModelSpec.vocabSize` to this exact value". **Precise mechanism (corrected):** the
+script does **not** read the Kotlin `OnnxModelSpec.vocabSize` at all (no fragile `OnnxModelSpec.kt` parse,
+no CLI arg) — so the automated hard-fail covers **model↔`vocab.txt`** agreement, and the
+`vocab.txt`→Kotlin step is a **human copy at Stage 2 guarded by the print, not a third automated assert**.
+This also means it is inert/safe on today's `VOCAB_SIZE_PENDING` sentinel (the sentinel is never read, so
+no crash and no false compare). `model_embedding_rows` is read from whatever `.onnx` is passed, so Stage 2
+must point it at the **real pruned export** (not the teacher) or the check is falsely green. **The 7 labels
 are language-independent and DID NOT change.**
 
 **Blast-radius statement (per block).**
@@ -1963,8 +1968,12 @@ Contract→Owner rows current; (5) `testDebugUnitTest` + `assembleDebug` BUILD S
 unqualified `IntentMatcher` (= `LayeredIntentMatcher`) + `@RuleMatcher`/`@NluMatcher` qualified. **All
 PASS — clear to proceed to Stage 1 (multilingual dataset, en/ar/tr/ru).** Stage-2 follow-up (not a
 blocker): set `OnnxModelSpec.vocabSize` (today the `VOCAB_SIZE_PENDING` sentinel) to the actual
-produced pruned `vocab.txt` line count. NOTE — `assert_onnx_contract` is **already data-driven** (per
-the OQ#1 multilingual amendment: `tools/nlu/train_export.py` derives the size from the produced
-`vocab.txt` and hard-fails unless `model_embedding_rows == len(vocab) == OnnxModelSpec.vocabSize`), so
-it already guards that one manual value against desync. The checklist's "make the assert data-driven"
-phrasing predated the amendment and is **obsolete** — do not re-do it.
+produced pruned `vocab.txt` line count. NOTE — `assert_onnx_contract` is **already data-driven** for the
+part it automates: it hard-fails unless `model_embedding_rows == len(vocab.txt lines)` and prints the
+value to hand-set in Kotlin. It does **not** read `OnnxModelSpec.vocabSize` itself (deliberate — avoids a
+fragile `OnnxModelSpec.kt` parse), so it is inert/safe on today's `VOCAB_SIZE_PENDING` sentinel (never
+read → no crash, no false compare), and the `vocab.txt`→Kotlin copy is human-guarded-by-print, not a
+third assert. The checklist's "make the assert data-driven" phrasing predated the amendment and is
+**obsolete** — do not re-do it. (Optional Stage-2 hardening, not required: add an `--expected-vocab-size`
+CLI arg so the manual Kotlin value is asserted when supplied and skipped on the sentinel — closes the
+manual-copy gap without any Kotlin parse.)

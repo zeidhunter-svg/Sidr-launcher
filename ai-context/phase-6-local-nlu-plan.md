@@ -5,8 +5,12 @@
 > (goal / depends-on / new files / checkbox steps / acceptance / demoable milestone) → frozen-forward →
 > demoable milestones → tracking → per-block agent-model table → confirmed-decisions.
 > Block lettering continues the alphabet (Phase 4 = E→H, Phase 5 = I→N), so **Phase 6 = Blocks O → R**.
-> **Status: forks decided 2026-06-27; plan agreed; no block started.** Each block gets its own
-> execution prompt. **First execution round = Block O only** (gated, like "Block E only" / "Block I only").
+> **Status (2026-06-29): Block O ✅ (2026-06-27) · Block P ✅ (2026-06-28) · Block Q ✅ (2026-06-28, incl.
+> rework) · Block R ⏳ pending (integration + Phase-6 close).** Open questions: **OQ#1 amended →
+> multilingual (2026-06-29)** — see decisions.md "ADR — OQ#1 amended (multilingual)"; **OQ#2 still open**
+> (model hosting/URL). Each block gets its own execution prompt; per-block ADRs land in `decisions.md`
+> and **this plan's status is advanced as part of every block's close-out** (going forward, not only
+> `decisions.md`/`CLAUDE.md`). Phase 6 is **not** closed (Block R's R5 closes it).
 
 ## Pre-flight — repo-truth check (verified 2026-06-27, before any block)
 
@@ -359,17 +363,30 @@ and logs no input.
 
 ### Open questions (gating — must be closed before the owning block)
 
-1. **Model + tokenizer + label-set selection (gates Block P) — RESOLVED 2026-06-28.**
-   - **Base model:** a **BERT-Mini / TinyBERT-4L-class** encoder (e.g. `google/bert_uncased_L-4_H-256`
-     or TinyBERT-4L), **fine-tuned** for sequence classification on a small in-repo dataset of
-     launcher-style commands, **dynamic int8** quantized, exported to ONNX at an opset **ORT 1.20.0
-     supports** (≤ ~22 — pin + verify at export). Target artifact ~6–15 MB. Chosen for the smallest
-     download/load and a comfortable margin under the `< 150ms` MID_RANGE CPU budget; a 7-class task
-     does not need a larger backbone. (MobileBERT int8 ~25MB is the fallback only if accuracy on our
-     dataset is insufficient.)
-   - **Tokenizer:** **BERT WordPiece, uncased `vocab.txt` (30522)** — MUST equal the base model's
-     tokenizer; shipped as an asset alongside the model. No approximation; a minimal Kotlin WordPiece
-     implementation (or a vetted lib) in `:data:ai-local`.
+1. **Model + tokenizer + label-set selection (gates Block P) — RESOLVED 2026-06-28; AMENDED multilingual
+   2026-06-29.** The original English choice (BERT-Mini, `bert-base-uncased`, vocab 30522, `max_len 32`)
+   is **invalid for non-English commands** (an English WordPiece vocab tokenizes other scripts to `[UNK]`).
+   Superseded below; see decisions.md "ADR — OQ#1 amended (multilingual)". **The 7 labels are
+   language-independent and DID NOT change.**
+   - **Target language set (fixed):** `en` / `ar` / `tr` / `ru`. European languages are **deferred** — a
+     broad WordPiece base already covers them in-vocab, so adding one later is a dataset+retrain step with
+     **zero contract change**. (Western users can command in English; an unknown native language degrades
+     to rule → cloud, so local language coverage is an optimization, not a correctness requirement.)
+   - **Base model = a multilingual WordPiece *teacher*, not the shipped model:**
+     **`bert-base-multilingual-uncased`** (12-layer, ~110M params, WordPiece, ~110k shared vocab,
+     **uncased** — its lower-case + accent-strip preprocessing matches `WordPieceTokenizer` exactly, so
+     **no tokenizer change**). Naive mBERT is **rejected** as the shipped model (~110M, dominated by a
+     ~110k-row embedding table → won't meet `<150ms` on SM-A325F). The shipped model is produced (Stage 2)
+     by compressing it: **(1) vocab-prune** the embedding table to en/ar/tr/ru + the launcher domain
+     (~110k → ~20–30k; the dominant size lever, WordPiece algorithm unchanged), **(2) layer-distill** to a
+     ~2–4-layer student (the latency lever), **(3) int8**. `<150ms` on SM-A325F is a **hard Stage-2 go/no-go
+     gate**; if missed, fall back to a **non-transformer classifier** (char/byte-CNN or fastText-style
+     subword — reworks the P tokenizer/export pipeline). **SentencePiece/XLM-R rejected** (would rewrite
+     `WordPieceTokenizer` + its golden test).
+   - **Tokenizer:** **BERT WordPiece, uncased**, pruned multilingual `vocab.txt` (**data-driven size,
+     ~20–30k, en/ar/tr/ru**) — MUST equal the teacher's tokenizer; shipped as a bundled asset. The Kotlin
+     `WordPieceTokenizer` (`:data:ai-local`) is **vocab-size-agnostic** (proven by
+     `WordPieceTokenizerMultilingualTest`) — no change.
    - **Label set (7 classes, argmax → `LauncherIntent`):**
      `LAUNCH_APP` → `LaunchAppIntent(displayNameQuery = <heuristic slot>)`;
      `SEARCH` → `SearchIntent(query = <heuristic slot>, target = WEB)`;
@@ -387,14 +404,41 @@ and logs no input.
      in-repo (NOT app code) authoring a small labeled launcher-command dataset across the 7 classes;
      it produces the artifact + `vocab.txt` that Block Q downloads + SHA-256-verifies. The pinned hash
      and host are Open Question #2 (Block Q).
-2. **Model download source / hosting (gates Block Q).** Fork P6-3 pins a SHA-256 hash but a pinned hash
-   is meaningless without a pinned artifact, and Phase 5 deliberately chose **no backend** (BYOK). The
-   host (CDN / GitHub release / object store) must be decided before Block Q wires the download worker;
-   until then the worker has no URL.
+2. **Model download source / hosting (gates Block Q) — STILL OPEN.** Fork P6-3 pins a SHA-256 hash but a
+   pinned hash is meaningless without a pinned artifact, and Phase 5 deliberately chose **no backend**
+   (BYOK). The host (CDN / GitHub release / object store) must be decided before the download goes live;
+   until then `ModelDownloadConfig.INTENT_NLU_PENDING` is an inert seam (blank URL/hash, `isPinned=false`).
+
+### Pinned model/tokenizer contract (current — OQ#1 multilingual amendment, 2026-06-29)
+
+| Item | Value |
+|---|---|
+| Teacher (Stage 2, not shipped raw) | `bert-base-multilingual-uncased` (WordPiece, uncased, ~110k vocab) |
+| Shipped model | teacher **vocab-pruned → layer-distilled → int8** (en/ar/tr/ru + launcher domain) |
+| Tokenizer | BERT WordPiece, **uncased**; vocab-size-agnostic Kotlin impl (no change) |
+| `vocab.txt` | pruned multilingual, **data-driven size ~20–30k** (en/ar/tr/ru); bundled asset |
+| `OnnxModelSpec.vocabSize` | provisional `VOCAB_SIZE_PENDING` sentinel; set to the pruned line count at Stage 2 (hand-synced to `assert_onnx_contract`) |
+| `maxLen` | **48** (provisional; agglutinative tr / Arabic fragment more) |
+| Inputs / output | `input_ids`+`attention_mask`[+`token_type_ids` if declared] int64 `[1,48]`; `logits` float `[1,7]` |
+| Labels (7, language-independent) | LAUNCH_APP, SEARCH, OPEN_SETTINGS, SHOW_APPS, HELP, OPEN_ASSISTANT, UNKNOWN — **unchanged** |
+| `<150ms` SM-A325F | **hard Stage-2 go/no-go gate**; non-transformer classifier is the documented fallback |
+
+### Device / release-pending (Phase 6, multilingual)
+
+- The **real pruned-multilingual `intent.onnx` + `vocab.txt` (~20–30k, en/ar/tr/ru)** + HF-regenerated
+  goldens, via the Stage-1 (dataset) → Stage-2 (prune/distill/int8/export) pipeline (OQ#1).
+- The model **host + pinned URL/SHA-256** (OQ#2).
+- On-device acceptance on **SM-A325F**: `<150ms` MID_RANGE CPU latency (hard gate), NNAPI→CPU path,
+  session teardown/`onTrimMemory`, `AndroidDeviceProfiler` reads + thermal/battery transitions; plus the
+  inherited Block-J `SecretStoreInstrumentedTest` + Block-N N5 streaming runs.
+- `DeviceProfileClassifier` LOW_END threshold re-check once the multilingual footprint is known.
 
 ---
 
-## Block O — Local-AI domain contracts (pure)
+## Block O — Local-AI domain contracts (pure) — ✅ COMPLETE (2026-06-27)
+
+> **Status: ✅ complete.** ADR: decisions.md "ADR 2026-06-27 — Block O complete". Language-independent
+> domain contracts; unaffected by the OQ#1 multilingual amendment.
 
 **Goal:** vendor-/runtime-neutral local-AI contracts + the `DeviceProfile`/`DeviceCapability` model +
 the pure gating policy, in `:domain`. JVM-only, no impls.
@@ -431,7 +475,13 @@ returns an `IntentMatchResult(source = NLU)`.
 
 ---
 
-## Block P — ONNX runtime integration in `:data:ai-local`
+## Block P — ONNX runtime integration in `:data:ai-local` — ✅ COMPLETE (2026-06-28)
+
+> **Status: ✅ complete.** ADR: decisions.md "ADR 2026-06-28 — Block P complete" (+ "amended OQ#1
+> (multilingual) 2026-06-29"). The ONNX shell, `WordPieceTokenizer`, `IntentLabelMapper`, and
+> `OnnxModelSpec` shipped. Under the OQ#1 amendment the **runtime code is unchanged** (WordPiece path);
+> only `OnnxModelSpec` constants changed (`maxLen 32→48`, `vocabSize` now a provisional sentinel) plus a
+> tokenizer vocab-agnosticism test. Real pruned-multilingual goldens are Stage 2 (device-pending).
 
 **Goal:** a lazy, single, memory-safe `OnnxIntentClassifier : IntentClassifier` with opportunistic NNAPI
 and deterministic CPU fallback. The platform-risk block.
@@ -468,7 +518,12 @@ rules miss and returns an `IntentMatchResult(source = NLU)`; pulling NNAPI still
 
 ---
 
-## Block Q — `DeviceProfile` detector + model management + WorkManager gating
+## Block Q — `DeviceProfile` detector + model management + WorkManager gating — ✅ COMPLETE (2026-06-28)
+
+> **Status: ✅ complete (incl. rework P1-1…P2-8).** ADR: decisions.md "ADR 2026-06-28 — Block Q complete".
+> Model-agnostic (downloads + SHA-256-verifies bytes) → **no code change** under the OQ#1 multilingual
+> amendment. Carry-forward: re-check the `DeviceProfileClassifier` LOW_END threshold + `<150ms` budget
+> against the heavier multilingual model once its footprint is known (Stage 2).
 
 **Goal:** the single capability gate made real — `DeviceProfile` detection, on-disk model store +
 availability surface, and the battery-aware WorkManager download/verify worker.
@@ -515,7 +570,13 @@ nothing.
 
 ---
 
-## Block R — Wire NLU `IntentMatcher` source + docs-sync / phase close
+## Block R — Wire NLU `IntentMatcher` source + docs-sync / phase close — ⏳ PENDING
+
+> **Status: ⏳ pending** (the integration + Phase-6-close block). **Unaffected by the OQ#1 multilingual
+> amendment:** R sits above the port boundary — `LayeredIntentMatcher` / the DI swap / calibration
+> reference only `IntentMatchResult` (intent + confidence) and `IntentConfidencePolicy`, never the
+> tokenizer / vocab / `OnnxModelSpec`. **R can proceed/merge as-is.** The only model-landing-time step is
+> empirical `confidenceFloor` tuning, which was always pending and is not a revision.
 
 **Goal:** merge the NLU source into the live pipeline via a composite that preserves the rule fast path,
 reconcile the docs to as-built, and close Phase 6.

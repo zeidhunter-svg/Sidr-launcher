@@ -42,9 +42,11 @@ Fork-P6-5 failure modes handled, test seam) + a **pure JVM-tested P2a layer** (`
 byte-exact vs an independent golden, `IntentLabelMapper` softmax/label-map + confidence escape,
 `SlotExtractor`, `NluLabel`, `OnnxModelSpec`) + `LocalModelFiles` seam (Q implements) + P0 pipeline in
 `tools/nlu/` + device-pending `androidTest`. Open Question #1 (model/tokenizer/7-label set) RESOLVED
-2026-06-28: BERT-Mini int8, WordPiece uncased vocab, 7 classes (`CLEAR` rule-only, slots heuristic).
+2026-06-28, **AMENDED multilingual 2026-06-29**: multilingual WordPiece teacher
+(`bert-base-multilingual-uncased`) → prune+distill+int8 for `en/ar/tr/ru`, pruned `vocab.txt`
+(data-driven ~20–30k), `maxLen 48`, 7 (language-independent) classes (`CLEAR` rule-only, slots heuristic).
 21 new JVM tests (0 failures); ONNX confined to two shell files; pinned I/O contract
-(`input_ids`/`attention_mask`[/`token_type_ids` if declared] int64 `[1,32]`, `logits` float `[1,7]`);
+(`input_ids`/`attention_mask`[/`token_type_ids` if declared] int64 `[1,48]`, `logits` float `[1,7]`);
 NLU softmax confidence **uncalibrated** vs rule scale (open Q → Block R); `assembleDebug` + full JVM
 regression green. **Device-pending:** real `intent.onnx`/`vocab.txt` training + P5 SM-A325F run (no
 torch/onnx/network here). `:app` trim-hook registration + DI binding deferred to Q/R (classifier not
@@ -261,7 +263,9 @@ Phase 3 result, Blocks A → D:
   Details: decisions.md "ADR 2026-06-27 — Block O complete". **Next = Block P** (gated on model +
   tokenizer + label-set selection — open question must be resolved first).
 - **Phase 6 Block P ✅ (2026-06-28)** — ONNX runtime in `:data:ai-local` (platform-risk block). Open
-  Question #1 resolved: BERT-Mini/TinyBERT-4L int8, WordPiece **uncased** vocab, **7 classes**
+  Question #1 resolved (**amended multilingual 2026-06-29** — multilingual WordPiece teacher
+  `bert-base-multilingual-uncased` → prune+distill+int8, pruned `vocab.txt` ~20–30k, `maxLen 48`),
+  WordPiece **uncased** vocab, **7 (language-independent) classes**
   (`NluLabel` argmax order LAUNCH_APP/SEARCH/OPEN_SETTINGS/SHOW_APPS/HELP/OPEN_ASSISTANT/UNKNOWN;
   `CLEAR` rule-only; slots heuristic). **P2a pure, ONNX-free, JVM-tested:** `WordPieceTokenizer`
   (faithful HF BasicTokenizer+Wordpiece; byte-exact vs an **independent** stdlib reference golden —
@@ -279,7 +283,8 @@ Phase 3 result, Blocks A → D:
   mid-run. **P1** `OnnxSessionFactory`: **CPU deterministic default** + NNAPI appended only when
   `nnapiEnabled && sdkInt>=29` (flag in `OnnxRuntimeFlags`, off by default; both init-failure and
   degraded-success handled; `nnapiEnabled`/`sdkInt` test seams for P5 path comparison). Pinned I/O:
-  `input_ids`+`attention_mask`[+`token_type_ids` iff declared] int64 `[1,32]`, `logits` float `[1,7]`
+  `input_ids`+`attention_mask`[+`token_type_ids` iff declared] int64 `[1,48]` (OQ#1 amended; was 32),
+  `logits` float `[1,7]`
   read by index 0. **P0** `tools/nlu/` (out of source sets): stdlib golden generator (ran), placeholder
   + train/export scripts (device-pending — no torch/onnx/net). ONNX Java surface re-verified vs the
   bundled 1.20.0 AAR (`javap`). `:core:android` edge added; **no new dep**. ONNX confined to two shell
@@ -326,8 +331,9 @@ Phase 3 result, Blocks A → D:
   `testDebugUnitTest` + `assembleDebug` **BUILD SUCCESSFUL**. **Reworked before close (review P1-1…P2-8):**
   context7-verified WM init pasted in ADR; availability disk cross-check (P1-2); downloader moved to
   `:data:ai-cloud` (P2-4); half-pinned-config `require` (P2-5); `noBackupFilesDir` confirmed (P2-6); retry
-  taxonomy (P2-7). **Device/release-pending:** live download + real artifact URL/SHA-256 (OQ#2); **real
-  `vocab.txt` (30522, byte-matched to the exported tokenizer) — OQ#1**; `AndroidDeviceProfiler` Android-API
+  taxonomy (P2-7). **Device/release-pending:** live download + real artifact URL/SHA-256 (OQ#2); **the
+  pruned multilingual `vocab.txt` (data-driven ~20–30k, `en/ar/tr/ru`, byte-matched to the exported
+  tokenizer) — OQ#1**; `AndroidDeviceProfiler` Android-API
   reads + thermal/battery transitions (SM-A325F). P's three seams now have prod impls →
   `OnnxIntentClassifier` bindable. Details: decisions.md "ADR 2026-06-28 — Block Q complete" + its
   "Rework before close" subsection. **Next = Block R** (binds the classifier; closes Phase 6).

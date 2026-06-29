@@ -1485,7 +1485,10 @@ recreated the corrupt registrations) and a **green `assembleDebug` baseline** wa
 `OnnxIntentClassifier : IntentMatcher` returns `IntentMatchResult(source = MatcherSource.NLU)`. The
 gate-off no-op is the existing `NoOpIntentMatcher` (`:core:testing`). No parallel port created.
 
-**Model / tokenizer / 7-label set (Open Question #1, resolved 2026-06-28):** BERT-Mini/TinyBERT-4L-class
+**Model / tokenizer / 7-label set (Open Question #1, resolved 2026-06-28; amended OQ#1 (multilingual)
+2026-06-29 — see "ADR — OQ#1 amended (multilingual)" below; the English `vocab.txt (30522)` / `max_len 32`
+choice recorded here is SUPERSEDED by a pruned multilingual `vocab.txt` (~20–30k, en/ar/tr/ru) + `maxLen 48`):**
+BERT-Mini/TinyBERT-4L-class
 encoder fine-tuned for 7-class sequence classification, dynamic int8, ONNX opset ≤ 22; BERT **WordPiece
 uncased `vocab.txt` (30522)** shipped beside the model. Labels in **argmax-index order**
 (`NluLabel`): `0 LAUNCH_APP, 1 SEARCH, 2 OPEN_SETTINGS, 3 SHOW_APPS, 4 HELP, 5 OPEN_ASSISTANT,
@@ -1496,7 +1499,8 @@ HELP|OPEN_ASSISTANT)/UnknownIntent`. **`CLEAR` is not a class** (rule-only). **S
 **Pinned input/shape contract (`OnnxModelSpec`):** inputs `input_ids` + `attention_mask`
 [+ `token_type_ids` **only if the model declares it** — checked via `session.inputNames`], all
 **int64 `[1, maxLen]`**; sequence axis treated as **fixed `max_len = 32`** (the tokenizer always
-pads/truncates to exactly `[1,32]`, valid for fixed-32 or dynamic exports); output `logits` float
+pads/truncates to exactly `[1,32]`, valid for fixed-32 or dynamic exports) [**amended OQ#1 2026-06-29:
+`maxLen → 48`**, see "ADR — OQ#1 amended (multilingual)"]; output `logits` float
 `[1,7]` read **by index 0** (name-independent). The `tools/nlu/` placeholder model matches these
 names/dtypes/axes exactly so swapping in the real model needs no Kotlin change.
 
@@ -1538,9 +1542,10 @@ force NNAPI on to compare paths. (a) init failure → catch → CPU-only session
 curated `vocab.mini.txt` exercising whole-word/`##`/`[UNK]`/accent/punct/truncation);
 `make_placeholder_model.py` (valid `intent.onnx` with the exact contract, needs `onnx`);
 `train_export.py` (fine-tune→int8→export + min-accuracy gate + confusion matrix, needs torch/transformers/net).
-This environment has **no torch/transformers/onnx/network**, so the **real** `intent.onnx` + real
-`vocab.txt` (30522) + HF-regenerated golden vectors are a **device-pending acceptance item** (Block J
-precedent). The mini-vocab golden set validates the Kotlin tokenizer's algorithm now, offline.
+This environment has **no torch/transformers/onnx/network**, so the **real** `intent.onnx` + the
+pruned multilingual `vocab.txt` (~20–30k, en/ar/tr/ru — OQ#1 amended 2026-06-29) + HF-regenerated golden
+vectors are a **device-pending acceptance item** (Block J precedent). The mini-vocab golden set validates
+the Kotlin tokenizer's algorithm now, offline.
 
 **Freshly-downloaded model only picked up after restart:** model `availability` is read from
 `ModelAvailabilityRepository` per inference, but the bound secondary impl (real `OnnxIntentClassifier`
@@ -1611,7 +1616,8 @@ Phase 6's effective gate is LOW_END-vs-rest. `AndroidDeviceProfiler` caches `pro
 write-throughs to `DeviceProfileCacheRepository` via `@ApplicationScope` (fire-and-forget, never blocks
 the synchronous read); `capability()` is re-read every call (thermal/battery move).
 
-**Vocab (§5.D): bundled, not downloaded.** `vocab.txt` (uncased, 30522) lives in
+**Vocab (§5.D): bundled, not downloaded.** `vocab.txt` (uncased — the pruned multilingual vocab,
+data-driven ~20–30k, en/ar/tr/ru; OQ#1 amended 2026-06-29) lives in
 `:data:ai-local/src/main/assets/nlu/` (small, static, version-locked to `WordPieceTokenizer` → no
 second download/hash, can't drift). `ModelStore` resolves vocab via an injected `vocabOpener` seam
 (assets in prod, fake stream in tests) and the **model** from `noBackupFilesDir/models/`. The real
@@ -1712,9 +1718,10 @@ Eight review items applied before closing Q. Where a rework supersedes a stateme
   else `Missing`. A marker-set-but-file-missing reads **not-Available** (gate degrades). All three Block-O
   states now reachable; no `data→data` edge (both sides depend on the domain port). New JVM tests:
   marker-but-missing→Missing, present-but-unmarked→Unverified.
-- **P1-3 (vocab.txt on the pending list).** The real **`vocab.txt` (uncased, 30522, byte-matched to the
-  exported tokenizer)** is now an explicit OQ#1 device/release-pending artifact in this ADR + CLAUDE.md —
-  it ships bundled in `assets/nlu/` and is a silent release-blocker if dropped.
+- **P1-3 (vocab.txt on the pending list).** The real **`vocab.txt`** — under OQ#1 (amended 2026-06-29) the
+  **pruned multilingual** vocab (uncased, data-driven ~20–30k, en/ar/tr/ru, byte-matched to the exported
+  tokenizer) — is an explicit OQ#1 device/release-pending artifact in this ADR + CLAUDE.md; it ships
+  bundled in `assets/nlu/` and is a silent release-blocker if dropped.
 - **P2-4 (download impl out of `:app`).** **Supersedes §5.E.** The `ModelDownloader` port moved to
   **`:domain`** (`domain.ai.local`, stdlib-only `java.io.File` signature); `KtorModelDownloader` moved to
   **`:data:ai-cloud`** as a plain class (Block-K engine pattern), `@Provides`-constructed in `:app` with
@@ -1749,8 +1756,82 @@ Guards re-asserted: `ai.onnxruntime` still confined to `OnnxIntentClassifier`/`O
 `:domain`); new deps still only WorkManager + hilt-work.
 
 **Device/release-pending (updated):** the live download + the real artifact's pinned URL/SHA-256 (OQ#2);
-**the real `vocab.txt` (30522, byte-matched to the exported tokenizer) — OQ#1**; the `AndroidDeviceProfiler`
-Android-API reads + thermal/battery transitions (instrumented) on SM-A325F.
+**the pruned multilingual `vocab.txt` (data-driven ~20–30k, en/ar/tr/ru, byte-matched to the exported
+tokenizer) — OQ#1 (amended 2026-06-29)**; the `AndroidDeviceProfiler` Android-API reads + thermal/battery
+transitions (instrumented) on SM-A325F.
+
+### ADR — OQ#1 amended (multilingual) (2026-06-29)
+
+**Requirement.** Sidr is a multilingual launcher. The original OQ#1 model choice (BERT-Mini,
+`bert-base-uncased`, **English** WordPiece vocab 30522, `max_len 32`) is **invalid for non-English
+commands**: an English WordPiece vocab tokenizes other scripts almost entirely to `[UNK]`, so the local
+NLU would silently never fire for them. This is an **architecture-level** amendment to the pinned
+model/tokenizer contract (not a dataset choice), resolved **before Stage 1 (dataset)**. It changes the
+**decision + the pinned contract + the docs** plus a minimal, proven-safe code touch; it does **not**
+prune/distill/train/quantize/export/host a model or author the dataset (Stage 1/2+ / OQ#2).
+
+**Target language set (fixed).** `en` / `ar` / `tr` / `ru`. European languages are **deferred** — a broad
+WordPiece base covers them in-vocab, so adding one later is a dataset+retrain step with **zero contract
+change**. (Western users can command in English; an unknown native language degrades to rule → cloud, so
+local language coverage is an optimization, not a correctness requirement.)
+
+**Chosen base + tradeoff.** Base = **`bert-base-multilingual-uncased`** as a *teacher*, **not** the shipped
+model (present-day facts via web_search: 12-layer, ~110M params, WordPiece, ~110k shared vocab, **uncased**
+— its lower-case + NFD accent-strip preprocessing matches `WordPieceTokenizer` exactly → **no tokenizer
+change**, **no golden regeneration** of the algorithm). Naive mBERT/distil-mBERT (~110–134M, dominated by a
+~110–120k-row embedding table) will not meet `<150ms` on the SM-A325F, so it is **rejected as the shipped
+model**. The shipped model is produced (Stage 2) by compressing the teacher:
+- **(Recommended, chosen) WordPiece teacher → vocab-prune → layer-distill → int8.** Prune the embedding
+  table to the tokens in en/ar/tr/ru + the launcher command domain (~110k → **~20–30k**; the dominant size
+  lever, WordPiece algorithm unchanged); distill to a ~2–4-layer student (the latency lever); int8 (final
+  footprint). Blast radius = `OnnxModelSpec` constants + a smaller pruned `vocab.txt` + regenerated goldens.
+- **(Fallback, documented) a non-transformer classifier** (char/byte-CNN or fastText-style subword) — only
+  if the WordPiece path **measurably** fails `<150ms` after prune+distill+int8; it reworks the P
+  tokenizer/export pipeline (no longer WordPiece). Not adopted without a measured latency failure.
+- **(Rejected) SentencePiece/XLM-R / `Multilingual-MiniLM`** (≈250k SentencePiece vocab) — better quality
+  but a **full rewrite of `WordPieceTokenizer` (P2a) + its golden test**.
+
+**`<150ms` on SM-A325F is a HARD Stage-2 go/no-go gate**, not a soft risk: if prune+distill+int8 of the
+WordPiece path can't meet it, fall back to the non-transformer classifier rather than ship a too-slow model.
+
+**New pinned values.** `maxLen` **32 → 48** (provisional, finalized at dataset time — Turkish agglutination
++ Arabic fragment into more wordpieces/word). `vocabSize` = **data-driven**, not a literal: `OnnxModelSpec`
+now carries a `VOCAB_SIZE_PENDING` sentinel (the pruned `vocab.txt` doesn't exist yet), and
+`tools/nlu/train_export.py:assert_onnx_contract` **derives** vocab size from the produced `vocab.txt` line
+count and hard-fails unless `model_embedding_rows == len(vocab) == OnnxModelSpec.vocabSize` (hand-synced,
+the Phase-4 `TABLE_NAMES` precedent) + `[1, maxLen]` input shape. **The 7 labels are language-independent
+and DID NOT change.**
+
+**Blast-radius statement (per block).**
+- **O** — **none** (language-independent domain contracts).
+- **P** — `OnnxModelSpec` constants (`maxLen 32→48`, `vocabSize` sentinel) + a new vocab-agnosticism test
+  (`WordPieceTokenizerMultilingualTest`, synthetic Latin/Cyrillic/Arabic mini-vocab) + doc/contract sync;
+  **runtime code unchanged** under the WordPiece option (`WordPieceTokenizer`/`OnnxSessionFactory`/
+  `OnnxIntentClassifier`/`IntentLabelMapper` untouched). Real pruned vocab + regenerated goldens are Stage 2.
+  Tokenizer rewrite **only** under the rejected SentencePiece option.
+- **Q** — model-agnostic (downloads + SHA-256-verifies bytes); **no code change**. Carry-forward: re-check
+  the LOW_END threshold + `<150ms` budget against the heavier multilingual footprint.
+- **R** — **none**; it sits above the port boundary — `LayeredIntentMatcher` / the DI swap / calibration
+  reference only `IntentMatchResult` (intent + confidence) + `IntentConfidencePolicy`, never the
+  tokenizer / vocab / `OnnxModelSpec`. **R is unaffected and clear to proceed/merge as-is.** The only
+  model-landing step is empirical `confidenceFloor` tuning, which was always pending.
+
+**Carry-forward risks (mitigations mandated above; validated at Stage 2).** (1) Latency on SM-A325F is the
+binding constraint — naive mBERT won't hit `<150ms`; mitigation = prune+distill+int8, hard gate, non-transformer
+fallback; final measurement device-pending. (2) Final pruned vocab size + `maxLen` are finalized at
+dataset/Stage-2 time; `OnnxModelSpec`/`assert_onnx_contract` are data-driven so they absorb the values
+without code edits. (3) `DeviceProfile` LOW_END cutoff may warrant a stricter MID/HIGH gate for a heavier
+model — a `DeviceProfileClassifier` threshold tweak, revisited once footprint is known. (4) Bigger artifact
+vs download/storage — `requiresStorageNotLow` already covers it; noted. Carry-forward: uncased multilingual
+normalization (lower-case + accent-strip) is lossy for Turkish İ/ı and accented scripts, but it is
+**self-consistent** with the chosen uncased teacher (matching tokenizer↔model preprocessing, not linguistic
+correctness, is what prevents feeding garbage); if a **cased** base is later chosen at Stage 2 it gains a
+`do_lower_case=false` toggle (a parameterization, not a rewrite) + golden regeneration.
+
+**Verification.** `:data:ai-local:testDebugUnitTest` green incl. the new `WordPieceTokenizerMultilingualTest`;
+full `testDebugUnitTest` + `assembleDebug` BUILD SUCCESSFUL (this is constants + a tokenizer test — no model
+needed). Repo `30522` grep shows only superseded/historical prose, no live pending item. Stage 1 (dataset)
+now proceeds multilingually (en/ar/tr/ru).
 
 ### ADR 2026-06-19 — Phase 2 skipped / reordered into a minimal slice
 - Decision: Phase 2 (launcher shell) is **not** run as a separate phase. Its navigation half was already absorbed into `3.1.x`; its product floor — `InstalledAppsRepository`, app grid, command input, offline app launch — is folded into Phase 3 as a **minimal P2 slice** (Block B).

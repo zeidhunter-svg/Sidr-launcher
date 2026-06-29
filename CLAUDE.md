@@ -122,6 +122,30 @@ Ph7 (no Ph4 display surface). `assembleDebug` + `testDebugUnitTest --rerun-tasks
 **Phase 4 closed; next = Phase 5 (cloud AI).** Details in
 [ai-context/decisions.md](ai-context/decisions.md) ("ADR Block H").
 
+**Phase 5 CLOSED (code-closed, Blocks I → N, 2026-06-27). ⚠ device-pending** (NOT dissolved —
+carried into Phase 7 Tracking): Block-J `SecretStoreInstrumentedTest` (real Keystore, SM-A325F) +
+Block-N N5 streaming / offline / cancel / rotation. Details:
+[ai-context/phase-5-plan.md](ai-context/phase-5-plan.md).
+
+**Phase 6 CLOSED (code-closed, Blocks O → R, 2026-06-29). ⚠ device-pending** (NOT dissolved —
+carried into Phase 7 Tracking): Block-P P5 `< 150ms` inference + on-device NLU + Block-Q
+`AndroidDeviceProfiler` reads + Block-R `onTrimMemory` teardown — all gated on OQ#1/#2 (real
+`intent.onnx`/`vocab.txt`). Details:
+[ai-context/phase-6-local-nlu-plan.md](ai-context/phase-6-local-nlu-plan.md).
+
+**Phase 7 — voice input + contextual suggestions** (Blocks S → W, see
+[ai-context/phase-7-voice-suggestions-plan.md](ai-context/phase-7-voice-suggestions-plan.md); forks
+decided 2026-06-29). **Block S DONE (2026-06-29):** pure `:domain` suggestion+voice contracts
+(`Suggestion`/`SuggestionSource`/`SuggestionContext`/`TimeOfDay`, `SuggestionProvider`/
+`SuggestionEngine`/`SuggestionRanker` + pure `HeuristicSuggestionRanker`; `SpeechInputSource` port
++ `SpeechRecognitionState`/`SpeechRecognitionError` — **enum, UPPER_SNAKE_CASE** like
+`AiStopReason`); fakes in `:core:testing`; 12 new JVM tests / 131 domain total; `assembleDebug` +
+`testDebugUnitTest` green; 0 new Gradle deps. **Block T next** (voice impl:
+`AndroidSpeechInputSource` in `:core:android` over `android.speech.SpeechRecognizer`; `RECORD_AUDIO`
+request flow + Block-H `refreshStatus()` debt; mic affordance; ⚠ re-verify
+`android.speech.SpeechRecognizer` Java signatures against Android Javadoc first — context7 covers
+only Leanback wrappers; device run OQ#4 independent of U/V/W gating).
+
 Phase 3 result, Blocks A → D:
 
 - **A ✅** `OperationResult` / `OperationError` in `domain`; `domain → core/common` edge removed.
@@ -437,12 +461,21 @@ Phase 3 result, Blocks A → D:
   **IN SYNC** as of Block H6 (2026-06-23) — real 3-flow `LauncherViewModel`, `UiState.Error(retryable)`,
   per-feature permission education + upgrade-only `refreshStatus()`, Forks 1/2/8/9 reflected.
   `EncryptedSharedPreferences` documented as deprecated/not used (Fork 1 defers secrets to Phase 5).
-- Closed checklists: [ai-context/phase-4-plan.md](ai-context/phase-4-plan.md) *(Phase 4 closed,
-  Blocks E → H, 2026-06-23)* · [ai-context/phase-3-intent-system-plan.md](ai-context/phase-3-intent-system-plan.md)
-  *(Phase 3 closed 2026-06-21)*
+- Closed checklists *(**code-closed**; "closed" = the code phase, NOT the device debt — Phase 5/6
+  device-acceptance items are still open and carried into Phase 7 Tracking, see below)*:
+  [ai-context/phase-6-local-nlu-plan.md](ai-context/phase-6-local-nlu-plan.md)
+  *(Phase 6 code-closed, Blocks O → R, 2026-06-29; device-pending: Block-P P5 + OQ#1/#2 real model)* ·
+  [ai-context/phase-5-plan.md](ai-context/phase-5-plan.md)
+  *(Phase 5 code-closed, Blocks I → N, 2026-06-27; device-pending: Block-J `SecretStoreInstrumentedTest`
+  + Block-N N5)* · [ai-context/phase-4-plan.md](ai-context/phase-4-plan.md)
+  *(Phase 4 closed, Blocks E → H, 2026-06-23)* ·
+  [ai-context/phase-3-intent-system-plan.md](ai-context/phase-3-intent-system-plan.md) *(Phase 3 closed 2026-06-21)*
 - Decisions log: [ai-context/decisions.md](ai-context/decisions.md)
-- Active checklist: [ai-context/phase-5-plan.md](ai-context/phase-5-plan.md) *(Phase 5 cloud AI,
-  multi-provider — Blocks I/J/K done 2026-06-24, Block L done 2026-06-27, Block M next; forks decided 2026-06-24)*
+- Active checklist: [ai-context/phase-7-voice-suggestions-plan.md](ai-context/phase-7-voice-suggestions-plan.md)
+  *(Phase 7 — voice input + contextual suggestions, Blocks S → W; forks decided 2026-06-29; **Block S
+  DONE 2026-06-29** — pure `:domain` suggestion+voice contracts + `HeuristicSuggestionRanker` + fakes, 12
+  new JVM tests / 131 domain total, `assembleDebug` + `testDebugUnitTest` green, 0 new deps; **Block T
+  next** (voice impl, port-gated; device run OQ#4); OQ#3 embedding model/host gates Block V)*
 - Roadmap: [docs/roadmap.md](docs/roadmap.md)
 
 ## Do not

@@ -64,6 +64,14 @@
 
 ## Phase 7: Voice and contextual suggestions
 
+**Status: plan drafted + forks decided (Blocks S → W, 2026-06-29); NO block started. First execution
+round gated to Block S only.** Voice = a `SpeechInputSource` input *modality* feeding the existing intent
+pipeline (on-device preferred, never a new generative path, never our-backend audio); suggestions = a
+third `SuggestionEngine` port (offline time + usage always-on; calendar/location opt-in +
+degrade-to-nothing). Surface single-owner = the host `LauncherViewModel`/`LauncherUiState.suggestions`.
+OQ#3 (embedding model + host) gates Block V; OQ#4 (on-device STT availability) gates Block T device
+acceptance. Plan: [ai-context/phase-7-voice-suggestions-plan.md](../ai-context/phase-7-voice-suggestions-plan.md).
+
 - Add `SpeechInputSource` abstraction over Android `SpeechRecognizer`.
 - Add no-op/fake speech input implementation for tests and unsupported devices.
 - Add context-aware suggestion pipeline.

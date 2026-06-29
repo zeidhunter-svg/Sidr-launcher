@@ -1988,3 +1988,178 @@ third assert. The checklist's "make the assert data-driven" phrasing predated th
 **obsolete** — do not re-do it. (Optional Stage-2 hardening, not required: add an `--expected-vocab-size`
 CLI arg so the manual Kotlin value is asserted when supplied and skipped on the sentinel — closes the
 manual-copy gap without any Kotlin parse.)
+
+### ADR 2026-06-29 — Phase 7 (Voice + contextual suggestions) forks decided, plan agreed, NO block started
+- **Status:** planning round only — no production Kotlin, no `build.gradle.kts`/catalog edits, no manifest
+  edits this round. Deliverable = `ai-context/phase-7-voice-suggestions-plan.md` (Blocks **S → W**,
+  continuing the alphabet). First execution round gated to **Block S only**. Mirrors the Phase-5/Phase-6
+  "forks-before-code" discipline (the 2026-06-27 Phase-6 ADR is the template).
+- **Pre-flight repo-truth deltas found (codegraph + grep + file reads, not docs):**
+  - **`:feature:suggestions` is an EMPTY scaffold** — `include`d in `settings.gradle.kts` with a
+    `build.gradle.kts` (no Hilt) but **zero `.kt` sources**. Block W builds it out; under the F7-8
+    single-owner decision it becomes a **stateless `SuggestionsRow` composable only** (no VM → no Hilt).
+  - **No `SpeechInputSource` / `SpeechRecognizer` anywhere** (grep empty). `architecture.md`/`roadmap.md`
+    name `SpeechInputSource` as aspirational — Phase 7 **creates** the port (`:domain`) + the Android
+    `SpeechRecognizer` impl (`:core:android`) + the JVM fake (`:core:testing`) from scratch (Blocks S/T).
+  - **Suggestion persistence ports exist; the pipeline does not.** `SuggestionsCacheRepository`,
+    `SuggestionRankingRepository`, `UsageHistoryRepository` are built/tested, but there is **no
+    `Suggestion` model, no `SuggestionProvider`/`SuggestionEngine`/`SuggestionRanker` ports, no context
+    pipeline** — net-new (Blocks S → U). `CachedSuggestion`'s display-only/no-raw KDoc is honoured.
+  - **`TextEmbedder` port exists, impl deferred to Phase 7 by name** (its own KDoc). Block V fills it
+    **only** behind a real reader — U's semantic re-rank seam (build-a-producer-with-no-reader forbidden).
+  - **Permission framework has three DORMANT dangerous features** (`VOICE_INPUT`/`CALENDAR_SUGGESTIONS`/
+    `LOCATION_SUGGESTIONS`, all `requestable=false`, already mapped to `RECORD_AUDIO`/`READ_CALENDAR`/
+    `ACCESS_FINE_LOCATION`); `PermissionEducationViewModel` is hardcoded to `WALLPAPER`; `refreshStatus()`
+    is upgrade-only and **carries an explicit Block-H debt** to revisit when the first dangerous permission
+    lands (`RECORD_AUDIO`, Ph7). Phase 7 flips the flags + routes the feature in + discharges the debt
+    (Block T audio, Block U calendar/location).
+  - **WorkManager is fully wired** (`Configuration.Provider`/`HiltWorkerFactory`, manifest initializer
+    removed, `enqueueUniqueWork(KEEP)` + battery/storage constraints). Phase 7 adds **no new WM infra** —
+    the periodic pre-compute/cleanup workers reuse the factory via `enqueueUniquePeriodicWork`.
+  - **Model-provisioning machinery is general** (`ModelStore` quarantine→SHA-256→atomic-rename,
+    `ModelProvisioner`/`ModelManager`/`KtorModelDownloader`/`ModelAvailabilityRepositoryImpl`). The
+    embedding model reuses it verbatim with a **second** `ModelId` + `ModelDownloadConfig.EMBEDDING_PENDING`
+    (the OQ#3 inert seam, exactly like `INTENT_NLU_PENDING`).
+  - **Co-residency fact (codegraph-verified):** `OnnxIntentClassifier` and the future `OnnxTextEmbedder`
+    are **distinct `SessionLifecycle` holders**; `:app` `onTrimMemory`/`onLowMemory` call
+    `releaseResources()` per holder; there is **no cross-session arbiter** today and the plan does not add
+    one (see closure #1).
+- **Three pre-ADR items closed before the flip (the verifier's request):**
+  1. **Co-residency of the NLU + embedder ONNX sessions under the `< 150MB` MID_RANGE ceiling — decided
+     Option B (accepted, not arbitrated).** The two are not co-resident **by scheduling, not by locking**:
+     the embedder's only consumer is U's re-rank seam, run primarily by the **deviceIdle** pre-compute
+     worker (Block W) when the foreground command path is idle and the NLU session has already torn down
+     via its sustained-gate-off (~30s) / `onTrimMemory` path; both tear down together under `onTrimMemory`.
+     A rare brief overlap is **explicitly accepted**; the combined footprint is a device-pending OQ#3
+     measurement; a **single-resident arbiter is frozen-forward**, built only if the device measurement
+     shows a breach. Only `:app` wiring change: the single injected `SessionLifecycle` becomes a Hilt
+     **`Set<SessionLifecycle>` multibinding** so both holders are released. Recorded in the plan's hard
+     invariants + Block V.
+  2. **Suggestions single source of truth — decided owner = the host `LauncherViewModel`/
+     `LauncherUiState.suggestions`** (`architecture.md:229` single-source-per-concern). The earlier draft's
+     `SuggestionsViewModel` with its **own `StateFlow<List<Suggestion>>`** is **dropped** (it duplicated the
+     concern). `:feature:suggestions` ships a **stateless `SuggestionsRow(suggestions, onSuggestionTap)`**
+     only (no VM, no Hilt). Pinned in Block S (port shape), wired in W1 — must not drift. Recorded in F7-8,
+     F7-11, the pre-flight bullet, Block S, Block W (files + W1), and confirmed-decision #8.
+  3. **Privacy-guard wording corrected.** Voice is an input *modality* — recognized text legitimately flows
+     out as `USER_COMMAND`, byte-identical to keyboard text. The guard invariant is therefore **"no *new
+     outbound category* (calendar event data, location coordinates, raw audio / a standalone transcript
+     field) enters the allow-list"**, **not** "voice never reaches the cloud" (which would assert something
+     false). A positive regression keeps a voice-derived command flowing as `USER_COMMAND` (the Block-L
+     "calendar-in-a-user-command stays legal" precedent). The Block-L allow-list
+     `{USER_COMMAND, STATIC_SYSTEM_PROMPT, GENERATION_LIMITS}` is unchanged. Recorded in F7-9, the hard
+     invariant, the contract table, and confirmed-decision #9.
+- **Forks decided (full rationale in the plan §"Fork decisions"):**
+  1. **Voice scope** = STT → text → the **existing** intent pipeline; on-device preferred
+     (`createOnDeviceSpeechRecognizer` + `EXTRA_PREFER_OFFLINE`); never a new generative path; never
+     our-backend audio (BYOK, no backend — fallback is the user's own system recognizer); raw audio never
+     persisted, transcripts never logged; wake-word frozen-forward.
+  2. **Voice surface** = one `SpeechInputSource`, a mic affordance on the **launcher command input**
+     (primary), optional thin assistant-prompt reuse — one port, one Android impl, two call sites.
+  3. **`RECORD_AUDIO`** = `VOICE_INPUT.requestable=true`; feature routed into the education VM (the
+     hardcoded `WALLPAPER` escape hatch); full dangerous-permission lifecycle
+     (`shouldShowRequestPermissionRationale` → `PERMANENTLY_DENIED` → system-Settings deep link); the
+     Block-H `refreshStatus()` debt **discharged**. Template for Block U's calendar/location flows.
+  4. **Context sources** = offline-first always-on (time-of-day + recent/frequent usage from
+     `UsageHistoryRepository`) + opt-in permission-gated (calendar, location) that return **empty** when
+     not `GRANTED`; only derived display-safe `Suggestion{label, actionId}` leaves a provider.
+  5. **Ranking** = pure deterministic JVM-tested `HeuristicSuggestionRanker` ships (recency + frequency +
+     time-prior + per-source weight, dedup by `actionId`, bound to N); ONNX semantic re-rank is an
+     **optional gated decorator** with heuristic fallback (the CPU-vs-NNAPI precedent).
+  6. **`TextEmbedder` impl** = `OnnxTextEmbedder` built **behind U's reader**, gated by the **same**
+     `LocalInferenceGate`/`DeviceProfile` as the NLU, reusing the Phase-6 model-store/WorkManager; inert
+     `EMBEDDING_PENDING` seam if OQ#3 open (heuristic ranker ships); ONNX confined to `:data:ai-local`.
+  7. **WorkManager** = periodic `SuggestionPrecomputeWorker` (~24h, `batteryNotLow`+`storageNotLow`+
+     `deviceIdle`, **no network**, **no `LOW_END`**, gated on `aiSuggestionsEnabled`,
+     `enqueueUniquePeriodicWork`) + `UsageCleanupWorker`; boot warmup via `RECEIVE_BOOT_COMPLETED`; reuses
+     the existing `Configuration.Provider`/`HiltWorkerFactory`; idempotent + cancellable, no foreground
+     service.
+  8. **Surface** = single owner = host `LauncherViewModel`/`LauncherUiState.suggestions` (no parallel VM);
+     `:feature:suggestions` = stateless `SuggestionsRow`; cold-start cache-restore-then-supersede (the
+     deferred Fork-6 half). *(See closure #2.)*
+  9. **Privacy** = outbound allow-list unchanged; guard = "no new outbound category", not "voice never
+     reaches cloud"; sensitive context never persisted raw / logged; inventory guards extended for any new
+     keys/tables. *(See closure #3.)*
+  10. **Testing** = interface-gate everything; JVM fakes in `:core:testing` (JVM-only); real recognizer +
+      real embedder only on SM-A325F; the `< 150ms` embedder budget + the recognizer run are
+      device-pending acceptance items (the Block-J/N/P precedent).
+  11. **Deps** = **no new Gradle deps** (`SpeechRecognizer` = framework; WorkManager/`hilt-work`/ONNX
+      already in catalog); new manifest perms `READ_CALENDAR` + `ACCESS_FINE_LOCATION` +
+      `RECEIVE_BOOT_COMPLETED` (`RECORD_AUDIO` already declared in Block N); `:feature:suggestions` gains
+      **no** Hilt under F7-8; full ONNX R8/ProGuard frozen to Ph9; `EncryptedSharedPreferences`/
+      `security-crypto` remain forbidden.
+- **Two open questions, explicitly NOT forks (gate their blocks, must be closed first):** OQ#3 — embedding
+  model + tokenizer + host + pinned SHA-256 + dimensionality/pooling (`assert_embedding_contract`) gates
+  **Block V**; OQ#4 — on-device STT availability across target devices (SM-A325F + API-28/29 fallback)
+  gates **Block T device acceptance**. The `SpeechInputSource` contract (availability probe + graceful
+  unavailable state) is decided in S/T regardless; only the device matrix / real artifact is pending. The
+  **11 fork count is unchanged** — these are unresolved gating items, not decisions.
+- **Tooling note:** WorkManager **periodic** API verified current via context7 (`/androidx/androidx`:
+  `PeriodicWorkRequest.Builder`, `enqueueUniquePeriodicWork`, `ExistingPeriodicWorkPolicy`,
+  `setRequiresDeviceIdle`/`setRequiresBatteryNotLow`/`setRequiresStorageNotLow`, 15-min periodic floor).
+  **`android.speech.SpeechRecognizer` is NOT an androidx library — context7 returns only the Leanback
+  wrappers, not the framework class.** The framework signatures (`createOnDeviceSpeechRecognizer` API 31+,
+  `isOnDeviceRecognitionAvailable`, `RecognitionListener`, `EXTRA_PREFER_OFFLINE`, main-thread binding) are
+  flagged **re-verify-against-the-Android-Javadoc-at-Block-T**, the same discipline Phase 6 applied to the
+  thin ONNX Java coverage (Fork P6-5) and Phase 5 to Ktor `HttpTimeout` — not pinned from memory.
+- **Next:** execute the **Block S** prompt only (pure `:domain` contracts + heuristic ranker + fakes), then
+  gate S green before T; T's device run is independent (port-gated); U before V (V needs U's reader);
+  V before W; W closes Phase 7.
+
+### ADR 2026-06-29 — Block S complete (suggestion + voice domain contracts, pure)
+- **Scope:** Block S only — pure-`:domain` suggestion + voice contracts + the heuristic ranking policy +
+  JVM fakes. No impls (Android/ONNX/WorkManager are T/U/V/W), no DI, no manifest, no new Gradle deps. The
+  NLU 7-label set and `HandleUserCommandUseCase` were not touched.
+- **New `:domain` files:**
+  - `…domain.suggestions`: `Suggestion(label, actionId, source: SuggestionSource, score: Double)` (the
+    third concern's display-safe value type — distinct from `IntentMatchResult` and `AiChunk`);
+    `SuggestionSource{RECENT_USAGE, FREQUENT_USAGE, TIME_OF_DAY, CALENDAR, LOCATION, SEMANTIC}`;
+    `SuggestionContext(timeOfDay: TimeOfDay, nowEpochMs: Long, typedPrefix: String?)` +
+    `TimeOfDay{MORNING, WORK, EVENING, NIGHT}` (display-safe shared input — `nowEpochMs` for testable
+    recency in U, `typedPrefix` for V's semantic re-rank; never carries raw sensitive signals);
+    `SuggestionProvider.provide(context): List<Suggestion>` (empty when permission/signal absent, never
+    throws); `SuggestionEngine.suggestions(): Flow<List<Suggestion>>` + `refresh(): OperationResult<…>`
+    (port-only; aggregation is U); `SuggestionRanker.rank(candidates, context)` + the pure
+    `HeuristicSuggestionRanker`.
+  - `…domain.voice`: `SpeechInputSource.isAvailable()` + `listen(languageTag): Flow<SpeechRecognitionState>`
+    (cold flow, input modality — feeds the existing command path, not a 4th pipeline);
+    `SpeechRecognitionState{Ready, Partial, Final, Error, Ended}` (sealed; `Ended`/`Error` terminal,
+    failure-as-value — the `AiChunk` precedent); `SpeechRecognitionError{UNAVAILABLE, PERMISSION_DENIED,
+    NO_MATCH, BUSY, NETWORK, TIMEOUT, UNKNOWN}` (enum, like `AiStopReason`/`ModelAvailability`; Android
+    error-code mapping deferred to the `:core:android` impl in Block T).
+- **`HeuristicSuggestionRanker` (pure, deterministic):** `weight = score × sourceWeight(source) ×
+  timePrior(source, timeOfDay)`; dedup by `actionId` keeping max weight; sort desc with a deterministic
+  tie-break (`label`, then `actionId`); bound to `maxResults` (default `DEFAULT_MAX_SUGGESTIONS = 5`,
+  mirroring data-layer `MAX_CACHED_SUGGESTIONS`; the cache repo still caps on write). The candidate's
+  incoming `score` is the provider's recency/frequency signal — the ranker needs **no raw history**, so it
+  stays pure and table-testable. The weight tables are heuristic/tunable; the **order contract** is what is
+  pinned, not the constants.
+- **New fakes (`:core:testing`, JVM-only):** `FakeSpeechInputSource` (scripted `Ready→Partial*→Final→Ended`
+  / `Error` terminal, `available` flag, records language tags), `FakeSuggestionProvider` (scripted list +
+  records contexts), `FakeSuggestionEngine` (`MutableStateFlow`-backed, `emit`, `refreshCount`).
+  `FakeTextEmbedder` already existed.
+- **Closure carry-through (the three pre-ADR items) pinned in code/tests where they touch S:**
+  - **Suggestions single-source (F7-8):** `SuggestionEngine.suggestions()` is documented to be collected by
+    the **one** host `LauncherViewModel` (no parallel `SuggestionsViewModel`/`StateFlow`).
+    `SuggestionCompositionTest` proves the form composes with **no new port**: a `Suggestion` is a strict
+    superset of `CachedSuggestion(label, actionId)`, so the existing `SuggestionsCacheRepository` caches
+    engine output directly. Reconciliation **behaviour** (cache-restore-then-supersede, never merge —
+    `architecture.md:254-256`) is deliberately **not** built here; it lands in W2.
+  - **Privacy (F7-9):** `SuggestionContext`/`Suggestion` KDoc fixes them as display-safe (no raw event
+    title / coordinates / query / timestamp); the outbound allow-list is untouched (S adds nothing to a
+    cloud `AiRequest`).
+  - **Co-residency (Block V):** not in S's surface (no ONNX here); unchanged.
+- **Tests (12 new, 0 failures; 131 domain total):** `HeuristicSuggestionRankerTest` (7 — recency,
+  frequency, time-prior order-flip-by-context, dedup, bound at default + custom cap, tie-break determinism,
+  empty); `SuggestionCompositionTest` (2 — provider aggregation with an opt-in provider absent → degrade;
+  `Suggestion`⊇`CachedSuggestion` projection); `FakeSpeechInputSourceTest` (3 — success-run ordering +
+  language-tag capture, `Error` as a value the stream completes on, availability flip).
+- **Acceptance verified:** purity guard **machine-checked** — `grep` over `domain/src/main` finds no
+  `import` of `android*`/`onnx*`/`workmanager`/`androidx` (only `OperationResult` + `kotlinx…Flow` imported
+  by the new files); `domain` classpath stays `coroutines.core` only; `assembleDebug` + full
+  `testDebugUnitTest` BUILD SUCCESSFUL; `git status` shows **no production file modified** (only new files +
+  the planning-round docs); intent/generative/Phase-3/5/6 suites untouched; 0 new Gradle deps.
+- **Next = Block T** (voice input: `AndroidSpeechInputSource` over `SpeechRecognizer`, `RECORD_AUDIO`
+  request flow + the `refreshStatus()` Block-H debt, mic affordance). ⚠ re-verify the
+  `android.speech.SpeechRecognizer` Java signatures against the Android Javadoc first (context7 covers only
+  the Leanback wrappers). T's device run (OQ#4) is independent of U/V/W.

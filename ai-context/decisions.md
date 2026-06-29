@@ -1776,15 +1776,19 @@ change**. (Western users can command in English; an unknown native language degr
 local language coverage is an optimization, not a correctness requirement.)
 
 **Chosen base + tradeoff.** Base = **`bert-base-multilingual-uncased`** as a *teacher*, **not** the shipped
-model (present-day facts via web_search: 12-layer, ~110M params, WordPiece, ~110k shared vocab, **uncased**
-— its lower-case + NFD accent-strip preprocessing matches `WordPieceTokenizer` exactly → **no tokenizer
-change**, **no golden regeneration** of the algorithm). Naive mBERT/distil-mBERT (~110–134M, dominated by a
-~110–120k-row embedding table) will not meet `<150ms` on the SM-A325F, so it is **rejected as the shipped
-model**. The shipped model is produced (Stage 2) by compressing the teacher:
+model (present-day facts via web_search: 12-layer, **~168M params** (corrected from Google's README which
+copied the English BERT-Base figure; reproducible count is 168,054,423 — ~105,879 vocab × 768 embedding dim
+≈ 81M of embeddings, roughly half the model), WordPiece, ~110k shared vocab, **uncased** — its lower-case +
+NFD accent-strip preprocessing matches `WordPieceTokenizer` exactly → **no tokenizer change**, **no golden
+regeneration** of the algorithm). Naive mBERT (~168M, dominated by a ~110k-row embedding table — the
+dominant mass justification is now *stronger*, not weaker) will not meet `<150ms` on the SM-A325F, so it is
+**rejected as the shipped model**. The shipped model is produced (Stage 2) by compressing the teacher:
 - **(Recommended, chosen) WordPiece teacher → vocab-prune → layer-distill → int8.** Prune the embedding
   table to the tokens in en/ar/tr/ru + the launcher command domain (~110k → **~20–30k**; the dominant size
-  lever, WordPiece algorithm unchanged); distill to a ~2–4-layer student (the latency lever); int8 (final
-  footprint). Blast radius = `OnnxModelSpec` constants + a smaller pruned `vocab.txt` + regenerated goldens.
+  lever — embedding pruning matters even more at 168M than the incorrectly-quoted 110M, since the embedding
+  table is ~half the model weight; WordPiece algorithm unchanged); distill to a ~2–4-layer student (the
+  latency lever); int8 (final footprint). Blast radius = `OnnxModelSpec` constants + a smaller pruned
+  `vocab.txt` + regenerated goldens.
 - **(Fallback, documented) a non-transformer classifier** (char/byte-CNN or fastText-style subword) — only
   if the WordPiece path **measurably** fails `<150ms` after prune+distill+int8; it reworks the P
   tokenizer/export pipeline (no longer WordPiece). Not adopted without a measured latency failure.
@@ -1798,9 +1802,11 @@ WordPiece path can't meet it, fall back to the non-transformer classifier rather
 + Arabic fragment into more wordpieces/word). `vocabSize` = **data-driven**, not a literal: `OnnxModelSpec`
 now carries a `VOCAB_SIZE_PENDING` sentinel (the pruned `vocab.txt` doesn't exist yet), and
 `tools/nlu/train_export.py:assert_onnx_contract` **derives** vocab size from the produced `vocab.txt` line
-count and hard-fails unless `model_embedding_rows == len(vocab) == OnnxModelSpec.vocabSize` (hand-synced,
-the Phase-4 `TABLE_NAMES` precedent) + `[1, maxLen]` input shape. **The 7 labels are language-independent
-and DID NOT change.**
+count and hard-fails unless `model_embedding_rows == len(vocab) == OnnxModelSpec.vocabSize` +
+`[1, maxLen]` input shape. `OnnxModelSpec.vocabSize` is set **manually at Stage 2** to the produced
+line count; `assert_onnx_contract` is the data-driven cross-check that hard-fails on any desync
+(the Phase-4 `TABLE_NAMES` precedent — an invariant enforced by a tool, not assumed). **The 7 labels
+are language-independent and DID NOT change.**
 
 **Blast-radius statement (per block).**
 - **O** — **none** (language-independent domain contracts).
@@ -1817,16 +1823,24 @@ and DID NOT change.**
   model-landing step is empirical `confidenceFloor` tuning, which was always pending.
 
 **Carry-forward risks (mitigations mandated above; validated at Stage 2).** (1) Latency on SM-A325F is the
-binding constraint — naive mBERT won't hit `<150ms`; mitigation = prune+distill+int8, hard gate, non-transformer
-fallback; final measurement device-pending. (2) Final pruned vocab size + `maxLen` are finalized at
-dataset/Stage-2 time; `OnnxModelSpec`/`assert_onnx_contract` are data-driven so they absorb the values
-without code edits. (3) `DeviceProfile` LOW_END cutoff may warrant a stricter MID/HIGH gate for a heavier
-model — a `DeviceProfileClassifier` threshold tweak, revisited once footprint is known. (4) Bigger artifact
-vs download/storage — `requiresStorageNotLow` already covers it; noted. Carry-forward: uncased multilingual
-normalization (lower-case + accent-strip) is lossy for Turkish İ/ı and accented scripts, but it is
-**self-consistent** with the chosen uncased teacher (matching tokenizer↔model preprocessing, not linguistic
-correctness, is what prevents feeding garbage); if a **cased** base is later chosen at Stage 2 it gains a
-`do_lower_case=false` toggle (a parameterization, not a rewrite) + golden regeneration.
+binding constraint — naive mBERT (~168M) won't hit `<150ms`; mitigation = prune+distill+int8, hard gate,
+non-transformer fallback; final measurement device-pending. (2) Final pruned vocab size + `maxLen` are
+finalized at dataset/Stage-2 time; `OnnxModelSpec`/`assert_onnx_contract` are data-driven so they absorb
+the values without code edits. (3) `DeviceProfile` LOW_END cutoff may warrant a stricter MID/HIGH gate
+for a heavier model — a `DeviceProfileClassifier` threshold tweak, revisited once footprint is known.
+(4) Bigger artifact vs download/storage — `requiresStorageNotLow` already covers it; noted.
+(5) **Cased vs uncased — explicit Stage-2 decision required.** The uncased choice this block is a
+deliberate blast-radius optimization: `bert-base-multilingual-uncased`'s lowercase + NFD accent-strip
+preprocessing matches the existing `WordPieceTokenizer` exactly, so no golden regeneration is needed now.
+However, Google marks Multilingual **Uncased** "not recommended" and recommends **Multilingual Cased** —
+explicitly for non-Latin alphabets (Arabic) and "often better" for Latin scripts (Turkish). **At Stage 2,
+measure cased vs uncased accuracy on the Arabic + Turkish validation subsets and decide on data — do not
+default to uncased by inertia.** Switching to cased is bounded: a `do_lower_case=false` preprocessing
+toggle + one golden regeneration (not a rewrite). Staying uncased is also valid if the accuracy data
+supports it. (6) **CJK carry-forward (no-op for en/ar/tr/ru).** The Kotlin `WordPieceTokenizer`
+implements `tokenizeChinese` (per-CJK-char space-padding), which matches mBERT's `tokenize_chinese_chars`
+step. This is a no-op for the four target languages but means CJK language support (if ever added) requires
+no tokenizer change — noted for completeness, not an action item.
 
 **Verification.** `:data:ai-local:testDebugUnitTest` green incl. the new `WordPieceTokenizerMultilingualTest`;
 full `testDebugUnitTest` + `assembleDebug` BUILD SUCCESSFUL (this is constants + a tokenizer test — no model
@@ -1948,5 +1962,9 @@ marked SUPERSEDED — the live contract reads multilingual (`bert-base-multiling
 Contract→Owner rows current; (5) `testDebugUnitTest` + `assembleDebug` BUILD SUCCESSFUL with exactly one
 unqualified `IntentMatcher` (= `LayeredIntentMatcher`) + `@RuleMatcher`/`@NluMatcher` qualified. **All
 PASS — clear to proceed to Stage 1 (multilingual dataset, en/ar/tr/ru).** Stage-2 follow-up (not a
-blocker): make `assert_onnx_contract` data-driven (derive expected vocab size from the produced
-`vocab.txt` line count) so a pruned-vocab change can't silently desync `OnnxModelSpec.vocabSize`.
+blocker): set `OnnxModelSpec.vocabSize` (today the `VOCAB_SIZE_PENDING` sentinel) to the actual
+produced pruned `vocab.txt` line count. NOTE — `assert_onnx_contract` is **already data-driven** (per
+the OQ#1 multilingual amendment: `tools/nlu/train_export.py` derives the size from the produced
+`vocab.txt` and hard-fails unless `model_embedding_rows == len(vocab) == OnnxModelSpec.vocabSize`), so
+it already guards that one manual value against desync. The checklist's "make the assert data-driven"
+phrasing predated the amendment and is **obsolete** — do not re-do it.

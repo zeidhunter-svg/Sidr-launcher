@@ -1,0 +1,24 @@
+{
+  "_comment": "Argmax-index → label contract. MUST match NluLabel.kt enum order and train_export.py LABELS list exactly. Changing this order without retraining silently mislabels every inference.",
+  "label_to_index": {
+    "LAUNCH_APP":     0,
+    "SEARCH":         1,
+    "OPEN_SETTINGS":  2,
+    "SHOW_APPS":      3,
+    "HELP":           4,
+    "OPEN_ASSISTANT": 5,
+    "UNKNOWN":        6
+  },
+  "index_to_label": [
+    "LAUNCH_APP",
+    "SEARCH",
+    "OPEN_SETTINGS",
+    "SHOW_APPS",
+    "HELP",
+    "OPEN_ASSISTANT",
+    "UNKNOWN"
+  ],
+  "num_labels": 7,
+  "note_clear": "CLEAR is intentionally absent — it is a rule-only fixed phrase (RuleBasedIntentMatcher SIMPLE_COMMANDS), never an NLU class.",
+  "source_of_truth": "data/ai-local/src/main/java/com/sidr/launcher/data/ailocal/nlu/NluLabel.kt"
+}

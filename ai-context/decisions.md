@@ -1938,3 +1938,15 @@ instrumented reads.
 
 **Phase 6 is CLOSED with Block R (Blocks O → R).** Next = the deferred device-acceptance pass
 (Block J/N + P5/Q live items) and/or Phase 7 per the roadmap.
+
+**Reconcile verified 2026-06-29.** Parallel-session reconcile checklist run after the Block-R commit:
+(1) git clean, no conflict markers, both the Block-R commit (`5d245bc`) and the OQ#1-amendment docs
+commit (`c4d0e9e`) present — nothing lost; (2) all three ADRs coexist (OQ#1-amended-multilingual,
+Block-Q-incl-rework, Block-R-close); (3) every `30522` / `max_len 32` / English-base hit is explicitly
+marked SUPERSEDED — the live contract reads multilingual (`bert-base-multilingual-uncased` → pruned
+`vocab.txt` ~20–30k en/ar/tr/ru, `maxLen 48`, `VOCAB_SIZE_PENDING`); (4) `CLAUDE.md` status +
+Contract→Owner rows current; (5) `testDebugUnitTest` + `assembleDebug` BUILD SUCCESSFUL with exactly one
+unqualified `IntentMatcher` (= `LayeredIntentMatcher`) + `@RuleMatcher`/`@NluMatcher` qualified. **All
+PASS — clear to proceed to Stage 1 (multilingual dataset, en/ar/tr/ru).** Stage-2 follow-up (not a
+blocker): make `assert_onnx_contract` data-driven (derive expected vocab size from the produced
+`vocab.txt` line count) so a pruned-vocab change can't silently desync `OnnxModelSpec.vocabSize`.

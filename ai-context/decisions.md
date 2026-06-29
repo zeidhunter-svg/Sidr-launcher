@@ -1842,10 +1842,21 @@ explicitly for non-Latin alphabets (Arabic) and "often better" for Latin scripts
 measure cased vs uncased accuracy on the Arabic + Turkish validation subsets and decide on data — do not
 default to uncased by inertia.** Switching to cased is bounded: a `do_lower_case=false` preprocessing
 toggle + one golden regeneration (not a rewrite). Staying uncased is also valid if the accuracy data
-supports it. (6) **CJK carry-forward (no-op for en/ar/tr/ru).** The Kotlin `WordPieceTokenizer`
-implements `tokenizeChinese` (per-CJK-char space-padding), which matches mBERT's `tokenize_chinese_chars`
-step. This is a no-op for the four target languages but means CJK language support (if ever added) requires
-no tokenizer change — noted for completeness, not an action item.
+supports it. (6) **CJK — confirmed present, no divergence (verified by code 2026-06-29).** The Kotlin
+`WordPieceTokenizer` has `tokenizeChinese()` (per-CJK-char space-padding, called from `basicTokenize`)
+plus an `isChinese(cp)` covering HF's CJK Unicode blocks — i.e. it **matches** mBERT's
+`_tokenize_chinese_chars`/`_is_chinese_char`. (Minor, non-target: it iterates UTF-16 `Char`s, so
+supplementary-plane CJK ≥U+20000 isn't split — irrelevant to en/ar/tr/ru and to BMP CJK.) No-op for the
+four target languages; CJK support (if ever added) needs no tokenizer change — completeness, not an
+action item. (7) **Stage-2 hardening — `--expected-vocab-size` CLI-guard for `assert_onnx_contract`
+(not yet implemented).** Add an optional arg: when supplied, also assert `rows == len(vocab) ==
+expected` (the hand-set Kotlin `OnnxModelSpec.vocabSize`); when omitted (today's sentinel), skip the
+third compare and just print. Closes the manual-copy gap **without** parsing `OnnxModelSpec.kt` (no
+fragile regex). (8) **Stage-2 hardening — run the contract check STRICTLY against the final pruned
+artifact + a pruned-size sanity bound (not yet implemented).** `rows == len(vocab)` does **not** catch a
+run against the teacher or a not-fully-pruned model — both values agree there, so the assert is falsely
+green. Mitigation: point `assert_onnx_contract` only at the real pruned export AND assert the size is in
+the pruned band (~20–30k), explicitly rejecting the ~110k teacher embedding table.
 
 **Verification.** `:data:ai-local:testDebugUnitTest` green incl. the new `WordPieceTokenizerMultilingualTest`;
 full `testDebugUnitTest` + `assembleDebug` BUILD SUCCESSFUL (this is constants + a tokenizer test — no model

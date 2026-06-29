@@ -14,6 +14,13 @@ import java.text.Normalizer
  * vectors produced by an independent reference implementation (`tools/nlu/gen_golden_vectors.py`,
  * the HF algorithm) — see `WordPieceTokenizerGoldenTest`.
  *
+ * **Vocab-size-agnostic (OQ#1 multilingual amendment, 2026-06-29):** the algorithm does greedy
+ * longest-match over whatever [vocab] map it is given — no hardcoded size, no English-only
+ * assumption beyond HF uncased normalization (lower-case + NFD accent-strip), which matches the
+ * chosen `bert-base-multilingual-uncased` teacher's preprocessing. The same code therefore serves
+ * the pruned multilingual `vocab.txt` (en/ar/tr/ru, ~20–30k) unchanged; proven by
+ * `WordPieceTokenizerMultilingualTest` against a synthetic Latin/Cyrillic/Arabic mini-vocab.
+ *
  * Pipeline (matching HF exactly):
  *  1. clean text — drop control / replacement chars, normalize whitespace to a single space.
  *  2. add spaces around CJK chars.

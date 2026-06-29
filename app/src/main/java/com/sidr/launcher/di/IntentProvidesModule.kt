@@ -1,7 +1,7 @@
 package com.sidr.launcher.di
 
 import com.sidr.launcher.core.common.di.ApplicationScope
-import com.sidr.launcher.data.repository.intent.RuleBasedIntentMatcher
+import com.sidr.launcher.data.repository.intent.LayeredIntentMatcher
 import com.sidr.launcher.domain.history.IntentMatchHistoryRepository
 import com.sidr.launcher.domain.intent.ActionExecutor
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
@@ -28,9 +28,23 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object IntentProvidesModule {
 
+    /**
+     * Block R — the unqualified [IntentMatcher] is now the rule-first [LayeredIntentMatcher]
+     * composing the [RuleMatcher] (rule) + [NluMatcher] (ONNX NLU) sources from
+     * [NluMatcherProvidesModule]. The use-case provider below is unchanged: it still injects the
+     * single unqualified [IntentMatcher] and never sees the swap (Fork P6-2).
+     */
     @Provides
     @Singleton
-    fun provideIntentMatcher(): IntentMatcher = RuleBasedIntentMatcher()
+    fun provideIntentMatcher(
+        @RuleMatcher ruleMatcher: IntentMatcher,
+        @NluMatcher nluMatcher: IntentMatcher,
+        confidencePolicy: IntentConfidencePolicy,
+    ): IntentMatcher = LayeredIntentMatcher(
+        primary = ruleMatcher,
+        secondary = nluMatcher,
+        policy = confidencePolicy,
+    )
 
     @Provides
     @Singleton

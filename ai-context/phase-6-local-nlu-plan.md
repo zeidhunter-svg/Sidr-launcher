@@ -6,11 +6,12 @@
 > demoable milestones → tracking → per-block agent-model table → confirmed-decisions.
 > Block lettering continues the alphabet (Phase 4 = E→H, Phase 5 = I→N), so **Phase 6 = Blocks O → R**.
 > **Status (2026-06-29): Block O ✅ (2026-06-27) · Block P ✅ (2026-06-28) · Block Q ✅ (2026-06-28, incl.
-> rework) · Block R ⏳ pending (integration + Phase-6 close).** Open questions: **OQ#1 amended →
+> rework) · Block R ✅ (2026-06-29). PHASE 6 CLOSED (Blocks O → R).** Open questions: **OQ#1 amended →
 > multilingual (2026-06-29)** — see decisions.md "ADR — OQ#1 amended (multilingual)"; **OQ#2 still open**
-> (model hosting/URL). Each block gets its own execution prompt; per-block ADRs land in `decisions.md`
-> and **this plan's status is advanced as part of every block's close-out** (going forward, not only
-> `decisions.md`/`CLAUDE.md`). Phase 6 is **not** closed (Block R's R5 closes it).
+> (model hosting/URL) — both gate the *real model*, not Block R, which is correct + green with no model
+> present (the shipping state). Each block got its own execution prompt; per-block ADRs are in
+> `decisions.md`. **Device-acceptance pending** (on-device NLU + `onTrimMemory` teardown on SM-A325F,
+> gated on OQ#1/#2, bundled with Block J/N + P5/Q live items).
 
 ## Pre-flight — repo-truth check (verified 2026-06-27, before any block)
 
@@ -458,11 +459,11 @@ the pure gating policy, in `:domain`. JVM-only, no impls.
 always-lowest-confidence), `FakeTextEmbedder`, `FakeModelAvailabilityRepository`, `FakeDeviceProfileProvider`.
 
 **Steps:**
-- [ ] `O1` Local-AI ports (`IntentClassifier`, `TextEmbedder` port-only, `ModelId`, `ModelAvailability`).
-- [ ] `O2` `DeviceProfile` + `DeviceCapability` + `DeviceProfileProvider` + `ModelAvailabilityRepository`.
-- [ ] `O3` Pure `LocalInferenceGate` policy (LOW_END never; MID conditional; HIGH enabled).
-- [ ] `O4` Fakes in `:core:testing` (JVM-only, no Android variants).
-- [ ] `O5` JVM tests: gate truth-table (all 3 profiles × availability × thermal/battery); fake classifier
+- [x] `O1` Local-AI ports (`IntentClassifier`, `TextEmbedder` port-only, `ModelId`, `ModelAvailability`).
+- [x] `O2` `DeviceProfile` + `DeviceCapability` + `DeviceProfileProvider` + `ModelAvailabilityRepository`.
+- [x] `O3` Pure `LocalInferenceGate` policy (LOW_END never; MID conditional; HIGH enabled).
+- [x] `O4` Fakes in `:core:testing` (JVM-only, no Android variants).
+- [x] `O5` JVM tests: gate truth-table (all 3 profiles × availability × thermal/battery); fake classifier
       returns `source = NLU`; `NoOpIntentClassifier` is always low-confidence.
 
 **Acceptance:** `:domain` stays stdlib+coroutines (purity guard green); no ONNX/Android/WorkManager term
@@ -493,20 +494,20 @@ tokenizer/label-map helper matching the chosen model; `:data:ai-local/src/androi
 Build: add `:core:android` edge (+ minimal ONNX keep rule note, deferred to Ph9 for full rules).
 
 **Steps:**
-- [ ] `P1` `OnnxSessionFactory`: `OrtEnvironment` + `SessionOptions`; **CPU is the deterministic default
+- [x] `P1` `OnnxSessionFactory`: `OrtEnvironment` + `SessionOptions`; **CPU is the deterministic default
       — always kept**; **append NNAPI EP only on API 29+** (skipped by construction on API 28); handle
       **both** failure modes per Fork P6-5 — (a) *init failure* → catch → CPU-only session, no crash, and
       (b) *init-success-but-degraded* → **NNAPI off by default** behind a build/profile flag until the
       Block-P device run proves it **faster *and* correct** vs the CPU baseline. ⚠ verify
       `ai.onnxruntime` Java signatures against the Javadoc first.
-- [ ] `P2` `OnnxIntentClassifier`: **lazy** session (first inference only, never cold start); **single
+- [x] `P2` `OnnxIntentClassifier`: **lazy** session (first inference only, never cold start); **single
       shared** session; input tokenization → `OnnxTensor`; `session.run` → output → `IntentMatchResult`
       (`source = NLU`, confidence from softmax); concurrency-guarded.
-- [ ] `P3` **Memory lifecycle**: `close()`/`AutoCloseable`; closeable under `onTrimMemory`; lazily
+- [x] `P3` **Memory lifecycle**: `close()`/`AutoCloseable`; closeable under `onTrimMemory`; lazily
       re-inits next inference; respects per-profile heap ceilings.
-- [ ] `P4` **Graceful degrade**: any session/inference failure → low-confidence/empty result (so
+- [x] `P4` **Graceful degrade**: any session/inference failure → low-confidence/empty result (so
       `LayeredIntentMatcher` falls back to rule), never an exception to the caller; no user text logged.
-- [ ] `P5` `androidTest` on SM-A325F: loads a small verified model, runs inference, NNAPI→CPU fallback
+- [x] `P5` `androidTest` on SM-A325F: loads a small verified model, runs inference, NNAPI→CPU fallback
       path exercised, **records `< 150ms` MID_RANGE latency (device-pending acceptance)**.
 
 **Acceptance:** ONNX confined to `:data:ai-local` (grep: no `ai.onnxruntime` import elsewhere); session
@@ -544,17 +545,17 @@ session to gate). Forks 3/4/7/11 fixed.
   module deps for WorkManager + `hilt-work`.
 
 **Steps:**
-- [ ] `Q1` `AndroidDeviceProfiler` → `DeviceProfile`/`DeviceCapability`; map to/from
+- [x] `Q1` `AndroidDeviceProfiler` → `DeviceProfile`/`DeviceCapability`; map to/from
       `DeviceProfileCacheEntry` in `PreferencesMapper` (no new DataStore keys).
-- [ ] `Q2` `ModelStore` + `Sha256Verifier`: download to quarantine, verify against the **pinned**
+- [x] `Q2` `ModelStore` + `Sha256Verifier`: download to quarantine, verify against the **pinned**
       expected hash, **atomic rename** on match, mark available; **never expose an unverified file**.
-- [ ] `Q3` `ModelDownloadWorker` (`CoroutineWorker`+`@HiltWorker`) with constraints
+- [x] `Q3` `ModelDownloadWorker` (`CoroutineWorker`+`@HiltWorker`) with constraints
       `requiresBatteryNotLow` + `requiresStorageNotLow` + network; idempotent (no-op if verified model
       exists); cancellable; **no foreground service**.
-- [ ] `Q4` `ModelManager.ensureModel()`: **checks the gate first** — `LOW_END` (or gate-off) → never
+- [x] `Q4` `ModelManager.ensureModel()`: **checks the gate first** — `LOW_END` (or gate-off) → never
       enqueue; otherwise `enqueueUniqueWork`. WorkManager + `HiltWorkerFactory` + `Configuration.Provider`
       wired in `:app` (init path re-verified via context7).
-- [ ] `Q5` JVM tests (against fakes): gate-before-enqueue (LOW_END never schedules); SHA-256 verify
+- [x] `Q5` JVM tests (against fakes): gate-before-enqueue (LOW_END never schedules); SHA-256 verify
       accept/reject; idempotent re-run; availability flips on verified rename. Worker logic tested via
       fakes; no real ONNX.
 
@@ -570,13 +571,14 @@ nothing.
 
 ---
 
-## Block R — Wire NLU `IntentMatcher` source + docs-sync / phase close — ⏳ PENDING
+## Block R — Wire NLU `IntentMatcher` source + docs-sync / phase close — ✅ DONE (2026-06-29)
 
-> **Status: ⏳ pending** (the integration + Phase-6-close block). **Unaffected by the OQ#1 multilingual
-> amendment:** R sits above the port boundary — `LayeredIntentMatcher` / the DI swap / calibration
-> reference only `IntentMatchResult` (intent + confidence) and `IntentConfidencePolicy`, never the
-> tokenizer / vocab / `OnnxModelSpec`. **R can proceed/merge as-is.** The only model-landing-time step is
-> empirical `confidenceFloor` tuning, which was always pending and is not a revision.
+> **Status: ✅ DONE (2026-06-29) — PHASE 6 CLOSED.** Integration + Phase-6 close. Sat above the port
+> boundary as predicted — `LayeredIntentMatcher` / the DI swap / calibration reference only
+> `IntentMatchResult` + `IntentConfidencePolicy`, never the tokenizer / vocab / `OnnxModelSpec`, so the
+> OQ#1 multilingual amendment did not touch it. Empirical `confidenceFloor` tuning remains a
+> model-landing-time step (device-pending), not a Block-R revision. Details: decisions.md "ADR
+> 2026-06-29 — Block R complete + Phase 6 close".
 
 **Goal:** merge the NLU source into the live pipeline via a composite that preserves the rule fast path,
 reconcile the docs to as-built, and close Phase 6.
@@ -597,31 +599,33 @@ that forwards `onTrimMemory` to the bound matcher's `SessionLifecycle` seam (Blo
 > decision** (source-aware policy / per-source thresholds / NLU down-scaling), not the default merge.
 
 **Steps:**
-- [ ] `R1` `LayeredIntentMatcher`: rule-first; return rule verbatim when not low-confidence (NLU never
-      called, `< 10ms` preserved); on low-confidence consult NLU. **Merge policy is the conscious
-      decision above — do NOT ship a raw "higher-confidence wins" against an uncalibrated NLU scale.**
-      Decide + record: source-aware thresholds (or NLU confidence down-scaling) so the `[0.60, 0.85)`
-      window behaves intentionally; settle whether `confidenceFloor` stays in `OnnxModelSpec` or moves
-      to the policy. JVM-test the chosen rule explicitly.
-- [ ] `R2` DI: qualified `@RuleMatcher`(=`RuleBasedIntentMatcher`) + `@NluMatcher`(=gate ? `OnnxIntentClassifier`
-      : `NoOpIntentMatcher`) → `LayeredIntentMatcher` as the unqualified `IntentMatcher`.
-      **`HandleUserCommandUseCase` and `IntentProvidesModule.provideHandleUserCommandUseCase` only see
-      the swapped binding — no use-case code change.**
-- [ ] `R2.5` **(Fork P6-9 hard invariant — do NOT drop):** register a `ComponentCallbacks2` in `:app`
-      whose `onTrimMemory(TRIM_MEMORY_*)` calls `SessionLifecycle.releaseResources()` on the bound
-      `@NluMatcher` (cast/inject the `SessionLifecycle` seam from `:data:ai-local`; `:app` already deps
-      `:data:ai-local`). Deferred from Block P only because the classifier wasn't bindable until Q's
-      `DeviceProfileProvider`/`ModelAvailabilityRepository`/`LocalModelFiles` impls existed — the seam
-      + teardown logic already exist (P3). Without this the "close session under memory pressure"
-      invariant is unmet.
-- [ ] `R3` JVM tests: rule-high-confidence → NLU never invoked (verified via a counting fake) + identical
-      outcome to Phase 3; rule-low + NLU-high → NLU wins per the **calibrated** R1 rule (`source = NLU`);
-      gate-off (NoOp secondary) → behaviour identical to rule-only; **all Phase-3 intent tests still green**.
-- [ ] `R4` **Docs-sync:** fix `architecture.md:169,192` ONNX-slot wording (NLU/classification, generative
-      slot still reserved); document the as-built local-NLU pipeline (`DeviceProfile`, gate, ONNX
-      isolation, WorkManager download/verify); update the Contract→Owner table for the new ports/owners.
-- [ ] `R5` ADRs in `decisions.md` (ONNX scope, composite-matcher seam, gate, model verify, WorkManager);
-      advance `CLAUDE.md` status; mark Phase 6 closed; note device-pending acceptance (P5/Q on SM-A325F).
+- [x] `R1` `LayeredIntentMatcher` (`:data:repository`): rule-first; rule returned verbatim when not
+      low-confidence (NLU never called, `< 10ms` preserved); NLU consulted only on low confidence.
+      **Decided (§5.A): conservative band → Suggest** — a winning NLU result's raw softmax is remapped
+      by the pure `NluConfidenceCalibrator` into `[suggestThreshold, autoExecuteThreshold)`, so it always
+      Suggests and never auto-executes (NOT raw "higher-confidence wins"). `confidenceFloor` **stays in
+      `OnnxModelSpec`**; the calibrator takes a decoupled plain-`Float` floor (default 0.60) → no
+      `data→data` edge. Escape pinned structurally (`source==NLU && (conf==0f || UnknownIntent)`).
+      JVM-tested (boundaries + the merge rule).
+- [x] `R2` DI: `@RuleMatcher`(=`RuleBasedIntentMatcher`) + `@NluMatcher`(=`OnnxIntentClassifier`) →
+      `LayeredIntentMatcher` as the unqualified `IntentMatcher` (`NluMatcherProvidesModule` +
+      `IntentProvidesModule` swap). **§5.F deviation (recorded): `@NluMatcher` binds the self-gating
+      classifier UNCONDITIONALLY** (no graph-time real-vs-NoOp swap — availability flips at runtime, so
+      the per-inference re-check is more correct; no production NoOp needed). Same `@Singleton` exposed
+      as both `@NluMatcher` and `SessionLifecycle`. `HandleUserCommandUseCase` untouched.
+- [x] `R2.5` `SidrLauncherApp` (itself a `ComponentCallbacks2`) overrides `onTrimMemory(level)` →
+      `SessionLifecycle.releaseResources()` at/above `TRIM_MEMORY_BACKGROUND` (§5.D) + `onLowMemory()`;
+      `:app` holds only the ONNX-free `SessionLifecycle` seam. Plus **R3 trigger:** `ensureModel()`
+      fired fire-and-forget on `@ApplicationScope` (IO) from `onCreate()` (§5.E; inert under OQ#2).
+- [x] `R3`(tests) JVM: rule-high → NLU never invoked (counting fake) + identical to Phase 3; rule-low +
+      NLU-high → NLU wins with **calibrated** confidence (`source = NLU`); escape/no-model →
+      behaviour identical to rule-only across the Phase-3 set; calibrator boundary tests. All green.
+      (App-level `ComponentCallbacks2` delegation = `assembleDebug` graph validation + device-pending.)
+- [x] `R4` **Docs-sync:** `architecture.md:169,192` ONNX-slot wording fixed (generative slot Phase 7+,
+      still reserved; Phase 6 feeds the matcher pipeline) + as-built rule-first layered pipeline; the
+      Contract→Owner row added in `CLAUDE.md`.
+- [x] `R5` ADR in `decisions.md` ("ADR 2026-06-29 — Block R complete + Phase 6 close"); `CLAUDE.md`
+      status advanced; Phase 6 marked closed; device-pending acceptance recorded (P5/Q + J/N on SM-A325F).
 
 **Acceptance:** the rule fast path and every Phase-3 test are unchanged; a rules-missed phrase resolves
 via NLU when the gate is on; gate-off devices behave exactly as today; `HandleUserCommandUseCase`

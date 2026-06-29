@@ -153,9 +153,20 @@ generative path.
 ### Intent matching (offline, fast)
 
 1. User enters text command in the launcher.
-2. Input is normalized and passed to the `RuleBasedIntentMatcher` (offline, `< 10ms`).
-3. If confidence is sufficient, the mapped intent is executed via `HandleUserCommandUseCase`.
-4. `SimpleCommand.OPEN_ASSISTANT` routes to the assistant screen; the generative pipeline starts there.
+2. Input is normalized and passed to the unqualified `IntentMatcher`, which is the **rule-first
+   `LayeredIntentMatcher`** (Phase 6, Block R). It runs `RuleBasedIntentMatcher` first (offline,
+   `< 10ms`); if the rule result is **not** low-confidence it is returned **verbatim** and the NLU
+   secondary is **never consulted** — the fast path and every Phase-3 outcome are preserved exactly.
+3. Only on a low-confidence rule does it consult the local NLU secondary (`OnnxIntentClassifier`,
+   `MatcherSource.NLU`), which **self-gates** per inference (LOW_END / no verified model /
+   thermal/battery → escape without loading ONNX). An NLU escape leaves the weak rule standing; a
+   real NLU answer wins only if it clears `suggestThreshold`, with its over-confident softmax
+   **calibrated** into the `[suggestThreshold, autoExecuteThreshold)` band (`NluConfidenceCalibrator`)
+   so a model-driven intent always **Suggests** and never silently auto-executes. With no model
+   present (today's shipping state) the secondary always escapes, so behaviour is identical to
+   rule-only. `HandleUserCommandUseCase` sees a single unqualified `IntentMatcher` and is untouched.
+4. If confidence is sufficient, the mapped intent is executed via `HandleUserCommandUseCase`.
+5. `SimpleCommand.OPEN_ASSISTANT` routes to the assistant screen; the generative pipeline starts there.
 
 ### Generative AI (assistant screen, Phase 5)
 
@@ -166,7 +177,8 @@ The assistant screen drives the generative pipeline via `GenerateReplyUseCase`:
    (positive allow-list: only the verbatim user command + a static system prompt; no calendar /
    location / history / device context assembled — fail-closed privacy guard).
 3. `DefaultGenerativeRouter` selects the engine in order:
-   - **ONNX slot** (reserved; local NLU/generation, Phase 6)
+   - **ONNX slot** (reserved for local *generation*, Phase 7+ — still empty; Phase 6's ONNX work
+     feeds the separate `IntentMatcher` pipeline, not this generative router)
    - **Cloud** (`OpenAiCompatibleGenerativeAiEngine`) — if online + provider config present + non-blank
      key in Keystore. Sends `POST {baseUrl}/chat/completions` (configurable base URL, free-text model,
      `Authorization: Bearer <key>`, `stream: true`). Parses SSE `choices[].delta.content` deltas.
@@ -189,7 +201,7 @@ When the primary path fails, fallback order is:
 
 ```text
 rule matcher (offline, always)
-  -> ONNX (reserved, Ph6 — local NLU/generation)
+  -> ONNX (reserved, Ph7+ — local *generation*; Phase 6 NLU lives in the IntentMatcher pipeline, not here)
   -> cloud AI (if online + config + key present)
   -> static conversational fallback (always available)
 ```

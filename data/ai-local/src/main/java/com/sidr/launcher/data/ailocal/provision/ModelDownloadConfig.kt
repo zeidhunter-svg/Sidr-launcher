@@ -39,7 +39,8 @@ data class ModelDownloadConfig(
 
     companion object {
         /**
-         * The intent-NLU model (BERT-Mini int8, 7-class — see Block P / Open Question #1).
+         * The intent-NLU model (compressed multilingual WordPiece teacher → prune+distill+int8,
+         * 7-class, en/ar/tr/ru — see Block P / Open Question #1, amended multilingual 2026-06-29).
          *
          * TODO(OQ#2): pin the real host [url] + the artifact's [expectedSha256] once model hosting
          * is decided. Until then [isPinned] is false and nothing downloads. The vocab is bundled as

@@ -52,6 +52,10 @@
 
 ## Phase 6: Local NLU and embeddings
 
+**Status: code-complete (Blocks O → R, closed 2026-06-29); device acceptance + the real model
+(OQ#1/#2) pending.** NLU rides the existing `IntentMatcher` port via the rule-first
+`LayeredIntentMatcher`; the `TextEmbedder` is a port only (impl deferred to Phase 7).
+
 - Integrate ONNX Runtime Mobile.
 - Add intent classifier and embeddings interfaces.
 - Use NNAPI opportunistically where available.

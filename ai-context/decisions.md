@@ -1839,3 +1839,102 @@ now proceeds multilingually (en/ar/tr/ru).
 - Rationale: the launcher core (home + app grid + app launch) is the product floor; the intent pipeline is meaningless without it. Building the minimal slice now unblocks `3.4.8`/`3.4.11`/`3.4.13`.
 - Consequence: full launcher-shell polish stays deferred; Room/DataStore persistence and intent-match-history are frozen to Phase 4; `feature/settings` and `feature/permission_education` remain inline placeholders until created.
 - Active plan: `ai-context/phase-3-intent-system-plan.md` (Blocks A → D). Session summary in root `CLAUDE.md`.
+
+### ADR 2026-06-29 — Block R complete + Phase 6 close
+**Context.** Block R is the integration block: it wires the local NLU source into the live
+`IntentMatcher` pipeline. Pre-flight (codegraph + reads) confirmed Block Q's three production seams
+exist on `feature/launcher-3` (`AndroidDeviceProfiler : DeviceProfileProvider`,
+`ModelAvailabilityRepositoryImpl`, `ModelStore : LocalModelFiles`) plus `ModelManager`, so
+`OnnxIntentClassifier` is constructible from the Hilt graph. The model itself is still
+training/host-pending (OQ#1/#2), so on every current device the NLU secondary escapes — **R is
+correct and fully green with NO model present, which is the shipping state.**
+
+- **Precedence — RULE-FIRST (§5.B / Fork P6-2).** `LayeredIntentMatcher(primary = rule,
+  secondary = nlu, policy, calibrator)`: run the rule first; if `!policy.isLowConfidence(rule.conf)`
+  return it **verbatim and never call the secondary** (preserves the `< 10ms` path + exact Phase-3
+  parity). Only on a low-confidence rule consult NLU; an NLU **escape** leaves the weak rule
+  standing; otherwise the NLU answer wins iff its calibrated confidence clears `suggestThreshold`.
+  The escape predicate is pinned **structurally** — `source == NLU && (best.confidence == 0f ||
+  best.intent is UnknownIntent)` — not by free-text `debugReason`; this matches every escape
+  `IntentLabelMapper.escape` emits (`gate_off`/`inference_error`/`argmax_unknown`/
+  `below_confidence_floor`/`logit_size_mismatch`).
+- **R1 calibration — conservative band → Suggest (§5.A, the headline decision).** A winning NLU
+  result's raw softmax (∈ `[0.60, 1.0]`) is remapped by the pure `NluConfidenceCalibrator` onto
+  `[suggestThreshold 0.50, autoExecuteThreshold 0.85)` — kept strictly below auto-execute
+  (`AUTO_EXECUTE_MARGIN 0.01`). So a model-driven intent **always Suggests, never silently
+  auto-executes** a side-effecting launcher action. Rationale: NLU only fires on ambiguous input
+  (the rule was weak), softmax is not a calibrated probability, and a confirmation step is the right
+  UX exactly there; a confident deterministic rule still short-circuits before NLU per §5.B.
+  Surfaced NLU confidence is therefore an **approximation, not a probability**. Verified thresholds
+  read from source (policy 0.85/0.50, rule scale 0.95/0.90/0.30/0.10/0.0, floor 0.60); the mapping is
+  a pure function with boundary unit tests.
+- **`confidenceFloor` home (R1 open point) — stays in `OnnxModelSpec`** (it governs the escape
+  *inside* the classifier). The calibrator parameterizes its own input-domain floor as a plain
+  `Float` (default `0.60f`, mirroring `OnnxModelSpec.confidenceFloor`) so `:data:repository` keeps
+  **no edge to `:data:ai-local`**. No second `IntentConfidencePolicy`; calibration lives in the
+  helper the matcher owns.
+- **Home + no-edge (§5.C).** `LayeredIntentMatcher` + `NluConfidenceCalibrator` live in
+  `:data:repository` (alongside `RuleBasedIntentMatcher`), referencing only the `IntentMatcher`
+  **port** + policy for both collaborators — no `data→data` edge, exactly the
+  `DefaultGenerativeRouter`/`GenerativeAiEngine` precedent. Which impls fill `@RuleMatcher`/
+  `@NluMatcher` is decided in `:app` DI.
+- **§5.F gate-off binding — DEVIATION from plan R2 (deliberate): always bind the self-gating
+  classifier.** `@NluMatcher` is bound to `OnnxIntentClassifier` **unconditionally** (no graph-time
+  real-vs-NoOp swap). Rationale: (1) Block P already made it self-gate per inference (LOW_END /
+  no-verified-model / thermal/battery → escape **without** loading ONNX); (2) **model availability
+  flips at runtime** when a download completes, so a graph-time choice would go stale until app
+  restart — the live re-check is more correct; (3) no production `NoOpIntentMatcher` is needed (the
+  existing one is test-only in `:core:testing`). The gate-off fallback is the real
+  `RuleBasedIntentMatcher` via `LayeredIntentMatcher`'s escape handling, never a NoOp masquerading
+  as an answer. Construction does no ONNX work (lazy session), so binding it on LOW_END is safe.
+- **Single instance for `@NluMatcher` + `SessionLifecycle` (hard invariant).** `OnnxIntentClassifier`
+  is `@Provides @Singleton` in `NluMatcherProvidesModule`; both the `@NluMatcher IntentMatcher` and
+  the `SessionLifecycle` providers return that injected singleton, guaranteeing the trim hook tears
+  down the *same* live session, not a different empty object. `modelId = config.modelId` keeps the
+  classifier aligned with Block Q's provisioner/manager.
+- **R2.5 — `onTrimMemory` teardown (§5.D / Fork P6-9).** `SidrLauncherApp` (itself a
+  `ComponentCallbacks2`) overrides `onTrimMemory(level)` → `releaseResources()` at/above
+  `TRIM_MEMORY_BACKGROUND` (40), and `onLowMemory()` → `releaseResources()`; lighter foreground
+  levels are ignored to avoid thrashing a session mid-use; the session lazily re-inits on the next
+  gated inference. `:app` holds only the ONNX-free `SessionLifecycle` seam (no `ai.onnxruntime`
+  edge). Signatures used (verified against the Android SDK at compile): `ComponentCallbacks2.
+  onTrimMemory(Int)` / `onLowMemory()` and the constant `TRIM_MEMORY_BACKGROUND`; the deprecated
+  (API 34) `TRIM_MEMORY_RUNNING_*` / `TRIM_MEMORY_UI_HIDDEN` levels are deliberately not used.
+- **R3 — `ensureModel()` trigger (§5.E).** Fired fire-and-forget from `SidrLauncherApp.onCreate()` on
+  `@ApplicationScope` (= `SupervisorJob() + Dispatchers.IO`), so it never blocks the cold/main path
+  and a failure cannot crash startup. Inert under OQ#2 (`config.isPinned == false` → no-op); also
+  warms Block Q's cached `DeviceProfile` on first run.
+- **No-model-parity guarantee.** With the model absent (today's shipping state) the secondary always
+  escapes and rule-first means a confident rule returns before NLU is consulted, so
+  `LayeredIntentMatcher` reproduces `RuleBasedIntentMatcher` outcomes exactly (JVM-tested across the
+  Phase-3 command set). Zero Phase-3 regressions.
+- **Invariants held.** Two-port invariant intact (`MatcherSource.AI` absent; generation untouched);
+  `HandleUserCommandUseCase` + `RuleBasedIntentMatcher` + generative router unchanged; `:domain`
+  pure; `ai.onnxruntime` still confined to `OnnxIntentClassifier`/`OnnxSessionFactory`; no new
+  dependency. Consistent with the concurrent OQ#1 multilingual amendment (which recorded "R — none;
+  unaffected"): R references only `IntentMatchResult` + `IntentConfidencePolicy`, never the
+  tokenizer/vocab/`OnnxModelSpec`.
+
+**Files.** New: `data/repository/.../intent/LayeredIntentMatcher.kt`,
+`.../intent/NluConfidenceCalibrator.kt` (+ JVM tests `LayeredIntentMatcherTest`,
+`NluConfidenceCalibratorTest`); `app/.../di/RuleMatcher.kt`, `NluMatcher.kt`,
+`NluMatcherProvidesModule.kt`. Edited: `IntentProvidesModule` (unqualified `IntentMatcher` →
+`LayeredIntentMatcher`), `SidrLauncherApp` (trim hooks + `ensureModel` trigger). Docs:
+`architecture.md` (§169/192 ONNX-slot wording fixed — generative slot is Phase 7+ and still
+reserved; Phase 6 feeds the matcher pipeline — + as-built rule-first layered pipeline),
+`roadmap.md`, `phase-6-local-nlu-plan.md`, `CLAUDE.md`.
+
+**Verification.** `:data:repository:testDebugUnitTest` executed green (fast-path "NLU never invoked"
+via a counting fake, escape→rule, calibrated answer, no-model parity, calibrator boundaries);
+forced `:app:kaptDebugKotlin`/`compileDebugKotlin` BUILD SUCCESSFUL (Hilt graph valid — single
+unqualified `IntentMatcher` = `LayeredIntentMatcher`); full `testDebugUnitTest` + `assembleDebug`
+green.
+
+**Device/release-pending (record, not fake-passed).** End-to-end NLU-answers-a-command and the
+`onTrimMemory` teardown on SM-A325F, gated on the real model (OQ#1 train/quantize/export + OQ#2
+host/SHA-256). Bundled with the still-open Block J `SecretStoreInstrumentedTest` and Block N (N5)
+device runs, plus Block P P5 inference budget (`< 150ms` MID_RANGE) and Block Q `AndroidDeviceProfiler`
+instrumented reads.
+
+**Phase 6 is CLOSED with Block R (Blocks O → R).** Next = the deferred device-acceptance pass
+(Block J/N + P5/Q live items) and/or Phase 7 per the roadmap.

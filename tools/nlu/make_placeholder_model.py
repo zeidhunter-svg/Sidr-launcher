@@ -8,7 +8,7 @@ run a session, and exercise the NNAPI->CPU path on-device BEFORE the real model 
 math is meaningless (a fixed linear layer) — only the I/O contract matters here. Swapping in the
 real model must not require any Kotlin change because the contract is identical.
 
-Inputs : input_ids, attention_mask, token_type_ids  -> int64  [1, 32]
+Inputs : input_ids, attention_mask, token_type_ids  -> int64  [1, 48]  (OQ#1 multilingual: maxLen 48)
 Output : logits                                      -> float  [1, 7]
 
 Run:
@@ -23,7 +23,7 @@ precedent). The script is the source of truth for the placeholder's shape.
 """
 import os
 
-MAX_LEN = 32
+MAX_LEN = 48  # OQ#1 multilingual amendment (was 32); matches OnnxModelSpec.maxLen
 NUM_LABELS = 7
 INPUTS = ["input_ids", "attention_mask", "token_type_ids"]
 

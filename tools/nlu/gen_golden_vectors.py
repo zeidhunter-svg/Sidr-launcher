@@ -11,13 +11,17 @@ reference produced by a different codebase (the #1 silent-failure risk of Block 
 
 Two independent implementations of the same documented algorithm agreeing == validation.
 
+The WordPiece algorithm is **language-independent and vocab-size-agnostic** (OQ#1 multilingual
+amendment, 2026-06-29): the uncased base (lower-case + NFD accent-strip) matches the multilingual
+`bert-base-multilingual-uncased` teacher's preprocessing, so the same reference serves en/ar/tr/ru.
+
 IMPORTANT (device-pending, like Block J):
   These golden vectors are generated against `vocab.mini.txt` — a tiny curated vocab that
   exercises whole-word, greedy `##` subword continuation, [UNK], accent-strip, punctuation
-  split, and truncation paths. When the REAL model + real `vocab.txt` (30522, uncased) land
-  (Open Question #1 artifact), regenerate the golden set from the *actual* HuggingFace
-  `BertTokenizer` over the real vocab and re-run the Kotlin test against it. The algorithm
-  here matches HF transformers; only the vocab differs.
+  split, and truncation paths. When the REAL model + the pruned multilingual `vocab.txt`
+  (~20-30k, en/ar/tr/ru, uncased) land (Open Question #1 artifact), regenerate the golden set
+  from the *actual* HuggingFace `BertTokenizer` over that vocab and re-run the Kotlin test
+  against it. The algorithm here matches HF transformers; only the vocab differs.
 
 Run:
   python3 tools/nlu/gen_golden_vectors.py
@@ -35,7 +39,8 @@ REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 TEST_RES = os.path.join(REPO, "data", "ai-local", "src", "test", "resources", "nlu")
 
 # Pinned contract for the golden set. The golden uses MAX_LEN=12 so a long input forces the
-# truncation path with short sentences; production DEFAULT max_len is 32 (OnnxModelSpec).
+# truncation path with short sentences; production DEFAULT max_len is 48 (OnnxModelSpec, OQ#1
+# multilingual amendment). This golden MAX_LEN is independent of production and stays 12.
 MAX_LEN = 12
 PAD, UNK, CLS, SEP = "[PAD]", "[UNK]", "[CLS]", "[SEP]"
 MAX_INPUT_CHARS_PER_WORD = 200

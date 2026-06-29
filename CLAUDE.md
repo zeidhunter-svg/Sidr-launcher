@@ -4,8 +4,27 @@ Session digest. Read this first. **Phase 4 is DONE (Blocks E → H, 2026-06-23).
 multi-provider) is DONE — Blocks I → N complete (2026-06-24 – 2026-06-27).** Code + JVM green;
 on-device acceptance **pending** device run on SM-A325F (Block-J `SecretStoreInstrumentedTest` +
 Block-N N5 streaming/offline/cancel/rotation).
-**Phase 6 (Local NLU + embeddings, Blocks O → R) is IN PROGRESS — Blocks O + P + Q complete (O 2026-06-27,
-P + Q 2026-06-28).** **Block Q delivered model-management + download gating:** pure
+**Phase 6 (Local NLU + embeddings, Blocks O → R) is DONE — Blocks O → R complete (O 2026-06-27,
+P + Q 2026-06-28, R 2026-06-29); code + JVM green, device acceptance + real model (OQ#1/#2) pending.**
+**Block R wired the NLU source into the live pipeline + closed the phase:** rule-first
+`LayeredIntentMatcher : IntentMatcher` (`:data:repository`, port-only, no `data→data` edge) — rule
+returned verbatim when not low-confidence (NLU never consulted, `< 10ms` + Phase-3 parity preserved),
+NLU consulted only on low confidence; **R1 calibration decided (§5.A): conservative band → Suggest** via
+the pure `NluConfidenceCalibrator` (raw softmax → `[suggestThreshold, autoExecuteThreshold)`, always
+Suggests, never silently auto-executes; `confidenceFloor` stays in `OnnxModelSpec`, calibrator floor a
+decoupled plain `Float`); escape pinned structurally (`source==NLU && (conf==0f || UnknownIntent)`). DI
+(R2): `@RuleMatcher`/`@NluMatcher` qualifiers + `NluMatcherProvidesModule`, unqualified `IntentMatcher` →
+`LayeredIntentMatcher`, `HandleUserCommandUseCase` untouched; **§5.F deviation (recorded): `@NluMatcher`
+binds the self-gating `OnnxIntentClassifier` UNCONDITIONALLY** (availability flips at runtime → live
+re-check beats a stale graph-time NoOp swap; no production NoOp needed), same `@Singleton` exposed as
+`@NluMatcher` + `SessionLifecycle`. R2.5: `SidrLauncherApp.onTrimMemory(≥TRIM_MEMORY_BACKGROUND)` /
+`onLowMemory()` → `SessionLifecycle.releaseResources()` (`:app` holds only the ONNX-free seam). R3:
+`ensureModel()` fired fire-and-forget on `@ApplicationScope` (IO) from `onCreate()` (inert under OQ#2).
+With no model present (shipping state) the NLU secondary always escapes → exact rule-only parity. New
+JVM tests green (fast-path "NLU never invoked", escape→rule, calibrated answer, no-model parity,
+calibrator boundaries); `assembleDebug` (Hilt graph valid) + full regression green. Details: decisions.md
+"ADR 2026-06-29 — Block R complete + Phase 6 close".
+**Block Q delivered model-management + download gating:** pure
 `DeviceProfileClassifier` (`(ram,cores)→DeviceProfile`: LOW_END `<2.5 GB` or `<4` cores, HIGH_END `≥5.5 GB`
 + `≥8` cores, else MID) + `DeviceProfileCacheMapping` (lossy LOW_END-vs-rest) + `AndroidDeviceProfiler :
 DeviceProfileProvider` (`:core:android`, write-through to the **pre-existing** `DeviceProfileCacheRepository`,
@@ -49,12 +68,13 @@ byte-exact vs an independent golden, `IntentLabelMapper` softmax/label-map + con
 (`input_ids`/`attention_mask`[/`token_type_ids` if declared] int64 `[1,48]`, `logits` float `[1,7]`);
 NLU softmax confidence **uncalibrated** vs rule scale (open Q → Block R); `assembleDebug` + full JVM
 regression green. **Device-pending:** real `intent.onnx`/`vocab.txt` training + P5 SM-A325F run (no
-torch/onnx/network here). `:app` trim-hook registration + DI binding deferred to Q/R (classifier not
-bindable until Q's impls exist; Q delivered them — see above). Next = **Block R** (`LayeredIntentMatcher` +
-unqualified-`IntentMatcher` DI swap + `:app` `onTrimMemory`→`SessionLifecycle.releaseResources()` + the
-runtime `ensureModel()` trigger + NLU↔rule confidence calibration + docs-sync + **Phase 6 close**). Plan + forks:
+torch/onnx/network here). `:app` trim-hook registration + DI binding were deferred to Q/R; **Block R
+delivered them (see above) — Phase 6 is now CLOSED.** Next = the deferred **device-acceptance pass**
+(SM-A325F: Block-J `SecretStoreInstrumentedTest`, Block-N N5, Block-P P5 `< 150ms` inference + on-device
+NLU, Block-Q `AndroidDeviceProfiler` reads, Block-R `onTrimMemory` teardown — all gated on the real model
+OQ#1/#2) and/or **Phase 7** per the roadmap. Plan + forks:
 [ai-context/phase-6-local-nlu-plan.md](ai-context/phase-6-local-nlu-plan.md) (ADRs "Block O complete",
-"Block P complete", "Block Q complete" in decisions.md). Phase 5 plan: [ai-context/phase-5-plan.md](ai-context/phase-5-plan.md).
+"Block P complete", "Block Q complete", "Block R complete + Phase 6 close" in decisions.md). Phase 5 plan: [ai-context/phase-5-plan.md](ai-context/phase-5-plan.md).
 
 ## What this is
 
@@ -336,7 +356,29 @@ Phase 3 result, Blocks A → D:
   tokenizer) — OQ#1**; `AndroidDeviceProfiler` Android-API
   reads + thermal/battery transitions (SM-A325F). P's three seams now have prod impls →
   `OnnxIntentClassifier` bindable. Details: decisions.md "ADR 2026-06-28 — Block Q complete" + its
-  "Rework before close" subsection. **Next = Block R** (binds the classifier; closes Phase 6).
+  "Rework before close" subsection. P's three seams now have prod impls → `OnnxIntentClassifier`
+  bindable (consumed by Block R).
+- **Phase 6 Block R ✅ (2026-06-29)** — wire NLU `IntentMatcher` source + docs-sync + **Phase 6 close**.
+  `LayeredIntentMatcher : IntentMatcher` + `NluConfidenceCalibrator` (`:data:repository`, port-only, no
+  `data→data` edge): **rule-first** — rule returned verbatim when `!isLowConfidence` (NLU never consulted,
+  `< 10ms` + Phase-3 parity), NLU consulted only on low confidence; escape (`source==NLU && (conf==0f ||
+  UnknownIntent)`) → rule stands; non-escape NLU wins iff calibrated conf clears `suggestThreshold`. **R1
+  calibration = conservative band → Suggest (§5.A):** raw softmax remapped into `[suggest 0.50, autoExec
+  0.85)` (always Suggests, never auto-executes a model-driven intent); `confidenceFloor` stays in
+  `OnnxModelSpec`, calibrator floor a decoupled plain `Float` (0.60). DI (`:app`): `@RuleMatcher`/
+  `@NluMatcher` qualifiers + `NluMatcherProvidesModule`; unqualified `IntentMatcher` →
+  `LayeredIntentMatcher`; `HandleUserCommandUseCase` untouched. **§5.F deviation (recorded): `@NluMatcher`
+  binds the self-gating `OnnxIntentClassifier` unconditionally** (availability flips at runtime → live
+  re-check beats a stale graph-time NoOp swap), same `@Singleton` exposed as `@NluMatcher` +
+  `SessionLifecycle`. R2.5: `SidrLauncherApp.onTrimMemory(≥TRIM_MEMORY_BACKGROUND)`/`onLowMemory()` →
+  `releaseResources()` (`:app` holds only the ONNX-free seam). R3: `ensureModel()` fire-and-forget on
+  `@ApplicationScope` (IO) from `onCreate()` (inert under OQ#2). **No-model parity** (shipping state):
+  secondary always escapes → identical to rule-only. New JVM tests green (fast-path NLU-never-invoked,
+  escape→rule, calibrated answer, no-model parity, calibrator boundaries); `assembleDebug` (Hilt graph
+  valid) + full regression green. Two-port invariant intact; `:domain` pure; `ai.onnxruntime` still
+  confined to P's two files; no new dep. Details: decisions.md "ADR 2026-06-29 — Block R complete + Phase
+  6 close". **Phase 6 CLOSED (Blocks O → R). Next = deferred device-acceptance pass (SM-A325F, gated on
+  OQ#1/#2) and/or Phase 7.**
 
 ## Hard rules
 
@@ -361,6 +403,9 @@ Phase 3 result, Blocks A → D:
 | `DeviceProfile`/`DeviceCapability` model + `DeviceProfileProvider` port + `LocalInferenceGate` *(Block O ✅)* | `domain` |
 | `ModelId`/`ModelAvailability`/`ModelAvailabilityRepository`/`TextEmbedder` port *(Block O ✅)* | `domain` |
 | Rule-based matcher impl, `InstalledAppsRepository` impl, Android `ActionExecutor` impl | `data/repository` |
+| `LayeredIntentMatcher` (rule-first composite) + `NluConfidenceCalibrator` *(Block R ✅)* | `data/repository` |
+| `OnnxIntentClassifier` (`@NluMatcher` + `SessionLifecycle`) | `data/ai-local` |
+| `@RuleMatcher`/`@NluMatcher` qualifiers + matcher DI swap + `onTrimMemory`/`ensureModel` wiring *(Block R ✅)* | `app` |
 | Pref domain models (`UserPreferences`, `FeatureFlags`, `DeviceProfileCacheEntry`, `CachedSuggestion`) + their repo interfaces *(Block E ✅)* | `domain` |
 | DataStore Preferences impls + `PreferencesMapper` + `PreferencesKeys` *(Block E ✅)* | `data/repository` |
 | History domain models (`AppUsageRecord`, `SuggestionRankingRecord`, `IntentMatchRecord`) + repo interfaces (`UsageHistoryRepository`, `SuggestionRankingRepository`, `IntentMatchHistoryRepository`) *(Block F)* | `domain` |

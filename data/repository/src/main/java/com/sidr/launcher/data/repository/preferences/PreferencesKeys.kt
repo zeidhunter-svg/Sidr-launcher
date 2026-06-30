@@ -64,13 +64,16 @@ internal object PreferencesKeys {
     val SUG_CACHED_LIST_JSON = stringPreferencesKey("sug_cached_list_json")
 
     // Permission-education dismissed flags — prefix: perm_ (Block G, Fork 5)
-    // Per-feature "don't ask again / dismissed" state. Only requestable features are persisted;
-    // a dormant feature has no request flow and thus no dismissed state, so it gets no key.
-    // Only WALLPAPER is live in Phase 4 → exactly one key here today. Keys for the dangerous
-    // dormant features (voice/calendar/location) are deliberately NOT created — both because
-    // there is nothing to dismiss yet and because their names would collide with the privacy
-    // denylist. Per-feature granularity supersedes the legacy global flag_permission_edu_dismissed
-    // (kept above for Block E compatibility; the global flag is no longer the source of truth).
+    // Per-feature "don't ask again / dismissed" state. WALLPAPER is the only feature with a
+    // persisted key. VOICE_INPUT (Block T) and CALENDAR_SUGGESTIONS/LOCATION_SUGGESTIONS (Block U)
+    // are all live (requestable=true) but STILL have no key — not because they're dormant, but
+    // because "voice"/"calendar"/"location" are forbidden terms in this exact guard's denylist
+    // (PrivacyInventoryGuardTest), so a key literally named perm_dismissed_voice/_calendar/_location
+    // would fail the guard outright. PermissionPrefsRepositoryImpl.keyFor() returns null for all
+    // three; their "don't ask again" choice is in-memory only for the ViewModel's lifetime (Block G
+    // ADR, "Forks/Decisions" — carried forward unchanged through Blocks T and U). Per-feature
+    // granularity supersedes the legacy global flag_permission_edu_dismissed (kept above for Block E
+    // compatibility; the global flag is no longer the source of truth).
     val PERM_DISMISSED_WALLPAPER = booleanPreferencesKey("perm_dismissed_wallpaper")
 
     // AI provider config — prefix: ai_provider_ (Block K).

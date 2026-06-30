@@ -87,4 +87,59 @@ class AiRequestGuardTest {
             request.messages.single().content.contains("calendar"),
         )
     }
+
+    /**
+     * Block U5 fix: closes a gap in the guard's own enforcement. [OutboundContextPolicy.OUTBOUND_FIELD_NAMES]
+     * was a hand-maintained literal set with nothing reflecting it against [AiRequest]'s real declared
+     * fields — a field added to [AiRequest] without a matching update here would compile, run, and stay
+     * green under every existing test, while silently widening the outbound surface. This test makes that
+     * scenario fail: it reflects over [AiRequest]'s actual declared instance fields and asserts the set
+     * equals the hand-maintained inventory, so the two can never drift apart unnoticed.
+     */
+    @Test
+    fun `AiRequest's actual declared fields exactly match OUTBOUND_FIELD_NAMES (no hand-maintained drift)`() {
+        val declaredFieldNames = AiRequest::class.java.declaredFields
+            .filterNot { java.lang.reflect.Modifier.isStatic(it.modifiers) }
+            .map { it.name }
+            .toSet()
+        assertEquals(OutboundContextPolicy.OUTBOUND_FIELD_NAMES, declaredFieldNames)
+    }
+
+    /**
+     * Same fix, for [AiError]: a sealed interface, so the "fields" are the union of every declared
+     * subtype's instance fields ([AiError.RateLimited.retryAfterMs], [AiError.Network.detail],
+     * [AiError.ServerError.statusCode], [AiError.InvalidRequest.detail], [AiError.Unknown.detail] — the
+     * data-object variants contribute none). Reflects over the real nested classes rather than trusting
+     * the hand-maintained [OutboundContextPolicy.AIERROR_FIELD_NAMES] set in isolation.
+     *
+     * [AiError::class.java.declaredClasses] only enumerates classes nested *inside* [AiError]'s own
+     * `.class` file — it would silently miss a variant declared as a top-level sibling elsewhere in the
+     * package (Kotlin sealed interfaces permit same-module subtypes, not just nested ones). The subtype
+     * **count** is pinned below as a second, independent check: today all 9 variants
+     * (`Offline`/`MissingCredentials`/`Unauthorized`/`RateLimited`/`Timeout`/`Network`/`ServerError`/
+     * `InvalidRequest`/`Unknown`) are nested in `AiError.kt` (verified by `grep ": AiError"` repo-wide —
+     * the only non-nested hits are the `AiChunk.Failed(error: AiError)` field-type reference and a
+     * `mapHttpError(...): AiError` return-type annotation, neither a class declaration). If a future
+     * variant were added outside the nested set, this count assertion fails even though the field-name
+     * scan above would silently miss it — the two checks together close the gap a single one would leave.
+     */
+    @Test
+    fun `AiError's actual declared fields across all subtypes exactly match AIERROR_FIELD_NAMES (no hand-maintained drift)`() {
+        val subtypes = AiError::class.java.declaredClasses
+        assertEquals(
+            "AiError's nested-subtype count drifted — a variant may have been added outside declaredClasses' " +
+                "reach (a top-level sibling), which would make the field-name scan below silently incomplete",
+            9,
+            subtypes.size,
+        )
+
+        val declaredFieldNames = subtypes
+            .flatMap { subtype ->
+                subtype.declaredFields
+                    .filterNot { java.lang.reflect.Modifier.isStatic(it.modifiers) }
+                    .map { it.name }
+            }
+            .toSet()
+        assertEquals(OutboundContextPolicy.AIERROR_FIELD_NAMES, declaredFieldNames)
+    }
 }

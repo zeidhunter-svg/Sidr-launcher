@@ -38,15 +38,19 @@ fun rationaleFor(feature: PermissionFeature): PermissionRationale = when (featur
 
     PermissionFeature.CALENDAR_SUGGESTIONS -> PermissionRationale(
         title = "Calendar-aware suggestions",
-        body = "Reading your calendar lets Sidr suggest the right thing at the right time. It's " +
-            "coming in a later release and stays off until you turn it on.",
-        ctaLabel = "Coming soon",
+        body = "Reading your calendar lets Sidr suggest the right thing at the right time, like " +
+            "nudging you toward an upcoming event. Sidr only checks whether something is coming up " +
+            "soon — it never stores event titles, times, or details. It's optional — suggestions " +
+            "work fine without it, and you can change your mind any time.",
+        ctaLabel = "Enable calendar suggestions",
     )
 
     PermissionFeature.LOCATION_SUGGESTIONS -> PermissionRationale(
         title = "Location-aware suggestions",
-        body = "Using your location lets Sidr surface nearby-relevant actions. It's coming in a " +
-            "later release and stays off until you turn it on.",
-        ctaLabel = "Coming soon",
+        body = "Using your location lets Sidr surface nearby-relevant actions, like suggesting a " +
+            "maps app when you're out and about. Sidr only checks whether a recent location fix " +
+            "exists — it never stores or sends your coordinates. It's optional — suggestions work " +
+            "fine without it, and you can change your mind any time.",
+        ctaLabel = "Enable location suggestions",
     )
 }

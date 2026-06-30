@@ -7,14 +7,21 @@
 > demoable milestones → tracking → per-block agent-model table → confirmed-decisions.
 > Block lettering continues the alphabet (Phase 3 = A→D, Phase 4 = E→H, Phase 5 = I→N, Phase 6 = O→R),
 > so **Phase 7 = Blocks S → W**.
-> **Status (2026-06-29): FORKS DECIDED + BLOCKS S & T COMPLETE.** All 11 forks below are **decided**. **Block S**
+> **Status (2026-06-30): FORKS DECIDED + BLOCKS S, T & U COMPLETE.** All 11 forks below are **decided**. **Block S**
 > (pure `:domain` contracts + `HeuristicSuggestionRanker` + fakes) is **done 2026-06-29** (S1–S6 ✅, 12 new JVM
 > tests, no production file edited). **Block T** (voice input — `AndroidSpeechInputSource` in `:core:android`,
 > `VoiceModule` DI, `RECORD_AUDIO` live request via the routed education flow, `refreshStatus()` dangerous-permission
-> debt discharged, launcher mic affordance) is **done 2026-06-29** (T1–T6 ✅, 9 new JVM tests, **383 JVM total /
-> 0 failures**, `assembleDebug` + full `testDebugUnitTest` green, **0 new Gradle deps**, `android.speech` confined
-> to `:core:android`, `HandleUserCommandUseCase` untouched; real recognizer device-pending OQ#4). **Next = Block U
-> (contextual suggestion engine + context sources + cache-restore).** Three pre-ADR items were closed before the
+> debt discharged, launcher mic affordance) is **done 2026-06-30** (T1–T6 ✅, 9 new JVM tests, 383 JVM total /
+> 0 failures, `assembleDebug` + full `testDebugUnitTest` green, 0 new Gradle deps, `android.speech` confined
+> to `:core:android`, `HandleUserCommandUseCase` untouched; real recognizer device-pending OQ#4). **Block U**
+> (contextual suggestion engine — offline `TimeOfDaySuggestionProvider`/`UsageSuggestionProvider`, opt-in
+> `CalendarSuggestionProvider`/`LocationSuggestionProvider`, `SuggestionEngineImpl` aggregate→rank→persist,
+> the Block-T request-flow template reused verbatim for calendar/location) is **done 2026-06-30** (U1–U6 ✅,
+> 16 new JVM tests, **399 JVM total / 0 failures**, `assembleDebug` + full `testDebugUnitTest` + `:domain:test`
+> green, **0 new Gradle deps**, `android.location`/`CalendarContract` confined to `:data:repository`,
+> `HandleUserCommandUseCase` untouched; privacy guard delivered as 4 executable proofs, see the Block U
+> section). **Next = Block V** (ONNX `TextEmbedder` impl + semantic re-rank; gated on OQ#3). Three pre-ADR
+> items were closed before the
 > flip: **co-residency** of the NLU + embedder ONNX
 > sessions (§Block V — Option B, accepted-not-arbitrated), **suggestions single-source** (§F7-8 — owner =
 > host `LauncherViewModel`/`LauncherUiState`, no parallel VM), and the **privacy-guard wording** (§F7-9 —
@@ -135,9 +142,9 @@ new-deps accounting, never the block structure.
   (`ERROR_NO_MATCH`, `ERROR_RECOGNIZER_BUSY`, `ERROR_INSUFFICIENT_PERMISSIONS`, `ERROR_NETWORK`, …) map to
   a pure `SpeechRecognitionError` taxonomy in `:domain`.
 
-Run order: this check is done; Blocks S + T are complete — execute the Block U prompt next. (Block T
-re-confirmed the `SpeechRecognizer` framework signatures against the Android Javadoc at its Step 0, as
-planned — context7's Leanback-only coverage was not trusted.)
+Run order: this check is done; Blocks S, T & U are complete — execute the Block V prompt next (gated on
+OQ#3). (Block T re-confirmed the `SpeechRecognizer` framework signatures against the Android Javadoc at its
+Step 0, as planned — context7's Leanback-only coverage was not trusted.)
 
 ---
 
@@ -317,6 +324,18 @@ upgrade-only guard is revisited for the dangerous case** (its own KDoc names thi
 denied mic shows a "open system Settings" deep-link path rather than a dead re-request. This is the
 template Block U reuses for calendar/location.
 
+**Decision (confirmed Block U, applies retroactively to T's `VOICE_INPUT` too): the per-feature
+"dismissed" flag is intentionally NOT persisted for `VOICE_INPUT`/`CALENDAR_SUGGESTIONS`/
+`LOCATION_SUGGESTIONS` — their feature names are forbidden terms in `PrivacyInventoryGuardTest`'s own
+denylist (`"voice"`, `"calendar"`, `"location"`), so a DataStore key named `perm_dismissed_voice`/
+`_calendar`/`_location` would fail that guard outright. `PermissionPrefsRepositoryImpl.keyFor()` returns
+`null` for all three (only `WALLPAPER` has a key); `isDismissed()` always emits `false` and
+`setDismissed()` is a no-op `Success` for them. Product consequence, accepted as a trade-off: closing the
+education sheet ("don't show again") for these three features does NOT survive past the current
+ViewModel instance — the rationale reappears on the next trigger, every time. This is consistent with the
+phase's fail-closed spirit (a dangerous-permission feature leaves no disk trace of user interaction with
+it) and is a deliberate trade-off, not a bug — do not "fix" it by inventing a denylist-safe key name.
+
 ### Fork F7-4 — Suggestion context sources — **decided: offline-first always-on (time + usage), calendar/location opt-in + degrade-to-nothing**
 - **Always-on, zero-permission:** time-of-day bucket (morning/work/evening/night) + recent/frequent usage
   (from `UsageHistoryRepository` — already Room-backed and grid-proven). These alone produce useful
@@ -457,8 +476,9 @@ The **`AndroidSpeechInputSource` device run + the embedder `< 150ms` device meas
 - On-device acceptance on **SM-A325F**: `AndroidSpeechInputSource` on-device + fallback recognition (OQ#4),
   mic permission grant/deny/permanently-denied transitions, the embedder `< 150ms` MID_RANGE measurement +
   `onTrimMemory` teardown, the periodic pre-compute worker firing under battery/idle constraints, boot
-  warmup re-enqueue after reboot; plus the inherited Block-J `SecretStoreInstrumentedTest` + Block-N N5 +
-  Block-P P5 device items still open from Phases 5/6.
+  warmup re-enqueue after reboot; real `CalendarSuggestionProvider`/`LocationSuggestionProvider` reads +
+  the calendar/location grant/deny/permanently-denied request-flow UX (Block U); plus the inherited
+  Block-J `SecretStoreInstrumentedTest` + Block-N N5 + Block-P P5 device items still open from Phases 5/6.
 
 ---
 
@@ -588,7 +608,61 @@ working.
 
 ---
 
-## Block U — Contextual suggestion engine + context sources + cache-restore
+## Block U — Contextual suggestion engine + context sources + cache-restore — ✅ DONE 2026-06-30
+
+**Status:** complete (U1–U6). Offline-first providers `TimeOfDaySuggestionProvider` (fixed per-`TimeOfDay`
+prior, zero-permission, always contributes) + `UsageSuggestionProvider` (exponential-decay recency over a
+7-day horizon + launch-count-ratio frequency, both over `UsageHistoryRepository`); opt-in providers
+`CalendarSuggestionProvider` (`READ_CALENDAR`-gated, queries only `CalendarContract.Instances.EVENT_ID` in
+a 2-hour lookahead, never reads/caches a raw title) and `LocationSuggestionProvider`
+(`ACCESS_FINE_LOCATION`-gated, checks only whether `LocationManager.getLastKnownLocation` across
+GPS/NETWORK/PASSIVE returns non-null, never reads/caches a coordinate) — both emit a single fixed, generic
+`Suggestion` label, never derived from the raw signal; all four in `:data:repository`. `SuggestionEngineImpl`
+(`:data:repository`): structured-concurrency aggregate (`coroutineScope` + `async` per provider,
+fault-isolated — a throwing provider degrades to empty, never fails the aggregate) → `HeuristicSuggestionRanker`
+→ persists to `SuggestionRankingRepository` (history) + `SuggestionsCacheRepository` (cold-start repaint,
+`CachedSuggestion(label, actionId)` only) → exposes a hot `StateFlow`; gated end-to-end by
+`FeatureFlagRepository.aiSuggestionsEnabled` (no work at all when disabled). `persist()`'s two writes are
+fire-and-forget (no caller to return `Failure` to) — the module's first such path, logged via direct
+`Log.w` (payload-free) rather than the module's normal return-`Failure` convention; `core/common`'s dormant
+`ResultLogger` was deliberately **not** wired (an early draft did; reverted — wiring that seam is a separate
+decision, not a U3 side-effect). DI: `SuggestionsProvidesModule` (`:app`, `@Provides`-composed, mirrors the
+Block-M `GenerationProvidesModule` precedent since `SuggestionEngineImpl` takes a composed
+`List<SuggestionProvider>`). U4 reused the Block-T template **literally**: `CALENDAR_SUGGESTIONS`/
+`LOCATION_SUGGESTIONS.requestable` flipped to `true`, real rationale copy, manifest gained exactly
+`READ_CALENDAR` + `ACCESS_FINE_LOCATION` (not `RECEIVE_BOOT_COMPLETED` — that's Block W's); zero edits needed
+to `PermissionEducationScreen.androidPermission()` (already an exhaustive `when`, no `else`, pre-populated
+ahead of this block) or to `PermissionEducationViewModel`/`LauncherViewModel`'s constructors (neither
+changed — no test-factory itemization needed). **Per-feature dismissed flag is in-memory only for all three
+non-`WALLPAPER` requestable features** (`VOICE_INPUT` included, since Block T) — `PermissionPrefsRepositoryImpl.keyFor()`
+returns `null` for all three, not because U4 dropped it, but because `"voice"`/`"calendar"`/`"location"` are
+literally forbidden terms in `PrivacyInventoryGuardTest`'s own denylist; a persisted key would fail that
+guard outright. This is a Block-G-era structural fact (documented there since 2026-06-23), carried forward
+unchanged through T and U — not a per-block deviation, so it needed no flag. **U5 privacy guard delivered as
+4 executable proofs, not assertions:** `SuggestionEngineImplTest` (persistence carries exactly
+`SuggestionRankingRecord`'s 4 fields / `CachedSuggestion`'s 2 fields, nothing wider) +
+`SuggestionProviderPrivacyGuardTest` (plants a sensitive real event title inside a fake `CalendarContract`-authority
+`ContentProvider`, and a real GPS fix via Robolectric's `LocationManager` shadow, runs the **actual production
+providers** against them, asserts the planted value appears nowhere in the output — proves leak-freedom rather
+than asserting it from reading the source) + `SuggestionOutboundIsolationTest` (`:domain`, pins
+`OutboundContextPolicy.ALLOWED`/`OUTBOUND_FIELD_NAMES`/`AIERROR_FIELD_NAMES` to their pre-Block-U literal
+values) + a reflection-based fix to `AiRequestGuardTest` (Block L) closing a real gap found during U5 review:
+`OUTBOUND_FIELD_NAMES`/`AIERROR_FIELD_NAMES` were hand-maintained sets with nothing reflecting them against
+`AiRequest`/`AiError`'s actual declared fields — a field silently added without a matching inventory update
+would have shipped clean; two new tests there now reflect over the real classes and fail if the two ever
+drift. **U6** added the remaining JVM coverage: real-output tests for both offline providers (not just
+forwarding through fakes — `TimeOfDaySuggestionProviderTest` covers all 4 `TimeOfDay` buckets,
+`UsageSuggestionProviderTest` covers the recency and frequency code paths separately plus the
+no-history-no-throw case), the degrade test (every optional permission denied, run against the **real**
+`CalendarSuggestionProvider`/`LocationSuggestionProvider`, time+usage still non-empty), provider opt-in
+absence (covered by the privacy-guard test's "not granted, even with sensitive data present" cases),
+engine mix + dedup-by-`actionId`-keep-highest-weighted (proven across two providers with the same `actionId`
+and different scores/sources), and bound-to-ranker's-max with the bounded set verified to reach both
+persistence targets unchanged. **16 new JVM tests; 399 JVM total, 0 failures**; `assembleDebug` (Hilt graph
+valid) + full `testDebugUnitTest` + `:domain:test` green; **0 new Gradle deps**; `android.location`/
+`android.provider.CalendarContract` confined to `:data:repository` (grep-proven, zero hits in `:domain`/
+`:feature:*`/`:core:common`/`:core:ui`/`:core:testing`); `HandleUserCommandUseCase` untouched; suggestion tap
+routing is Block W's job. ADR: decisions.md "ADR 2026-06-30 — Block U complete".
 
 **Goal:** the offline-first suggestion pipeline made real — context providers, the `SuggestionEngine`
 aggregation + heuristic rank, ranking/cache persistence, calendar/location request flows.
@@ -604,19 +678,22 @@ aggregation + heuristic rank, ranking/cache persistence, calendar/location reque
   add `READ_CALENDAR` + `ACCESS_FINE_LOCATION` to the manifest.
 
 **Steps:**
-- [ ] `U1` Offline providers (time, usage) — zero-permission, always contribute.
-- [ ] `U2` Opt-in providers (calendar, location) — return **empty** unless `PermissionChecker.status ==
+- [x] `U1` Offline providers (time, usage) — zero-permission, always contribute.
+- [x] `U2` Opt-in providers (calendar, location) — return **empty** unless `PermissionChecker.status ==
       GRANTED`; emit only derived display-safe `Suggestion`s (no raw event title / coordinates).
-- [ ] `U3` `SuggestionEngineImpl`: aggregate → rank → dedup/bound; persist ranked results to
+- [x] `U3` `SuggestionEngineImpl`: aggregate → rank → dedup/bound; persist ranked results to
       `SuggestionRankingRepository` (learning) + `SuggestionsCacheRepository` (cold-start repaint);
       gated by `aiSuggestionsEnabled`.
-- [ ] `U4` Calendar/location request flows reusing the Block-T template (education ≠ request; per-feature
-      dismissed flag; permanently-denied path).
-- [ ] `U5` **Privacy guard** test: suggestion path persists/sends nothing beyond `CachedSuggestion`'s
+- [x] `U4` Calendar/location request flows reusing the Block-T template (education ≠ request; per-feature
+      dismissed flag — in-memory only, mirrors `VOICE_INPUT` since Block G's denylist-collision design;
+      permanently-denied path).
+- [x] `U5` **Privacy guard** test: suggestion path persists/sends nothing beyond `CachedSuggestion`'s
       allowed fields; no calendar/location term in the outbound `AiRequest` inventory (allow-list
-      unchanged); new keys/tables (if any) registered.
-- [ ] `U6` JVM tests: provider opt-in absence (denied → empty), engine mix + dedup + bound, cache write,
-      ranking persistence, degrade-with-zero-sensitive-data.
+      unchanged); new keys/tables (if any) registered. Delivered as 4 executable proofs (see Status above),
+      including a reflection-based fix to Block L's `AiRequestGuardTest` closing a hand-maintained-inventory
+      drift gap found during review.
+- [x] `U6` JVM tests: provider opt-in absence (denied → empty), engine mix + dedup + bound, cache write,
+      ranking persistence, degrade-with-zero-sensitive-data. **16 new JVM tests; 399 total, 0 failures.**
 
 **Acceptance:** suggestions are produced with every optional permission denied (time + usage only); a
 granted calendar/location adds exactly that signal; nothing sensitive is persisted raw or sent to cloud
@@ -624,6 +701,9 @@ granted calendar/location adds exactly that signal; nothing sensitive is persist
 
 **Demoable milestone:** with calendar/location denied, the engine returns time + usage suggestions; grant
 calendar and a "next meeting" suggestion appears; the result is cached for cold-start repaint.
+**Device-pending:** real on-device `CalendarSuggestionProvider`/`LocationSuggestionProvider` reads and the
+live calendar/location request-flow UX (SM-A325F) — carried into Phase 7 Tracking alongside the Block-T
+recognizer (OQ#4) and the Phase 5/6 device debt.
 
 ---
 

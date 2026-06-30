@@ -84,16 +84,23 @@ The offline launcher core (home, app grid, app launch) must work fully without A
 
 ## Current goal (active work)
 
-**NOW (2026-06-30): Phase 7 in progress — Blocks S + T DONE, Block U next.** Phases 3 → 6 are code-closed
+**NOW (2026-06-30): Phase 7 in progress — Blocks S + T + U DONE, Block V next.** Phases 3 → 6 are code-closed
 (MVP loop, persistence/Room/permission-education/hardening, cloud AI multi-provider, local ONNX NLU).
 **Phase 7 Block S** delivered the pure `:domain` suggestion + voice contracts; **Phase 7 Block T** delivered
 voice input (`AndroidSpeechInputSource` in `:core:android`, `VoiceModule` DI, the `RECORD_AUDIO` routed-education
 request flow, the discharged Block-H `refreshStatus()` debt, and the launcher mic affordance) — 383 JVM tests
-green, 0 new deps, `android.speech` confined to `:core:android`, real recognizer device-pending (OQ#4). **Next =
-Block U** (contextual suggestion engine + context sources + cache-restore). Carried device-acceptance debt
-(SM-A325F): Block-J Keystore, Block-N N5, Block-P P5/OQ#1-2, Block-T OQ#4. See the session digest at the top +
-the [Phase 7 plan](ai-context/phase-7-voice-suggestions-plan.md). *(The phase-by-phase history below is retained
-for context.)*
+green, 0 new deps, `android.speech` confined to `:core:android`, real recognizer device-pending (OQ#4).
+**Phase 7 Block U** delivered the contextual suggestion engine (offline `TimeOfDaySuggestionProvider`/
+`UsageSuggestionProvider` + opt-in `CalendarSuggestionProvider`/`LocationSuggestionProvider` +
+`SuggestionEngineImpl` aggregate→rank→persist, gated by `aiSuggestionsEnabled`) and reused Block T's
+request-flow template verbatim for `CALENDAR_SUGGESTIONS`/`LOCATION_SUGGESTIONS` — 399 JVM tests green (16
+new), 0 new deps, `android.location`/`CalendarContract` confined to `:data:repository`, privacy guard
+delivered as 4 executable proofs (incl. a reflection-based fix closing a hand-maintained-inventory drift
+gap in Block L's `AiRequestGuardTest`), real device reads device-pending. **Next = Block V** (ONNX
+`TextEmbedder` impl + semantic re-rank; gated on OQ#3). Carried device-acceptance debt (SM-A325F): Block-J
+Keystore, Block-N N5, Block-P P5/OQ#1-2, Block-T OQ#4, Block-U calendar/location reads. See the session
+digest at the top + the [Phase 7 plan](ai-context/phase-7-voice-suggestions-plan.md). *(The phase-by-phase
+history below is retained for context.)*
 
 **Phase 3 is DONE (Blocks A → D, 2026-06-21).** The MVP loop works: type `open telegram` →
 resolves + launches offline; tap a grid app → launches; unknown → fallback UI, no crash.
@@ -168,9 +175,32 @@ route to education (framework `checkSelfPermission`, **no `:feature:launcher` bu
 `HandleUserCommandUseCase` untouched; voice text = `USER_COMMAND` byte-for-byte (F7-9). **9 new JVM tests; 383
 JVM total / 0 failures; `assembleDebug` (Hilt graph valid) + `testDebugUnitTest` green; 0 new Gradle deps; no
 manifest line (RECORD_AUDIO present since Block N).** Real recognizer **device-pending (OQ#4, independent of
-U/V/W)**. Details: decisions.md "ADR 2026-06-30 — Block T complete". **Block U next** (contextual suggestion
-engine + offline/opt-in context sources + cache-restore; reuses T's request-flow template for
-calendar/location).
+U/V/W)**. Details: decisions.md "ADR 2026-06-30 — Block T complete". **Block U DONE (2026-06-30):**
+contextual suggestion engine — `:data:repository` gained `TimeOfDaySuggestionProvider` (zero-permission,
+fixed per-`TimeOfDay` table) + `UsageSuggestionProvider` (recency-decay + frequency-ratio over
+`UsageHistoryRepository`) + `CalendarSuggestionProvider`/`LocationSuggestionProvider` (`READ_CALENDAR`/
+`ACCESS_FINE_LOCATION`-gated, query/read only enough to decide *whether* a signal exists — never a raw
+title/coordinate — and emit a single fixed generic `Suggestion`) + `SuggestionEngineImpl` (structured-
+concurrency aggregate, fault-isolated per provider, `HeuristicSuggestionRanker`-ranked, persists to
+`SuggestionRankingRepository`+`SuggestionsCacheRepository` as `CachedSuggestion(label,actionId)` only,
+gated by `aiSuggestionsEnabled`, fire-and-forget persist failures logged via direct `Log.w` — the module's
+first such path; `core/common`'s dormant `ResultLogger` was deliberately **not** wired). DI:
+`SuggestionsProvidesModule` in `:app`. `CALENDAR_SUGGESTIONS`/`LOCATION_SUGGESTIONS.requestable` flipped
+**true** reusing Block T's request-flow template **literally** (zero edits needed to
+`PermissionEducationScreen.androidPermission()`'s already-exhaustive `when`, or to either VM's
+constructor); manifest gained exactly `READ_CALENDAR`+`ACCESS_FINE_LOCATION`. Per-feature dismissed flag
+stays in-memory only for all three non-`WALLPAPER` requestable features (`VOICE_INPUT` included) — a
+Block-G-era structural fact (the feature names collide with `PrivacyInventoryGuardTest`'s own denylist),
+not a per-block deviation. **Privacy guard delivered as 4 executable proofs**: persistence-shape test,
+`SuggestionProviderPrivacyGuardTest` (plants a real sensitive event title/GPS fix and runs the **actual**
+providers against them, asserts nothing leaks), an outbound-isolation regression in `:domain`, and a
+reflection-based fix to Block L's `AiRequestGuardTest` (closed a real hand-maintained-inventory drift gap
+found during review — `OUTBOUND_FIELD_NAMES`/`AIERROR_FIELD_NAMES` now reflect against `AiRequest`/
+`AiError`'s actual declared fields). **16 new JVM tests; 399 JVM total / 0 failures; `assembleDebug` +
+`testDebugUnitTest` + `:domain:test` green; 0 new Gradle deps; `android.location`/`CalendarContract`
+confined to `:data:repository`.** `HandleUserCommandUseCase` untouched; suggestion tap routing is Block
+W's job. Details: decisions.md "ADR 2026-06-30 — Block U complete". **Block V next** (ONNX `TextEmbedder`
+impl + semantic re-rank; gated on OQ#3).
 
 Phase 3 result, Blocks A → D:
 
@@ -501,10 +531,16 @@ Phase 3 result, Blocks A → D:
   *(Phase 7 — voice input + contextual suggestions, Blocks S → W; forks decided 2026-06-29; **Block S DONE
   2026-06-29** — pure `:domain` suggestion+voice contracts + `HeuristicSuggestionRanker` + fakes; **Block T DONE
   2026-06-30** — `AndroidSpeechInputSource` (`:core:android`) + `VoiceModule` DI + `RECORD_AUDIO` routed-education
-  request flow + `refreshStatus()` debt discharged + launcher mic affordance, 9 new JVM tests / **383 JVM total**,
+  request flow + `refreshStatus()` debt discharged + launcher mic affordance, 9 new JVM tests / 383 JVM total,
   `assembleDebug` + `testDebugUnitTest` green, 0 new deps, `android.speech` confined to `:core:android`, real
-  recognizer device-pending OQ#4; **Block U next** — contextual suggestion engine + context sources + cache-restore;
-  OQ#3 embedding model/host gates Block V)*
+  recognizer device-pending OQ#4; **Block U DONE 2026-06-30** — `TimeOfDaySuggestionProvider`/
+  `UsageSuggestionProvider` (offline) + `CalendarSuggestionProvider`/`LocationSuggestionProvider` (opt-in,
+  `:data:repository`) + `SuggestionEngineImpl` (aggregate→rank→persist, gated by `aiSuggestionsEnabled`) +
+  Block-T request-flow template reused verbatim for calendar/location; privacy guard delivered as 4
+  executable proofs incl. a reflection-based fix to Block L's `AiRequestGuardTest`; 16 new JVM tests /
+  **399 JVM total**, `assembleDebug` + `testDebugUnitTest` + `:domain:test` green, 0 new deps,
+  `android.location`/`CalendarContract` confined to `:data:repository`, real device reads device-pending;
+  **Block V next** — ONNX `TextEmbedder` impl + semantic re-rank; OQ#3 embedding model/host gates it)*
 - Roadmap: [docs/roadmap.md](docs/roadmap.md)
 
 ## Do not

@@ -8,6 +8,11 @@
     <!-- Optional, normal permission for the wallpaper feature (Block G). Granted at install;
          requested through the education flow, never at startup. -->
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
+    <!-- Optional, dangerous permissions for the opt-in suggestion providers (Block U). Requested only
+         through the education flow when the calendar/location suggestion feature is triggered, never
+         at startup; denial disables only that provider (core launcher + other providers unaffected). -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <queries>
         <intent>

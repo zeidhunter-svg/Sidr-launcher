@@ -7,9 +7,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.feature.assistant.AssistantScreen
@@ -89,9 +91,20 @@ fun AppNavHost(
             Text(text = "Settings")
         }
 
-        // Real destination (Block G) — replaces the former inline placeholder. The screen owns
-        // its own request flow; navigating back uses the same safe-fallback helper as every node.
-        composable(Routes.PermissionEducation.ROUTE) {
+        // Real destination (Block G; Block T routes the feature in). The optional `feature` arg
+        // selects which PermissionFeature to educate (defaults to WALLPAPER when absent — so a bare
+        // `permission_education` route still matches). The screen owns its own request flow;
+        // navigating back uses the same safe-fallback helper as every node.
+        composable(
+            route = Routes.PermissionEducation.ROUTE_WITH_ARG,
+            arguments = listOf(
+                navArgument(Routes.PermissionEducation.ARG_FEATURE) {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) {
             PermissionEducationScreen(
                 onBack = {
                     handleNavigationEvent(navController, NavigationEvent.NavigateBack)

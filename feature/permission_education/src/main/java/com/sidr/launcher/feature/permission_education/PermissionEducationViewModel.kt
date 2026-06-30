@@ -1,7 +1,9 @@
 package com.sidr.launcher.feature.permission_education
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.domain.permission.PermissionChecker
 import com.sidr.launcher.domain.permission.PermissionFeature
 import com.sidr.launcher.domain.permission.PermissionPrefsRepository
@@ -24,16 +26,24 @@ import javax.inject.Inject
  * result back via [onPermissionResult] — keeping "education ≠ request" (Fork 5) and the rule that
  * a ViewModel never touches Android UI APIs.
  *
- * Phase 4 targets a single live feature ([PermissionFeature.WALLPAPER]); a future slice can route
- * the feature in via a nav arg / SavedStateHandle once more features have live request flows.
+ * The educated feature is routed in via the [Routes.PermissionEducation.ARG_FEATURE] nav arg
+ * ([SavedStateHandle]); it defaults to [PermissionFeature.WALLPAPER] when the arg is absent or
+ * unparseable (Block T — replacing the former Phase-4 hardcode now that [PermissionFeature.VOICE_INPUT]
+ * also has a live request flow).
  */
 @HiltViewModel
 class PermissionEducationViewModel @Inject constructor(
     private val permissionChecker: PermissionChecker,
     private val permissionPrefs: PermissionPrefsRepository,
+    savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
-    private val feature: PermissionFeature = PermissionFeature.WALLPAPER
+    // Routed from the nav arg; defaults to WALLPAPER for a bare `permission_education` route or an
+    // unrecognised value (forward-compatible if the enum changes).
+    private val feature: PermissionFeature =
+        savedStateHandle.get<String>(Routes.PermissionEducation.ARG_FEATURE)
+            ?.let { name -> runCatching { PermissionFeature.valueOf(name) }.getOrNull() }
+            ?: PermissionFeature.WALLPAPER
 
     private val _uiState = MutableStateFlow(
         PermissionEducationUiState(
@@ -57,25 +67,37 @@ class PermissionEducationViewModel @Inject constructor(
     }
 
     /**
-     * Re-check the live permission status (e.g. after returning from the system Settings screen).
+     * Re-check the live permission status (called on `ON_RESUME` by the screen, e.g. after returning
+     * from the system Settings screen). Block-H debt **discharged** here for the dangerous
+     * `RECORD_AUDIO` case (Block T).
      *
-     * Upgrade-only: a re-check may only move the status **up to [PermissionStatus.GRANTED]**; it must
-     * never overwrite an existing [PermissionStatus.PERMANENTLY_DENIED] with [PermissionStatus.DENIED].
-     * The [PermissionChecker] runs over `checkSelfPermission`, which can report only GRANTED/DENIED —
-     * it cannot observe permanent denial (that is derivable only from the request callback's
-     * `shouldShowRequestPermissionRationale`, see [onPermissionResult]). An unconditional overwrite
-     * would therefore silently downgrade a permanently-denied feature back to merely-denied on every
-     * refresh. This guard is a *partial* fix sized to the current SET_WALLPAPER (normal-permission)
-     * scope; it must be revisited when the first dangerous permission lands (`RECORD_AUDIO`, Ph7).
+     * This is **not** a blunt "upgrade-only" rule (which would wrongly hide a real revocation). The
+     * branches are disjoint by the value of `current`:
+     * - **(a)** a live `GRANTED` always wins — the user enabled it in Settings.
+     * - **(c)** otherwise the live read is taken verbatim, so a genuine **`GRANTED → DENIED`
+     *   revocation** (dangerous permissions can be revoked in Settings while we're backgrounded) **is
+     *   reflected** — we never keep believing the mic is available after the user turned it off.
+     * - **(b)** the *only* suppressed transition is `PERMANENTLY_DENIED → DENIED`, and it is reachable
+     *   **only when `current` is already `PERMANENTLY_DENIED`** — never from `GRANTED`. That read is not
+     *   a revocation (you cannot revoke an already-denied permission); it is `checkSelfPermission`'s
+     *   inability to distinguish "denied-askable" from "denied-permanent" (permanence is observable
+     *   only via the request callback's `shouldShowRequestPermissionRationale`, see [onPermissionResult]).
+     *   Pinning the stronger known state keeps the screen on the Settings-deep-link recovery instead of
+     *   bouncing back to a dead re-request button.
+     *
+     * Net: revocation and the permanent-denial guard never collide — a revocation always starts from
+     * `GRANTED` (branch c), the guard only pins an established `PERMANENTLY_DENIED` (branch b).
      */
     fun refreshStatus() {
         val checked = permissionChecker.status(feature)
         _uiState.update { current ->
             val next = when {
-                // A live grant always wins (e.g. the user granted it in system Settings).
+                // (a) A live grant always wins (e.g. the user granted it in system Settings).
                 checked == PermissionStatus.GRANTED -> PermissionStatus.GRANTED
-                // Preserve the stronger existing status: never downgrade PERMANENTLY_DENIED → DENIED.
+                // (b) Preserve an established permanent denial against an ambiguous DENIED re-read;
+                //     reachable only when current is already PERMANENTLY_DENIED (never from GRANTED).
                 current.status == PermissionStatus.PERMANENTLY_DENIED -> PermissionStatus.PERMANENTLY_DENIED
+                // (c) Take the live read — this reflects a genuine GRANTED → DENIED revocation.
                 else -> checked
             }
             current.copy(status = next)

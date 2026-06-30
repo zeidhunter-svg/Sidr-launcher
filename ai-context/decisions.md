@@ -2163,3 +2163,90 @@ manual-copy gap without any Kotlin parse.)
   request flow + the `refreshStatus()` Block-H debt, mic affordance). ⚠ re-verify the
   `android.speech.SpeechRecognizer` Java signatures against the Android Javadoc first (context7 covers only
   the Leanback wrappers). T's device run (OQ#4) is independent of U/V/W.
+
+### ADR 2026-06-30 — Block T complete (voice input + RECORD_AUDIO request flow + refreshStatus() debt discharged)
+
+**Context.** Phase 7 Block T lands the first voice-input modality and the first *dangerous* runtime permission
+(`RECORD_AUDIO`). Per the Phase-7 plan §Block T (T1–T6) + Forks F7-1/2/3/10. Voice is an **input modality**, not
+a fourth pipeline: recognized text feeds the **existing** command-input → `IntentMatcher` path byte-for-byte like
+keyboard text (the three-port invariant — `IntentMatcher` ≠ `GenerativeAiEngine` ≠ `SuggestionEngine` — holds).
+`HandleUserCommandUseCase` is **untouched**.
+
+**Step 0 (verify-first).** The `android.speech.SpeechRecognizer` framework signatures were re-verified against the
+Android Javadoc + the dotnet-android API mirror (context7 covers only the Leanback wrappers and was **not** trusted,
+the Phase-5/6 discipline): methods are **main-thread-only**; `createOnDeviceSpeechRecognizer`/
+`isOnDeviceRecognitionAvailable` are **API 31+**; results come from `Bundle.getStringArrayList(RESULTS_RECOGNITION)`;
+the full `ERROR_*` set + API levels were tabulated; `compileSdk = 35` (all modules) resolves the API-33
+`ERROR_LANGUAGE_*` constants by name. codegraph mapped the real edit surface (permission enum/checker/VM/screen,
+the launcher command-input + `SavedStateHandle` seam, the `AndroidConnectivityChecker` `callbackFlow` precedent,
+the DI modules).
+
+**Decisions.**
+- **T1 — `AndroidSpeechInputSource : SpeechInputSource` (`:core:android`, the only new `android.speech` site).**
+  `listen()` is a cold `callbackFlow`; the recognizer is **constructed, `setRecognitionListener`'d, `startListening`'d,
+  and torn down on the main `Looper`** via a `Handler(Looper.getMainLooper())` (framework main-thread contract). The
+  `RecognitionListener` callbacks `trySend` `Ready/Partial/Final/Error/Ended`; `onResults`/`onError` `close()` the
+  flow (terminal-as-value — nothing thrown, the `Flow<AiChunk>` precedent). `awaitClose` posts `stopListening` +
+  `cancel` + **mandatory `destroy()`** to the main looper; an `AtomicBoolean` guards the cancel-before-create race
+  (a create still queued behind a teardown destroys immediately) so no recognizer/microphone leaks. **On-device
+  preferred** (`createOnDeviceSpeechRecognizer` behind `SDK_INT >= S` + `isOnDeviceRecognitionAvailable`), else the
+  system recognizer biased offline with `EXTRA_PREFER_OFFLINE`. Full error-code → `SpeechRecognitionError` map
+  (`INSUFFICIENT_PERMISSIONS→PERMISSION_DENIED`, `NO_MATCH→NO_MATCH`, `SPEECH_TIMEOUT→TIMEOUT`,
+  `RECOGNIZER_BUSY`/`TOO_MANY_REQUESTS→BUSY`, `NETWORK`/`NETWORK_TIMEOUT`/`SERVER`/`SERVER_DISCONNECTED→NETWORK`,
+  `LANGUAGE_*→UNAVAILABLE`, else `UNKNOWN`). **No transcript/partial/audio is ever logged or persisted** (grep-clean
+  for `Log.`/`println`/`Timber`). Plain class (no Hilt) — the `AndroidPermissionChecker`/`AndroidConnectivityChecker`
+  precedent; not unit-tested in `core/android` (JVM-only `:core:testing` rule) — covered by `FakeSpeechInputSource`
+  + the device run.
+- **T2 — DI.** `VoiceModule` in `:app` `@Provides @Singleton SpeechInputSource = AndroidSpeechInputSource(@ApplicationContext)`.
+  Voice-unavailable → `isAvailable()==false` → the mic affordance is hidden, keyboard untouched (degrade, never block).
+- **T3 — permission routing.** `PermissionFeature.VOICE_INPUT.requestable` flipped **false→true**.
+  `PermissionEducationViewModel` gains a `SavedStateHandle` and derives its feature from the
+  `Routes.PermissionEducation.ARG_FEATURE` nav arg (`permission_education?feature={feature}`, optional, **defaults
+  WALLPAPER** for a bare route / unknown value), replacing the Phase-4 hardcode. `AppNavHost` registers the arg
+  (`navArgument` nullable/default-null, so the bare route still matches). The screen's `RequestPermission` permission
+  string + post-grant side-effect are feature-driven (a screen-local `PermissionFeature.androidPermission()` `when`
+  that mirrors `AndroidPermissionChecker` — duplicated because `feature → core/android` is forbidden; the screen is
+  already the Android UI-glue layer). Education ≠ request (Fork 5) preserved.
+- **T4 — Block-H `refreshStatus()` debt discharged for the dangerous case.** The guard was a **misnomer** ("upgrade-only")
+  but already correct: a genuine `GRANTED → DENIED` revocation (a dangerous permission revoked in Settings while
+  backgrounded) flows through the live-read branch and **is reflected** — we never keep believing the mic is available.
+  The *only* suppressed transition is `PERMANENTLY_DENIED → DENIED`, reachable **only when `current` is already
+  `PERMANENTLY_DENIED`** (never from `GRANTED`) — that is not a revocation but `checkSelfPermission`'s inability to
+  distinguish "denied-askable" from "denied-permanent"; pinning the stronger state keeps the screen on the Settings
+  deep-link instead of a dead re-request. The two cases never collide. The real gap (grep showed `refreshStatus()` had
+  **zero production callers**) is closed by an **`ON_RESUME` `DisposableEffect`/`LifecycleEventObserver`** in the screen
+  (lifecycle-runtime-compose 2.8.7, dep-free) so the Settings round-trip (grant *or* revoke) reflects on return. KDoc
+  rewritten to state the disjoint branches. JVM-tested for VOICE_INPUT (revocation reflected, permanent-denial preserved,
+  upgrade-to-granted).
+- **T5 — mic affordance (`:feature:launcher`).** Shown only when `viewModel.isVoiceInputAvailable` (a text-glyph
+  `IconButton` — no `material-icons` dep). Tap uses **framework `context.checkSelfPermission(RECORD_AUDIO)`** (API 23+,
+  no dep): granted → `LauncherViewModel.startVoiceInput()` (collects `listen()`; `Partial`→`setCommandInput`,
+  `Final`→`setCommandInput`+the **unchanged** `onCommandSubmitted` path, `Error`→a safe feedback message);
+  not-granted → `navigateTo(permission_education?feature=VOICE_INPUT)` so the **existing Block-G Fork-5 flow** performs
+  the request. **Decided (Step-0 review): route-to-education over inline `RequestPermission`** — keeps `:feature:launcher`'s
+  build file untouched (no `activity-compose` dep-edge) and reuses the proven flow; the granted path still listens
+  immediately with no detour.
+- **T6 — tests.** 9 new JVM tests: 4 launcher-voice (partials stream into input; final submits + executes via the
+  unchanged path; unavailable degrades to a message + keyboard still works; error surfaces a message) + 5 permission-VM
+  (feature routed from the nav arg; unknown arg → WALLPAPER; `GRANTED→DENIED` revocation reflected; `PERMANENTLY_DENIED`
+  preserved vs a `DENIED` re-read; `PERMANENTLY_DENIED→GRANTED` upgrade). Real recognizer = device-pending (OQ#4).
+
+**Invariants held.** `android.speech.*` confined to `:core:android` (grep-proven — only `AndroidSpeechInputSource`
+matches). `HandleUserCommandUseCase` + the three-port topology untouched; voice text = `USER_COMMAND` byte-for-byte
+(F7-9 — no new outbound category). No transcript/audio persisted or logged. **0 new Gradle deps** (`git diff` over
+build files/catalog empty; `SpeechRecognizer` = framework; `RECORD_AUDIO` already in the manifest since Block N — T
+added only the runtime request flow). `:domain` stays pure (the `PermissionFeature` enum change is stdlib-only). No
+manifest line added.
+
+**Verification.** `assembleDebug` **BUILD SUCCESSFUL** (Hilt graph valid — `:app:hiltJavaCompileDebug` clean); full
+`testDebugUnitTest` **BUILD SUCCESSFUL**, **383 JVM tests / 0 failures** (domain 131 unchanged; launcher 37,
+permission_education 15, core/android 8). `git diff --stat` = 10 files changed + 2 new (`VoiceModule.kt`,
+`core/android/.../voice/AndroidSpeechInputSource.kt`).
+
+**Device-pending (OQ#4, carried to Phase-7 Tracking, independent of U/V/W).** On SM-A325F: on-device + fallback
+recognition, mic grant/deny/permanently-denied/revocation transitions, the on-device language-pack matrix + the
+API-28/29 (no on-device recognizer) fallback path. Exactly as Block S proved its port via the fake, T delivers
+JVM-green wiring + impl with the real recognizer pending.
+
+**Next = Block U** (contextual suggestion engine + offline/opt-in context sources + cache-restore; reuses the
+Block-T request-flow template for calendar/location).

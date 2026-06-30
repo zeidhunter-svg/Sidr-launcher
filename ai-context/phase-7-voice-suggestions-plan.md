@@ -7,12 +7,14 @@
 > demoable milestones → tracking → per-block agent-model table → confirmed-decisions.
 > Block lettering continues the alphabet (Phase 3 = A→D, Phase 4 = E→H, Phase 5 = I→N, Phase 6 = O→R),
 > so **Phase 7 = Blocks S → W**.
-> **Status (2026-06-29): FORKS DECIDED + BLOCK S COMPLETE.** All 11 forks below are **decided**; the
-> first execution round (**Block S — pure `:domain` contracts + `HeuristicSuggestionRanker` + fakes**) is
-> **done 2026-06-29** (S1–S6 ✅, 12 new JVM tests, 131 domain total, `assembleDebug` + full
-> `testDebugUnitTest` green, purity-guard machine-checked, 0 new deps, no production file edited —
-> `HandleUserCommandUseCase` untouched). **Next = Block T (voice input, port-gated; device run OQ#4).** All
-> 11 forks decided (the Phase-6 "forks-before-code" discipline). Three pre-ADR items were closed before the
+> **Status (2026-06-29): FORKS DECIDED + BLOCKS S & T COMPLETE.** All 11 forks below are **decided**. **Block S**
+> (pure `:domain` contracts + `HeuristicSuggestionRanker` + fakes) is **done 2026-06-29** (S1–S6 ✅, 12 new JVM
+> tests, no production file edited). **Block T** (voice input — `AndroidSpeechInputSource` in `:core:android`,
+> `VoiceModule` DI, `RECORD_AUDIO` live request via the routed education flow, `refreshStatus()` dangerous-permission
+> debt discharged, launcher mic affordance) is **done 2026-06-29** (T1–T6 ✅, 9 new JVM tests, **383 JVM total /
+> 0 failures**, `assembleDebug` + full `testDebugUnitTest` green, **0 new Gradle deps**, `android.speech` confined
+> to `:core:android`, `HandleUserCommandUseCase` untouched; real recognizer device-pending OQ#4). **Next = Block U
+> (contextual suggestion engine + context sources + cache-restore).** Three pre-ADR items were closed before the
 > flip: **co-residency** of the NLU + embedder ONNX
 > sessions (§Block V — Option B, accepted-not-arbitrated), **suggestions single-source** (§F7-8 — owner =
 > host `LauncherViewModel`/`LauncherUiState`, no parallel VM), and the **privacy-guard wording** (§F7-9 —
@@ -133,7 +135,9 @@ new-deps accounting, never the block structure.
   (`ERROR_NO_MATCH`, `ERROR_RECOGNIZER_BUSY`, `ERROR_INSUFFICIENT_PERMISSIONS`, `ERROR_NETWORK`, …) map to
   a pure `SpeechRecognitionError` taxonomy in `:domain`.
 
-Run order: this check is done; execute the Block S prompt next.
+Run order: this check is done; Blocks S + T are complete — execute the Block U prompt next. (Block T
+re-confirmed the `SpeechRecognizer` framework signatures against the Android Javadoc at its Step 0, as
+planned — context7's Leanback-only coverage was not trusted.)
 
 ---
 
@@ -521,13 +525,34 @@ and asserts the ordered, deduped, bounded list; a `FakeSpeechInputSource` yields
 
 ---
 
-## Block T — Voice input (`SpeechInputSource`) + `RECORD_AUDIO` request flow
+## Block T — Voice input (`SpeechInputSource`) + `RECORD_AUDIO` request flow — ✅ DONE 2026-06-30
+
+**Status:** complete (T1–T6). `AndroidSpeechInputSource : SpeechInputSource` in `:core:android` (on-device
+recognizer preferred behind a `Build.VERSION.SDK_INT >= S` guard + `EXTRA_PREFER_OFFLINE` fallback;
+`RecognitionListener` → `callbackFlow`; all recognizer calls marshalled to `Handler(Looper.getMainLooper())`;
+`destroy()` on `awaitClose` with an `AtomicBoolean` cancel-before-create guard so no recognizer/mic leaks;
+full error-code → `SpeechRecognitionError` map; **no transcript/audio logged**). DI: `VoiceModule` in `:app`
+(`@ApplicationContext`); `FakeSpeechInputSource` (Block S) drives the JVM tests. `PermissionFeature.VOICE_INPUT.requestable`
+flipped to **true**; the education VM is routed via a `SavedStateHandle` `feature` nav arg (`permission_education?feature={feature}`,
+defaults WALLPAPER) replacing the hardcode; the screen's request permission + post-grant action are feature-driven
+and it gains an **`ON_RESUME` `refreshStatus()`**. **Block-H `refreshStatus()` debt discharged for the dangerous case:**
+a genuine `GRANTED → DENIED` revocation IS reflected (branch c), while the `PERMANENTLY_DENIED → DENIED` suppression
+is reachable only from an established `PERMANENTLY_DENIED` (never from `GRANTED`) — the two never collide; KDoc
+rewritten + JVM-tested for VOICE_INPUT (revocation, preservation, upgrade). Launcher mic affordance (text-glyph
+`IconButton`, shown only when `isVoiceInputAvailable`): granted → `startVoiceInput()` (partials → `commandInput`,
+Final → the **unchanged** `onCommandSubmitted` path); not-granted → route to `permission_education?feature=VOICE_INPUT`
+(the Block-G Fork-5 flow does the request — framework `checkSelfPermission`, no `:feature:launcher` build change).
+`HandleUserCommandUseCase` untouched. **9 new JVM tests (4 launcher-voice + 5 permission-VM); 383 JVM total, 0
+failures; `assembleDebug` (Hilt graph valid) + full `testDebugUnitTest` green; 0 new Gradle deps; `android.speech`
+confined to `:core:android` (grep-proven).** Real recognizer = **device-pending (OQ#4)**. ADR: decisions.md
+"ADR 2026-06-29 — Block T complete".
 
 **Goal:** an on-device-preferred `AndroidSpeechInputSource`, a no-op fake, the `RECORD_AUDIO` live request
 flow + `refreshStatus()` dangerous-permission hardening, and a mic affordance on the command input.
 **Depends on:** S (`SpeechInputSource` port), the existing permission framework. Forks 1/2/3/10 fixed.
-⚠ re-verify the `android.speech.SpeechRecognizer` Java signatures against the Android Javadoc first
-(context7 covers only the Leanback wrappers).
+✅ `android.speech.SpeechRecognizer` Java signatures re-verified against the Android Javadoc + dotnet-android
+API mirror at Step 0 (main-thread-only; `createOnDeviceSpeechRecognizer`/`isOnDeviceRecognitionAvailable` API 31+;
+`RESULTS_RECOGNITION` key; full `ERROR_*` set + API levels) — context7 (Leanback-only) was not trusted.
 
 **New files (`:core:android`):** `AndroidSpeechInputSource : SpeechInputSource` (on-device recognizer when
 available + `EXTRA_PREFER_OFFLINE`, `RecognitionListener` → `callbackFlow`, main-thread marshalling,
@@ -535,20 +560,22 @@ available + `EXTRA_PREFER_OFFLINE`, `RecognitionListener` → `callbackFlow`, ma
 education-VM feature-routing + the mic affordance in `:feature:launcher`.
 
 **Steps:**
-- [ ] `T1` `AndroidSpeechInputSource`: availability probe (`isRecognitionAvailable` /
+- [x] `T1` `AndroidSpeechInputSource`: availability probe (`isRecognitionAvailable` /
       `isOnDeviceRecognitionAvailable`), `listen()` as `callbackFlow` over `RecognitionListener`,
       on-device-preferred construction, lifecycle (`destroy` on cancel), error mapping; no transcript logged.
-- [ ] `T2` `FakeSpeechInputSource` already in S — wire DI: real impl in `:app` (application `Context`),
-      fake bound in tests; voice unavailable → `isAvailable() == false` (degrade to keyboard).
-- [ ] `T3` Permission: flip `PermissionFeature.VOICE_INPUT.requestable = true`; route the feature into
-      `PermissionEducationViewModel` (nav-arg/`SavedStateHandle`, replacing the hardcoded `WALLPAPER`);
-      mic launches `ActivityResultContracts.RequestPermission`; result → `onPermissionResult`.
-- [ ] `T4` **Discharge the Block-H debt:** `refreshStatus()` handles the dangerous case (permanently-denied
-      mic → system-Settings deep-link path, no silent downgrade); JVM-tested.
-- [ ] `T5` Mic affordance on the launcher command input: tap → (permission-gated) listen → partials into
-      `commandInput` → final submits via the **unchanged** command path. Assistant prompt reuse optional.
-- [ ] `T6` JVM tests: permission VM (grant/deny/permanently-denied/refresh), voice-unavailable degrade,
-      partial→final→submit wiring against `FakeSpeechInputSource`. Real recognizer = device-pending.
+- [x] `T2` `FakeSpeechInputSource` already in S — wire DI: real impl in `:app` (`VoiceModule`, application
+      `Context`), fake drives tests; voice unavailable → `isAvailable() == false` (degrade to keyboard, mic hidden).
+- [x] `T3` Permission: flipped `PermissionFeature.VOICE_INPUT.requestable = true`; routed the feature into
+      `PermissionEducationViewModel` via `SavedStateHandle` (`permission_education?feature={feature}`, replacing
+      the hardcoded `WALLPAPER`); the screen's `RequestPermission` + post-grant are feature-driven; result → `onPermissionResult`.
+- [x] `T4` **Block-H debt discharged:** `refreshStatus()` now fires on `ON_RESUME` and reflects a genuine
+      `GRANTED → DENIED` revocation; `PERMANENTLY_DENIED` shows the system-Settings deep-link (no dead re-request)
+      and is never clobbered by a bare `DENIED` read; KDoc rewritten; JVM-tested for VOICE_INPUT.
+- [x] `T5` Mic affordance on the launcher command input: tap → (permission-gated via `checkSelfPermission`;
+      not-granted routes to education) `startVoiceInput()` → partials into `commandInput` → final submits via the
+      **unchanged** command path. (Assistant prompt reuse left optional/frozen-forward.)
+- [x] `T6` JVM tests: permission VM (route + grant/deny/permanently-denied/revocation/upgrade), voice-unavailable
+      degrade, partial→final→submit wiring against `FakeSpeechInputSource`. Real recognizer = device-pending (OQ#4).
 
 **Acceptance:** `SpeechRecognizer` confined to `:core:android` (grep: no `android.speech` import elsewhere);
 mic denied → keyboard-only, core unaffected; permanently-denied handled (no dead re-request);

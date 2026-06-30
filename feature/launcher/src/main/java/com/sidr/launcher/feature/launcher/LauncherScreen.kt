@@ -1,5 +1,7 @@
 package com.sidr.launcher.feature.launcher
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
@@ -22,6 +24,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -45,7 +48,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
+import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.domain.model.InstalledApp
+import com.sidr.launcher.domain.permission.PermissionFeature
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -57,6 +62,20 @@ fun LauncherScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val commandInput by viewModel.commandInput.collectAsStateWithLifecycle()
     val feedback by viewModel.commandFeedback.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    // Voice input (Block T). Tapping the mic starts recognition only when RECORD_AUDIO is held;
+    // otherwise it routes to the permission-education screen for VOICE_INPUT (the Fork-5
+    // education≠request flow). Framework checkSelfPermission keeps :feature:launcher dependency-free.
+    val onMicTap: () -> Unit = {
+        val granted = context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            viewModel.startVoiceInput()
+        } else {
+            viewModel.navigateTo(Routes.PermissionEducation.routeFor(PermissionFeature.VOICE_INPUT.name))
+        }
+    }
 
     Column(
         modifier = modifier
@@ -91,11 +110,14 @@ fun LauncherScreen(
             onDismiss = viewModel::dismissFeedback,
         )
 
-        // Command input — always visible; imePadding() on the Column keeps it above keyboard
+        // Command input — always visible; imePadding() on the Column keeps it above keyboard.
+        // The mic affordance is shown only when a speech recognizer is usable (degrade to keyboard).
         CommandInputBar(
             value = commandInput,
             onChange = viewModel::onCommandChanged,
             onSubmit = viewModel::onCommandSubmitted,
+            showMic = viewModel.isVoiceInputAvailable,
+            onMic = onMicTap,
         )
     }
 }
@@ -239,6 +261,8 @@ private fun CommandInputBar(
     value: String,
     onChange: (String) -> Unit,
     onSubmit: (String) -> Unit,
+    showMic: Boolean,
+    onMic: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     OutlinedTextField(
@@ -248,6 +272,14 @@ private fun CommandInputBar(
         singleLine = true,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { onSubmit(value) }),
+        trailingIcon = if (showMic) {
+            {
+                // Text glyph keeps :feature:launcher free of a material-icons dependency.
+                IconButton(onClick = onMic) { Text("🎤") }
+            }
+        } else {
+            null
+        },
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 8.dp),

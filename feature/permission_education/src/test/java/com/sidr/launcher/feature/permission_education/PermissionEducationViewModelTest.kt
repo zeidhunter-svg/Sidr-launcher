@@ -1,5 +1,7 @@
 package com.sidr.launcher.feature.permission_education
 
+import androidx.lifecycle.SavedStateHandle
+import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.core.testing.FakePermissionChecker
 import com.sidr.launcher.core.testing.FakePermissionPrefsRepository
 import com.sidr.launcher.domain.permission.PermissionFeature
@@ -36,7 +38,15 @@ class PermissionEducationViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun vm() = PermissionEducationViewModel(checker, prefs)
+    // Bare route (no feature arg) → VM defaults to WALLPAPER, preserving the Phase-4 behaviour.
+    private fun vm() = PermissionEducationViewModel(checker, prefs, SavedStateHandle())
+
+    // Routed feature (Block T) — the nav arg selects which PermissionFeature to educate.
+    private fun vmFor(feature: PermissionFeature) = PermissionEducationViewModel(
+        checker,
+        prefs,
+        SavedStateHandle(mapOf(Routes.PermissionEducation.ARG_FEATURE to feature.name)),
+    )
 
     @Test
     fun `initial state reflects the checker status and is requestable for wallpaper`() = runTest {
@@ -156,6 +166,76 @@ class PermissionEducationViewModelTest {
 
         // If the user grants it in system Settings, a refresh must reflect the live grant.
         checker.setStatus(PermissionFeature.WALLPAPER, PermissionStatus.GRANTED)
+        viewModel.refreshStatus()
+
+        assertEquals(PermissionStatus.GRANTED, viewModel.uiState.value.status)
+    }
+
+    // ── Block T: feature routing + dangerous RECORD_AUDIO lifecycle ─────────
+
+    @Test
+    fun `feature is routed from the SavedStateHandle nav arg`() = runTest {
+        checker.setStatus(PermissionFeature.VOICE_INPUT, PermissionStatus.DENIED)
+        val viewModel = vmFor(PermissionFeature.VOICE_INPUT)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(PermissionFeature.VOICE_INPUT, state.feature)
+        // VOICE_INPUT.requestable was flipped to true in Block T.
+        assertTrue(state.requestable)
+    }
+
+    @Test
+    fun `unknown feature arg falls back to WALLPAPER`() = runTest {
+        val viewModel = PermissionEducationViewModel(
+            checker,
+            prefs,
+            SavedStateHandle(mapOf(Routes.PermissionEducation.ARG_FEATURE to "NOT_A_FEATURE")),
+        )
+        advanceUntilIdle()
+        assertEquals(PermissionFeature.WALLPAPER, viewModel.uiState.value.feature)
+    }
+
+    @Test
+    fun `dangerous mic revocation GRANTED to DENIED is reflected on refresh`() = runTest {
+        // The core dangerous-permission case the Block-H debt was deferred for: RECORD_AUDIO can be
+        // revoked in Settings while we are backgrounded. refreshStatus() MUST surface that downgrade.
+        checker.setStatus(PermissionFeature.VOICE_INPUT, PermissionStatus.GRANTED)
+        val viewModel = vmFor(PermissionFeature.VOICE_INPUT)
+        advanceUntilIdle()
+        assertEquals(PermissionStatus.GRANTED, viewModel.uiState.value.status)
+
+        // User revokes the mic in system Settings; on return checkSelfPermission reads DENIED.
+        checker.setStatus(PermissionFeature.VOICE_INPUT, PermissionStatus.DENIED)
+        viewModel.refreshStatus()
+
+        // Genuine revocation reflected — we do NOT keep believing the mic is available.
+        assertEquals(PermissionStatus.DENIED, viewModel.uiState.value.status)
+    }
+
+    @Test
+    fun `mic PERMANENTLY_DENIED is preserved against an ambiguous DENIED re-read`() = runTest {
+        val viewModel = vmFor(PermissionFeature.VOICE_INPUT)
+        advanceUntilIdle()
+
+        viewModel.onPermissionResult(granted = false, canRequestAgain = false)
+        assertEquals(PermissionStatus.PERMANENTLY_DENIED, viewModel.uiState.value.status)
+
+        // checkSelfPermission can only report DENIED; it must NOT downgrade an established permanent
+        // denial (that would bounce the user from the Settings deep-link to a dead re-request button).
+        checker.setStatus(PermissionFeature.VOICE_INPUT, PermissionStatus.DENIED)
+        viewModel.refreshStatus()
+
+        assertEquals(PermissionStatus.PERMANENTLY_DENIED, viewModel.uiState.value.status)
+    }
+
+    @Test
+    fun `mic PERMANENTLY_DENIED upgrades to GRANTED when enabled in Settings`() = runTest {
+        val viewModel = vmFor(PermissionFeature.VOICE_INPUT)
+        advanceUntilIdle()
+
+        viewModel.onPermissionResult(granted = false, canRequestAgain = false)
+        checker.setStatus(PermissionFeature.VOICE_INPUT, PermissionStatus.GRANTED)
         viewModel.refreshStatus()
 
         assertEquals(PermissionStatus.GRANTED, viewModel.uiState.value.status)

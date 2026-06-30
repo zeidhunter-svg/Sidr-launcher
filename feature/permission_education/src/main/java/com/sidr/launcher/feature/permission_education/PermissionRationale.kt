@@ -30,9 +30,10 @@ fun rationaleFor(feature: PermissionFeature): PermissionRationale = when (featur
 
     PermissionFeature.VOICE_INPUT -> PermissionRationale(
         title = "Voice commands",
-        body = "Voice input lets you speak commands instead of typing. It's coming in a later " +
-            "release; the launcher never records audio without you starting it.",
-        ctaLabel = "Coming soon",
+        body = "Voice input lets you speak commands instead of typing. The launcher only listens " +
+            "while you tap the mic, never records in the background, and prefers on-device " +
+            "recognition. It's optional — typing always works without it.",
+        ctaLabel = "Enable microphone",
     )
 
     PermissionFeature.CALENDAR_SUGGESTIONS -> PermissionRationale(

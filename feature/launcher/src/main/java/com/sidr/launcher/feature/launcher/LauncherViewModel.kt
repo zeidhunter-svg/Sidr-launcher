@@ -21,6 +21,9 @@ import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.voice.SpeechInputSource
+import com.sidr.launcher.domain.voice.SpeechRecognitionError
+import com.sidr.launcher.domain.voice.SpeechRecognitionState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CancellationException
@@ -46,6 +49,9 @@ class LauncherViewModel @Inject constructor(
     // Domain interfaces — injected from :app via Hilt. No feature→data edge.
     private val usageHistoryRepository: UsageHistoryRepository,
     private val featureFlagRepository: FeatureFlagRepository,
+    // Voice input modality (Block T). Produces the same text the keyboard does; rides the existing
+    // command path. The launcher core never depends on it — when unavailable the mic is hidden.
+    private val speechInputSource: SpeechInputSource,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     // Survives process death — the user's typed command text is restored on relaunch (H3).
     // Hilt auto-provides this for @HiltViewModel; tests pass a SavedStateHandle() directly.
@@ -108,6 +114,14 @@ class LauncherViewModel @Inject constructor(
 
     // Tracks the in-flight app load so a new load (init or retry) cancels the previous one.
     private var loadJob: Job? = null
+
+    // Tracks an in-flight voice recognition so a second mic tap restarts cleanly (cancelling the
+    // previous collection calls destroy() on the recognizer via the impl's awaitClose).
+    private var voiceJob: Job? = null
+
+    /** Whether a speech recognizer is usable. The UI shows the mic affordance only when true. */
+    val isVoiceInputAvailable: Boolean
+        get() = speechInputSource.isAvailable()
 
     init {
         loadApps()
@@ -173,6 +187,45 @@ class LauncherViewModel @Inject constructor(
 
     fun dismissFeedback() {
         _commandFeedback.value = CommandFeedback.None
+    }
+
+    // ── Voice input (Block T) ──────────────────────────────────────────────
+    // The mic affordance calls this once the RECORD_AUDIO permission is held (the screen gates it
+    // via checkSelfPermission, routing to permission education otherwise). Partial hypotheses stream
+    // into the command input; the Final result is submitted through the UNCHANGED command path —
+    // voice produces byte-identical text to the keyboard (HandleUserCommandUseCase is untouched).
+    fun startVoiceInput(languageTag: String? = null) {
+        if (!speechInputSource.isAvailable()) {
+            _commandFeedback.value = CommandFeedback.Message(VOICE_UNAVAILABLE)
+            return
+        }
+        voiceJob?.cancel()
+        voiceJob = viewModelScope.launch {
+            speechInputSource.listen(languageTag).collect { state ->
+                when (state) {
+                    SpeechRecognitionState.Ready -> Unit
+                    is SpeechRecognitionState.Partial -> setCommandInput(state.text)
+                    is SpeechRecognitionState.Final -> {
+                        setCommandInput(state.text)
+                        // Same entry point as the keyboard's IME "Done" / submit.
+                        onCommandSubmitted(state.text)
+                    }
+                    is SpeechRecognitionState.Error ->
+                        _commandFeedback.value = CommandFeedback.Message(voiceErrorMessage(state.error))
+                    SpeechRecognitionState.Ended -> Unit
+                }
+            }
+        }
+    }
+
+    private fun voiceErrorMessage(error: SpeechRecognitionError): String = when (error) {
+        SpeechRecognitionError.PERMISSION_DENIED -> "Microphone permission is needed for voice input."
+        SpeechRecognitionError.UNAVAILABLE -> VOICE_UNAVAILABLE
+        SpeechRecognitionError.NO_MATCH -> "Didn't catch that — try again."
+        SpeechRecognitionError.BUSY -> "Voice input is busy — try again in a moment."
+        SpeechRecognitionError.NETWORK -> "Voice input needs a network connection right now."
+        SpeechRecognitionError.TIMEOUT -> "No speech detected — try again."
+        SpeechRecognitionError.UNKNOWN -> "Voice input failed — try again."
     }
 
     // ── CommandOutcome → UI — exhaustive when, no else branch ──────────────
@@ -292,5 +345,6 @@ class LauncherViewModel @Inject constructor(
         const val GENERIC_ERROR = "Something went wrong. Please try again."
         // SavedStateHandle key for the typed command text (H3 process-death restoration).
         const val KEY_COMMAND_INPUT = "command_input"
+        const val VOICE_UNAVAILABLE = "Voice input isn't available on this device."
     }
 }

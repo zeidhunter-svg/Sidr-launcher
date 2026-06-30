@@ -84,6 +84,17 @@ The offline launcher core (home, app grid, app launch) must work fully without A
 
 ## Current goal (active work)
 
+**NOW (2026-06-30): Phase 7 in progress — Blocks S + T DONE, Block U next.** Phases 3 → 6 are code-closed
+(MVP loop, persistence/Room/permission-education/hardening, cloud AI multi-provider, local ONNX NLU).
+**Phase 7 Block S** delivered the pure `:domain` suggestion + voice contracts; **Phase 7 Block T** delivered
+voice input (`AndroidSpeechInputSource` in `:core:android`, `VoiceModule` DI, the `RECORD_AUDIO` routed-education
+request flow, the discharged Block-H `refreshStatus()` debt, and the launcher mic affordance) — 383 JVM tests
+green, 0 new deps, `android.speech` confined to `:core:android`, real recognizer device-pending (OQ#4). **Next =
+Block U** (contextual suggestion engine + context sources + cache-restore). Carried device-acceptance debt
+(SM-A325F): Block-J Keystore, Block-N N5, Block-P P5/OQ#1-2, Block-T OQ#4. See the session digest at the top +
+the [Phase 7 plan](ai-context/phase-7-voice-suggestions-plan.md). *(The phase-by-phase history below is retained
+for context.)*
+
 **Phase 3 is DONE (Blocks A → D, 2026-06-21).** The MVP loop works: type `open telegram` →
 resolves + launches offline; tap a grid app → launches; unknown → fallback UI, no crash.
 **Live launch verified on device (SM-A325F, Android 13).** `assembleDebug` +
@@ -140,11 +151,26 @@ decided 2026-06-29). **Block S DONE (2026-06-29):** pure `:domain` suggestion+vo
 `SuggestionEngine`/`SuggestionRanker` + pure `HeuristicSuggestionRanker`; `SpeechInputSource` port
 + `SpeechRecognitionState`/`SpeechRecognitionError` — **enum, UPPER_SNAKE_CASE** like
 `AiStopReason`); fakes in `:core:testing`; 12 new JVM tests / 131 domain total; `assembleDebug` +
-`testDebugUnitTest` green; 0 new Gradle deps. **Block T next** (voice impl:
-`AndroidSpeechInputSource` in `:core:android` over `android.speech.SpeechRecognizer`; `RECORD_AUDIO`
-request flow + Block-H `refreshStatus()` debt; mic affordance; ⚠ re-verify
-`android.speech.SpeechRecognizer` Java signatures against Android Javadoc first — context7 covers
-only Leanback wrappers; device run OQ#4 independent of U/V/W gating).
+`testDebugUnitTest` green; 0 new Gradle deps. **Block T DONE (2026-06-30):** voice input —
+`AndroidSpeechInputSource : SpeechInputSource` in `:core:android` (on-device recognizer preferred behind
+`SDK_INT>=S` + `EXTRA_PREFER_OFFLINE` fallback; `RecognitionListener` → `callbackFlow`; all recognizer
+calls marshalled to `Handler(Looper.getMainLooper())`; `destroy()` on `awaitClose` + `AtomicBoolean`
+cancel-before-create guard so no recognizer/mic leak; full error-code → `SpeechRecognitionError` map; **no
+transcript/audio logged**) — the **only** `android.speech` site (grep-proven). `VoiceModule` DI in `:app`
+(`@ApplicationContext`); `FakeSpeechInputSource` drives JVM tests. `PermissionFeature.VOICE_INPUT.requestable`
+flipped **true**; education VM routed via `SavedStateHandle` (`permission_education?feature={feature}`, defaults
+WALLPAPER), screen request/post-grant feature-driven + `ON_RESUME` `refreshStatus()`. **Block-H `refreshStatus()`
+debt discharged:** genuine `GRANTED→DENIED` revocation reflected; `PERMANENTLY_DENIED→DENIED` suppression
+reachable only from an established `PERMANENTLY_DENIED` (never from `GRANTED`) — the two never collide; KDoc
+rewritten + JVM-tested. Launcher mic affordance (shown only when `isVoiceInputAvailable`): granted →
+`startVoiceInput()` (partials → `commandInput`, Final → **unchanged** `onCommandSubmitted`); not-granted →
+route to education (framework `checkSelfPermission`, **no `:feature:launcher` build change**).
+`HandleUserCommandUseCase` untouched; voice text = `USER_COMMAND` byte-for-byte (F7-9). **9 new JVM tests; 383
+JVM total / 0 failures; `assembleDebug` (Hilt graph valid) + `testDebugUnitTest` green; 0 new Gradle deps; no
+manifest line (RECORD_AUDIO present since Block N).** Real recognizer **device-pending (OQ#4, independent of
+U/V/W)**. Details: decisions.md "ADR 2026-06-30 — Block T complete". **Block U next** (contextual suggestion
+engine + offline/opt-in context sources + cache-restore; reuses T's request-flow template for
+calendar/location).
 
 Phase 3 result, Blocks A → D:
 
@@ -472,10 +498,13 @@ Phase 3 result, Blocks A → D:
   [ai-context/phase-3-intent-system-plan.md](ai-context/phase-3-intent-system-plan.md) *(Phase 3 closed 2026-06-21)*
 - Decisions log: [ai-context/decisions.md](ai-context/decisions.md)
 - Active checklist: [ai-context/phase-7-voice-suggestions-plan.md](ai-context/phase-7-voice-suggestions-plan.md)
-  *(Phase 7 — voice input + contextual suggestions, Blocks S → W; forks decided 2026-06-29; **Block S
-  DONE 2026-06-29** — pure `:domain` suggestion+voice contracts + `HeuristicSuggestionRanker` + fakes, 12
-  new JVM tests / 131 domain total, `assembleDebug` + `testDebugUnitTest` green, 0 new deps; **Block T
-  next** (voice impl, port-gated; device run OQ#4); OQ#3 embedding model/host gates Block V)*
+  *(Phase 7 — voice input + contextual suggestions, Blocks S → W; forks decided 2026-06-29; **Block S DONE
+  2026-06-29** — pure `:domain` suggestion+voice contracts + `HeuristicSuggestionRanker` + fakes; **Block T DONE
+  2026-06-30** — `AndroidSpeechInputSource` (`:core:android`) + `VoiceModule` DI + `RECORD_AUDIO` routed-education
+  request flow + `refreshStatus()` debt discharged + launcher mic affordance, 9 new JVM tests / **383 JVM total**,
+  `assembleDebug` + `testDebugUnitTest` green, 0 new deps, `android.speech` confined to `:core:android`, real
+  recognizer device-pending OQ#4; **Block U next** — contextual suggestion engine + context sources + cache-restore;
+  OQ#3 embedding model/host gates Block V)*
 - Roadmap: [docs/roadmap.md](docs/roadmap.md)
 
 ## Do not

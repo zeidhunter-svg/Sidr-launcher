@@ -8,7 +8,10 @@ import androidx.lifecycle.SavedStateHandle
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeIntentMatcher
+import com.sidr.launcher.core.testing.FakeSpeechInputSource
 import com.sidr.launcher.core.testing.FakeUsageHistoryRepository
+import com.sidr.launcher.domain.voice.SpeechRecognitionError
+import com.sidr.launcher.domain.voice.SpeechRecognitionState
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.preferences.FeatureFlags
 import com.sidr.launcher.domain.result.OperationResult
@@ -48,6 +51,7 @@ class LauncherViewModelTest {
     private val fakeMatcher = FakeIntentMatcher()
     private val fakeExecutor = FakeActionExecutor()
     private val fakeUsageRepo = FakeUsageHistoryRepository()
+    private val fakeSpeech = FakeSpeechInputSource()
     // Default: usageHistoryEnabled = true so existing recording tests remain valid.
     private val fakeFlagRepo = FakeFeatureFlagRepository(FeatureFlags(usageHistoryEnabled = true))
     private val useCase = HandleUserCommandUseCase(
@@ -74,6 +78,7 @@ class LauncherViewModelTest {
         fakeMatcher.reset()
         fakeExecutor.reset()
         fakeUsageRepo.reset()
+        fakeSpeech.reset()
         Dispatchers.resetMain()
     }
 
@@ -86,6 +91,7 @@ class LauncherViewModelTest {
         actionExecutor = fakeExecutor,
         usageHistoryRepository = fakeUsageRepo,
         featureFlagRepository = flagRepo,
+        speechInputSource = fakeSpeech,
         ioDispatcher = testDispatcher,
         savedStateHandle = savedStateHandle,
     )
@@ -258,6 +264,7 @@ class LauncherViewModelTest {
             actionExecutor = fakeExecutor,
             usageHistoryRepository = fakeUsageRepo,
             featureFlagRepository = fakeFlagRepo,
+            speechInputSource = fakeSpeech,
             ioDispatcher = testDispatcher,
             savedStateHandle = SavedStateHandle(),
         )
@@ -642,4 +649,75 @@ class LauncherViewModelTest {
             // No usage recorded — flag could not be read.
             assertTrue(fakeUsageRepo.recordedLaunches.isEmpty())
         }
+
+    // ── Voice input (Block T) ──────────────────────────────────────────────
+
+    @Test
+    fun `voice partials stream into commandInput`() = runTest(testDispatcher) {
+        fakeSpeech.scriptedStates = listOf(
+            SpeechRecognitionState.Ready,
+            SpeechRecognitionState.Partial("open te"),
+        )
+        val vm = buildViewModel()
+
+        vm.startVoiceInput()
+        advanceUntilIdle()
+
+        assertEquals("open te", vm.commandInput.value)
+        assertEquals(0, fakeExecutor.callCount) // no Final yet → nothing submitted
+    }
+
+    @Test
+    fun `voice final submits through the unchanged command path and executes`() =
+        runTest(testDispatcher) {
+            fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
+            fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent("telegram")
+            fakeMatcher.confidenceToReturn = 0.90f
+            fakeSpeech.scriptSuccess(partials = listOf("open", "open tele"), finalText = "open telegram")
+            val vm = buildViewModel()
+
+            vm.startVoiceInput()
+            advanceUntilIdle()
+
+            // Final rode the same path as keyboard submit: executed + input cleared (Executed).
+            assertEquals(1, fakeExecutor.callCount)
+            assertTrue(fakeExecutor.executedActions.single() is ExecutableAction.LaunchAppAction)
+            assertEquals("", vm.commandInput.value)
+            // The recognized text fed the matcher (normalized) exactly as keyboard text would.
+            assertTrue("open telegram" in fakeMatcher.receivedInputs)
+        }
+
+    @Test
+    fun `voice unavailable degrades to a message and never listens`() = runTest(testDispatcher) {
+        fakeSpeech.available = false
+        val vm = buildViewModel()
+
+        assertFalse(vm.isVoiceInputAvailable)
+
+        vm.startVoiceInput()
+        advanceUntilIdle()
+
+        assertEquals(0, fakeExecutor.callCount)
+        assertTrue(vm.commandFeedback.value is CommandFeedback.Message)
+        // The keyboard path is unaffected — a normal type-then-submit launch still executes.
+        fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
+        fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent("telegram")
+        fakeMatcher.confidenceToReturn = 0.90f
+        vm.onCommandChanged("open telegram")
+        vm.onCommandSubmitted("open telegram")
+        advanceUntilIdle()
+        assertEquals(1, fakeExecutor.callCount)
+    }
+
+    @Test
+    fun `voice error surfaces a message and does not execute`() = runTest(testDispatcher) {
+        fakeSpeech.scriptError(SpeechRecognitionError.PERMISSION_DENIED)
+        val vm = buildViewModel()
+
+        vm.startVoiceInput()
+        advanceUntilIdle()
+
+        assertEquals(0, fakeExecutor.callCount)
+        assertTrue(vm.commandFeedback.value is CommandFeedback.Message)
+    }
 }

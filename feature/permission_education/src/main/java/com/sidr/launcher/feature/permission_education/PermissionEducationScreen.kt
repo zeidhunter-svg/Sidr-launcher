@@ -22,13 +22,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sidr.launcher.domain.permission.PermissionFeature
 import com.sidr.launcher.domain.permission.PermissionStatus
 
 /**
@@ -49,18 +54,35 @@ fun PermissionEducationScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val androidPermission = state.feature.androidPermission()
+
+    // Re-check the live status whenever the screen resumes — this is what makes the Settings
+    // round-trip work for the dangerous RECORD_AUDIO case (Block T): a grant *or* a revocation done
+    // in system Settings is reflected on return (the VM reconciles, see refreshStatus()).
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshStatus()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     // The system permission dialog. For SET_WALLPAPER (a normal permission) the OS grants without
-    // showing UI; for dangerous permissions this is the real dialog. After a denial we read
+    // showing UI; for the dangerous RECORD_AUDIO this is the real dialog. After a denial we read
     // shouldShowRequestPermissionRationale to distinguish "ask again" from "permanently denied".
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        val canRequestAgain = context.findActivity()?.let {
-            ActivityCompat.shouldShowRequestPermissionRationale(it, Manifest.permission.SET_WALLPAPER)
+        val canRequestAgain = context.findActivity()?.let { activity ->
+            androidPermission?.let {
+                ActivityCompat.shouldShowRequestPermissionRationale(activity, it)
+            } ?: true
         } ?: true
         viewModel.onPermissionResult(granted = granted, canRequestAgain = canRequestAgain)
-        if (granted) context.launchWallpaperPicker()
+        // Feature-specific post-grant action (only wallpaper opens a picker; voice just enables the
+        // mic affordance back on the launcher).
+        if (granted && state.feature == PermissionFeature.WALLPAPER) context.launchWallpaperPicker()
     }
 
     Column(
@@ -90,10 +112,13 @@ fun PermissionEducationScreen(
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
-                Button(
-                    onClick = { context.launchWallpaperPicker() },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Set wallpaper") }
+                // Only wallpaper has an in-screen action; voice is used from the launcher mic.
+                if (state.feature == PermissionFeature.WALLPAPER) {
+                    Button(
+                        onClick = { context.launchWallpaperPicker() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Set wallpaper") }
+                }
             }
 
             state.status == PermissionStatus.PERMANENTLY_DENIED -> {
@@ -119,7 +144,7 @@ fun PermissionEducationScreen(
                     )
                 }
                 Button(
-                    onClick = { permissionLauncher.launch(Manifest.permission.SET_WALLPAPER) },
+                    onClick = { androidPermission?.let { permissionLauncher.launch(it) } },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text(state.rationale.ctaLabel) }
             }
@@ -142,6 +167,20 @@ fun PermissionEducationScreen(
 }
 
 // ── Android glue ────────────────────────────────────────────────────────────
+
+/**
+ * The manifest permission backing each feature, for the request contract. This mirrors the canonical
+ * map in `core/android`'s `AndroidPermissionChecker.manifestPermission`; it is duplicated here because
+ * a `feature` module must not depend on `core/android` (the screen is already the Android UI-glue
+ * layer, so the string constants are local to it). Keep the two in sync. Returns null for a feature
+ * with no live request flow.
+ */
+private fun PermissionFeature.androidPermission(): String? = when (this) {
+    PermissionFeature.WALLPAPER -> Manifest.permission.SET_WALLPAPER
+    PermissionFeature.VOICE_INPUT -> Manifest.permission.RECORD_AUDIO
+    PermissionFeature.CALENDAR_SUGGESTIONS -> Manifest.permission.READ_CALENDAR
+    PermissionFeature.LOCATION_SUGGESTIONS -> Manifest.permission.ACCESS_FINE_LOCATION
+}
 
 /** Unwraps the Activity from a (possibly wrapped) Context; null if none in the chain. */
 private fun Context.findActivity(): Activity? {

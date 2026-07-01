@@ -2373,4 +2373,96 @@ edits to `PermissionFeature.kt`/`PermissionRationale.kt`/`AndroidManifest.xml`/`
 `LocationManager`, and the calendar/location grant/deny/permanently-denied request-flow UX — alongside
 the inherited Block-T recognizer (OQ#4) and the Phase 5/6 device debt.
 
-**Next = Block V** (ONNX `TextEmbedder` impl + semantic re-rank; gated on OQ#3 — embedding model/host).
+**Subsequent work split:** the user-facing launcher surface is now closed by Block W; **Block V** (ONNX
+`TextEmbedder` impl + semantic re-rank) remains a separate model/runtime track gated on OQ#3 — not a blocker
+for shipping the current suggestions/voice surface.
+
+### ADR 2026-07-01 — Block W complete; Phase 7 user-facing close shipped, Block V stays separate
+
+**Status.** Done 2026-07-01 (Block W, W1–W7). The already-implemented **W-lite** surface was reviewed first:
+no critical architectural regressions found. The single-owner invariant holds (`LauncherViewModel` /
+`LauncherUiState.suggestions` only; no `SuggestionsViewModel`), cache-first then fresh-supersede ordering is
+implemented in the host VM, `:feature:suggestions` stays stateless/UI-only, launcher-home rendering introduces
+no `feature→feature` dependency, and suggestion taps reuse the launcher's existing launch/navigation path
+without creating a fourth engine/matcher concern. One non-blocking note remains: `aiSuggestionsEnabled` is
+sampled on VM init rather than observed live, so a dynamic toggle is reflected on the next VM/app start.
+
+**W proper delivered.**
+- `SuggestionPrecomputeWorker : CoroutineWorker @HiltWorker` in `:app` — thin shell over
+  `SuggestionEngine.refresh()`, gated fail-closed by `SuggestionPrecomputeGate`. Scheduling is periodic
+  (~24h), unique, idempotent (`enqueueUniquePeriodicWork(..., UPDATE, ...)`), and constrained with
+  `batteryNotLow` + `storageNotLow` + `deviceIdle`, **no network**. Gate-before-enqueue is explicit:
+  `aiSuggestionsEnabled == false` or `DeviceProfile.LOW_END` cancels the precompute work instead of leaving a
+  stale periodic request behind. Runtime execution also exits early under battery saver via
+  `DeviceProfileProvider.capability().batteryOk`.
+- `UsageCleanupWorker : CoroutineWorker @HiltWorker` in `:app` — weekly, unique periodic maintenance that
+  prunes stale usage-history rows through the `UsageHistoryRepository` port (`cleanupOlderThan(cutoff)`),
+  keeping Room details out of `:app`. Row-count caps on write remain intact; this is the time-based
+  complement.
+- `SuggestionsWorkScheduler` + tiny `UniquePeriodicWorkScheduler` facade — startup/boot orchestration stays
+  unit-testable without a real WorkManager instance while production still delegates directly to
+  `WorkManager`.
+- `BootCompletedReceiver` (`RECEIVE_BOOT_COMPLETED`) — best-effort warmup that re-applies the same scheduler
+  logic after reboot. `SidrLauncherApp.onCreate()` now also fire-and-forget schedules the periodic jobs on
+  `@ApplicationScope`, off the cold path.
+
+**Tests / verification added.**
+- App JVM tests cover schedule gating (`aiSuggestionsEnabled` off / `LOW_END`), stable unique-work names +
+  UPDATE policy (idempotent rerun), and the battery-saver runtime gate.
+- Data JVM coverage for `UsageHistoryRepositoryImpl.cleanupOlderThan(...)` proves only stale usage rows are
+  removed.
+- Existing launcher tests already cover the W-lite cache-restore-then-supersede ordering and suggestion-tap
+  routing, so Block W proper extended rather than duplicated those proofs.
+
+**Outcome.** Phase 7's **user-facing** scope is now closed: voice input, contextual suggestions surface,
+background pre-compute/cleanup, and boot warmup are all present. **Block V remains open by choice** as the
+separate semantic-rerank/model-host track (OQ#3), not as a dependency of the shipped launcher surface.
+
+### ADR 2026-07-01 — Block V inert runtime seam implemented; OQ#3 remains open
+
+**Status.** Code-complete as an inert seam, device/model acceptance pending. Block V is not local
+generation and does not touch `IntentMatcher` or `GenerativeAiEngine` semantics; it is only an optional
+local embedding encoder for semantic suggestion re-rank.
+
+**Delivered.**
+- `OnnxTextEmbedder : TextEmbedder` in `:data:ai-local`, mirroring `OnnxIntentClassifier`'s runtime style:
+  lazy single `Mutex`-guarded ORT session on `Dispatchers.Default`, per-call `LocalInferenceGate` re-check,
+  `LocalModelFiles` model/vocab resolution before ORT, `OperationResult.Failure` graceful degrade,
+  `AutoCloseable` + `SessionLifecycle`, and no user text in logs.
+- `ModelDownloadConfig.EMBEDDING_PENDING` with blank URL/hash and `isPinned=false`; the existing
+  half-pinned guard still rejects URL-without-hash or hash-without-URL. The NLU config remains unchanged.
+- `SemanticSuggestionRanker : SuggestionRanker` in `:data:repository`, wired as the unqualified
+  `SuggestionRanker` binding. It always computes heuristic order first and consults `TextEmbedder` only
+  when the embedding config is pinned, a typed prefix exists, the model is available, and the device gate
+  allows local inference. No model, gate-off, embedder failure, empty vectors, non-finite vectors,
+  dimension mismatch, or invalid cosine all return the heuristic order verbatim.
+- `SessionLifecycle` injection in `SidrLauncherApp` is now a Hilt `Set<SessionLifecycle>` multibinding:
+  both `OnnxIntentClassifier` and `OnnxTextEmbedder` release on `onTrimMemory(>=TRIM_MEMORY_BACKGROUND)`
+  and `onLowMemory`.
+
+**Explicitly not solved.** OQ#3 remains unresolved. No production embedding model, hosting URL, SHA-256,
+vocab asset, or final ONNX output contract was guessed or pinned. `EMBEDDING_PENDING.isPinned == false`
+keeps the semantic layer inert in shipping builds, so heuristic ranking remains the baseline.
+
+**Tests / verification.** JVM coverage added for semantic parity (pending model, gate-off, missing
+availability, embedder failure, empty/invalid/dimension-mismatched vectors), positive eligible re-rank,
+embedder gate/missing-file graceful failure, `ModelDownloadConfig` pending/half-pinned guard, and lifecycle
+set release. `./gradlew testDebugUnitTest` and `./gradlew assembleDebug` are the required green checks.
+
+**Device-pending acceptance.** Once OQ#3 closes: real embedding model load on SM-A325F, `<150ms`
+MID_RANGE embedding/re-rank measurement, and memory/co-residency check with the NLU session. If measured
+combined footprint breaches the accepted budget, revisit the frozen-forward single-resident arbiter.
+
+**Follow-up debt before making OQ#3 real.**
+- `SemanticSuggestionRanker` currently bridges the synchronous `SuggestionRanker` port to suspend
+  `TextEmbedder` with `runBlocking`. This is acceptable only while `EMBEDDING_PENDING.isPinned == false`
+  keeps the path inert; before pinning a real embedding model, revisit the suspend/background boundary so
+  semantic ranking cannot block an inappropriate caller thread.
+- Production `SuggestionEngineImpl` currently builds `SuggestionContext` without `typedPrefix`. The semantic
+  path therefore will not activate for live typed-prefix UX until a separate owner/boundary decision feeds
+  the transient prefix into refresh/ranking without persisting sensitive raw text.
+- Embedding provisioning is config-only/inert. Closing OQ#3 needs either generalized multi-model
+  provisioning or a separate embedding model manager/scheduler; do not silently reuse the NLU-only
+  `ModelManager` wiring as if it handled both artifacts.
+- Device acceptance remains pending: real embedding model load, `<150ms` MID_RANGE measurement, and
+  memory/co-residency check with the NLU session.

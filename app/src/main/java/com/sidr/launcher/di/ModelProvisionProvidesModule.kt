@@ -45,8 +45,11 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object ModelProvisionProvidesModule {
 
-    /** Bundled tokenizer vocab (§5.D): static `assets/nlu/vocab.txt`, not downloaded. */
-    private const val VOCAB_ASSET_PATH = "nlu/vocab.txt"
+    /** Bundled NLU tokenizer vocab (§5.D): static `assets/nlu/vocab.txt`, not downloaded. */
+    private const val NLU_VOCAB_ASSET_PATH = "nlu/vocab.txt"
+
+    /** Future Block V embedding vocab. OQ#3-pending, so absence degrades to heuristic ranking. */
+    private const val EMBEDDING_VOCAB_ASSET_PATH = "embedding/vocab.txt"
 
     @Provides
     @Singleton
@@ -68,9 +71,14 @@ object ModelProvisionProvidesModule {
         // App-internal, not-backed-up storage: the model is re-downloadable, so it must not bloat
         // cloud backup or restore stale onto a new device.
         val rootDir = context.noBackupFilesDir
-        val vocabOpener: (ModelId) -> InputStream? = { _ ->
+        val vocabOpener: (ModelId) -> InputStream? = { modelId ->
+            val path = when (modelId) {
+                ModelDownloadConfig.INTENT_NLU_PENDING.modelId -> NLU_VOCAB_ASSET_PATH
+                ModelDownloadConfig.EMBEDDING_PENDING.modelId -> EMBEDDING_VOCAB_ASSET_PATH
+                else -> null
+            }
             try {
-                context.assets.open(VOCAB_ASSET_PATH)
+                path?.let { context.assets.open(it) }
             } catch (e: IOException) {
                 null // asset absent (vocab is device/training-pending alongside the model) → degrade
             }
@@ -102,6 +110,11 @@ object ModelProvisionProvidesModule {
     @Provides
     @Singleton
     fun provideModelDownloadConfig(): ModelDownloadConfig = ModelDownloadConfig.INTENT_NLU_PENDING
+
+    @Provides
+    @Singleton
+    @EmbeddingModelConfig
+    fun provideEmbeddingModelDownloadConfig(): ModelDownloadConfig = ModelDownloadConfig.EMBEDDING_PENDING
 
     @Provides
     @Singleton

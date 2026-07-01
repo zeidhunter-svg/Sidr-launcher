@@ -2,20 +2,32 @@ package com.sidr.launcher.feature.launcher
 
 import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
+import com.sidr.launcher.core.common.navigation.NavigationEvent
+import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import androidx.lifecycle.SavedStateHandle
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
+import com.sidr.launcher.core.testing.FakeSuggestionEngine
+import com.sidr.launcher.core.testing.FakeSuggestionsCacheRepository
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeIntentMatcher
 import com.sidr.launcher.core.testing.FakeSpeechInputSource
 import com.sidr.launcher.core.testing.FakeUsageHistoryRepository
+import com.sidr.launcher.domain.preferences.CachedSuggestion
 import com.sidr.launcher.domain.voice.SpeechRecognitionError
 import com.sidr.launcher.domain.voice.SpeechRecognitionState
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.preferences.FeatureFlags
+import com.sidr.launcher.domain.preferences.SuggestionsCacheRepository
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.suggestions.Suggestion
+import com.sidr.launcher.domain.suggestions.SuggestionEngine
+import com.sidr.launcher.domain.suggestions.SuggestionSource
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import com.sidr.launcher.domain.history.AppUsageRecord
 import com.sidr.launcher.domain.intent.ActionExecutionResult
@@ -26,6 +38,7 @@ import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.result.OperationError
+import kotlinx.coroutines.async
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -85,12 +98,16 @@ class LauncherViewModelTest {
     private fun buildViewModel(
         flagRepo: FeatureFlagRepository = fakeFlagRepo,
         savedStateHandle: SavedStateHandle = SavedStateHandle(),
+        suggestionEngine: SuggestionEngine = FakeSuggestionEngine(),
+        suggestionsCacheRepository: SuggestionsCacheRepository = FakeSuggestionsCacheRepository(),
     ) = LauncherViewModel(
         installedAppsRepository = fakeRepo,
         handleUserCommand = useCase,
         actionExecutor = fakeExecutor,
         usageHistoryRepository = fakeUsageRepo,
         featureFlagRepository = flagRepo,
+        suggestionEngine = suggestionEngine,
+        suggestionsCacheRepository = suggestionsCacheRepository,
         speechInputSource = fakeSpeech,
         ioDispatcher = testDispatcher,
         savedStateHandle = savedStateHandle,
@@ -264,6 +281,8 @@ class LauncherViewModelTest {
             actionExecutor = fakeExecutor,
             usageHistoryRepository = fakeUsageRepo,
             featureFlagRepository = fakeFlagRepo,
+            suggestionEngine = FakeSuggestionEngine(),
+            suggestionsCacheRepository = FakeSuggestionsCacheRepository(),
             speechInputSource = fakeSpeech,
             ioDispatcher = testDispatcher,
             savedStateHandle = SavedStateHandle(),
@@ -459,6 +478,101 @@ class LauncherViewModelTest {
         assertEquals(2, (feedback as CommandFeedback.Ambiguous).candidates.size)
     }
 
+    // ── Suggestions (Phase 7, Block W-lite) ───────────────────────────────
+
+    @Test
+    fun `cached suggestions first-paint then fresh engine result supersedes without merge`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp("com.cached", "Cached App"),
+            InstalledApp("com.fresh", "Fresh App"),
+        )
+        val flagRepo = FakeFeatureFlagRepository(
+            FeatureFlags(aiSuggestionsEnabled = true, usageHistoryEnabled = true),
+        )
+        val cacheRepo = FakeSuggestionsCacheRepository(
+            initial = listOf(CachedSuggestion(label = "com.cached", actionId = "com.cached")),
+        )
+        val freshSuggestions = listOf(
+            Suggestion(
+                label = "com.fresh",
+                actionId = "com.fresh",
+                source = SuggestionSource.RECENT_USAGE,
+                score = 1.0,
+            ),
+        )
+        val gatedEngine = object : SuggestionEngine {
+            private val state = MutableStateFlow<List<Suggestion>>(emptyList())
+
+            var refreshCount: Int = 0
+                private set
+
+            val refreshStarted = CompletableDeferred<Unit>()
+            val releaseRefresh = CompletableDeferred<Unit>()
+
+            override fun suggestions(): Flow<List<Suggestion>> = state.asStateFlow()
+
+            override suspend fun refresh(): OperationResult<List<Suggestion>> {
+                refreshCount++
+                refreshStarted.complete(Unit)
+                releaseRefresh.await()
+                state.value = freshSuggestions
+                return OperationResult.Success(freshSuggestions)
+            }
+        }
+        val vm = buildViewModel(
+            flagRepo = flagRepo,
+            suggestionEngine = gatedEngine,
+            suggestionsCacheRepository = cacheRepo,
+        )
+
+        gatedEngine.refreshStarted.await()
+        advanceUntilIdle()
+
+        val cachedState = vm.uiState.value as UiState.Success
+        assertEquals(listOf("Cached App"), cachedState.data.suggestions.map { it.label })
+
+        gatedEngine.releaseRefresh.complete(Unit)
+        advanceUntilIdle()
+
+        val freshState = vm.uiState.value as UiState.Success
+        assertEquals(1, gatedEngine.refreshCount)
+        assertEquals(listOf("Fresh App"), freshState.data.suggestions.map { it.label })
+        assertEquals(listOf("com.fresh"), freshState.data.suggestions.map { it.actionId })
+    }
+
+    @Test
+    fun `ai suggestions flag off leaves suggestions empty and skips refresh`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(InstalledApp("com.example.one", "One"))
+        val cacheRepo = FakeSuggestionsCacheRepository(
+            initial = listOf(CachedSuggestion(label = "Stale", actionId = "com.stale")),
+        )
+        val suggestionEngine = FakeSuggestionEngine().apply {
+            refreshResult = OperationResult.Success(
+                listOf(
+                    Suggestion(
+                        label = "Fresh",
+                        actionId = "com.fresh",
+                        source = SuggestionSource.RECENT_USAGE,
+                        score = 1.0,
+                    ),
+                ),
+            )
+        }
+        val vm = buildViewModel(
+            flagRepo = FakeFeatureFlagRepository(
+                FeatureFlags(aiSuggestionsEnabled = false, usageHistoryEnabled = true),
+            ),
+            suggestionEngine = suggestionEngine,
+            suggestionsCacheRepository = cacheRepo,
+        )
+
+        advanceUntilIdle()
+
+        val state = vm.uiState.value as UiState.Success
+        assertTrue(state.data.suggestions.isEmpty())
+        assertEquals(0, suggestionEngine.refreshCount)
+    }
+
     // ── Tap-to-launch goes straight through the executor ───────────────────
 
     @Test
@@ -485,6 +599,63 @@ class LauncherViewModelTest {
         val feedback = vm.commandFeedback.value
         assertTrue(feedback is CommandFeedback.Message)
         assertEquals("Couldn't open that app.", (feedback as CommandFeedback.Message).text)
+    }
+
+    @Test
+    fun `package suggestion tap reuses app-click launch path`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp(
+                packageName = "org.telegram.messenger",
+                label = "Telegram",
+                activityName = "org.telegram.messenger.MainActivity",
+            ),
+        )
+        val vm = buildViewModel(
+            flagRepo = FakeFeatureFlagRepository(
+                FeatureFlags(aiSuggestionsEnabled = true, usageHistoryEnabled = true),
+            ),
+        )
+        advanceUntilIdle()
+
+        vm.onSuggestionClicked(
+            Suggestion(
+                label = "Telegram",
+                actionId = "org.telegram.messenger",
+                source = SuggestionSource.RECENT_USAGE,
+                score = 1.0,
+            ),
+        )
+        advanceUntilIdle()
+
+        val action = fakeExecutor.executedActions.single() as ExecutableAction.LaunchAppAction
+        assertEquals("org.telegram.messenger", action.packageName)
+        assertEquals("org.telegram.messenger.MainActivity", action.activityName)
+    }
+
+    @Test
+    fun `route suggestion tap emits existing navigation event`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(InstalledApp("com.example.one", "One"))
+        val vm = buildViewModel(
+            flagRepo = FakeFeatureFlagRepository(
+                FeatureFlags(aiSuggestionsEnabled = true, usageHistoryEnabled = true),
+            ),
+        )
+        advanceUntilIdle()
+        val eventDeferred = async { vm.navigationEvents.first() }
+
+        vm.onSuggestionClicked(
+            Suggestion(
+                label = "Assistant",
+                actionId = Routes.Assistant.ROUTE,
+                source = SuggestionSource.TIME_OF_DAY,
+                score = 1.0,
+            ),
+        )
+
+        assertEquals(
+            NavigationEvent.NavigateTo(Routes.Assistant.ROUTE),
+            eventDeferred.await(),
+        )
     }
 
     // ── Usage-aware grid sort (F6) ─────────────────────────────────────────

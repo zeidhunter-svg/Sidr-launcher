@@ -81,5 +81,9 @@ dependencies {
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.android)
 
+    testImplementation(project(":core:testing"))
+    testImplementation(libs.junit4)
+    testImplementation(libs.coroutines.test)
+
     debugImplementation(libs.compose.ui.tooling)
 }

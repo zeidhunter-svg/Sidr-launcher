@@ -41,6 +41,18 @@ class UsageHistoryRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun cleanupOlderThan(cutoffEpochMs: Long): OperationResult<Unit> =
+        withContext(ioDispatcher) {
+            try {
+                dao.deleteOlderThan(cutoffEpochMs)
+                OperationResult.Success(Unit)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                OperationResult.Failure(OperationError.UnknownError(reason = "db_usage_cleanup_failed"))
+            }
+        }
+
     private companion object {
         const val MAX_USAGE_ROWS = 200
     }

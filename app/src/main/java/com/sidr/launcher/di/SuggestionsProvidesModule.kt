@@ -1,11 +1,16 @@
 package com.sidr.launcher.di
 
 import com.sidr.launcher.core.common.di.IoDispatcher
+import com.sidr.launcher.data.ailocal.provision.ModelDownloadConfig
 import com.sidr.launcher.data.repository.suggestions.CalendarSuggestionProvider
 import com.sidr.launcher.data.repository.suggestions.LocationSuggestionProvider
+import com.sidr.launcher.data.repository.suggestions.SemanticSuggestionRanker
 import com.sidr.launcher.data.repository.suggestions.SuggestionEngineImpl
 import com.sidr.launcher.data.repository.suggestions.TimeOfDaySuggestionProvider
 import com.sidr.launcher.data.repository.suggestions.UsageSuggestionProvider
+import com.sidr.launcher.domain.ai.local.ModelAvailabilityRepository
+import com.sidr.launcher.domain.ai.local.TextEmbedder
+import com.sidr.launcher.domain.device.DeviceProfileProvider
 import com.sidr.launcher.domain.history.SuggestionRankingRepository
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.preferences.SuggestionsCacheRepository
@@ -39,7 +44,19 @@ object SuggestionsProvidesModule {
 
     @Provides
     @Singleton
-    fun provideSuggestionRanker(): SuggestionRanker = HeuristicSuggestionRanker()
+    fun provideSuggestionRanker(
+        textEmbedder: TextEmbedder,
+        deviceProfileProvider: DeviceProfileProvider,
+        modelAvailabilityRepository: ModelAvailabilityRepository,
+        @EmbeddingModelConfig embeddingConfig: ModelDownloadConfig,
+    ): SuggestionRanker = SemanticSuggestionRanker(
+        heuristic = HeuristicSuggestionRanker(),
+        textEmbedder = textEmbedder,
+        deviceProfileProvider = deviceProfileProvider,
+        modelAvailabilityRepository = modelAvailabilityRepository,
+        embeddingModelId = embeddingConfig.modelId,
+        embeddingModelPinned = embeddingConfig.isPinned,
+    )
 
     @Provides
     @Singleton

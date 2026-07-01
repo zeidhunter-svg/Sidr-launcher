@@ -13,6 +13,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -94,5 +95,19 @@ class UsageHistoryRepositoryImplTest {
         assertEquals(200, dao.count())
         assertNull("oldest row (timestamp=0) should be pruned", dao.getByPackageName("pkg0"))
         assertNotNull("newest row must survive", dao.getByPackageName("pkg_new"))
+    }
+
+    @Test
+    fun `cleanupOlderThan deletes only stale usage rows`() = runTest {
+        dao.insert(AppUsageEntity("old", lastUsedEpochMs = 999L, launchCount = 1))
+        dao.insert(AppUsageEntity("fresh", lastUsedEpochMs = 1_000L, launchCount = 2))
+        dao.insert(AppUsageEntity("newer", lastUsedEpochMs = 2_000L, launchCount = 3))
+
+        val result = repo.cleanupOlderThan(1_000L)
+
+        assertTrue(result is com.sidr.launcher.domain.result.OperationResult.Success)
+        assertNull("rows strictly older than the cutoff should be removed", dao.getByPackageName("old"))
+        assertNotNull("row exactly at cutoff should remain", dao.getByPackageName("fresh"))
+        assertNotNull("newer row should remain", dao.getByPackageName("newer"))
     }
 }

@@ -11,6 +11,7 @@ import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.domain.history.AppUsageRecord
 import com.sidr.launcher.domain.history.UsageHistoryRepository
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
+import com.sidr.launcher.domain.preferences.SuggestionsCacheRepository
 import com.sidr.launcher.domain.intent.ActionExecutionResult
 import com.sidr.launcher.domain.intent.ActionExecutor
 import com.sidr.launcher.domain.intent.CommandOutcome
@@ -21,12 +22,16 @@ import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.suggestions.Suggestion
+import com.sidr.launcher.domain.suggestions.SuggestionEngine
+import com.sidr.launcher.domain.suggestions.SuggestionSource
 import com.sidr.launcher.domain.voice.SpeechInputSource
 import com.sidr.launcher.domain.voice.SpeechRecognitionError
 import com.sidr.launcher.domain.voice.SpeechRecognitionState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -35,6 +40,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -49,6 +55,8 @@ class LauncherViewModel @Inject constructor(
     // Domain interfaces — injected from :app via Hilt. No feature→data edge.
     private val usageHistoryRepository: UsageHistoryRepository,
     private val featureFlagRepository: FeatureFlagRepository,
+    private val suggestionEngine: SuggestionEngine,
+    private val suggestionsCacheRepository: SuggestionsCacheRepository,
     // Voice input modality (Block T). Produces the same text the keyboard does; rides the existing
     // command path. The launcher core never depends on it — when unavailable the mic is hidden.
     private val speechInputSource: SpeechInputSource,
@@ -73,13 +81,16 @@ class LauncherViewModel @Inject constructor(
     // ── App-list state ─────────────────────────────────────────────────────
     // Raw load result; null = loading not yet complete.
     private val _rawAppsResult = MutableStateFlow<OperationResult<List<InstalledApp>>?>(null)
+    private val _suggestions = MutableStateFlow<List<Suggestion>>(emptyList())
 
     // Derived state: combines the loaded app list with live usage records so the grid
-    // re-sorts automatically whenever a launch is recorded (F6 demo slice).
-    val uiState: StateFlow<UiState<LauncherUiState>> = _rawAppsResult
-        .combine(
-            usageHistoryRepository.getUsageRecords().catch { emit(emptyList()) }
-        ) { appsResult, usageRecords ->
+    // re-sorts automatically whenever a launch is recorded (F6 demo slice), and surfaces the
+    // launcher-owned suggestion row state (Phase 7, Block W-lite).
+    val uiState: StateFlow<UiState<LauncherUiState>> = combine(
+        _rawAppsResult,
+        usageHistoryRepository.getUsageRecords().catch { emit(emptyList()) },
+        _suggestions,
+    ) { appsResult, usageRecords, suggestions ->
             when (appsResult) {
                 // null = not loaded yet (initial or mid-retry) → Loading, so a retry visibly
                 // flashes Loading → content rather than freezing on the stale error.
@@ -89,7 +100,12 @@ class LauncherViewModel @Inject constructor(
                 is OperationResult.Success -> {
                     val sorted = sortByUsage(appsResult.value, usageRecords)
                     if (sorted.isEmpty()) UiState.Empty
-                    else UiState.Success(LauncherUiState(apps = sorted))
+                    else UiState.Success(
+                        LauncherUiState(
+                            apps = sorted,
+                            suggestions = resolveSuggestionLabels(suggestions, sorted),
+                        ),
+                    )
                 }
             }
         }
@@ -125,6 +141,7 @@ class LauncherViewModel @Inject constructor(
 
     init {
         loadApps()
+        restoreAndRefreshSuggestions()
     }
 
     private fun loadApps() {
@@ -161,28 +178,31 @@ class LauncherViewModel @Inject constructor(
         }
     }
 
+    fun onSuggestionClicked(suggestion: Suggestion) {
+        val app = (uiState.value as? UiState.Success)
+            ?.data
+            ?.apps
+            ?.firstOrNull { it.packageName == suggestion.actionId }
+        when {
+            app != null -> onAppClicked(app)
+            suggestion.actionId.isKnownRoute() -> {
+                _commandFeedback.value = CommandFeedback.None
+                navigateTo(suggestion.actionId)
+            }
+            else -> launchApp(
+                packageName = suggestion.actionId,
+                activityName = null,
+            )
+        }
+    }
+
     /** Tap-to-launch from the grid (or from an ambiguity suggestion): the app is already known, */
     /** so launch it directly through the executor — no matching needed. Does not touch input. */
     fun onAppClicked(app: InstalledApp) {
-        viewModelScope.launch {
-            val action = ExecutableAction.LaunchAppAction(
-                packageName = app.packageName,
-                activityName = app.activityName,
-            )
-            val result = actionExecutor.execute(action)
-            _commandFeedback.value = when (result) {
-                is ActionExecutionResult.Success -> CommandFeedback.None
-                is ActionExecutionResult.Failure -> CommandFeedback.Message(result.safeMessage)
-                is ActionExecutionResult.Unsupported -> CommandFeedback.Message(GENERIC_ERROR)
-            }
-            // Record usage only on a successful launch — soft-wrapped, never blocks the launch.
-            // Command-executed launches (CommandOutcome.Executed) are not tracked here because
-            // the package name is not available at the ViewModel boundary; a future slice can
-            // extend HandleUserCommandUseCase to carry it in the outcome.
-            if (result is ActionExecutionResult.Success) {
-                recordUsage(app.packageName)
-            }
-        }
+        launchApp(
+            packageName = app.packageName,
+            activityName = app.activityName,
+        )
     }
 
     fun dismissFeedback() {
@@ -282,6 +302,43 @@ class LauncherViewModel @Inject constructor(
         }
     }
 
+    private fun restoreAndRefreshSuggestions() {
+        viewModelScope.launch(ioDispatcher) {
+            try {
+                if (!featureFlagRepository.getFlags().first().aiSuggestionsEnabled) {
+                    _suggestions.value = emptyList()
+                    return@launch
+                }
+
+                _suggestions.value = suggestionsCacheRepository.getCachedSuggestions().first().map { cached ->
+                    // The cache stores only the display-safe repaint fields; the synthetic source/score are
+                    // placeholders until the fresh engine result supersedes this first paint.
+                    Suggestion(
+                        label = cached.label,
+                        actionId = cached.actionId,
+                        source = SuggestionSource.RECENT_USAGE,
+                        score = 0.0,
+                    )
+                }
+
+                launch(start = CoroutineStart.UNDISPATCHED) {
+                    suggestionEngine
+                        .suggestions()
+                        .drop(1)
+                        .collect { fresh ->
+                            _suggestions.value = fresh
+                        }
+                }
+
+                suggestionEngine.refresh()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                _suggestions.value = emptyList()
+            }
+        }
+    }
+
     // ── Usage-aware grid sort ───────────────────────────────────────────────
     // Apps with usage history rise to the top (by launchCount then lastUsedEpochMs).
     // Apps without history keep their original relative order as the fallback.
@@ -297,6 +354,43 @@ class LauncherViewModel @Inject constructor(
                 .thenByDescending { byPackage[it.packageName]!!.lastUsedEpochMs }
         )
         return sorted + withoutHistory
+    }
+
+    private fun resolveSuggestionLabels(
+        suggestions: List<Suggestion>,
+        apps: List<InstalledApp>,
+    ): List<Suggestion> {
+        if (suggestions.isEmpty() || apps.isEmpty()) return suggestions
+        val appsByPackage = apps.associateBy { it.packageName }
+        return suggestions.map { suggestion ->
+            val app = appsByPackage[suggestion.actionId] ?: return@map suggestion
+            suggestion.copy(label = app.label)
+        }
+    }
+
+    private fun launchApp(
+        packageName: String,
+        activityName: String?,
+    ) {
+        viewModelScope.launch {
+            val action = ExecutableAction.LaunchAppAction(
+                packageName = packageName,
+                activityName = activityName,
+            )
+            val result = actionExecutor.execute(action)
+            _commandFeedback.value = when (result) {
+                is ActionExecutionResult.Success -> CommandFeedback.None
+                is ActionExecutionResult.Failure -> CommandFeedback.Message(result.safeMessage)
+                is ActionExecutionResult.Unsupported -> CommandFeedback.Message(GENERIC_ERROR)
+            }
+            // Record usage only on a successful launch — soft-wrapped, never blocks the launch.
+            // Command-executed launches (CommandOutcome.Executed) are not tracked here because
+            // the package name is not available at the ViewModel boundary; a future slice can
+            // extend HandleUserCommandUseCase to carry it in the outcome.
+            if (result is ActionExecutionResult.Success) {
+                recordUsage(packageName)
+            }
+        }
     }
 
     private suspend fun recordUsage(packageName: String) {
@@ -340,6 +434,13 @@ class LauncherViewModel @Inject constructor(
         is OperationError.PermissionDenied -> false
         is OperationError.DeviceNotCapable -> false
     }
+
+    private fun String.isKnownRoute(): Boolean =
+        this == Routes.Launcher.ROUTE ||
+            this == Routes.Assistant.ROUTE ||
+            this == Routes.Settings.ROUTE ||
+            this == Routes.PermissionEducation.ROUTE ||
+            this.startsWith("${Routes.PermissionEducation.ROUTE}?")
 
     private companion object {
         const val GENERIC_ERROR = "Something went wrong. Please try again."

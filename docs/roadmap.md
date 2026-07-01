@@ -64,12 +64,12 @@
 
 ## Phase 7: Voice and contextual suggestions
 
-**Status: plan drafted + forks decided (Blocks S → W, 2026-06-29); NO block started. First execution
-round gated to Block S only.** Voice = a `SpeechInputSource` input *modality* feeding the existing intent
+**Status: user-facing close delivered (Blocks S + T + U + W, 2026-07-01).** Voice = a `SpeechInputSource` input *modality* feeding the existing intent
 pipeline (on-device preferred, never a new generative path, never our-backend audio); suggestions = a
 third `SuggestionEngine` port (offline time + usage always-on; calendar/location opt-in +
-degrade-to-nothing). Surface single-owner = the host `LauncherViewModel`/`LauncherUiState.suggestions`.
-OQ#3 (embedding model + host) gates Block V; OQ#4 (on-device STT availability) gates Block T device
+degrade-to-nothing). Surface single-owner = the host `LauncherViewModel`/`LauncherUiState.suggestions`,
+now shipping with cache-first paint and background WorkManager pre-compute/cleanup. OQ#3 (embedding model +
+host) keeps Block V as a separate model/runtime track; OQ#4 (on-device STT availability) gates Block T device
 acceptance. Plan: [ai-context/phase-7-voice-suggestions-plan.md](../ai-context/phase-7-voice-suggestions-plan.md).
 
 - Add `SpeechInputSource` abstraction over Android `SpeechRecognizer`.
@@ -77,6 +77,7 @@ acceptance. Plan: [ai-context/phase-7-voice-suggestions-plan.md](../ai-context/p
 - Add context-aware suggestion pipeline.
 - Keep suggestions useful without sensitive or unavailable data.
 - Add user controls and permission education for calendar, location, audio, and boot warmup.
+- Keep semantic re-rank optional; Block V must not block the shipped user surface.
 
 ## Phase 8: Optional advanced automation
 

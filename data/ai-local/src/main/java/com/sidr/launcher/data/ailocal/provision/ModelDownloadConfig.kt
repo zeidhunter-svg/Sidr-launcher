@@ -1,9 +1,10 @@
 package com.sidr.launcher.data.ailocal.provision
 
 import com.sidr.launcher.domain.ai.local.ModelId
+import com.sidr.launcher.domain.ai.local.TextEmbedder
 
 /**
- * The single device/release-pending seam for the local-NLU model download (Block Q, §0 / OQ#2).
+ * The device/release-pending seam for local model downloads (Block Q / Phase 7 Block V).
  *
  * A pinned SHA-256 is meaningless without a pinned artifact, and Phase 5 deliberately chose **no
  * backend** (BYOK). Open Question #2 — model download source / hosting — is **NOT resolved** at
@@ -11,7 +12,7 @@ import com.sidr.launcher.domain.ai.local.ModelId
  * availability flips, DI, worker shell) is built and JVM-tested against fakes this block; only the
  * live download stays inert until [url] + [expectedSha256] are pinned.
  *
- * [isPinned] is `false` while the placeholders are blank, so [ModelManager] never schedules the
+ * [isPinned] is `false` while the placeholders are blank, so [ModelManager] never schedules the NLU
  * worker and [ModelProvisioner] reports `NotConfigured` — the seam is genuinely inert, not pointing
  * at any real host. Tests inject a configured instance (a fake URL + a hash computed over the test
  * bytes) to exercise the full happy path.
@@ -48,6 +49,19 @@ data class ModelDownloadConfig(
          */
         val INTENT_NLU_PENDING = ModelDownloadConfig(
             modelId = ModelId("intent-nlu-v1"),
+            url = "",
+            expectedSha256 = "",
+        )
+
+        /**
+         * Optional semantic suggestion embedding model (Phase 7 Block V / OQ#3).
+         *
+         * TODO(OQ#3): pin the real embedding artifact URL, SHA-256, vocab asset, and ONNX contract.
+         * Until then [isPinned] is false, the semantic ranker does not consult [TextEmbedder], and
+         * heuristic suggestion order remains the shipping baseline.
+         */
+        val EMBEDDING_PENDING = ModelDownloadConfig(
+            modelId = ModelId("suggestion-embedding-v1"),
             url = "",
             expectedSha256 = "",
         )

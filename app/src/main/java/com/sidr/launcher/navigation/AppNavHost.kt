@@ -19,6 +19,7 @@ import com.sidr.launcher.feature.assistant.AssistantViewModel
 import com.sidr.launcher.feature.launcher.LauncherScreen
 import com.sidr.launcher.feature.launcher.LauncherViewModel
 import com.sidr.launcher.feature.permission_education.PermissionEducationScreen
+import com.sidr.launcher.feature.suggestions.SuggestionsRow
 
 private const val TAG = "AppNavHost"
 
@@ -75,7 +76,15 @@ fun AppNavHost(
                     handleNavigationEvent(navController, event)
                 }
             }
-            LauncherScreen(viewModel = viewModel)
+            LauncherScreen(
+                viewModel = viewModel,
+                suggestionsContent = { suggestions, onSuggestionTap ->
+                    SuggestionsRow(
+                        suggestions = suggestions,
+                        onSuggestionTap = onSuggestionTap,
+                    )
+                },
+            )
         }
 
         composable(Routes.Assistant.ROUTE) {

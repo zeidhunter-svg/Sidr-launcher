@@ -13,6 +13,7 @@ class ModelDownloadConfigTest {
     @Test
     fun `both-blank config is inert (not pinned)`() {
         assertFalse(ModelDownloadConfig.INTENT_NLU_PENDING.isPinned)
+        assertFalse(ModelDownloadConfig.EMBEDDING_PENDING.isPinned)
         assertFalse(ModelDownloadConfig(modelId, url = "", expectedSha256 = "").isPinned)
     }
 
@@ -29,5 +30,10 @@ class ModelDownloadConfigTest {
         assertThrows(IllegalArgumentException::class.java) {
             ModelDownloadConfig(modelId, url = "", expectedSha256 = "a".repeat(64))
         }
+    }
+
+    @Test
+    fun `pending configs have distinct model ids`() {
+        assertTrue(ModelDownloadConfig.INTENT_NLU_PENDING.modelId != ModelDownloadConfig.EMBEDDING_PENDING.modelId)
     }
 }

@@ -77,7 +77,7 @@ data/ai-cloud/                Ktor cloud AI client and streaming adapter
 data/ai-local/                ONNX NLU, embeddings, local inference (interface-gated, ONNX isolated)
 feature/launcher/             Home screen, app grid, command input, launcher interactions
 feature/assistant/            Text/voice AI command UI and SpeechInputSource abstraction
-feature/suggestions/          Context-aware suggestions UI
+feature/suggestions/          Stateless context-aware suggestions row (UI only; host VM owns state)
 feature/settings/             Settings UI (planned; inline placeholder until created)
 feature/permission_education/ Permission education UI (built, Block G — real destination + request flow)
 build-logic/                  Gradle convention plugins (planned)
@@ -233,27 +233,27 @@ Rules:
 - Error states must be recoverable without app restart — `OperationError → UiError →
   UiState.Error(retryable)` + a `retry()` ViewModel method (Block H, H2).
 
-`LauncherViewModel` state shape — **the single composite below is aspirational, not the current
-code.** As of Phase 4 the ViewModel exposes **three independent `StateFlow`s** (single-source-per-concern,
-not one source holding several states):
+`LauncherViewModel` state shape — the launcher exposes **three independent `StateFlow`s**
+(single-source-per-concern, not one source holding several states):
 
 ```kotlin
-val uiState: StateFlow<UiState<LauncherUiState>>   // LauncherUiState(apps); Loading/Empty/Error/Success
+val uiState: StateFlow<UiState<LauncherUiState>>   // LauncherUiState(apps, suggestions); Loading/Empty/Error/Success
 val commandInput: StateFlow<String>                // backed by SavedStateHandle (H3 process-death restore)
 val commandFeedback: StateFlow<CommandFeedback>    // transient last-command result (ephemeral, not restored)
 // + navigationEvents: Flow<NavigationEvent> via a Channel
 
-data class LauncherUiState(val apps: List<InstalledApp>)
+data class LauncherUiState(
+    val apps: List<InstalledApp>,
+    val suggestions: List<Suggestion>,
+)
 ```
 
-`suggestions` (Ph7 context pipeline) is **unbuilt** — `LauncherUiState` grows when that phase lands.
 Generative AI (Ph5) is **built and lives on the assistant screen**, NOT folded into `LauncherUiState`
 (`aiState` was never added): `AssistantViewModel` holds its own `StateFlow<AssistantUiState>` with
 `reply`, `status` (`Streaming`/`Done`/`Error`), and `form` (provider config); `LauncherViewModel`
-is not touched by the generative pipeline. The `SuggestionsCacheRepository` (Block E)
-is the future cold-start repaint source; its content-restore activates with the Ph7 suggestions surface
-(reconciliation rule: SavedStateHandle owns transient input/route, the DataStore cache owns content
-first-paint, a fresh load supersedes the cached repaint — never merged).
+is not touched by the generative pipeline. `suggestions` is now built and stays single-owner on the
+host `LauncherViewModel`: first paint comes from `SuggestionsCacheRepository` (display cache), then a
+fresh `SuggestionEngine` result supersedes the cached repaint — never merged.
 
 ## Launcher responsibilities
 
@@ -291,12 +291,12 @@ rationale with **no** system dialog; the dialog is launched only on a feature tr
 (`AndroidPermissionChecker` impl in `core/android`, over `checkSelfPermission`). The "dismissed /
 don't ask again" flag is **per-feature** via `PermissionPrefsRepository` over DataStore (key
 `perm_dismissed_<feature>`) — not a single global flag, so a denial disables exactly one feature.
-Phase 4 wires a live `SET_WALLPAPER` trigger (normal permission); `RECORD_AUDIO`/`READ_CALENDAR`/
-`ACCESS_FINE_LOCATION` have dormant education-only entries (request flow lands in their phase);
-`BIND_ACCESSIBILITY_SERVICE` is **neither requested nor educated** (deferred to Phase 8). Note:
-`PERMANENTLY_DENIED` is derivable only from the request callback (`shouldShowRequestPermissionRationale`),
-not from `checkSelfPermission`; `refreshStatus()` is therefore upgrade-only (Block H, H-b) — a partial
-fix revisited when the first dangerous permission (`RECORD_AUDIO`, Ph7) lands.
+Phase 4 wired the live `SET_WALLPAPER` trigger; Phase 7 then activated the dangerous-permission request
+flows for `RECORD_AUDIO`, `READ_CALENDAR`, and `ACCESS_FINE_LOCATION` through the same education surface.
+`RECEIVE_BOOT_COMPLETED` is a normal best-effort warmup permission (no dialog). `BIND_ACCESSIBILITY_SERVICE`
+is **neither requested nor educated** (deferred to Phase 8). Note: `PERMANENTLY_DENIED` is derivable only
+from the request callback (`shouldShowRequestPermissionRationale`), not from `checkSelfPermission`; the
+Phase-7 `refreshStatus()` work discharged the original dangerous-permission debt for these live flows.
 
 ## Data boundaries
 
@@ -334,7 +334,8 @@ Rules:
 - Sensitive data is **excluded from persistence entirely** in Phase 4. Secret storage is deferred to
   Phase 5 (Fork 1) — `EncryptedSharedPreferences` is deprecated and not used. Intent-match history
   redacts arbitrary-content match types (SEARCH/UNKNOWN store a placeholder, never the query — Block F).
-- Retention is enforced in the repository on write (row-count caps; WorkManager cleanup is frozen to Ph6/9).
+- Retention is enforced in the repository on write (row-count caps) and complemented by periodic
+  WorkManager cleanup for stale usage-history rows.
 
 ## Background processing
 
@@ -346,7 +347,9 @@ Rules:
 
 Rules:
 
-- No background work on `LOW_END` by default.
+- No background suggestion pre-compute on `LOW_END` by default.
+- Suggestion pre-compute is gated by `aiSuggestionsEnabled`, scheduled as unique periodic work, and
+  cancelled fail-closed when the gate is shut.
 - Workers must respect battery saver mode.
 - Workers must be idempotent and cancellable.
 - Foreground services are not used unless strictly required.
@@ -413,4 +416,3 @@ Build security:
 The first implementation milestone is a compile-ready skeleton with stubs and interfaces, not complete business logic.
 
 R8/ProGuard rules are required for ONNX Runtime. Release readiness requires validation on Android 9, 11, 13, and 14, plus memory profiling on the `LOW_END` device profile.
-

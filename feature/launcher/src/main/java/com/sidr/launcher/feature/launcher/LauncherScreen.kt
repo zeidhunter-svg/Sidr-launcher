@@ -51,6 +51,7 @@ import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.permission.PermissionFeature
+import com.sidr.launcher.domain.suggestions.Suggestion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -58,6 +59,7 @@ import kotlinx.coroutines.withContext
 fun LauncherScreen(
     modifier: Modifier = Modifier,
     viewModel: LauncherViewModel = hiltViewModel(),
+    suggestionsContent: @Composable (suggestions: List<Suggestion>, onSuggestionTap: (Suggestion) -> Unit) -> Unit = { _, _ -> },
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val commandInput by viewModel.commandInput.collectAsStateWithLifecycle()
@@ -96,9 +98,11 @@ fun LauncherScreen(
                     retryable = state.retryable,
                     onRetry = viewModel::retry,
                 )
-                is UiState.Success -> AppGrid(
-                    apps = state.data.apps,
+                is UiState.Success -> SuccessContent(
+                    state = state.data,
                     onAppClick = viewModel::onAppClicked,
+                    onSuggestionTap = viewModel::onSuggestionClicked,
+                    suggestionsContent = suggestionsContent,
                 )
             }
         }
@@ -123,6 +127,26 @@ fun LauncherScreen(
 }
 
 // ── Command feedback ────────────────────────────────────────────────────────
+
+@Composable
+private fun SuccessContent(
+    state: LauncherUiState,
+    onAppClick: (InstalledApp) -> Unit,
+    onSuggestionTap: (Suggestion) -> Unit,
+    suggestionsContent: @Composable (suggestions: List<Suggestion>, onSuggestionTap: (Suggestion) -> Unit) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxSize()) {
+        if (state.suggestions.isNotEmpty()) {
+            suggestionsContent(state.suggestions, onSuggestionTap)
+        }
+        AppGrid(
+            apps = state.apps,
+            onAppClick = onAppClick,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
 
 @Composable
 private fun CommandFeedbackArea(

@@ -21,6 +21,9 @@ class FakeUsageHistoryRepository : UsageHistoryRepository {
     /** When non-null, [recordLaunch] returns [OperationResult.Failure] with this error. */
     var errorToReturn: OperationError? = null
 
+    /** All cutoffs passed to [cleanupOlderThan], in order. */
+    val cleanupCutoffs = mutableListOf<Long>()
+
     override fun getUsageRecords(): Flow<List<AppUsageRecord>> = _records
 
     override suspend fun recordLaunch(
@@ -43,6 +46,14 @@ class FakeUsageHistoryRepository : UsageHistoryRepository {
         return OperationResult.Success(Unit)
     }
 
+    override suspend fun cleanupOlderThan(cutoffEpochMs: Long): OperationResult<Unit> {
+        val error = errorToReturn
+        if (error != null) return OperationResult.Failure(error)
+        cleanupCutoffs += cutoffEpochMs
+        _records.value = _records.value.filter { it.lastUsedEpochMs >= cutoffEpochMs }
+        return OperationResult.Success(Unit)
+    }
+
     /** Pre-load records for tests that verify sorting without going through [recordLaunch]. */
     fun setRecords(records: List<AppUsageRecord>) {
         _records.value = records
@@ -51,6 +62,7 @@ class FakeUsageHistoryRepository : UsageHistoryRepository {
     fun reset() {
         _records.value = emptyList()
         recordedLaunches.clear()
+        cleanupCutoffs.clear()
         errorToReturn = null
     }
 }

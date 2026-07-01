@@ -84,7 +84,7 @@ The offline launcher core (home, app grid, app launch) must work fully without A
 
 ## Current goal (active work)
 
-**NOW (2026-06-30): Phase 7 in progress — Blocks S + T + U DONE, Block V next.** Phases 3 → 6 are code-closed
+**NOW (2026-07-01): Phase 7 user-facing close is DONE — Blocks S + T + U + W complete; Block V runtime seam is implemented but inert pending OQ#3.** Phases 3 → 6 are code-closed
 (MVP loop, persistence/Room/permission-education/hardening, cloud AI multi-provider, local ONNX NLU).
 **Phase 7 Block S** delivered the pure `:domain` suggestion + voice contracts; **Phase 7 Block T** delivered
 voice input (`AndroidSpeechInputSource` in `:core:android`, `VoiceModule` DI, the `RECORD_AUDIO` routed-education
@@ -96,11 +96,24 @@ green, 0 new deps, `android.speech` confined to `:core:android`, real recognizer
 request-flow template verbatim for `CALENDAR_SUGGESTIONS`/`LOCATION_SUGGESTIONS` — 399 JVM tests green (16
 new), 0 new deps, `android.location`/`CalendarContract` confined to `:data:repository`, privacy guard
 delivered as 4 executable proofs (incl. a reflection-based fix closing a hand-maintained-inventory drift
-gap in Block L's `AiRequestGuardTest`), real device reads device-pending. **Next = Block V** (ONNX
-`TextEmbedder` impl + semantic re-rank; gated on OQ#3). Carried device-acceptance debt (SM-A325F): Block-J
-Keystore, Block-N N5, Block-P P5/OQ#1-2, Block-T OQ#4, Block-U calendar/location reads. See the session
-digest at the top + the [Phase 7 plan](ai-context/phase-7-voice-suggestions-plan.md). *(The phase-by-phase
-history below is retained for context.)*
+gap in Block L's `AiRequestGuardTest`), real device reads device-pending. **Phase 7 Block W** then closed the
+user-facing suggestions surface in two slices: **W-lite** made `LauncherUiState.suggestions` the single owner,
+restored cached suggestions for first paint, refreshed with a fresh superseding engine pass, kept
+`:feature:suggestions` stateless/UI-only, and wired suggestion taps into the existing launcher
+launch/navigation path; **W proper** added periodic `SuggestionPrecomputeWorker` +
+`UsageCleanupWorker`, gate-before-enqueue scheduling, boot warmup via `RECEIVE_BOOT_COMPLETED`, and docs sync.
+**Phase 7 Block V** added `OnnxTextEmbedder : TextEmbedder` in `:data:ai-local`, the
+`SemanticSuggestionRanker` decorator, `ModelDownloadConfig.EMBEDDING_PENDING`, and Hilt
+`Set<SessionLifecycle>` teardown so NLU + embedder sessions both release on trim/low-memory. It is
+**structurally ready but inert** until OQ#3 pins the embedding model/host/hash/ONNX contract; no-model,
+gate-off, and failure paths preserve heuristic suggestion order exactly. Carried device-acceptance debt
+(SM-A325F): Block-J Keystore, Block-N N5, Block-P P5/OQ#1-2, Block-T OQ#4, Block-U calendar/location reads,
+and Block-V real embedding load + `<150ms` MID_RANGE latency + memory/co-residency check. **OQ#3 follow-up
+debt is recorded in decisions.md:** revisit `SemanticSuggestionRanker`'s sync `runBlocking` boundary when a
+real model is pinned; decide how live typed-prefix UX feeds `SuggestionContext.typedPrefix`; generalize
+multi-model provisioning or add an embedding-specific manager/scheduler; run real embedder device
+acceptance. See the session digest at the top + the [Phase 7 plan](ai-context/phase-7-voice-suggestions-plan.md).
+*(The phase-by-phase history below is retained for context.)*
 
 **Phase 3 is DONE (Blocks A → D, 2026-06-21).** The MVP loop works: type `open telegram` →
 resolves + launches offline; tap a grid app → launches; unknown → fallback UI, no crash.
@@ -198,9 +211,16 @@ reflection-based fix to Block L's `AiRequestGuardTest` (closed a real hand-maint
 found during review — `OUTBOUND_FIELD_NAMES`/`AIERROR_FIELD_NAMES` now reflect against `AiRequest`/
 `AiError`'s actual declared fields). **16 new JVM tests; 399 JVM total / 0 failures; `assembleDebug` +
 `testDebugUnitTest` + `:domain:test` green; 0 new Gradle deps; `android.location`/`CalendarContract`
-confined to `:data:repository`.** `HandleUserCommandUseCase` untouched; suggestion tap routing is Block
-W's job. Details: decisions.md "ADR 2026-06-30 — Block U complete". **Block V next** (ONNX `TextEmbedder`
-impl + semantic re-rank; gated on OQ#3).
+confined to `:data:repository`.** `HandleUserCommandUseCase` untouched. **Block W DONE (2026-07-01):**
+`LauncherUiState` now carries `suggestions`; the host `LauncherViewModel` owns the single suggestions source
+and performs cache-first paint from `SuggestionsCacheRepository` followed by a fresh `SuggestionEngine`
+result that supersedes rather than merges; `:feature:suggestions` stayed a stateless `SuggestionsRow`;
+launcher-home rendering + suggestion tap routing are wired with no `feature→feature` edge. Background
+completion added `SuggestionPrecomputeWorker` + `UsageCleanupWorker`, unique-periodic scheduling, boot
+warmup via `RECEIVE_BOOT_COMPLETED`, and startup re-scheduling from `SidrLauncherApp`; precompute is
+fail-closed and never schedules/runs when `aiSuggestionsEnabled == false`, on `LOW_END`, or while battery
+saver is active. **Phase 7's user-facing part is therefore closed. Block V remains open as a separate
+model/runtime track** (ONNX `TextEmbedder` impl + semantic re-rank; gated on OQ#3).
 
 Phase 3 result, Blocks A → D:
 
@@ -484,8 +504,8 @@ Phase 3 result, Blocks A → D:
 | `ModelId`/`ModelAvailability`/`ModelAvailabilityRepository`/`TextEmbedder` port *(Block O ✅)* | `domain` |
 | Rule-based matcher impl, `InstalledAppsRepository` impl, Android `ActionExecutor` impl | `data/repository` |
 | `LayeredIntentMatcher` (rule-first composite) + `NluConfidenceCalibrator` *(Block R ✅)* | `data/repository` |
-| `OnnxIntentClassifier` (`@NluMatcher` + `SessionLifecycle`) | `data/ai-local` |
-| `@RuleMatcher`/`@NluMatcher` qualifiers + matcher DI swap + `onTrimMemory`/`ensureModel` wiring *(Block R ✅)* | `app` |
+| `OnnxIntentClassifier` (`@NluMatcher` + `SessionLifecycle`) + `OnnxTextEmbedder` *(Block V inert seam)* | `data/ai-local` |
+| `@RuleMatcher`/`@NluMatcher` qualifiers + matcher DI swap + `onTrimMemory`/`ensureModel` wiring *(Block R ✅; lifecycle set updated in V)* | `app` |
 | Pref domain models (`UserPreferences`, `FeatureFlags`, `DeviceProfileCacheEntry`, `CachedSuggestion`) + their repo interfaces *(Block E ✅)* | `domain` |
 | DataStore Preferences impls + `PreferencesMapper` + `PreferencesKeys` *(Block E ✅)* | `data/repository` |
 | History domain models (`AppUsageRecord`, `SuggestionRankingRecord`, `IntentMatchRecord`) + repo interfaces (`UsageHistoryRepository`, `SuggestionRankingRepository`, `IntentMatchHistoryRepository`) *(Block F)* | `domain` |
@@ -540,7 +560,10 @@ Phase 3 result, Blocks A → D:
   executable proofs incl. a reflection-based fix to Block L's `AiRequestGuardTest`; 16 new JVM tests /
   **399 JVM total**, `assembleDebug` + `testDebugUnitTest` + `:domain:test` green, 0 new deps,
   `android.location`/`CalendarContract` confined to `:data:repository`, real device reads device-pending;
-  **Block V next** — ONNX `TextEmbedder` impl + semantic re-rank; OQ#3 embedding model/host gates it)*
+  **Block W DONE 2026-07-01** — W-lite + W proper close the shipped launcher surface (single-owner
+  suggestions state, cache→fresh supersede, stateless row, periodic precompute/cleanup, boot warmup);
+  **Block V remains separate** — ONNX `TextEmbedder` impl + semantic re-rank; OQ#3 embedding model/host
+  gates it)*
 - Roadmap: [docs/roadmap.md](docs/roadmap.md)
 
 ## Do not

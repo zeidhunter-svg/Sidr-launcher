@@ -7,7 +7,7 @@
 > demoable milestones → tracking → per-block agent-model table → confirmed-decisions.
 > Block lettering continues the alphabet (Phase 3 = A→D, Phase 4 = E→H, Phase 5 = I→N, Phase 6 = O→R),
 > so **Phase 7 = Blocks S → W**.
-> **Status (2026-06-30): FORKS DECIDED + BLOCKS S, T & U COMPLETE.** All 11 forks below are **decided**. **Block S**
+> **Status (2026-07-01): FORKS DECIDED + BLOCKS S, T, U AND W COMPLETE.** All 11 forks below are **decided**. **Block S**
 > (pure `:domain` contracts + `HeuristicSuggestionRanker` + fakes) is **done 2026-06-29** (S1–S6 ✅, 12 new JVM
 > tests, no production file edited). **Block T** (voice input — `AndroidSpeechInputSource` in `:core:android`,
 > `VoiceModule` DI, `RECORD_AUDIO` live request via the routed education flow, `refreshStatus()` dangerous-permission
@@ -20,7 +20,12 @@
 > 16 new JVM tests, **399 JVM total / 0 failures**, `assembleDebug` + full `testDebugUnitTest` + `:domain:test`
 > green, **0 new Gradle deps**, `android.location`/`CalendarContract` confined to `:data:repository`,
 > `HandleUserCommandUseCase` untouched; privacy guard delivered as 4 executable proofs, see the Block U
-> section). **Next = Block V** (ONNX `TextEmbedder` impl + semantic re-rank; gated on OQ#3). Three pre-ADR
+> section). **Block W** is **done 2026-07-01** in two slices: **W-lite** closed the launcher-home user surface
+> (`LauncherUiState.suggestions`, host-VM single owner, cache-first paint, fresh supersede, stateless
+> `SuggestionsRow`, tap routing); **W proper** added periodic `SuggestionPrecomputeWorker` +
+> `UsageCleanupWorker`, gate-before-enqueue scheduling, boot warmup, and docs sync. **Block V remains a
+> separate model/runtime track** (ONNX `TextEmbedder` impl + semantic re-rank; gated on OQ#3) and does
+> **not** block the user-facing Phase-7 close. Three pre-ADR
 > items were closed before the
 > flip: **co-residency** of the NLU + embedder ONNX
 > sessions (§Block V — Option B, accepted-not-arbitrated), **suggestions single-source** (§F7-8 — owner =
@@ -28,7 +33,7 @@
 > "no new outbound category", not "voice never reaches cloud"). Two open questions gate the
 > device/model-bearing blocks (OQ#3 embedding model + host → Block V; OQ#4 on-device STT availability
 > across targets → Block T device acceptance); both gate the *real artifact / device run*, not the
-> JVM-green wiring, exactly as OQ#1/#2 did in Phase 6. **No production code started.**
+> JVM-green wiring, exactly as OQ#1/#2 did in Phase 6.
 
 ## Pre-flight — repo-truth check (verified 2026-06-29, before any block)
 
@@ -142,9 +147,9 @@ new-deps accounting, never the block structure.
   (`ERROR_NO_MATCH`, `ERROR_RECOGNIZER_BUSY`, `ERROR_INSUFFICIENT_PERMISSIONS`, `ERROR_NETWORK`, …) map to
   a pure `SpeechRecognitionError` taxonomy in `:domain`.
 
-Run order: this check is done; Blocks S, T & U are complete — execute the Block V prompt next (gated on
-OQ#3). (Block T re-confirmed the `SpeechRecognizer` framework signatures against the Android Javadoc at its
-Step 0, as planned — context7's Leanback-only coverage was not trusted.)
+Run order: this check is done; Blocks S, T, U and W are complete. **Block V is intentionally separate**
+and remains gated on OQ#3. (Block T re-confirmed the `SpeechRecognizer` framework signatures against the
+Android Javadoc at its Step 0, as planned — context7's Leanback-only coverage was not trusted.)
 
 ---
 
@@ -726,29 +731,36 @@ change is that the single injected `SessionLifecycle` becomes a Hilt **multibind
 or an `@IntoSet` provider per holder) so `onTrimMemory`/`onLowMemory` release **both** the NLU and
 embedder sessions; the seam, threshold (`≥TRIM_MEMORY_BACKGROUND`), and teardown logic are unchanged.
 
-**New files (`:data:ai-local`):** `OnnxTextEmbedder : TextEmbedder` (lazy single `Mutex`-guarded session
-on `Dispatchers.Default`, per-call `LocalInferenceGate` re-check, `AutoCloseable` + existing
-`SessionLifecycle`, graceful degrade, no text logged); a `SemanticSuggestionRanker : SuggestionRanker`
-decorator (embedding similarity re-rank over the heuristic order). Second `ModelId` +
-`ModelDownloadConfig.EMBEDDING_PENDING` (inert OQ#3 seam) reusing `ModelStore`/`ModelProvisioner`/the
-WorkManager downloader.
+**Status 2026-07-01:** Block V is code-implemented as an inert runtime seam. `OnnxTextEmbedder :
+TextEmbedder` exists in `:data:ai-local`, `SemanticSuggestionRanker : SuggestionRanker` decorates the
+heuristic ranker, `ModelDownloadConfig.EMBEDDING_PENDING` is blank/unpinned, and `:app` now releases a
+`Set<SessionLifecycle>` so the NLU classifier and embedder both tear down on trim/low-memory. OQ#3 remains
+unresolved: no production embedding model, host/hash, vocab asset, or final ONNX contract has been guessed
+or pinned. Shipping no-model/gate-off/failure behavior is heuristic-order parity.
+
+**New files (`:data:ai-local` / `:data:repository`):** `OnnxTextEmbedder : TextEmbedder` (lazy single
+`Mutex`-guarded session on `Dispatchers.Default`, per-call `LocalInferenceGate` re-check, `AutoCloseable`
++ existing `SessionLifecycle`, graceful degrade, no text logged); `SemanticSuggestionRanker :
+SuggestionRanker` decorator (embedding similarity re-rank over the heuristic order). Second `ModelId` +
+`ModelDownloadConfig.EMBEDDING_PENDING` is the inert OQ#3 seam. The existing store can resolve the model
+file by id, but production provisioning remains unpinned until OQ#3 closes.
 
 **Steps:**
-- [ ] `V1` `OnnxTextEmbedder`: pinned input contract (reuse `WordPieceTokenizer` if compatible; pooled
+- [x] `V1` `OnnxTextEmbedder`: provisional input contract (reuse `WordPieceTokenizer` if compatible; pooled
       `[1, hiddenDim]` output read by index); files resolved via `LocalModelFiles` **before** any ORT call;
       any failure → `OperationResult.Failure` (never thrown).
-- [ ] `V2` `SemanticSuggestionRanker` decorator: re-rank candidates by similarity to the context/typed
+- [x] `V2` `SemanticSuggestionRanker` decorator: re-rank candidates by similarity to the context/typed
       prefix **iff** the gate is on + model available; else delegate to the heuristic order verbatim.
-- [ ] `V3` Embedding model provisioning: second `ModelId`/`ModelDownloadConfig` through the existing
-      store/verifier/worker; `assert_embedding_contract` cross-check (dimensionality/pooling) — inert
-      under OQ#3 (`isPinned=false` → no enqueue, port degrades).
-- [ ] `V4` JVM tests (fakes): re-rank consults the embedder only when gated-on; embedder failure →
-      heuristic order; no-model → heuristic order (shipping-state parity); contract cross-check.
+- [x] `V3a` Embedding model config seam: second `ModelId`/`ModelDownloadConfig.EMBEDDING_PENDING`;
+      blank URL/hash, `isPinned=false`, half-pinned guard unchanged. Full live provisioning + contract
+      cross-check stays OQ#3-pending.
+- [x] `V4` JVM tests (fakes): re-rank consults the embedder only when gated-on; embedder failure →
+      heuristic order; no-model → heuristic order (shipping-state parity); empty/invalid vectors degrade.
 - [ ] `V5` `androidTest` (device-pending): real embedder loads + embeds, `< 150ms` MID_RANGE measurement,
-      `onTrimMemory` teardown.
+      `onTrimMemory` teardown, memory/co-residency measurement with the NLU session.
 
-**Acceptance:** ONNX still confined to `:data:ai-local` (grep clean incl. the embedder); the embedder is
-lazy + single + closeable under the **same** `SessionLifecycle` as the NLU; **no-model devices rank
+**Acceptance:** ONNX still confined to `:data:ai-local`; the embedder is lazy + single + closeable and is
+released through the same `SessionLifecycle` seam as the NLU via Hilt multibinding; **no-model devices rank
 identically to today's heuristic** (parity); embedder failure degrades silently; `assembleDebug` + JVM
 regression green (device run pending).
 
@@ -762,7 +774,8 @@ the heuristic order returns unchanged.
 
 **Goal:** surface the pipeline on the launcher home, schedule background pre-compute + cleanup, wire boot
 warmup, reconcile docs, and close Phase 7.
-**Depends on:** S, T, U, V. Forks 7/8/9 fixed.
+**Depends on:** S, T, U. Forks 7/8/9 fixed. **Block V is separate and non-blocking for the user-facing
+surface close.**
 
 **New files:** `:feature:suggestions` — a **stateless `SuggestionsRow(suggestions, onSuggestionTap)`
 composable only** (no `SuggestionsViewModel`, no parallel `StateFlow`, no Hilt — F7-8 single-owner
@@ -773,24 +786,26 @@ their periodic schedulers, a `RECEIVE_BOOT_COMPLETED` `BroadcastReceiver`; manif
 `RECEIVE_BOOT_COMPLETED`.
 
 **Steps:**
-- [ ] `W1` `:feature:suggestions` **stateless** `SuggestionsRow` (no VM/StateFlow — single owner is the
+- [x] `W1` `:feature:suggestions` **stateless** `SuggestionsRow` (no VM/StateFlow — single owner is the
       host VM); grow `LauncherUiState` with `suggestions` fed by the injected `SuggestionEngine`
       (`architecture.md:229` single source); tap → existing `ExecutableAction`/`HandleUserCommandUseCase`
       path (no `feature→feature` edge).
-- [ ] `W2` **Cold-start cache-restore** (the deferred Fork-6 half): first-paint from
+- [x] `W2` **Cold-start cache-restore** (the deferred Fork-6 half): first-paint from
       `SuggestionsCacheRepository`, a fresh `SuggestionEngine` load supersedes it (never merged — the
       `architecture.md` reconciliation rule).
-- [ ] `W3` `SuggestionPrecomputeWorker` (periodic ~24h, `batteryNotLow`+`storageNotLow`+`deviceIdle`, no
+- [x] `W3` `SuggestionPrecomputeWorker` (periodic ~24h, `batteryNotLow`+`storageNotLow`+`deviceIdle`, no
       network, **no `LOW_END`**, gated on `aiSuggestionsEnabled`, idempotent via
-      `enqueueUniquePeriodicWork`); `UsageCleanupWorker` (retention sweep, idempotent, cancellable).
-- [ ] `W4` Boot warmup: `RECEIVE_BOOT_COMPLETED` receiver re-enqueues the periodic work; permission
+      `enqueueUniquePeriodicWork`); `UsageCleanupWorker` (time-based usage-history sweep, idempotent,
+      cancellable). Scheduler cancels precompute fail-closed when the flag is off or the device is
+      `LOW_END`; runtime execution also stops under battery saver.
+- [x] `W4` Boot warmup: `RECEIVE_BOOT_COMPLETED` receiver re-enqueues the periodic work; permission
       education entry; best-effort (never required).
-- [ ] `W5` JVM tests (fakes): worker gate-before-enqueue (LOW_END / flag-off never schedules), idempotent
+- [x] `W5` JVM tests (fakes): worker gate-before-enqueue (LOW_END / flag-off never schedules), idempotent
       re-run, cache-restore-then-supersede ordering, suggestion-tap routing.
-- [ ] `W6` **Docs-sync:** `architecture.md` AI-pipeline + "`LauncherUiState` grows" + the suggestions
+- [x] `W6` **Docs-sync:** `architecture.md` AI-pipeline + "`LauncherUiState` grows" + the suggestions
       surface + voice modality + WorkManager pre-compute/cleanup rows; `CLAUDE.md` Contract→Owner rows for
       the new ports/impls; `roadmap.md` Phase 7 marked.
-- [ ] `W7` ADR in `decisions.md` ("ADR — Block W complete + Phase 7 close"); `CLAUDE.md` status advanced;
+- [x] `W7` ADR in `decisions.md` ("ADR — Block W complete + Phase 7 close"); `CLAUDE.md` status advanced;
       Phase 7 marked closed; device-pending acceptance recorded (OQ#3/#4 + the inherited J/N/P items).
 
 **Acceptance:** the suggestion row renders gated by `aiSuggestionsEnabled`; cold start first-paints from

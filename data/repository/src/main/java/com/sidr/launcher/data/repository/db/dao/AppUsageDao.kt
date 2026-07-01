@@ -35,6 +35,9 @@ abstract class AppUsageDao {
     )
     abstract suspend fun deleteOldest(excess: Int)
 
+    @Query("DELETE FROM app_usage WHERE last_used_epoch_ms < :cutoffEpochMs")
+    abstract suspend fun deleteOlderThan(cutoffEpochMs: Long)
+
     /** Increments launch_count for an existing record, or inserts a new one (count = 1). */
     @Transaction
     open suspend fun upsertLaunch(packageName: String, timestampMs: Long) {

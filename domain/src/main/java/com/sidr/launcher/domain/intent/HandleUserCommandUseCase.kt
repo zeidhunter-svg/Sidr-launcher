@@ -20,9 +20,9 @@ import kotlinx.coroutines.launch
  * - Never throws to the UI. Technical failures from the resolver/executor become
  *   [CommandOutcome.Failed] with a safe message — they do NOT bubble up as exceptions or
  *   [OperationResult.Failure].
- * - Not everything is executed: navigation ([CommandOutcome.OpenAssistant]), input clearing
- *   ([CommandOutcome.ClearInput]), grid display ([CommandOutcome.ShowApps]), ambiguity and
- *   "not found" never reach the [ActionExecutor].
+ * - Not everything is executed: navigation ([CommandOutcome.OpenAssistant] /
+ *   [CommandOutcome.OpenSettings]), input clearing ([CommandOutcome.ClearInput]), grid display
+ *   ([CommandOutcome.ShowApps]), ambiguity and "not found" never reach the [ActionExecutor].
  * - Low/medium confidence never auto-executes.
  */
 class HandleUserCommandUseCase(
@@ -99,7 +99,7 @@ class HandleUserCommandUseCase(
         // Routing outcomes — never executed.
         is ExecutableAction.AmbiguousAppAction -> CommandOutcome.NeedsConfirmation(action.candidates)
         is ExecutableAction.ShowMessageAction -> CommandOutcome.Message(action.message)
-        ExecutableAction.OpenLauncherSettingsAction -> CommandOutcome.Message(SETTINGS_STUB_MESSAGE)
+        ExecutableAction.OpenLauncherSettingsAction -> CommandOutcome.OpenSettings
         ExecutableAction.NoOpAction -> CommandOutcome.NoOp
     }
 
@@ -150,7 +150,6 @@ class HandleUserCommandUseCase(
 
     private companion object {
         const val SAFE_FAILURE_MESSAGE = "Something went wrong. Please try again."
-        const val SETTINGS_STUB_MESSAGE = "Settings are not available yet."
         const val HELP_MESSAGE = "Try: open <app>, search <query>, show apps, clear"
     }
 }

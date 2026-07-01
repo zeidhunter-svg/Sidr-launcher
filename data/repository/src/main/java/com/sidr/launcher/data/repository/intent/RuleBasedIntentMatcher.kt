@@ -124,6 +124,8 @@ class RuleBasedIntentMatcher : IntentMatcher {
         val SEARCH_VERBS = setOf("search", "find", "google")
         val SETTINGS_KEYWORDS = setOf("settings", "launcher settings")
         val SIMPLE_COMMANDS = mapOf(
+            "assistant" to SimpleCommand.OPEN_ASSISTANT,
+            "show assistant" to SimpleCommand.OPEN_ASSISTANT,
             "show apps" to SimpleCommand.SHOW_APPS,
             "show all apps" to SimpleCommand.SHOW_APPS,
             "clear" to SimpleCommand.CLEAR,

@@ -258,6 +258,45 @@ configurable `errorToReturn`.
   newlines; a string-split scheme would corrupt. `kotlinx-serialization-json` was already in the
   catalog (not a new dep); added the plugin + lib to `:data:repository` only. Test round-trips a
   label with `||| "quotes"` + newline.
+
+### ADR 2026-07-01 — Acceptance blockers follow-up (settings toggle, voice probe, assistant route)
+
+**Done 2026-07-01.**
+
+- `Routes.Settings` no longer renders a bare `Text("Settings")` placeholder. It now hosts a minimal
+  inline launcher-settings surface in `:app` (`LauncherSettingsScreen` + `LauncherSettingsViewModel`)
+  with a sanctioned `aiSuggestionsEnabled` toggle for device acceptance. No adb/debug hack is
+  required.
+- Toggling `aiSuggestionsEnabled` now re-syncs `SuggestionsWorkScheduler.ensureScheduled()`
+  immediately, so precompute scheduling/cancellation follows the setting without waiting for a
+  restart/boot.
+- `LauncherViewModel` now observes `FeatureFlagRepository.getFlags().map { aiSuggestionsEnabled }`
+  live: enabling suggestions restores cached display-safe suggestions and refreshes the engine;
+  disabling clears `LauncherUiState.suggestions`. The single-owner invariant stays intact
+  (`LauncherViewModel` / `LauncherUiState.suggestions`; `:feature:suggestions` remains stateless UI).
+- `AndroidSpeechInputSource.isAvailable()` was hardened for OEM/package-visibility false negatives:
+  in addition to the framework `SpeechRecognizer` probes, it now accepts a resolvable
+  `android.speech.RecognitionService` or `ACTION_RECOGNIZE_SPEECH` handler as evidence that voice
+  input is usable. The manifest gained matching `<queries>` entries so those components are visible
+  on Android 11+.
+- `RuleBasedIntentMatcher` again exposes a rule-only assistant launcher entry:
+  `"assistant"` / `"show assistant"` → `SimpleCommand.OPEN_ASSISTANT`. `HandleUserCommandUseCase`
+  already routes `OPEN_ASSISTANT` to `CommandOutcome.OpenAssistant`, so assistant launch remains
+  independent of NLU/model availability and never hits the executor.
+- Launcher settings routing is now a first-class `CommandOutcome.OpenSettings` outcome instead of a
+  stub message; the domain still stays Android-free and the ViewModel owns route-string translation.
+
+**Verification:**
+- New/updated JVM coverage in `feature:launcher`, `domain`, `data:repository`, `core:android`, and
+  `app` (settings toggle scheduling + voice availability helper + assistant rule + settings route).
+- `./gradlew testDebugUnitTest` ✅
+- `./gradlew assembleDebug` ✅
+
+**Still pending / explicitly NOT closed by this ADR:**
+- provider config/key for real assistant streaming
+- OQ#1 / OQ#2 real NLU model + vocab acceptance
+- OQ#3 embedding model / semantic-rank acceptance
+- cold-start performance budget on device
 - **`DeviceProfileCacheEntry` is a primitive projection, not a `DeviceProfile` alias** — the
   domain `DeviceProfile`/capability model isn't formalised yet; flattened booleans avoid a
   premature dependency and serialise cleanly. When `DeviceProfile` lands, only the mapper +
@@ -2466,3 +2505,85 @@ combined footprint breaches the accepted budget, revisit the frozen-forward sing
   `ModelManager` wiring as if it handled both artifacts.
 - Device acceptance remains pending: real embedding model load, `<150ms` MID_RANGE measurement, and
   memory/co-residency check with the NLU session.
+
+### ADR 2026-07-01 — Device acceptance pass (partial) on SM-A325F / Android 13
+
+**Scope.** Honest device-only verification for already-shipped Phase 5/6/7 code on the real target
+device (`SM-A325F`, Android `13`, SDK `33`). No architecture changes, no new runtime/model track,
+no OQ#1/OQ#2/OQ#3 resolution.
+
+**Baseline and install.**
+- `./gradlew testDebugUnitTest` — **BUILD SUCCESSFUL**
+- `./gradlew assembleDebug` — **BUILD SUCCESSFUL**
+- `codegraph sync .` — up to date
+- `adb devices -l` — real target confirmed: `RF8R705H38F ... model:SM_A325F`
+- `./gradlew installDebug` reached device install; package presence confirmed separately on device:
+  `pm list packages` / `pm path com.sidr.launcher` showed the debug app installed.
+- `adb shell am start -W -n com.sidr.launcher/.LauncherActivity` — **launch-smoke PASS only**:
+  cold starts completed (`TotalTime: 1381`, later `1026`; hot relaunch `248`), but the `<400ms`
+  cold-start performance budget remains **PENDING/perf-risk**.
+
+**Phase 5 results.**
+- **Block J PASS on device.** `SecretStoreInstrumentedTest` executed on SM-A325F against the real
+  Keystore and finished `OK (3 tests)`:
+  `put_thenRestart_get_returnsValue`, `twoProviders_areIsolated`,
+  `strongBoxFallback_doesNotCrash_andRoundTrips`.
+- Device log evidence showed real keymaster activity (`keymaster_tee`) during the run.
+- **Block N remains pending-config/manual.** This session did **not** honestly verify live streaming,
+  offline static fallback UI, cancel/retry, or rotation-mid-stream. Provider configuration/key was not
+  established as part of the pass, and the interactive UI path was not fully observable from the shell.
+
+**Phase 6 results.**
+- `OnnxIntentClassifierInstrumentedTest` was executed directly on device after installing the
+  `androidTest` APK. The AndroidJUnitRunner reported `OK (3 tests)`, but device `logcat` showed the real
+  outcome: all three cases assumption-skipped in `setUp()` with
+  `AssumptionViolatedException: device-pending: nlu/intent.onnx not bundled (see tools/nlu/README.md)`.
+- Therefore this is recorded as **PENDING/model-blocked**, not pass and not failure: the real
+  `intent.onnx` artifact is absent, so `<150ms` CPU latency, NNAPI→CPU fallback, and true on-device NLU
+  acceptance remain blocked on OQ#1/OQ#2.
+- Trim-memory is **PARTIAL**, not full pass. `adb shell am send-trim-memory com.sidr.launcher
+  RUNNING_CRITICAL` and a backgrounded `BACKGROUND` / `COMPLETE` pass left `pidof
+  com.sidr.launcher` alive, and filtered `logcat` showed
+  `OpenGLRenderer: trimMemory(TRIM_MEMORY_COMPLETE)::destroyRenderingContext` with no
+  `AndroidRuntime` fatal for the process. This proves a real no-crash / renderer-release path, but
+  the app was still in **no-model state**, so final proof of ONNX/native session release must wait
+  until a real session is actually loaded.
+- No evidence was found of a scheduled model-download job on the device after app launch, which is
+  consistent with `ModelDownloadConfig.INTENT_NLU_PENDING.isPinned == false`; however this was not
+  promoted to a standalone PASS because the shell-only evidence is indirect.
+
+**Phase 7 results.**
+- Interactive/manual UI checks were advanced to a **real unlocked Sidr surface** and still remain only
+  partially closed:
+  - **Launcher home / flag-off suggestions PASS.** The home surface rendered a plain app grid with the
+    `Type a command…` field and **no suggestions row**, matching `FeatureFlags.aiSuggestionsEnabled ==
+    false`. `dumpsys jobscheduler com.sidr.launcher` showed `Registered ... None` / `Pending queue:
+    None`, consistent with no suggestion-precompute scheduling while the flag is off.
+  - **Assistant remains PENDING-model / PENDING-config.** The launcher command field is reachable, but
+    the shipped rule-only table does **not** contain an assistant command entry (`RuleBasedIntentMatcher`
+    simple commands are `show apps`, `clear`, `help` only). With no real NLU model bundled, an honest
+    device-run path into `Routes.Assistant` was not available from launcher home. Therefore no-provider
+    state, offline `StaticFallbackEngine`, cancel/retry, and rotation-mid-stream remain unverified.
+  - **Voice is PARTIAL / blocked.** Package-manager queries resolved recognizer components on device
+    (`cmd package query-services -a android.speech.RecognitionService` and
+    `query-activities -a android.speech.action.RECOGNIZE_SPEECH`), but the launcher home did **not**
+    show the mic affordance. Keyboard fallback is therefore the only verified path; RECORD_AUDIO
+    education/request, active listening, final transcript submission, and denied/unavailable UX remain
+    device-pending behind this mismatch.
+  - **Suggestions flag-on UI is PENDING/blocker.** CodeGraph review found no user-facing settings/toggle
+    path that enables `aiSuggestionsEnabled`; without a real in-app toggle, row-render / calendar /
+    location granted-denied UI acceptance could not be verified honestly from the shipped UI.
+  - **WorkManager is PARTIAL.** Flag-off / no-precompute behavior is supported by device evidence
+    above; unique/idempotent re-enqueue, LOW_END gating, and boot re-enqueue remain device-pending.
+
+**Net status after this pass.**
+- **PASS:** baseline JVM build/tests, device detection, APK install presence, launcher launch-smoke,
+  Block-J real Keystore instrumentation, flag-off launcher home rendering, no-precompute-at-flag-off shell evidence.
+- **PARTIAL:** trim-memory release/no-crash path under no-model conditions; voice availability/device
+  UX mismatch (recognizer components present, mic affordance absent); WorkManager device acceptance
+  beyond flag-off gate.
+- **PENDING/config/manual:** Block-N streaming/offline/cancel/rotation; assistant UI/device checks once
+  a real launcher entry path and/or provider config exists; Block-U/Block-W manual permission UX.
+- **PENDING/model-blocked:** Phase 6 real ONNX/NLU acceptance (missing `intent.onnx`, and bundled
+  `vocab.txt` remains intentionally absent per the asset README); assistant route from no-model
+  launcher home; OQ#3 embedding model acceptance.

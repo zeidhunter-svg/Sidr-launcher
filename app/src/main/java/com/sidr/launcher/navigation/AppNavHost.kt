@@ -1,7 +1,6 @@
 package com.sidr.launcher.navigation
 
 import android.util.Log
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
@@ -20,6 +19,8 @@ import com.sidr.launcher.feature.launcher.LauncherScreen
 import com.sidr.launcher.feature.launcher.LauncherViewModel
 import com.sidr.launcher.feature.permission_education.PermissionEducationScreen
 import com.sidr.launcher.feature.suggestions.SuggestionsRow
+import com.sidr.launcher.settings.LauncherSettingsScreen
+import com.sidr.launcher.settings.LauncherSettingsViewModel
 
 private const val TAG = "AppNavHost"
 
@@ -95,9 +96,14 @@ fun AppNavHost(
             AssistantScreen(viewModel = vm)
         }
 
-        // No feature:settings module yet — inline placeholder until module is created
         composable(Routes.Settings.ROUTE) {
-            Text(text = "Settings")
+            val vm: LauncherSettingsViewModel = hiltViewModel()
+            LauncherSettingsScreen(
+                viewModel = vm,
+                onBack = {
+                    handleNavigationEvent(navController, NavigationEvent.NavigateBack)
+                },
+            )
         }
 
         // Real destination (Block G; Block T routes the feature in). The optional `feature` arg

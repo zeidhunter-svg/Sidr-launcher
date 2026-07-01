@@ -10,8 +10,8 @@ import com.sidr.launcher.domain.model.InstalledApp
  * business outcomes (ambiguity, "not found", low confidence, unknown) are modeled here as
  * regular variants, NOT as failures. Only real technical failures map to [Failed].
  *
- * Android-free: navigation is expressed as [OpenAssistant] (a domain intent), never a
- * :core:common route string — the ViewModel translates it to a navigation event.
+ * Android-free: navigation is expressed as [OpenAssistant] / [OpenSettings] domain intents,
+ * never a :core:common route string — the ViewModel translates them to navigation events.
  */
 sealed interface CommandOutcome {
 
@@ -24,7 +24,7 @@ sealed interface CommandOutcome {
     /** A safe action that intentionally does nothing — input is left untouched (no clear). */
     data object NoOp : CommandOutcome
 
-    /** A user-facing message: HELP examples, settings stub, "not found", or [ExecutableAction.ShowMessageAction]. */
+    /** A user-facing message: HELP examples, "not found", or [ExecutableAction.ShowMessageAction]. */
     data class Message(val text: String) : CommandOutcome
 
     /** Query matched 2+ apps — render [candidates] as tappable suggestions; nothing executed. */
@@ -44,6 +44,9 @@ sealed interface CommandOutcome {
 
     /** Navigate to the assistant — the ViewModel maps this to its navigation Channel. */
     data object OpenAssistant : CommandOutcome
+
+    /** Navigate to launcher settings — the ViewModel maps this to its navigation Channel. */
+    data object OpenSettings : CommandOutcome
 
     /** Show the full app grid — handled by the ViewModel/UI, not the executor. */
     data object ShowApps : CommandOutcome

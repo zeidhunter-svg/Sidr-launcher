@@ -130,6 +130,13 @@ class RuleBasedIntentMatcherTest {
         assertEquals(SimpleCommand.HELP, intent.command)
     }
 
+    @Test fun `assistant commands return SimpleCommandIntent OPEN_ASSISTANT`() = runTest {
+        listOf("assistant", "show assistant").forEach { input ->
+            val intent = matcher.match(input).best.intent as LauncherIntent.SimpleCommandIntent
+            assertEquals("Expected OPEN_ASSISTANT for '$input'", SimpleCommand.OPEN_ASSISTANT, intent.command)
+        }
+    }
+
     // --- unknowns ---
 
     @Test fun `empty input returns UnknownIntent with zero confidence`() = runTest {

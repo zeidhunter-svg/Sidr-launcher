@@ -130,7 +130,7 @@ class LayeredIntentMatcherTest {
 
         val commands = listOf(
             "open telegram", "launch whatsapp", "search cats", "google kotlin",
-            "settings", "show apps", "help", "clear", "open", "", "zzz nonsense",
+            "settings", "assistant", "show apps", "help", "clear", "open", "", "zzz nonsense",
         )
         for (cmd in commands) {
             val expected = ruleMatcher.match(cmd)

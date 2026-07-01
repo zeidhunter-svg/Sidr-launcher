@@ -213,12 +213,12 @@ class HandleUserCommandUseCaseTest {
         assertEquals(0, fakeExecutor.callCount)
     }
 
-    // ── Settings stub & NoOp ─────────────────────────────────────────────────
+    // ── Settings route & NoOp ────────────────────────────────────────────────
 
-    @Test fun `open settings resolves to a stub Message, never the executor`() = runTest(testDispatcher) {
+    @Test fun `open settings routes to OpenSettings, never the executor`() = runTest(testDispatcher) {
         matcherReturns(LauncherIntent.OpenSettingsIntent(), 0.95f)
 
-        assertTrue(useCase.handle("settings") is CommandOutcome.Message)
+        assertEquals(CommandOutcome.OpenSettings, useCase.handle("settings"))
         assertEquals(0, fakeExecutor.callCount)
     }
 

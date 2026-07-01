@@ -573,6 +573,78 @@ class LauncherViewModelTest {
         assertEquals(0, suggestionEngine.refreshCount)
     }
 
+    @Test
+    fun `enabling ai suggestions after init restores cache then refreshes live`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp("com.cached", "Cached App"),
+            InstalledApp("com.fresh", "Fresh App"),
+        )
+        val flagRepo = FakeFeatureFlagRepository(
+            FeatureFlags(aiSuggestionsEnabled = false, usageHistoryEnabled = true),
+        )
+        val cacheRepo = FakeSuggestionsCacheRepository(
+            initial = listOf(CachedSuggestion(label = "com.cached", actionId = "com.cached")),
+        )
+        val freshSuggestions = listOf(
+            Suggestion(
+                label = "com.fresh",
+                actionId = "com.fresh",
+                source = SuggestionSource.RECENT_USAGE,
+                score = 1.0,
+            ),
+        )
+        val suggestionEngine = FakeSuggestionEngine().apply {
+            refreshResult = OperationResult.Success(freshSuggestions)
+        }
+        val vm = buildViewModel(
+            flagRepo = flagRepo,
+            suggestionEngine = suggestionEngine,
+            suggestionsCacheRepository = cacheRepo,
+        )
+
+        advanceUntilIdle()
+        assertTrue((vm.uiState.value as UiState.Success).data.suggestions.isEmpty())
+
+        flagRepo.updateFlags(FeatureFlags(aiSuggestionsEnabled = true, usageHistoryEnabled = true))
+        advanceUntilIdle()
+
+        val state = vm.uiState.value as UiState.Success
+        assertEquals(1, suggestionEngine.refreshCount)
+        assertEquals(listOf("Fresh App"), state.data.suggestions.map { it.label })
+    }
+
+    @Test
+    fun `disabling ai suggestions after they rendered clears them`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(InstalledApp("com.fresh", "Fresh App"))
+        val flagRepo = FakeFeatureFlagRepository(
+            FeatureFlags(aiSuggestionsEnabled = true, usageHistoryEnabled = true),
+        )
+        val suggestionEngine = FakeSuggestionEngine().apply {
+            refreshResult = OperationResult.Success(
+                listOf(
+                    Suggestion(
+                        label = "com.fresh",
+                        actionId = "com.fresh",
+                        source = SuggestionSource.RECENT_USAGE,
+                        score = 1.0,
+                    ),
+                ),
+            )
+        }
+        val vm = buildViewModel(
+            flagRepo = flagRepo,
+            suggestionEngine = suggestionEngine,
+        )
+
+        advanceUntilIdle()
+        assertEquals(listOf("Fresh App"), (vm.uiState.value as UiState.Success).data.suggestions.map { it.label })
+
+        flagRepo.updateFlags(FeatureFlags(aiSuggestionsEnabled = false, usageHistoryEnabled = true))
+        advanceUntilIdle()
+
+        assertTrue((vm.uiState.value as UiState.Success).data.suggestions.isEmpty())
+    }
+
     // ── Tap-to-launch goes straight through the executor ───────────────────
 
     @Test
@@ -656,6 +728,23 @@ class LauncherViewModelTest {
             NavigationEvent.NavigateTo(Routes.Assistant.ROUTE),
             eventDeferred.await(),
         )
+    }
+
+    @Test
+    fun `open settings outcome clears input and emits settings navigation`() = runTest(testDispatcher) {
+        fakeMatcher.intentToReturn = LauncherIntent.OpenSettingsIntent()
+        fakeMatcher.confidenceToReturn = 0.95f
+        val vm = buildViewModel()
+        val eventDeferred = async { vm.navigationEvents.first() }
+
+        vm.onCommandChanged("settings")
+        vm.onCommandSubmitted("settings")
+        advanceUntilIdle()
+
+        assertEquals("", vm.commandInput.value)
+        assertEquals(CommandFeedback.None, vm.commandFeedback.value)
+        assertEquals(NavigationEvent.NavigateTo(Routes.Settings.ROUTE), eventDeferred.await())
+        assertEquals(0, fakeExecutor.callCount)
     }
 
     // ── Usage-aware grid sort (F6) ─────────────────────────────────────────

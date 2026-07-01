@@ -33,6 +33,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,8 +41,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -135,13 +138,16 @@ class LauncherViewModel @Inject constructor(
     // previous collection calls destroy() on the recognizer via the impl's awaitClose).
     private var voiceJob: Job? = null
 
+    // Tracks the live suggestion-stream collector so flag toggles can cancel/restart it cleanly.
+    private var suggestionsJob: Job? = null
+
     /** Whether a speech recognizer is usable. The UI shows the mic affordance only when true. */
     val isVoiceInputAvailable: Boolean
         get() = speechInputSource.isAvailable()
 
     init {
         loadApps()
-        restoreAndRefreshSuggestions()
+        observeSuggestionFlag()
     }
 
     private fun loadApps() {
@@ -290,6 +296,12 @@ class LauncherViewModel @Inject constructor(
                 navigateTo(Routes.Assistant.ROUTE)
             }
 
+            CommandOutcome.OpenSettings -> {
+                setCommandInput("")
+                _commandFeedback.value = CommandFeedback.None
+                navigateTo(Routes.Settings.ROUTE)
+            }
+
             CommandOutcome.ShowApps -> {
                 setCommandInput("")
                 _commandFeedback.value = CommandFeedback.None
@@ -302,41 +314,63 @@ class LauncherViewModel @Inject constructor(
         }
     }
 
-    private fun restoreAndRefreshSuggestions() {
+    private fun observeSuggestionFlag() {
         viewModelScope.launch(ioDispatcher) {
             try {
-                if (!featureFlagRepository.getFlags().first().aiSuggestionsEnabled) {
-                    _suggestions.value = emptyList()
-                    return@launch
-                }
-
-                _suggestions.value = suggestionsCacheRepository.getCachedSuggestions().first().map { cached ->
-                    // The cache stores only the display-safe repaint fields; the synthetic source/score are
-                    // placeholders until the fresh engine result supersedes this first paint.
-                    Suggestion(
-                        label = cached.label,
-                        actionId = cached.actionId,
-                        source = SuggestionSource.RECENT_USAGE,
-                        score = 0.0,
-                    )
-                }
-
-                launch(start = CoroutineStart.UNDISPATCHED) {
-                    suggestionEngine
-                        .suggestions()
-                        .drop(1)
-                        .collect { fresh ->
-                            _suggestions.value = fresh
+                featureFlagRepository.getFlags()
+                    .map { it.aiSuggestionsEnabled }
+                    .distinctUntilChanged()
+                    .collect { enabled ->
+                        if (enabled) {
+                            restoreAndRefreshSuggestions()
+                        } else {
+                            clearSuggestions()
                         }
-                }
-
-                suggestionEngine.refresh()
+                    }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Throwable) {
-                _suggestions.value = emptyList()
+                clearSuggestions()
             }
         }
+    }
+
+    private suspend fun restoreAndRefreshSuggestions() {
+        suggestionsJob?.cancelAndJoin()
+        suggestionsJob = null
+        try {
+            _suggestions.value = suggestionsCacheRepository.getCachedSuggestions().first().map { cached ->
+                // The cache stores only the display-safe repaint fields; the synthetic source/score are
+                // placeholders until the fresh engine result supersedes this first paint.
+                Suggestion(
+                    label = cached.label,
+                    actionId = cached.actionId,
+                    source = SuggestionSource.RECENT_USAGE,
+                    score = 0.0,
+                )
+            }
+
+            suggestionsJob = viewModelScope.launch(ioDispatcher, start = CoroutineStart.UNDISPATCHED) {
+                suggestionEngine
+                    .suggestions()
+                    .drop(1)
+                    .collect { fresh ->
+                        _suggestions.value = fresh
+                    }
+            }
+
+            suggestionEngine.refresh()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            clearSuggestions()
+        }
+    }
+
+    private suspend fun clearSuggestions() {
+        suggestionsJob?.cancelAndJoin()
+        suggestionsJob = null
+        _suggestions.value = emptyList()
     }
 
     // ── Usage-aware grid sort ───────────────────────────────────────────────

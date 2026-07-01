@@ -2,11 +2,13 @@ package com.sidr.launcher.core.android.voice
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.speech.RecognitionListener
+import android.speech.RecognitionService
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import com.sidr.launcher.domain.voice.SpeechInputSource
@@ -39,6 +41,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  * collector. A missing `RECORD_AUDIO` grant surfaces as `onError(ERROR_INSUFFICIENT_PERMISSIONS)`
  * → [SpeechRecognitionError.PERMISSION_DENIED], not a crash.
  *
+ * **Availability probing.** Some devices report `isRecognitionAvailable=false` even when a speech
+ * recognizer component is present but hidden behind Android 11+ package-visibility rules or an OEM
+ * quirk. We therefore treat a resolvable `RecognitionService` / `ACTION_RECOGNIZE_SPEECH` handler
+ * as a valid fallback signal before hiding the mic affordance.
+ *
  * **Privacy.** No transcript, partial, or audio is ever logged or persisted here.
  *
  * Plain class (no Hilt annotations) so `core/android` stays DI-framework-free; constructed in
@@ -57,9 +64,7 @@ class AndroidSpeechInputSource(
      * recognizer is present. `false` → the caller hides the mic and degrades to keyboard input.
      */
     override fun isAvailable(): Boolean =
-        SpeechRecognizer.isRecognitionAvailable(context) ||
-            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                SpeechRecognizer.isOnDeviceRecognitionAvailable(context))
+        SpeechRecognizerAvailability.snapshot(context).isAvailable()
 
     override fun listen(languageTag: String?): Flow<SpeechRecognitionState> = callbackFlow {
         // Touched only on the main looper (both the create-post and the teardown-post run there),
@@ -175,4 +180,46 @@ class AndroidSpeechInputSource(
         this?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             ?.firstOrNull()
             ?.takeIf { it.isNotBlank() }
+}
+
+internal object SpeechRecognizerAvailability {
+
+    fun snapshot(context: Context): Snapshot = Snapshot(
+        frameworkAvailable = SpeechRecognizer.isRecognitionAvailable(context),
+        onDeviceAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(context),
+        hasRecognitionService = context.hasResolvableService(Intent(RecognitionService.SERVICE_INTERFACE)),
+        hasRecognizeSpeechActivity = context.hasResolvableActivity(
+            Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH),
+        ),
+    )
+
+    data class Snapshot(
+        val frameworkAvailable: Boolean,
+        val onDeviceAvailable: Boolean,
+        val hasRecognitionService: Boolean,
+        val hasRecognizeSpeechActivity: Boolean,
+    ) {
+        fun isAvailable(): Boolean =
+            frameworkAvailable ||
+                onDeviceAvailable ||
+                hasRecognitionService ||
+                hasRecognizeSpeechActivity
+    }
+
+    private fun Context.hasResolvableService(intent: Intent): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.resolveService(intent, PackageManager.ResolveInfoFlags.of(0L)) != null
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.resolveService(intent, 0) != null
+        }
+
+    private fun Context.hasResolvableActivity(intent: Intent): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.resolveActivity(intent, PackageManager.ResolveInfoFlags.of(0L)) != null
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.resolveActivity(intent, 0) != null
+        }
 }

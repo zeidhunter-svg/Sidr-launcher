@@ -2587,3 +2587,58 @@ no OQ#1/OQ#2/OQ#3 resolution.
 - **PENDING/model-blocked:** Phase 6 real ONNX/NLU acceptance (missing `intent.onnx`, and bundled
   `vocab.txt` remains intentionally absent per the asset README); assistant route from no-model
   launcher home; OQ#3 embedding model acceptance.
+
+### ADR 2026-07-02 — Device Acceptance Round 2 (SM-A325F / Android 13)
+
+**Scope.** Honest device-only verification for already-shipped Phase 5/6/7 code on the real target
+device (`SM-A325F`, Android `13`, SDK `33`). No runtime changes, no model-training/export work, no
+OQ#1/OQ#2/OQ#3 resolution.
+
+**Baseline / install evidence.**
+- `./gradlew testDebugUnitTest` — **BUILD SUCCESSFUL**
+- `./gradlew assembleDebug` — **BUILD SUCCESSFUL**
+- `codegraph sync .` — **Already up to date**
+- `adb devices -l` — `RF8R705H38F ... model:SM_A325F`
+- `adb shell dumpsys package com.sidr.launcher` — package installed, debuggable, `lastUpdateTime=2026-07-02 13:57:42`
+- Cold-start smoke only: `adb shell am start -S -W -n com.sidr.launcher/.LauncherActivity` observed
+  `TotalTime: 3601` and later `2215`; keep the `<400ms` budget **PENDING/perf-risk**
+
+**Phase 7 suggestions.**
+- `settings` command → launcher settings screen **PASS** (device screenshot evidence)
+- `AI suggestions` toggle **ON** → suggestions row rendered on home **PASS**
+- toggle **OFF** → suggestions row cleared **PASS**
+- suggestion tap routing **PASS**: the `Настройки` chip launched the system Settings app, proving the
+  row is wired to the normal launch/navigation path
+- WorkManager ON/OFF gate **PASS** with direct device evidence:
+  - flag **ON**: local WorkManager DB contained `sidr_usage_cleanup` + `sidr_suggestion_precompute`,
+    both in `state=0`; `dumpsys jobscheduler com.sidr.launcher` showed `2` Sidr jobs
+  - flag **OFF**: local WorkManager DB kept `sidr_usage_cleanup` in `state=0`, moved
+    `sidr_suggestion_precompute` to `state=5`, and `dumpsys jobscheduler com.sidr.launcher` dropped to
+    `1` Sidr job
+  - the device reported `Battery not low: false`, so the queued jobs stayed constrained rather than
+    executing; this matches the contract and is not a failure
+
+**Phase 7 voice.**
+- Mic affordance on launcher home **PASS** (visible on SM-A325F)
+- Without `RECORD_AUDIO`, mic tap → `Voice commands` permission-education screen **PASS**
+- In-app enable flow ended with `android.permission.RECORD_AUDIO: granted=true` in `dumpsys package`
+- Post-grant recognizer run is **PARTIAL** but materially advanced: one run produced final transcript
+  `она такая группа` in the launcher input plus the normal feedback
+  `Unknown command. Try: open <app>, search <query>`, which confirms the unchanged
+  `Final -> onCommandSubmitted` path on device
+- `Ready` / `Partial` intermediate states were **not directly evidenced** and remain open; do not
+  promote this to a full recognizer PASS
+
+**Phase 5 / Assistant.**
+- Launcher command `assistant` → Assistant setup screen **PASS** (no NLU/model dependency)
+- Real streaming / terminal state / retry / cancel / offline fallback remain **PENDING-CONFIG**:
+  the setup form was blank (`Base URL`, `Model`, `API Key` empty), so no provider-backed session was
+  honestly runnable
+
+**Phase 6 / model.**
+- Real local NLU remains **PENDING-MODEL**. Searches for `intent.onnx` / `vocab.txt` returned no files
+  in the repo and no files in the app sandbox on device; do not claim on-device NLU acceptance
+
+**Net effect.** This round closes the Phase-7 launcher-side acceptance blockers (sanctioned settings
+path, suggestions ON/OFF surface, suggestion routing, mic visibility, assistant entry path) while
+keeping the remaining config/model/perf debts explicitly open.

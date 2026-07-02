@@ -1,13 +1,30 @@
 # CLAUDE.md — Sidr Launcher
 
 Session digest. Read this first. **Phase 4 is DONE (Blocks E → H, 2026-06-23).** **Phase 5 (cloud AI,
-multi-provider) is DONE — Blocks I → N complete (2026-06-24 – 2026-06-27).** Code + JVM green;
-**partial device acceptance executed on SM-A325F / Android 13 on 2026-07-01:** Block-J
-`SecretStoreInstrumentedTest` **PASS** on real Keystore (`OK (3 tests)`), APK install presence **PASS**,
-launcher **launch-smoke PASS** (`am start -W` cold starts observed at `1381ms` and `1026ms`, so the
-`<400ms` performance budget remains **pending/perf-risk**). Block-N N5 streaming/offline/cancel/rotation
-remains **pending-config/manual** (provider setup absent, assistant entry path not honestly verified from
-this session).
+multi-provider) is DONE — Blocks I → N complete (2026-06-24 – 2026-06-27).** Code + JVM green.
+**Device Acceptance Round 2 executed on SM-A325F / Android 13 on 2026-07-02:** `./gradlew
+testDebugUnitTest` **PASS**, `./gradlew assembleDebug` **PASS**, `codegraph sync .` up to date, device
+presence **PASS** (`RF8R705H38F`, `SM-A325F`, Android `13` / SDK `33`), package presence **PASS**
+(`com.sidr.launcher` installed; `lastUpdateTime=2026-07-02 13:57:42`), launcher cold-start smoke
+**PASS only** (`am start -S -W` observed `TotalTime: 3601ms`, later `2215ms`; `<400ms` remains
+**pending/perf-risk**). Phase 7 user-facing acceptance advanced with direct device evidence: command
+`settings` → launcher settings **PASS**; sanctioned `aiSuggestionsEnabled` toggle **ON** shows a
+suggestions row on home **PASS**; toggle **OFF** clears the row **PASS**; suggestion tap routing
+**PASS** (chip `Настройки` launched the system Settings app). WorkManager ON/OFF gating is now
+device-verified: with flag **ON** the WorkManager DB held `sidr_usage_cleanup` + `sidr_suggestion_precompute`
+in `state=0`, and `dumpsys jobscheduler` showed two constrained Sidr jobs; with flag **OFF**
+`sidr_usage_cleanup` stayed in `state=0` while `sidr_suggestion_precompute` moved to `state=5`, and
+`dumpsys jobscheduler` dropped to one Sidr job only. The device was `Battery not low: false`, so the
+queued jobs remained constrained rather than executing, which is consistent with the gate/constraint
+contract. Voice also advanced: mic affordance visible **PASS**; without `RECORD_AUDIO`, mic tap routes
+to the `Voice commands` education screen **PASS**; the in-app grant flow ended with
+`android.permission.RECORD_AUDIO: granted=true`; one post-grant mic run produced final transcript
+`она такая группа` plus standard launcher feedback `Unknown command. Try: open <app>, search <query>`,
+confirming the unchanged final-transcript submit path. **Still not honestly closed:** assistant real
+streaming/offline/retry/cancel remains **PENDING-CONFIG** (the `assistant` command now opens Assistant
+setup, but provider base URL/model/API key are absent); real local NLU remains **PENDING-MODEL**
+(`intent.onnx` / `vocab.txt` absent in repo and app sandbox, so no Phase-6 pass claim); recognizer
+`Ready` / `Partial` intermediate states were not directly evidenced.
 **Phase 6 (Local NLU + embeddings, Blocks O → R) is DONE — Blocks O → R complete (O 2026-06-27,
 P + Q 2026-06-28, R 2026-06-29); code + JVM green, partial device acceptance executed 2026-07-01:
 trim-memory is only PARTIAL (no-crash under `RUNNING_CRITICAL` and `BACKGROUND`/`COMPLETE`, process alive,
@@ -91,7 +108,7 @@ The offline launcher core (home, app grid, app launch) must work fully without A
 
 ## Current goal (active work)
 
-**NOW (2026-07-01): Phase 7 user-facing close is DONE — Blocks S + T + U + W complete; Block V runtime seam is implemented but inert pending OQ#3.** Phases 3 → 6 are code-closed
+**NOW (2026-07-02): Phase 7 user-facing close is DONE — Blocks S + T + U + W complete; Block V runtime seam is implemented but inert pending OQ#3.** Phases 3 → 6 are code-closed
 (MVP loop, persistence/Room/permission-education/hardening, cloud AI multi-provider, local ONNX NLU).
 **Acceptance-blocker follow-up (2026-07-01):** the inline `Routes.Settings` destination is now a real
 minimal launcher-settings screen with a sanctioned `aiSuggestionsEnabled` toggle (no adb hack), the
@@ -104,6 +121,18 @@ false-negative class seen on device. `RuleBasedIntentMatcher` again exposes a ru
 depends on NLU/model presence. JVM regression + `assembleDebug` are green. **Still pending / NOT
 claimed done:** provider config/key for real assistant streaming, OQ#1/OQ#2 real NLU model+vocab,
 OQ#3 embedding model, and cold-start perf budget.
+**Device Acceptance Round 2 (2026-07-02):** the launcher-side acceptance blockers are now directly
+verified on SM-A325F. `settings` opens launcher settings; `aiSuggestionsEnabled` **ON** shows the
+home suggestions row and **OFF** clears it; suggestion tap routing works on-device; and the
+WorkManager ON/OFF gate is evidenced by the app's real WorkManager DB (`sidr_usage_cleanup` stays
+enqueued, `sidr_suggestion_precompute` enqueued at ON then `state=5` at OFF) plus `dumpsys jobscheduler`
+(`2` Sidr jobs at ON, `1` at OFF, both constrained while `Battery not low: false`). Voice also moved
+forward materially: mic affordance visible, no-permission mic tap routes to education, in-app grant
+ended with `RECORD_AUDIO granted=true`, and one post-grant recognizer run produced a final transcript
+that went through the ordinary command pipeline (unknown-command feedback surfaced from launcher home).
+Still pending: assistant real streaming/offline/retry/cancel (**PENDING-CONFIG**), Phase 6 real NLU
+acceptance (**PENDING-MODEL**; no `intent.onnx` / `vocab.txt`), recognizer `Ready` / `Partial`
+intermediate-state evidence, OQ#3 embedding model, and the cold-start performance budget.
 **Phase 7 Block S** delivered the pure `:domain` suggestion + voice contracts; **Phase 7 Block T** delivered
 voice input (`AndroidSpeechInputSource` in `:core:android`, `VoiceModule` DI, the `RECORD_AUDIO` routed-education
 request flow, the discharged Block-H `refreshStatus()` debt, and the launcher mic affordance) — 383 JVM tests
@@ -177,6 +206,10 @@ Ph7 (no Ph4 display surface). `assembleDebug` + `testDebugUnitTest --rerun-tasks
 behavior; `OK (3 tests)`); Block-N N5 streaming / offline / cancel / rotation remains
 **pending-config/manual**. Details:
 [ai-context/phase-5-plan.md](ai-context/phase-5-plan.md).
+**Round 2 update (2026-07-02):** launcher command `assistant` now opens the Assistant setup screen on
+device without depending on NLU/model presence (**PASS** for the entry path), but the provider form is
+still empty, so real streaming / offline fallback / retry / cancel / terminal-state acceptance remains
+**PENDING-CONFIG**.
 
 **Phase 6 CLOSED (code-closed, Blocks O → R, 2026-06-29). ⚠ partial device acceptance executed
 2026-07-01** (NOT dissolved — carried into Phase 7 Tracking): APK install presence on SM-A325F **PASS**;
@@ -190,6 +223,8 @@ was run on device but all three tests **assumption-skipped** with
 inference + on-device NLU and Block-Q real model provisioning remain **pending/model-blocked** on
 OQ#1/#2 (`intent.onnx` / `vocab.txt`). Details:
 [ai-context/phase-6-local-nlu-plan.md](ai-context/phase-6-local-nlu-plan.md).
+**Round 2 update (2026-07-02):** no `intent.onnx` / `vocab.txt` were found either in the repo or in the
+app sandbox on device, so the status remains **PENDING-MODEL** and no real NLU acceptance is claimed.
 
 **Phase 7 — voice input + contextual suggestions** (Blocks S → W, see
 [ai-context/phase-7-voice-suggestions-plan.md](ai-context/phase-7-voice-suggestions-plan.md); forks

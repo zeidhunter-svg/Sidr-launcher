@@ -125,9 +125,14 @@ acceptance pass), gated on open questions OQ#1–OQ#4.
     Block X6 complete".
 - **MVP sequencing (owner 2026-07-02):** numeric 8→9 is NOT the ship order → **Phase UX → Phase 9
   (hardening, pre-ship gate) → Phase 8 (optional, deferred)**.
-  - **Phase 9 — hardening:** ⛔ not started; pre-ship gate after Phase UX. Absorbs the residual
-    cold-start perf-fix (if Block X6's re-measure still misses `< 400ms`), release build (R8/ProGuard),
-    multi-version validation, LOW_END profiling.
+  - **Phase 9 — hardening:** ⛔ not started; pre-ship gate after Phase UX. **Full plan:
+    [ai-context/phase-9-plan.md](phase-9-plan.md) (Blocks Y1–Y7).** Y1 startup (reframed: warm ≤~200ms +
+    no spinner primary, cold ~500–800ms release; `<400ms` aspirational, not a gate — measure warm too),
+    Y2 release build (R8/ProGuard + Baseline Profile), **Y3 contextual-suggestions rework** (A: filter
+    unlaunchable chips at `resolveSuggestionLabels`; b2: rework the hardcoded `TimeOfDaySuggestionProvider`
+    6-app AOSP table → 1–2 category-resolved universal anchors, usage/calendar/location primary), Y4 test
+    coverage, Y5 privacy/logging, Y6 multi-version + LOW_END, Y7 cosmetic findings. Model-gated OQ#1–#4 are
+    a separate track, out of the ship gate.
   - **Phase 8 — accessibility automation:** ⛔ OPTIONAL / DEFERRED (post-MVP); not a ship blocker.
 
 ## Open questions gating the residual track

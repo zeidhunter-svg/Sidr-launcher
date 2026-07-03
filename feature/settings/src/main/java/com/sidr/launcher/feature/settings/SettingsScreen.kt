@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
@@ -121,6 +123,10 @@ private fun SettingsContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(inner)
+                // Settings content can exceed the viewport (more so on small screens / large fonts) —
+                // make it scrollable so the SYSTEM section stays reachable. Scaffold insets stay outside
+                // the scroll; content padding is inside it.
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 8.dp, vertical = 8.dp),
         ) {
             // ── Appearance ──────────────────────────────────────────────────────

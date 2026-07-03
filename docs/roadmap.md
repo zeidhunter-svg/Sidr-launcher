@@ -115,15 +115,27 @@ automation becomes a product goal.
 
 ## Phase 9: Hardening
 
-**Status: pre-ship gate — runs after Phase UX (MVP-required).** Absorbs the residual cold-start
-perf-fix (if Block X6's re-measure still misses `<400ms`).
+**Status: pre-ship gate — runs after Phase UX (MVP-required).** Full plan:
+[ai-context/phase-9-plan.md](../ai-context/phase-9-plan.md) (Blocks Y1–Y7). No new features.
 
-- Add tests for domain logic, intent matching, repositories, permissions, offline states, and device capability paths.
-- Improve privacy, logging, crash-report filtering, and error handling.
-- Optimize startup, app grid rendering, AI latency, and memory usage against performance budgets.
-- Add R8/ProGuard rules for ONNX Runtime and release builds.
-- Validate behavior on Android 9, 11, 13, and 14.
-- Complete LOW_END memory profiling before release.
+- **Y1 Startup performance** — reframed goals (a launcher's resident/warm path dominates): warm/hot start
+  ≤ ~200ms + **no first-frame spinner**; cold ~500–800ms on release. `<400ms` is aspirational, **not** a
+  ship gate. Measure warm **and** cold on release; move `ensureModel`/WorkManager/PackageManager-enum off
+  the first-frame path; cache-first first paint.
+- **Y2 Release build** — enable R8 (`isMinifyEnabled`/`isShrinkResources`) + `-keep` for
+  Hilt/Room/kotlinx-serialization/ONNX/Ktor; add a **Baseline Profile** (macrobenchmark module).
+- **Y3 Contextual suggestions rework** — (A) filter unlaunchable chips at
+  `LauncherViewModel.resolveSuggestionLabels` so a chip that can't launch never renders (tiny, do first);
+  (B/b2) **rework the hardcoded `TimeOfDaySuggestionProvider` 6-app AOSP table** down to 1–2 genuinely
+  universal, **category-resolved** anchors (device's real default clock/camera via system intents), making
+  usage/calendar/location the primary sources.
+- **Y4** test-coverage hardening (domain, intent, repositories, permissions, offline, device-capability;
+  fill VM suggestions/favorites gaps).
+- **Y5** privacy, logging, crash-report filtering, error handling.
+- **Y6** validate on Android 9/11/13/14 + LOW_END memory profiling.
+- **Y7** residual cosmetic findings (keySet race, `retray→retry`, re-entry-resumes-drawer).
+
+Model-gated items (OQ#1–#4: NLU/embedder models, STT matrix) are a **separate track, out of the ship gate**.
 
 ## Post-MVP Track: AI Operating Layer over Android
 

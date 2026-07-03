@@ -34,4 +34,7 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
+
+    // Renders @Preview composables in the IDE / preview host (debug-only).
+    debugImplementation(libs.compose.ui.tooling)
 }

@@ -1,6 +1,7 @@
 package com.sidr.launcher.data.repository.preferences
 
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -41,6 +42,11 @@ internal object PreferencesKeys {
     // User preferences — prefix: user_
     val USER_THEME_NAME             = stringPreferencesKey("user_theme_name")
     val USER_COMMAND_INPUT_ENABLED  = booleanPreferencesKey("user_command_input_enabled")
+    // Block X6 deferred UI prefs. All three names are denylist-clean (no forbidden term):
+    // "favorites"/"count", "mic"/"input" (deliberately NOT "voice"), "setup"/"hint"/"dismissed".
+    val USER_FAVORITES_COUNT        = intPreferencesKey("user_favorites_count")
+    val USER_MIC_INPUT_ENABLED      = booleanPreferencesKey("user_mic_input_enabled")
+    val USER_SETUP_HINT_DISMISSED   = booleanPreferencesKey("user_setup_hint_dismissed")
 
     // Feature flags — prefix: flag_
     val FLAG_AI_SUGGESTIONS_ENABLED    = booleanPreferencesKey("flag_ai_suggestions_enabled")
@@ -101,6 +107,9 @@ internal object PreferencesKeys {
     val ALL_KEY_NAMES: Set<String> = setOf(
         USER_THEME_NAME.name,
         USER_COMMAND_INPUT_ENABLED.name,
+        USER_FAVORITES_COUNT.name,
+        USER_MIC_INPUT_ENABLED.name,
+        USER_SETUP_HINT_DISMISSED.name,
         FLAG_AI_SUGGESTIONS_ENABLED.name,
         FLAG_USAGE_HISTORY_ENABLED.name,
         FLAG_PERMISSION_EDU_DISMISSED.name,

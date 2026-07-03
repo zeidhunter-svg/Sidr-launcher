@@ -12,6 +12,8 @@ import com.sidr.launcher.domain.history.AppUsageRecord
 import com.sidr.launcher.domain.history.UsageHistoryRepository
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.preferences.SuggestionsCacheRepository
+import com.sidr.launcher.domain.preferences.UserPreferences
+import com.sidr.launcher.domain.preferences.UserPreferencesRepository
 import com.sidr.launcher.domain.intent.ActionExecutionResult
 import com.sidr.launcher.domain.intent.ActionExecutor
 import com.sidr.launcher.domain.intent.CommandOutcome
@@ -58,6 +60,7 @@ class LauncherViewModel @Inject constructor(
     // Domain interfaces — injected from :app via Hilt. No feature→data edge.
     private val usageHistoryRepository: UsageHistoryRepository,
     private val featureFlagRepository: FeatureFlagRepository,
+    private val userPreferencesRepository: UserPreferencesRepository,
     private val suggestionEngine: SuggestionEngine,
     private val suggestionsCacheRepository: SuggestionsCacheRepository,
     // Voice input modality (Block T). Produces the same text the keyboard does; rides the existing
@@ -86,14 +89,38 @@ class LauncherViewModel @Inject constructor(
     private val _rawAppsResult = MutableStateFlow<OperationResult<List<InstalledApp>>?>(null)
     private val _suggestions = MutableStateFlow<List<Suggestion>>(emptyList())
 
+    // Block X6: deferred UI preferences (favorites row size, mic toggle, first-run nudge flag).
+    // Held as a hot StateFlow so both the derived [uiState] and the imperative voice/nudge paths
+    // read a consistent snapshot. A read failure degrades to defaults (mic on, 8 favorites).
+    private val userPreferences: StateFlow<UserPreferences> =
+        userPreferencesRepository.getPreferences()
+            .catch { emit(UserPreferences()) }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.Eagerly,
+                initialValue = UserPreferences(),
+            )
+
+    // Whether the mic affordance is shown: the recognizer must be usable AND the user pref on.
+    // Read outside the app-list UiState (the search field renders during Loading too).
+    val showMic: StateFlow<Boolean> = userPreferences
+        .map { it.micInputEnabled && speechInputSource.isAvailable() }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = speechInputSource.isAvailable(),
+        )
+
     // Derived state: combines the loaded app list with live usage records so the grid
-    // re-sorts automatically whenever a launch is recorded (F6 demo slice), and surfaces the
-    // launcher-owned suggestion row state (Phase 7, Block W-lite).
+    // re-sorts automatically whenever a launch is recorded (F6 demo slice), surfaces the
+    // launcher-owned suggestion row state (Phase 7, Block W-lite), and carries the Block X6
+    // favorites cap + first-run nudge flag through user preferences.
     val uiState: StateFlow<UiState<LauncherUiState>> = combine(
         _rawAppsResult,
         usageHistoryRepository.getUsageRecords().catch { emit(emptyList()) },
         _suggestions,
-    ) { appsResult, usageRecords, suggestions ->
+        userPreferences,
+    ) { appsResult, usageRecords, suggestions, prefs ->
             when (appsResult) {
                 // null = not loaded yet (initial or mid-retry) → Loading, so a retry visibly
                 // flashes Loading → content rather than freezing on the stale error.
@@ -107,6 +134,8 @@ class LauncherViewModel @Inject constructor(
                         LauncherUiState(
                             apps = sorted,
                             suggestions = resolveSuggestionLabels(suggestions, sorted),
+                            favorites = deriveFavorites(usageRecords, sorted, prefs.favoritesCount),
+                            setupHintDismissed = prefs.setupHintDismissed,
                         ),
                     )
                 }
@@ -221,6 +250,9 @@ class LauncherViewModel @Inject constructor(
     // into the command input; the Final result is submitted through the UNCHANGED command path —
     // voice produces byte-identical text to the keyboard (HandleUserCommandUseCase is untouched).
     fun startVoiceInput(languageTag: String? = null) {
+        // Block X6: the user can disable voice input in Settings. A stale mic tap (or a caller that
+        // bypasses the showMic gate) becomes a no-op rather than starting the recognizer.
+        if (!userPreferences.value.micInputEnabled) return
         if (!speechInputSource.isAvailable()) {
             _commandFeedback.value = CommandFeedback.Message(VOICE_UNAVAILABLE)
             return
@@ -388,6 +420,44 @@ class LauncherViewModel @Inject constructor(
                 .thenByDescending { byPackage[it.packageName]!!.lastUsedEpochMs }
         )
         return sorted + withoutHistory
+    }
+
+    // ── Favorites (Block X2) ───────────────────────────────────────────────
+    // The decluttered home shows a small top-N most-used row instead of the full grid.
+    // [usageRecords] arrives most-used-first (UsageHistoryRepository contract); we map each to its
+    // currently-installed app (dropping records for apps that are gone) and cap at [favoritesCount]
+    // (Block X6 — user-configurable via Settings). Empty history (fresh install) → empty favorites
+    // (an alphabetical fallback is a later block).
+    private fun deriveFavorites(
+        usageRecords: List<AppUsageRecord>,
+        installed: List<InstalledApp>,
+        favoritesCount: Int,
+    ): List<InstalledApp> {
+        if (usageRecords.isEmpty() || favoritesCount <= 0) return emptyList()
+        val byPackage = installed.associateBy { it.packageName }
+        return usageRecords
+            .mapNotNull { byPackage[it.packageName] }
+            .take(favoritesCount)
+    }
+
+    /**
+     * Dismiss the one-shot first-run "set as default launcher" nudge (Block X6). Persisted so the
+     * hint never resurfaces. Idempotent; a write failure leaves the flag unset (the nudge may show
+     * again — acceptable for a purely advisory hint).
+     */
+    fun dismissSetupHint() {
+        viewModelScope.launch(ioDispatcher) {
+            try {
+                val current = userPreferencesRepository.getPreferences().first()
+                if (!current.setupHintDismissed) {
+                    userPreferencesRepository.updatePreferences(current.copy(setupHintDismissed = true))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                // Advisory hint — a failed dismiss is non-critical.
+            }
+        }
     }
 
     private fun resolveSuggestionLabels(

@@ -2642,3 +2642,448 @@ OQ#1/OQ#2/OQ#3 resolution.
 **Net effect.** This round closes the Phase-7 launcher-side acceptance blockers (sanctioned settings
 path, suggestions ON/OFF surface, suggestion routing, mic visibility, assistant entry path) while
 keeping the remaining config/model/perf debts explicitly open.
+
+### ADR 2026-07-02 — Device Acceptance Round 3 (SM-A325F / Android 13)
+
+**Scope.** Agent-directed / human-hands device pass targeting the items Round 2 left open, with a
+**BYOK OpenRouter key entered in-app** (never committed/logged). Focus: assistant real streaming
+(brief C.1), a rigorous cold-start measure + root-cause (Part D), a clean trim BACKGROUND/COMPLETE
+run (Part E), and calendar/location opt-in UX + privacy (C.4). No runtime/model work; two small
+findings recorded, not fixed (per brief boundary).
+
+**C.1 Assistant — real streaming end-to-end = PASS (the last big AI blocker).** Previously
+PENDING-CONFIG; now verified against a live provider (`openrouter.ai`, model `openai/gpt-4o-mini`):
+- No-config → provider-setup form shown (no crash).
+- `saveProvider` persists config to `sidr_preferences` (`ai_provider_id/base_url/model` =
+  `openrouter.ai` / `https://openrouter.ai/api/v1` / `openai/gpt-4o-mini`) and the key to the
+  encrypted `sidr_secrets` store (slot `ai_api_key_openrouter.ai`, 172-byte blob) — the key is
+  **absent from `sidr_preferences`**, confirming store separation.
+- **Real streaming:** first model hit a provider-side `429` (mapped correctly to a Retry-able
+  "Rate limited" error — external throttle, not an app bug); switching model → **tokens streamed**.
+  `keystore2 create_operation Success` on each send confirms the stored key **decrypts and is used**
+  (crypto round-trip is sound).
+- **Offline static fallback = PASS:** `svc wifi/data disable` → send → `StaticFallbackEngine` canned
+  reply ("I can't reach an AI service right now…"), no crash / no hung spinner.
+- **cancel / retry / rotation = PASS:** back-nav aborts the stream (no crash); retry reruns a single
+  stream (no double); rotate mid-stream → reply survives and streaming continues.
+
+**Two findings (recorded, NOT fixed — small, per brief boundary):**
+1. **`keySet` indicator race (cosmetic).** In `AssistantViewModel.saveProvider`, `setActiveConfig`
+   (prefs write) re-triggers the `activeConfig().collect` `keySet` recompute **before**
+   `secretStore.put` stores the key, and nothing re-triggers the collector after the put — so the
+   "API Key (set)" indicator stays false even though the key is saved and usable. Cosmetic only
+   (streaming works); fix is to re-read/reflect keySet after `put`.
+2. **String typo:** RateLimited error reads `Please wait and retray` → should be `retry`.
+
+**Part D Cold-start — rigorous measure + root-cause = PENDING / PERF-RISK.** `am force-stop` + `am
+start -S -W` ×6 cold: `2172, 1751, 1833, 1718, 1711, 1728` ms → **min 1711 / median ~1740 / max
+2172**; hot relaunch `TotalTime 0 / WaitTime 16`. Median **~1740ms vs the `<400ms` budget** (~4.3×
+over). `WaitTime≈TotalTime` cold + hot≈0 localizes the cost to `onCreate` + first frame, not Activity
+redraw. **Root-cause hypothesis (not fixed here):** for a launcher, `PackageManager` app enumeration
++ label/icon load on the first-frame path likely dominates, over Hilt graph construction,
+`SidrDatabase` open + usage-sorted grid query, first DataStore read, and the fire-and-forget
+`ensureModel()` coroutine. A profiled attribution (`am start --start-profiler` / Perfetto) is owed
+before any fix.
+
+**Part E Trim BACKGROUND/COMPLETE = PASS (no-crash; upgraded from Round-1/2 PARTIAL).** Backgrounded
+(Settings foregrounded) → `am send-trim-memory … BACKGROUND` then `COMPLETE`. Process stayed alive
+(pid logging after the trims); `OpenGLRenderer … trimMemory(TRIM_MEMORY_COMPLETE)::destroyRenderingContext`
+(renderer release); and **`OnnxIntentClassifier: ONNX session released (trim).` ×2** — the R2.5
+`onTrimMemory` → `SessionLifecycle.releaseResources()` hook fired for **both** Block-V
+`Set<SessionLifecycle>` seams (NLU + embedder), device-proven for the first time. No `AndroidRuntime`
+/ `FATAL`. Honest caveat unchanged: with **no model bundled** there is no native ONNX session to tear
+down, so native-session release stays structurally unprovable until OQ#1/#2 — this proves the
+**release wiring fires and the app survives**, not native teardown.
+
+**C.4 Calendar / Location opt-in + privacy = PASS.** Baseline `READ_CALENDAR` /
+`ACCESS_FINE_LOCATION` = `granted=false`; suggestions still rendered from time/usage
+(degrade-not-block). After `pm grant` of both + a suggestions off→on refresh, the persisted cache
+(`sug_cached_list_json`) held exactly:
+`[{"label":"Clock","actionId":"com.android.deskclock"},{"label":"Nearby places","actionId":"com.google.android.apps.maps"},{"label":"Music","actionId":"com.android.music"}]`.
+The location provider emitted a **single fixed generic** `"Nearby places"` → maps app — **no
+coordinate, no raw place**. No calendar-generic entry (no upcoming event on device → provider
+returned empty). **Privacy: nothing sensitive leaked** — neither the cache nor logcat contained a raw
+event title, coordinate, or `lat/lon`; only fixed generic labels + package `actionId`s.
+
+**Still open after Round 3.** C.2 voice recognizer `Ready`/`Partial` intermediate states (OQ#4, not
+evidenced); C.5 boot-warmup re-enqueue after reboot; Part D cold-start **fix** (profiled attribution
++ deferral of first-frame work); the two C.1 findings above; and the model-gated NLU acceptance
+(OQ#1/#2). **Net effect:** C.1 — the only working AI path — is now honestly **PASS end-to-end**,
+retiring the largest outstanding acceptance blocker; the residual debt is perf (cold-start), voice
+intermediate states, boot-warmup, and the model track.
+
+## ADR 2026-07-03 — Phase UX Block X1 complete (design-system foundation in `core/ui`)
+
+**Context.** Phase UX (home redesign) starts here. `core/ui` was reserved as "Design system / theme"
+in the module contract but was effectively empty; `LauncherActivity` wrapped the app in a bare
+`MaterialTheme {}`. Block X1 fills `core/ui` with a pragmatic M3 theme + a small component library,
+**presentation-only** — no behavior change, no screen rewired yet (that lands in X2+). Forks: **U4 =
+(b) pragmatic M3 theme + core components** (no bespoke token engine); **UX-Q4 = neutral M3 palette +
+Material You dynamic colour on API 31+**.
+
+**Theme (`core/ui/.../theme/`).**
+- `Color.kt` — neutral indigo-seeded M3 palette; `SidrLightColorScheme` / `SidrDarkColorScheme` as
+  the **static fallback** (raw colours kept `private`; consumers read semantic roles only).
+- `Type.kt` — `SidrTypography`: M3 scale on the platform default font (no bundled font), with a
+  SemiBold `titleLarge` and a wide-tracked `labelSmall` for section headers.
+- `Shape.kt` — `SidrShapes` (4/8/12/16/28dp).
+- `Spacing.kt` — flat `object Spacing` (xs..xxl) + `object Sizes` (`minTouchTarget`/`appIcon`/
+  `appTile`/`icon`/`stateGlyph`). A plain object, **not** a CompositionLocal (single density scale; U4).
+- `Theme.kt` — `SidrTheme(darkTheme = isSystemInDarkTheme(), dynamicColor = true, content)`: dynamic
+  colour on API 31+, else the static schemes; typography + shapes are always the Sidr scale.
+
+**Components (`core/ui/.../component/`).** `SidrScaffold` (themed Scaffold defaults), `SidrSearchField`
+(the unified search/command field — leading search glyph, submit → `onSubmit`, trailing precedence
+Clear-when-typed → Mic-when-available; the reusable replacement for `CommandInputBar` in X2/X4),
+`AppTile` (icon **slot** + one-line label — the slot keeps `PackageManager`/`Drawable`/`InstalledApp`
+loading in the feature layer so `core/ui` takes **no** `domain`/`data` edge), `SectionHeader` (a11y
+`heading()`), `TopBarIcon` (48dp touch target, required non-null `contentDescription` — these icons
+are the *only* Settings/Assistant discovery affordance in X2), `EmptyState`, `ErrorState` (optional
+`onRetry`, mirrors `UiState.Error(retryable)` shape without depending on it). Each has light/dark
+`@Preview`s.
+
+**Icons decision (owner-approved).** Use `androidx.compose.material.icons.Icons` **core set** —
+already transitive via `material3` (`material-icons-core` 1.7.6), used by `feature/assistant` — so
+Settings/Search/Clear cost **no new dependency**. The core set has **no `Mic`** (extended-only), so
+rather than pull `material-icons-extended`, the mic is a bundled vector drawable
+`res/drawable/ic_mic_24.xml` (standard Material mic path, no `?attr/colorControlNormal` tint — this
+is a Compose-only theme with no AppCompat attrs; `Icon` tints it). **Zero new Gradle deps.**
+
+**Integration.** `LauncherActivity`: `MaterialTheme {}` → `SidrTheme {}` (the single app-wide theme
+application point; behavior unchanged). `core/ui/build.gradle.kts`: added
+`debugImplementation(libs.compose.ui.tooling)` for `@Preview` rendering only.
+
+**Hard-rules compliance.** `core/ui` still depends on **`core/common` only** (+ Compose); **no**
+`domain`/`data`/`feature` edge (AppTile's icon slot is the load-bearing choice that preserves this).
+No `feature→feature`. No behavior change; no `IntentMatcher`/`GenerativeAiEngine`/`SuggestionEngine`/
+`HandleUserCommandUseCase` touch. No new JVM tests (pure presentation — previews are the visual check;
+existing suites unchanged and green). Round-3 findings (keySet race, `retray`→`retry`) deliberately
+**not** touched here — they belong to X5/X6.
+
+**Verification.** `:core:ui:assembleDebug` green; full `assembleDebug` + `testDebugUnitTest` **BUILD
+SUCCESSFUL** (no regressions). **Next = Block X2** (home declutter: top-bar Settings/Assistant icons,
+`SidrSearchField` wrapping today's command bar + mic, Favorites from `UsageHistoryRepository`, remove
+`AppGrid` from home).
+
+## ADR 2026-07-03 — Phase UX Block X2 complete (home redesign / declutter)
+
+**Context.** Home = the full installed-app grid + a bottom command bar; Settings/Assistant were
+reachable **only** by typing commands. Block X2 rebuilds the home surface into the decluttered,
+search-first layout from the plan (§3): a lightweight top bar with **discoverable** Settings +
+Assistant icons, the unified `SidrSearchField`, the unchanged Suggestions row, a small **Favorites**
+row (top-N most-used), and an **All apps** affordance — and **removes `AppGrid` from home**. Forks
+already decided (U1 minimal home + drawer, U2 button-first, U3 auto top-N favorites, U6 field submits
+commands byte-for-byte in X2; live filtering is X4).
+
+**`core/ui` (additive, allowed by handoff §5).** New bundled vector `res/drawable/ic_assistant_24.xml`
+(auto-awesome sparkle, `@android:color/white`, no `?attr/colorControlNormal` — Compose tints it;
+modeled on `ic_mic_24.xml`) because the core Material icon set has no Assistant glyph. `TopBarIcon`
+gained a **`Painter` overload** next to the `ImageVector` one (same 48dp target / 24dp glyph) so the
+bundled vector can be passed. **Zero new Gradle deps.**
+
+**`core/common`.** New route `Routes.AppDrawer.ROUTE = "app_drawer"`. The home "All apps" button
+navigates here now; the `composable(...)` destination lands in **X3**. Until then `AppNavHost`'s
+existing `handleNavigationEvent` safe-fallback (unknown route → `IllegalArgumentException` → back to
+`Launcher`) covers the tap — the deliberate interim behaviour (handoff §3), not a bug.
+
+**`feature/launcher`.** `LauncherUiState` gained `favorites: List<InstalledApp>`. `LauncherViewModel`
+derives it inside the **existing** `combine(_rawAppsResult, getUsageRecords(), _suggestions)` Success
+branch via pure `deriveFavorites(usageRecords, sortedApps)`: walk usage records (most-used-first per
+the repository contract) → map to the installed app by `packageName` → drop records for uninstalled
+apps → `take(FAVORITES_COUNT = 8)`; empty history → empty favorites (alphabetical fallback deferred to
+X6). **No new VM constructor dependency** (`usageHistoryRepository` was already injected for
+`recordUsage`). The full `apps` list stays loaded + `sortByUsage`'d — the X3 drawer and
+`onSuggestionClicked`'s package resolution still consume it; it just isn't rendered as a grid.
+`LauncherScreen` rebuilt on `SidrScaffold`: top bar = right-aligned `TopBarIcon(Settings)` →
+`navigateTo(Routes.Settings.ROUTE)` + `TopBarIcon(Assistant painter)` → `navigateTo(Routes.Assistant.ROUTE)`;
+`SidrSearchField` replaces the private `CommandInputBar` (`onMicTap` logic copied **verbatim** —
+`checkSelfPermission(RECORD_AUDIO)` → `startVoiceInput()` else route to VOICE_INPUT education);
+`CommandFeedbackArea` moved directly under the field. `SuccessContent → HomeContent`: suggestions
+(unchanged) + `SectionHeader("Favorites")` + a `LazyRow` of `AppTile` (icon slot fed by the retained
+`rememberAppIcon`/`Drawable.toImageBitmap` helpers with the monogram fallback) + a bottom-anchored
+"All apps" `TextButton`. **Deleted** `AppGrid`, `AppItem`, `CommandInputBar`. **Layout choice:** the
+search field sits at the **top** (under the top bar), not bottom-anchored as before — matches the
+search-first mockup; `imePadding()` retained.
+
+**Hard-rules compliance.** `core/ui` still `core/common`-only — no `domain`/`data`/`feature` edge (the
+`AppTile` icon slot keeps `PackageManager`/`InstalledApp` in the feature layer). No `feature→feature`.
+VM emits `NavigationEvent` only; never touches `NavHostController`. `domain` untouched;
+`HandleUserCommandUseCase`/`IntentMatcher`/`GenerativeAiEngine`/`SuggestionEngine` unchanged — typed
+commands run byte-for-byte; launcher core stays offline. `:data:ai-local` inert; OQ#1/2/3 and the
+Round-3 findings (keySet race, `retray`→`retry`) not touched (X5/X6).
+
+**Verification.** **7 new JVM tests** in `LauncherViewModelTest` (favorites: top-N usage order,
+uninstalled-exclusion, `FAVORITES_COUNT` cap, empty-history→empty; nav-events for Settings / Assistant /
+AppDrawer); `:feature:launcher:testDebugUnitTest`, full `assembleDebug` (Hilt graph valid) +
+`testDebugUnitTest` **BUILD SUCCESSFUL**. **Device-pending (SM-A325F, handoff §8):** home opens without
+the icon wall, both top-bar icons reach Settings/Assistant, favorites visible, `open telegram` (typed)
+works, mic affordance present. **Next = Block X3** (App Drawer — register `Routes.AppDrawer`, move the
+full list there, alphabetical + fast-scroll).
+
+## ADR 2026-07-03 — Phase UX Block X3 complete (App Drawer — all apps, on demand)
+
+**Context.** X2 decluttered home and left the home "All apps" `TextButton` navigating to the
+pre-registered `Routes.AppDrawer.ROUTE = "app_drawer"`, but no `composable(...)` existed → the tap hit
+`AppNavHost`'s safe-fallback back to home. Block X3 registers the destination and delivers the full
+installed-app list as a **separate App Drawer surface**: alphabetical with lettered section headers,
+launch-on-tap that feeds Favorites/Suggestions. Forks were pre-decided in the handoff (U-topology:
+drawer is a screen **inside `feature/launcher`**, no new module, no `feature→feature` edge; U2: button
+opens it, swipe-up optional/deferred; U6: live filtering is X4 — X3 shows the whole list unfiltered).
+
+**Two owner-confirmed decisions.**
+- **launch/recordUsage duplication → copy, not shared use-case.** `AppDrawerViewModel.launchApp`/
+  `recordUsage` is a ~10-line verbatim copy of `LauncherViewModel`'s (same `ActionExecutor` path, same
+  `usageHistoryEnabled` gate, `CancellationException` re-thrown, non-critical errors swallowed). A
+  shared `feature/launcher` use-case was judged premature for a two-caller path; keeps `:domain`
+  untouched. Revisit if a third caller appears.
+- **Fast-scroll → `stickyHeader` is the mandatory X3 mechanism; an A–Z side rail is an optional later
+  touch, not an acceptance blocker.** Shipped sticky lettered headers; no side rail this block.
+
+**`feature/launcher` (new files).**
+- **`AppIcon.kt`** — `rememberAppIcon(packageName)` + `Drawable.toImageBitmap()` **moved verbatim out
+  of `LauncherScreen.kt` and made `internal`** so both home (`AppTileIcon`) and drawer (`DrawerAppIcon`)
+  reuse them. `LauncherScreen.kt` lost those two `private` helpers + 10 now-unused imports; behaviour
+  unchanged. `core/ui` deliberately does **not** get these (PackageManager/Drawable is a feature
+  concern — the reason `AppTile` takes the icon as a slot).
+- **`AppDrawerUiState.kt`** — `AppDrawerUiState(sections)` + `DrawerSection(letter, apps)` + the **pure**
+  `internal fun groupIntoSections(apps)`: sort by label case-insensitive (`String.CASE_INSENSITIVE_ORDER`),
+  bucket by uppercased first letter (`LinkedHashMap` preserves A→Z after the sort), non-letter labels
+  collapse into a single trailing `"#"` bucket (omitted when empty). Side-effect-free → unit-tested
+  directly.
+- **`AppDrawerViewModel.kt`** (`@HiltViewModel`) — injects only `InstalledAppsRepository`,
+  `ActionExecutor`, `UsageHistoryRepository`, `FeatureFlagRepository`, `@IoDispatcher`. **No**
+  `HandleUserCommandUseCase`/`IntentMatcher` (the drawer doesn't parse commands). `uiState:
+  StateFlow<UiState<AppDrawerUiState>>` = `map` over the raw load result → `Loading`/`Error(retryable)`/
+  `Empty`/`Success(groupIntoSections(...))`; `retry()` resets to `Loading` and reloads. Same
+  `Channel<NavigationEvent>` pattern for `navigateBack()`. Error→UiError + isRetryable mirror
+  `LauncherViewModel` exactly.
+- **`AppDrawerScreen.kt`** — `SidrScaffold` top bar = `TopBarIcon(Icons.AutoMirrored.Filled.ArrowBack,
+  "Back")` + "All apps" title; content switches on `UiState` (`CircularProgressIndicator` / `EmptyState` /
+  `ErrorState(onRetry = retry when retryable)` / `LazyColumn`). `LazyColumn` uses `stickyHeader` per
+  section (`SectionHeader(letter)` on a themed background) + a compact `DrawerAppRow` (icon + label, one
+  tappable target, `clearAndSetSemantics { contentDescription = label }`) — a list row scans better for
+  A–Z than a grid tile. `stickyHeader` is a **member** of `LazyListScope` (not an importable
+  extension) — called without an import.
+
+**`:app`.** `AppNavHost` gains `composable(Routes.AppDrawer.ROUTE)`: `hiltViewModel<AppDrawerViewModel>()`,
+a `LaunchedEffect` collecting `navigationEvents` → the shared `handleNavigationEvent`, and `onBack =
+{ handleNavigationEvent(navController, NavigateBack) }` — the Settings-destination template. This retires
+the X2 interim safe-fallback for the "All apps" tap.
+
+**Hard-rules compliance.** No `feature→feature` edge (drawer lives in `feature/launcher`); single
+`NavHost` in `:app`; VM emits `NavigationEvent` only, never touches `NavHostController`. `core/ui`
+unchanged (icons stay a feature concern via the slot). `domain` untouched —
+`HandleUserCommandUseCase`/`IntentMatcher`/`SuggestionEngine`/`GenerativeAiEngine` unchanged; typed home
+commands still run byte-for-byte; drawer is fully offline (PackageManager + local launch). `:data:ai-local`
+inert; OQ#1/2/3 and the Round-3 findings (keySet race, `retray`→`retry`) not touched (X5/X6); live
+filtering left to X4.
+
+**Verification.** **15 new JVM tests** — `AppDrawerGroupingTest` (6: empty, in-section sort, A→Z order,
+case-insensitive first letter, trailing `#` bucket, `#` omitted when all-alpha) + `AppDrawerViewModelTest`
+(9: Loading→Success sections, Empty, retryable vs non-retryable Error, retry reloads, launch-through-
+executor + usage write, flag-gate suppresses the write, failed launch skips the write, `navigateBack`
+emits `NavigateBack`). `:feature:launcher:testDebugUnitTest`, full `assembleDebug` (Hilt graph valid) +
+`testDebugUnitTest` **BUILD SUCCESSFUL**. **Device-pending (SM-A325F, handoff §8):** "All apps" opens the
+drawer with every app, alphabetical + smooth scroll, tap launches, Back returns home, and a
+drawer-launched app rises into home Favorites. **Next = Block X4** (search ⇄ command unification — live
+app filtering).
+
+## ADR 2026-07-03 — Phase UX Block X4 complete (search ⇄ command unification — live app filtering)
+
+**Context.** X3 shipped the App Drawer showing the full installed-app list unfiltered. Block X4 adds
+the live filter (fork U6: one field filters apps *and* still submits commands, no regression). Three
+forks were surfaced to the owner before code and all landed on the recommended option.
+
+**Owner-decided forks.**
+- **X4-A (where the filter lives) → (a) filter in the App Drawer.** Home stays command-first (exact X2
+  behaviour, zero regression); the drawer already owns the full `InstalledApp` list + `groupIntoSections`,
+  so the filter is a pure derivation over data already loaded — the cheapest, lowest-risk slice. Options
+  (b) filter on home and (c) both were rejected as more scope for an MVP.
+- **Drawer IME submit → launch the top filtered match.** Enter launches the first *alphabetical* match
+  (the first app of the first section) via the existing launch path; no-op when nothing matches. This
+  keeps the drawer **command-free** — no `HandleUserCommandUseCase`/`IntentMatcher` added, preserving the
+  X3 topology decision. Command dispatch stays exclusively on home.
+- **"Ask assistant" affordance → deferred to X6.** Routing to the assistant *without* prefill is a
+  dead-end (the user's typed question is lost on arrival), and a real prompt-prefill needs a deliberate
+  nav-arg design (an optional prompt consumed once, **never** persisted to saved state — `AssistantViewModel`
+  intentionally has no `SavedStateHandle`). Bundled with X6 polish; the "key never in saved state"
+  invariant is untouched by X4.
+
+**`feature/launcher` changes.**
+- **`AppDrawerUiState.kt`** — new **pure** `internal fun filterApps(apps, query)` next to
+  `groupIntoSections`: `query.trim()`; blank/whitespace → the list unchanged (no filter); else keep apps
+  whose `label` `contains` the needle **case-insensitively**. Substring (not prefix) matching, so "tele"
+  finds "Telegram" and mid-word fragments match too. Side-effect-free → unit-tested directly.
+- **`AppDrawerViewModel.kt`** — added `_query: MutableStateFlow<String>` + `onQueryChanged(text)`, exposed
+  `val query: StateFlow<String> = _query.asStateFlow()`. `uiState` switched from `map` over
+  `_rawAppsResult` to `combine(_rawAppsResult, _query)` → on `Success`, `groupIntoSections(filterApps(...))`;
+  empty sections still collapse to `UiState.Empty` (covering both "no apps installed" and "query matched
+  nothing" — the screen picks the message from the current query). New `onQuerySubmitted()`: reads the
+  `Success` value, takes `groupIntoSections(filterApps(...)).firstOrNull()?.apps?.firstOrNull()` (the top
+  *visible* match), and launches it through the existing `launchApp`/`recordUsage` path; no-op otherwise.
+- **`AppDrawerScreen.kt`** — collects `query`; wraps the content in a `Column` + `imePadding()` with a
+  `SidrSearchField` under the top bar (`value=query`, `onValueChange=onQueryChanged`,
+  `onSubmit={onQuerySubmitted()}`, `showMic=false` — voice stays on home; built-in Clear;
+  `placeholder="Search apps"`). The `Empty` branch message is keyed off `query.isBlank()` ("No apps
+  found." vs "Nothing found."). Sticky lettered headers + the list are unchanged.
+
+**Hard-rules compliance.** Filter is UI/VM derivation over the already-loaded list — no repository
+re-hit, fully offline. `HandleUserCommandUseCase`/`IntentMatcher`/`CommandNormalizer`/`RuleBasedIntentMatcher`
+**unchanged** → typed home commands run byte-for-byte. No `feature→feature` edge; single `NavHost` in
+`:app`; VM emits `NavigationEvent` only. `core/ui` untouched (`SidrSearchField` already had the Clear +
+`onSubmit` seam); 0 new Gradle deps. `:domain` pure; `:data:ai-local` inert; OQ#1/2/3 and the Round-3
+findings (keySet race, `retray`→`retry`) not touched (X5/X6).
+
+**Verification.** **10 new JVM tests** — `AppDrawerGroupingTest` +5 (`filterApps`: blank→full,
+substring/case-insensitive, multi-match, no-match→empty, query trimmed) + `AppDrawerViewModelTest` +5
+(query filters sections live, clear→full list, no-match→`Empty`, `onQuerySubmitted` launches the top
+alphabetical match + records usage, submit no-op when nothing matches). `:feature:launcher:testDebugUnitTest`,
+full `assembleDebug` (Hilt graph valid) + `testDebugUnitTest` **BUILD SUCCESSFUL**. **Device-pending
+(SM-A325F, handoff §8, batched):** in the drawer typing filters apps live, Clear resets to the full list,
+Enter launches the top match, tap launches, Back → home; on home a typed command (`open telegram`,
+`settings`) still works. **Next = Block X5** (real `:feature:settings`).
+
+## ADR 2026-07-03 — Phase UX Block X5 complete (real Settings surface — `:feature:settings`)
+
+**Context.** Settings was a one-toggle stub (`com.sidr.launcher.settings.LauncherSettingsScreen` +
+`LauncherSettingsViewModel`) in `:app`. Block X5 promotes it to a real, discoverable module reached by
+the X2 top-bar icon. Forks U5 (own module) and U7 (in-Settings default-launcher helper) were
+pre-decided by the owner (b); four X5-specific forks were surfaced before code and all landed on the
+recommended option.
+
+**Owner-decided forks.**
+- **X5-A (how a feature re-syncs WorkManager) → (a) `:domain` port.** New
+  `SuggestionScheduling { suspend fun ensureScheduled() }` in `:domain`; impl `SuggestionSchedulingImpl`
+  in `:app` delegates to the existing `SuggestionsWorkScheduler`; Hilt-bound via
+  `SuggestionSchedulingModule`. The AI-suggestions toggle keeps its Block-W behaviour (write flag →
+  `ensureScheduled()`, synchronous) but reaches WorkManager through the port — **no `feature→:app`
+  edge**, and the gate-before-enqueue contract is unchanged (the scheduler still re-applies the
+  `aiSuggestionsEnabled`/`LOW_END`/battery-saver gate). Option (b) (app-side flag observer) was rejected
+  as it makes the re-sync async relative to the tap and adds an observer.
+- **X5-B (scope) → MVP slice.** Shipped: **theme** (system/light/dark), **AI suggestions** (existing
+  flag), **Assistant provider entry** (nav only), **Set-as-default**. **Deferred to X6:** voice on/off
+  and favorites-count — both need *new* pref fields + `PreferencesKeys`/`ALL_KEY_NAMES`/`PreferencesMapper`
+  edits + guard + consumer wiring (`deriveFavorites` / mic gate). Deferring keeps X5 off persistence
+  migrations, so **`PrivacyInventoryGuardTest` is untouched and green** (no new DataStore key).
+- **X5-C (default-launcher helper) → (a) intent from the screen.** `launchDefaultLauncherSettings(context)`
+  fires from `SettingsScreen` via `LocalContext`: API 29+ uses `RoleManager.createRequestRoleIntent(ROLE_HOME)`
+  when `isRoleAvailable(ROLE_HOME)`, else `Settings.ACTION_HOME_SETTINGS`; `ActivityNotFoundException`
+  swallowed (never crashes the launcher). It's a UI action, not business logic — no new port (mirrors how
+  `:feature:permission_education` fires system intents).
+- **X5-D (theme application) → composition-root observes prefs.** `LauncherActivity` field-injects
+  `UserPreferencesRepository`, `collectAsState`s `getPreferences()`, maps `themeName`
+  (`light→false`, `dark→true`, else `isSystemInDarkTheme()`) → `SidrTheme(darkTheme=…)`. `dynamicColor`
+  stays on (Material You unchanged; only the light/dark scheme follows the choice). Theme wiring stays in
+  `:app`/`core:ui`, not the feature.
+
+**Changes.**
+- **New `:feature:settings`** (`settings.gradle.kts` include + `:app` `implementation`), Compose + Hilt
+  kapt, deps `core:ui`/`core:common`/`domain`/`core:testing` — **0 new Gradle deps**, cloned from the
+  `feature/permission_education` template. `SettingsViewModel` (`@HiltViewModel`, deps
+  `FeatureFlagRepository` + `UserPreferencesRepository` + `SuggestionScheduling` + `@IoDispatcher`):
+  `uiState` = `combine(getFlags(), getPreferences(), saveError)`; `setAiSuggestionsEnabled` (flag write →
+  `ensureScheduled()`, unchanged failure→`SAVE_ERROR`/no-resync semantics), `setThemeName`
+  (write pref), `openAssistantProvider`/`navigateBack` via a `NavigationEvent` `Channel`
+  (mirrors `AssistantViewModel`). `SettingsUiState` + `ThemeOption` (the `system|light|dark` labels).
+  `SettingsScreen` is a stateless render on `SidrScaffold` + back `TopBarIcon` + `SectionHeader` + M3
+  radio/switch/buttons.
+- **`:domain`** gained the `SuggestionScheduling` port; **`:core:testing`** gained `FakeSuggestionScheduling`
+  (call-count). **`:app`** gained `SuggestionSchedulingImpl` + `SuggestionSchedulingModule`, deleted the
+  old `settings/*` screen+VM+test, rewired `AppNavHost.composable(Routes.Settings.ROUTE)` to
+  `SettingsViewModel`/`SettingsScreen` + a `navigationEvents` `LaunchedEffect`, and wired
+  `LauncherActivity` theme observation.
+
+**Hard-rules compliance.** `SuggestionScheduling` interface in `:domain`, impl in `:app` (contract-in-
+domain, impl-in-composition-root). No `feature→feature`, **no `feature→:app`**. Single `NavHost` in
+`:app`; VM emits `NavigationEvent` only. Assistant key invariant untouched — Settings only *navigates* to
+the existing provider form, never duplicates it. `HandleUserCommandUseCase`/`IntentMatcher`/suggestion +
+WorkManager (gate-before-enqueue) contracts unchanged; `:domain` pure; `:data:ai-local` inert; OQ#1/2/3
+and the Round-3 findings (keySet race, `retray`→`retry`) not touched.
+
+**Verification.** **6 new JVM tests** (`SettingsViewModelTest`: enable→flag+re-sync, disable→re-sync,
+flag-write-failure→error+no-resync, theme persist, theme-write-failure→error, assistant nav emits
+`NavigateTo(Assistant)`). `:feature:settings:testDebugUnitTest`, full `assembleDebug` (Hilt graph valid)
++ `testDebugUnitTest` **BUILD SUCCESSFUL**. **Device-pending (SM-A325F, handoff §7, batched):** Settings
+opens by icon; theme change applies (system/light/dark); toggles survive restart; "Set as default" opens
+the correct system screen; "Assistant provider" routes to the form. **Next = Block X6** (polish, a11y,
+first-run, deferred voice/favorites-count, device acceptance + cold-start re-measure).
+
+## ADR 2026-07-03 — Phase UX Block X6 complete (polish, a11y, first-run nudge, deferred settings; Phase UX CLOSED)
+
+**Context.** Final Phase UX block. It discharges X5's deferred settings (favorites-count + voice
+toggle), adds a11y hygiene + `core/ui` state surfaces on home, a first-run "set as default" nudge, and
+the X4-deferred "Ask assistant" prompt prefill. Five X6 forks were surfaced before code; the owner
+confirmed the recommended option on each.
+
+**Owner-decided forks.**
+- **X6-A (placement + key names) → all three prefs in `UserPreferences`.** New fields
+  `favoritesCount: Int = 8`, `micInputEnabled: Boolean = true`, `setupHintDismissed: Boolean = false`;
+  DataStore keys `user_favorites_count`, `user_mic_input_enabled`, `user_setup_hint_dismissed` — all
+  **denylist-clean** (the mic toggle deliberately avoids the forbidden term "voice"; verified against
+  `PrivacyInventoryGuardTest`'s list `voice/query/search/location/calendar/history/conversation/message/
+  transcript/secret/token/api`). All three added to `PreferencesMapper` (read-with-default + write) and
+  to `ALL_KEY_NAMES`. Rationale: these are UI preferences, not capability flags — `UserPreferences`, not
+  `FeatureFlags`.
+- **X6-B (scope) → full block.** Deferred settings + a11y + `core/ui` empty/error surfaces + first-run
+  nudge + assistant prefill, all shipped together. Motion kept minimal (no new animation deps).
+  Cold-start = **re-measure only** (X6-E), no startup-path code.
+- **X6-C (assistant prefill) → implement minimally.** `Routes.Assistant` gained an optional
+  `prompt` nav-arg (`ROUTE_WITH_ARG = "assistant?prompt={prompt}"`, `routeFor(encodedPrompt)`); the
+  `AppNavHost` reads it from the back-stack entry and passes `initialPrompt` to `AssistantScreen`, which
+  seeds `ChatView`'s local input via `remember(initialPrompt)`. **Prefill only — never auto-sent, and it
+  never touches `SavedStateHandle`** (the assistant deliberately holds none; the key/prompt invariant is
+  intact). Source: a drawer "Ask assistant: \"<query>\"" affordance shown when the query is non-blank,
+  which navigates via `viewModel.navigateTo(Routes.Assistant.routeFor(Uri.encode(query)))` — the screen
+  builds the encoded route (Android), the VM only emits the `NavigationEvent` (no Android/route-encoding
+  in the VM). Bare `assistant` still matches the arg'd pattern, so every existing
+  `navigateTo(Routes.Assistant.ROUTE)` call is unchanged.
+- **X6-D (first-run nudge) → detect in the screen, flag in `UserPreferences`.** `LauncherScreen`
+  computes `isDefaultLauncher(context)` (API 29+ `RoleManager.isRoleHeld(ROLE_HOME)`, else HOME-intent
+  `resolveActivity` package compare; any failure → not-default so the nudge can still surface). The
+  dismissible `SetupNudge` card ("Make Sidr your home screen" + a one-line type/search hint + "Set as
+  default") shows on the home Success surface only when `!isDefaultLauncher && !setupHintDismissed`.
+  Dismiss or CTA calls `viewModel.dismissSetupHint()` → persists `setupHintDismissed=true`; the CTA also
+  fires `launchDefaultLauncherSettings(context)` (same intent path as Settings X5-C). One-shot: never
+  resurfaces once persisted.
+- **X6-E (cold-start) → re-measure only.** No Hilt/Room/DataStore startup rework in X6; the profiled fix
+  stays a separate owed item. Re-measure (`am start -S -W ×N`) is part of the batched device pass.
+
+**Changes.**
+- **`:domain`** — `UserPreferences` +3 fields (data-class defaults only; module stays pure).
+- **`:data:repository`** — `PreferencesKeys` +3 keys (+`intPreferencesKey` import) +3 in `ALL_KEY_NAMES`;
+  `PreferencesMapper.toUserPreferences`/`writeUserPreferences` +3.
+- **`:feature:settings`** — `SettingsUiState` +`favoritesCount`/`micInputEnabled` + `FAVORITES_COUNT_OPTIONS`
+  (4/6/8/10); `SettingsViewModel` combine reads them + `setFavoritesCount`/`setMicInputEnabled` (write
+  pref, failure→`SAVE_ERROR`, no-op when unchanged); `SettingsScreen` gains a HOME section (favorites
+  `FilterChip` selector + a Voice-input `Switch`).
+- **`:feature:launcher`** — `LauncherViewModel` injects `UserPreferencesRepository`, holds a hot
+  `userPreferences` `StateFlow` (read-fail → defaults), exposes `showMic: StateFlow<Boolean>` =
+  `micInputEnabled && recognizer available`; `deriveFavorites` takes `favoritesCount`; `startVoiceInput`
+  early-returns when mic disabled; `dismissSetupHint()` added; `LauncherUiState` +`setupHintDismissed`;
+  `const FAVORITES_COUNT` removed. `LauncherScreen` reads `showMic`, renders `SetupNudge`, routes
+  empty/error through `core/ui` `EmptyState`/`ErrorState`, and the default-launcher helpers live here.
+  `AppDrawerViewModel` +`navigateTo(route)`; `AppDrawerScreen` +"Ask assistant" affordance.
+- **`:core:common`** — `Routes.Assistant` gained `ARG_PROMPT`/`ROUTE_WITH_ARG`/`routeFor` (pure string
+  interpolation; caller URL-encodes).
+- **`:feature:assistant`** — `AssistantScreen(initialPrompt)` seeds `ChatView`.
+- **`:app`** — `AppNavHost` Assistant destination registered with the optional nullable `prompt` arg;
+  reads it and passes `initialPrompt` to the screen.
+
+**Hard-rules compliance.** `domain` pure (fields only). Interfaces in `domain`, impls in `data`/`app`.
+No `feature→feature`, **no `feature→:app`** (drawer builds the route + VM emits `NavigationEvent`; app
+reads the nav-arg). Single `NavHost` in `:app`. Assistant key/prompt never in `SavedStateHandle`.
+`HandleUserCommandUseCase`/`IntentMatcher`/`CommandNormalizer`/`RuleBasedIntentMatcher` +
+suggestion/WorkManager (gate-before-enqueue) contracts untouched; `:data:ai-local` inert; OQ#1/2/3 and
+Round-3 findings (keySet race, `retray`→`retry`) not touched. **`PrivacyInventoryGuardTest` green** (3
+new keys inventoried, denylist-clean).
+
+**Verification.** New JVM tests: `SettingsViewModelTest` (favorites-count persist + write-failure, voice
+toggle persist + write-failure), `LauncherViewModelTest` (custom `favoritesCount` caps favorites,
+`showMic` true/false by pref, `startVoiceInput` no-op when disabled), `UserPreferencesRepositoryImplTest`
+round-trip + restart extended to the 3 new fields. `:feature:settings` / `:feature:launcher` /
+`:data:repository` / `:domain` / `:core:common` / `:feature:assistant` / `:app` test tasks all green;
+`assembleDebug` (Hilt graph valid) green. **Device-pending (SM-A325F, handoff §7, batched):** favorites
+count changes the row; voice toggle OFF hides the mic and no-ops `startVoiceInput`; toggles survive
+restart; first-run nudge shows once and opens the system launcher chooser; "Ask assistant" carries text
+to the assistant without saved state; a11y (TalkBack labels, ≥48dp) and cold-start re-measure.
+**Phase UX is CLOSED with this block.**

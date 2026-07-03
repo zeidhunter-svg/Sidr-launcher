@@ -20,11 +20,22 @@ contract. Voice also advanced: mic affordance visible **PASS**; without `RECORD_
 to the `Voice commands` education screen **PASS**; the in-app grant flow ended with
 `android.permission.RECORD_AUDIO: granted=true`; one post-grant mic run produced final transcript
 `она такая группа` plus standard launcher feedback `Unknown command. Try: open <app>, search <query>`,
-confirming the unchanged final-transcript submit path. **Still not honestly closed:** assistant real
-streaming/offline/retry/cancel remains **PENDING-CONFIG** (the `assistant` command now opens Assistant
-setup, but provider base URL/model/API key are absent); real local NLU remains **PENDING-MODEL**
-(`intent.onnx` / `vocab.txt` absent in repo and app sandbox, so no Phase-6 pass claim); recognizer
-`Ready` / `Partial` intermediate states were not directly evidenced.
+confirming the unchanged final-transcript submit path. **Device Acceptance Round 3 (2026-07-02, BYOK
+key in-app) retired the last big AI blocker — assistant real streaming is now PASS end-to-end** on
+`openrouter.ai`/`openai/gpt-4o-mini`: config persists to `sidr_preferences` + key to encrypted
+`sidr_secrets` (absent from prefs), tokens streamed (key decrypts & is used; first model's `429` was
+external throttle), **offline static fallback** + **cancel/retry/rotation** all PASS. **Part E trim
+BACKGROUND/COMPLETE = PASS** (no-crash; renderer `destroyRenderingContext` + `OnnxIntentClassifier:
+ONNX session released (trim)` ×2 — both Block-V `SessionLifecycle` seams; native teardown still
+unprovable w/o a model). **C.4 calendar/location = PASS** (granted → generic `"Nearby places"`→maps in
+cache, no coordinate/raw title in cache or logcat; calendar empty→degrade). **Part D cold-start =
+PENDING/PERF-RISK** — rigorous `am start -S -W` ×6 = min 1711 / median ~1740 / max 2172 ms vs `<400ms`
+(root-cause hypothesis: PackageManager app-enum + Hilt graph + Room open + first DataStore read +
+`ensureModel()`; profiled fix owed). **Two recorded findings (not fixed):** `keySet` indicator race
+(recompute before `secretStore.put` → tick stays false though key saved/usable, cosmetic) + RateLimited
+typo `retray`→`retry`. **Still open:** real local NLU **PENDING-MODEL** (`intent.onnx`/`vocab.txt`
+absent → no Phase-6 pass claim); recognizer `Ready`/`Partial` states not evidenced (OQ#4); C.5 boot
+warmup after reboot; cold-start fix. Details: decisions.md "ADR 2026-07-02 — Device Acceptance Round 3".
 **Phase 6 (Local NLU + embeddings, Blocks O → R) is DONE — Blocks O → R complete (O 2026-06-27,
 P + Q 2026-06-28, R 2026-06-29); code + JVM green, partial device acceptance executed 2026-07-01:
 trim-memory is only PARTIAL (no-crash under `RUNNING_CRITICAL` and `BACKGROUND`/`COMPLETE`, process alive,

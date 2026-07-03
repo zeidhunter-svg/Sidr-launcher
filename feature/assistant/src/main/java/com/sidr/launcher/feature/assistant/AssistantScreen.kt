@@ -51,6 +51,7 @@ import com.sidr.launcher.core.common.UiError
 fun AssistantScreen(
     viewModel: AssistantViewModel,
     modifier: Modifier = Modifier,
+    initialPrompt: String? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isConfigured = uiState.form.baseUrl.isNotBlank()
@@ -91,6 +92,7 @@ fun AssistantScreen(
         } else {
             ChatView(
                 uiState = uiState,
+                initialPrompt = initialPrompt,
                 onSend = viewModel::send,
                 onRetry = viewModel::retry,
                 onSaveProvider = viewModel::saveProvider,
@@ -106,8 +108,12 @@ private fun ChatView(
     onRetry: () -> Unit,
     onSaveProvider: (String, String, String) -> Unit,
     modifier: Modifier = Modifier,
+    initialPrompt: String? = null,
 ) {
-    var prompt by remember { mutableStateOf("") }
+    // Block X6-C: seed the input from the one-shot nav-arg prompt (keyed on it so it initialises once
+    // per navigation and never clobbers subsequent user edits). Prefill only — never auto-sent, and
+    // it never touches SavedStateHandle (the assistant holds none by design).
+    var prompt by remember(initialPrompt) { mutableStateOf(initialPrompt ?: "") }
     var showProviderForm by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
 

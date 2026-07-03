@@ -2,7 +2,7 @@
 
 > **Authoritative status lives in `CLAUDE.md` (session digest), `ai-context/decisions.md` (ADR log),
 > and the per-phase plans.** This file is a short pointer/snapshot only — if it disagrees with those,
-> they win. Last re-based: 2026-07-01.
+> they win. Last re-based: 2026-07-02 (Device Acceptance Round 3).
 
 ## Where we are
 
@@ -31,7 +31,71 @@ acceptance pass), gated on open questions OQ#1–OQ#4.
   precompute/cleanup workers + boot warmup.
   - **Block V (ONNX `TextEmbedder` + semantic re-rank):** implemented but **INERT** — gated on OQ#3
     (embedding model / host / hash / ONNX contract). Heuristic ranking is the shipping path.
-- **Phase 8 — accessibility · Phase 9 — hardening:** ⛔ not started.
+- **Phase UX — home redesign & design system:** 🚧 IN PROGRESS (owner decision 2026-07-02, U1/U5
+  decided). Minimal home + App Drawer (grid leaves home), discoverable Settings/Assistant, `core/ui`
+  design system, real `:feature:settings`. Plan: `ai-context/phase-ux-plan.md`. Synergistic with
+  cold-start (cold-start re-measure lives in its Block X6).
+  - **Block X1 (design-system foundation) ✅ 2026-07-03** — `core/ui` filled: `SidrTheme` (neutral M3
+    + dynamic colour on API 31+), typography/shapes/spacing tokens, and components `SidrScaffold`,
+    `SidrSearchField` (unified search/command + mic), `AppTile` (icon slot — no domain/data edge),
+    `SectionHeader`, `TopBarIcon`, `EmptyState`, `ErrorState`. `LauncherActivity` now themes via
+    `SidrTheme`. 0 new Gradle deps (icons = core set + one bundled mic vector); presentation-only, no
+    behavior change; `assembleDebug` + `testDebugUnitTest` green. ADR: decisions.md "2026-07-03 —
+    Phase UX Block X1 complete".
+  - **Block X2 (home declutter) ✅ 2026-07-03** — `LauncherScreen` rebuilt on `SidrScaffold`:
+    top-bar `TopBarIcon` Settings + Assistant (bundled `ic_assistant_24` via a new `Painter`
+    overload) → `navigateTo`; `SidrSearchField` replaced the private `CommandInputBar` (`onMicTap`
+    verbatim); Suggestions unchanged; new **Favorites** row (`SectionHeader` + `LazyRow`/`AppTile`,
+    top-N most-used); **All apps** button → new `Routes.AppDrawer.ROUTE` (X3 registers it; interim
+    safe-fallback to home). **`AppGrid` removed from home** (`apps` still loads for drawer + suggestion
+    resolution). `LauncherUiState.favorites` derived in the existing `combine` (`deriveFavorites`, cap
+    8, usage-order ∩ installed) — no new VM dep. 0 new Gradle deps; `core/ui` still `core/common`-only;
+    typed commands byte-for-byte; offline intact. 7 new JVM tests; `assembleDebug` + `testDebugUnitTest`
+    green. Device pass (SM-A325F) pending. ADR: decisions.md "2026-07-03 — Phase UX Block X2 complete".
+  - **Block X3 (App Drawer) ✅ 2026-07-03** — `AppNavHost` registers `composable(Routes.AppDrawer.ROUTE)`
+    (retires X2's interim safe-fallback). New drawer surface **inside `feature/launcher`** (no new
+    module, no `feature→feature` edge): `AppDrawerViewModel` (`@HiltViewModel`; no
+    `HandleUserCommandUseCase`/`IntentMatcher`) → `UiState<AppDrawerUiState>` from the **pure**
+    `groupIntoSections` (label-sorted, lettered buckets + trailing `#`); `AppDrawerScreen` = `SidrScaffold`
+    + Back `TopBarIcon` + `LazyColumn` with `stickyHeader` `SectionHeader`s + compact icon+label rows,
+    `Empty`/`Error(retry)` via `core/ui`. Icon helpers lifted to `internal AppIcon.kt` (shared home +
+    drawer). launch/usage = **verbatim copy** of `LauncherViewModel`'s (owner-confirmed; no shared
+    use-case, `:domain` untouched). Fast-scroll = sticky headers; A–Z side rail deferred (non-blocking).
+    15 new JVM tests; `assembleDebug` + `testDebugUnitTest` green; 0 new deps. Device pass (SM-A325F)
+    pending. ADR: decisions.md "2026-07-03 — Phase UX Block X3 complete".
+  - **Block X4 (search ⇄ command unification) ✅ 2026-07-03** — the App Drawer now filters live (fork
+    X4-A = filter in drawer; home stays command-first, no regression). Pure `filterApps(apps, query)`
+    (case-insensitive substring, blank → full list) in `AppDrawerUiState.kt`; `AppDrawerViewModel` gains
+    `_query`/`onQueryChanged` + exposed `query`, `uiState = combine(_rawAppsResult, _query)` → filter →
+    `groupIntoSections`; IME submit → `onQuerySubmitted()` launches the top (alphabetical) match via the
+    existing launch path (drawer stays command-free — no `HandleUserCommandUseCase`). `AppDrawerScreen`
+    adds `SidrSearchField` under the top bar (`showMic=false`, built-in Clear); Empty message keyed off
+    the query ("No apps found." vs "Nothing found."). **"Ask assistant" affordance deferred to X6** (a
+    prompt-prefill nav-arg needs deliberate design; the "key never in saved state" invariant is
+    untouched). `HandleUserCommandUseCase`/`IntentMatcher`/`CommandNormalizer` unchanged; `core/ui`
+    untouched; 0 new deps. 10 new JVM tests; `assembleDebug` + `testDebugUnitTest` green. Device pass
+    (SM-A325F) pending. ADR: decisions.md "2026-07-03 — Phase UX Block X4 complete".
+  - **Block X5 (real Settings surface) ✅ 2026-07-03** — the stub `com.sidr.launcher.settings.*` in `:app`
+    is replaced by a real, icon-reachable **`:feature:settings`** module (Compose + Hilt kapt, 0 new deps)
+    holding `SettingsScreen`/`SettingsViewModel`/`SettingsUiState`. **MVP slice (fork X5-B):** theme
+    (system/light/dark), AI suggestions (existing flag), Assistant provider entry (nav only), Set-as-default
+    — voice on/off + favorites-count **deferred to X6** (they'd need new pref keys; deferring keeps
+    `PrivacyInventoryGuardTest` untouched/green). **X5-A:** new `SuggestionScheduling` `:domain` port +
+    `SuggestionSchedulingImpl` in `:app` over `SuggestionsWorkScheduler` (Hilt-bound) → the toggle re-syncs
+    WorkManager with no `feature→:app` edge, gate-before-enqueue unchanged. **X5-C:** default-launcher
+    intent from the screen via `LocalContext` (RoleManager `ROLE_HOME` API 29+, else `ACTION_HOME_SETTINGS`).
+    **X5-D:** `LauncherActivity` observes `UserPreferencesRepository` → `themeName` → `SidrTheme(darkTheme=…)`,
+    `dynamicColor` stays on. Assistant key invariant untouched (nav-only). 6 new JVM tests; `assembleDebug`
+    + `testDebugUnitTest` green. Device pass (SM-A325F) pending. ADR: decisions.md "2026-07-03 — Phase UX
+    Block X5 complete".
+  - **Block X6** — pending. **Block X6 (polish, a11y, first-run, deferred voice/favorites-count, device
+    acceptance + cold-start re-measure) is next.**
+- **MVP sequencing (owner 2026-07-02):** numeric 8→9 is NOT the ship order → **Phase UX → Phase 9
+  (hardening, pre-ship gate) → Phase 8 (optional, deferred)**.
+  - **Phase 9 — hardening:** ⛔ not started; pre-ship gate after Phase UX. Absorbs the residual
+    cold-start perf-fix (if Block X6's re-measure still misses `< 400ms`), release build (R8/ProGuard),
+    multi-version validation, LOW_END profiling.
+  - **Phase 8 — accessibility automation:** ⛔ OPTIONAL / DEFERRED (post-MVP); not a ship blocker.
 
 ## Open questions gating the residual track
 
@@ -40,38 +104,68 @@ acceptance pass), gated on open questions OQ#1–OQ#4.
 - **OQ#3** — embedding model + tokenizer + host/hash (gates Block V). `EMBEDDING_PENDING` inert seam.
 - **OQ#4** — on-device STT availability across the target device matrix (gates Block T acceptance).
 
-## Device acceptance (SM-A325F / Android 13) — partial (see ADR 2026-07-01)
+## Device acceptance (SM-A325F / Android 13) — see ADR 2026-07-02 (Rounds 2 + 3)
 
-**Next step is a manual device-acceptance re-run — see
-[`device-acceptance-brief.md`](device-acceptance-brief.md).** Scope: observation + matrix honesty
-only, no runtime/model work.
+**Round 3 (2026-07-02, BYOK key in-app) retired the last big AI blocker: assistant real streaming is
+now PASS end-to-end.** Residual debt is perf (cold-start fix), voice intermediate states, boot-warmup,
+and the model track. See [`device-acceptance-brief.md`](device-acceptance-brief.md).
 
+**Verified on device (Round 3):**
+- ✅ **C.1 Assistant real streaming — PASS end-to-end** (was PENDING-CONFIG). Live provider
+  (`openrouter.ai` / `openai/gpt-4o-mini`): no-config form → `saveProvider` persists config
+  (`sidr_preferences`) + key (encrypted `sidr_secrets`, absent from prefs) → **tokens streamed**
+  (key decrypts & is used; first model's `429` was external throttle) → **offline static fallback**
+  ("I can't reach an AI service right now…") → **cancel / retry / rotation** all PASS.
+- ✅ **Part E Trim BACKGROUND/COMPLETE — PASS (no-crash).** Process alive; renderer
+  `destroyRenderingContext`; **`OnnxIntentClassifier: ONNX session released (trim)` ×2** (both Block-V
+  `SessionLifecycle` seams fired). Native ONNX teardown still unprovable (no model) — release wiring +
+  survival proven.
+- ✅ **C.4 Calendar/Location opt-in + privacy — PASS.** Denied → suggestions still from time/usage.
+  Granted → cache held only generic `"Nearby places"` → maps (no coordinate), `Clock`, `Music`; no
+  calendar-generic (no event → empty). **No raw event title / coordinate in cache or logcat.**
+
+**Verified on device (Round 1 + Round 2):**
 - ✅ Block-J `SecretStoreInstrumentedTest` — real Keystore round-trip, `OK (3 tests)`.
 - ✅ APK install presence; launcher launch-smoke; flag-off home (no suggestions row / no precompute).
-- ⚠️ **Cold start:** `am start` showed `1381ms` then `1026ms` cold (hot `248ms`) vs the `< 400ms`
-  budget (`docs/architecture.md:47`) → `PENDING / PERF-RISK`. Two `am start` calls are **not** a
-  rigorous benchmark — a proper measure (force-stop + `-S` + N runs) **and** a root-cause are owed.
-- ⚠️ **Trim:** `PARTIAL` — `RUNNING_CRITICAL` + backgrounded run = no-crash + renderer release, but
-  no-model state, so native ONNX-session release is unproven. `BACKGROUND`/`COMPLETE` re-run pending.
-- 🔁 **Three UI blockers hit during the pass were code-fixed the SAME day (ADR `decisions.md:262`) but
-  NOT re-verified on device:** assistant route from home (`assistant`/`show assistant` rule entry
-  restored), mic affordance (probe hardened + `<queries>`), and the `aiSuggestionsEnabled` toggle
-  (`LauncherSettingsScreen`). Re-verifying these against the fixed code is the point of the next pass.
-- ⏭️ Block-N N5 streaming/offline/cancel/rotation — needs a BYOK provider key (required setup, not
-  optional); it is the only working AI path and is still unverified end-to-end.
-- ⏭️ `OnnxIntentClassifierInstrumentedTest` assumption-skipped (no bundled model) — Block-P P5
-  `< 150ms` inference + Block-Q real provisioning still model-blocked (OQ#1/#2).
-- ⏭️ Block-U calendar/location granted/denied UX, Block-W boot warmup + WorkManager idempotency,
-  Block-V embedder `< 150ms` + memory co-residency — pending.
+- ✅ **[Round 2] The three ADR-262 UI blockers are now re-verified PASS on device:** `settings` →
+  `LauncherSettingsScreen` with a sanctioned `aiSuggestionsEnabled` toggle; toggle **ON** renders the
+  suggestions row, **OFF** clears it; suggestion tap routing works (the `Настройки` chip launched the
+  system Settings app); mic affordance is visible and no-permission mic tap routes to education.
+- ✅ **[Round 2] WorkManager ON/OFF gate** — device-verified via the app's real WorkManager DB
+  (`sidr_usage_cleanup` + `sidr_suggestion_precompute` at ON; `sidr_suggestion_precompute` → `state=5`
+  at OFF) plus `dumpsys jobscheduler` (`2` Sidr jobs ON → `1` OFF; both constrained while
+  `Battery not low: false`).
+- ✅ **[Round 2] Voice grant + submit path** — in-app enable ended with `RECORD_AUDIO granted=true`;
+  one post-grant run produced a final transcript that went through the unchanged
+  `Final → onCommandSubmitted` command path (unknown-command feedback surfaced).
+
+**Still open after Round 3:**
+- ⚠️ **Cold start — measured, fix owed.** Rigorous `am start -S -W` ×6 cold: min 1711 / median ~1740
+  / max 2172 ms (hot 0/16) vs the `< 400ms` budget (`docs/architecture.md:47`) → `PENDING / PERF-RISK`.
+  Root-cause hypothesis: `PackageManager` app enumeration on the first-frame path + Hilt graph + Room
+  open + first DataStore read + fire-and-forget `ensureModel()`. Needs a profiled attribution
+  (`--start-profiler` / Perfetto) then deferral of first-frame work (**separate fix task**).
+- 🔧 **Two C.1 findings (recorded, not fixed):** (1) `keySet` indicator race — `saveProvider` recomputes
+  keySet before `secretStore.put`, so the "key set" tick stays false though the key is saved & usable
+  (cosmetic); (2) RateLimited string typo `retray` → `retry`.
+- ⚠️ **Voice recognizer intermediate states** — `Ready` / `Partial` not evidenced (OQ#4); C.2 not a full
+  recognizer PASS.
+- ⏭️ **C.5 boot warmup** — `RECEIVE_BOOT_COMPLETED` re-enqueue after a reboot not yet exercised.
+- ⏭️ `OnnxIntentClassifierInstrumentedTest` assumption-skipped (no bundled model) — no `intent.onnx` /
+  `vocab.txt` in repo or app sandbox → **PENDING-MODEL**; Block-P P5 `< 150ms` inference + Block-Q real
+  provisioning still model-blocked (OQ#1/#2).
+- ⏭️ Block-V embedder `< 150ms` + memory co-residency — pending (OQ#3).
 
 ## Not claimed done
 
-Real assistant streaming against a live provider (needs BYOK config/key); OQ#1–OQ#4 real
-models/vocab/embedder; the cold-start performance budget; full device-acceptance pass.
+The cold-start performance **budget** (`< 400ms`) — measured at ~1740ms median, root-caused, fix
+owed; OQ#1–OQ#4 real models/vocab/embedder + on-device NLU acceptance; voice `Ready`/`Partial`
+intermediate states (OQ#4); boot-warmup after reboot (C.5). *(Real assistant streaming against a live
+provider — done Round 3.)*
 
 ## Source of truth
 
 - Session digest + hard rules: `CLAUDE.md`
-- Decisions log (30 ADRs): `ai-context/decisions.md`
+- Decisions log (latest: ADR 2026-07-02 — Device Acceptance Round 2): `ai-context/decisions.md`
 - Architecture (in sync): `docs/architecture.md` · Roadmap: `docs/roadmap.md`
 - Active/last plan: `ai-context/phase-7-voice-suggestions-plan.md`

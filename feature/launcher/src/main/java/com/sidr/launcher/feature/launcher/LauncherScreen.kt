@@ -1,9 +1,13 @@
 package com.sidr.launcher.feature.launcher
 
 import android.Manifest
+import android.app.role.RoleManager
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.drawable.Drawable
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -11,6 +15,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,43 +23,55 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.navigation.Routes
+import com.sidr.launcher.core.ui.R
+import com.sidr.launcher.core.ui.component.AppTile
+import com.sidr.launcher.core.ui.component.EmptyState
+import com.sidr.launcher.core.ui.component.ErrorState
+import com.sidr.launcher.core.ui.component.SectionHeader
+import com.sidr.launcher.core.ui.component.SidrScaffold
+import com.sidr.launcher.core.ui.component.SidrSearchField
+import com.sidr.launcher.core.ui.component.TopBarIcon
+import com.sidr.launcher.core.ui.theme.Sizes
+import com.sidr.launcher.core.ui.theme.Spacing
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.permission.PermissionFeature
 import com.sidr.launcher.domain.suggestions.Suggestion
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
+/**
+ * The redesigned, decluttered home surface (Phase UX, Block X2).
+ *
+ * There is no full app grid here any more — the wall of icons moves to the App Drawer (Block X3).
+ * Home shows only a small, useful set: a lightweight top bar with **discoverable** Settings +
+ * Assistant icons, the unified [SidrSearchField] (search look, command-pipeline behaviour), the
+ * existing Suggestions row (unchanged single-owner [LauncherUiState.suggestions]), a **Favorites**
+ * row of the top-N most-used apps, and an **All apps** affordance. The full [LauncherUiState.apps]
+ * list still loads (the drawer and suggestion resolution need it); it just isn't rendered as a grid.
+ */
 @Composable
 fun LauncherScreen(
     modifier: Modifier = Modifier,
@@ -64,7 +81,13 @@ fun LauncherScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val commandInput by viewModel.commandInput.collectAsStateWithLifecycle()
     val feedback by viewModel.commandFeedback.collectAsStateWithLifecycle()
+    val showMic by viewModel.showMic.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    // First-run nudge (Block X6): whether this launcher is already the system default HOME app.
+    // A runtime Android query kept in the screen (like Settings' "Set as default"); the persisted
+    // "dismissed" half lives in UserPreferences (LauncherUiState.setupHintDismissed).
+    val isDefaultLauncher = remember { isDefaultLauncher(context) }
 
     // Voice input (Block T). Tapping the mic starts recognition only when RECORD_AUDIO is held;
     // otherwise it routes to the permission-education screen for VOICE_INPUT (the Fork-5
@@ -79,74 +102,219 @@ fun LauncherScreen(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .imePadding(),
-    ) {
-        // NOTE (Block H, H4): the temporary home-screen "Wallpaper" demo button was removed here.
-        // The permission-education destination stays registered in AppNavHost and reachable by
-        // route; a real entry point (launcher settings / home long-press) lands in a later phase.
-
-        // Switching area — expands to fill available space above the input bar
-        Box(modifier = Modifier.weight(1f)) {
-            when (val state = uiState) {
-                is UiState.Loading -> LoadingContent()
-                is UiState.Empty -> EmptyContent()
-                is UiState.Error -> ErrorContent(
-                    error = state.error,
-                    retryable = state.retryable,
-                    onRetry = viewModel::retry,
+    SidrScaffold(
+        modifier = modifier,
+        topBar = {
+            // Discoverable entry points — the only way to reach Settings / Assistant without typing
+            // a command (both stay as typed power-user shortcuts too). Labelled for TalkBack.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.sm),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TopBarIcon(
+                    icon = Icons.Filled.Settings,
+                    contentDescription = "Settings",
+                    onClick = { viewModel.navigateTo(Routes.Settings.ROUTE) },
                 )
-                is UiState.Success -> SuccessContent(
-                    state = state.data,
-                    onAppClick = viewModel::onAppClicked,
-                    onSuggestionTap = viewModel::onSuggestionClicked,
-                    suggestionsContent = suggestionsContent,
+                TopBarIcon(
+                    painter = painterResource(R.drawable.ic_assistant_24),
+                    contentDescription = "Assistant",
+                    onClick = { viewModel.navigateTo(Routes.Assistant.ROUTE) },
                 )
             }
+        },
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .imePadding(),
+        ) {
+            // Unified search + command field (Block X1). Submit drives the existing command pipeline
+            // byte-for-byte; live app filtering lands in Block X4.
+            SidrSearchField(
+                value = commandInput,
+                onValueChange = viewModel::onCommandChanged,
+                onSubmit = viewModel::onCommandSubmitted,
+                showMic = showMic,
+                onMic = onMicTap,
+            )
+
+            // Command feedback — fallback UI for the last submitted command, shown just under the field.
+            CommandFeedbackArea(
+                feedback = feedback,
+                onCandidateClick = viewModel::onAppClicked,
+                onDismiss = viewModel::dismissFeedback,
+            )
+
+            Box(modifier = Modifier.weight(1f)) {
+                when (val state = uiState) {
+                    is UiState.Loading -> LoadingContent()
+                    is UiState.Empty -> EmptyState(message = "No apps found")
+                    is UiState.Error -> ErrorState(
+                        message = errorMessage(state.error),
+                        onRetry = if (state.retryable) viewModel::retry else null,
+                    )
+                    is UiState.Success -> HomeContent(
+                        state = state.data,
+                        onAppClick = viewModel::onAppClicked,
+                        onSuggestionTap = viewModel::onSuggestionClicked,
+                        onAllApps = { viewModel.navigateTo(Routes.AppDrawer.ROUTE) },
+                        showSetupHint = !isDefaultLauncher && !state.data.setupHintDismissed,
+                        onSetDefault = {
+                            viewModel.dismissSetupHint()
+                            launchDefaultLauncherSettings(context)
+                        },
+                        onDismissHint = viewModel::dismissSetupHint,
+                        suggestionsContent = suggestionsContent,
+                    )
+                }
+            }
         }
-
-        // Command feedback — fallback UI for the last submitted command (above the input bar)
-        CommandFeedbackArea(
-            feedback = feedback,
-            onCandidateClick = viewModel::onAppClicked,
-            onDismiss = viewModel::dismissFeedback,
-        )
-
-        // Command input — always visible; imePadding() on the Column keeps it above keyboard.
-        // The mic affordance is shown only when a speech recognizer is usable (degrade to keyboard).
-        CommandInputBar(
-            value = commandInput,
-            onChange = viewModel::onCommandChanged,
-            onSubmit = viewModel::onCommandSubmitted,
-            showMic = viewModel.isVoiceInputAvailable,
-            onMic = onMicTap,
-        )
     }
 }
 
-// ── Command feedback ────────────────────────────────────────────────────────
+// ── Home content (no full grid — Block X2) ──────────────────────────────────
 
 @Composable
-private fun SuccessContent(
+private fun HomeContent(
     state: LauncherUiState,
     onAppClick: (InstalledApp) -> Unit,
     onSuggestionTap: (Suggestion) -> Unit,
+    onAllApps: () -> Unit,
+    showSetupHint: Boolean,
+    onSetDefault: () -> Unit,
+    onDismissHint: () -> Unit,
     suggestionsContent: @Composable (suggestions: List<Suggestion>, onSuggestionTap: (Suggestion) -> Unit) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
+        if (showSetupHint) {
+            SetupNudge(onSetDefault = onSetDefault, onDismiss = onDismissHint)
+        }
         if (state.suggestions.isNotEmpty()) {
             suggestionsContent(state.suggestions, onSuggestionTap)
         }
-        AppGrid(
-            apps = state.apps,
-            onAppClick = onAppClick,
-            modifier = Modifier.weight(1f),
-        )
+        if (state.favorites.isNotEmpty()) {
+            SectionHeader(text = "Favorites")
+            FavoritesRow(favorites = state.favorites, onAppClick = onAppClick)
+        }
+        // Push the All apps affordance to the bottom of the (small) home surface.
+        Spacer(modifier = Modifier.weight(1f))
+        TextButton(
+            onClick = onAllApps,
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .padding(vertical = Spacing.md),
+        ) {
+            Text(text = "All apps")
+        }
     }
 }
+
+/**
+ * First-run nudge (Block X6): a dismissible card prompting the user to make Sidr the default
+ * launcher, plus a one-line "type or search" hint. Shown only until the user acts or dismisses
+ * (the choice persists via [UserPreferences.setupHintDismissed]).
+ */
+@Composable
+private fun SetupNudge(
+    onSetDefault: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+    ) {
+        Column(modifier = Modifier.padding(Spacing.lg)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Make Sidr your home screen",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier
+                        .weight(1f)
+                        .semantics { heading() },
+                )
+                TopBarIcon(
+                    icon = Icons.Filled.Close,
+                    contentDescription = "Dismiss",
+                    onClick = onDismiss,
+                )
+            }
+            Text(
+                text = "Set Sidr as your default launcher, then type or search from the field above to open apps.",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = Spacing.xs),
+            )
+            TextButton(
+                onClick = onSetDefault,
+                modifier = Modifier.padding(top = Spacing.sm),
+            ) {
+                Text(text = "Set as default")
+            }
+        }
+    }
+}
+
+@Composable
+private fun FavoritesRow(
+    favorites: List<InstalledApp>,
+    onAppClick: (InstalledApp) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyRow(
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = Spacing.md),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+    ) {
+        items(favorites, key = { it.packageName }) { app ->
+            AppTile(
+                label = app.label,
+                onClick = { onAppClick(app) },
+                icon = { AppTileIcon(app) },
+            )
+        }
+    }
+}
+
+/**
+ * Icon slot for an [AppTile]: loads the app's launcher icon (a `PackageManager`/`Drawable` concern
+ * that belongs to this feature module, not `core/ui`), falling back to a coloured monogram box.
+ * Decorative — the enclosing [AppTile] already carries the app label as its content description.
+ */
+@Composable
+private fun AppTileIcon(app: InstalledApp) {
+    val icon by rememberAppIcon(app.packageName)
+    if (icon != null) {
+        Image(
+            bitmap = icon!!,
+            contentDescription = null,
+            modifier = Modifier.size(Sizes.appIcon),
+        )
+    } else {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(Sizes.appIcon)
+                .background(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = MaterialTheme.shapes.small,
+                ),
+        ) {
+            Text(
+                text = app.label.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
+    }
+}
+
+// ── Command feedback ────────────────────────────────────────────────────────
 
 @Composable
 private fun CommandFeedbackArea(
@@ -211,104 +379,9 @@ private fun FeedbackText(
     )
 }
 
-// ── Private composables ────────────────────────────────────────────────────
-
-@Composable
-private fun AppGrid(
-    apps: List<InstalledApp>,
-    onAppClick: (InstalledApp) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 80.dp),
-        contentPadding = PaddingValues(8.dp),
-        modifier = modifier.fillMaxSize(),
-    ) {
-        items(apps, key = { it.packageName }) { app ->
-            AppItem(app = app, onClick = { onAppClick(app) })
-        }
-    }
-}
-
-@Composable
-private fun AppItem(
-    app: InstalledApp,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val icon by rememberAppIcon(app.packageName)
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier
-            .clickable(onClick = onClick)
-            .padding(8.dp),
-    ) {
-        if (icon != null) {
-            Image(
-                bitmap = icon!!,
-                contentDescription = app.label,
-                modifier = Modifier.size(48.dp),
-            )
-        } else {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        shape = MaterialTheme.shapes.small,
-                    ),
-            ) {
-                Text(
-                    text = app.label.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Text(
-            text = app.label,
-            style = MaterialTheme.typography.labelSmall,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-private fun CommandInputBar(
-    value: String,
-    onChange: (String) -> Unit,
-    onSubmit: (String) -> Unit,
-    showMic: Boolean,
-    onMic: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onChange,
-        placeholder = { Text("Type a command…") },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { onSubmit(value) }),
-        trailingIcon = if (showMic) {
-            {
-                // Text glyph keeps :feature:launcher free of a material-icons dependency.
-                IconButton(onClick = onMic) { Text("🎤") }
-            }
-        } else {
-            null
-        },
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-    )
-}
+// ── State surfaces ─────────────────────────────────────────────────────────
+// Empty/Error now render through core/ui EmptyState/ErrorState (Block X6); only the launcher-local
+// Loading spinner remains here.
 
 @Composable
 private fun LoadingContent(modifier: Modifier = Modifier) {
@@ -320,75 +393,54 @@ private fun LoadingContent(modifier: Modifier = Modifier) {
     }
 }
 
-@Composable
-private fun EmptyContent(modifier: Modifier = Modifier) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier.fillMaxSize(),
-    ) {
-        Text(text = "No apps found")
-    }
+/** Display-safe message for a [UiError] on the home error surface. */
+private fun errorMessage(error: UiError): String = when (error) {
+    is UiError.Message -> error.text
+    UiError.Network -> "Network error — check your connection"
+    UiError.Unknown -> "Something went wrong"
 }
 
-@Composable
-private fun ErrorContent(
-    error: UiError,
-    retryable: Boolean,
-    onRetry: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val message = when (error) {
-        is UiError.Message -> error.text
-        UiError.Network -> "Network error — check your connection"
-        UiError.Unknown -> "Something went wrong"
+// ── Default-launcher helpers (Block X6, first-run nudge) ─────────────────────
+
+/**
+ * Whether this app currently holds the default HOME role. API 29+ uses [RoleManager.isRoleHeld];
+ * older releases resolve the HOME intent and compare the winning package. Best-effort: any failure
+ * is treated as "not default" so the nudge can still surface.
+ */
+private fun isDefaultLauncher(context: Context): Boolean = try {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val roleManager = context.getSystemService(RoleManager::class.java)
+        roleManager != null &&
+            roleManager.isRoleAvailable(RoleManager.ROLE_HOME) &&
+            roleManager.isRoleHeld(RoleManager.ROLE_HOME)
+    } else {
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val resolved = context.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+        resolved?.activityInfo?.packageName == context.packageName
     }
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier.fillMaxSize(),
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = message,
-                color = MaterialTheme.colorScheme.error,
-            )
-            if (retryable) {
-                TextButton(onClick = onRetry) { Text("Retry") }
-            }
+} catch (_: Exception) {
+    false
+}
+
+/**
+ * Opens the system surface for choosing the default launcher. Mirrors the Settings screen helper
+ * (Fork X5-C): [RoleManager.ROLE_HOME] request on API 29+ when available, else Home settings. A
+ * missing handler is swallowed so a tap can never crash the launcher.
+ */
+private fun launchDefaultLauncherSettings(context: Context) {
+    val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val roleManager = context.getSystemService(RoleManager::class.java)
+        if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
+            roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)
+        } else {
+            Intent(Settings.ACTION_HOME_SETTINGS)
         }
+    } else {
+        Intent(Settings.ACTION_HOME_SETTINGS)
     }
-}
-
-// ── Icon loading — async on IO, no sync PackageManager call in composition ─
-
-@Composable
-private fun rememberAppIcon(packageName: String): State<ImageBitmap?> {
-    val pm = LocalContext.current.packageManager
-    val state = remember(packageName) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(packageName) {
-        withContext(Dispatchers.IO) {
-            state.value = try {
-                pm.getApplicationIcon(packageName).toImageBitmap()
-            } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
-                null
-            }
-        }
+    try {
+        context.startActivity(intent)
+    } catch (_: ActivityNotFoundException) {
+        // No handler — never crash the launcher.
     }
-    return state
-}
-
-// TODO: handle AdaptiveIconDrawable (intrinsicWidth/Height = -1) — move to a dedicated
-//       image-loading layer (e.g. Coil + AppIconFetcher) in a later phase.
-private fun Drawable.toImageBitmap(): ImageBitmap {
-    val bmp = Bitmap.createBitmap(
-        intrinsicWidth.coerceAtLeast(1),
-        intrinsicHeight.coerceAtLeast(1),
-        Bitmap.Config.ARGB_8888,
-    )
-    val canvas = android.graphics.Canvas(bmp)
-    setBounds(0, 0, canvas.width, canvas.height)
-    draw(canvas)
-    return bmp.asImageBitmap()
 }

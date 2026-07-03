@@ -40,7 +40,13 @@ class UserPreferencesRepositoryImplTest {
         val scope = CoroutineScope(dispatcher + Job())
         val repo = UserPreferencesRepositoryImpl(createTestDataStore(file(), scope), dispatcher)
 
-        val updated = UserPreferences(themeName = "dark", commandInputEnabled = false)
+        val updated = UserPreferences(
+            themeName = "dark",
+            commandInputEnabled = false,
+            favoritesCount = 4,
+            micInputEnabled = false,
+            setupHintDismissed = true,
+        )
         val result = repo.updatePreferences(updated)
 
         assertTrue(result is OperationResult.Success)
@@ -52,7 +58,13 @@ class UserPreferencesRepositoryImplTest {
     fun `written preferences survive a process restart`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val target = file()
-        val updated = UserPreferences(themeName = "light", commandInputEnabled = false)
+        val updated = UserPreferences(
+            themeName = "light",
+            commandInputEnabled = false,
+            favoritesCount = 10,
+            micInputEnabled = false,
+            setupHintDismissed = true,
+        )
 
         // First "process": write, then release the file lock.
         val writeScope = CoroutineScope(dispatcher + Job())

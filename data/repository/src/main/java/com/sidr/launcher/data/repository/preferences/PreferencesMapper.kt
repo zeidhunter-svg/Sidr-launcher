@@ -32,12 +32,19 @@ internal object PreferencesMapper {
             themeName = prefs[PreferencesKeys.USER_THEME_NAME] ?: defaults.themeName,
             commandInputEnabled = prefs[PreferencesKeys.USER_COMMAND_INPUT_ENABLED]
                 ?: defaults.commandInputEnabled,
+            favoritesCount = prefs[PreferencesKeys.USER_FAVORITES_COUNT] ?: defaults.favoritesCount,
+            micInputEnabled = prefs[PreferencesKeys.USER_MIC_INPUT_ENABLED] ?: defaults.micInputEnabled,
+            setupHintDismissed = prefs[PreferencesKeys.USER_SETUP_HINT_DISMISSED]
+                ?: defaults.setupHintDismissed,
         )
     }
 
     fun writeUserPreferences(prefs: androidx.datastore.preferences.core.MutablePreferences, value: UserPreferences) {
         prefs[PreferencesKeys.USER_THEME_NAME] = value.themeName
         prefs[PreferencesKeys.USER_COMMAND_INPUT_ENABLED] = value.commandInputEnabled
+        prefs[PreferencesKeys.USER_FAVORITES_COUNT] = value.favoritesCount
+        prefs[PreferencesKeys.USER_MIC_INPUT_ENABLED] = value.micInputEnabled
+        prefs[PreferencesKeys.USER_SETUP_HINT_DISMISSED] = value.setupHintDismissed
     }
 
     // ── Feature flags ─────────────────────────────────────────────────────────

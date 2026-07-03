@@ -14,7 +14,10 @@ import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeIntentMatcher
 import com.sidr.launcher.core.testing.FakeSpeechInputSource
 import com.sidr.launcher.core.testing.FakeUsageHistoryRepository
+import com.sidr.launcher.core.testing.FakeUserPreferencesRepository
 import com.sidr.launcher.domain.preferences.CachedSuggestion
+import com.sidr.launcher.domain.preferences.UserPreferences
+import com.sidr.launcher.domain.preferences.UserPreferencesRepository
 import com.sidr.launcher.domain.voice.SpeechRecognitionError
 import com.sidr.launcher.domain.voice.SpeechRecognitionState
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
@@ -65,6 +68,7 @@ class LauncherViewModelTest {
     private val fakeExecutor = FakeActionExecutor()
     private val fakeUsageRepo = FakeUsageHistoryRepository()
     private val fakeSpeech = FakeSpeechInputSource()
+    private val fakePrefsRepo = FakeUserPreferencesRepository()
     // Default: usageHistoryEnabled = true so existing recording tests remain valid.
     private val fakeFlagRepo = FakeFeatureFlagRepository(FeatureFlags(usageHistoryEnabled = true))
     private val useCase = HandleUserCommandUseCase(
@@ -100,12 +104,14 @@ class LauncherViewModelTest {
         savedStateHandle: SavedStateHandle = SavedStateHandle(),
         suggestionEngine: SuggestionEngine = FakeSuggestionEngine(),
         suggestionsCacheRepository: SuggestionsCacheRepository = FakeSuggestionsCacheRepository(),
+        prefsRepo: UserPreferencesRepository = fakePrefsRepo,
     ) = LauncherViewModel(
         installedAppsRepository = fakeRepo,
         handleUserCommand = useCase,
         actionExecutor = fakeExecutor,
         usageHistoryRepository = fakeUsageRepo,
         featureFlagRepository = flagRepo,
+        userPreferencesRepository = prefsRepo,
         suggestionEngine = suggestionEngine,
         suggestionsCacheRepository = suggestionsCacheRepository,
         speechInputSource = fakeSpeech,
@@ -281,6 +287,7 @@ class LauncherViewModelTest {
             actionExecutor = fakeExecutor,
             usageHistoryRepository = fakeUsageRepo,
             featureFlagRepository = fakeFlagRepo,
+            userPreferencesRepository = fakePrefsRepo,
             suggestionEngine = FakeSuggestionEngine(),
             suggestionsCacheRepository = FakeSuggestionsCacheRepository(),
             speechInputSource = fakeSpeech,
@@ -910,6 +917,137 @@ class LauncherViewModelTest {
             assertTrue(fakeUsageRepo.recordedLaunches.isEmpty())
         }
 
+    // ── Favorites derivation (Block X2) ────────────────────────────────────
+
+    @Test
+    fun `favorites are the top-N most-used apps in usage order`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp("com.a", "Alpha"),
+            InstalledApp("com.b", "Beta"),
+            InstalledApp("com.c", "Gamma"),
+        )
+        // Usage records arrive most-used-first (repository contract): b, then c, then a.
+        fakeUsageRepo.setRecords(listOf(
+            AppUsageRecord("com.b", lastUsedEpochMs = 3000L, launchCount = 9),
+            AppUsageRecord("com.c", lastUsedEpochMs = 2000L, launchCount = 5),
+            AppUsageRecord("com.a", lastUsedEpochMs = 1000L, launchCount = 1),
+        ))
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        val favorites = (vm.uiState.value as UiState.Success).data.favorites
+        assertEquals(
+            listOf("com.b", "com.c", "com.a"),
+            favorites.map { it.packageName },
+        )
+    }
+
+    @Test
+    fun `favorites exclude usage records for uninstalled apps`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp("com.a", "Alpha"),
+            InstalledApp("com.c", "Gamma"),
+        )
+        // com.b has usage history but is no longer installed → must not appear in favorites.
+        fakeUsageRepo.setRecords(listOf(
+            AppUsageRecord("com.b", lastUsedEpochMs = 3000L, launchCount = 9),
+            AppUsageRecord("com.a", lastUsedEpochMs = 2000L, launchCount = 5),
+            AppUsageRecord("com.c", lastUsedEpochMs = 1000L, launchCount = 1),
+        ))
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        val favorites = (vm.uiState.value as UiState.Success).data.favorites
+        assertEquals(listOf("com.a", "com.c"), favorites.map { it.packageName })
+    }
+
+    @Test
+    fun `favorites are capped at FAVORITES_COUNT`() = runTest(testDispatcher) {
+        val apps = (0 until 10).map { InstalledApp("com.app$it", "App $it") }
+        fakeRepo.appsToReturn = apps
+        fakeUsageRepo.setRecords(
+            apps.mapIndexed { i, app ->
+                AppUsageRecord(app.packageName, lastUsedEpochMs = (10 - i).toLong(), launchCount = 10 - i)
+            },
+        )
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        val favorites = (vm.uiState.value as UiState.Success).data.favorites
+        assertEquals("Favorites must be capped at 8", 8, favorites.size)
+        // The 8 most-used (first 8 records) are kept, in order.
+        assertEquals(
+            (0 until 8).map { "com.app$it" },
+            favorites.map { it.packageName },
+        )
+    }
+
+    @Test
+    fun `favorites honour a custom favoritesCount preference`() = runTest(testDispatcher) {
+        val apps = (0 until 10).map { InstalledApp("com.app$it", "App $it") }
+        fakeRepo.appsToReturn = apps
+        fakeUsageRepo.setRecords(
+            apps.mapIndexed { i, app ->
+                AppUsageRecord(app.packageName, lastUsedEpochMs = (10 - i).toLong(), launchCount = 10 - i)
+            },
+        )
+        val vm = buildViewModel(
+            prefsRepo = FakeUserPreferencesRepository(UserPreferences(favoritesCount = 4)),
+        )
+        advanceUntilIdle()
+
+        val favorites = (vm.uiState.value as UiState.Success).data.favorites
+        assertEquals("Custom favoritesCount must cap the row", 4, favorites.size)
+        assertEquals((0 until 4).map { "com.app$it" }, favorites.map { it.packageName })
+    }
+
+    @Test
+    fun `no usage history yields empty favorites`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp("com.a", "Alpha"),
+            InstalledApp("com.b", "Beta"),
+        )
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        val state = vm.uiState.value as UiState.Success
+        assertTrue("Fresh install → no favorites", state.data.favorites.isEmpty())
+        // The full app list still loads (drawer + suggestion resolution depend on it).
+        assertEquals(2, state.data.apps.size)
+    }
+
+    // ── Top-bar / All-apps navigation (Block X2) ───────────────────────────
+
+    @Test
+    fun `settings top-bar icon emits settings navigation`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        val eventDeferred = async { vm.navigationEvents.first() }
+
+        vm.navigateTo(Routes.Settings.ROUTE)
+
+        assertEquals(NavigationEvent.NavigateTo(Routes.Settings.ROUTE), eventDeferred.await())
+    }
+
+    @Test
+    fun `assistant top-bar icon emits assistant navigation`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        val eventDeferred = async { vm.navigationEvents.first() }
+
+        vm.navigateTo(Routes.Assistant.ROUTE)
+
+        assertEquals(NavigationEvent.NavigateTo(Routes.Assistant.ROUTE), eventDeferred.await())
+    }
+
+    @Test
+    fun `all apps affordance emits app drawer navigation`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        val eventDeferred = async { vm.navigationEvents.first() }
+
+        vm.navigateTo(Routes.AppDrawer.ROUTE)
+
+        assertEquals(NavigationEvent.NavigateTo(Routes.AppDrawer.ROUTE), eventDeferred.await())
+    }
+
     // ── Voice input (Block T) ──────────────────────────────────────────────
 
     @Test
@@ -979,5 +1117,48 @@ class LauncherViewModelTest {
 
         assertEquals(0, fakeExecutor.callCount)
         assertTrue(vm.commandFeedback.value is CommandFeedback.Message)
+    }
+
+    // ── Voice/mic user toggle (Block X6) ───────────────────────────────────
+
+    @Test
+    fun `showMic is true when recognizer available and mic pref enabled`() = runTest(testDispatcher) {
+        fakeSpeech.available = true
+        val vm = buildViewModel(
+            prefsRepo = FakeUserPreferencesRepository(UserPreferences(micInputEnabled = true)),
+        )
+        advanceUntilIdle()
+
+        assertTrue(vm.showMic.value)
+    }
+
+    @Test
+    fun `showMic is false when mic pref disabled even if recognizer available`() = runTest(testDispatcher) {
+        fakeSpeech.available = true
+        val vm = buildViewModel(
+            prefsRepo = FakeUserPreferencesRepository(UserPreferences(micInputEnabled = false)),
+        )
+        advanceUntilIdle()
+
+        assertFalse(vm.showMic.value)
+    }
+
+    @Test
+    fun `startVoiceInput is a no-op when mic input is disabled`() = runTest(testDispatcher) {
+        // Recognizer is available, but the user disabled voice in Settings: a stale mic tap must not
+        // start recognition, submit anything, or surface a message.
+        fakeSpeech.available = true
+        fakeSpeech.scriptSuccess(partials = listOf("open"), finalText = "open telegram")
+        val vm = buildViewModel(
+            prefsRepo = FakeUserPreferencesRepository(UserPreferences(micInputEnabled = false)),
+        )
+        advanceUntilIdle()
+
+        vm.startVoiceInput()
+        advanceUntilIdle()
+
+        assertEquals(0, fakeExecutor.callCount)
+        assertEquals("", vm.commandInput.value)
+        assertEquals(CommandFeedback.None, vm.commandFeedback.value)
     }
 }

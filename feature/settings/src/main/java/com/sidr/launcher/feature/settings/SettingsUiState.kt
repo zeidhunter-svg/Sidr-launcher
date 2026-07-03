@@ -5,11 +5,15 @@ package com.sidr.launcher.feature.settings
  *
  * [themeName] is the persisted `system | light | dark` choice (mirrors
  * `UserPreferences.themeName`); [aiSuggestionsEnabled] mirrors `FeatureFlags.aiSuggestionsEnabled`.
+ * [usageHistoryEnabled] mirrors `FeatureFlags.usageHistoryEnabled` — the opt-in that lets the launcher
+ * record app launches so the home **Favorites** row (and usage-based suggestion ranking) can populate;
+ * off by default (privacy-first), so without it the Favorites row stays empty.
  * [favoritesCount] + [micInputEnabled] mirror the Block X6 `UserPreferences` deferred UI prefs.
  * [errorMessage] is a transient, display-safe write-failure string (never persisted).
  */
 data class SettingsUiState(
     val aiSuggestionsEnabled: Boolean = false,
+    val usageHistoryEnabled: Boolean = false,
     val themeName: String = ThemeOption.SYSTEM,
     val favoritesCount: Int = 8,
     val micInputEnabled: Boolean = true,

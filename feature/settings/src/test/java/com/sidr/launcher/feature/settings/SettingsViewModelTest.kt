@@ -82,6 +82,33 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `enabling usage history updates the flag and reflects in state`() = runTest(testDispatcher) {
+        val flagRepo = FakeFeatureFlagRepository(FeatureFlags(usageHistoryEnabled = false))
+        val vm = buildViewModel(flagRepo)
+
+        vm.setUsageHistoryEnabled(true)
+        advanceUntilIdle()
+
+        assertTrue(flagRepo.getFlags().first().usageHistoryEnabled)
+        assertTrue(vm.uiState.value.usageHistoryEnabled)
+        assertEquals(null, vm.uiState.value.errorMessage)
+    }
+
+    @Test
+    fun `usage history write failure surfaces a safe error`() = runTest(testDispatcher) {
+        val flagRepo = FakeFeatureFlagRepository(FeatureFlags(usageHistoryEnabled = false)).apply {
+            errorToReturn = OperationError.UnknownError("datastore down")
+        }
+        val vm = buildViewModel(flagRepo)
+
+        vm.setUsageHistoryEnabled(true)
+        advanceUntilIdle()
+
+        assertFalse(flagRepo.getFlags().first().usageHistoryEnabled)
+        assertEquals("Couldn't update launcher settings. Please try again.", vm.uiState.value.errorMessage)
+    }
+
+    @Test
     fun `selecting a theme persists the preference`() = runTest(testDispatcher) {
         val prefsRepo = FakeUserPreferencesRepository(UserPreferences(themeName = "system"))
         val vm = buildViewModel(prefsRepo = prefsRepo)

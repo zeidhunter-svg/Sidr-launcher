@@ -264,3 +264,18 @@ phase and the cold-start perf task reinforce each other; do X2 with a cold-start
 - `core/ui` design system in place and applied app-wide.
 - Hard rules intact; JVM + `assembleDebug` green; device pass on SM-A325F; ADR + `current-status.md`
   synced; cold-start re-measured.
+
+**Device pass — DONE 2026-07-04 (SM-A325F / Android 13).** Full matrix PASS (X2 home / X3–X4 drawer+search /
+X5–X6 settings+persistence / X6-C ask-assistant prefill / X6-D first-run nudge / a11y). **One real bug found
+and fixed:** "Set as default launcher" (Settings **and** the nudge) fired `startActivity` on the ROLE_HOME
+intent → null caller → system `RequestRoleActivity` aborted with **no chooser**; fixed by launching via
+`rememberLauncherForActivityResult(StartActivityForResult())` (helper reduced to a pure `defaultLauncherIntent`),
+rebuilt + reinstalled + retested (role dialog now shows). **Bonus (owner entered a real provider on device):**
+Assistant real streaming **PASS** (openrouter/`gpt-4o-mini`) and Block-J BYOK Keystore **PASS** (key encrypted
+in `sidr_secrets`, decrypted + used) — retiring two carried device-debt items. **Still PENDING:** cold-start
+`<400ms` (measured min 1956 / median ~2021 / max 2066 ms → PERF-RISK, Phase 9). **Follow-up fix (owner-approved):** added a
+**"Personalize from usage"** opt-in toggle to Settings (`FeatureFlags.usageHistoryEnabled`, off by default) —
+device-verified Favorites now populate + count selector changes the row (4→5) + suggestions use real installed
+apps; +2 JVM tests. **Finding still open (deferred to Phase 9):** `TimeOfDaySuggestionProvider` uses hardcoded
+AOSP package IDs unfiltered vs installed apps (tap → "Couldn't open that app" on OEM). ADR: decisions.md
+"2026-07-04 — Phase UX device acceptance (SM-A325F) + set-as-default bug fix".

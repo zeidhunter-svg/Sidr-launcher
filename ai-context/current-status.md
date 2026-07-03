@@ -31,10 +31,29 @@ acceptance pass), gated on open questions OQ#1–OQ#4.
   precompute/cleanup workers + boot warmup.
   - **Block V (ONNX `TextEmbedder` + semantic re-rank):** implemented but **INERT** — gated on OQ#3
     (embedding model / host / hash / ONNX contract). Heuristic ranking is the shipping path.
-- **Phase UX — home redesign & design system:** 🚧 IN PROGRESS (owner decision 2026-07-02, U1/U5
-  decided). Minimal home + App Drawer (grid leaves home), discoverable Settings/Assistant, `core/ui`
-  design system, real `:feature:settings`. Plan: `ai-context/phase-ux-plan.md`. Synergistic with
-  cold-start (cold-start re-measure lives in its Block X6).
+- **Phase UX — home redesign & design system:** ✅ CODE-CLOSED 2026-07-03 (Blocks X1 → X6; owner
+  decision 2026-07-02, U1/U5 decided). Minimal home + App Drawer (grid leaves home), discoverable
+  Settings/Assistant, `core/ui` design system, real `:feature:settings`, deferred settings + a11y +
+  first-run nudge + assistant prefill. Plan: `ai-context/phase-ux-plan.md`.
+  **✅ DEVICE PASS DONE 2026-07-04 (SM-A325F / Android 13).** Full acceptance matrix PASS (X2 home
+  discoverability + typed commands `settings`/`open plus`; X3–X4 drawer alphabetical/sticky/live-filter/
+  clear/enter-launch; X5–X6 settings — theme applies-immediately+persists, AI-suggestions gate, voice
+  toggle→mic hide, AI provider form; **persistence** across `force-stop` for theme/voice/AI/favorites-count/
+  setup-hint incl. datastore keys; **X6-C** ask-assistant prefill visible + not-auto-sent + no saved-state;
+  **X6-D** first-run nudge shown/dismiss/no-reshow; a11y content-desc + 48dp). **One real bug found + fixed
+  on-run:** "Set as default launcher" (Settings **and** nudge) launched the ROLE_HOME intent with plain
+  `startActivity` → null caller → system `RequestRoleActivity` aborted, **no chooser** — fixed via
+  `rememberLauncherForActivityResult(StartActivityForResult())` (helper → pure `defaultLauncherIntent`),
+  rebuilt+reinstalled+retested (role dialog now shows); touched-module tests green. **Bonus (owner entered
+  a real provider):** Assistant **real streaming PASS** (openrouter/`gpt-4o-mini`) + Block-J BYOK Keystore
+  **PASS** (key encrypted in `sidr_secrets`, decrypted+used) → retires those two carried device-debt items.
+  **Still PENDING/PERF-RISK:** cold-start `<400ms` (measured min 1956 / median ~2021 / max 2066 ms → Phase 9).
+  **Follow-up fix (owner-approved, same run):** added a **"Personalize from usage"** opt-in `Switch` to
+  Settings (writes `FeatureFlags.usageHistoryEnabled`, off by default) — device-verified that the Favorites
+  row now populates, the count selector visibly changes it (4→5), and usage-based suggestions surface real
+  installed apps. **Finding still open (deferred to Phase 9):** `TimeOfDaySuggestionProvider` hardcoded AOSP
+  package IDs unfiltered vs installed apps (Clock/Music tap → "Couldn't open that app" on Samsung).
+  ADR: decisions.md "2026-07-04 — Phase UX device acceptance (SM-A325F) + set-as-default bug fix".
   - **Block X1 (design-system foundation) ✅ 2026-07-03** — `core/ui` filled: `SidrTheme` (neutral M3
     + dynamic colour on API 31+), typography/shapes/spacing tokens, and components `SidrScaffold`,
     `SidrSearchField` (unified search/command + mic), `AppTile` (icon slot — no domain/data edge),
@@ -88,8 +107,22 @@ acceptance pass), gated on open questions OQ#1–OQ#4.
     `dynamicColor` stays on. Assistant key invariant untouched (nav-only). 6 new JVM tests; `assembleDebug`
     + `testDebugUnitTest` green. Device pass (SM-A325F) pending. ADR: decisions.md "2026-07-03 — Phase UX
     Block X5 complete".
-  - **Block X6** — pending. **Block X6 (polish, a11y, first-run, deferred voice/favorites-count, device
-    acceptance + cold-start re-measure) is next.**
+  - **Block X6 (polish, a11y, first-run, deferred settings) ✅ 2026-07-03 — Phase UX CLOSED.** All five
+    X6 forks landed on the recommended option. Three deferred prefs live in `UserPreferences`
+    (`favoritesCount=8` / `micInputEnabled=true` / `setupHintDismissed=false`; keys `user_favorites_count`
+    / `user_mic_input_enabled` / `user_setup_hint_dismissed` — all denylist-clean, `PrivacyInventoryGuardTest`
+    green). `:feature:settings` gained a HOME section (favorites `FilterChip` 4/6/8/10 + voice `Switch`) +
+    `setFavoritesCount`/`setMicInputEnabled`. `LauncherViewModel` injects `UserPreferencesRepository`,
+    exposes `showMic: StateFlow` (`micInputEnabled && recognizer available`), `deriveFavorites` reads the
+    pref (`const FAVORITES_COUNT` removed), `startVoiceInput` no-ops when the mic pref is off, and
+    `dismissSetupHint()` persists the one-shot nudge. `LauncherScreen` renders the dismissible first-run
+    `SetupNudge` (`!isDefaultLauncher && !setupHintDismissed`; CTA → system launcher chooser) and routes
+    empty/error through `core/ui` `EmptyState`/`ErrorState`. **X6-C** "Ask assistant" prefill: optional
+    `Routes.Assistant.prompt` nav-arg + drawer affordance, seeded into the assistant input once — never
+    auto-sent, **never in `SavedStateHandle`**. Cold-start = re-measure only (no startup-path code). New
+    JVM tests across settings/launcher/persistence; all touched-module test tasks + `assembleDebug` green;
+    0 new Gradle deps. Device pass (SM-A325F) batched-pending. ADR: decisions.md "2026-07-03 — Phase UX
+    Block X6 complete".
 - **MVP sequencing (owner 2026-07-02):** numeric 8→9 is NOT the ship order → **Phase UX → Phase 9
   (hardening, pre-ship gate) → Phase 8 (optional, deferred)**.
   - **Phase 9 — hardening:** ⛔ not started; pre-ship gate after Phase UX. Absorbs the residual

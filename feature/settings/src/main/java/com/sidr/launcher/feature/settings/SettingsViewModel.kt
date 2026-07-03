@@ -57,6 +57,7 @@ class SettingsViewModel @Inject constructor(
     ) { flags, preferences, errorMessage ->
         SettingsUiState(
             aiSuggestionsEnabled = flags.aiSuggestionsEnabled,
+            usageHistoryEnabled = flags.usageHistoryEnabled,
             themeName = preferences.themeName,
             favoritesCount = preferences.favoritesCount,
             micInputEnabled = preferences.micInputEnabled,
@@ -98,6 +99,30 @@ class SettingsViewModel @Inject constructor(
                 val current = userPreferencesRepository.getPreferences().first()
                 if (current.themeName != themeName) {
                     when (userPreferencesRepository.updatePreferences(current.copy(themeName = themeName))) {
+                        is OperationResult.Success -> Unit
+                        is OperationResult.Failure -> saveError.value = SAVE_ERROR
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                saveError.value = SAVE_ERROR
+            }
+        }
+    }
+
+    /**
+     * Persist the usage-history opt-in (Phase UX follow-up). When on, the launcher records app
+     * launches so the home Favorites row and usage-based suggestion ranking can populate; off by
+     * default (privacy-first). No-op when unchanged.
+     */
+    fun setUsageHistoryEnabled(enabled: Boolean) {
+        viewModelScope.launch(ioDispatcher) {
+            saveError.value = null
+            try {
+                val current = featureFlagRepository.getFlags().first()
+                if (current.usageHistoryEnabled != enabled) {
+                    when (featureFlagRepository.updateFlags(current.copy(usageHistoryEnabled = enabled))) {
                         is OperationResult.Success -> Unit
                         is OperationResult.Failure -> saveError.value = SAVE_ERROR
                     }

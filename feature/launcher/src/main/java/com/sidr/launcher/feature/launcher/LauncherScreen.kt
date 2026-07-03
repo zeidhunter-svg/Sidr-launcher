@@ -8,6 +8,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -89,6 +91,15 @@ fun LauncherScreen(
     // "dismissed" half lives in UserPreferences (LauncherUiState.setupHintDismissed).
     val isDefaultLauncher = remember { isDefaultLauncher(context) }
 
+    // The ROLE_HOME request must go through startActivityForResult so the permission controller can
+    // read the calling package; a plain startActivity delivers a null caller and RequestRoleActivity
+    // aborts ("Package name cannot be null") without showing the chooser. This launcher routes through
+    // the host Activity's startActivityForResult. Result ignored — the nudge is dismissed on tap and
+    // isDefaultLauncher re-reads on the next composition.
+    val setDefaultLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { /* no-op */ }
+
     // Voice input (Block T). Tapping the mic starts recognition only when RECORD_AUDIO is held;
     // otherwise it routes to the permission-education screen for VOICE_INPUT (the Fork-5
     // education≠request flow). Framework checkSelfPermission keeps :feature:launcher dependency-free.
@@ -165,7 +176,11 @@ fun LauncherScreen(
                         showSetupHint = !isDefaultLauncher && !state.data.setupHintDismissed,
                         onSetDefault = {
                             viewModel.dismissSetupHint()
-                            launchDefaultLauncherSettings(context)
+                            try {
+                                setDefaultLauncher.launch(defaultLauncherIntent(context))
+                            } catch (_: ActivityNotFoundException) {
+                                // No handler — never crash the launcher.
+                            }
                         },
                         onDismissHint = viewModel::dismissSetupHint,
                         suggestionsContent = suggestionsContent,
@@ -423,12 +438,14 @@ private fun isDefaultLauncher(context: Context): Boolean = try {
 }
 
 /**
- * Opens the system surface for choosing the default launcher. Mirrors the Settings screen helper
- * (Fork X5-C): [RoleManager.ROLE_HOME] request on API 29+ when available, else Home settings. A
- * missing handler is swallowed so a tap can never crash the launcher.
+ * Builds the intent for the system default-launcher surface. Mirrors the Settings screen helper
+ * (Fork X5-C): [RoleManager.ROLE_HOME] request on API 29+ when available, else Home settings. The
+ * caller launches it through an `ActivityResultContracts.StartActivityForResult` launcher — a role
+ * request delivered via a plain `startActivity` arrives with a null calling package and is rejected
+ * by the system's RequestRoleActivity.
  */
-private fun launchDefaultLauncherSettings(context: Context) {
-    val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+private fun defaultLauncherIntent(context: Context): Intent =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         val roleManager = context.getSystemService(RoleManager::class.java)
         if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
             roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)
@@ -438,9 +455,3 @@ private fun launchDefaultLauncherSettings(context: Context) {
     } else {
         Intent(Settings.ACTION_HOME_SETTINGS)
     }
-    try {
-        context.startActivity(intent)
-    } catch (_: ActivityNotFoundException) {
-        // No handler — never crash the launcher.
-    }
-}

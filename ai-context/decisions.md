@@ -3087,3 +3087,95 @@ count changes the row; voice toggle OFF hides the mic and no-ops `startVoiceInpu
 restart; first-run nudge shows once and opens the system launcher chooser; "Ask assistant" carries text
 to the assistant without saved state; a11y (TalkBack labels, ≥48dp) and cold-start re-measure.
 **Phase UX is CLOSED with this block.**
+
+## ADR 2026-07-04 — Phase UX device acceptance (SM-A325F / Android 13) + set-as-default bug fix
+
+**Context.** Executed the batched Phase-UX device-acceptance run (Blocks X1→X6) on SM-A325F
+(`RF8R705H38F`, Android 13 / SDK 33). Fresh install: the on-device APK (2026-07-02) was signed with a
+different debug keystore (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`), so it was uninstalled and the current
+build installed clean (`versionName 0.1.0`, `lastUpdateTime 2026-07-04`). Evidence = screenshots +
+`uiautomator`/`dumpsys`/`logcat` + `run-as` datastore/Room reads. Density 420dpi (1dp=2.625px → 48dp=126px).
+
+**One real bug found and fixed (sanctioned minimal fix).** "Set as default launcher" was **silently
+broken on every device**: both `SettingsScreen` and the first-run `SetupNudge` fired
+`context.startActivity(roleManager.createRequestRoleIntent(ROLE_HOME))`. `createRequestRoleIntent` **must**
+be launched via `startActivityForResult` so the permission controller can read the calling package;
+launched with a plain `startActivity` the caller is null and the system `RequestRoleActivity` aborts
+instantly (`logcat`: `W RequestRoleActivity: Package name cannot be null or empty: null` →
+`RequestRoleFragment … requestingPackageName=null … result=1` → activity destroyed) with **no chooser
+shown**. **Fix:** route through an `androidx.activity.compose.rememberLauncherForActivityResult(
+ActivityResultContracts.StartActivityForResult())` in each screen; the shared helper is now a pure
+`defaultLauncherIntent(context): Intent` builder (unchanged ROLE_HOME→ACTION_HOME_SETTINGS fallback,
+`ActivityNotFoundException` still swallowed at the launch site). Added `libs.androidx.activity.compose` to
+`feature/launcher` (already present in `feature/settings`; catalog dep, used by 3 other modules). Rebuilt
+(`assembleDebug` green), reinstalled `-r` (state preserved), retested: the system role dialog **now
+appears** (*«Сделать "Sidr Launcher" приложением для главного экрана по умолчанию?»*, One-UI-Home vs Sidr,
+Отмена/По умолчанию), `mCurrentFocus=…RequestRoleActivity`, **no null-package error**. Cancelled to leave
+the device's default unchanged. `:feature:settings` + `:feature:launcher` `testDebugUnitTest` green. Two
+call sites share the fix; the nudge path was verified via the identical Settings helper (the nudge was
+already dismissed, so re-triggering it would need a state reset).
+
+**Acceptance matrix — result (PASS unless noted).**
+- **X2 home:** no grid wall; top-bar **Settings + Assistant** icons (content-desc + 48dp); **All apps**
+  affordance; typed commands: `settings`→Settings screen, `open plus`→launched `org.telegram.plus` (app
+  labelled "Plus"; `open telegram`→correct "No app found" since no app is labelled telegram). Suggestions
+  row works (`Clock`/`Music`, NIGHT).
+- **X3/X4 drawer:** alphabetical, sticky A/B/… headers, no mic (by design), **live filter** ("tele"→Türk
+  Telekom), **Clear** ✕, **Enter launches top match** (Türk Telekom → `com.tmob.AveaOIM` foregrounded).
+- **X5/X6 settings:** theme **applies immediately** (Light) and **persists**; AI-suggestions gate ON→row /
+  OFF→cleared; voice toggle **OFF → mic hidden** (recognizer IS available on device, so mic shows when ON;
+  `startVoiceInput` also guards `if(!micInputEnabled) return`); **AI provider form** (Base URL/Model/API
+  Key/Save) shown; **Set as default → system chooser** (after the fix).
+- **Persistence:** `am force-stop`→relaunch preserved theme=Light, AI-suggestions=ON (cache-first repaint),
+  favorites=4, voice=OFF, setup-hint=dismissed. Datastore keys present in `files/datastore/sidr_preferences`
+  (`user_theme_name=light`, `user_favorites_count`, `user_mic_input_enabled`, `user_setup_hint_dismissed`,
+  `flag_ai_suggestions_enabled`, `flag_usage_tracking_enabled`).
+- **First-run nudge (X6-D):** shown when not default (card "Make Sidr your home screen" + Set-as-default +
+  type/search hint); **Dismiss ✕ hides it**; **does not reappear after restart** (`setup_hint_dismissed`
+  persisted); Set-as-default fixed.
+- **Ask-assistant prefill (X6-C):** drawer "Ask assistant: \"plus\"" routes to Assistant; once a provider
+  is configured the composer renders with **"plus" prefilled and NOT auto-sent**; no `SavedStateHandle`
+  (transient by design — `AssistantScreen.kt:116` `remember(initialPrompt)`).
+- **a11y:** `TopBarIcon` = 48dp `IconButton` + required contentDescription (Settings/Assistant/Back/Dismiss
+  all labelled); nudge title `heading()`; app tiles/drawer rows expose the app label as contentDescription;
+  chips 48dp; measured Settings/Assistant = 126×126px = 48dp. (TalkBack gesture-nav not driven over adb to
+  avoid destabilising the session; the a11y *semantics* it surfaces were verified.)
+
+**Bonus — retired two carried device-debt items (owner entered a real provider on device).** With BYOK
+config saved (openrouter.ai/`openai/gpt-4o-mini`): **Assistant real streaming = PASS** (was PENDING-CONFIG)
+— tapped Send on the prefilled "plus", a real reply streamed, input cleared, Send re-disabled on empty.
+**Block-J BYOK secret store (real Keystore) = PASS** — config (base_url/model/id) is in `sidr_preferences`,
+the key is only in a **separate encrypted `sidr_secrets`** store (key-name `ai_api_key_openrouter.ai`,
+value ciphertext — no plaintext `sk-` in either file) and was successfully decrypted + used (request
+authorized → stream).
+
+**Cold-start re-measure (X6-E) — PENDING/PERF-RISK.** `am start -S -W` ×6 (debug build):
+TotalTime 1956 / 2049 / 2031 / 1995 / 2066 / 2012 ms → **min 1956 / median ~2021 / max 2066** vs the
+`<400ms` budget. Roughly in line with Round-3 (~1740ms median; within device-state/debug-build variance —
+no meaningful regression). Perf fix stays **out of scope (Phase 9)**.
+
+**Findings — dispositions.**
+1. **Offline suggestions un-launchable on OEM devices** (NOT fixed — deferred to Phase 9 per owner).
+   `TimeOfDaySuggestionProvider` emits **hardcoded AOSP package IDs** (`com.android.deskclock`/
+   `com.android.music`/…) that don't exist on Samsung and are **not filtered against installed apps** →
+   tapping `Clock`/`Music` routes correctly but ends in "Couldn't open that app." Chip render + tap wiring
+   work; the target set is the gap. (Usage-based suggestions from `UsageSuggestionProvider` resolve fine —
+   see follow-up below.)
+2. **Favorites empty on fresh install → FIXED (owner chose the Settings toggle).** Favorites derive from
+   usage records, only written when `FeatureFlags.usageHistoryEnabled` is on — it **defaulted `false` with
+   no UI**. Added a **"Personalize from usage"** `Switch` to the Settings HOME section
+   (`SettingsUiState.usageHistoryEnabled` + `SettingsViewModel.setUsageHistoryEnabled`, mirroring the
+   AI-suggestions write path; off by default, privacy-first). **Device-verified:** toggle ON writes
+   `flag_usage_tracking_enabled`; launching apps via the drawer records `app_usage` rows; the **Favorites
+   row populates** (AiFiqh/Adobe/A101 → then 5 apps), the **count selector visibly changes the row (4→5)**,
+   and the suggestions row now surfaces **real installed apps** too. +2 JVM tests; `:feature:settings`
+   tests + `assembleDebug` green.
+3. **Re-entry resumes last nav state** (NOT fixed — cosmetic). Relaunching `LauncherActivity` while alive
+   resumes the last destination (e.g. the drawer), not home — only observable while Sidr is **not** the
+   default launcher.
+
+**Files changed.** Set-as-default fix: `feature/settings/.../SettingsScreen.kt`,
+`feature/launcher/.../LauncherScreen.kt`, `feature/launcher/build.gradle.kts`. Usage-history toggle:
+`feature/settings/.../SettingsScreen.kt` + `SettingsViewModel.kt` + `SettingsUiState.kt` +
+`SettingsViewModelTest.kt`. No domain/data change (reuses the existing `usageHistoryEnabled` flag + key);
+hard rules intact; 0 new catalog deps (activity-compose already in the catalog).

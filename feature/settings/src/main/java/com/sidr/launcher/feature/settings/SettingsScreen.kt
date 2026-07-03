@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -50,15 +52,31 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
+    // A ROLE_HOME request MUST be launched via startActivityForResult so the permission controller can
+    // read the calling package; a plain startActivity delivers a null caller and RequestRoleActivity
+    // aborts ("Package name cannot be null") without ever showing the chooser. This launcher routes
+    // through the host Activity's startActivityForResult. The result is ignored — the default-launcher
+    // state is re-read when the surface next resumes.
+    val setDefaultLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { /* no-op */ }
+
     SettingsContent(
         uiState = uiState,
         onBack = viewModel::navigateBack,
         onThemeSelected = viewModel::setThemeName,
         onAiSuggestionsChanged = viewModel::setAiSuggestionsEnabled,
+        onUsageHistoryChanged = viewModel::setUsageHistoryEnabled,
         onFavoritesCountSelected = viewModel::setFavoritesCount,
         onMicInputChanged = viewModel::setMicInputEnabled,
         onAssistantProvider = viewModel::openAssistantProvider,
-        onSetDefaultLauncher = { launchDefaultLauncherSettings(context) },
+        onSetDefaultLauncher = {
+            try {
+                setDefaultLauncher.launch(defaultLauncherIntent(context))
+            } catch (_: ActivityNotFoundException) {
+                // No handler for either surface — never crash the launcher.
+            }
+        },
         modifier = modifier,
     )
 }
@@ -69,6 +87,7 @@ private fun SettingsContent(
     onBack: () -> Unit,
     onThemeSelected: (String) -> Unit,
     onAiSuggestionsChanged: (Boolean) -> Unit,
+    onUsageHistoryChanged: (Boolean) -> Unit,
     onFavoritesCountSelected: (Int) -> Unit,
     onMicInputChanged: (Boolean) -> Unit,
     onAssistantProvider: () -> Unit,
@@ -187,6 +206,30 @@ private fun SettingsContent(
                     }
                 }
             }
+            // Usage-history opt-in — without it no launches are recorded, so the Favorites row above
+            // (and usage-based suggestion ranking) stay empty. Off by default (privacy-first).
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Personalize from usage",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = "Remember which apps you open to fill Favorites and improve suggestions.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Switch(
+                    checked = uiState.usageHistoryEnabled,
+                    onCheckedChange = onUsageHistoryChanged,
+                )
+            }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -245,14 +288,15 @@ private fun SettingsContent(
 }
 
 /**
- * Opens the system surface for choosing the default launcher (Fork X5-C).
+ * Builds the intent for the system default-launcher surface (Fork X5-C).
  *
  * API 29+ uses [RoleManager.ROLE_HOME] (`createRequestRoleIntent`) when the role is available;
- * otherwise falls back to the Home-settings screen. Best-effort: a missing handler is swallowed so
- * a tap can never crash the launcher.
+ * otherwise falls back to the Home-settings screen. The caller launches it through an
+ * `ActivityResultContracts.StartActivityForResult` launcher — a role request delivered via a plain
+ * `startActivity` arrives with a null calling package and the system's RequestRoleActivity rejects it.
  */
-private fun launchDefaultLauncherSettings(context: Context) {
-    val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+private fun defaultLauncherIntent(context: Context): Intent =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         val roleManager = context.getSystemService(RoleManager::class.java)
         if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
             roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)
@@ -262,9 +306,3 @@ private fun launchDefaultLauncherSettings(context: Context) {
     } else {
         Intent(Settings.ACTION_HOME_SETTINGS)
     }
-    try {
-        context.startActivity(intent)
-    } catch (_: ActivityNotFoundException) {
-        // No handler for either surface — nothing we can do; never crash the launcher.
-    }
-}

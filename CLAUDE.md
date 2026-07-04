@@ -1,115 +1,47 @@
 # CLAUDE.md — Sidr Launcher
 
-Session digest. Read this first. **Phase 4 is DONE (Blocks E → H, 2026-06-23).** **Phase 5 (cloud AI,
-multi-provider) is DONE — Blocks I → N complete (2026-06-24 – 2026-06-27).** Code + JVM green.
-**Device Acceptance Round 2 executed on SM-A325F / Android 13 on 2026-07-02:** `./gradlew
-testDebugUnitTest` **PASS**, `./gradlew assembleDebug` **PASS**, `codegraph sync .` up to date, device
-presence **PASS** (`RF8R705H38F`, `SM-A325F`, Android `13` / SDK `33`), package presence **PASS**
-(`com.sidr.launcher` installed; `lastUpdateTime=2026-07-02 13:57:42`), launcher cold-start smoke
-**PASS only** (`am start -S -W` observed `TotalTime: 3601ms`, later `2215ms`; `<400ms` remains
-**pending/perf-risk**). Phase 7 user-facing acceptance advanced with direct device evidence: command
-`settings` → launcher settings **PASS**; sanctioned `aiSuggestionsEnabled` toggle **ON** shows a
-suggestions row on home **PASS**; toggle **OFF** clears the row **PASS**; suggestion tap routing
-**PASS** (chip `Настройки` launched the system Settings app). WorkManager ON/OFF gating is now
-device-verified: with flag **ON** the WorkManager DB held `sidr_usage_cleanup` + `sidr_suggestion_precompute`
-in `state=0`, and `dumpsys jobscheduler` showed two constrained Sidr jobs; with flag **OFF**
-`sidr_usage_cleanup` stayed in `state=0` while `sidr_suggestion_precompute` moved to `state=5`, and
-`dumpsys jobscheduler` dropped to one Sidr job only. The device was `Battery not low: false`, so the
-queued jobs remained constrained rather than executing, which is consistent with the gate/constraint
-contract. Voice also advanced: mic affordance visible **PASS**; without `RECORD_AUDIO`, mic tap routes
-to the `Voice commands` education screen **PASS**; the in-app grant flow ended with
-`android.permission.RECORD_AUDIO: granted=true`; one post-grant mic run produced final transcript
-`она такая группа` plus standard launcher feedback `Unknown command. Try: open <app>, search <query>`,
-confirming the unchanged final-transcript submit path. **Device Acceptance Round 3 (2026-07-02, BYOK
-key in-app) retired the last big AI blocker — assistant real streaming is now PASS end-to-end** on
-`openrouter.ai`/`openai/gpt-4o-mini`: config persists to `sidr_preferences` + key to encrypted
-`sidr_secrets` (absent from prefs), tokens streamed (key decrypts & is used; first model's `429` was
-external throttle), **offline static fallback** + **cancel/retry/rotation** all PASS. **Part E trim
-BACKGROUND/COMPLETE = PASS** (no-crash; renderer `destroyRenderingContext` + `OnnxIntentClassifier:
-ONNX session released (trim)` ×2 — both Block-V `SessionLifecycle` seams; native teardown still
-unprovable w/o a model). **C.4 calendar/location = PASS** (granted → generic `"Nearby places"`→maps in
-cache, no coordinate/raw title in cache or logcat; calendar empty→degrade). **Part D cold-start =
-PENDING/PERF-RISK** — rigorous `am start -S -W` ×6 = min 1711 / median ~1740 / max 2172 ms vs `<400ms`
-(root-cause hypothesis: PackageManager app-enum + Hilt graph + Room open + first DataStore read +
-`ensureModel()`; profiled fix owed). **Two recorded findings (not fixed):** `keySet` indicator race
-(recompute before `secretStore.put` → tick stays false though key saved/usable, cosmetic) + RateLimited
-typo `retray`→`retry`. **Still open:** real local NLU **PENDING-MODEL** (`intent.onnx`/`vocab.txt`
-absent → no Phase-6 pass claim); recognizer `Ready`/`Partial` states not evidenced (OQ#4); C.5 boot
-warmup after reboot; cold-start fix. Details: decisions.md "ADR 2026-07-02 — Device Acceptance Round 3".
-**Phase 6 (Local NLU + embeddings, Blocks O → R) is DONE — Blocks O → R complete (O 2026-06-27,
-P + Q 2026-06-28, R 2026-06-29); code + JVM green, partial device acceptance executed 2026-07-01:
-trim-memory is only PARTIAL (no-crash under `RUNNING_CRITICAL` and `BACKGROUND`/`COMPLETE`, process alive,
-renderer context release observed, but no-model state means ONNX/native session release is not conclusively
-proven), and real-model acceptance remains pending/model-blocked on OQ#1/#2.**
-**Block R wired the NLU source into the live pipeline + closed the phase:** rule-first
-`LayeredIntentMatcher : IntentMatcher` (`:data:repository`, port-only, no `data→data` edge) — rule
-returned verbatim when not low-confidence (NLU never consulted, `< 10ms` + Phase-3 parity preserved),
-NLU consulted only on low confidence; **R1 calibration decided (§5.A): conservative band → Suggest** via
-the pure `NluConfidenceCalibrator` (raw softmax → `[suggestThreshold, autoExecuteThreshold)`, always
-Suggests, never silently auto-executes; `confidenceFloor` stays in `OnnxModelSpec`, calibrator floor a
-decoupled plain `Float`); escape pinned structurally (`source==NLU && (conf==0f || UnknownIntent)`). DI
-(R2): `@RuleMatcher`/`@NluMatcher` qualifiers + `NluMatcherProvidesModule`, unqualified `IntentMatcher` →
-`LayeredIntentMatcher`, `HandleUserCommandUseCase` untouched; **§5.F deviation (recorded): `@NluMatcher`
-binds the self-gating `OnnxIntentClassifier` UNCONDITIONALLY** (availability flips at runtime → live
-re-check beats a stale graph-time NoOp swap; no production NoOp needed), same `@Singleton` exposed as
-`@NluMatcher` + `SessionLifecycle`. R2.5: `SidrLauncherApp.onTrimMemory(≥TRIM_MEMORY_BACKGROUND)` /
-`onLowMemory()` → `SessionLifecycle.releaseResources()` (`:app` holds only the ONNX-free seam). R3:
-`ensureModel()` fired fire-and-forget on `@ApplicationScope` (IO) from `onCreate()` (inert under OQ#2).
-With no model present (shipping state) the NLU secondary always escapes → exact rule-only parity. New
-JVM tests green (fast-path "NLU never invoked", escape→rule, calibrated answer, no-model parity,
-calibrator boundaries); `assembleDebug` (Hilt graph valid) + full regression green. Details: decisions.md
-"ADR 2026-06-29 — Block R complete + Phase 6 close".
-**Block Q delivered model-management + download gating:** pure
-`DeviceProfileClassifier` (`(ram,cores)→DeviceProfile`: LOW_END `<2.5 GB` or `<4` cores, HIGH_END `≥5.5 GB`
-+ `≥8` cores, else MID) + `DeviceProfileCacheMapping` (lossy LOW_END-vs-rest) + `AndroidDeviceProfiler :
-DeviceProfileProvider` (`:core:android`, write-through to the **pre-existing** `DeviceProfileCacheRepository`,
-capability re-read per call); `ModelStore` (quarantine→SHA-256-verify→atomic-rename, implements P's
-`LocalModelFiles`, **never exposes an unverified file**, bundled-vocab `assets/nlu/` seam) +
-`Sha256Verifier` + `ModelProvisioner` + `ModelManager` (**enqueue-gate-static-only** §6.A:
-`profile≠LOW_END && availability≠Available && config.isPinned`; thermal/battery NOT in the enqueue
-decision — they're WorkManager constraints + the per-inference re-check inside `OnnxIntentClassifier`) +
-`ModelDownloader` port (**`:domain`**, rework P2-4) + `ModelFilePresence` port (`:domain`, rework P1-2) +
-`ModelDownloadScheduler` port (`:data:ai-local`); `ModelAvailabilityRepositoryImpl` (`:data:repository`,
-`model_available_ids` stringSet **cross-checked against `ModelFilePresence` disk truth** → all 3 Block-O
-states reachable, marker-but-missing reads not-Available; privacy-guard green); `@HiltWorker
-ModelDownloadWorker` (shell) + `WorkManagerModelDownloadScheduler` + `SidrLauncherApp :
-Configuration.Provider`/`HiltWorkerFactory` + manifest WorkManagerInitializer removal (in `:app`);
-`KtorModelDownloader` (HTTPS-only, **retry taxonomy** 4xx/non-HTTPS→permanent, 5xx/network→transient) is a
-plain class in **`:data:ai-cloud`** (`@Provides`-wired in `:app`, reuses the cloud `HttpClient`) — keeps
-`:data:ai-local` kapt/HTTP-free and adds **no `data→data` edge** (port in `:domain`); correctness logic
-stays in the JVM-tested `ModelProvisioner`. **OQ#2 NOT resolved (expected):**
-`ModelDownloadConfig.INTENT_NLU_PENDING` is the single inert seam (blank URL/hash, `TODO(OQ#2)`; `init`
-`require` rejects a half-pinned config); whole mechanism JVM-tested vs fakes, live download +
-`AndroidDeviceProfiler` reads device/release-pending on SM-A325F. New deps = WorkManager 2.10.0 +
-hilt-work 1.2.0 only; `ai.onnxruntime` still confined to P's two shell files; `:domain` untouched. **39
-new JVM tests** (0 failures); full `testDebugUnitTest` + `assembleDebug` green. **P's three seams
-(`DeviceProfileProvider`/`ModelAvailabilityRepository`/`LocalModelFiles`) now have prod impls →
-`OnnxIntentClassifier` is bindable; Block R does the bind + trim-hook + `ensureModel()` trigger.**
-Block O delivered the pure domain contracts (`DeviceProfile`/`DeviceCapability`/
-`DeviceProfileProvider` + `LocalInferenceGate` + `domain.ai.local` ports + fakes; NLU rides the existing
-`IntentMatcher` port — **no parallel `IntentClassifier`**). **Block P delivered the ONNX runtime in
-`:data:ai-local`:** `OnnxIntentClassifier : IntentMatcher` (`source = NLU`; lazy + single + Mutex-guarded
-session on `Dispatchers.Default`, per-inference `LocalInferenceGate` re-check, `AutoCloseable` +
-`SessionLifecycle` seam with transient-vs-sustained teardown, graceful degrade, no user text logged) +
-`OnnxSessionFactory` (CPU default + opportunistic NNAPI on API 29+ behind `OnnxRuntimeFlags`, both
-Fork-P6-5 failure modes handled, test seam) + a **pure JVM-tested P2a layer** (`WordPieceTokenizer`
-byte-exact vs an independent golden, `IntentLabelMapper` softmax/label-map + confidence escape,
-`SlotExtractor`, `NluLabel`, `OnnxModelSpec`) + `LocalModelFiles` seam (Q implements) + P0 pipeline in
-`tools/nlu/` + device-pending `androidTest`. Open Question #1 (model/tokenizer/7-label set) RESOLVED
-2026-06-28, **AMENDED multilingual 2026-06-29**: multilingual WordPiece teacher
-(`bert-base-multilingual-uncased`) → prune+distill+int8 for `en/ar/tr/ru`, pruned `vocab.txt`
-(data-driven ~20–30k), `maxLen 48`, 7 (language-independent) classes (`CLEAR` rule-only, slots heuristic).
-21 new JVM tests (0 failures); ONNX confined to two shell files; pinned I/O contract
-(`input_ids`/`attention_mask`[/`token_type_ids` if declared] int64 `[1,48]`, `logits` float `[1,7]`);
-NLU softmax confidence **uncalibrated** vs rule scale (open Q → Block R); `assembleDebug` + full JVM
-regression green. **Device-pending:** real `intent.onnx`/`vocab.txt` training + P5 SM-A325F run (no
-torch/onnx/network here). `:app` trim-hook registration + DI binding were deferred to Q/R; **Block R
-delivered them (see above) — Phase 6 is now CLOSED.** Next = the deferred **device-acceptance pass**
-(SM-A325F: Block-J `SecretStoreInstrumentedTest`, Block-N N5, Block-P P5 `< 150ms` inference + on-device
-NLU, Block-Q `AndroidDeviceProfiler` reads, Block-R `onTrimMemory` teardown — all gated on the real model
-OQ#1/#2) and/or **Phase 7** per the roadmap. Plan + forks:
-[ai-context/phase-6-local-nlu-plan.md](ai-context/phase-6-local-nlu-plan.md) (ADRs "Block O complete",
-"Block P complete", "Block Q complete", "Block R complete + Phase 6 close" in decisions.md). Phase 5 plan: [ai-context/phase-5-plan.md](ai-context/phase-5-plan.md).
+Session digest. Read this first. **Last synced: 2026-07-04, after commit
+`71fc2f5 Complete Phase 9 Y4-Y7 hardening`.** Phases **3 → 7**, **Phase UX**, and
+**Phase 9 hardening** are done for the available matrix. The current recommended next step is an
+**MVP release-candidate pass**, not more feature work: rebuild on HEAD, run the release sanity suite, and
+smoke the release APK on SM-A325F.
+
+**Current ship status.**
+- **Phase UX closed** (2026-07-03) and device-accepted on SM-A325F / Android 13 (2026-07-04): minimal home
+  + app drawer, Settings/Assistant entry points, settings persistence, first-run nudge, a11y semantics,
+  ask-assistant prefill, and set-as-default chooser fix all passed.
+- **Phase 9 closed** (2026-07-04): Y1/Y2 startup + release hardening, Y3 suggestion correctness, Y4 test
+  hardening, Y5 privacy/logging/error handling, Y6 Android 13 + trim/LOW_END-path validation, and Y7
+  residual cosmetic cleanup are complete.
+- **Release performance record:** final release on SM-A325F warm median ~102ms; cold median 766ms after
+  drop-first protocol; first home frame has no Loading spinner. `<400ms` cold remains aspirational, not a
+  ship gate.
+- **Assistant real streaming and BYOK Keystore are device-proven:** OpenRouter / `openai/gpt-4o-mini`
+  streamed end-to-end; config persisted in `sidr_preferences`, key stayed encrypted in `sidr_secrets`,
+  offline static fallback / cancel / retry / rotation passed.
+- **Suggestion correctness is device-proven:** home suggestions render only launchable package targets or
+  known routes; old hardcoded AOSP time-of-day chips were replaced with resolved universal anchors.
+- **Y7 cosmetic findings retired:** `keySet` flips true immediately after a successful non-blank key save;
+  `RateLimited` text is pinned as `retry`; relaunching `LauncherActivity` while alive resets nested nav
+  back to home via `singleTop` + `onNewIntent` + `AppNavHost` home reset.
+
+**Verification already run for Phase 9 closure.**
+- `./gradlew --no-daemon :domain:test :core:android:testDebugUnitTest :data:ai-local:testDebugUnitTest :app:testDebugUnitTest :feature:launcher:testDebugUnitTest :feature:settings:testDebugUnitTest :feature:permission_education:testDebugUnitTest :feature:assistant:testDebugUnitTest :app:assembleDebug` ✅
+- SM-A325F / Android 13 debug smoke for Y7 re-entry ✅: drawer -> `am start -W -n com.sidr.launcher/.LauncherActivity`
+  delivered the intent to the running top-most instance and returned to home; `AndroidRuntime:E` empty.
+- Earlier Y1/Y2 release smoke on SM-A325F ✅: release builds/installs/runs with R8/resource shrink +
+  Baseline Profile; home -> drawer -> settings -> assistant -> set-as-default -> voice education clean.
+
+**Still not claimed / not Phase 9 blockers.**
+- Android 9 / 11 / 14 device/emulator validation and real LOW_END hardware validation remain residual
+  until those targets exist.
+- OQ#1/OQ#2 real NLU model + vocab + host/hash, OQ#3 embedding model/host/hash, and OQ#4 on-device STT
+  matrix remain separate model/STT tracks.
+- Voice recognizer `Ready` / `Partial` intermediate states are not fully evidenced (OQ#4).
+- Boot warmup after a physical reboot (`RECEIVE_BOOT_COMPLETED` re-enqueue) remains unexercised.
+
+Authoritative details: `ai-context/current-status.md`, `ai-context/phase-9-plan.md`, and
+`ai-context/decisions.md` (latest ADR: "2026-07-04 — Phase 9 Block Y7 residual cosmetic cleanup").
 
 ## What this is
 
@@ -119,58 +51,19 @@ The offline launcher core (home, app grid, app launch) must work fully without A
 
 ## Current goal (active work)
 
-**NOW (2026-07-02): Phase 7 user-facing close is DONE — Blocks S + T + U + W complete; Block V runtime seam is implemented but inert pending OQ#3.** Phases 3 → 6 are code-closed
-(MVP loop, persistence/Room/permission-education/hardening, cloud AI multi-provider, local ONNX NLU).
-**Acceptance-blocker follow-up (2026-07-01):** the inline `Routes.Settings` destination is now a real
-minimal launcher-settings screen with a sanctioned `aiSuggestionsEnabled` toggle (no adb hack), the
-toggle re-syncs `SuggestionsWorkScheduler` immediately and `LauncherViewModel` now reacts live to flag
-changes (enable → cache/refresh suggestions, disable → clear suggestions). `AndroidSpeechInputSource`
-now treats a resolvable `RecognitionService` / `ACTION_RECOGNIZE_SPEECH` handler as a valid fallback
-availability signal (plus manifest `<queries>` for those speech components), fixing the hidden-mic
-false-negative class seen on device. `RuleBasedIntentMatcher` again exposes a rule-only assistant entry
-(`assistant`, `show assistant`) mapping to `SimpleCommand.OPEN_ASSISTANT`, so assistant launch no longer
-depends on NLU/model presence. JVM regression + `assembleDebug` are green. **Still pending / NOT
-claimed done:** provider config/key for real assistant streaming, OQ#1/OQ#2 real NLU model+vocab,
-OQ#3 embedding model, and cold-start perf budget.
-**Device Acceptance Round 2 (2026-07-02):** the launcher-side acceptance blockers are now directly
-verified on SM-A325F. `settings` opens launcher settings; `aiSuggestionsEnabled` **ON** shows the
-home suggestions row and **OFF** clears it; suggestion tap routing works on-device; and the
-WorkManager ON/OFF gate is evidenced by the app's real WorkManager DB (`sidr_usage_cleanup` stays
-enqueued, `sidr_suggestion_precompute` enqueued at ON then `state=5` at OFF) plus `dumpsys jobscheduler`
-(`2` Sidr jobs at ON, `1` at OFF, both constrained while `Battery not low: false`). Voice also moved
-forward materially: mic affordance visible, no-permission mic tap routes to education, in-app grant
-ended with `RECORD_AUDIO granted=true`, and one post-grant recognizer run produced a final transcript
-that went through the ordinary command pipeline (unknown-command feedback surfaced from launcher home).
-Still pending: assistant real streaming/offline/retry/cancel (**PENDING-CONFIG**), Phase 6 real NLU
-acceptance (**PENDING-MODEL**; no `intent.onnx` / `vocab.txt`), recognizer `Ready` / `Partial`
-intermediate-state evidence, OQ#3 embedding model, and the cold-start performance budget.
-**Phase 7 Block S** delivered the pure `:domain` suggestion + voice contracts; **Phase 7 Block T** delivered
-voice input (`AndroidSpeechInputSource` in `:core:android`, `VoiceModule` DI, the `RECORD_AUDIO` routed-education
-request flow, the discharged Block-H `refreshStatus()` debt, and the launcher mic affordance) — 383 JVM tests
-green, 0 new deps, `android.speech` confined to `:core:android`, real recognizer device-pending (OQ#4).
-**Phase 7 Block U** delivered the contextual suggestion engine (offline `TimeOfDaySuggestionProvider`/
-`UsageSuggestionProvider` + opt-in `CalendarSuggestionProvider`/`LocationSuggestionProvider` +
-`SuggestionEngineImpl` aggregate→rank→persist, gated by `aiSuggestionsEnabled`) and reused Block T's
-request-flow template verbatim for `CALENDAR_SUGGESTIONS`/`LOCATION_SUGGESTIONS` — 399 JVM tests green (16
-new), 0 new deps, `android.location`/`CalendarContract` confined to `:data:repository`, privacy guard
-delivered as 4 executable proofs (incl. a reflection-based fix closing a hand-maintained-inventory drift
-gap in Block L's `AiRequestGuardTest`), real device reads device-pending. **Phase 7 Block W** then closed the
-user-facing suggestions surface in two slices: **W-lite** made `LauncherUiState.suggestions` the single owner,
-restored cached suggestions for first paint, refreshed with a fresh superseding engine pass, kept
-`:feature:suggestions` stateless/UI-only, and wired suggestion taps into the existing launcher
-launch/navigation path; **W proper** added periodic `SuggestionPrecomputeWorker` +
-`UsageCleanupWorker`, gate-before-enqueue scheduling, boot warmup via `RECEIVE_BOOT_COMPLETED`, and docs sync.
-**Phase 7 Block V** added `OnnxTextEmbedder : TextEmbedder` in `:data:ai-local`, the
-`SemanticSuggestionRanker` decorator, `ModelDownloadConfig.EMBEDDING_PENDING`, and Hilt
-`Set<SessionLifecycle>` teardown so NLU + embedder sessions both release on trim/low-memory. It is
-**structurally ready but inert** until OQ#3 pins the embedding model/host/hash/ONNX contract; no-model,
-gate-off, and failure paths preserve heuristic suggestion order exactly. Carried device-acceptance debt
-(SM-A325F): Block-J Keystore, Block-N N5, Block-P P5/OQ#1-2, Block-T OQ#4, Block-U calendar/location reads,
-and Block-V real embedding load + `<150ms` MID_RANGE latency + memory/co-residency check. **OQ#3 follow-up
-debt is recorded in decisions.md:** revisit `SemanticSuggestionRanker`'s sync `runBlocking` boundary when a
-real model is pinned; decide how live typed-prefix UX feeds `SuggestionContext.typedPrefix`; generalize
-multi-model provisioning or add an embedding-specific manager/scheduler; run real embedder device
-acceptance. See the session digest at the top + the [Phase 7 plan](ai-context/phase-7-voice-suggestions-plan.md).
+**NOW (2026-07-04): MVP release-candidate prep.** Phase 9 is closed and committed in
+`71fc2f5 Complete Phase 9 Y4-Y7 hardening`; previous Phase 9 Y1-Y3 commit is `d744bcd`. Do not start
+optional Phase 8 or model/OQ work unless the owner explicitly chooses that track.
+
+Recommended next commands for an RC pass:
+- `./gradlew --no-daemon testDebugUnitTest assembleDebug :app:assembleRelease`
+- Install the release APK on SM-A325F and smoke: home -> drawer -> settings -> assistant ->
+  set-as-default -> voice education -> relaunch-to-home.
+
+If the owner chooses post-MVP hardening instead of RC, the next buckets are Android 9/11/14 matrix,
+real LOW_END hardware, boot warmup after reboot, and model/STT OQ#1-OQ#4. These are not Phase 9 ship
+blockers. See `ai-context/current-status.md` for the compact status and `ai-context/phase-9-plan.md` for
+the closed hardening plan.
 *(The phase-by-phase history below is retained for context.)*
 
 **Phase 3 is DONE (Blocks A → D, 2026-06-21).** The MVP loop works: type `open telegram` →

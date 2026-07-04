@@ -858,6 +858,88 @@ class LauncherViewModelTest {
     }
 
     @Test
+    fun `route suggestion tap clears stale feedback without launching`() = runTest(testDispatcher) {
+        fakeExecutor.resultToReturn = ActionExecutionResult.Failure("Couldn't open that app.")
+        val vm = buildViewModel()
+        vm.onAppClicked(InstalledApp("com.missing", "Missing"))
+        advanceUntilIdle()
+        assertTrue(vm.commandFeedback.value is CommandFeedback.Message)
+        fakeExecutor.reset()
+        val eventDeferred = async { vm.navigationEvents.first() }
+
+        vm.onSuggestionClicked(
+            Suggestion(
+                label = "Settings",
+                actionId = Routes.Settings.ROUTE,
+                source = SuggestionSource.TIME_OF_DAY,
+                score = 1.0,
+            ),
+        )
+
+        assertEquals(NavigationEvent.NavigateTo(Routes.Settings.ROUTE), eventDeferred.await())
+        assertEquals(CommandFeedback.None, vm.commandFeedback.value)
+        assertEquals(0, fakeExecutor.callCount)
+    }
+
+    @Test
+    fun `unknown package suggestion tap launches actionId without activity fallback`() =
+        runTest(testDispatcher) {
+            val vm = buildViewModel(
+                flagRepo = FakeFeatureFlagRepository(
+                    FeatureFlags(aiSuggestionsEnabled = true, usageHistoryEnabled = true),
+                ),
+            )
+            advanceUntilIdle()
+
+            vm.onSuggestionClicked(
+                Suggestion(
+                    label = "Direct Package",
+                    actionId = "com.direct.package",
+                    source = SuggestionSource.RECENT_USAGE,
+                    score = 1.0,
+                ),
+            )
+            advanceUntilIdle()
+
+            val action = fakeExecutor.executedActions.single() as ExecutableAction.LaunchAppAction
+            assertEquals("com.direct.package", action.packageName)
+            assertEquals(null, action.activityName)
+            assertEquals(listOf("com.direct.package"), fakeUsageRepo.recordedLaunches)
+        }
+
+    @Test
+    fun `package suggestion tap respects usage history gate`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp(
+                packageName = "org.telegram.messenger",
+                label = "Telegram",
+                activityName = "org.telegram.messenger.MainActivity",
+            ),
+        )
+        val vm = buildViewModel(
+            flagRepo = FakeFeatureFlagRepository(
+                FeatureFlags(aiSuggestionsEnabled = true, usageHistoryEnabled = false),
+            ),
+        )
+        advanceUntilIdle()
+
+        vm.onSuggestionClicked(
+            Suggestion(
+                label = "Telegram",
+                actionId = "org.telegram.messenger",
+                source = SuggestionSource.RECENT_USAGE,
+                score = 1.0,
+            ),
+        )
+        advanceUntilIdle()
+
+        val action = fakeExecutor.executedActions.single() as ExecutableAction.LaunchAppAction
+        assertEquals("org.telegram.messenger", action.packageName)
+        assertEquals("org.telegram.messenger.MainActivity", action.activityName)
+        assertTrue(fakeUsageRepo.recordedLaunches.isEmpty())
+    }
+
+    @Test
     fun `open settings outcome clears input and emits settings navigation`() = runTest(testDispatcher) {
         fakeMatcher.intentToReturn = LauncherIntent.OpenSettingsIntent()
         fakeMatcher.confidenceToReturn = 0.95f
@@ -1120,6 +1202,55 @@ class LauncherViewModelTest {
         assertEquals("Custom favoritesCount must cap the row", 4, favorites.size)
         assertEquals((0 until 4).map { "com.app$it" }, favorites.map { it.packageName })
     }
+
+    @Test
+    fun `favorites are empty when favoritesCount preference is zero`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp("com.a", "Alpha"),
+            InstalledApp("com.b", "Beta"),
+        )
+        fakeUsageRepo.setRecords(listOf(
+            AppUsageRecord("com.a", lastUsedEpochMs = 2000L, launchCount = 5),
+            AppUsageRecord("com.b", lastUsedEpochMs = 1000L, launchCount = 3),
+        ))
+        val vm = buildViewModel(
+            prefsRepo = FakeUserPreferencesRepository(UserPreferences(favoritesCount = 0)),
+        )
+        advanceUntilIdle()
+
+        val state = vm.uiState.value as UiState.Success
+        assertTrue(state.data.favorites.isEmpty())
+        assertEquals(listOf("com.a", "com.b"), state.data.apps.map { it.packageName })
+    }
+
+    @Test
+    fun `favorites react to favoritesCount preference changes without reloading apps`() =
+        runTest(testDispatcher) {
+            val apps = (0 until 4).map { InstalledApp("com.app$it", "App $it") }
+            fakeRepo.appsToReturn = apps
+            fakeUsageRepo.setRecords(
+                apps.mapIndexed { i, app ->
+                    AppUsageRecord(app.packageName, lastUsedEpochMs = (4 - i).toLong(), launchCount = 4 - i)
+                },
+            )
+            val prefsRepo = FakeUserPreferencesRepository(UserPreferences(favoritesCount = 3))
+            val vm = buildViewModel(prefsRepo = prefsRepo)
+            advanceUntilIdle()
+            assertEquals(1, fakeRepo.callCount)
+            assertEquals(
+                (0 until 3).map { "com.app$it" },
+                (vm.uiState.value as UiState.Success).data.favorites.map { it.packageName },
+            )
+
+            prefsRepo.updatePreferences(UserPreferences(favoritesCount = 1))
+            advanceUntilIdle()
+
+            assertEquals("Changing the count must not re-query PackageManager", 1, fakeRepo.callCount)
+            assertEquals(
+                listOf("com.app0"),
+                (vm.uiState.value as UiState.Success).data.favorites.map { it.packageName },
+            )
+        }
 
     @Test
     fun `no usage history yields empty favorites`() = runTest(testDispatcher) {

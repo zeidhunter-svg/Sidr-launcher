@@ -3,6 +3,7 @@ package com.sidr.launcher.feature.assistant
 import com.sidr.launcher.core.testing.FakeAiProviderConfigRepository
 import com.sidr.launcher.core.testing.FakeGenerativeAiEngine
 import com.sidr.launcher.core.testing.FakeSecureSecretStore
+import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.domain.ai.AiChunk
 import com.sidr.launcher.domain.ai.AiError
 import com.sidr.launcher.domain.ai.AiModelId
@@ -139,6 +140,35 @@ class AssistantViewModelTest {
         assertFalse(status.showProviderCta)
     }
 
+    @Test
+    fun `AiError retry and provider CTA classification covers every variant`() {
+        val cases = listOf(
+            AiError.Offline to (true to false),
+            AiError.MissingCredentials to (false to true),
+            AiError.Unauthorized to (false to true),
+            AiError.RateLimited(retryAfterMs = 1_000L) to (true to false),
+            AiError.Timeout to (true to false),
+            AiError.Network("connection reset") to (true to false),
+            AiError.ServerError(statusCode = 500) to (true to false),
+            AiError.InvalidRequest("bad model") to (false to false),
+            AiError.Unknown("unmapped") to (true to false),
+        )
+
+        cases.forEach { (error, expected) ->
+            val (retryable, showProviderCta) = expected
+            assertEquals("${error::class.simpleName} retryable", retryable, error.isButtonRetryable())
+            assertEquals("${error::class.simpleName} provider CTA", showProviderCta, error.needsProviderSetup())
+        }
+    }
+
+    @Test
+    fun `RateLimited message says retry`() {
+        val error = AiError.RateLimited(retryAfterMs = 1_000L).toUiError() as UiError.Message
+
+        assertEquals("Rate limited. Please wait and retry.", error.text)
+        assertFalse("RateLimited message must not contain old typo", error.text.contains("retray"))
+    }
+
     // ── retry latest-wins ─────────────────────────────────────────────────────────────────────────
 
     @Test
@@ -188,6 +218,15 @@ class AssistantViewModelTest {
             "key value must not leak into uiState",
             vm.uiState.value.toString().contains("secret-key"),
         )
+    }
+
+    @Test
+    fun `saveProvider with new key immediately marks keySet true`() = runTest {
+        val vm = buildVm()
+        vm.saveProvider("https://openrouter.ai/api/v1", "mistralai/mistral-7b-instruct", "secret-key")
+        advanceUntilIdle()
+
+        assertTrue("saved key must be reflected in the form immediately", vm.uiState.value.form.keySet)
     }
 
     @Test

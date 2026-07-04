@@ -66,6 +66,22 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `unchanged ai suggestions setting skips flag write but still re-syncs scheduling`() =
+        runTest(testDispatcher) {
+            val flagRepo = FakeFeatureFlagRepository(FeatureFlags(aiSuggestionsEnabled = true))
+            val scheduling = FakeSuggestionScheduling()
+            val vm = buildViewModel(flagRepo, scheduling = scheduling)
+
+            vm.setAiSuggestionsEnabled(true)
+            advanceUntilIdle()
+
+            assertTrue(flagRepo.getFlags().first().aiSuggestionsEnabled)
+            assertEquals(0, flagRepo.updateCount)
+            assertEquals(1, scheduling.ensureScheduledCount)
+            assertEquals(null, vm.uiState.value.errorMessage)
+        }
+
+    @Test
     fun `flag write failure surfaces a safe error and does not re-sync`() = runTest(testDispatcher) {
         val flagRepo = FakeFeatureFlagRepository(FeatureFlags(aiSuggestionsEnabled = false)).apply {
             errorToReturn = OperationError.UnknownError("datastore down")
@@ -106,6 +122,19 @@ class SettingsViewModelTest {
 
         assertFalse(flagRepo.getFlags().first().usageHistoryEnabled)
         assertEquals("Couldn't update launcher settings. Please try again.", vm.uiState.value.errorMessage)
+    }
+
+    @Test
+    fun `unchanged usage history setting skips flag write`() = runTest(testDispatcher) {
+        val flagRepo = FakeFeatureFlagRepository(FeatureFlags(usageHistoryEnabled = true))
+        val vm = buildViewModel(flagRepo)
+
+        vm.setUsageHistoryEnabled(true)
+        advanceUntilIdle()
+
+        assertTrue(flagRepo.getFlags().first().usageHistoryEnabled)
+        assertEquals(0, flagRepo.updateCount)
+        assertEquals(null, vm.uiState.value.errorMessage)
     }
 
     @Test
@@ -190,6 +219,26 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `unchanged user preference settings skip preference writes`() = runTest(testDispatcher) {
+        val prefsRepo = FakeUserPreferencesRepository(
+            UserPreferences(
+                themeName = ThemeOption.SYSTEM,
+                favoritesCount = 8,
+                micInputEnabled = true,
+            ),
+        )
+        val vm = buildViewModel(prefsRepo = prefsRepo)
+
+        vm.setThemeName(ThemeOption.SYSTEM)
+        vm.setFavoritesCount(8)
+        vm.setMicInputEnabled(true)
+        advanceUntilIdle()
+
+        assertEquals(0, prefsRepo.updateCount)
+        assertEquals(null, vm.uiState.value.errorMessage)
+    }
+
+    @Test
     fun `assistant provider entry emits navigation to the assistant route`() = runTest(testDispatcher) {
         val vm = buildViewModel()
 
@@ -197,6 +246,16 @@ class SettingsViewModelTest {
         val event = vm.navigationEvents.first()
 
         assertEquals(NavigationEvent.NavigateTo(Routes.Assistant.ROUTE), event)
+    }
+
+    @Test
+    fun `back action emits navigate back`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+
+        vm.navigateBack()
+        val event = vm.navigationEvents.first()
+
+        assertEquals(NavigationEvent.NavigateBack, event)
     }
 
     private fun buildViewModel(

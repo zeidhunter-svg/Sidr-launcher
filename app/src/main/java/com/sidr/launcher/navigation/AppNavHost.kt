@@ -26,11 +26,19 @@ import com.sidr.launcher.feature.suggestions.SuggestionsRow
 
 private const val TAG = "AppNavHost"
 
+private fun navigateHome(navController: NavHostController) {
+    navController.navigate(Routes.Launcher.ROUTE) {
+        popUpTo(Routes.Launcher.ROUTE) { inclusive = false }
+        launchSingleTop = true
+    }
+}
+
 /**
  * Handles a [NavigationEvent] safely:
  * - [NavigationEvent.NavigateTo]: attempts to navigate to [event.route]; if the route is not
  *   registered in the graph (throws [IllegalArgumentException]), falls back to
  *   [Routes.Launcher.ROUTE] with popUpTo + launchSingleTop to avoid a growing back stack.
+ *   Fallback logs stay payload-free: routes can carry user prompt text in query args.
  * - [NavigationEvent.NavigateBack]: calls [NavHostController.popBackStack]; if it returns false
  *   (already at the root / no back stack entry), does nothing — avoids an infinite loop.
  *
@@ -45,12 +53,9 @@ private fun handleNavigationEvent(
         is NavigationEvent.NavigateTo -> {
             try {
                 navController.navigate(event.route)
-            } catch (e: IllegalArgumentException) {
-                Log.w(TAG, "Unknown route '${event.route}', falling back to launcher home", e)
-                navController.navigate(Routes.Launcher.ROUTE) {
-                    popUpTo(Routes.Launcher.ROUTE) { inclusive = false }
-                    launchSingleTop = true
-                }
+            } catch (_: IllegalArgumentException) {
+                Log.w(TAG, "Navigation route was not registered; falling back to launcher home.")
+                navigateHome(navController)
             }
         }
         NavigationEvent.NavigateBack -> {
@@ -66,7 +71,14 @@ private fun handleNavigationEvent(
 fun AppNavHost(
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
+    homeResetSignal: Int = 0,
 ) {
+    LaunchedEffect(homeResetSignal) {
+        if (homeResetSignal > 0) {
+            navigateHome(navController)
+        }
+    }
+
     NavHost(
         navController = navController,
         startDestination = Routes.Launcher.ROUTE,

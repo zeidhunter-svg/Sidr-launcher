@@ -2,15 +2,16 @@
 
 > **Authoritative status lives in `CLAUDE.md` (session digest), `ai-context/decisions.md` (ADR log),
 > and the per-phase plans.** This file is a short pointer/snapshot only — if it disagrees with those,
-> they win. Last re-based: 2026-07-04 (Phase 9 Y1/Y2/Y3).
+> they win. Last re-based: 2026-07-04 (Phase 9 Y1/Y2/Y3/Y4/Y5/Y6/Y7).
 
 ## Where we are
 
 **Phase 7 (voice input + contextual suggestions) — user-facing close SHIPPED (2026-07-01).**
-Phases 3 → 7 and Phase UX are code-closed. **Phase 9 hardening is active:** Blocks **Y1/Y2/Y3 are done**
-(startup release perf + release R8/Baseline Profile + contextual-suggestions correctness). Y4-Y7 remain
-pending. The separate model track (real ONNX models, the inert embedder seam, OQ#1-OQ#4) is still outside
-Phase 9.
+Phases 3 → 7, Phase UX, and **Phase 9 hardening are done** for the available matrix: Blocks
+**Y1/Y2/Y3/Y4/Y5/Y6/Y7 are done** (startup release perf + release R8/Baseline Profile +
+contextual-suggestions correctness + test-coverage hardening + privacy/logging/error handling +
+Android 13 / LOW_END validation pass + residual cosmetic cleanup). The separate model track (real ONNX
+models, the inert embedder seam, OQ#1-OQ#4) is still outside Phase 9.
 
 ## Phase ledger (see `docs/roadmap.md` + `ai-context/decisions.md`)
 
@@ -129,7 +130,8 @@ Phase 9.
     Block X6 complete".
 - **MVP sequencing (owner 2026-07-02):** numeric 8→9 is NOT the ship order → **Phase UX → Phase 9
   (hardening, pre-ship gate) → Phase 8 (optional, deferred)**.
-  - **Phase 9 — hardening:** IN PROGRESS. **Y1 startup + Y2 release build are ✅ done 2026-07-04.**
+  - **Phase 9 — hardening:** ✅ DONE 2026-07-04 for the available matrix. **Y1 startup + Y2 release build
+    are done.**
     Final release on SM-A325F: warm median ~102ms, cold median 766ms (drop-first protocol), first home
     frame has no Loading spinner; R8/resource shrink enabled; Baseline Profile generated/shipped
     (`app/src/main/baseline-prof.txt`, 18,862 lines); release smoke-clean; `testDebugUnitTest` +
@@ -138,8 +140,26 @@ Phase 9.
     actionIds before ranking/cache, and time-of-day fallback now resolves Alarm/Camera anchors through
     `PackageManager` instead of hardcoded AOSP packages; full Gradle verification green; SM-A325F smoke
     showed `A101` usage suggestion and resolved Samsung Clock (`Часы`) launching successfully, no
-    AndroidRuntime crash. **Still pending:** Y4 test coverage, Y5 privacy/logging, Y6 multi-version +
-    LOW_END, Y7 cosmetic findings. Model-gated OQ#1–#4 remain a separate track, out of the ship gate.
+    AndroidRuntime crash. **Y4 done 2026-07-04:** VM-level regression coverage broadened for
+    suggestions first-paint/supersede, `deriveFavorites`, `onSuggestionClicked` routing,
+    usage-history/AI-suggestions gates, and Settings VM no-op/navigation paths; production code unchanged.
+    **Y5 done 2026-07-04:** logging audit stripped the only raw-route/exception-bearing log surface
+    (`AppNavHost` fallback, which could carry assistant prompt text), added a source guard for payload-free
+    nav logging, confirmed no crash-report SDK/surface is wired, and pinned full assistant `AiError`
+    retryable/provider-CTA classification; full Gradle verification green. **Y6 done 2026-07-04:**
+    validation-first pass with no production changes. Available runtime matrix was SM-A325F / Android 13
+    only; debug APK installed via `adb install -r --no-streaming`; launch/home/offline core/settings
+    persistence/set-as-default ROLE_HOME/voice education all passed; trim-memory BACKGROUND/COMPLETE
+    released `OnnxTextEmbedder` + `OnnxIntentClassifier` through `SessionLifecycle`; no `files/models`
+    directory, so local AI paths stayed inert/gated-off; device is HIGH_END by current classifier
+    (~5.8GB RAM / 8 cores), so LOW_END hardware plus Android 9/11/14 remain residual until a matrix exists.
+    **Y7 done 2026-07-04:** `saveProvider` now reflects a newly saved non-blank API key in `keySet`
+    immediately without exposing the key, `RateLimited` text is regression-pinned as `retry`, and
+    relaunch/re-entry while `LauncherActivity` is alive resets nested nav (drawer/settings/etc.) back to
+    launcher home via `singleTop` + `onNewIntent` + `AppNavHost` home reset. SM-A325F debug smoke passed:
+    drawer -> `am start -W -n com.sidr.launcher/.LauncherActivity` delivered the new intent to the running
+    top instance and returned to home; `AndroidRuntime:E` empty. Model-gated OQ#1–#4 remain a separate
+    track, out of the ship gate.
   - **Phase 8 — accessibility automation:** ⛔ OPTIONAL / DEFERRED (post-MVP); not a ship blocker.
 
 ## Open questions gating the residual track
@@ -152,8 +172,9 @@ Phase 9.
 ## Device acceptance (SM-A325F / Android 13) — see ADR 2026-07-02 (Rounds 2 + 3)
 
 **Round 3 (2026-07-02, BYOK key in-app) retired the last big AI blocker: assistant real streaming is
-now PASS end-to-end.** Residual debt is perf (cold-start fix), voice intermediate states, boot-warmup,
-and the model track. See [`device-acceptance-brief.md`](device-acceptance-brief.md).
+now PASS end-to-end.** Phase 9 later retired startup perf and Y7 cosmetic findings; residual debt is voice
+intermediate states, boot-warmup, unavailable Android 9/11/14 + real LOW_END matrix, and the model track.
+See [`device-acceptance-brief.md`](device-acceptance-brief.md).
 
 **Verified on device (Round 3):**
 - ✅ **C.1 Assistant real streaming — PASS end-to-end** (was PENDING-CONFIG). Live provider
@@ -190,9 +211,8 @@ and the model track. See [`device-acceptance-brief.md`](device-acceptance-brief.
   (`TotalTime` 760ms) showed the remaining cost concentrated in normal process/app first-frame work
   (`bindApplication` ~177ms, `activityStart` ~76ms, `performCreate` ~44ms, first traversal/doFrame
   ~376ms), with the launcher-owned Loading state removed from the first frame.
-- 🔧 **Two C.1 findings (recorded, not fixed):** (1) `keySet` indicator race — `saveProvider` recomputes
-  keySet before `secretStore.put`, so the "key set" tick stays false though the key is saved & usable
-  (cosmetic); (2) RateLimited string typo `retray` → `retry`.
+- ✅ **C.1 cosmetic findings retired by Phase 9 Y7:** `keySet` now flips true immediately after a successful
+  non-blank key save, and `RateLimited` text is pinned as `Rate limited. Please wait and retry.`.
 - ⚠️ **Voice recognizer intermediate states** — `Ready` / `Partial` not evidenced (OQ#4); C.2 not a full
   recognizer PASS.
 - ⏭️ **C.5 boot warmup** — `RECEIVE_BOOT_COMPLETED` re-enqueue after a reboot not yet exercised.
@@ -204,13 +224,14 @@ and the model track. See [`device-acceptance-brief.md`](device-acceptance-brief.
 ## Not claimed done
 
 The `<400ms` cold-start number remains aspirational (final release median 766ms, ship-band PASS).
-Still not claimed: Y4-Y7 Phase 9 blocks; OQ#1–OQ#4 real models/vocab/embedder + on-device NLU acceptance;
-voice `Ready`/`Partial` intermediate states (OQ#4); boot-warmup after reboot (C.5).
+Still not claimed: Android 9/11/14 and real LOW_END hardware validation; OQ#1–OQ#4 real models/vocab/
+embedder + on-device NLU acceptance; voice `Ready`/`Partial` intermediate states (OQ#4); boot-warmup
+after reboot (C.5).
 *(Real assistant streaming against a live provider — done Round 3.)*
 
 ## Source of truth
 
 - Session digest + hard rules: `CLAUDE.md`
-- Decisions log (latest: ADR 2026-07-04 — Contextual suggestions correctness): `ai-context/decisions.md`
+- Decisions log (latest: ADR 2026-07-04 — Phase 9 Block Y7 residual cosmetic cleanup): `ai-context/decisions.md`
 - Architecture (in sync): `docs/architecture.md` · Roadmap: `docs/roadmap.md`
 - Active/last plan: `ai-context/phase-9-plan.md`

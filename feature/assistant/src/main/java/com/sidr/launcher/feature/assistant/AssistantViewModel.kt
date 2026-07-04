@@ -164,7 +164,14 @@ class AssistantViewModel @Inject constructor(
                     return@launch
                 }
             }
-            _uiState.update { it.copy(form = it.form.copy(saveError = null)) }
+            _uiState.update {
+                it.copy(
+                    form = it.form.copy(
+                        keySet = it.form.keySet || apiKey.isNotBlank(),
+                        saveError = null,
+                    ),
+                )
+            }
         }
     }
 }

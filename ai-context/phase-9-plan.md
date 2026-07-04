@@ -1,6 +1,6 @@
 # Phase 9 — Hardening (pre-ship gate)
 
-**Status: IN PROGRESS (Y1 + Y2 + Y3 done 2026-07-04; Y4-Y7 pending).** This is the
+**Status: DONE (Y1 + Y2 + Y3 + Y4 + Y5 + Y6 + Y7 done 2026-07-04).** This is the
 **pre-ship gate** — the last required phase before an MVP ship. It absorbs the residual startup-perf
 work, the release-build hardening (R8/ProGuard + Baseline Profile), the contextual-suggestions rework,
 test/privacy/logging hardening, and the multi-version / LOW_END validation. **No new product features.**
@@ -23,10 +23,14 @@ relevant) green, a device pass on SM-A325F where it's a runtime change, and a sh
    shipped `app/src/main/baseline-prof.txt`; release smoke-clean on SM-A325F).
 3. **Block Y3 — Contextual suggestions rework** ✅ 2026-07-04 (home correctness — no unlaunchable
    suggestion chips on SM-A325F).
-4. **Block Y4 — Test-coverage hardening.**
-5. **Block Y5 — Privacy / logging / crash-report filtering / error handling.**
-6. **Block Y6 — Multi-version + LOW_END validation.**
-7. **Block Y7 — Residual cosmetic findings cleanup.**
+4. **Block Y4 — Test-coverage hardening.** ✅ 2026-07-04 (VM-level regression coverage broadened;
+   production code unchanged).
+5. **Block Y5 — Privacy / logging / crash-report filtering / error handling.** ✅ 2026-07-04
+   (payload-free logging guard + complete assistant retryability matrix; no crash-report SDK present).
+6. **Block Y6 — Multi-version + LOW_END validation.** ✅ 2026-07-04 (Android 13 device pass +
+   LOW_END/trim validation by tests and available-device profiling; Android 9/11/14 + real LOW_END
+   hardware remain residual due unavailable matrix).
+7. **Block Y7 — Residual cosmetic findings cleanup.** ✅ 2026-07-04
 
 **Out of scope (separate model/data track, NOT Phase 9):** real NLU model (OQ#1/#2), embedding model
 (OQ#3), on-device STT matrix (OQ#4). These are gated on model/data availability, not hardening.
@@ -149,8 +153,13 @@ OEM (Samsung) devices and is **not filtered against installed apps** → chips r
 - Broaden domain/intent/repository/permission/offline/device-capability coverage per the roadmap.
 - Regression tests pinning the Phase-UX device findings (usage-history gate, suggestion filtering).
 
-**Done:** meaningful coverage on the above; full `testDebugUnitTest` green; ADR (or a short note in the
-block's ADR).
+**Done 2026-07-04:** meaningful coverage added without production changes. `LauncherViewModelTest` now
+pins suggestion first-paint/supersede, route/package tap routing (including stale-feedback clearing and
+fallback package launch), usage-history gating for suggestion taps, and favorites edge cases
+(`favoritesCount <= 0` and live preference changes without app-list reload). `SettingsViewModelTest` now
+pins no-op writes for AI suggestions / usage history / user preferences plus `NavigateBack`. Set-as-default
+remains a screen-level Android intent helper, so Y4 did not introduce a VM seam for it. Full
+`testDebugUnitTest assembleDebug :app:assembleRelease` green.
 
 ---
 
@@ -162,7 +171,16 @@ block's ADR).
 - Error-handling sweep: every repo/use-case returns `OperationResult`; no throw reaches the UI; retryable
   vs non-retryable classification consistent.
 
-**Done:** guards green; no payload logging; ADR.
+**Done 2026-07-04:** logging audit found one real privacy gap in `AppNavHost`: the unknown-route
+fallback logged the raw route and attached the navigation exception, while assistant routes can carry a
+user prompt in the `prompt` query arg. The fallback log is now payload-free and no longer attaches the
+exception; `AppNavHostLoggingGuardTest` pins that discipline. Existing log sites were re-audited and
+remain payload-free (no command text/transcripts/secrets/raw calendar/location values; only class names,
+status/counts, and static messages). No crash-report SDK/surface is wired, so there was no report payload
+filter to install; the only exception-bearing surface found was the nav fallback log and it was stripped.
+Assistant error handling gained full `AiError` retryable/provider-CTA coverage. `PrivacyInventoryGuardTest`,
+`AiRequestGuardTest`, and `OutboundSecretLeakGuardTest` remain green. Full
+`testDebugUnitTest assembleDebug :app:assembleRelease` green.
 
 ---
 
@@ -175,7 +193,47 @@ block's ADR).
   (`SessionLifecycle` release), cold/warm start on a low-RAM profile; confirm the launcher core stays
   responsive and the AI paths self-gate off.
 
-**Done:** matrix pass recorded; LOW_END budget met or residual plan; ADR.
+**Done 2026-07-04:** validation-first pass completed with no production code changes. Available runtime
+matrix was one real device only: SM-A325F (`RF8R705H38F`) on Android 13 / SDK 33. No AVDs were configured
+(`avdmanager list avd` empty) and `emulator` was not available in PATH, so Android 9 / 11 / 14 remain an
+explicit residual until the matrix exists.
+
+Android 13 device pass:
+- Installed the current debug APK via `adb install -r --no-streaming` (Gradle `installDebug` briefly lost
+  the WSL USB device; direct no-streaming install succeeded).
+- Launch/home: cold debug `TotalTime` samples during the run were 2258ms, 1901ms, and 1883ms; warm/HOT
+  samples with the process alive were 166ms, 114ms, and 100ms. Home rendered search/mic, setup nudge,
+  resolved suggestions (`Часы`, `A101`), Favorites, All apps, Settings, and Assistant; `AndroidRuntime:E`
+  stayed empty. These are debug timings; Y1/Y2 release startup numbers remain the ship performance record.
+- Offline core: temporarily set Wi-Fi disabled and `mobile_data=0`, force-stopped/relaunched Sidr, and
+  confirmed the home surface still rendered. Tapping the resolved Clock suggestion launched
+  `com.sec.android.app.clockpackage/.ClockPackage` while offline; no crash. Wi-Fi and mobile data were
+  restored to their original enabled state.
+- Settings persistence: switched theme to Light, force-stopped/relaunched, returned to Settings, and
+  confirmed Light stayed selected while AI suggestions / usage personalization / voice input / favorites=8
+  remained persisted. Restored the theme to System default after validation.
+- Set-as-default: Settings -> Set as default launcher opened the Android 13 `ROLE_HOME`
+  `RequestRoleActivity` chooser with One UI Home and Sidr Launcher; cancelled without changing the
+  device default. The Android < 10 `ACTION_HOME_SETTINGS` fallback is code/JVM-covered but not device-run
+  because no API 28/older target was available.
+- Voice education: with `RECORD_AUDIO` denied (`appops RECORD_AUDIO: ignore`), tapping the home mic routed
+  to the Voice commands education screen with the Enable microphone CTA; no recognizer start was attempted.
+
+LOW_END / memory validation:
+- The available device is not LOW_END by current thresholds: `/proc/meminfo` `MemTotal=5,791,280 kB` and
+  `nproc=8`, so `DeviceProfileClassifier` classifies it HIGH_END. LOW_END gating remains covered by
+  JVM tests (`DeviceProfileClassifierTest` / `LocalInferenceGateTest`) rather than hardware validation in
+  this run.
+- No local model files are present on device (`run-as com.sidr.launcher ls files/models` -> missing), so
+  model-gated NLU/embedding paths remain inert and launcher core stayed responsive.
+- `am send-trim-memory com.sidr.launcher BACKGROUND` and `COMPLETE` invoked the `SessionLifecycle` seams:
+  `OnnxTextEmbedder: Embedding ONNX session released (trim)` and
+  `OnnxIntentClassifier: ONNX session released (trim)` logged for both levels; the Sidr process stayed
+  alive.
+
+Verification:
+- `./gradlew --no-daemon :domain:test :core:android:testDebugUnitTest :data:ai-local:testDebugUnitTest :app:testDebugUnitTest :feature:launcher:testDebugUnitTest :feature:settings:testDebugUnitTest :feature:permission_education:testDebugUnitTest :app:assembleDebug` ✅
+- Device validation above on SM-A325F / Android 13 ✅
 
 ---
 
@@ -188,6 +246,24 @@ block's ADR).
   `onNewIntent` when Sidr is the home app.
 
 **Done:** cleared or explicitly deferred with rationale; ADR note.
+
+**Done 2026-07-04 (SM-A325F / Android 13 smoke).**
+- `AssistantViewModel.saveProvider(...)` now marks `form.keySet=true` immediately after a successful
+  non-blank API-key write, so the provider form tick no longer waits on (or loses) the config-flow /
+  secret-store ordering. The key value still never enters UI state.
+- The `RateLimited` user-facing text is pinned as `Rate limited. Please wait and retry.`; `retray` is
+  absent from production/test code. No production string edit was needed in this Y7 pass because the
+  current working tree already had the corrected text; regression coverage now locks it.
+- Relaunch/re-entry while `LauncherActivity` is alive now resets nested navigation back to launcher home:
+  the HOME activity is `singleTop`, `onNewIntent` emits a Compose state signal, and `AppNavHost` clears
+  back stack entries above `Routes.Launcher.ROUTE` via the same `popUpTo + launchSingleTop` home path.
+  This is deliberately app-shell-only; feature ViewModels and in-app back behavior are unchanged.
+- Coverage added: assistant VM regressions for immediate `keySet` and `RateLimited` text, plus an app
+  source guard for the re-entry wiring.
+- Verification: extended touched-module Gradle set + `:app:assembleDebug` green; debug APK installed on
+  SM-A325F, drawer opened, `am start -W -n com.sidr.launcher/.LauncherActivity` delivered a new intent to
+  the running top instance, and the UI returned to home (`Search or type a command...` / `Favorites` /
+  `All apps`) with empty `AndroidRuntime:E`.
 
 ---
 

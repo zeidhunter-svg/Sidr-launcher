@@ -3281,3 +3281,131 @@ and model-gated OQ#1-OQ#4 were left untouched; no commit was made.
   `Music`/missing-AOSP chip. Tapping `A101` launched `com.a101kapida.android`; tapping Clock opened
   `com.sec.android.app.clockpackage` instead of Sidr's "Couldn't open that app" fallback.
   `adb shell logcat -d -v time -t 1000 AndroidRuntime:E '*:S'` returned empty.
+
+## ADR 2026-07-04 — Phase 9 Block Y4 test-coverage hardening
+
+**Context.** Phase 9 Block Y4 only. Y1/Y2/Y3 were already complete and device-smoked; Y5-Y7 plus
+model-gated OQ#1-OQ#4 stayed untouched. The goal was tests-first hardening with minimal production
+change.
+
+**Decision.**
+- Broadened `LauncherViewModelTest` around the home suggestion contracts: cache first-paint followed by
+  fresh-engine supersede, AI-suggestions toggle on/off regression, installed/route filtering, route tap
+  routing with stale-feedback clearing, fallback package launch routing, and usage-history gating for
+  suggestion taps.
+- Broadened `deriveFavorites` coverage for uninstalled usage rows, default/custom caps, `favoritesCount`
+  zero, and live `favoritesCount` preference changes without re-querying the app list.
+- Broadened `SettingsViewModelTest` for unchanged/no-op writes on AI suggestions, usage history, and user
+  preferences, plus `NavigateBack`. Set-as-default remains a screen-level Android intent helper rather
+  than a VM action, so no new VM seam was introduced for it.
+
+**Changes.** Test-only plus status docs:
+`feature/launcher/src/test/java/com/sidr/launcher/feature/launcher/LauncherViewModelTest.kt`,
+`feature/settings/src/test/java/com/sidr/launcher/feature/settings/SettingsViewModelTest.kt`,
+`ai-context/phase-9-plan.md`, and `ai-context/current-status.md`. Production code unchanged; Y3 was not
+refactored.
+
+**Verification.**
+- `./gradlew :feature:launcher:testDebugUnitTest :feature:settings:testDebugUnitTest` ✅
+- `./gradlew testDebugUnitTest assembleDebug :app:assembleRelease` ✅
+
+## ADR 2026-07-04 — Phase 9 Block Y5 privacy/logging/error handling
+
+**Context.** Phase 9 Block Y5 only. Y1-Y4 were already done; Y6/Y7 and model-gated OQ#1-OQ#4 stayed
+untouched. Y4's uncommitted test/docs changes were preserved. Goal: audit logging/privacy/error surfaces
+with minimal production change and no domain-boundary movement.
+
+**Decision.**
+- Logging audit found one actionable privacy gap: `AppNavHost`'s unknown-route fallback logged the raw
+  `event.route` and attached the `IllegalArgumentException`. Routes can include `assistant?prompt=...`,
+  so a malformed/unregistered route could put user prompt text into logcat or an exception-bearing
+  surface. The fallback now logs only a static payload-free message and no throwable.
+- Added `AppNavHostLoggingGuardTest`, a source-level guard over the app nav host, to prevent raw-route
+  logging or exception attachment from returning on that fallback path.
+- Re-audited remaining production log sites. They are payload-free: static WorkManager/suggestion
+  persistence messages, ONNX class simple names/status/counts/release reasons, and no user command text,
+  transcripts, secrets/API keys, raw calendar/location values, or assistant payloads.
+- No crash-report SDK or reporting surface is wired in the app. With no report payload to filter, the
+  relevant crash/error surface was the exception-bearing nav fallback log, now stripped.
+- Error handling stayed within existing boundaries. Repository/use-case contracts were not refactored;
+  the sweep confirmed expected failures already return `OperationResult` or `AiChunk.Failed`/safe UI
+  outcomes. Assistant coverage now pins the full `AiError` retryable vs non-retryable matrix and provider
+  CTA classification for every variant.
+
+**Verification.**
+- `./gradlew :app:testDebugUnitTest :feature:assistant:testDebugUnitTest` ✅
+- `./gradlew testDebugUnitTest assembleDebug :app:assembleRelease` ✅
+
+## ADR 2026-07-04 — Phase 9 Block Y6 multi-version + LOW_END validation
+
+**Context.** Phase 9 Block Y6 only. Y1-Y5 were already complete; Y7 and model-gated OQ#1-OQ#4 stayed
+untouched. This was a validation-first block: no production code changes unless validation found a real
+problem. The local WSL environment had one connected real device (SM-A325F `RF8R705H38F`, Android 13 /
+SDK 33), no configured AVDs (`avdmanager list avd` empty), and no `emulator` binary in PATH.
+
+**Decision / result.**
+- Mark Y6 done for the available matrix with explicit residuals. Android 13 device validation passed; Android
+  9 / 11 / 14 remain residual until emulator/device targets are available.
+- No production changes were needed. The only edits for this block are status docs.
+- The available device is not LOW_END by current classifier thresholds (`MemTotal=5,791,280 kB`, `nproc=8`
+  -> HIGH_END), so LOW_END hardware behavior is covered by JVM classifier/gate tests in this run, not by
+  physical low-RAM profiling.
+
+**Device validation (SM-A325F / Android 13).**
+- Install: Gradle `:app:installDebug` briefly lost the WSL USB device (`No connected devices` after starting
+  its adb daemon). Direct `adb install -r --no-streaming app/build/outputs/apk/debug/app-debug.apk` succeeded.
+- Launch/home: debug cold samples observed during validation were `2258ms`, `1901ms`, and `1883ms`;
+  warm/HOT samples with the process alive were `166ms`, `114ms`, and `100ms`. Home rendered search/mic,
+  setup nudge, resolved suggestions (`Часы`, `A101`), Favorites, All apps, Settings, and Assistant. No
+  `AndroidRuntime:E` entries were present. These debug timings do not replace the Y1/Y2 release perf record.
+- Offline core: temporarily disabled Wi-Fi and mobile data, force-stopped/relaunched Sidr, confirmed home
+  rendered, then launched the resolved Clock suggestion; foreground became
+  `com.sec.android.app.clockpackage/.ClockPackage`. Wi-Fi and mobile data were restored to their original
+  enabled state.
+- Settings persistence: switched theme to Light, force-stopped/relaunched, returned to Settings, and
+  confirmed Light stayed selected; AI suggestions / usage personalization / voice input / favorites=8
+  remained persisted. Theme was restored to System default afterward.
+- Set-as-default: Settings -> Set as default launcher opened the Android 13 `ROLE_HOME`
+  `RequestRoleActivity` chooser with One UI Home and Sidr Launcher; cancelled without changing the default
+  launcher. The older `ACTION_HOME_SETTINGS` fallback remains code-covered but not device-run in this
+  environment.
+- Voice education: with `RECORD_AUDIO` denied (`appops RECORD_AUDIO: ignore`), tapping the mic routed to
+  the Voice commands education screen with the Enable microphone CTA rather than starting recognition.
+- Memory/trim: `am send-trim-memory com.sidr.launcher BACKGROUND` and `COMPLETE` both invoked
+  `SessionLifecycle`; logcat showed `OnnxTextEmbedder: Embedding ONNX session released (trim)` and
+  `OnnxIntentClassifier: ONNX session released (trim)` for each level, and the Sidr process stayed alive.
+- Local AI gating: no `files/models` directory exists in the app sandbox, so local NLU/embedding remain
+  inert/model-gated and launcher core stayed responsive.
+
+**Verification.**
+- `./gradlew --no-daemon :domain:test :core:android:testDebugUnitTest :data:ai-local:testDebugUnitTest :app:testDebugUnitTest :feature:launcher:testDebugUnitTest :feature:settings:testDebugUnitTest :feature:permission_education:testDebugUnitTest :app:assembleDebug` ✅
+- Android 13 runtime validation above ✅
+
+## ADR 2026-07-04 — Phase 9 Block Y7 residual cosmetic cleanup
+
+**Context.** Phase 9 Block Y7 only. Y1-Y6 were already complete in the working tree; model-gated
+OQ#1-OQ#4 and the Y3/Y4/Y5/Y6 implementations stayed untouched except for app-shell navigation code
+needed to retire the re-entry cosmetic finding. No commit was made.
+
+**Decision.**
+- Fixed the provider-form `keySet` race at the assistant VM level: after `saveProvider(...)` successfully
+  writes a non-blank API key, `form.keySet` is set true immediately while still keeping the secret value
+  out of UI state. The existing active-config observer remains the authority for provider switches and
+  stored-key reads.
+- The `RateLimited` user-facing text in the current working tree already read
+  `Rate limited. Please wait and retry.`; Y7 adds regression coverage so the old `retray` typo cannot
+  return unnoticed.
+- Fixed the launcher re-entry cosmetic behavior with app-shell-only wiring. `LauncherActivity` is now
+  `singleTop`; `onNewIntent` updates a Compose state signal; `AppNavHost` reacts to non-initial signals
+  by navigating to `Routes.Launcher.ROUTE` with `popUpTo(Routes.Launcher.ROUTE)` and `launchSingleTop`.
+  This clears nested destinations such as the drawer when Sidr is relaunched while alive, without changing
+  feature ViewModels or normal in-app back behavior.
+
+**Verification.**
+- `./gradlew --no-daemon :feature:assistant:testDebugUnitTest :app:testDebugUnitTest` ✅
+- `./gradlew --no-daemon :domain:test :core:android:testDebugUnitTest :data:ai-local:testDebugUnitTest :app:testDebugUnitTest :feature:launcher:testDebugUnitTest :feature:settings:testDebugUnitTest :feature:permission_education:testDebugUnitTest :feature:assistant:testDebugUnitTest :app:assembleDebug` ✅
+- SM-A325F / Android 13 debug smoke ✅: installed `app-debug.apk`, launched Sidr, opened the drawer,
+  relaunched with `adb shell am start -W -n com.sidr.launcher/.LauncherActivity`; Android reported the
+  intent was delivered to the running top-most instance, and the next UI dump showed launcher home
+  (`Search or type a command...`, `Favorites`, `All apps`) rather than the drawer. `AndroidRuntime:E`
+  logcat filter was empty.

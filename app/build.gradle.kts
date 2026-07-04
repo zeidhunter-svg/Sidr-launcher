@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.kapt)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.baselineprofile)
 }
 
 android {
@@ -17,6 +18,17 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+        }
     }
 
     compileOptions {
@@ -86,5 +98,11 @@ dependencies {
     testImplementation(libs.junit4)
     testImplementation(libs.coroutines.test)
 
+    baselineProfile(project(":baselineprofile"))
+
     debugImplementation(libs.compose.ui.tooling)
+}
+
+baselineProfile {
+    mergeIntoMain = true
 }

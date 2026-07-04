@@ -85,7 +85,8 @@ class LauncherViewModel @Inject constructor(
     }
 
     // ── App-list state ─────────────────────────────────────────────────────
-    // Raw load result; null = loading not yet complete.
+    // Raw app-list load result; null = the full launcher app inventory is still loading in the
+    // background. Home must still paint from cheap cached state while this is null.
     private val _rawAppsResult = MutableStateFlow<OperationResult<List<InstalledApp>>?>(null)
     private val _suggestions = MutableStateFlow<List<Suggestion>>(emptyList())
 
@@ -122,9 +123,14 @@ class LauncherViewModel @Inject constructor(
         userPreferences,
     ) { appsResult, usageRecords, suggestions, prefs ->
             when (appsResult) {
-                // null = not loaded yet (initial or mid-retry) → Loading, so a retry visibly
-                // flashes Loading → content rather than freezing on the stale error.
-                null -> UiState.Loading
+                // Full app inventory is not first-frame-critical: paint the home shell + cached
+                // suggestions immediately, then fill apps/favorites once PackageManager returns.
+                null -> UiState.Success(
+                    LauncherUiState(
+                        suggestions = resolveSuggestionLabels(suggestions, emptyList()),
+                        setupHintDismissed = prefs.setupHintDismissed,
+                    ),
+                )
                 is OperationResult.Failure ->
                     UiState.Error(appsResult.error.toUiError(), retryable = appsResult.error.isRetryable())
                 is OperationResult.Success -> {
@@ -144,7 +150,7 @@ class LauncherViewModel @Inject constructor(
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.Eagerly,
-            initialValue = UiState.Loading,
+            initialValue = UiState.Success(LauncherUiState()),
         )
 
     // ── Command input — independent of app-list loading ────────────────────
@@ -192,7 +198,7 @@ class LauncherViewModel @Inject constructor(
 
     /**
      * Re-attempt the app-list load after a recoverable [UiState.Error] — no process restart.
-     * Resetting to null returns the screen to [UiState.Loading] before the reload emits its result.
+     * Resetting to null keeps the cache-first home shell visible before the reload emits its result.
      */
     fun retry() {
         _rawAppsResult.value = null
@@ -464,11 +470,15 @@ class LauncherViewModel @Inject constructor(
         suggestions: List<Suggestion>,
         apps: List<InstalledApp>,
     ): List<Suggestion> {
-        if (suggestions.isEmpty() || apps.isEmpty()) return suggestions
+        if (suggestions.isEmpty()) return emptyList()
         val appsByPackage = apps.associateBy { it.packageName }
-        return suggestions.map { suggestion ->
-            val app = appsByPackage[suggestion.actionId] ?: return@map suggestion
-            suggestion.copy(label = app.label)
+        return suggestions.mapNotNull { suggestion ->
+            val app = appsByPackage[suggestion.actionId]
+            when {
+                app != null -> suggestion.copy(label = app.label)
+                suggestion.actionId.isKnownRoute() -> suggestion
+                else -> null
+            }
         }
     }
 

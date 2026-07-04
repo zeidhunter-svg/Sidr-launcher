@@ -1,6 +1,6 @@
 # Phase 9 — Hardening (pre-ship gate)
 
-**Status: PLAN (owner sequencing 2026-07-02: Phase UX → Phase 9 → Phase 8-optional).** This is the
+**Status: IN PROGRESS (Y1 + Y2 + Y3 done 2026-07-04; Y4-Y7 pending).** This is the
 **pre-ship gate** — the last required phase before an MVP ship. It absorbs the residual startup-perf
 work, the release-build hardening (R8/ProGuard + Baseline Profile), the contextual-suggestions rework,
 test/privacy/logging hardening, and the multi-version / LOW_END validation. **No new product features.**
@@ -17,10 +17,12 @@ relevant) green, a device pass on SM-A325F where it's a runtime change, and a sh
 
 ## 0. Priority / sequencing (ship-order within the phase)
 
-1. **Block Y1 — Startup performance** (biggest user-visible win; gates ship). Pairs with **Y2**.
-2. **Block Y2 — Release build (R8/ProGuard + Baseline Profile)** (required for a real ship; overlaps Y1).
-3. **Block Y3 — Contextual suggestions rework** (home correctness — the AI-differentiator screen must not
-   show unlaunchable chips). Y3-A is tiny and can land immediately.
+1. **Block Y1 — Startup performance** ✅ 2026-07-04 (warm median ~102ms, cold median 766ms release,
+   first home frame has no Loading spinner). Pairs with **Y2**.
+2. **Block Y2 — Release build (R8/ProGuard + Baseline Profile)** ✅ 2026-07-04 (R8/resource shrink +
+   shipped `app/src/main/baseline-prof.txt`; release smoke-clean on SM-A325F).
+3. **Block Y3 — Contextual suggestions rework** ✅ 2026-07-04 (home correctness — no unlaunchable
+   suggestion chips on SM-A325F).
 4. **Block Y4 — Test-coverage hardening.**
 5. **Block Y5 — Privacy / logging / crash-report filtering / error handling.**
 6. **Block Y6 — Multi-version + LOW_END validation.**
@@ -62,8 +64,11 @@ relevant) green, a device pass on SM-A325F where it's a runtime change, and a sh
   favorites+suggestions from cache; the drawer already loads lazily).
 - Cache-first first paint so the spinner never shows on a repeat launch.
 
-**Done:** warm+cold measured on release, spinner gone on repeat launch, cold in the ~500–800ms band (or a
-recorded residual plan), no offline-core regression, ADR with before/after numbers.
+**Done 2026-07-04 (SM-A325F / Android 13):** release warm+cold measured, spinner gone on first home frame,
+cold in the ~500-800ms band, offline-core unchanged. Final release: warm `TotalTime` median ~102ms
+(`204,109,83,86,115,101,103,98`), cold median 766ms after dropping first
+(`778,745,766,757,772,747,784,817`), early screenshots at ~150ms/~600ms show home shell with no Loading
+spinner. ADR: decisions.md "2026-07-04 — Startup optimization + release build (SM-A325F)".
 
 ---
 
@@ -78,7 +83,11 @@ recorded residual plan), no offline-core regression, ADR with before/after numbe
   module (`:baselineprofile`) with a `BaselineProfileGenerator` (scenario: cold start → home ready).
   Generate on-device, ship `app/src/main/baseline-prof.txt` in release. Re-measure (typically 20–40%).
 
-**Done:** release build green + smoke-clean on device; baseline profile shipped and measured; ADR.
+**Done 2026-07-04:** release R8/resource shrink enabled, keep rules added for Hilt/Room/
+kotlinx-serialization/ONNX/Ktor, `:baselineprofile` module added and generated a 18,862-line
+`app/src/main/baseline-prof.txt`. Final release builds/installs/runs; smoke-clean on device
+(home -> drawer -> settings -> assistant -> set-as-default -> voice education); `testDebugUnitTest`
++ `assembleDebug` + `:app:assembleRelease` green. ADR recorded in decisions.md.
 
 ---
 
@@ -112,8 +121,23 @@ OEM (Samsung) devices and is **not filtered against installed apps** → chips r
 - Guarantee (invariant + test): the engine never emits a suggestion whose target can't be launched on the
   current device. Add a provider-level test that runs against a fake installed-set.
 
-**Done:** no unlaunchable chip on any device; time-of-day reduced to resolved universal anchors; usage/
-calendar/location primary; JVM tests + device pass on SM-A325F; ADR.
+**Done 2026-07-04 (SM-A325F / Android 13).**
+- `LauncherViewModel.resolveSuggestionLabels(...)` now filters suggestions to installed launchable
+  packages or known routes; package-target cached suggestions are not rendered before the installed-app
+  list is available, while route suggestions can still paint.
+- New `SuggestionActionTargetResolver` domain port + Android `PackageManager` implementation. The engine
+  filters unsupported actionIds before ranking/persisting, so precompute/cache do not keep stale
+  unlaunchable targets.
+- `TimeOfDaySuggestionProvider` no longer has the 6-app AOSP table. It resolves only two thin universal
+  anchors (`AlarmClock.ACTION_SHOW_ALARMS`, `MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA`) to the
+  device's actual launchable package, and emits nothing when no launchable handler is proven.
+- JVM coverage added/updated for VM filtering, engine filtering/persistence, and TimeOfDay resolved-anchor
+  fallback. `./gradlew testDebugUnitTest assembleDebug :app:assembleRelease` green.
+- Device smoke: debug installed over the existing app, AI suggestions + usage personalization enabled,
+  launched `A101` from the drawer to create a usage record, relaunched Sidr, and the home suggestions row
+  rendered `A101` + resolved Samsung Clock (`Часы`) with no `Music`/missing-AOSP chip. `A101` suggestion
+  launched `com.a101kapida.android`; Clock suggestion opened `com.sec.android.app.clockpackage`.
+  `AndroidRuntime:E` logcat filter was empty.
 
 ---
 

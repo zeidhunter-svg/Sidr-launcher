@@ -10,6 +10,7 @@ import com.sidr.launcher.domain.preferences.SuggestionsCacheRepository
 import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.suggestions.Suggestion
+import com.sidr.launcher.domain.suggestions.SuggestionActionTargetResolver
 import com.sidr.launcher.domain.suggestions.SuggestionContext
 import com.sidr.launcher.domain.suggestions.SuggestionEngine
 import com.sidr.launcher.domain.suggestions.SuggestionProvider
@@ -57,6 +58,7 @@ class SuggestionEngineImpl(
     private val rankingRepository: SuggestionRankingRepository,
     private val cacheRepository: SuggestionsCacheRepository,
     private val featureFlagRepository: FeatureFlagRepository,
+    private val actionTargetResolver: SuggestionActionTargetResolver,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val nowEpochMs: () -> Long = System::currentTimeMillis,
 ) : SuggestionEngine {
@@ -79,7 +81,7 @@ class SuggestionEngineImpl(
                         .map { it.await() }
                         .flatten()
                 }
-                ranker.rank(candidates, context)
+                ranker.rank(filterSupported(candidates), context)
             }
             persist(ranked)
             state.value = ranked
@@ -99,6 +101,23 @@ class SuggestionEngineImpl(
         } catch (_: Throwable) {
             emptyList()
         }
+
+    private suspend fun filterSupported(candidates: List<Suggestion>): List<Suggestion> {
+        if (candidates.isEmpty()) return emptyList()
+        val supportByAction = mutableMapOf<String, Boolean>()
+        val supported = mutableListOf<Suggestion>()
+        candidates.forEach { suggestion ->
+            val cached = supportByAction[suggestion.actionId]
+            val isSupported = if (cached != null) {
+                cached
+            } else {
+                actionTargetResolver.isSupportedAction(suggestion.actionId)
+                    .also { supportByAction[suggestion.actionId] = it }
+            }
+            if (isSupported) supported += suggestion
+        }
+        return supported
+    }
 
     private suspend fun persist(ranked: List<Suggestion>) {
         val now = nowEpochMs()

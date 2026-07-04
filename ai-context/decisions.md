@@ -3179,3 +3179,105 @@ no meaningful regression). Perf fix stays **out of scope (Phase 9)**.
 `feature/settings/.../SettingsScreen.kt` + `SettingsViewModel.kt` + `SettingsUiState.kt` +
 `SettingsViewModelTest.kt`. No domain/data change (reuses the existing `usageHistoryEnabled` flag + key);
 hard rules intact; 0 new catalog deps (activity-compose already in the catalog).
+
+## ADR 2026-07-04 — Startup optimization + release build (SM-A325F)
+
+**Context.** Phase 9 Blocks Y1 + Y2 only: make startup perceptibly fast on SM-A325F
+(`RF8R705H38F`, Android 13 / SDK 33) with minimal measured changes; enable a real release build
+(R8/resource shrink + keep rules) and ship a Baseline Profile. Y3-Y7 and model-gated OQ#1-OQ#4 were
+left untouched. The Phase-UX debug cold baseline was ~2021ms median; release was measured first before
+changing startup code.
+
+**Measurements and deltas.**
+- **Release pre-R8 / pre-Y1 code baseline:** warm `TotalTime` median ~78ms
+  (`77,88,79,79,73,70,87,69`); cold median 504ms after dropping first
+  (`509,495,527,497,543,501,504,518`). Early cold screenshot at ~150ms showed Sidr's own blue Loading
+  spinner; ~600ms showed the home shell.
+- **Y1 cache-first home shell:** `LauncherViewModel` no longer maps `apps == null` to `UiState.Loading`.
+  It emits a Success shell immediately (cached suggestions/preferences, empty app/favorites until the
+  PackageManager list arrives). Warm median ~95ms (`96,114,93,103,99,76,82,78`); cold median 527ms
+  after dropping first (`547,620,510,527,521,525,546,539`). Spinner removed; no broad app-list refactor.
+- **Y2 R8/resource shrink:** `release` now has `isMinifyEnabled=true` and `isShrinkResources=true` with
+  keep rules for Hilt/Dagger, Room, kotlinx.serialization, ONNX Runtime, Ktor and workers. Release APK
+  shrank from ~98MB to ~75MB. Warm median ~74ms (`80,73,72,73,80,73,74,83`); cold median 750ms after
+  dropping first (`744,744,739,768,795,750,800,738`).
+- **Y2 Baseline Profile:** added `:baselineprofile`, generated on SM-A325F via
+  `BaselineProfileGenerator.startupHomeReady` (explicit `com.sidr.launcher/.LauncherActivity` HOME
+  intent because Sidr has no normal `CATEGORY_LAUNCHER` activity). The generated
+  `app/src/main/baseline-prof.txt` has 18,862 lines and is merged into release (`mergeReleaseArtProfile`
+  / `expandReleaseArtProfileWildcards`). Final release warm median ~102ms
+  (`204,109,83,86,115,101,103,98`); final cold median 766ms after dropping first
+  (`778,745,766,757,772,747,784,817`). Baseline Profile did not produce a clear additional win in raw
+  `am start` timing on this install, but the final release is inside the ~500-800ms cold band and the
+  primary warm path is comfortably below ~200ms.
+
+**Perfetto finding.** A final cold Perfetto trace was captured through `adb exec-out perfetto` (device
+could not write trace files directly to `/data/local/tmp` or `/sdcard`). The traced run reported
+`TotalTime 760ms`. The biggest app-side slices were normal first-frame/process work:
+`bindApplication` ~177ms, `activityStart` ~76ms, `performCreate:LauncherActivity` ~44ms, and first
+`Choreographer#doFrame`/`traversal` ~376ms. There was no remaining launcher-owned Loading state on the
+first home frame; screenshots at ~150ms and ~600ms showed the home shell (search/setup/all-apps) with no
+spinner. The earlier visible spinner was rooted in the `UiState.Loading` mapping while
+`InstalledAppsRepositoryImpl.getInstalledApps()` was still enumerating packages for the first app list.
+
+**Changes.**
+- `feature/launcher`: `LauncherViewModel` paints a Success shell before the full installed-app list is
+  loaded; retry keeps the shell visible. JVM tests updated and extended for cache-first suggestions while
+  app loading is still gated.
+- `app`: release R8/resource shrink enabled; `app/proguard-rules.pro` added; Baseline Profile plugin
+  wired with `mergeIntoMain=true`.
+- New `:baselineprofile` Android test module with Macrobenchmark Baseline Profile generation. The module
+  is device-targeted for `arm64-v8a` and excludes unused trace-processor assets so the test APK installs
+  reliably on SM-A325F. Generation note: UTP install initially timed out while PackageInstaller was in a
+  bad state; after reboot the reduced test APK installed normally, and manual `am instrument` completed
+  `OK (1 test)`.
+- `app/src/main/baseline-prof.txt` checked in as the generated startup profile.
+
+**Verification.**
+- Device final release installed (`versionName 0.1.0`, no debug flag).
+- Smoke-clean on SM-A325F: home -> drawer (`Search apps` + installed app list), Settings, Assistant,
+  Set-as-default (system settings/role path), Voice education (`Voice commands`); no `FATAL EXCEPTION` /
+  ANR in logcat.
+- Gradle: `testDebugUnitTest assembleDebug :app:assembleRelease` **BUILD SUCCESSFUL**.
+
+**Decision.** Mark **Y1 and Y2 done**. Warm/hot path is the launcher-critical path and now meets the
+~200ms target without a spinner; cold release is in the accepted ~500-800ms band. Do not spend Phase 9
+time chasing `<400ms` cold micro-optimizations unless a new trace exposes a large single blocker. Next
+Phase 9 work remains Y3 (contextual suggestions correctness), then Y4-Y7.
+
+## ADR 2026-07-04 — Contextual suggestions correctness (SM-A325F)
+
+**Context.** Phase 9 Block Y3 only. The Phase-UX device pass showed `Clock`/`Music` chips from
+`TimeOfDaySuggestionProvider` tapping into missing AOSP packages on Samsung. Y1/Y2 startup/release work
+and model-gated OQ#1-OQ#4 were left untouched; no commit was made.
+
+**Decision.**
+- Home rendering now has a hard choke-point in `LauncherViewModel.resolveSuggestionLabels(...)`:
+  suggestions render only when their `actionId` is an installed launchable package or a known Sidr route.
+  Installed-app suggestions get the real installed label; uninstalled package targets are dropped. During
+  the cache-first phase before the app list is loaded, package-target cached chips are held back and known
+  routes may still render.
+- Added a pure-domain `SuggestionActionTargetResolver` port with an Android `PackageManager` implementation
+  in `:data:repository`. The resolver validates package/route actionIds and resolves universal anchors to
+  this device's actual launchable package.
+- `SuggestionEngineImpl` filters unsupported actions before ranking and persistence, so WorkManager
+  precompute/cache no longer store stale unlaunchable top results.
+- `TimeOfDaySuggestionProvider` no longer has the hardcoded six-app AOSP table. It is now a thin fallback
+  over two resolved anchors only: alarms (`AlarmClock.ACTION_SHOW_ALARMS`) and camera
+  (`MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA`). If a launchable handler cannot be proven, it emits
+  nothing instead of guessing a package.
+
+**Manifest/visibility.** Android 11+ package-visibility queries were added for `SHOW_ALARMS` and
+`STILL_IMAGE_CAMERA`, matching the resolver's implicit-intent probes.
+
+**Verification.**
+- New/updated JVM coverage: launcher VM filtering and cache-first behavior; engine unsupported-action
+  filtering before ranking/cache; TimeOfDay resolved-anchor/no-fallback behavior.
+- `./gradlew :domain:test :data:repository:testDebugUnitTest :feature:launcher:testDebugUnitTest` ✅
+- `./gradlew testDebugUnitTest assembleDebug :app:assembleRelease` ✅
+- SM-A325F / Android 13 device smoke ✅: installed current debug APK with `adb install -r`, enabled AI
+  suggestions + Personalize from usage, launched `A101` from the drawer to create a usage signal, then
+  relaunched Sidr. Home rendered `A101` (usage) and resolved Samsung Clock (`Часы`) suggestions; no stale
+  `Music`/missing-AOSP chip. Tapping `A101` launched `com.a101kapida.android`; tapping Clock opened
+  `com.sec.android.app.clockpackage` instead of Sidr's "Couldn't open that app" fallback.
+  `adb shell logcat -d -v time -t 1000 AndroidRuntime:E '*:S'` returned empty.

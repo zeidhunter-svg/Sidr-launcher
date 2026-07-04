@@ -15,6 +15,7 @@ import com.sidr.launcher.domain.history.SuggestionRankingRepository
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.preferences.SuggestionsCacheRepository
 import com.sidr.launcher.domain.suggestions.HeuristicSuggestionRanker
+import com.sidr.launcher.domain.suggestions.SuggestionActionTargetResolver
 import com.sidr.launcher.domain.suggestions.SuggestionEngine
 import com.sidr.launcher.domain.suggestions.SuggestionRanker
 import dagger.Module
@@ -69,6 +70,7 @@ object SuggestionsProvidesModule {
         rankingRepository: SuggestionRankingRepository,
         cacheRepository: SuggestionsCacheRepository,
         featureFlagRepository: FeatureFlagRepository,
+        actionTargetResolver: SuggestionActionTargetResolver,
         @IoDispatcher ioDispatcher: CoroutineDispatcher,
     ): SuggestionEngine = SuggestionEngineImpl(
         providers = listOf(timeOfDayProvider, usageProvider, calendarProvider, locationProvider),
@@ -76,6 +78,7 @@ object SuggestionsProvidesModule {
         rankingRepository = rankingRepository,
         cacheRepository = cacheRepository,
         featureFlagRepository = featureFlagRepository,
+        actionTargetResolver = actionTargetResolver,
         ioDispatcher = ioDispatcher,
     )
 }

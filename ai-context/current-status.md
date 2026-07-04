@@ -2,14 +2,15 @@
 
 > **Authoritative status lives in `CLAUDE.md` (session digest), `ai-context/decisions.md` (ADR log),
 > and the per-phase plans.** This file is a short pointer/snapshot only — if it disagrees with those,
-> they win. Last re-based: 2026-07-02 (Device Acceptance Round 3).
+> they win. Last re-based: 2026-07-04 (Phase 9 Y1/Y2/Y3).
 
 ## Where we are
 
 **Phase 7 (voice input + contextual suggestions) — user-facing close SHIPPED (2026-07-01).**
-Phases 3 → 7 are code-closed. There is **no phase actively in development**; what remains open is a
-**model + device-acceptance track** (real ONNX models, the inert embedder seam, and the SM-A325F
-acceptance pass), gated on open questions OQ#1–OQ#4.
+Phases 3 → 7 and Phase UX are code-closed. **Phase 9 hardening is active:** Blocks **Y1/Y2/Y3 are done**
+(startup release perf + release R8/Baseline Profile + contextual-suggestions correctness). Y4-Y7 remain
+pending. The separate model track (real ONNX models, the inert embedder seam, OQ#1-OQ#4) is still outside
+Phase 9.
 
 ## Phase ledger (see `docs/roadmap.md` + `ai-context/decisions.md`)
 
@@ -47,12 +48,15 @@ acceptance pass), gated on open questions OQ#1–OQ#4.
   rebuilt+reinstalled+retested (role dialog now shows); touched-module tests green. **Bonus (owner entered
   a real provider):** Assistant **real streaming PASS** (openrouter/`gpt-4o-mini`) + Block-J BYOK Keystore
   **PASS** (key encrypted in `sidr_secrets`, decrypted+used) → retires those two carried device-debt items.
-  **Still PENDING/PERF-RISK:** cold-start `<400ms` (measured min 1956 / median ~2021 / max 2066 ms → Phase 9).
+  **Startup perf debt retired by Phase 9 Y1/Y2 (2026-07-04):** final release on SM-A325F warm median
+  ~102ms, cold median 766ms after dropping first, and no Loading spinner on the first home frame
+  (`<400ms` remains aspirational, not a ship gate).
   **Follow-up fix (owner-approved, same run):** added a **"Personalize from usage"** opt-in `Switch` to
   Settings (writes `FeatureFlags.usageHistoryEnabled`, off by default) — device-verified that the Favorites
   row now populates, the count selector visibly changes it (4→5), and usage-based suggestions surface real
-  installed apps. **Finding still open (deferred to Phase 9):** `TimeOfDaySuggestionProvider` hardcoded AOSP
-  package IDs unfiltered vs installed apps (Clock/Music tap → "Couldn't open that app" on Samsung).
+  installed apps. **Phase 9 Y3 follow-up done:** unlaunchable suggestion chips are now filtered
+  at the launcher VM choke-point and the old `TimeOfDaySuggestionProvider` AOSP package table was replaced
+  with resolved universal anchors; SM-A325F smoke passed.
   ADR: decisions.md "2026-07-04 — Phase UX device acceptance (SM-A325F) + set-as-default bug fix".
   - **Block X1 (design-system foundation) ✅ 2026-07-03** — `core/ui` filled: `SidrTheme` (neutral M3
     + dynamic colour on API 31+), typography/shapes/spacing tokens, and components `SidrScaffold`,
@@ -125,14 +129,17 @@ acceptance pass), gated on open questions OQ#1–OQ#4.
     Block X6 complete".
 - **MVP sequencing (owner 2026-07-02):** numeric 8→9 is NOT the ship order → **Phase UX → Phase 9
   (hardening, pre-ship gate) → Phase 8 (optional, deferred)**.
-  - **Phase 9 — hardening:** ⛔ not started; pre-ship gate after Phase UX. **Full plan:
-    [ai-context/phase-9-plan.md](phase-9-plan.md) (Blocks Y1–Y7).** Y1 startup (reframed: warm ≤~200ms +
-    no spinner primary, cold ~500–800ms release; `<400ms` aspirational, not a gate — measure warm too),
-    Y2 release build (R8/ProGuard + Baseline Profile), **Y3 contextual-suggestions rework** (A: filter
-    unlaunchable chips at `resolveSuggestionLabels`; b2: rework the hardcoded `TimeOfDaySuggestionProvider`
-    6-app AOSP table → 1–2 category-resolved universal anchors, usage/calendar/location primary), Y4 test
-    coverage, Y5 privacy/logging, Y6 multi-version + LOW_END, Y7 cosmetic findings. Model-gated OQ#1–#4 are
-    a separate track, out of the ship gate.
+  - **Phase 9 — hardening:** IN PROGRESS. **Y1 startup + Y2 release build are ✅ done 2026-07-04.**
+    Final release on SM-A325F: warm median ~102ms, cold median 766ms (drop-first protocol), first home
+    frame has no Loading spinner; R8/resource shrink enabled; Baseline Profile generated/shipped
+    (`app/src/main/baseline-prof.txt`, 18,862 lines); release smoke-clean; `testDebugUnitTest` +
+    `assembleDebug` + `:app:assembleRelease` green. **Y3 done 2026-07-04:** VM filters suggestion
+    chips to installed launchable packages/known routes, `SuggestionEngineImpl` filters unsupported
+    actionIds before ranking/cache, and time-of-day fallback now resolves Alarm/Camera anchors through
+    `PackageManager` instead of hardcoded AOSP packages; full Gradle verification green; SM-A325F smoke
+    showed `A101` usage suggestion and resolved Samsung Clock (`Часы`) launching successfully, no
+    AndroidRuntime crash. **Still pending:** Y4 test coverage, Y5 privacy/logging, Y6 multi-version +
+    LOW_END, Y7 cosmetic findings. Model-gated OQ#1–#4 remain a separate track, out of the ship gate.
   - **Phase 8 — accessibility automation:** ⛔ OPTIONAL / DEFERRED (post-MVP); not a ship blocker.
 
 ## Open questions gating the residual track
@@ -178,11 +185,11 @@ and the model track. See [`device-acceptance-brief.md`](device-acceptance-brief.
   `Final → onCommandSubmitted` command path (unknown-command feedback surfaced).
 
 **Still open after Round 3:**
-- ⚠️ **Cold start — measured, fix owed.** Rigorous `am start -S -W` ×6 cold: min 1711 / median ~1740
-  / max 2172 ms (hot 0/16) vs the `< 400ms` budget (`docs/architecture.md:47`) → `PENDING / PERF-RISK`.
-  Root-cause hypothesis: `PackageManager` app enumeration on the first-frame path + Hilt graph + Room
-  open + first DataStore read + fire-and-forget `ensureModel()`. Needs a profiled attribution
-  (`--start-profiler` / Perfetto) then deferral of first-frame work (**separate fix task**).
+- ✅ **Startup perf — Phase 9 Y1/Y2 PASS.** Final release on SM-A325F: warm median ~102ms and no spinner;
+  cold median 766ms after dropping the first run, in the ~500-800ms release band. Perfetto cold trace
+  (`TotalTime` 760ms) showed the remaining cost concentrated in normal process/app first-frame work
+  (`bindApplication` ~177ms, `activityStart` ~76ms, `performCreate` ~44ms, first traversal/doFrame
+  ~376ms), with the launcher-owned Loading state removed from the first frame.
 - 🔧 **Two C.1 findings (recorded, not fixed):** (1) `keySet` indicator race — `saveProvider` recomputes
   keySet before `secretStore.put`, so the "key set" tick stays false though the key is saved & usable
   (cosmetic); (2) RateLimited string typo `retray` → `retry`.
@@ -196,14 +203,14 @@ and the model track. See [`device-acceptance-brief.md`](device-acceptance-brief.
 
 ## Not claimed done
 
-The cold-start performance **budget** (`< 400ms`) — measured at ~1740ms median, root-caused, fix
-owed; OQ#1–OQ#4 real models/vocab/embedder + on-device NLU acceptance; voice `Ready`/`Partial`
-intermediate states (OQ#4); boot-warmup after reboot (C.5). *(Real assistant streaming against a live
-provider — done Round 3.)*
+The `<400ms` cold-start number remains aspirational (final release median 766ms, ship-band PASS).
+Still not claimed: Y4-Y7 Phase 9 blocks; OQ#1–OQ#4 real models/vocab/embedder + on-device NLU acceptance;
+voice `Ready`/`Partial` intermediate states (OQ#4); boot-warmup after reboot (C.5).
+*(Real assistant streaming against a live provider — done Round 3.)*
 
 ## Source of truth
 
 - Session digest + hard rules: `CLAUDE.md`
-- Decisions log (latest: ADR 2026-07-02 — Device Acceptance Round 2): `ai-context/decisions.md`
+- Decisions log (latest: ADR 2026-07-04 — Contextual suggestions correctness): `ai-context/decisions.md`
 - Architecture (in sync): `docs/architecture.md` · Roadmap: `docs/roadmap.md`
-- Active/last plan: `ai-context/phase-7-voice-suggestions-plan.md`
+- Active/last plan: `ai-context/phase-9-plan.md`

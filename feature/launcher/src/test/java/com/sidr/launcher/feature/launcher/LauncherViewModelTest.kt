@@ -122,7 +122,7 @@ class LauncherViewModelTest {
     // ── App list loading ───────────────────────────────────────────────────
 
     @Test
-    fun `Loading before advanceUntilIdle then Success after for non-empty list`() =
+    fun `home shell paints before app list then Success after for non-empty list`() =
         runTest(testDispatcher) {
             fakeRepo.appsToReturn = listOf(
                 InstalledApp("com.example.one", "One"),
@@ -130,11 +130,14 @@ class LauncherViewModelTest {
             )
             val vm = buildViewModel()
 
-            // init{} has queued loadApps() but it has not run yet
+            // init{} has queued loadApps() but it has not run yet; home still paints immediately.
+            val initial = vm.uiState.value
             assertTrue(
-                "Expected Loading before advance, got ${vm.uiState.value}",
-                vm.uiState.value is UiState.Loading,
+                "Expected cache-first home shell before advance, got $initial",
+                initial is UiState.Success,
             )
+            assertTrue((initial as UiState.Success).data.apps.isEmpty())
+            assertTrue(initial.data.favorites.isEmpty())
 
             advanceUntilIdle()
 
@@ -265,9 +268,9 @@ class LauncherViewModelTest {
     }
 
     @Test
-    fun `retry after a failure shows Loading then Success without restart`() = runTest(testDispatcher) {
-        // A repo whose first load fails (retryable) and whose retry parks on a gate, so Loading is
-        // the settled state while the reload is in flight — letting us assert the transient cleanly.
+    fun `retry after a failure keeps home shell visible then Success without restart`() = runTest(testDispatcher) {
+        // A repo whose first load fails (retryable) and whose retry parks on a gate, so the cache-first
+        // home shell is the settled state while the reload is in flight — no full-screen spinner.
         val gate = CompletableDeferred<Unit>()
         var calls = 0
         val gatedRepo = object : InstalledAppsRepository {
@@ -299,14 +302,15 @@ class LauncherViewModelTest {
 
         // User taps Retry on the SAME ViewModel instance (no process/VM restart).
         vm.retry()
-        advanceUntilIdle() // null→Loading is processed; the reload is parked on gate.await()
+        advanceUntilIdle() // null state is processed; the reload is parked on gate.await()
 
-        // Resetting to null returns the combine to Loading — using the still-held usage records
-        // without racing them into a stale Error/Success emission.
+        // Resetting to null clears the stale Error but keeps the home shell visible while reloading.
+        val reloadingState = vm.uiState.value
         assertTrue(
-            "Expected Loading while the reload is in flight, got ${vm.uiState.value}",
-            vm.uiState.value is UiState.Loading,
+            "Expected cache-first home shell while the reload is in flight, got $reloadingState",
+            reloadingState is UiState.Success,
         )
+        assertTrue((reloadingState as UiState.Success).data.apps.isEmpty())
 
         gate.complete(Unit) // release the reload
         advanceUntilIdle()
@@ -488,6 +492,73 @@ class LauncherViewModelTest {
     // ── Suggestions (Phase 7, Block W-lite) ───────────────────────────────
 
     @Test
+    fun `cached package suggestions wait for app list while route suggestions can paint immediately`() =
+        runTest(testDispatcher) {
+        val appListGate = CompletableDeferred<Unit>()
+        var appListCalls = 0
+        val gatedRepo = object : InstalledAppsRepository {
+            override suspend fun getInstalledApps(): OperationResult<List<InstalledApp>> {
+                appListCalls++
+                appListGate.await()
+                return OperationResult.Success(listOf(InstalledApp("com.cached", "Cached App")))
+            }
+        }
+        val cacheRepo = FakeSuggestionsCacheRepository(
+            initial = listOf(
+                CachedSuggestion(label = "Cached label", actionId = "com.cached"),
+                CachedSuggestion(label = "Assistant", actionId = Routes.Assistant.ROUTE),
+            ),
+        )
+        val gatedEngine = object : SuggestionEngine {
+            private val state = MutableStateFlow<List<Suggestion>>(emptyList())
+            val refreshStarted = CompletableDeferred<Unit>()
+            val releaseRefresh = CompletableDeferred<Unit>()
+
+            override fun suggestions(): Flow<List<Suggestion>> = state.asStateFlow()
+
+            override suspend fun refresh(): OperationResult<List<Suggestion>> {
+                refreshStarted.complete(Unit)
+                releaseRefresh.await()
+                return OperationResult.Success(emptyList())
+            }
+        }
+        val vm = LauncherViewModel(
+            installedAppsRepository = gatedRepo,
+            handleUserCommand = useCase,
+            actionExecutor = fakeExecutor,
+            usageHistoryRepository = fakeUsageRepo,
+            featureFlagRepository = FakeFeatureFlagRepository(
+                FeatureFlags(aiSuggestionsEnabled = true, usageHistoryEnabled = true),
+            ),
+            userPreferencesRepository = fakePrefsRepo,
+            suggestionEngine = gatedEngine,
+            suggestionsCacheRepository = cacheRepo,
+            speechInputSource = fakeSpeech,
+            ioDispatcher = testDispatcher,
+            savedStateHandle = SavedStateHandle(),
+        )
+
+        advanceUntilIdle()
+
+        val firstPaint = vm.uiState.value as UiState.Success
+        assertEquals("App list load should be in flight", 1, appListCalls)
+        assertTrue("Apps are filled only after PackageManager returns", firstPaint.data.apps.isEmpty())
+        assertEquals(listOf("Assistant"), firstPaint.data.suggestions.map { it.label })
+
+        appListGate.complete(Unit)
+        advanceUntilIdle()
+
+        val afterApps = vm.uiState.value as UiState.Success
+        assertEquals(
+            listOf("Cached App", "Assistant"),
+            afterApps.data.suggestions.map { it.label },
+        )
+
+        gatedEngine.releaseRefresh.complete(Unit)
+        advanceUntilIdle()
+    }
+
+    @Test
     fun `cached suggestions first-paint then fresh engine result supersedes without merge`() = runTest(testDispatcher) {
         fakeRepo.appsToReturn = listOf(
             InstalledApp("com.cached", "Cached App"),
@@ -651,6 +722,55 @@ class LauncherViewModelTest {
 
         assertTrue((vm.uiState.value as UiState.Success).data.suggestions.isEmpty())
     }
+
+    @Test
+    fun `suggestions filter unlaunchable package actions while keeping installed apps and routes`() =
+        runTest(testDispatcher) {
+            fakeRepo.appsToReturn = listOf(
+                InstalledApp("com.installed", "Installed App"),
+            )
+            val suggestions = listOf(
+                Suggestion(
+                    label = "Clock",
+                    actionId = "com.android.deskclock",
+                    source = SuggestionSource.TIME_OF_DAY,
+                    score = 1.0,
+                ),
+                Suggestion(
+                    label = "com.installed",
+                    actionId = "com.installed",
+                    source = SuggestionSource.RECENT_USAGE,
+                    score = 0.8,
+                ),
+                Suggestion(
+                    label = "Assistant",
+                    actionId = Routes.Assistant.ROUTE,
+                    source = SuggestionSource.TIME_OF_DAY,
+                    score = 0.4,
+                ),
+            )
+            val suggestionEngine = FakeSuggestionEngine().apply {
+                refreshResult = OperationResult.Success(suggestions)
+            }
+            val vm = buildViewModel(
+                flagRepo = FakeFeatureFlagRepository(
+                    FeatureFlags(aiSuggestionsEnabled = true, usageHistoryEnabled = true),
+                ),
+                suggestionEngine = suggestionEngine,
+            )
+
+            advanceUntilIdle()
+
+            val state = vm.uiState.value as UiState.Success
+            assertEquals(
+                listOf("com.installed", Routes.Assistant.ROUTE),
+                state.data.suggestions.map { it.actionId },
+            )
+            assertEquals(
+                listOf("Installed App", "Assistant"),
+                state.data.suggestions.map { it.label },
+            )
+        }
 
     // ── Tap-to-launch goes straight through the executor ───────────────────
 

@@ -1455,4 +1455,26 @@ class LauncherViewModelTest {
         assertTrue(results.appMatches.isEmpty())
         assertTrue(results.chips.isEmpty())
     }
+
+    // ── Chip dispatch through the unchanged pipeline (AIL-3, Task 5) ───────
+
+    @Test
+    fun `web chip routes a search command through the unchanged pipeline`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        advanceUntilIdle()
+        vm.onCommandChanged("cats")
+        vm.submitWebSearch("cats")
+        advanceUntilIdle()
+        // FakeIntentMatcher records the normalized command text it was asked to match.
+        assertEquals("search cats", fakeMatcher.receivedInputs.last())
+    }
+
+    @Test
+    fun `site chip submits the raw url through the unchanged pipeline`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        advanceUntilIdle()
+        vm.submitSite("github.com")
+        advanceUntilIdle()
+        assertEquals("github.com", fakeMatcher.receivedInputs.last())
+    }
 }

@@ -250,6 +250,26 @@ class LauncherViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Web-search route chip (AIL-3): prefix the buffer with the `search` verb and route it through the
+     * UNCHANGED command pipeline (AIL-2 web search, already history-redacted). No new executor path.
+     */
+    fun submitWebSearch(query: String) {
+        val q = query.trim()
+        if (q.isEmpty()) return
+        onCommandSubmitted("search $q")
+    }
+
+    /**
+     * Open-site route chip (AIL-3): the buffer is already a safe URL (the chip is offered only then), so
+     * submitting it as-is routes to AIL-2's OpenUrl through the UNCHANGED pipeline. One-tap "submit".
+     */
+    fun submitSite(query: String) {
+        val q = query.trim()
+        if (q.isEmpty()) return
+        onCommandSubmitted(q)
+    }
+
     fun onSuggestionClicked(suggestion: Suggestion) {
         val app = (uiState.value as? UiState.Success)
             ?.data

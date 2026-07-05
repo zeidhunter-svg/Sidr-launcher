@@ -68,10 +68,10 @@ The offline launcher core (home, app grid, app launch) must work fully without A
 
 ## Current goal (active work)
 
-**NOW (2026-07-05): Stage-1 AI-Launcher completion track — active block = AIL-3 (Universal Input).**
-The foundation is built and device-accepted, but the shipped routing is still rule-based (7 verbs +
-a command table); the local NLU/ONNX pipeline is inert (no model, OQ#1/#2) and the assistant is an
-isolated chat screen that cannot act. The active track (blocks **AIL-1…6**, plan:
+**NOW (2026-07-05): Stage-1 AI-Launcher completion track — active block = AIL-4 (LLM Action Router).**
+The foundation is built and device-accepted; the offline routing is still rule-based, and AIL-3 has now
+unified the home input over it (app-filter + web/site/store/assistant lanes) without changing the pipeline —
+AIL-4 makes it AI-first via the BYOK cloud `CommandPlanner`. The active track (blocks **AIL-1…6**, plan:
 [ai-context/ai-launcher-mvp-plan.md](ai-context/ai-launcher-mvp-plan.md)) adds:
 
 - **AIL-0 ✅ DONE (2026-07-05)** Design tokens & visual identity (`core/ui`, presentation-only) — replaced
@@ -100,9 +100,20 @@ isolated chat screen that cannot act. The active track (blocks **AIL-1…6**, pl
   denylist-clean key `web_provider_template`). URL/store queries redacted via existing Fork-3 SEARCH
   mapping. `HandleUserCommandUseCase`/`IntentMatcher`/`GenerateReplyUseCase` contracts unchanged; launcher
   fully offline. testDebugUnitTest + assembleDebug green. ADR: decisions.md "ADR 2026-07-05 — AIL-2 complete".
-- **AIL-3 — NEXT** Universal Input — one home field routes typed + spoken NL (app filter / command / web / site /
-  assistant / voice); typed commands byte-for-byte unchanged.
-- **AIL-4** LLM Action Router (BYOK cloud) — a **new third port** `CommandPlanner` (distinct from
+- **AIL-3 ✅ DONE (2026-07-05)** Universal Input — one home field additively routes typed + spoken NL over
+  the **unchanged** command pipeline. New pure `domain/input/UniversalInputRouter` + sealed `InputIntent`
+  (`Empty`/`DevSentinel`/`Query(raw,siteUrl)`, reuses `UrlDetector`, lowercases its token so mixed-case
+  domains open); `core/ui` `SidrCommandPrompt` (DF-2 terminal `>` prompt) + `RouteChipRow` (DF-3 bracketed
+  chips, button-role/48dp); `LauncherViewModel` `inputResults` (app-filter via reused `filterApps` +
+  WEB/ASK/SITE chips, SITE-gated on safe URL) + `submitWebSearch`/`submitSite` (delegate to unchanged
+  `onCommandSubmitted`); `LauncherScreen` "search-overtakes" body, chip dispatch (ASK = assistant nav with
+  `Uri.encode`d prefill built in the screen), `SIDR//` wordmark. **DF-1** ships "search overtakes" + a
+  hidden session-only **dev Command console** (7-tap wordmark arm + `//dev-mode` toggle; no persisted key).
+  **R8** voice reuses the path for free. Command pipeline **byte-for-byte** (`git diff` over intent files
+  empty); no `feature→feature`; VM Android-free; launcher fully offline; no LLM. testDebugUnitTest +
+  assembleDebug green (7 router + 62→69 VM tests). Deferred to DF-5/AIL-6: true block caret + CRT motion,
+  `>`-glyph TalkBack polish. ADR: decisions.md "ADR 2026-07-05 — AIL-3 complete".
+- **AIL-4 — NEXT** LLM Action Router (BYOK cloud) — a **new third port** `CommandPlanner` (distinct from
   `IntentMatcher` and `GenerateReplyUseCase`); consulted only on low rule-confidence / NL input; emits
   **structured** registered actions; offline/failure → rule outcome (exact rule-only parity when off).
 - **AIL-5** Confirmation & safety gating — risky/LLM-proposed actions confirm first; permission-gated.

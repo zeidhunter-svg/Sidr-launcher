@@ -35,8 +35,16 @@ learned launch-verb URL divert (Q2), `install <app>`→store (Q3 install-only), 
 (R6); **R5** configurable provider from `UserPreferences.webProviderTemplate` (default Google, denylist-clean
 key). Contracts (`HandleUserCommandUseCase`/`IntentMatcher`/`GenerateReplyUseCase`) unchanged; launcher fully
 offline; `testDebugUnitTest`+`assembleDebug` green; new tests UrlDetector 25 / matcher 25→35 / catalog 7 /
-resolver +2 / use-case +2; privacy guard green. ADR: "ADR 2026-07-05 — AIL-2 complete". **Active block = AIL-3
-(Universal Input).**
+resolver +2 / use-case +2; privacy guard green. ADR: "ADR 2026-07-05 — AIL-2 complete". **AIL-3 ✅ done
+(2026-07-05)** — Universal Input: additive `domain/input/UniversalInputRouter` + sealed `InputIntent`
+(reuses `UrlDetector`) over one home field; `core/ui` `SidrCommandPrompt` (terminal `>` prompt, DF-2) +
+`RouteChipRow` (DF-3 chips); `LauncherViewModel` `inputResults` (live app-filter + WEB/ASK/SITE chips) +
+`submitWebSearch`/`submitSite` delegating to the **unchanged** `onCommandSubmitted`; `LauncherScreen`
+"search overtakes" body + ASK assistant-prefill nav + hidden session-only dev Command console (7-tap
+`SIDR//` arm + `//dev-mode` toggle, no persisted key). Command pipeline **byte-for-byte** (intent-file diff
+empty); voice (R8) reuses the path; launcher fully offline; no LLM. `testDebugUnitTest`+`assembleDebug`
+green (router 7 / VM 62→69). Deferred to DF-5/AIL-6: true block caret + CRT motion, `>`-glyph a11y polish.
+ADR: "ADR 2026-07-05 — AIL-3 complete". **Active block = AIL-4 (LLM Action Router, BYOK cloud).**
 
 ## Where we are (foundation — done)
 

@@ -3797,3 +3797,81 @@ touched (AIL-4). Privacy: the new pref key is denylist-clean; URL/store queries 
 **Next = AIL-3** — Universal Input (`UniversalInputRouter` + sealed `InputIntent`; unify the home field for
 app-filter + command + web/site + assistant + voice; typed commands byte-for-byte; voice reuses the path,
 R8). `HandleUserCommandUseCase` stays untouched.
+
+## ADR 2026-07-05 — AIL-3 complete (Universal Input: additive router over one home field)
+
+**Context.** Stage-1B's fourth block. The home field only stored typed text and submitted it to the
+command pipeline — no live app-filter (that lived only in the App Drawer), no explicit web/assistant
+lanes, and the terminal identity from AIL-0 was not yet applied to the input surface. AIL-3 unifies the
+single home field so it additively routes typed **and** spoken natural language to app-filter (live) ·
+the existing command pipeline (byte-for-byte) · web/site · Play Store · assistant (prefilled) · voice —
+**without touching the proven command pipeline** and with **no LLM** (that is AIL-4). Design/plan:
+`ai-context/ail-3-universal-input-design.md` + `ai-context/ail-3-universal-input-plan.md`.
+
+**Forks resolved before code (owner, this session).**
+- **Routing model → additive router (not "router owns submit").** Enter/IME submit still calls
+  `HandleUserCommandUseCase` byte-for-byte; the router only feeds the live results/chips, and each route
+  chip is itself implemented by reusing the existing pipeline/nav (so no new execution logic). Parity is
+  guaranteed by construction. (Rejected: a router that classifies+dispatches submit — would force
+  re-proving parity.)
+- **DF-1 home layout → "Search overtakes" primary + hidden dev "Command console".** A non-blank buffer
+  replaces the home body (favorites/suggestions/all-apps) with a results panel; clearing restores home.
+  Plus a hidden developer transcript mode behind a **two-factor** unlock: 7 rapid taps on the `SIDR//`
+  wordmark **arm** it, then submitting the literal `//dev-mode` **toggles** the console. Session-only /
+  in-memory (no persisted key → `PrivacyInventoryGuardTest` untouched).
+- **DF-2 input field → terminal `>` prompt.** `SidrCommandPrompt` (`core/ui`): leading `>` glyph
+  (replaces the magnifier), JetBrains Mono, accent caret, thin border + glowing accent corner ticks, mic
+  as a trailing affordance with idle vs listening (accent) states. The App Drawer keeps `SidrSearchField`.
+  (Deferred to DF-5/AIL-6 motion: a **true block caret** + blink + CRT FX — the KDoc was corrected to not
+  over-promise a block caret.)
+- **DF-3 results → hybrid.** App matches as an icon+label list (icons aid recognition) over a single
+  bracketed route-chip row `[ ⌕ web ] [ ✦ ask ] [ ⌂ site ]` (`RouteChipRow`); `site` only for a safe
+  openable URL.
+- **R8 voice → one path.** Voice partials already flow into `commandInput`, so they drive the live
+  results/chips for free; Final submits through the unchanged command path. No new voice code.
+
+**What shipped (10 files, additive).**
+- **`domain/input/`** (pure, stdlib-only): `InputIntent` (sealed — `Empty` / `DevSentinel` /
+  `Query(raw, siteUrl)`) + `object UniversalInputRouter.classify(buffer)` — mirrors `UrlDetector`, which
+  it **reuses** for URL safety. It lowercases the token handed to `UrlDetector` (that component is
+  documented to expect a normalized/lowercased token; `Locale.ROOT`) while returning `raw` as the trimmed
+  **original** casing — so mixed-case domains (`GitHub.com`) still open (review fix).
+- **`core/ui`**: `SidrCommandPrompt` (DF-2 terminal field) + `RouteChip`/`RouteChipRow` (DF-3 bracketed
+  chips, button role + 48dp touch target per the sibling-component a11y convention). Presentation-only;
+  `core/ui` still depends only on `core/common`.
+- **`feature/launcher`**: `HomeInputResults(active, appMatches, chips)` + `RouteChipKind {WEB,ASK,SITE}` +
+  `ConsoleLine`. `LauncherViewModel` gained a derived `inputResults` flow (`combine(commandInput,
+  _rawAppsResult)` → router-classified chips + `filterApps` app matches, SITE-gated on `siteUrl`),
+  `submitWebSearch`/`submitSite` (both delegate to the unchanged `onCommandSubmitted`), and the session-only
+  dev console (`devConsoleOn`/`consoleLines`/`armDevMode()` + an **additive** armed-`//dev-mode` pre-check
+  in `onCommandSubmitted` that consumes the sentinel and returns; every other input runs the pre-existing
+  `handleUserCommand.handle(...)` path verbatim). `LauncherScreen` wired: `SidrCommandPrompt`, the
+  "search overtakes" `InputResultsPanel`, chip dispatch (WEB→`submitWebSearch`, ASK→assistant nav with
+  `Uri.encode`d prefill built **in the screen**, SITE→`submitSite`), the `CommandConsole` transcript, and
+  the `SIDR//` wordmark 7-tap arm.
+
+**Invariants / hard-rules.** Command pipeline **byte-for-byte**: `git diff bafd0f3..HEAD` over
+`domain/.../intent/` + `data/repository/.../intent/` is **empty** — `CommandNormalizer`/`IntentMatcher`/
+`HandleUserCommandUseCase`/`ExecutableAction`/resolver/`AndroidActionExecutor` untouched. `domain` stays
+pure/vendor-neutral; `core/ui` depends only on `core/common`; no `feature→feature` edge; the ViewModel
+stays Android-free (the screen does `Uri.encode` + route building); nav via `NavigationEvent`. Dev console
+is in-memory only — no new persisted key, privacy guard untouched. Launcher core still fully offline; no
+LLM (AIL-4).
+
+**Verification.**
+- `./gradlew --no-daemon testDebugUnitTest assembleDebug` ✅ **BUILD SUCCESSFUL**. New JVM tests:
+  `UniversalInputRouterTest` 7 (empty/dev-sentinel/query/URL/punycode/mixed-case-raw), `LauncherViewModelTest`
+  62→69 (results derivation + SITE gating, web/site dispatch routes through the matcher, armed dev-sentinel
+  consumed vs un-armed falls through, console records only while on). `core/ui` components validated by
+  compile + previews (presentation-only).
+- Executed via subagent-driven development: 7 implementer tasks, each spec+quality reviewed; 4 review
+  findings fixed and re-reviewed clean (Task 1 mixed-case URL lowercase; Task 2 padding + honest caret
+  KDoc; Task 3 chip a11y/48dp; all Important). Minors carried to the final whole-branch review triage.
+- Device acceptance is **opportunistic** here (mandatory only at AIL-6) — not run this session.
+- **Deferred (surface at AIL-5/6):** true block caret + blink/CRT motion (DF-5); the `>` glyph TalkBack
+  a11y polish; `submitWebSearch` double-`search` prefix guard for an already-`search`-prefixed buffer.
+
+**Next = AIL-4** — LLM Action Router (BYOK cloud): `CommandPlanner` port + cloud impl, `RouteCommandUseCase`
+(rule-first → planner on low confidence), strict structured JSON parse, privacy allow-list extension +
+guard test, `NoPlan` → rule fallback, feature-flag + settings toggle; **router-off ⇒ byte-for-byte
+rule-only parity**. The blocking AIL-4 ADR is already written (see "ADR 2026-07-05 — AIL-4").

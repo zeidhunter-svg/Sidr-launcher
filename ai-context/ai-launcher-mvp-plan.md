@@ -276,6 +276,22 @@ softened toward a default.
 - **AIL-3 — Universal Input.** `UniversalInputRouter` + sealed `InputIntent`; unify the home field
   (app-filter + command + web/site + assistant + voice). Typed commands byte-for-byte; voice reuses the
   path (R8). `HandleUserCommandUseCase` untouched.
+  **✅ DONE (2026-07-05).** Additive router over one home field — Enter still calls the **unchanged**
+  `HandleUserCommandUseCase` (command-pipeline diff empty); the router only feeds live results/chips and
+  route chips reuse the pipeline/nav. New pure `domain/input/UniversalInputRouter` + sealed `InputIntent`
+  (`Empty`/`DevSentinel`/`Query(raw,siteUrl)`, reuses `UrlDetector`, lowercases its token so mixed-case
+  domains open). `core/ui`: `SidrCommandPrompt` (DF-2 terminal `>` prompt) + `RouteChipRow` (DF-3 bracketed
+  chips, button-role + 48dp). `LauncherViewModel`: derived `inputResults` (reused `filterApps` app matches +
+  WEB/ASK/SITE chips, SITE-gated on a safe URL) + `submitWebSearch`/`submitSite` (delegate to
+  `onCommandSubmitted`) + session-only dev **Command console** (`devConsoleOn`/`consoleLines`/`armDevMode()`
+  + an additive armed-`//dev-mode` pre-check; no persisted key → privacy guard untouched). `LauncherScreen`:
+  "search overtakes" body, chip dispatch (ASK = assistant nav with `Uri.encode`d prefill built in the
+  screen), `CommandConsole` transcript, `SIDR//` 7-tap arm. **DF-1** = search-overtakes + hidden dev
+  console; **R8** voice reuses the path. Hard rules intact (domain pure, `core/ui`→`core/common` only, no
+  `feature→feature`, VM Android-free, launcher offline, no LLM). `testDebugUnitTest`+`assembleDebug` green
+  (router 7 / VM 62→69). Executed via subagent-driven dev (7 tasks, per-task spec+quality review; 4 Important
+  review findings fixed+re-reviewed). Deferred to DF-5/AIL-6: true block caret + CRT motion, `>`-glyph
+  TalkBack polish, `submitWebSearch` double-`search` guard. ADR: decisions.md "ADR 2026-07-05 — AIL-3 complete".
 - **AIL-4 — LLM Action Router (BYOK cloud).** `CommandPlanner` port + cloud impl over the existing engine;
   `RouteCommandUseCase` (rule-first → planner on low confidence, R1/R2); strict structured parsing (R3);
   privacy allow-list extension + guard test; `NoPlan` → rule fallback. Feature-flag + settings toggle;

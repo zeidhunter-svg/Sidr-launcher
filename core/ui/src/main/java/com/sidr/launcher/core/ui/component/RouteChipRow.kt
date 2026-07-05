@@ -2,17 +2,21 @@ package com.sidr.launcher.core.ui.component
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
 import com.sidr.launcher.core.ui.theme.SidrTheme
+import com.sidr.launcher.core.ui.theme.Sizes
 import com.sidr.launcher.core.ui.theme.Spacing
 
 /** One bracketed terminal route chip (AIL-3 / DF-3): a tappable `[ label ]` accelerator. */
@@ -39,8 +43,14 @@ fun RouteChipRow(
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
-                    .clickable(onClick = chip.onClick)
-                    .padding(vertical = Spacing.xs, horizontal = Spacing.xs),
+                    .clickable(
+                        onClickLabel = chip.label,
+                        role = Role.Button,
+                        onClick = chip.onClick,
+                    )
+                    .heightIn(min = Sizes.minTouchTarget)
+                    .wrapContentHeight(Alignment.CenterVertically)
+                    .padding(horizontal = Spacing.sm),
             )
         }
     }

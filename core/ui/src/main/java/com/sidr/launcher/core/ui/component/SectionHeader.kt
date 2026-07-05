@@ -30,10 +30,10 @@ fun SectionHeader(
     )
 }
 
-@Preview
+@Preview(showBackground = true, backgroundColor = 0xFF08090A)
 @Composable
 private fun SectionHeaderPreview() {
-    SidrTheme {
+    SidrTheme(darkTheme = true) {
         SectionHeader(text = "FAVORITES")
     }
 }

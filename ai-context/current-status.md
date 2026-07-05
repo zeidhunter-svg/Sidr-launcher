@@ -2,9 +2,43 @@
 
 > **Authoritative status lives in `CLAUDE.md` (session digest), `ai-context/decisions.md` (ADR log),
 > and the per-phase plans.** This file is a short pointer/snapshot only — if it disagrees with those,
-> they win. Last re-based: 2026-07-04 (Phase 9 Y1/Y2/Y3/Y4/Y5/Y6/Y7).
+> they win. Last re-based: 2026-07-05 (three-stage reframe).
 
-## Where we are
+## Project reframed (2026-07-05) — three stages
+
+Owner reframed the project into **Stage 1 — AI Launcher (MVP, now)** → **Stage 2 — AI Framework** →
+**Stage 3 — Agentic OS** (ADR "2026-07-05 — Project reframed into three stages"). The Phase 0–9 + Phase
+UX foundation below is **done and device-accepted**, but the shipped routing is still **rule-based only**
+— the launcher is not yet genuinely AI. The **active work** is the Stage-1 AI-Launcher completion track
+(blocks **AIL-1…6**): universal input + **BYOK cloud LLM action router** (`CommandPlanner`, a sanctioned
+third pipeline) + Action Registry + web/URL/Play-Store routing + confirmation gating. Router-off =
+byte-for-byte rule-only parity. Plan: `ai-context/ai-launcher-mvp-plan.md`; roadmap: `docs/roadmap.md`.
+The model track (OQ#1–#4), device matrix, and RC/hardening polish run in parallel, off the ship gate.
+
+**Stage-1B progress:** **AIL-0 ✅ done (2026-07-05)** — `core/ui` re-skinned to the "ultra-cyberpunk /
+early-computer terminal" identity (4 `ColorScheme`s green-default/amber-alt × dark/light, dynamic colour
+off by default, `AccentColor` enum, JetBrains Mono bundled/OFL, brutalist 0/2/4/8dp shapes, brand window
+background). Presentation-only, `testDebugUnitTest`+`assembleDebug` green; screen redesign deferred to
+AIL-3/5/6 (forks DF-1…DF-8). **AIL-1 ✅ done (2026-07-05)** — Action Registry contracts in `domain/action/`
+(pure, additive above the untouched `ExecutableAction` path): `ActionId`/`ActionIds` (7 family wire ids),
+`LauncherAction` (sealed, unresolved semantic args + `id`), `ActionDescriptor` (catalog+risk+schema),
+`ActionRiskLevel {SAFE,CONFIRM,DANGEROUS}`, `ActionCategory`, `ArgType {STRING}`/`ActionArg`, `ActionCatalog`
+port + `FakeActionCatalog`. Forks decided: argSchema = `List<ActionArg>` string-only; `LauncherAction` is a
+parallel hierarchy (not a wrapper); concrete descriptor catalog + impl deferred to AIL-2. No behaviour
+change; 9 new domain tests; `:domain:test`+`testDebugUnitTest`+`assembleDebug` green. ADR: decisions.md
+"ADR 2026-07-05 — AIL-1 complete". **AIL-2 ✅ done (2026-07-05)** — Web / URL / Play-Store routing (no AI):
+concrete `DefaultActionCatalog` (7 descriptors; open_url/play_store CONFIRM, rest SAFE; `ActionBindsModule`)
++ pure `domain/intent/UrlDetector` (AIL-Q3: http/https scheme allow-list only, curated-TLD open, punycode/IDN
++ query-string → web search, never a silent `intent://`/user `market://`) + new `OpenUrlIntent`/`PlayStoreSearchIntent`
+→ `OpenUrlAction`/`PlayStoreSearchAction` executed via `ACTION_VIEW` / `market://` (web fallback). Rule matcher
+learned launch-verb URL divert (Q2), `install <app>`→store (Q3 install-only), bare-URL/ambiguous recognition
+(R6); **R5** configurable provider from `UserPreferences.webProviderTemplate` (default Google, denylist-clean
+key). Contracts (`HandleUserCommandUseCase`/`IntentMatcher`/`GenerateReplyUseCase`) unchanged; launcher fully
+offline; `testDebugUnitTest`+`assembleDebug` green; new tests UrlDetector 25 / matcher 25→35 / catalog 7 /
+resolver +2 / use-case +2; privacy guard green. ADR: "ADR 2026-07-05 — AIL-2 complete". **Active block = AIL-3
+(Universal Input).**
+
+## Where we are (foundation — done)
 
 **Phase 7 (voice input + contextual suggestions) — user-facing close SHIPPED (2026-07-01).**
 Phases 3 → 7, Phase UX, and **Phase 9 hardening are done** for the available matrix: Blocks

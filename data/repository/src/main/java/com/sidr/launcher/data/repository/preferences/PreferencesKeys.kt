@@ -48,6 +48,11 @@ internal object PreferencesKeys {
     val USER_MIC_INPUT_ENABLED      = booleanPreferencesKey("user_mic_input_enabled")
     val USER_SETUP_HINT_DISMISSED   = booleanPreferencesKey("user_setup_hint_dismissed")
 
+    // AIL-2 / R5 — web-search provider URL template (default Google). Holds a `{q}` placeholder for
+    // the URL-encoded query. Denylist-clean: "web"/"provider"/"template" are not forbidden terms
+    // (deliberately NOT "search"/"query", which the privacy guard rejects), so it is inventoried below.
+    val WEB_PROVIDER_TEMPLATE       = stringPreferencesKey("web_provider_template")
+
     // Feature flags — prefix: flag_
     val FLAG_AI_SUGGESTIONS_ENABLED    = booleanPreferencesKey("flag_ai_suggestions_enabled")
     // Key string avoids the term "history" (kept in the guard denylist) — this is a feature
@@ -110,6 +115,7 @@ internal object PreferencesKeys {
         USER_FAVORITES_COUNT.name,
         USER_MIC_INPUT_ENABLED.name,
         USER_SETUP_HINT_DISMISSED.name,
+        WEB_PROVIDER_TEMPLATE.name,
         FLAG_AI_SUGGESTIONS_ENABLED.name,
         FLAG_USAGE_HISTORY_ENABLED.name,
         FLAG_PERMISSION_EDU_DISMISSED.name,

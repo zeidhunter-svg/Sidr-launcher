@@ -51,10 +51,10 @@ fun ErrorState(
     }
 }
 
-@Preview
+@Preview(showBackground = true, backgroundColor = 0xFF08090A)
 @Composable
 private fun ErrorStatePreview() {
-    SidrTheme {
+    SidrTheme(darkTheme = true) {
         ErrorState(
             message = "Couldn't load your apps.",
             onRetry = {},

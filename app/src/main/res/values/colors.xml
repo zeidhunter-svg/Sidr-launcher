@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#101010</color>
+    <!-- Brand terminal ground (matches core/ui GreenDark/AmberDark `background`); used as the
+         window background so there is no white flash before Compose paints (AIL-0). -->
+    <color name="sidr_ground">#08090A</color>
 </resources>

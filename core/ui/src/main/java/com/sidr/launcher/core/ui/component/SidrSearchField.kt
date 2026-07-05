@@ -81,10 +81,10 @@ fun SidrSearchField(
     )
 }
 
-@Preview
+@Preview(showBackground = true, backgroundColor = 0xFF08090A)
 @Composable
 private fun SidrSearchFieldEmptyPreview() {
-    SidrTheme {
+    SidrTheme(darkTheme = true) {
         SidrSearchField(
             value = "",
             onValueChange = {},
@@ -94,10 +94,10 @@ private fun SidrSearchFieldEmptyPreview() {
     }
 }
 
-@Preview
+@Preview(showBackground = true, backgroundColor = 0xFF08090A)
 @Composable
 private fun SidrSearchFieldTypedPreview() {
-    SidrTheme {
+    SidrTheme(darkTheme = true) {
         SidrSearchField(
             value = "open telegram",
             onValueChange = {},

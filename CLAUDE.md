@@ -1,10 +1,27 @@
 # CLAUDE.md — Sidr Launcher
 
-Session digest. Read this first. **Last synced: 2026-07-04, after commit
-`71fc2f5 Complete Phase 9 Y4-Y7 hardening`.** Phases **3 → 7**, **Phase UX**, and
-**Phase 9 hardening** are done for the available matrix. The current recommended next step is an
-**MVP release-candidate pass**, not more feature work: rebuild on HEAD, run the release sanity suite, and
-smoke the release APK on SM-A325F.
+Session digest. Read this first. **Last synced: 2026-07-05 — project reframed into three stages
+(AI Launcher → AI Framework → Agentic OS); active work is the Stage-1 AI-Launcher completion track.**
+Foundation (Phases 3 → 9 + Phase UX) is built and device-accepted, but today's routing is **rule-based
+only** — the launcher is not yet genuinely "AI". The next work makes it AI-first via a **BYOK cloud LLM
+router** that understands natural language and routes it to safe, registered actions with confirmation.
+Reframed roadmap: [docs/roadmap.md](docs/roadmap.md); active plan:
+[ai-context/ai-launcher-mvp-plan.md](ai-context/ai-launcher-mvp-plan.md).
+
+**Three-stage vision (owner reframe 2026-07-05).**
+1. **Stage 1 — AI Launcher (MVP, NOW).** Foundation ✅ done; the **AI-Launcher completion track
+   (AIL-1…6)** adds a universal input + BYOK LLM action router + Action Registry + web/URL/Play-Store
+   routing + confirmation gating. This is what ships first.
+2. **Stage 2 — AI Framework.** Generalize the router/registry/context/memory into a reusable on-device AI
+   framework (Action Registry, Context Engine v2, User Memory).
+3. **Stage 3 — Agentic OS.** Safe user-consented automation (absorbs the old Phase 8 / accessibility) +
+   the AI OS shell.
+
+**Owner decisions (2026-07-05) for the AI-Launcher MVP.**
+- **AI core = BYOK cloud LLM routing** (rule matcher stays the fast offline fallback; not blocked on ONNX
+  model selection).
+- **Action rights = understand + route to safe actions**; risky actions require explicit confirmation; no
+  autonomy / multi-step chains (that is Stage 3).
 
 **Current ship status.**
 - **Phase UX closed** (2026-07-03) and device-accepted on SM-A325F / Android 13 (2026-07-04): minimal home
@@ -40,8 +57,8 @@ smoke the release APK on SM-A325F.
 - Voice recognizer `Ready` / `Partial` intermediate states are not fully evidenced (OQ#4).
 - Boot warmup after a physical reboot (`RECEIVE_BOOT_COMPLETED` re-enqueue) remains unexercised.
 
-Authoritative details: `ai-context/current-status.md`, `ai-context/phase-9-plan.md`, and
-`ai-context/decisions.md` (latest ADR: "2026-07-04 — Phase 9 Block Y7 residual cosmetic cleanup").
+Authoritative details: `ai-context/current-status.md`, `ai-context/ai-launcher-mvp-plan.md`, and
+`ai-context/decisions.md` (latest ADR: "2026-07-05 — AIL-1 complete (Action Registry contracts)").
 
 ## What this is
 
@@ -51,19 +68,53 @@ The offline launcher core (home, app grid, app launch) must work fully without A
 
 ## Current goal (active work)
 
-**NOW (2026-07-04): MVP release-candidate prep.** Phase 9 is closed and committed in
-`71fc2f5 Complete Phase 9 Y4-Y7 hardening`; previous Phase 9 Y1-Y3 commit is `d744bcd`. Do not start
-optional Phase 8 or model/OQ work unless the owner explicitly chooses that track.
+**NOW (2026-07-05): Stage-1 AI-Launcher completion track — active block = AIL-3 (Universal Input).**
+The foundation is built and device-accepted, but the shipped routing is still rule-based (7 verbs +
+a command table); the local NLU/ONNX pipeline is inert (no model, OQ#1/#2) and the assistant is an
+isolated chat screen that cannot act. The active track (blocks **AIL-1…6**, plan:
+[ai-context/ai-launcher-mvp-plan.md](ai-context/ai-launcher-mvp-plan.md)) adds:
 
-Recommended next commands for an RC pass:
-- `./gradlew --no-daemon testDebugUnitTest assembleDebug :app:assembleRelease`
-- Install the release APK on SM-A325F and smoke: home -> drawer -> settings -> assistant ->
-  set-as-default -> voice education -> relaunch-to-home.
+- **AIL-0 ✅ DONE (2026-07-05)** Design tokens & visual identity (`core/ui`, presentation-only) — replaced
+  the neutral-indigo Material-You look with the "ultra-cyberpunk / early-computer terminal" identity: 4
+  `ColorScheme`s (green default / amber alt × dark/light), dynamic colour off by default, `AccentColor`
+  enum, **JetBrains Mono** bundled (OFL), brutalist 0/2/4/8dp shapes, previews refreshed, brand window
+  background (no white boot flash). Screen redesign stays deferred to AIL-3/5/6 (forks DF-1…DF-8).
+  ADR: decisions.md "ADR 2026-07-05 — AIL-0 complete".
+- **AIL-1 ✅ DONE (2026-07-05)** Action Registry (`domain`, contracts-only, additive) — `ActionId`/
+  `ActionIds` (7 family ids), `LauncherAction` (sealed, unresolved semantic args + `id`), `ActionDescriptor`
+  (catalog+risk+schema), `ActionRiskLevel {SAFE,CONFIRM,DANGEROUS}`, `ActionCategory`, `ArgType {STRING}`/
+  `ActionArg`, `ActionCatalog` port + `FakeActionCatalog`. Forks decided: argSchema = `List<ActionArg>`
+  string-only; `LauncherAction` is a **parallel** hierarchy (not a wrapper) so `ExecutableAction` is
+  untouched; the **concrete descriptor catalog + impl is deferred to AIL-2**. No behaviour change (nothing
+  consumes it yet); rule→resolver→executor path byte-for-byte unchanged. ADR: decisions.md "ADR 2026-07-05
+  — AIL-1 complete".
+- **AIL-2 ✅ DONE (2026-07-05)** Web / URL / Play-Store routing (no AI) — concrete `DefaultActionCatalog`
+  (7 descriptors; open_url/play_store = CONFIRM, rest SAFE; bound via `ActionBindsModule`) + offline routing
+  through the untouched rule→resolver→executor path. Pure `domain/intent/UrlDetector` enforces AIL-Q3:
+  **http/https scheme allow-list only** (no silent `intent://`; user `market://` never honored), **curated
+  TLD** open (Q1), **punycode/IDN → search** (homograph guard), **query-string → web search** (case-safe,
+  Q4). New `OpenUrlIntent`/`PlayStoreSearchIntent` + `OpenUrlAction`/`PlayStoreSearchAction`; matcher gained
+  launch-verb URL divert (Q2: `open github.com`→site, `open telegram`→app), `install <app>`→Play Store
+  (Q3 install-only), bare-URL/ambiguous recognition (R6). Executor: `ACTION_VIEW` + `market://` (web
+  fallback); **R5** configurable provider from `UserPreferences.webProviderTemplate` (default Google,
+  denylist-clean key `web_provider_template`). URL/store queries redacted via existing Fork-3 SEARCH
+  mapping. `HandleUserCommandUseCase`/`IntentMatcher`/`GenerateReplyUseCase` contracts unchanged; launcher
+  fully offline. testDebugUnitTest + assembleDebug green. ADR: decisions.md "ADR 2026-07-05 — AIL-2 complete".
+- **AIL-3 — NEXT** Universal Input — one home field routes typed + spoken NL (app filter / command / web / site /
+  assistant / voice); typed commands byte-for-byte unchanged.
+- **AIL-4** LLM Action Router (BYOK cloud) — a **new third port** `CommandPlanner` (distinct from
+  `IntentMatcher` and `GenerateReplyUseCase`); consulted only on low rule-confidence / NL input; emits
+  **structured** registered actions; offline/failure → rule outcome (exact rule-only parity when off).
+- **AIL-5** Confirmation & safety gating — risky/LLM-proposed actions confirm first; permission-gated.
+- **AIL-6** Polish + SM-A325F device acceptance with a real BYOK provider; offline parity.
 
-If the owner chooses post-MVP hardening instead of RC, the next buckets are Android 9/11/14 matrix,
-real LOW_END hardware, boot warmup after reboot, and model/STT OQ#1-OQ#4. These are not Phase 9 ship
-blockers. See `ai-context/current-status.md` for the compact status and `ai-context/phase-9-plan.md` for
-the closed hardening plan.
+**Blocking ADR before AIL-4:** record that `CommandPlanner` is a *third* pipeline (structured
+routing-via-LLM), that "local matching runs before any LLM call" is preserved, and that LLM proposals
+never auto-execute risky actions — this consciously refines the "matching ≠ generation" hard rule.
+
+**Not in this track (separate/deferred):** ONNX NLU model (OQ#1/#2), embeddings (OQ#3), STT matrix
+(OQ#4), Android 9/11/14 + LOW_END device matrix, boot warmup. RC/hardening polish (release build,
+`<400ms` cold) is not a gate for the AI-launcher feature work and can run in parallel.
 *(The phase-by-phase history below is retained for context.)*
 
 **Phase 3 is DONE (Blocks A → D, 2026-06-21).** The MVP loop works: type `open telegram` →
@@ -455,6 +506,11 @@ Phase 3 result, Blocks A → D:
 - Repository/use-case ops return `OperationResult<T>`; never throw to UI.
 - `IntentMatcher` (→ `IntentMatchResult`) is a **different port** from `GenerativeAiEngine`
   (→ `Flow<AiChunk>`). Matching ≠ generation.
+- **`CommandPlanner` (Stage 1B) is a sanctioned *third* pipeline: structured routing-via-LLM.** It is
+  NOT folded into `IntentMatcher` and is NOT the assistant's conversational path. It is consulted **only**
+  when the rule matcher is low-confidence / the input is natural language — so "local matching runs before
+  any LLM call" holds. LLM-proposed actions **never auto-execute a risky action** (confirmation-gated),
+  and router-off must be byte-for-byte rule-only parity. (See the AIL-4 ADR.)
 - Launcher core works fully offline; optional permissions never block startup.
 
 ## Contract → Owner module

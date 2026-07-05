@@ -137,6 +137,68 @@ class RuleBasedIntentMatcherTest {
         }
     }
 
+    // --- URL / site recognition (AIL-2, R6) ---
+
+    @Test fun `bare known-TLD domain returns OpenUrlIntent with scheme`() = runTest {
+        val best = matcher.match("github.com").best
+        val intent = best.intent as LauncherIntent.OpenUrlIntent
+        assertEquals("https://github.com", intent.url)
+        assertTrue(best.confidence >= 0.85f)
+    }
+
+    @Test fun `explicit https url returns OpenUrlIntent preserving the url`() = runTest {
+        val intent = matcher.match("https://example.com/docs").best.intent as LauncherIntent.OpenUrlIntent
+        assertEquals("https://example.com/docs", intent.url)
+    }
+
+    @Test fun `open plus url opens the site not an app launch`() = runTest {
+        val intent = matcher.match("open github.com").best.intent
+        assertTrue("expected OpenUrlIntent, got $intent", intent is LauncherIntent.OpenUrlIntent)
+        assertEquals("https://github.com", (intent as LauncherIntent.OpenUrlIntent).url)
+    }
+
+    @Test fun `open plus app name still launches the app`() = runTest {
+        val intent = matcher.match("open telegram").best.intent
+        assertTrue(intent is LauncherIntent.LaunchAppIntent)
+        assertEquals("telegram", (intent as LauncherIntent.LaunchAppIntent).displayNameQuery)
+    }
+
+    @Test fun `ambiguous unknown-TLD domain falls back to web search`() = runTest {
+        val best = matcher.match("example.foobar").best
+        val intent = best.intent as LauncherIntent.SearchIntent
+        assertEquals("example.foobar", intent.query)
+        assertTrue(best.confidence >= 0.85f)
+    }
+
+    @Test fun `punycode host is not opened silently`() = runTest {
+        val intent = matcher.match("xn--80ak6aa92e.com").best.intent
+        assertTrue("expected SearchIntent (never a silent open), got $intent", intent is LauncherIntent.SearchIntent)
+    }
+
+    @Test fun `url with query string routes to web search`() = runTest {
+        val intent = matcher.match("youtube.com/watch?v=abc").best.intent
+        assertTrue(intent is LauncherIntent.SearchIntent)
+    }
+
+    // --- install verb → Play Store (AIL-2, Q3) ---
+
+    @Test fun `install app returns PlayStoreSearchIntent`() = runTest {
+        val best = matcher.match("install whatsapp").best
+        val intent = best.intent as LauncherIntent.PlayStoreSearchIntent
+        assertEquals("whatsapp", intent.query)
+        assertTrue(best.confidence >= 0.85f)
+    }
+
+    @Test fun `bare install returns UnknownIntent`() = runTest {
+        assertTrue(matcher.match("install").best.intent is LauncherIntent.UnknownIntent)
+    }
+
+    @Test fun `download verb does not trigger Play Store (install only)`() = runTest {
+        // Q3 chose "install" only — "download X" is left to the normal rules (Unknown here).
+        val intent = matcher.match("download manager").best.intent
+        assertTrue("expected UnknownIntent for 'download manager', got $intent", intent is LauncherIntent.UnknownIntent)
+    }
+
     // --- unknowns ---
 
     @Test fun `empty input returns UnknownIntent with zero confidence`() = runTest {

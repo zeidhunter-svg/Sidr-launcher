@@ -16,6 +16,12 @@ sealed interface ExecutableAction {
 
     data object OpenLauncherSettingsAction : ExecutableAction
 
+    /** Open a safe, high-confidence [url] in the browser (AIL-2). Normalization/safety is enforced upstream. */
+    data class OpenUrlAction(val url: String) : ExecutableAction
+
+    /** Search the Play Store for [query] (AIL-2); the executor tries market:// then a web fallback. */
+    data class PlayStoreSearchAction(val query: String) : ExecutableAction
+
     data class ShowMessageAction(val message: String) : ExecutableAction
 
     data object NoOpAction : ExecutableAction

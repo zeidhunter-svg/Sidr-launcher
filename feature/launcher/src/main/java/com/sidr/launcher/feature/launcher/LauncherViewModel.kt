@@ -524,6 +524,8 @@ class LauncherViewModel @Inject constructor(
         is LauncherIntent.SearchIntent -> "Search the web for \"${intent.query}\"?"
         is LauncherIntent.OpenSettingsIntent -> "Open settings?"
         is LauncherIntent.SimpleCommandIntent -> "Run that command?"
+        is LauncherIntent.OpenUrlIntent -> "Open \"${intent.url}\"?"
+        is LauncherIntent.PlayStoreSearchIntent -> "Find \"${intent.query}\" in the Play Store?"
         is LauncherIntent.UnknownIntent -> "Try a different command"
     }
 

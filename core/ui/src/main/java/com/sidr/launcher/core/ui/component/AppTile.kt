@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,6 +20,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import com.sidr.launcher.core.ui.theme.AccentColor
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Sizes
 import com.sidr.launcher.core.ui.theme.Spacing
@@ -68,10 +68,10 @@ fun AppTile(
     }
 }
 
-@Preview
+@Preview(showBackground = true, backgroundColor = 0xFF08090A)
 @Composable
 private fun AppTilePreview() {
-    SidrTheme {
+    SidrTheme(darkTheme = true) {
         AppTile(
             label = "Telegram",
             onClick = {},
@@ -79,7 +79,26 @@ private fun AppTilePreview() {
                 Box(
                     modifier = Modifier
                         .size(Sizes.appIcon)
-                        .clip(CircleShape)
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                )
+            },
+        )
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF08090A)
+@Composable
+private fun AppTileAmberPreview() {
+    SidrTheme(darkTheme = true, accent = AccentColor.AMBER) {
+        AppTile(
+            label = "Signal",
+            onClick = {},
+            icon = {
+                Box(
+                    modifier = Modifier
+                        .size(Sizes.appIcon)
+                        .clip(MaterialTheme.shapes.medium)
                         .background(MaterialTheme.colorScheme.primaryContainer),
                 )
             },

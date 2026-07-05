@@ -25,6 +25,12 @@ class IntentActionResolver(
         is LauncherIntent.SimpleCommandIntent -> OperationResult.Success(
             resolveSimpleCommand(intent.command)
         )
+        is LauncherIntent.OpenUrlIntent -> OperationResult.Success(
+            ExecutableAction.OpenUrlAction(url = intent.url)
+        )
+        is LauncherIntent.PlayStoreSearchIntent -> OperationResult.Success(
+            ExecutableAction.PlayStoreSearchAction(query = intent.query)
+        )
         is LauncherIntent.UnknownIntent -> OperationResult.Success(ExecutableAction.NoOpAction)
     }
 

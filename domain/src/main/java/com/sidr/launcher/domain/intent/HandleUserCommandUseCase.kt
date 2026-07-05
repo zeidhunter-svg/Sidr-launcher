@@ -94,6 +94,8 @@ class HandleUserCommandUseCase(
         // Side-effecting actions go through the executor.
         is ExecutableAction.LaunchAppAction,
         is ExecutableAction.OpenSearchAction,
+        is ExecutableAction.OpenUrlAction,
+        is ExecutableAction.PlayStoreSearchAction,
         -> mapExecution(executor.execute(action))
 
         // Routing outcomes — never executed.
@@ -145,6 +147,11 @@ class HandleUserCommandUseCase(
         is LauncherIntent.SearchIntent        -> IntentMatchType.SEARCH
         is LauncherIntent.OpenSettingsIntent  -> IntentMatchType.OPEN_SETTINGS
         is LauncherIntent.SimpleCommandIntent -> IntentMatchType.SIMPLE_COMMAND
+        // OpenUrl/PlayStoreSearch carry arbitrary user content (a URL, an app-name query), so they are
+        // classified as SEARCH — the data-layer mapper redacts SEARCH's normalizedText (Fork 3), keeping
+        // the typed URL/query out of history. No new redaction surface is introduced.
+        is LauncherIntent.OpenUrlIntent       -> IntentMatchType.SEARCH
+        is LauncherIntent.PlayStoreSearchIntent -> IntentMatchType.SEARCH
         is LauncherIntent.UnknownIntent       -> IntentMatchType.UNKNOWN
     }
 

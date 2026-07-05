@@ -5,116 +5,141 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 
 /**
- * Sidr colour tokens — a neutral, calm M3 palette seeded around an indigo primary.
+ * Sidr colour tokens — a "modern ultra-cyberpunk / early-computer terminal" identity (AIL-0).
  *
- * These are the static fallback schemes used when Material You dynamic colour is unavailable
- * (pre-API 31, or when the user opts out). Dynamic colour, when available, is derived at runtime
- * in [SidrTheme]. Keep raw colours private to this file; consumers read semantic roles off
- * `MaterialTheme.colorScheme`, never these literals.
+ * The brand is a phosphor CRT: a near-black ground with a single luminous accent doing all the work.
+ * Two accents ship — **green (`#00FF66`, default brand)** and **amber (`#FFB000`, alternative)** — each
+ * with a **dark** identity scheme and a restrained **light** "blueprint / paper terminal" scheme, giving
+ * four schemes selected in [SidrTheme] by [AccentColor] × dark/light.
+ *
+ * Dynamic colour (Material You) is deliberately **off by default** in [SidrTheme]: a bespoke brand and
+ * wallpaper-derived colour are mutually exclusive. Keep raw colours private to this file; consumers read
+ * semantic roles off `MaterialTheme.colorScheme`, never these literals.
+ *
+ * Elevation is expressed through 1px `outline`/`outlineVariant` grid borders rather than tonal shadow, so
+ * the dark schemes keep `surface` close to `background`. Animated glow is a motion concern deferred to the
+ * screen blocks (AIL-3/5/6).
  */
 
-// ── Light ────────────────────────────────────────────────────────────────────
-private val LightPrimary = Color(0xFF4B5BD7)
-private val LightOnPrimary = Color(0xFFFFFFFF)
-private val LightPrimaryContainer = Color(0xFFDEE0FF)
-private val LightOnPrimaryContainer = Color(0xFF00105C)
-private val LightSecondary = Color(0xFF5A5D72)
-private val LightOnSecondary = Color(0xFFFFFFFF)
-private val LightSecondaryContainer = Color(0xFFDFE1F9)
-private val LightOnSecondaryContainer = Color(0xFF171B2C)
-private val LightTertiary = Color(0xFF76546E)
-private val LightOnTertiary = Color(0xFFFFFFFF)
-private val LightTertiaryContainer = Color(0xFFFFD7F3)
-private val LightOnTertiaryContainer = Color(0xFF2C1229)
-private val LightError = Color(0xFFBA1A1A)
-private val LightOnError = Color(0xFFFFFFFF)
-private val LightErrorContainer = Color(0xFFFFDAD6)
-private val LightOnErrorContainer = Color(0xFF410002)
-private val LightBackground = Color(0xFFFEFBFF)
-private val LightOnBackground = Color(0xFF1B1B1F)
-private val LightSurface = Color(0xFFFEFBFF)
-private val LightOnSurface = Color(0xFF1B1B1F)
-private val LightSurfaceVariant = Color(0xFFE3E1EC)
-private val LightOnSurfaceVariant = Color(0xFF46464F)
-private val LightOutline = Color(0xFF767680)
-private val LightOutlineVariant = Color(0xFFC7C5D0)
+// ── Shared ─────────────────────────────────────────────────────────────────────
+private val Ground = Color(0xFF08090A)   // near-black CRT ground (both dark schemes)
+private val TerminalError = Color(0xFFFF5B51)
+private val LightError = Color(0xFFB3261E)
+private val LightErrorContainer = Color(0xFFF9DEDC)
+private val OnLightError = Color(0xFFFFFFFF)
+private val OnLightErrorContainer = Color(0xFF410E0B)
+private val OnTerminalError = Color(0xFF1A0301)
+private val TerminalErrorContainer = Color(0xFF3A0F0C)
+private val OnTerminalErrorContainer = Color(0xFFFFB4AB)
 
-// ── Dark ─────────────────────────────────────────────────────────────────────
-private val DarkPrimary = Color(0xFFBBC3FF)
-private val DarkOnPrimary = Color(0xFF001489)
-private val DarkPrimaryContainer = Color(0xFF2F42BE)
-private val DarkOnPrimaryContainer = Color(0xFFDEE0FF)
-private val DarkSecondary = Color(0xFFC3C5DD)
-private val DarkOnSecondary = Color(0xFF2C2F42)
-private val DarkSecondaryContainer = Color(0xFF424659)
-private val DarkOnSecondaryContainer = Color(0xFFDFE1F9)
-private val DarkTertiary = Color(0xFFE5BAD8)
-private val DarkOnTertiary = Color(0xFF44263F)
-private val DarkTertiaryContainer = Color(0xFF5C3C56)
-private val DarkOnTertiaryContainer = Color(0xFFFFD7F3)
-private val DarkError = Color(0xFFFFB4AB)
-private val DarkOnError = Color(0xFF690005)
-private val DarkErrorContainer = Color(0xFF93000A)
-private val DarkOnErrorContainer = Color(0xFFFFDAD6)
-private val DarkBackground = Color(0xFF1B1B1F)
-private val DarkOnBackground = Color(0xFFE4E1E6)
-private val DarkSurface = Color(0xFF1B1B1F)
-private val DarkOnSurface = Color(0xFFE4E1E6)
-private val DarkSurfaceVariant = Color(0xFF46464F)
-private val DarkOnSurfaceVariant = Color(0xFFC7C5D0)
-private val DarkOutline = Color(0xFF90909A)
-private val DarkOutlineVariant = Color(0xFF46464F)
-
-internal val SidrLightColorScheme = lightColorScheme(
-    primary = LightPrimary,
-    onPrimary = LightOnPrimary,
-    primaryContainer = LightPrimaryContainer,
-    onPrimaryContainer = LightOnPrimaryContainer,
-    secondary = LightSecondary,
-    onSecondary = LightOnSecondary,
-    secondaryContainer = LightSecondaryContainer,
-    onSecondaryContainer = LightOnSecondaryContainer,
-    tertiary = LightTertiary,
-    onTertiary = LightOnTertiary,
-    tertiaryContainer = LightTertiaryContainer,
-    onTertiaryContainer = LightOnTertiaryContainer,
-    error = LightError,
-    onError = LightOnError,
-    errorContainer = LightErrorContainer,
-    onErrorContainer = LightOnErrorContainer,
-    background = LightBackground,
-    onBackground = LightOnBackground,
-    surface = LightSurface,
-    onSurface = LightOnSurface,
-    surfaceVariant = LightSurfaceVariant,
-    onSurfaceVariant = LightOnSurfaceVariant,
-    outline = LightOutline,
-    outlineVariant = LightOutlineVariant,
+// ── GREEN · DARK (default brand identity) ───────────────────────────────────────
+internal val GreenDarkColorScheme = darkColorScheme(
+    primary = Color(0xFF00FF66),
+    onPrimary = Color(0xFF05100A),
+    primaryContainer = Color(0xFF12261B),
+    onPrimaryContainer = Color(0xFF6EFFA8),
+    secondary = Color(0xFF6F8377),
+    onSecondary = Color(0xFF08090A),
+    secondaryContainer = Color(0xFF1E2922),
+    onSecondaryContainer = Color(0xFFC2D2C7),
+    tertiary = Color(0xFF6EFFA8),
+    onTertiary = Color(0xFF05100A),
+    tertiaryContainer = Color(0xFF12261B),
+    onTertiaryContainer = Color(0xFF6EFFA8),
+    error = TerminalError,
+    onError = OnTerminalError,
+    errorContainer = TerminalErrorContainer,
+    onErrorContainer = OnTerminalErrorContainer,
+    background = Ground,
+    onBackground = Color(0xFFC2D2C7),
+    surface = Color(0xFF0D100E),
+    onSurface = Color(0xFFC2D2C7),
+    surfaceVariant = Color(0xFF171E19),
+    onSurfaceVariant = Color(0xFF6F8377),
+    outline = Color(0xFF2A3A30),
+    outlineVariant = Color(0xFF1E2922),
 )
 
-internal val SidrDarkColorScheme = darkColorScheme(
-    primary = DarkPrimary,
-    onPrimary = DarkOnPrimary,
-    primaryContainer = DarkPrimaryContainer,
-    onPrimaryContainer = DarkOnPrimaryContainer,
-    secondary = DarkSecondary,
-    onSecondary = DarkOnSecondary,
-    secondaryContainer = DarkSecondaryContainer,
-    onSecondaryContainer = DarkOnSecondaryContainer,
-    tertiary = DarkTertiary,
-    onTertiary = DarkOnTertiary,
-    tertiaryContainer = DarkTertiaryContainer,
-    onTertiaryContainer = DarkOnTertiaryContainer,
-    error = DarkError,
-    onError = DarkOnError,
-    errorContainer = DarkErrorContainer,
-    onErrorContainer = DarkOnErrorContainer,
-    background = DarkBackground,
-    onBackground = DarkOnBackground,
-    surface = DarkSurface,
-    onSurface = DarkOnSurface,
-    surfaceVariant = DarkSurfaceVariant,
-    onSurfaceVariant = DarkOnSurfaceVariant,
-    outline = DarkOutline,
-    outlineVariant = DarkOutlineVariant,
+// ── GREEN · LIGHT (restrained "blueprint / paper terminal") ─────────────────────
+internal val GreenLightColorScheme = lightColorScheme(
+    primary = Color(0xFF087A38),
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFCDE8D6),
+    onPrimaryContainer = Color(0xFF05210F),
+    secondary = Color(0xFF4A5A50),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFDCE3DD),
+    onSecondaryContainer = Color(0xFF0C1410),
+    tertiary = Color(0xFF0A5C2C),
+    onTertiary = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFCDE8D6),
+    onTertiaryContainer = Color(0xFF05210F),
+    error = LightError,
+    onError = OnLightError,
+    errorContainer = LightErrorContainer,
+    onErrorContainer = OnLightErrorContainer,
+    background = Color(0xFFE7EAE6),
+    onBackground = Color(0xFF0C1410),
+    surface = Color(0xFFF1F4F0),
+    onSurface = Color(0xFF0C1410),
+    surfaceVariant = Color(0xFFDCE3DD),
+    onSurfaceVariant = Color(0xFF4A5A50),
+    outline = Color(0xFF9FB0A4),
+    outlineVariant = Color(0xFFC2CDC4),
+)
+
+// ── AMBER · DARK ────────────────────────────────────────────────────────────────
+internal val AmberDarkColorScheme = darkColorScheme(
+    primary = Color(0xFFFFB000),
+    onPrimary = Color(0xFF100B02),
+    primaryContainer = Color(0xFF2A2113),
+    onPrimaryContainer = Color(0xFFFFD37A),
+    secondary = Color(0xFF8A7C5C),
+    onSecondary = Color(0xFF08090A),
+    secondaryContainer = Color(0xFF2A2416),
+    onSecondaryContainer = Color(0xFFDFCFA6),
+    tertiary = Color(0xFFFFD37A),
+    onTertiary = Color(0xFF100B02),
+    tertiaryContainer = Color(0xFF2A2113),
+    onTertiaryContainer = Color(0xFFFFD37A),
+    error = TerminalError,
+    onError = OnTerminalError,
+    errorContainer = TerminalErrorContainer,
+    onErrorContainer = OnTerminalErrorContainer,
+    background = Ground,
+    onBackground = Color(0xFFDFCFA6),
+    surface = Color(0xFF100E0A),
+    onSurface = Color(0xFFDFCFA6),
+    surfaceVariant = Color(0xFF1B160D),
+    onSurfaceVariant = Color(0xFF8A7C5C),
+    outline = Color(0xFF3A3320),
+    outlineVariant = Color(0xFF2A2416),
+)
+
+// ── AMBER · LIGHT ───────────────────────────────────────────────────────────────
+internal val AmberLightColorScheme = lightColorScheme(
+    primary = Color(0xFF8A5A00),
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFF0E4C4),
+    onPrimaryContainer = Color(0xFF2B1B00),
+    secondary = Color(0xFF5A5238),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFE2DBCB),
+    onSecondaryContainer = Color(0xFF171308),
+    tertiary = Color(0xFF6E4700),
+    onTertiary = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFF0E4C4),
+    onTertiaryContainer = Color(0xFF2B1B00),
+    error = LightError,
+    onError = OnLightError,
+    errorContainer = LightErrorContainer,
+    onErrorContainer = OnLightErrorContainer,
+    background = Color(0xFFECE8DF),
+    onBackground = Color(0xFF171308),
+    surface = Color(0xFFF5F2EA),
+    onSurface = Color(0xFF171308),
+    surfaceVariant = Color(0xFFE2DBCB),
+    onSurfaceVariant = Color(0xFF5A5238),
+    outline = Color(0xFFADA283),
+    outlineVariant = Color(0xFFCDC4AC),
 )

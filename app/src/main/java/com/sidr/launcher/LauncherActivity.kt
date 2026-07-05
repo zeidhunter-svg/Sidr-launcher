@@ -23,8 +23,9 @@ import javax.inject.Inject
 class LauncherActivity : ComponentActivity() {
 
     // Block X5, Fork X5-D: the composition root observes the persisted theme preference and maps it
-    // to SidrTheme's darkTheme flag. dynamicColor stays on (Material You unchanged); only the
-    // light/dark scheme follows the user's system|light|dark choice.
+    // to SidrTheme's darkTheme flag; only the light/dark scheme follows the user's system|light|dark
+    // choice. AIL-0: dynamicColor now defaults off (the cyberpunk-terminal brand palette replaces
+    // Material You); the brand accent defaults to green. A user accent switcher is a later step (DF-7).
     @Inject
     lateinit var userPreferencesRepository: UserPreferencesRepository
 

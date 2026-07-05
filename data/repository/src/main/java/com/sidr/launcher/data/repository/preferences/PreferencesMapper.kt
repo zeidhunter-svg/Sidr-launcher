@@ -36,6 +36,8 @@ internal object PreferencesMapper {
             micInputEnabled = prefs[PreferencesKeys.USER_MIC_INPUT_ENABLED] ?: defaults.micInputEnabled,
             setupHintDismissed = prefs[PreferencesKeys.USER_SETUP_HINT_DISMISSED]
                 ?: defaults.setupHintDismissed,
+            webProviderTemplate = prefs[PreferencesKeys.WEB_PROVIDER_TEMPLATE]
+                ?: defaults.webProviderTemplate,
         )
     }
 
@@ -45,6 +47,7 @@ internal object PreferencesMapper {
         prefs[PreferencesKeys.USER_FAVORITES_COUNT] = value.favoritesCount
         prefs[PreferencesKeys.USER_MIC_INPUT_ENABLED] = value.micInputEnabled
         prefs[PreferencesKeys.USER_SETUP_HINT_DISMISSED] = value.setupHintDismissed
+        prefs[PreferencesKeys.WEB_PROVIDER_TEMPLATE] = value.webProviderTemplate
     }
 
     // ── Feature flags ─────────────────────────────────────────────────────────

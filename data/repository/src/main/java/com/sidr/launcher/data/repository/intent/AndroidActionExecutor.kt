@@ -9,23 +9,31 @@ import com.sidr.launcher.domain.intent.ActionExecutionResult
 import com.sidr.launcher.domain.intent.ActionExecutor
 import com.sidr.launcher.domain.intent.ExecutableAction
 import com.sidr.launcher.domain.intent.SearchTarget
+import com.sidr.launcher.domain.preferences.UserPreferencesRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
  * Android implementation of [ActionExecutor]. Performs only side-effecting actions —
- * [ExecutableAction.LaunchAppAction] and [ExecutableAction.OpenSearchAction] (WEB). Everything
+ * [ExecutableAction.LaunchAppAction], [ExecutableAction.OpenSearchAction] (WEB),
+ * [ExecutableAction.OpenUrlAction] and [ExecutableAction.PlayStoreSearchAction] (AIL-2). Everything
  * else returns [ActionExecutionResult.Unsupported]; the use case never routes those here.
  *
  * Launches from the application context, so every Intent gets FLAG_ACTIVITY_NEW_TASK. No
  * sensitive permissions are required. System exceptions are caught and converted to
  * [ActionExecutionResult.Failure] with a safe, user-facing message — this never crashes.
+ *
+ * The web-search provider is configurable (AIL-2 / R5): the search URL is built from
+ * [com.sidr.launcher.domain.preferences.UserPreferences.webProviderTemplate] (default Google),
+ * retiring the former hardcoded-Google TODO.
  */
 class AndroidActionExecutor @Inject constructor(
     @ApplicationContext private val context: Context,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    private val userPreferencesRepository: UserPreferencesRepository,
 ) : ActionExecutor {
 
     override suspend fun execute(action: ExecutableAction): ActionExecutionResult =
@@ -33,6 +41,8 @@ class AndroidActionExecutor @Inject constructor(
             when (action) {
                 is ExecutableAction.LaunchAppAction -> launchApp(action)
                 is ExecutableAction.OpenSearchAction -> openSearch(action)
+                is ExecutableAction.OpenUrlAction -> openUrl(action)
+                is ExecutableAction.PlayStoreSearchAction -> openPlayStore(action)
                 else -> ActionExecutionResult.Unsupported(action)
             }
         }
@@ -54,26 +64,58 @@ class AndroidActionExecutor @Inject constructor(
         }
     }
 
-    private fun openSearch(action: ExecutableAction.OpenSearchAction): ActionExecutionResult {
+    private suspend fun openSearch(action: ExecutableAction.OpenSearchAction): ActionExecutionResult {
         if (action.target != SearchTarget.WEB) {
             return ActionExecutionResult.Unsupported(action)
         }
-        // TODO: configurable search provider (hardcoded Google for this slice).
-        val uri = Uri.parse("https://www.google.com/search?q=" + Uri.encode(action.query))
-        val intent = Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        // AIL-2 / R5 — configurable provider (default Google). Substitute the URL-encoded query into
+        // the `{q}` placeholder; if a user-set template omits it, append the encoded query.
+        val template = userPreferencesRepository.getPreferences().first().webProviderTemplate
+        val encoded = Uri.encode(action.query)
+        val urlString =
+            if (template.contains(QUERY_PLACEHOLDER)) template.replace(QUERY_PLACEHOLDER, encoded)
+            else template + encoded
+        return viewUrl(urlString, NO_SEARCH_APP)
+    }
 
+    private fun openUrl(action: ExecutableAction.OpenUrlAction): ActionExecutionResult {
+        // The URL is already scheme-checked + normalized upstream (UrlDetector); ACTION_VIEW on an
+        // http(s) URI hands off to a browser. Never fired for non-http(s) schemes.
+        return viewUrl(action.url, CANT_OPEN_URL)
+    }
+
+    private fun openPlayStore(action: ExecutableAction.PlayStoreSearchAction): ActionExecutionResult {
+        val encoded = Uri.encode(action.query)
+        // Prefer the Play Store app (market://); fall back to the web store when it isn't installed.
+        val marketIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=$encoded&c=apps"))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            context.startActivity(marketIntent)
+            ActionExecutionResult.Success
+        } catch (e: ActivityNotFoundException) {
+            viewUrl("https://play.google.com/store/search?q=$encoded&c=apps", NO_STORE_APP)
+        } catch (e: SecurityException) {
+            ActionExecutionResult.Failure(NO_STORE_APP)
+        }
+    }
+
+    private fun viewUrl(url: String, failureMessage: String): ActionExecutionResult {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return try {
             context.startActivity(intent)
             ActionExecutionResult.Success
         } catch (e: ActivityNotFoundException) {
-            ActionExecutionResult.Failure(NO_SEARCH_APP)
+            ActionExecutionResult.Failure(failureMessage)
         } catch (e: SecurityException) {
-            ActionExecutionResult.Failure(NO_SEARCH_APP)
+            ActionExecutionResult.Failure(failureMessage)
         }
     }
 
     private companion object {
+        const val QUERY_PLACEHOLDER = "{q}"
         const val CANT_OPEN_APP = "Couldn't open that app."
         const val NO_SEARCH_APP = "No app available to handle that search."
+        const val CANT_OPEN_URL = "No app available to open that link."
+        const val NO_STORE_APP = "Couldn't open the Play Store."
     }
 }

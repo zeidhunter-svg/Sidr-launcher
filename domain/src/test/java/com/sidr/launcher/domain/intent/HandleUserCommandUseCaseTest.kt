@@ -80,6 +80,26 @@ class HandleUserCommandUseCaseTest {
         assertTrue(fakeExecutor.executedActions.single() is ExecutableAction.OpenSearchAction)
     }
 
+    @Test fun `high-confidence open-url executes via executor (AIL-2)`() = runTest(testDispatcher) {
+        matcherReturns(LauncherIntent.OpenUrlIntent("https://github.com"), 0.90f)
+
+        val outcome = useCase.handle("github.com")
+
+        assertEquals(CommandOutcome.Executed, outcome)
+        val action = fakeExecutor.executedActions.single()
+        assertTrue(action is ExecutableAction.OpenUrlAction)
+        assertEquals("https://github.com", (action as ExecutableAction.OpenUrlAction).url)
+    }
+
+    @Test fun `high-confidence play-store search executes via executor (AIL-2)`() = runTest(testDispatcher) {
+        matcherReturns(LauncherIntent.PlayStoreSearchIntent("whatsapp"), 0.90f)
+
+        val outcome = useCase.handle("install whatsapp")
+
+        assertEquals(CommandOutcome.Executed, outcome)
+        assertTrue(fakeExecutor.executedActions.single() is ExecutableAction.PlayStoreSearchAction)
+    }
+
     @Test fun `confidence exactly at auto-execute threshold executes`() = runTest(testDispatcher) {
         fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
         matcherReturns(LauncherIntent.LaunchAppIntent("telegram"), 0.85f)

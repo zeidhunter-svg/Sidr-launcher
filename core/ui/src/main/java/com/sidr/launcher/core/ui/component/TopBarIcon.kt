@@ -6,6 +6,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -70,26 +71,28 @@ fun TopBarIcon(
     }
 }
 
-@Preview
+@Preview(showBackground = true, backgroundColor = 0xFF08090A)
 @Composable
 private fun TopBarIconPreview() {
-    SidrTheme {
+    SidrTheme(darkTheme = true) {
         TopBarIcon(
             icon = Icons.Filled.Settings,
             contentDescription = "Settings",
             onClick = {},
+            tint = MaterialTheme.colorScheme.primary,
         )
     }
 }
 
-@Preview
+@Preview(showBackground = true, backgroundColor = 0xFF08090A)
 @Composable
 private fun TopBarIconPainterPreview() {
-    SidrTheme {
+    SidrTheme(darkTheme = true) {
         TopBarIcon(
             painter = painterResource(com.sidr.launcher.core.ui.R.drawable.ic_assistant_24),
             contentDescription = "Assistant",
             onClick = {},
+            tint = MaterialTheme.colorScheme.primary,
         )
     }
 }

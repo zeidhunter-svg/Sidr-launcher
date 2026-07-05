@@ -126,6 +126,20 @@ class IntentActionResolverTest {
         assertTrue(action is ExecutableAction.ShowMessageAction)
     }
 
+    // --- OpenUrlIntent / PlayStoreSearchIntent (AIL-2) ---
+
+    @Test fun `OpenUrlIntent returns OpenUrlAction carrying the url`() = runTest {
+        val action = resolveSuccess(LauncherIntent.OpenUrlIntent("https://github.com"))
+        assertTrue(action is ExecutableAction.OpenUrlAction)
+        assertEquals("https://github.com", (action as ExecutableAction.OpenUrlAction).url)
+    }
+
+    @Test fun `PlayStoreSearchIntent returns PlayStoreSearchAction carrying the query`() = runTest {
+        val action = resolveSuccess(LauncherIntent.PlayStoreSearchIntent("whatsapp"))
+        assertTrue(action is ExecutableAction.PlayStoreSearchAction)
+        assertEquals("whatsapp", (action as ExecutableAction.PlayStoreSearchAction).query)
+    }
+
     // --- UnknownIntent ---
 
     @Test fun `UnknownIntent returns NoOpAction`() = runTest {

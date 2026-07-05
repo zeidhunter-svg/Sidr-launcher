@@ -1,5 +1,172 @@
 # Decisions
 
+## ADR 2026-07-05 — AIL-4: LLM Action Router (`CommandPlanner`) — structured routing via BYOK LLM
+
+**Status: ACCEPTED (blocking design ADR — must precede AIL-4 implementation).** Depends on AIL-1
+(Action Registry) and AIL-2 (URL / Play-Store actions registered). Companion to the reframe ADR below and
+the plan `ai-context/ai-launcher-mvp-plan.md`.
+
+### Problem
+
+The MVP must let the launcher *understand* natural language and *route* it to a safe action, but the
+project has two intentionally-separate AI pipelines and a hard rule that matching ≠ generation:
+
+- `IntentMatcher` → `IntentMatchResult` (offline classification; rule-first `LayeredIntentMatcher`).
+- `GenerativeAiEngine` → `Flow<AiChunk>` (the assistant's conversational path via `GenerateReplyUseCase`,
+  deliberately minimal body: `model/messages/max_tokens/stream:true`, no `tools`, no sampling params).
+
+Neither can drive actions from natural language. We need a path where the LLM maps free text onto a
+**registered action**, without folding generation into `IntentMatcher`, without turning the assistant into
+an executor, and without breaking "local matching runs before any LLM call".
+
+### Decision
+
+**1. A new, third domain port — `CommandPlanner` — in `domain/ai/router/`.** It is structured
+routing-via-LLM: a single decision, not a token stream, not a classification.
+
+```kotlin
+// domain — pure, vendor-neutral
+interface CommandPlanner {
+    /** Returns a routing decision for [command] over the currently-registered [catalog]. Never throws;
+     *  offline / no key / provider / parse failure → [PlanResult.NoPlan]. */
+    suspend fun plan(command: String, catalog: ActionCatalog): PlanResult
+}
+
+sealed interface PlanResult {
+    /** The LLM proposed a concrete registered action. [confidence] is the model's own 0..1 (advisory). */
+    data class RoutedAction(val action: LauncherAction, val confidence: Float) : PlanResult
+    /** The LLM needs one disambiguating answer; UI shows [question], no execution. */
+    data class Clarify(val question: String) : PlanResult
+    /** Declined / offline / unparseable / non-tool-capable model → caller keeps the rule outcome. */
+    data object NoPlan : PlanResult
+}
+```
+
+**2. Composition — `RouteCommandUseCase` wraps rule-first, planner-second (Fork R2 = b).**
+`HandleUserCommandUseCase` is **not** modified.
+
+```
+RouteCommandUseCase.route(rawInput):
+  outcome = handleUserCommandUseCase.handle(rawInput)          // existing rule path, unchanged, offline
+  if (!routerEnabled) return outcome                           // feature flag OFF ⇒ exact rule-only parity
+  if (outcome !in { Unknown, LowConfidence }) return outcome   // rule was confident enough — LLM never called (R1)
+  if (!online || !hasProviderKey) return outcome               // offline / BYOK not configured ⇒ rule outcome
+  when (planner.plan(normalized, catalog)) {
+     RoutedAction(a, c) -> CommandOutcome.Suggest/NeedsConfirmation(a)   // NEVER auto-execute (R4)
+     Clarify(q)         -> CommandOutcome.Message(q)
+     NoPlan             -> outcome                                       // keep the original rule outcome
+  }
+```
+
+- **Trigger (R1 = b):** the planner is consulted **only** when the rule outcome is `Unknown` or
+  `LowConfidence` — the natural-language cases the rules can't handle. Every confident rule outcome
+  (`open telegram`, `settings`, `find flights`) is returned untouched and the LLM is never called.
+- **"Local matching before any LLM call" holds** — the rule matcher always runs first and short-circuits.
+
+**3. LLM output contract — structured, strict-parse, portable (Fork R3 = b).**
+BYOK means arbitrary OpenAI-compatible providers of varying capability, so the contract is **portable
+structured JSON**, not a hard dependency on OpenAI function-calling:
+
+- Request: a **separate, non-streaming** call (`stream:false`) — routing is one decision; non-streaming
+  lets us hard-timeout and read one body. This is a **new request path**, NOT the assistant's minimal
+  streaming body; the assistant path stays byte-for-byte as Block N/K left it.
+- Preferred: OpenAI `tools`/`tool_choice` function-calling when the provider advertises it; **fallback:**
+  `response_format={type:"json_object"}` (or a plain "reply with only this JSON" instruction) parsing a
+  JSON object from `choices[0].message.content`. Either way the parsed shape is one schema:
+  `{ "action": "<action_id | none | clarify>", "args": { … }, "confidence": 0..1, "question"?: "…" }`.
+- **Strict parse, fail-closed:** unknown `action` id, malformed JSON, args that don't match the descriptor
+  `argSchema`, or free-form chatter → **`NoPlan`**. We never execute on a hallucinated/free-text reply.
+- The catalog is rendered to the model as tool/schema text from `ActionDescriptor` (`id`, `title`,
+  `description`, `argSchema`) — AIL-1 owns that rendering.
+
+**4. Safety gating (Fork R4 = b, MVP).** An LLM-proposed action is **never auto-executed**. It surfaces as
+`Suggest` (a tappable chip) or `NeedsConfirmation` (a confirm card) per its `ActionRiskLevel`: `SAFE`
+proposals may render as a one-tap Suggest; `CONFIRM` (open arbitrary URL, Play Store, anything the model
+invented an argument for) requires an explicit confirm. `DANGEROUS` is not producible in the MVP. Wiring
+lands in AIL-5.
+
+**5. Privacy (unchanged invariant).** Outbound = **user command + static action schema only**. No
+calendar/location/usage/history/device/clipboard context. Extend `OutboundContextPolicy`'s positive
+allow-list with `ACTION_CATALOG_SCHEMA` (static, content-free) and add a guard test that plants a
+sensitive value and asserts nothing but command + schema leaves. Prompts/replies are **not persisted**
+(no routing history in this track). The API key stays in Keystore (`SecureSecretStore`), never logged.
+
+**6. Failure taxonomy + budget (AIL-Q1).** Reuse the cloud first-token budget as a **hard total timeout**
+(`< 2000ms` → `NoPlan`); network/offline/unauthorized/rate-limited/server/parse all collapse to `NoPlan`
+(the router is best-effort — a failure must be invisible beyond "no smarter suggestion appeared"). The
+router never surfaces an `AiError` to the launcher UI.
+
+**7. Topology.** Port + `RouteCommandUseCase` + `PlanResult` in `domain` (stdlib+coroutines,
+vendor-neutral). Impl in `data/ai-cloud` (its own HTTP call reusing the injected `HttpClient` +
+`AiProviderConfigRepository` + `SecureSecretStore` + `ConnectivityChecker`); **no `data → data` edge**
+(ports in `domain`). `:app` binds `RouteCommandUseCase` into `LauncherViewModel` in place of the direct
+`HandleUserCommandUseCase` call, plus the `@Router` engine wiring and the feature flag. No
+`feature → feature` edge; launcher core stays fully offline.
+
+### Consequences
+
+- **Refines, does not break, "matching ≠ generation".** A *third* pipeline is now sanctioned:
+  classification (`IntentMatcher`), conversation (`GenerateReplyUseCase`), and **structured routing**
+  (`CommandPlanner`). CLAUDE.md hard-rules updated to name it.
+- **Router-off / offline / no-key ⇒ byte-for-byte the current rule-only launcher.** This is the acceptance
+  guard and a required test.
+- Adds a new non-streaming request path to `data/ai-cloud`; the assistant's streaming body is untouched.
+- Model-capability variance is absorbed by the fallback contract + fail-closed parse; non-tool-capable
+  models degrade to `NoPlan`, so the launcher is never worse than rule-only.
+
+### Rejected alternatives
+
+- **Fold routing into `IntentMatcher` / an ONNX classifier** — rejected: violates the hard rule and is
+  blocked on OQ#1/#2; the whole point is cloud LLM understanding now.
+- **Let the assistant screen execute actions** — rejected: conflates conversation with routing, and the
+  assistant path is deliberately privacy-minimal and streaming-only.
+- **Auto-execute high-confidence LLM proposals** — rejected for the MVP (owner decision: confirmation for
+  risky actions; no autonomy). Revisit per-risk in Stage 2.
+- **Free-text prompt parsing** — rejected: not fail-closed; a hallucinated sentence could trigger an
+  action. Structured strict-parse only.
+
+### Open items carried to implementation
+
+- **AIL-Q2:** document a recommended BYOK default model that reliably emits structured output; detect
+  non-tool-capable models → `NoPlan`.
+- **AIL-Q3:** URL-normalization/safety (scheme allow-list, no silent `intent://`, punycode/typo guard) —
+  shared with AIL-2's `OpenUrlAction`.
+- Confirmation UX + risk→UI mapping is specified and tested in **AIL-5**.
+
+## ADR 2026-07-05 — Project reframed into three stages; Stage-1 AI-Launcher completion track
+
+**Context.** Review found a large gap between the stated goal ("AI launcher evolving into an agentic OS")
+and the shipped reality: routing is rule-based only (`RuleBasedIntentMatcher` = 7 verbs + a command
+table), the local NLU/ONNX pipeline is inert (no model, OQ#1/#2), and the assistant is an isolated chat
+screen with **no tool/function-calling** — it talks, it cannot act. The foundation (Phases 0–9 + Phase
+UX) is solid and device-accepted, but nothing on the shipped path is genuinely "AI".
+
+**Decision (owner, 2026-07-05).**
+1. **Reframe the product into three shippable stages:** **Stage 1 — AI Launcher (MVP, now)** → **Stage 2
+   — AI Framework** → **Stage 3 — Agentic OS**. The old numeric Phases 10–15 are absorbed: Phase 10/11 →
+   Stage-1 completion + Stage-2 Framework-1; Phase 12/13 → Framework-2/3; Phase 8 (accessibility) + Phase
+   14/15 → Stage-3 Agentic-1/2. Roadmap rewritten: `docs/roadmap.md`.
+2. **AI core of the MVP = BYOK cloud LLM routing.** A new `CommandPlanner` port uses the existing
+   OpenAI-compatible engine to understand natural language and propose **structured, registered actions**.
+   The rule matcher stays the fast offline fallback. Chosen over reviving local ONNX NLU (OQ#1/#2) because
+   it validates the agentic core immediately and is not blocked on model selection/hosting.
+3. **Action rights of the MVP = understand + route to safe actions.** The AI proposes/executes registered
+   actions (open app, web search, open site, Play Store, settings, assistant); **risky actions require
+   explicit confirmation**; no autonomy, no multi-step chains (deferred to Stage 3).
+
+**Consequences / invariants.**
+- `CommandPlanner` is a **third pipeline** — not folded into `IntentMatcher`, not the assistant's
+  conversational `GenerateReplyUseCase`. It is consulted **only** on low rule-confidence / NL input, so
+  "local matching runs before any LLM call" is preserved. This consciously refines (does not break) the
+  "matching ≠ generation" hard rule; a dedicated AIL-4 ADR will pin the details before implementation.
+- **Router-off ⇒ byte-for-byte rule-only parity;** offline/failure/no-key → the planner returns `NoPlan`
+  and the caller keeps the rule outcome. LLM proposals never auto-execute a risky action.
+- **Privacy unchanged:** the router sends only the user command + the static Action Registry tool schema —
+  no calendar/location/usage/history/device context. The `OutboundContextPolicy` allow-list is extended
+  and guard-tested.
+- Active plan + forks (R1–R8, blocks AIL-1…6): `ai-context/ai-launcher-mvp-plan.md`. The model track
+  (OQ#1–#4), device matrix, and RC/hardening polish run in parallel, off the AI-launcher ship gate.
+
 ## Accepted architecture
 
 - Use multi-module Clean Architecture.
@@ -3409,3 +3576,224 @@ needed to retire the re-entry cosmetic finding. No commit was made.
   intent was delivered to the running top-most instance, and the next UI dump showed launcher home
   (`Search or type a command...`, `Favorites`, `All apps`) rather than the drawer. `AndroidRuntime:E`
   logcat filter was empty.
+
+## ADR 2026-07-05 — AIL-0 complete (design tokens & visual identity: cyberpunk terminal in `core/ui`)
+
+**Context.** Stage-1B opens with AIL-0: refine the design system *before* the new AI surfaces land, so
+AIL-3/5/6 build on final tokens instead of reworking them. The owner pinned a bespoke visual direction —
+*"modern ultra-cyberpunk in the spirit of early computers"* (an advanced military AI terminal on a quantum
+machine): monospace, near-black CRT ground, one luminous accent, thin grid borders, brutalist edges. This
+deliberately replaces the Phase-UX neutral-indigo Material-You look. Because the direction was pinned, it
+is followed exactly (design-skill "user's words win", including when they match a known cluster). Reviewed
+via an interactive artifact (green/amber × dark/light) before any code.
+
+**Decisions (owner, artifact-reviewed 2026-07-05). Design forks D1–D5:**
+- **D1 accent = green `#00FF66` (default brand); amber `#FFB000` shipped as an alternative accent.** Both
+  are first-class schemes; one hero accent at a time.
+- **D2 dark-first identity** (ground `#08090A`) + a **restrained light "blueprint / paper terminal"**
+  scheme (muted ground, darkened accent, glow dropped). **Dynamic colour (Material You) default OFF** — a
+  bespoke brand and wallpaper-derived colour are mutually exclusive.
+- **D3 full monospace — JetBrains Mono bundled** (Regular/Medium/SemiBold/Bold, OFL). Launcher text is
+  short, so the readability cost is low and the identity payoff high.
+- **D4 restrained static tokens now; CRT motion/overlays deferred** (scanlines, flicker, per-character
+  typing, hover-invert, animated glow → DF-5, LOW_END-gated).
+- **D5 accent-switcher rollout = Variant A:** define both accent schemes in `core/ui` now (default green);
+  the live green/amber switch in Settings is a later half-step (DF-7). AIL-0 stays presentation-only.
+
+**What shipped (`core/ui`, presentation only).**
+- `Color.kt`: **4 `ColorScheme`s** — `GreenDark`/`GreenLight`/`AmberDark`/`AmberLight` — mapped onto
+  semantic M3 roles; raw hex private to the file; elevation carried by `outline`/`outlineVariant` grid
+  borders (surface kept close to background in dark), not tonal shadow.
+- `Theme.kt`: `enum AccentColor { GREEN, AMBER }` + `SidrTheme(darkTheme, accent = GREEN,
+  dynamicColor = false, content)`. Resolution: dynamic (only if explicitly opted in on API 31+) → else the
+  fixed brand scheme for accent × dark/light. No caller passes `dynamicColor`, so the default flip is
+  clean; the single caller `LauncherActivity` is unchanged (stale "dynamicColor stays on" comment fixed).
+- `Type.kt`: `JetBrainsMono` `FontFamily` from bundled `res/font/jetbrains_mono_{regular,medium,semibold,
+  bold}.ttf`; full-mono `SidrTypography` across all roles; tracking tightened for mono, wide only on the
+  small uppercase section label. OFL notice at `core/ui/OFL-JetBrainsMono.txt`.
+- `Shape.kt`: brutalist `SidrShapes` `0 / 2 / 4 / 8`dp (down from 4–28dp). `Spacing`/`Sizes` kept (4→32
+  rhythm already sound).
+- Component previews refreshed to the dark terminal identity (`showBackground` on the brand ground) plus
+  an amber `AppTile` proof of the accent axis; `AppTile` preview icon switched from `CircleShape` to
+  `shapes.medium` to match. **No component API/behaviour/structure change.**
+- **One `:app` touch (cosmetic):** `styles.xml` `Theme.SidrLauncher` → dark `Material.NoActionBar` with
+  `android:windowBackground = @color/sidr_ground` (`#08090A`), killing the white boot flash before Compose
+  paints. No behaviour change.
+
+**Invariants / hard-rules.** `core/ui` still depends only on `core/common`; no `feature→feature` /
+`domain→ui` edge; no `domain`/`data`/feature-logic change. Launcher core still fully offline. The design
+forks that touch *screens* (DF-1 home layout, DF-2 input field, DF-3 results/chips, DF-4 confirm card,
+DF-5 motion/CRT FX, DF-6 brand assets/icon, DF-7 accent switcher UI, DF-8 theme packs/wallpapers/widgets)
+are **deferred** to AIL-3/5/6 and Stage 2/3 — designed against real behaviour, not pre-emptively. The
+token system was kept extensible on purpose (semantic roles + parameterized theme), so future accents,
+theme packs, wallpapers, and widget containers layer on without reworking `core/ui`.
+
+**Verification.**
+- `./gradlew --no-daemon testDebugUnitTest assembleDebug` ✅ (font resources compiled — validates the
+  bundled TTFs; full unit-test suite + debug APK green).
+- Device **visual** acceptance is opportunistic for AIL-0 (mandatory only at AIL-6); not run this block.
+
+## ADR 2026-07-05 — AIL-1 complete (Action Registry contracts in `domain`)
+
+**Context.** Stage-1B's second block. The launcher's action taxonomy is closed: `ExecutableAction`
+(7 variants) + `IntentActionResolver`'s `when` + `AndroidActionExecutor`'s `when` must all be edited for
+every new capability, there is no risk model, and nothing enumerable for the AIL-4 LLM router to route
+into. AIL-1 introduces an **additive** catalog + risk + schema layer *above* the existing
+rule → resolver → executor path without touching it. `ExecutableAction` stays the execution vocabulary;
+the registry adds the metadata the router (AIL-4) and confirmation UI (AIL-5) need. Pure `domain` + a
+`core/testing` fake — no behaviour change, no Android, no provider.
+
+**Forks resolved before code (owner, this session).** The plan's R7 fixed *scope* (minimal catalog, not a
+full Phase-11 registry); three *shape* forks were surfaced and decided:
+- **argSchema shape → `List<ActionArg>`, string-only.** `ActionArg(name, type, required, description)`
+  with `enum ArgType { STRING }`. Every MVP family takes a single free-text arg; keeping `type`/`required`
+  explicit gives AIL-4 something concrete to strict-validate, and `ArgType` leaves room for richer types
+  without breaking the descriptor contract. (Rejected: bare `Map<String,String>` — no validation surface;
+  a fuller typed schema now — over-built before AIL-2/4 need it.)
+- **`LauncherAction` ↔ `ExecutableAction` → parallel, unresolved args.** `LauncherAction` is a *separate*
+  sealed hierarchy carrying **semantic, unresolved** args (`LaunchApp(query="telegram")`, not a resolved
+  package) + `val id: ActionId`. `ExecutableAction` is untouched; the mapping
+  `LauncherAction → resolution → ExecutableAction` is deferred to execution time (AIL-2/4/5). This matches
+  the LLM's reality (it knows "telegram", not a package) and keeps the registry strictly additive.
+  (Rejected: wrapping a resolved `ExecutableAction` — forces app resolution into the router at plan time.)
+- **Catalog home → port + types in AIL-1; concrete descriptor catalog deferred to AIL-2.** Per the hard
+  rule "interfaces in `domain`, implementations in the data layer," AIL-1 ships the `ActionCatalog`
+  **interface** + the type vocabulary (`ActionId`/`ActionIds`, `LauncherAction`, `ActionDescriptor`,
+  `ActionRiskLevel`, `ActionCategory`, `ActionArg`). The **registration** — the concrete
+  `ActionDescriptor` instances with per-family title/description/risk/args, plus the `ActionCatalog` impl
+  and its `:app` binding — lands in AIL-2 alongside the executors + rule recognition that act on the two
+  new families. So "the 6 families are registered" is delivered at AIL-1 as the **family vocabulary**
+  (`ActionIds` + `LauncherAction` variants); the descriptor metadata is AIL-2's. This is a conscious,
+  documented narrowing of the plan's §5 AIL-1 wording, not a silent one.
+
+**What shipped (`domain/action/`, pure Kotlin — stdlib only).**
+- `ActionId` — `@JvmInline value class(String)` (mirrors `AiProviderId`/`ModelId`); the wire identity
+  shared by `LauncherAction` and (AIL-4) the router's `action` JSON id.
+- `ActionIds` — canonical ids for all seven families: `launch_app`, `web_search`, `open_settings`,
+  `open_assistant`, `show_apps` (shipped families) + `open_url`, `play_store_search` (AIL-2 families,
+  vocabulary now / execution later) + `ALL` for exhaustiveness. Lowercase snake_case, pinned as a
+  persisted/wire contract.
+- `LauncherAction` — sealed interface, `val id: ActionId`, seven variants carrying unresolved semantic
+  args (`OpenSettings`/`ShowApps` as `data object`s; the rest `data class`es).
+- `ActionDescriptor(id, title, description, category, risk, argSchema = emptyList, permissionGate? = null)`
+  — the catalog+risk+schema metadata type. `permissionGate` reuses the existing `PermissionFeature`
+  (consumed by AIL-5's education flow).
+- `ActionRiskLevel { SAFE, CONFIRM, DANGEROUS }` (MVP uses SAFE/CONFIRM; DANGEROUS reserved for Stage 3 so
+  the AIL-5 `when` stays total), `ActionCategory { APP, WEB, SYSTEM, ASSISTANT, STORE }`,
+  `ArgType { STRING }`, `ActionArg`.
+- `ActionCatalog` port — `all(): List<ActionDescriptor>` + `descriptor(id): ActionDescriptor?`;
+  read-only, side-effect-free.
+- `core/testing`: `FakeActionCatalog` (seedable in-memory catalog).
+
+**Invariants / hard-rules.** `domain` stays stdlib-only (no coroutines needed here), vendor-neutral (no
+provider names). No `feature→feature` edge; no change to `IntentMatcher`, `HandleUserCommandUseCase`,
+`GenerateReplyUseCase`, `ExecutableAction`, `IntentActionResolver`, `AndroidActionExecutor`, or any screen
+— the rule → resolver → executor path is byte-for-byte unchanged, so the launcher still works fully
+offline and no runtime behaviour changed (nothing consumes the registry yet). The `CommandPlanner` /
+router is **not** touched (AIL-4).
+
+**Verification.**
+- `./gradlew --no-daemon :domain:test testDebugUnitTest assembleDebug` ✅ — 9 new domain tests
+  (`LauncherActionTest` 4: every variant's canonical id, args carried verbatim, ids unique + stable
+  lowercase snake_case; `ActionCatalogTest` 5: catalog enumerate/lookup via `FakeActionCatalog`,
+  descriptor defaults, argSchema type/required + permission gate, three-level risk model). Full unit-test
+  suite + debug APK green.
+- No device surface in this block (contracts only); device acceptance is AIL-6.
+
+**Next = AIL-2** — Web / URL / Play-Store routing (no AI): the concrete `ActionCatalog` impl + the
+`OpenUrl`/`PlayStoreSearch` executors + rule recognition + configurable search provider (R5) + URL safety
+(R6). AIL-2 is what registers the concrete descriptors deferred here.
+
+**Next = AIL-1** (Action Registry, `domain`).
+
+## ADR 2026-07-05 — AIL-2 complete (Web / URL / Play-Store routing, no AI)
+
+**Context.** Stage-1B's third block, fully offline / no LLM. It (a) delivers the concrete `ActionCatalog`
+descriptor registration deferred by AIL-1, and (b) adds real offline routing for two new capabilities —
+opening web addresses and searching the Play Store — through the existing
+rule → resolver → executor pipeline. The shipped `SearchIntent` fired only on a literal `search/find/google`
+prefix and hardcoded Google (`AndroidActionExecutor.openSearch` `TODO`); there was no URL detection and no
+"install X" → store. `LauncherAction`/`ActionDescriptor` (AIL-1) stay the parallel catalog layer; the actual
+execution vocabulary is still `ExecutableAction`, extended additively here.
+
+**Forks decided before code (owner, this session — R5/R6 pinned + AIL-Q3 finalized).**
+- **R5 = (b) configurable web-search provider, default Google.** New `UserPreferences.webProviderTemplate`
+  (`https://www.google.com/search?q={q}`) + DataStore key `web_provider_template`. **Denylist-clean by
+  design:** the `PrivacyInventoryGuardTest` denylist forbids the terms `search`/`query`, so the key is named
+  `web_provider_template` (not `web_search_provider`) and added to `ALL_KEY_NAMES`; the guard is green. No
+  switcher UI ships here — that's DF-7/AIL-3; AIL-2 only retires the hardcoded-Google TODO by reading the
+  pref (executor now injects `UserPreferencesRepository`).
+- **R6 = (b) open only high-confidence URLs; ambiguous → browser search; never open a guessed/malformed URL
+  silently.**
+- **AIL-Q3 finalized (URL normalization/safety), owner-answered:**
+  - **Q1 curated TLD allow-list** — a scheme-less host auto-opens only when its final label is a known TLD;
+    a domain-shaped token with an unknown-but-TLD-looking suffix (`example.foobar`, `node.js`) → web search,
+    not an open. (Rejected the permissive `x.y` pattern — false-opens code-ish tokens.)
+  - **Q2 URL wins over app launch when high-confidence** — `open github.com` opens the site; `open telegram`
+    still launches the app (the launch-verb argument is URL-checked first; only a confident `Url` diverts).
+  - **Q3 `install` only** — `install <app>` → Play Store search; `download`/`get` deliberately do NOT
+    trigger it (avoids `download manager`-style surprises).
+  - **Q4 bare host / simple path opens; query-string → web search** — because recognition runs on the
+    lowercased normalized input and a case-sensitive query string would be corrupted, any detected URL
+    carrying `?` is routed to a web search instead of opening a possibly-wrong page.
+  - **Scheme allow-list:** only `http`/`https` are ever opened; every other scheme (`intent://`,
+    `javascript:`, `market://`, `tel:`, `mailto:`, `file://`, `ftp://`, …) → `None`, never opened silently
+    (no silent `intent://`; user-typed `market://` is never honored — `market://` is produced only by our
+    own Play-Store executor). **Homograph/punycode guard:** an `xn--` label or any non-ASCII host → web
+    search, never a silent open.
+
+**What shipped.**
+- **`domain/intent/UrlDetector.kt`** (pure, Android-free — so it is unit-testable; the Context-bound
+  executor still has no unit tests). `classify(token) → UrlClassification { Url(url) | SearchFallback(term)
+  | None }`. Single-token only (any whitespace → `None`). Implements the full AIL-Q3 rule set above.
+  **Recognition ≠ opening** — the detector only classifies; the executor opens.
+- **`domain/intent/LauncherIntent`** += `OpenUrlIntent(url)`, `PlayStoreSearchIntent(query)`;
+  **`ExecutableAction`** += `OpenUrlAction(url)`, `PlayStoreSearchAction(query)`. `IntentActionResolver`
+  maps intent→action; `HandleUserCommandUseCase.routeAction` routes both new actions through the executor
+  (its **contract is unchanged** — only the internal exhaustive `when`s gained the mechanically-required
+  branches). `toMatchType()` classifies both new intents as `IntentMatchType.SEARCH` so their arbitrary
+  content (a URL / an app-name query) is **redacted** by the existing Fork-3 data-layer mapper — **no new
+  redaction surface**. `LauncherViewModel.describe()` gained matching Suggest strings.
+- **`data/repository/intent/RuleBasedIntentMatcher`** — new rules: launch-verb argument URL-check (Q2);
+  `install <app>` → `PlayStoreSearchIntent` (Q3); bare URL → `OpenUrlIntent` / ambiguous → `SearchIntent`
+  (R6), placed after the command table and before the Unknown fallback. All new hits are `0.90f`
+  (auto-execute; `search`/`google` verbs and existing behavior are byte-for-byte unchanged — proven by the
+  untouched existing tests still passing).
+- **`data/repository/action/DefaultActionCatalog`** — the concrete `ActionCatalog` registering all seven
+  families with title/description/category/risk/argSchema. `open_url`/`play_store_search` = **CONFIRM**
+  risk, the five shipped families = **SAFE**; no family needs a permission gate in the MVP. Bound via a new
+  `:app/di/ActionBindsModule` (`@Binds`). Nothing injects the catalog on the runtime path yet (AIL-4 router
+  + AIL-5 confirmation UI consume it); binding it validates the graph and keeps registration additive.
+- **`data/repository/intent/AndroidActionExecutor`** — new `OpenUrlAction`/`PlayStoreSearchAction`
+  branches; `openSearch` now builds the URL from `webProviderTemplate` (R5). URL open via `ACTION_VIEW`;
+  Play Store via `market://search?q=…&c=apps` with an `ActivityNotFoundException` fallback to
+  `https://play.google.com/store/search`. All paths catch `ActivityNotFoundException`/`SecurityException`
+  → safe `Failure`, never crash.
+
+**Deliberate deviation / note.** In AIL-2 (no AI) a user-typed high-confidence URL / `install` executes
+**directly**, exactly as a user-typed `search` does today — the descriptor's `CONFIRM` risk is metadata the
+**AIL-5** confirmation layer will enforce (confirmation matters most for **LLM-proposed** actions the user
+didn't type, R4). This is the plan's vertical-slice sequencing, not an omission. Documented so AIL-5 knows
+to wire the gate. `host:port` and trailing-dot forms are treated as non-openable edge cases (→ `None`),
+accepted for the launcher MVP.
+
+**Invariants / hard-rules.** `domain` stays stdlib-only + vendor-neutral (`UrlDetector` is pure Kotlin, no
+provider names). No `feature→feature` edge. Ops return `OperationResult`/`ActionExecutionResult`; the
+executor never throws to the UI. `IntentMatcher` and `GenerateReplyUseCase` ports untouched;
+`HandleUserCommandUseCase` **contract** unchanged (rule → resolver → executor topology intact). Launcher
+core still fully offline — the new routing needs no network and no permission. `CommandPlanner`/router not
+touched (AIL-4). Privacy: the new pref key is denylist-clean; URL/store queries are redacted in history.
+
+**Verification.**
+- `./gradlew --no-daemon testDebugUnitTest assembleDebug` ✅ **BUILD SUCCESSFUL** (Hilt graph valid with the
+  new `ActionCatalog` binding + the executor's new `UserPreferencesRepository` dep). New tests: `UrlDetectorTest`
+  25 (scheme allow-list, curated-TLD, punycode/IDN, query→search, non-URL→None), `RuleBasedIntentMatcherTest`
+  25→35 (URL/install recognition + existing behavior unchanged), `IntentActionResolverTest` +2,
+  `DefaultActionCatalogTest` 7, `HandleUserCommandUseCaseTest` +2 (OpenUrl/PlayStore route through the
+  executor). `PrivacyInventoryGuardTest` green (new key clean).
+- Device acceptance is **opportunistic** here (mandatory only at AIL-6); AIL-2 has a runtime surface but no
+  device run was performed this session — carried to AIL-6's SM-A325F pass.
+
+**Next = AIL-3** — Universal Input (`UniversalInputRouter` + sealed `InputIntent`; unify the home field for
+app-filter + command + web/site + assistant + voice; typed commands byte-for-byte; voice reuses the path,
+R8). `HandleUserCommandUseCase` stays untouched.

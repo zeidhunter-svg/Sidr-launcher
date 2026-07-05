@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
@@ -30,10 +31,10 @@ import com.sidr.launcher.core.ui.theme.Spacing
 
 /**
  * The terminal `>`-prompt universal-input field (AIL-3 / DF-2). A leading `>` glyph replaces the search
- * magnifier, JetBrains Mono renders the text, an accent block caret marks the cursor, and thin grid
- * borders carry glowing accent corner ticks. Same callback contract as [SidrSearchField] so it is a
- * drop-in for the home field; the App Drawer keeps [SidrSearchField]. Pure presentation — routing is the
- * caller's decision in [onSubmit] / [onValueChange].
+ * magnifier, JetBrains Mono renders the text, an accent caret marks the cursor (a full block caret and
+ * blink are DF-5/AIL-6 motion polish, deferred), and thin grid borders carry glowing accent corner ticks.
+ * Same callback contract as [SidrSearchField] so it is a drop-in for the home field; the App Drawer keeps
+ * [SidrSearchField]. Pure presentation — routing is the caller's decision in [onSubmit] / [onValueChange].
  *
  * @param listening true while a voice recognizer is capturing — the mic affordance switches to the
  *   active accent state (a static fill; pulse/flicker is DF-5 motion, deferred).
@@ -62,7 +63,7 @@ fun SidrCommandPrompt(
                 val h = size.height
                 val stroke = 1.dp.toPx()
                 // full thin border
-                drawRect(color = onSurface.copy(alpha = 0.12f), size = size, style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke))
+                drawRect(color = onSurface.copy(alpha = 0.12f), size = size, style = Stroke(width = stroke))
                 // four corner ticks in accent
                 fun corner(x: Float, y: Float, dx: Float, dy: Float) {
                     drawLine(accent, Offset(x, y), Offset(x + dx, y), strokeWidth = stroke)
@@ -73,7 +74,7 @@ fun SidrCommandPrompt(
                 corner(0f, h, tick, -tick)
                 corner(w, h, -tick, -tick)
             }
-            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+            .padding(Spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {

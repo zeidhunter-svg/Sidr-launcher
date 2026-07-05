@@ -289,9 +289,10 @@ softened toward a default.
   screen), `CommandConsole` transcript, `SIDR//` 7-tap arm. **DF-1** = search-overtakes + hidden dev
   console; **R8** voice reuses the path. Hard rules intact (domain pure, `core/ui`→`core/common` only, no
   `feature→feature`, VM Android-free, launcher offline, no LLM). `testDebugUnitTest`+`assembleDebug` green
-  (router 7 / VM 62→69). Executed via subagent-driven dev (7 tasks, per-task spec+quality review; 4 Important
-  review findings fixed+re-reviewed). Deferred to DF-5/AIL-6: true block caret + CRT motion, `>`-glyph
-  TalkBack polish, `submitWebSearch` double-`search` guard. ADR: decisions.md "ADR 2026-07-05 — AIL-3 complete".
+  (router 7 / VM 62→70). Executed via subagent-driven dev (7 tasks, per-task spec+quality review; 4 Important
+  review findings fixed+re-reviewed; final whole-branch review Ready-to-merge, 2 one-liner cleanups swept in).
+  Deferred to DF-5/AIL-6: true block caret + CRT motion, `>`-glyph TalkBack polish, `listening` mic-state
+  wiring, non-ASCII chip-glyph device fallback. ADR: decisions.md "ADR 2026-07-05 — AIL-3 complete".
 - **AIL-4 — LLM Action Router (BYOK cloud).** `CommandPlanner` port + cloud impl over the existing engine;
   `RouteCommandUseCase` (rule-first → planner on low confidence, R1/R2); strict structured parsing (R3);
   privacy allow-list extension + guard test; `NoPlan` → rule fallback. Feature-flag + settings toggle;

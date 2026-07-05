@@ -3864,12 +3864,15 @@ LLM (AIL-4).
   62→69 (results derivation + SITE gating, web/site dispatch routes through the matcher, armed dev-sentinel
   consumed vs un-armed falls through, console records only while on). `core/ui` components validated by
   compile + previews (presentation-only).
-- Executed via subagent-driven development: 7 implementer tasks, each spec+quality reviewed; 4 review
-  findings fixed and re-reviewed clean (Task 1 mixed-case URL lowercase; Task 2 padding + honest caret
-  KDoc; Task 3 chip a11y/48dp; all Important). Minors carried to the final whole-branch review triage.
+- Executed via subagent-driven development: 7 implementer tasks, each spec+quality reviewed; 4 Important
+  review findings fixed and re-reviewed clean (Task 1 mixed-case URL lowercase; Task 2 padding + honest
+  caret KDoc; Task 3 chip a11y/48dp). Final whole-branch review = **Ready to merge (Yes)**; its two
+  recommended one-liners were swept in (dead `InputResultsPanel` param dropped; `submitWebSearch` guarded
+  against a double-`search` prefix, +1 regression test → VM 69→70).
 - Device acceptance is **opportunistic** here (mandatory only at AIL-6) — not run this session.
 - **Deferred (surface at AIL-5/6):** true block caret + blink/CRT motion (DF-5); the `>` glyph TalkBack
-  a11y polish; `submitWebSearch` double-`search` prefix guard for an already-`search`-prefixed buffer.
+  a11y polish; wiring `SidrCommandPrompt.listening` to a VM voice-capture flag; a device-render fallback
+  for the non-ASCII chip glyphs (`⌕`/`✦`/`⌂`).
 
 **Next = AIL-4** — LLM Action Router (BYOK cloud): `CommandPlanner` port + cloud impl, `RouteCommandUseCase`
 (rule-first → planner on low confidence), strict structured JSON parse, privacy allow-list extension +

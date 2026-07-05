@@ -42,4 +42,11 @@ class UniversalInputRouterTest {
         assertEquals("Hello World", intent.raw)
         assertNull(intent.siteUrl)
     }
+
+    @Test
+    fun `mixed-case safe domain still yields a site url and preserves raw casing`() {
+        val intent = UniversalInputRouter.classify("GitHub.com") as InputIntent.Query
+        assertEquals("GitHub.com", intent.raw)
+        assertEquals("https://github.com", intent.siteUrl)
+    }
 }

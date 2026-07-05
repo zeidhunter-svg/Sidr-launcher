@@ -1087,7 +1087,9 @@ Expected: BUILD SUCCESSFUL, 0 test failures.
   cases (open/search/settings/assistant/unknown) still pass unchanged, and grep proves the pipeline is
   untouched:
 
-Run: `git diff --name-only main -- domain/src/main/java/com/sidr/launcher/domain/intent/ data/repository/src/main/java/com/sidr/launcher/data/repository/intent/`
+Run: `git diff --name-only bafd0f3 -- domain/src/main/java/com/sidr/launcher/domain/intent/ data/repository/src/main/java/com/sidr/launcher/data/repository/intent/`
+(`bafd0f3` = the AIL-3 BASE checkpoint, which already contains AIL-2's pipeline changes — so this proves
+AIL-3 adds **nothing** on top of them.)
 Expected: **empty** (no change to `CommandNormalizer` / `IntentMatcher` / `HandleUserCommandUseCase` /
 `ExecutableAction` / resolver / `AndroidActionExecutor`).
 

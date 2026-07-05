@@ -1412,4 +1412,47 @@ class LauncherViewModelTest {
         assertEquals("", vm.commandInput.value)
         assertEquals(CommandFeedback.None, vm.commandFeedback.value)
     }
+
+    // ── Universal-input live results (AIL-3, Task 4) ───────────────────────
+
+    @Test
+    // Note: FakeInstalledAppsRepository seeds via `appsToReturn`; FakeIntentMatcher records the
+    // *normalized* (trim+collapse+lowercase-ROOT) inputs in `receivedInputs` — assert against those.
+    fun `typing surfaces app matches and web+ask chips`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp(packageName = "org.telegram.messenger", label = "Telegram", activityName = null),
+            InstalledApp(packageName = "com.maps", label = "Maps", activityName = null),
+        )
+        val vm = buildViewModel()
+        advanceUntilIdle()
+        vm.onCommandChanged("tele")
+        advanceUntilIdle()
+        val results = vm.inputResults.value
+        assertTrue(results.active)
+        assertEquals(listOf("Telegram"), results.appMatches.map { it.label })
+        assertEquals(listOf(RouteChipKind.WEB, RouteChipKind.ASK), results.chips)
+    }
+
+    @Test
+    fun `typing a safe url adds the site chip`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        advanceUntilIdle()
+        vm.onCommandChanged("github.com")
+        advanceUntilIdle()
+        assertEquals(listOf(RouteChipKind.WEB, RouteChipKind.ASK, RouteChipKind.SITE), vm.inputResults.value.chips)
+    }
+
+    @Test
+    fun `clearing the buffer returns empty inactive results`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        advanceUntilIdle()
+        vm.onCommandChanged("tele")
+        advanceUntilIdle()
+        vm.onCommandChanged("")
+        advanceUntilIdle()
+        val results = vm.inputResults.value
+        assertFalse(results.active)
+        assertTrue(results.appMatches.isEmpty())
+        assertTrue(results.chips.isEmpty())
+    }
 }

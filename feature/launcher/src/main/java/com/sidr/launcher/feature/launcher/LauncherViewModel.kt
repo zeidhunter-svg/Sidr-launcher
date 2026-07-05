@@ -10,6 +10,8 @@ import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.domain.history.AppUsageRecord
 import com.sidr.launcher.domain.history.UsageHistoryRepository
+import com.sidr.launcher.domain.input.InputIntent
+import com.sidr.launcher.domain.input.UniversalInputRouter
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.preferences.SuggestionsCacheRepository
 import com.sidr.launcher.domain.preferences.UserPreferences
@@ -161,6 +163,35 @@ class LauncherViewModel @Inject constructor(
     private fun setCommandInput(text: String) {
         savedStateHandle[KEY_COMMAND_INPUT] = text
     }
+
+    // ── Universal-input live results (AIL-3) ───────────────────────────────
+    // Derived purely from the buffer + the loaded app list. Enter still routes through the unchanged
+    // command pipeline; this only decides what the "search overtakes" panel shows.
+    val inputResults: StateFlow<HomeInputResults> = combine(
+        commandInput,
+        _rawAppsResult,
+    ) { buffer, appsResult ->
+        when (val intent = UniversalInputRouter.classify(buffer)) {
+            InputIntent.Empty, InputIntent.DevSentinel -> HomeInputResults()
+            is InputIntent.Query -> {
+                val loaded = (appsResult as? OperationResult.Success)?.value ?: emptyList()
+                val chips = buildList {
+                    add(RouteChipKind.WEB)
+                    add(RouteChipKind.ASK)
+                    if (intent.siteUrl != null) add(RouteChipKind.SITE)
+                }
+                HomeInputResults(
+                    active = true,
+                    appMatches = filterApps(loaded, intent.raw),
+                    chips = chips,
+                )
+            }
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = HomeInputResults(),
+    )
 
     // ── Command feedback — transient result of the last submitted command ──
     private val _commandFeedback = MutableStateFlow<CommandFeedback>(CommandFeedback.None)

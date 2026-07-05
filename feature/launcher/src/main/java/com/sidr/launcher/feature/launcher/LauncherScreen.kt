@@ -194,7 +194,6 @@ fun LauncherScreen(
                     // "Search overtakes": a non-blank buffer replaces the home body with results.
                     inputResults.active -> InputResultsPanel(
                         results = inputResults,
-                        query = commandInput,
                         onAppClick = viewModel::onAppClicked,
                         onWeb = { viewModel.submitWebSearch(commandInput) },
                         onSite = { viewModel.submitSite(commandInput) },
@@ -378,7 +377,6 @@ private fun AppTileIcon(app: InstalledApp) {
 @Composable
 private fun InputResultsPanel(
     results: HomeInputResults,
-    query: String,
     onAppClick: (InstalledApp) -> Unit,
     onWeb: () -> Unit,
     onSite: () -> Unit,

@@ -52,6 +52,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
@@ -304,7 +305,9 @@ class LauncherViewModel @Inject constructor(
     fun submitWebSearch(query: String) {
         val q = query.trim()
         if (q.isEmpty()) return
-        onCommandSubmitted("search $q")
+        // Avoid "search search x" when the buffer already carries the search verb.
+        val command = if (q.lowercase(Locale.ROOT).startsWith("search ")) q else "search $q"
+        onCommandSubmitted(command)
     }
 
     /**

@@ -1470,6 +1470,15 @@ class LauncherViewModelTest {
     }
 
     @Test
+    fun `web chip does not double-prefix an already-search-prefixed buffer`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        advanceUntilIdle()
+        vm.submitWebSearch("search cats")
+        advanceUntilIdle()
+        assertEquals("search cats", fakeMatcher.receivedInputs.last())
+    }
+
+    @Test
     fun `site chip submits the raw url through the unchanged pipeline`() = runTest(testDispatcher) {
         val vm = buildViewModel()
         advanceUntilIdle()

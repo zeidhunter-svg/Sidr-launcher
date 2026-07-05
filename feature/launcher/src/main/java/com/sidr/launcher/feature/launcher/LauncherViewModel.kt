@@ -197,6 +197,15 @@ class LauncherViewModel @Inject constructor(
     private val _commandFeedback = MutableStateFlow<CommandFeedback>(CommandFeedback.None)
     val commandFeedback: StateFlow<CommandFeedback> = _commandFeedback
 
+    // ── Developer Command console (AIL-3 / DF-1) — session-only, in-memory. No persisted key, so the
+    // privacy denylist guard is untouched; both flags reset on process death. Two-factor unlock:
+    // arm via 7 wordmark taps (screen), then submit the "//dev-mode" sentinel to toggle.
+    private val _devArmed = MutableStateFlow(false)
+    private val _devConsoleOn = MutableStateFlow(false)
+    val devConsoleOn: StateFlow<Boolean> = _devConsoleOn
+    private val _consoleLines = MutableStateFlow<List<ConsoleLine>>(emptyList())
+    val consoleLines: StateFlow<List<ConsoleLine>> = _consoleLines
+
     // Tracks the in-flight app load so a new load (init or retry) cancels the previous one.
     private var loadJob: Job? = null
 
@@ -244,10 +253,48 @@ class LauncherViewModel @Inject constructor(
         _commandFeedback.value = CommandFeedback.None
     }
 
+    /** Arm the hidden developer console (called by the screen after 7 rapid wordmark taps). */
+    fun armDevMode() {
+        _devArmed.value = true
+        _commandFeedback.value = CommandFeedback.Message("dev mode armed — submit //dev-mode")
+    }
+
     fun onCommandSubmitted(text: String) {
-        viewModelScope.launch {
-            applyOutcome(handleUserCommand.handle(text))
+        // Additive AIL-3 pre-check: an ARMED "//dev-mode" toggles the console and is consumed here so it
+        // never reaches HandleUserCommandUseCase. Un-armed, it falls through unchanged (Unknown), so the
+        // command pipeline stays byte-for-byte for every real input.
+        if (_devArmed.value && UniversalInputRouter.classify(text) is InputIntent.DevSentinel) {
+            _devConsoleOn.value = !_devConsoleOn.value
+            setCommandInput("")
+            _commandFeedback.value = CommandFeedback.Message(
+                if (_devConsoleOn.value) "dev console on" else "dev console off",
+            )
+            return
         }
+        viewModelScope.launch {
+            val outcome = handleUserCommand.handle(text)
+            applyOutcome(outcome)
+            if (_devConsoleOn.value) {
+                _consoleLines.value = _consoleLines.value + ConsoleLine(text, outcomeSummary(outcome))
+            }
+        }
+    }
+
+    /** One-line console summary of a [CommandOutcome] (dev console only; display-safe). */
+    private fun outcomeSummary(outcome: CommandOutcome): String = when (outcome) {
+        CommandOutcome.Empty -> "empty"
+        CommandOutcome.Executed -> "✓ executed"
+        CommandOutcome.NoOp -> "no-op"
+        is CommandOutcome.Message -> outcome.text
+        is CommandOutcome.NeedsConfirmation -> "? ${outcome.candidates.size} candidates"
+        is CommandOutcome.Suggest -> "? suggest"
+        CommandOutcome.LowConfidence -> "low confidence"
+        is CommandOutcome.Unknown -> "unknown"
+        is CommandOutcome.Failed -> "✗ ${outcome.message}"
+        CommandOutcome.OpenAssistant -> "→ assistant"
+        CommandOutcome.OpenSettings -> "→ settings"
+        CommandOutcome.ShowApps -> "→ apps"
+        CommandOutcome.ClearInput -> "cleared"
     }
 
     /**

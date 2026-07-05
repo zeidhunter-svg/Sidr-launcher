@@ -1477,4 +1477,45 @@ class LauncherViewModelTest {
         advanceUntilIdle()
         assertEquals("github.com", fakeMatcher.receivedInputs.last())
     }
+
+    // ── Dev-mode Command console (AIL-3, Task 6) ───────────────────────────
+
+    @Test
+    fun `dev sentinel is inert until armed then toggles the console`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        advanceUntilIdle()
+        // Un-armed: passes through to the pipeline (matched as a normal, unknown command).
+        vm.onCommandSubmitted("//dev-mode")
+        advanceUntilIdle()
+        assertFalse(vm.devConsoleOn.value)
+        assertEquals("//dev-mode", fakeMatcher.receivedInputs.last())
+
+        // Arm, then toggle on; the sentinel must NOT reach the matcher this time.
+        fakeMatcher.reset()
+        vm.armDevMode()
+        vm.onCommandSubmitted("//dev-mode")
+        advanceUntilIdle()
+        assertTrue(vm.devConsoleOn.value)
+        assertTrue(fakeMatcher.receivedInputs.isEmpty())
+
+        // Toggle off.
+        vm.onCommandSubmitted("//dev-mode")
+        advanceUntilIdle()
+        assertFalse(vm.devConsoleOn.value)
+    }
+
+    @Test
+    fun `console records submitted commands only while on`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        advanceUntilIdle()
+        vm.onCommandSubmitted("open telegram")
+        advanceUntilIdle()
+        assertTrue(vm.consoleLines.value.isEmpty()) // off → no transcript
+
+        vm.armDevMode()
+        vm.onCommandSubmitted("//dev-mode")   // on
+        vm.onCommandSubmitted("open telegram")
+        advanceUntilIdle()
+        assertEquals(listOf("open telegram"), vm.consoleLines.value.map { it.command })
+    }
 }

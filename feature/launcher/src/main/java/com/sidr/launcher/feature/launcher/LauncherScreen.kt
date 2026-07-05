@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -38,6 +40,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -54,9 +57,11 @@ import com.sidr.launcher.core.ui.R
 import com.sidr.launcher.core.ui.component.AppTile
 import com.sidr.launcher.core.ui.component.EmptyState
 import com.sidr.launcher.core.ui.component.ErrorState
+import com.sidr.launcher.core.ui.component.RouteChip
+import com.sidr.launcher.core.ui.component.RouteChipRow
 import com.sidr.launcher.core.ui.component.SectionHeader
+import com.sidr.launcher.core.ui.component.SidrCommandPrompt
 import com.sidr.launcher.core.ui.component.SidrScaffold
-import com.sidr.launcher.core.ui.component.SidrSearchField
 import com.sidr.launcher.core.ui.component.TopBarIcon
 import com.sidr.launcher.core.ui.theme.Sizes
 import com.sidr.launcher.core.ui.theme.Spacing
@@ -84,6 +89,9 @@ fun LauncherScreen(
     val commandInput by viewModel.commandInput.collectAsStateWithLifecycle()
     val feedback by viewModel.commandFeedback.collectAsStateWithLifecycle()
     val showMic by viewModel.showMic.collectAsStateWithLifecycle()
+    val inputResults by viewModel.inputResults.collectAsStateWithLifecycle()
+    val devConsoleOn by viewModel.devConsoleOn.collectAsStateWithLifecycle()
+    val consoleLines by viewModel.consoleLines.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     // First-run nudge (Block X6): whether this launcher is already the system default HOME app.
@@ -122,8 +130,27 @@ fun LauncherScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = Spacing.sm),
-                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                // Wordmark + hidden dev-mode arm: 7 rapid taps arm the Command console (DF-1).
+                var tapCount by remember { androidx.compose.runtime.mutableStateOf(0) }
+                var lastTap by remember { androidx.compose.runtime.mutableStateOf(0L) }
+                Text(
+                    text = "SIDR//",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable {
+                            val now = System.currentTimeMillis()
+                            tapCount = if (now - lastTap < 3000L) tapCount + 1 else 1
+                            lastTap = now
+                            if (tapCount >= 7) {
+                                tapCount = 0
+                                viewModel.armDevMode()
+                            }
+                        },
+                )
                 TopBarIcon(
                     icon = Icons.Filled.Settings,
                     contentDescription = "Settings",
@@ -145,7 +172,7 @@ fun LauncherScreen(
         ) {
             // Unified search + command field (Block X1). Submit drives the existing command pipeline
             // byte-for-byte; live app filtering lands in Block X4.
-            SidrSearchField(
+            SidrCommandPrompt(
                 value = commandInput,
                 onValueChange = viewModel::onCommandChanged,
                 onSubmit = viewModel::onCommandSubmitted,
@@ -161,30 +188,45 @@ fun LauncherScreen(
             )
 
             Box(modifier = Modifier.weight(1f)) {
-                when (val state = uiState) {
-                    is UiState.Loading -> LoadingContent()
-                    is UiState.Empty -> EmptyState(message = "No apps found")
-                    is UiState.Error -> ErrorState(
-                        message = errorMessage(state.error),
-                        onRetry = if (state.retryable) viewModel::retry else null,
-                    )
-                    is UiState.Success -> HomeContent(
-                        state = state.data,
+                when {
+                    // Hidden developer transcript (DF-1) — takes over the body while on.
+                    devConsoleOn -> CommandConsole(lines = consoleLines)
+                    // "Search overtakes": a non-blank buffer replaces the home body with results.
+                    inputResults.active -> InputResultsPanel(
+                        results = inputResults,
+                        query = commandInput,
                         onAppClick = viewModel::onAppClicked,
-                        onSuggestionTap = viewModel::onSuggestionClicked,
-                        onAllApps = { viewModel.navigateTo(Routes.AppDrawer.ROUTE) },
-                        showSetupHint = !isDefaultLauncher && !state.data.setupHintDismissed,
-                        onSetDefault = {
-                            viewModel.dismissSetupHint()
-                            try {
-                                setDefaultLauncher.launch(defaultLauncherIntent(context))
-                            } catch (_: ActivityNotFoundException) {
-                                // No handler — never crash the launcher.
-                            }
+                        onWeb = { viewModel.submitWebSearch(commandInput) },
+                        onSite = { viewModel.submitSite(commandInput) },
+                        onAsk = {
+                            viewModel.navigateTo(Routes.Assistant.routeFor(Uri.encode(commandInput.trim())))
                         },
-                        onDismissHint = viewModel::dismissSetupHint,
-                        suggestionsContent = suggestionsContent,
                     )
+                    else -> when (val state = uiState) {
+                        is UiState.Loading -> LoadingContent()
+                        is UiState.Empty -> EmptyState(message = "No apps found")
+                        is UiState.Error -> ErrorState(
+                            message = errorMessage(state.error),
+                            onRetry = if (state.retryable) viewModel::retry else null,
+                        )
+                        is UiState.Success -> HomeContent(
+                            state = state.data,
+                            onAppClick = viewModel::onAppClicked,
+                            onSuggestionTap = viewModel::onSuggestionClicked,
+                            onAllApps = { viewModel.navigateTo(Routes.AppDrawer.ROUTE) },
+                            showSetupHint = !isDefaultLauncher && !state.data.setupHintDismissed,
+                            onSetDefault = {
+                                viewModel.dismissSetupHint()
+                                try {
+                                    setDefaultLauncher.launch(defaultLauncherIntent(context))
+                                } catch (_: ActivityNotFoundException) {
+                                    // No handler — never crash the launcher.
+                                }
+                            },
+                            onDismissHint = viewModel::dismissSetupHint,
+                            suggestionsContent = suggestionsContent,
+                        )
+                    }
                 }
             }
         }
@@ -324,6 +366,77 @@ private fun AppTileIcon(app: InstalledApp) {
                 text = app.label.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
+    }
+}
+
+/**
+ * "Search overtakes" results (AIL-3 / DF-1 + DF-3 hybrid): app matches as an icon+label list over a
+ * bracketed route-chip row (`⌕ web`, `✦ ask`, `⌂ site`). App icons use the feature-local [AppTileIcon].
+ */
+@Composable
+private fun InputResultsPanel(
+    results: HomeInputResults,
+    query: String,
+    onAppClick: (InstalledApp) -> Unit,
+    onWeb: () -> Unit,
+    onSite: () -> Unit,
+    onAsk: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val chips = results.chips.map { kind ->
+        when (kind) {
+            RouteChipKind.WEB -> RouteChip("⌕ web", onWeb)
+            RouteChipKind.ASK -> RouteChip("✦ ask", onAsk)
+            RouteChipKind.SITE -> RouteChip("⌂ site", onSite)
+        }
+    }
+    Column(modifier = modifier.fillMaxSize()) {
+        RouteChipRow(chips = chips, modifier = Modifier.padding(vertical = Spacing.sm))
+        LazyColumn(modifier = Modifier.fillMaxWidth()) {
+            items(results.appMatches, key = { it.packageName }) { app ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onAppClick(app) }
+                        .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                ) {
+                    AppTileIcon(app)
+                    Text(
+                        text = app.label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(start = Spacing.md),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Hidden developer Command console transcript (AIL-3 / DF-1): `> command` + a one-line outcome. */
+@Composable
+private fun CommandConsole(
+    lines: List<ConsoleLine>,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+    ) {
+        items(lines) { line ->
+            Text(
+                text = "> ${line.command}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = "  ${line.result}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = Spacing.xs),
             )
         }
     }

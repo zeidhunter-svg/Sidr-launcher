@@ -18,14 +18,16 @@ import org.junit.Test
 class AiRequestGuardTest {
 
     @Test
-    fun `allow-list holds exactly the three vetted categories`() {
+    fun `allow-list holds exactly the vetted categories`() {
         // Positive allow-list: adding a category is a deliberate, reviewed change. If a new context
-        // source is wired in without being allow-listed here, this fails closed.
+        // source is wired in without being allow-listed here, this fails closed. AIL-4 added exactly
+        // one static, content-free category — ACTION_CATALOG_SCHEMA (the router's tool schema).
         assertEquals(
             setOf(
                 AllowedContext.USER_COMMAND,
                 AllowedContext.STATIC_SYSTEM_PROMPT,
                 AllowedContext.GENERATION_LIMITS,
+                AllowedContext.ACTION_CATALOG_SCHEMA,
             ),
             OutboundContextPolicy.ALLOWED,
         )

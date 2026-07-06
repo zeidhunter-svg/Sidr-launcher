@@ -1,24 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  AIL-6 / DF-6 — Sidr brand mark: a terminal command prompt ">_" in phosphor green on the brand
-  ground. Reads as an "advanced AI terminal" at a glance and mirrors the in-app SidrCommandPrompt.
-  Content sits inside the adaptive-icon safe zone (centred ~66dp of the 108dp viewport) so it stays
-  fully visible across all launcher mask shapes.
+  AIL-6 / DF-6 — themed-icon (Android 13+) silhouette of the Sidr prompt mark. The system replaces
+  the fill with its own monochrome tint, so colour here is irrelevant; only the shape/alpha matters.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Prompt chevron ">" -->
     <path
-        android:strokeColor="#00FF66"
+        android:strokeColor="#FFFFFF"
         android:strokeWidth="8"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
         android:pathData="M38,40 L56,54 L38,68" />
-    <!-- Block caret -->
     <path
-        android:fillColor="#00FF66"
+        android:fillColor="#FFFFFF"
         android:pathData="M62,60 L72,60 L72,68 L62,68 Z" />
 </vector>

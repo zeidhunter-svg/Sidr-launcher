@@ -3878,3 +3878,149 @@ LLM (AIL-4).
 (rule-first → planner on low confidence), strict structured JSON parse, privacy allow-list extension +
 guard test, `NoPlan` → rule fallback, feature-flag + settings toggle; **router-off ⇒ byte-for-byte
 rule-only parity**. The blocking AIL-4 ADR is already written (see "ADR 2026-07-05 — AIL-4").
+
+## ADR 2026-07-06 — AIL-4 complete (LLM Action Router: `CommandPlanner` + `RouteCommandUseCase`)
+
+**Done 2026-07-06.** Implements the blocking design ADR "2026-07-05 — AIL-4" exactly (Forks R1/R2/R3/R4
+as recommended); no fork deviations. The launcher can now *understand* natural language and *route* it to
+a registered action via a BYOK cloud LLM, while the shipped default (flag off) stays byte-for-byte the
+rule-only launcher.
+
+**What shipped.**
+- **`domain/ai/router/` (pure, vendor-neutral):** `CommandPlanner` port + `PlanResult`
+  (`RoutedAction(action, confidence)` / `Clarify(question)` / `NoPlan`); `ActionProposal` (the
+  parsed-but-unvalidated wire shape, with `none`/`clarify` sentinels); `ProposalValidator` (the
+  **fail-closed** core — `ActionProposal` × `ActionCatalog` → `PlanResult`, strict: unknown/unregistered
+  id, missing/blank required arg, or **any** extra arg key → `NoPlan`; builds the concrete
+  `LauncherAction`); `CatalogSchemaRenderer` (static `ROUTER_INSTRUCTION` + descriptor-derived lines — the
+  ONLY outbound content besides the user command); `RouteCommandUseCase` (rule-first → planner-second).
+- **`RouteCommandUseCase` order (R1/R2/R4):** run the unchanged `HandleUserCommandUseCase` once → if
+  `!llmRouterEnabled` return the rule outcome (**parity**) → if the rule outcome is not `Unknown`/
+  `LowConfidence` return it (planner never consulted) → if offline return it → else `planner.plan(rawInput,
+  catalog)` and map `RoutedAction`→`CommandOutcome.RoutedAction(action, confidence, needsConfirmation)`
+  (never auto-executed, R4; `needsConfirmation = risk != SAFE`), `Clarify`→`Message`, `NoPlan`→rule outcome.
+- **`CommandOutcome.RoutedAction`** (new variant) + VM branches (`applyOutcome` renders a display-safe,
+  **non-executing** suggestion; `outcomeSummary` for the dev console). `HandleUserCommandUseCase` and its
+  `CommandOutcome` producers are otherwise untouched.
+- **`data/ai-cloud/LlmCommandPlanner`** (Hilt-free, reuses the shared `HttpClient` + `AiProviderConfigRepository`
+  + `SecureSecretStore`): a **separate, non-streaming** `chat/completions` call (`stream:false`), HTTPS-only,
+  `Bearer` key, minimal body (no sampling params, small `max_tokens`). Reads `choices[0].message.content`,
+  tolerates prose/markdown fences (extracts first `{`..last `}`), strict-parses to `ActionProposal`, then
+  `ProposalValidator`. **Never throws**; every degradation → `NoPlan`. The assistant's streaming engine is
+  byte-for-byte untouched.
+- **Feature flag + settings toggle:** `FeatureFlags.llmRouterEnabled` (default **false**) with the
+  denylist-clean key `flag_llm_router_enabled` (mapper + `ALL_KEY_NAMES` + `PrivacyInventoryGuardTest`);
+  `SettingsViewModel.setLlmRouterEnabled` + a "Smart command routing" `Switch` in the ASSISTANT section.
+- **`:app` DI:** `RouterProvidesModule` provides `CommandPlanner` (`LlmCommandPlanner`) + `RouteCommandUseCase`;
+  `LauncherViewModel` now injects `RouteCommandUseCase` in place of `HandleUserCommandUseCase`. No
+  `data → data` edge (impl → `domain` ports only); no `feature → feature` edge.
+
+**Forks — followed as recommended (no deviation).** R1 = planner only on `Unknown`/`LowConfidence`;
+R2 = a wrapping `RouteCommandUseCase` (`HandleUserCommandUseCase` unmodified); R3 = structured JSON,
+strict-parse, else `NoPlan`; R4 = LLM proposals never auto-execute (surface as
+`RoutedAction`/confirmation). **Implementation choices recorded (within R3's sanctioned "structured JSON"
+recommendation, not fork deviations):** (a) the MVP uses the **portable content-JSON** path the design ADR
+explicitly sanctions (a strict "reply with only this JSON" instruction + parse from `message.content`),
+NOT native `tools`/`tool_choice` — widest BYOK compatibility and it makes AIL-Q2 fall out for free (a
+non-tool-capable model that answers with prose parses to `NoPlan`); native function-calling is a Stage-2
+enhancement. (b) The `offline ⇒ rule outcome` short-circuit lives in `RouteCommandUseCase` (via
+`ConnectivityChecker`); **no-key / bad-config** is handled inside the planner impl (→ `NoPlan`,
+equivalent to the ADR's `hasProviderKey` guard) so `SecureSecretStore` stays out of the domain use case.
+
+**§0 mandatory guards — all green.**
+- **Privacy (allow-list widened by exactly one static category):** `OutboundContextPolicy.AllowedContext`
+  gains **`ACTION_CATALOG_SCHEMA`** only. Covered by `RouterOutboundGuardTest` (allow-list = the 4
+  categories; `ROUTER_INSTRUCTION` + rendered schema carry no `FORBIDDEN_CONTEXT_TERMS`/`CREDENTIAL_TERMS`;
+  `render(emptyCatalog) == ROUTER_INSTRUCTION` proves no hidden context; a planted GPS sentinel never
+  appears), the updated `AiRequestGuardTest`/`SuggestionOutboundIsolationTest` (no suggestion/calendar/
+  location/usage category admitted), `DefaultActionCatalogRouterSchemaGuardTest` (scans the **real** shipped
+  schema), and `LlmCommandPlannerTest`'s body-capture test (outbound body = exactly `[system=schema,
+  user=command]`; a planted sensitive value is absent).
+- **Byte-for-byte rule-only parity:** `RouteCommandUseCaseTest` proves router-off / confident-rule /
+  offline all return the rule outcome and **never consult the planner** (`planCallCount == 0`), and that
+  `handle()` runs exactly once. The whole `LauncherViewModelTest` suite passes unchanged with the router
+  off (the swap to `RouteCommandUseCase` is transparent).
+- **Hard timeout → `NoPlan` (AIL-Q1):** `LlmCommandPlanner` wraps the call in `withTimeoutOrNull` (2000ms
+  default); `a hard timeout collapses to NoPlan` proves it with real timing. **Non-tool-capable → `NoPlan`
+  (AIL-Q2):** `free-text reply is NoPlan` + `hallucinated action id is NoPlan`.
+
+**Hard rules intact.** `domain` pure/vendor-neutral (grep `anthropic|openai|gemini|claude` over
+`domain/.../router/` empty); `IntentMatcher` (classification) / `GenerateReplyUseCase` (conversation) /
+`CommandPlanner` (structured routing) are three distinct ports — routing is **not** folded into either;
+"local matching runs before any LLM call" holds (rule path always first, short-circuits); launcher core
+fully offline; ops return `OperationResult`/`PlanResult` (the planner never throws).
+
+**Verification.** `./gradlew --no-daemon :domain:test` ✅ (new: `ProposalValidatorTest` 15,
+`RouteCommandUseCaseTest` 8, `RouterOutboundGuardTest` 7) and
+`./gradlew --no-daemon testDebugUnitTest assembleDebug` ✅ **BUILD SUCCESSFUL** (new: `LlmCommandPlannerTest`
+11, `DefaultActionCatalogRouterSchemaGuardTest` 1, `SettingsViewModelTest` +3, `LauncherViewModelTest` +1;
+Hilt graph valid, debug APK built). Device acceptance is deferred to AIL-6 (mandatory there; a real BYOK
+provider round-trip + offline parity). **Not built:** confirmation UI + actual execution of a routed
+proposal (AIL-5 — the `needsConfirmation` flag + `RoutedAction` outcome are the seam it consumes).
+
+**Next = AIL-5** — Confirmation & safety gating: `ActionRiskLevel` → confirmation card in
+`feature/launcher`; LLM-proposed actions always confirm (R4); permission-gated via the education flow;
+execute the confirmed `LauncherAction` (resolve → `ExecutableAction` → executor); safe fallback.
+
+## ADR 2026-07-06 — AIL-5 complete (Confirmation & safety gating: risk-gated confirm card + execution)
+
+**What shipped.** AIL-5 turns AIL-4's *display-only* `CommandOutcome.RoutedAction` into an *executing*
+surface — the confirmation + execution layer for **router proposals**. Nothing else changes: the block
+touches only the `RoutedAction` path, so **router-off ⇒ `RoutedAction` is never produced ⇒ byte-for-byte
+rule-only parity** (structural, not just tested — the whole existing `LauncherViewModelTest` suite passes
+unchanged). Scope fork decided **router-proposals-only** (owner, recommended): user-typed CONFIRM-risk
+rule actions (`open_url`/`play_store`) keep executing directly as in AIL-2 — AIL-5 does **not** re-gate the
+rule path, preserving the parity guarantee.
+
+**Domain (pure, additive).** New `domain/intent/ExecuteActionUseCase.execute(action: LauncherAction):
+CommandOutcome` — the execution counterpart to AIL-4's routing. It maps each `LauncherAction` family to a
+`LauncherIntent` and resolves + executes through the **unchanged** `IntentActionResolver` + `ActionExecutor`
+(the same proven path `HandleUserCommandUseCase` uses; routing/execution semantics intentionally identical —
+ambiguity → `NeedsConfirmation`, not-found → `Message`, nav families never touch the executor). Never
+throws: resolver/executor technical failure → `CommandOutcome.Failed`. No new executor surface.
+
+**feature/launcher.** New Android-free `PendingRoutedAction(action, commandLine, riskLabel,
+requiresConfirmation, permissionGate)` + VM `pendingRoutedAction: StateFlow<PendingRoutedAction?>`.
+`applyOutcome(RoutedAction)` now arms a pending affordance instead of a display-only `Suggestion` (dead
+`describeRouted` removed): `needsConfirmation=true` (CONFIRM risk, or any unregistered id — fail-safe) →
+the DF-4 **confirm card**; `false` (SAFE) → a **one-tap** accelerator. Neither auto-executes (R4).
+`confirmRoutedAction()` runs `ExecuteActionUseCase` and feeds the result back through `applyOutcome` (so a
+successful launch clears input, nav routes, ambiguity surfaces exactly as a typed command would);
+`cancelRoutedAction()` dismisses without executing; editing the field or any new outcome also dismisses a
+stale card. Permission gate handled in the **screen** (keeps the VM Android-free): on confirm, a non-null
+`permissionGate` routes to the existing `Routes.PermissionEducation.routeFor(gate.name)` (education-first,
+safe fallback — no execution) instead of running. **Inert in the MVP catalog** (every `DefaultActionCatalog`
+family has `permissionGate = null`) but wired + fake-catalog-tested so a future gated family is safe by
+construction.
+
+**core/ui (presentation-only).** New dumb `ConfirmActionCard(commandLine, riskLabel, onConfirm, onCancel)`
+— **DF-4 "terminal confirm block"** (owner-approved, artifact-previewed): 1px accent-border block, sharp
+corners (`SidrShapes.small`), monospace; header `EXECUTE?` + bracketed `[CONFIRM]` accent **risk chip**
+(DF-4 risk-tag = bracketed accent chip); body `> commandLine`; bracketed `[ CANCEL ] / [ CONFIRM ]` buttons
+(button role, 48dp targets, matches `RouteChip`). Strings + lambdas only → **no `domain → ui` edge** (the
+feature maps `LauncherAction`/risk → strings). SAFE one-tap reuses the existing `RouteChipRow`.
+
+**:app DI.** `provideExecuteActionUseCase` added to `IntentProvidesModule` (from the existing
+`IntentActionResolver` + `ActionExecutor`); the VM injects `ExecuteActionUseCase` + the already-bound
+`ActionCatalog` (read-only, for the `permissionGate` lookup). Hilt graph validates via `assembleDebug`.
+
+**Forks.** DF-4 = terminal confirm block + bracketed accent risk chip (owner). Gate scope =
+router-proposals-only (owner). R4 honored (no silent execution — SAFE = one-tap, CONFIRM = card). No
+deviations from the plan's AIL-5 entry.
+
+**§0 guards green.** Rule-only parity intact (structural). Hard rules intact: `domain` pure
+(`ExecuteActionUseCase` stdlib+domain only); no `feature → feature` (screen uses `core/ui` + the
+`core/common` `Routes` string builder, never `:feature:permission_education`); VM Android-free (permission
+check in the screen, mirroring the mic flow); `core/ui → core/common` only (no domain import in
+`ConfirmActionCard`); launcher fully offline; no LLM on the execution path. **Tests:** new
+`ExecuteActionUseCaseTest` (11 — each family → correct outcome, execution/ resolver failure → `Failed`,
+ambiguous → `NeedsConfirmation`, nav families never execute) + 5 new VM tests (CONFIRM → card, SAFE →
+one-tap, confirm → executes + clears input/card, cancel → no execute, gated descriptor → carries the
+permission gate); the AIL-4 display-only suggestion test was replaced. `LauncherViewModelTest` 70 → 75.
+`./gradlew --no-daemon :domain:test testDebugUnitTest assembleDebug` green.
+
+**Deferred to AIL-6:** SM-A325F device acceptance with a real BYOK provider (NL routing → confirm card →
+execution; offline parity), CRT motion/typing on the card (DF-5), and `>`-glyph/card TalkBack polish.
+
+**Next = AIL-6** — Polish + device acceptance: SM-A325F pass with a real BYOK provider (NL routing,
+web/URL/Play-Store, confirmation, **offline parity**); docs + ADR + `current-status.md` sync.

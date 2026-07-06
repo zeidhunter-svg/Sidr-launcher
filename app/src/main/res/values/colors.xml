@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#101010</color>
+    <!-- AIL-6 / DF-6: adaptive-icon ground = the brand terminal ground, so the launcher icon, the
+         boot window background, and the in-app surface all read as one near-black phosphor terminal. -->
+    <color name="ic_launcher_background">#08090A</color>
     <!-- Brand terminal ground (matches core/ui GreenDark/AmberDark `background`); used as the
          window background so there is no white flash before Compose paints (AIL-0). -->
     <color name="sidr_ground">#08090A</color>

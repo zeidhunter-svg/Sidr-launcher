@@ -1,9 +1,12 @@
 # CLAUDE.md — Sidr Launcher
 
-Session digest. Read this first. **Last synced: 2026-07-05 — project reframed into three stages
-(AI Launcher → AI Framework → Agentic OS); active work is the Stage-1 AI-Launcher completion track.**
-Foundation (Phases 3 → 9 + Phase UX) is built and device-accepted, but today's routing is **rule-based
-only** — the launcher is not yet genuinely "AI". The next work makes it AI-first via a **BYOK cloud LLM
+Session digest. Read this first. **Last synced: 2026-07-06 — AIL-5 complete (risk-gated confirm card +
+execution of router proposals shipped); active block is now AIL-6 (Polish + SM-A325F device acceptance).**
+Project reframed into three
+stages (AI Launcher → AI Framework → Agentic OS); active work is the Stage-1 AI-Launcher completion track.
+Foundation (Phases 3 → 9 + Phase UX) is built and device-accepted; routing is now **AI-first behind a
+default-off flag** — AIL-4 added the BYOK cloud `CommandPlanner` and AIL-5 added the confirmation +
+execution surface for its proposals. Router-off ⇒ byte-for-byte rule-only parity. The original framing of that work: a **BYOK cloud LLM
 router** that understands natural language and routes it to safe, registered actions with confirmation.
 Reframed roadmap: [docs/roadmap.md](docs/roadmap.md); active plan:
 [ai-context/ai-launcher-mvp-plan.md](ai-context/ai-launcher-mvp-plan.md).
@@ -68,11 +71,16 @@ The offline launcher core (home, app grid, app launch) must work fully without A
 
 ## Current goal (active work)
 
-**NOW (2026-07-05): Stage-1 AI-Launcher completion track — active block = AIL-4 (LLM Action Router).**
-The foundation is built and device-accepted; the offline routing is still rule-based, and AIL-3 has now
-unified the home input over it (app-filter + web/site/store/assistant lanes) without changing the pipeline —
-AIL-4 makes it AI-first via the BYOK cloud `CommandPlanner`. The active track (blocks **AIL-1…6**, plan:
-[ai-context/ai-launcher-mvp-plan.md](ai-context/ai-launcher-mvp-plan.md)) adds:
+**NOW (2026-07-06): Stage-1 AI-Launcher completion track — active block = AIL-6 (Polish + SM-A325F device
+acceptance).** The foundation is built and device-accepted; AIL-3 unified the home input over the unchanged
+pipeline, **AIL-4 made routing AI-first** (the BYOK cloud `CommandPlanner` — a sanctioned third pipeline —
+proposes **registered** actions as non-executing `CommandOutcome.RoutedAction`, never auto-executed (R4),
+behind a default-off flag so **router-off ⇒ byte-for-byte rule-only parity**), and **AIL-5 turned those
+proposals into a risk-gated confirmation surface**: a CONFIRM-risk proposal shows the DF-4 terminal confirm
+card, a SAFE one shows a one-tap accelerator, and confirming executes the `LauncherAction` (resolve →
+`ExecutableAction` → executor) via the new `ExecuteActionUseCase` — **router-proposals only, so the rule
+path (and its parity) is untouched**. AIL-6 is the final device-acceptance + polish pass. The active track
+(blocks **AIL-1…6**, plan: [ai-context/ai-launcher-mvp-plan.md](ai-context/ai-launcher-mvp-plan.md)) adds:
 
 - **AIL-0 ✅ DONE (2026-07-05)** Design tokens & visual identity (`core/ui`, presentation-only) — replaced
   the neutral-indigo Material-You look with the "ultra-cyberpunk / early-computer terminal" identity: 4
@@ -113,15 +121,46 @@ AIL-4 makes it AI-first via the BYOK cloud `CommandPlanner`. The active track (b
   empty); no `feature→feature`; VM Android-free; launcher fully offline; no LLM. testDebugUnitTest +
   assembleDebug green (7 router + 62→69 VM tests). Deferred to DF-5/AIL-6: true block caret + CRT motion,
   `>`-glyph TalkBack polish. ADR: decisions.md "ADR 2026-07-05 — AIL-3 complete".
-- **AIL-4 — NEXT** LLM Action Router (BYOK cloud) — a **new third port** `CommandPlanner` (distinct from
-  `IntentMatcher` and `GenerateReplyUseCase`); consulted only on low rule-confidence / NL input; emits
-  **structured** registered actions; offline/failure → rule outcome (exact rule-only parity when off).
-- **AIL-5** Confirmation & safety gating — risky/LLM-proposed actions confirm first; permission-gated.
-- **AIL-6** Polish + SM-A325F device acceptance with a real BYOK provider; offline parity.
+- **AIL-4 ✅ DONE (2026-07-06)** LLM Action Router (BYOK cloud) — the **new third port** `CommandPlanner`
+  (distinct from `IntentMatcher`/`GenerateReplyUseCase`) in `domain/ai/router/` + `PlanResult` +
+  `ActionProposal` + fail-closed `ProposalValidator` (strict: unknown/unregistered id, missing/blank
+  required arg, or **any** extra arg key → `NoPlan`; builds the concrete `LauncherAction`) +
+  `CatalogSchemaRenderer` (the only outbound content besides the user command) + `RouteCommandUseCase`
+  (rule-first; planner consulted **only** on `Unknown`/`LowConfidence`, only when `llmRouterEnabled` +
+  online; `RoutedAction`→non-executing `CommandOutcome.RoutedAction`, `Clarify`→`Message`, `NoPlan`→rule
+  outcome). Impl `data/ai-cloud/LlmCommandPlanner` = a **separate non-streaming** OpenAI-compatible call
+  reusing the shared `HttpClient`/`AiProviderConfigRepository`/Keystore key; hard-timeout→`NoPlan`
+  (AIL-Q1), strict content-JSON parse (tolerates prose/fences), non-tool-capable/prose/hallucination→
+  `NoPlan` (AIL-Q2 — MVP uses the ADR-sanctioned portable content-JSON path; native `tools` deferred to
+  Stage 2), **never throws**. `FeatureFlags.llmRouterEnabled` (default off, denylist-clean
+  `flag_llm_router_enabled`) + a "Smart command routing" Settings toggle; `:app` `RouterProvidesModule`;
+  `LauncherViewModel` injects `RouteCommandUseCase` (`HandleUserCommandUseCase` unmodified). **§0 guards
+  green:** privacy allow-list widened by exactly `ACTION_CATALOG_SCHEMA` (guard-tested at domain +
+  real-catalog + outbound-body levels — a planted sensitive value never leaves); **router-off /
+  confident-rule / offline ⇒ byte-for-byte rule-only parity** (`RouteCommandUseCaseTest` proves the planner
+  is never consulted; whole `LauncherViewModelTest` suite passes unchanged). Forks R1–R4 as recommended (no
+  deviation). `:domain:test`+`testDebugUnitTest`+`assembleDebug` green. Device + confirmation-card/execution
+  deferred to AIL-6/AIL-5. ADR: decisions.md "ADR 2026-07-06 — AIL-4 complete".
+- **AIL-5 ✅ DONE (2026-07-06)** Confirmation & safety gating — turned AIL-4's display-only
+  `CommandOutcome.RoutedAction` into an executing surface (**router-proposals only** → the rule path and its
+  parity are untouched). New pure `domain/intent/ExecuteActionUseCase` maps a confirmed `LauncherAction` →
+  `LauncherIntent` → the **unchanged** `IntentActionResolver` + `ActionExecutor` (never throws). VM gained
+  Android-free `PendingRoutedAction` + `pendingRoutedAction` state: `needsConfirmation` → **confirm card**
+  (CONFIRM / unregistered) or **one-tap** (SAFE); `confirmRoutedAction()` executes + re-applies the outcome,
+  `cancelRoutedAction()` dismisses; neither auto-executes (R4). Permission gate handled in the screen via
+  the existing education route (inert in MVP — all catalog gates `null` — but wired + tested). New dumb
+  `core/ui` `ConfirmActionCard` = **DF-4 terminal confirm block** (`EXECUTE?` + bracketed `[CONFIRM]` accent
+  risk chip + `> commandLine` + bracketed CANCEL/CONFIRM; AIL-0 tokens; no `domain→ui` edge). `:app`
+  `provideExecuteActionUseCase`; VM injects it + the bound `ActionCatalog`. Hard rules intact; rule-only
+  parity structural. New `ExecuteActionUseCaseTest` (11) + 5 VM tests (VM 70→75); `:domain:test` +
+  `testDebugUnitTest` + `assembleDebug` green. Device acceptance deferred to AIL-6. ADR: decisions.md "ADR
+  2026-07-06 — AIL-5 complete".
+- **AIL-6 — NEXT** Polish + SM-A325F device acceptance with a real BYOK provider; offline parity.
 
-**Blocking ADR before AIL-4:** record that `CommandPlanner` is a *third* pipeline (structured
-routing-via-LLM), that "local matching runs before any LLM call" is preserved, and that LLM proposals
-never auto-execute risky actions — this consciously refines the "matching ≠ generation" hard rule.
+**Blocking ADR for AIL-4 (✅ honored):** `CommandPlanner` is a *third* pipeline (structured
+routing-via-LLM); "local matching runs before any LLM call" is preserved (rule path always first);
+LLM proposals never auto-execute risky actions — this consciously refines the "matching ≠ generation" hard
+rule. Recorded in decisions.md "ADR 2026-07-05 — AIL-4" (design) + "ADR 2026-07-06 — AIL-4 complete".
 
 **Not in this track (separate/deferred):** ONNX NLU model (OQ#1/#2), embeddings (OQ#3), STT matrix
 (OQ#4), Android 9/11/14 + LOW_END device matrix, boot warmup. RC/hardening polish (release build,
@@ -549,6 +588,13 @@ Phase 3 result, Blocks A → D:
 | Permission-education UI (`PermissionEducationScreen`/`ViewModel`, rationale, request flow) *(Block G)* | `feature/permission_education` |
 | Cloud AI client (Ktor) | `data/ai-cloud` |
 | `PromptContextBuilder` + `OutboundContextPolicy` (outbound allow-list/guards) *(Block L)* | `domain` |
+| `CommandPlanner` port + `PlanResult` + `ActionProposal` + `ProposalValidator` + `CatalogSchemaRenderer` + `RouteCommandUseCase` *(AIL-4 ✅)* | `domain` |
+| `ExecuteActionUseCase` (confirmed `LauncherAction` → resolve → execute → `CommandOutcome`) *(AIL-5 ✅)* | `domain` |
+| `LlmCommandPlanner` (`CommandPlanner` impl, non-streaming OpenAI-compatible) *(AIL-4 ✅)* | `data/ai-cloud` |
+| `RouterProvidesModule` (`CommandPlanner` + `RouteCommandUseCase` wiring) *(AIL-4 ✅)* | `app` |
+| `PendingRoutedAction` state + confirm/cancel VM wiring + confirmation UI dispatch *(AIL-5 ✅)* | `feature/launcher` |
+| `ConfirmActionCard` (DF-4 terminal confirm block, presentation-only) *(AIL-5 ✅)* | `core/ui` |
+| `provideExecuteActionUseCase` (`IntentProvidesModule`) *(AIL-5 ✅)* | `app` |
 | ONNX NLU / embeddings | `data/ai-local` |
 | `ModelDownloader` port + `ModelFilePresence` port *(Block Q ✅, rework)* | `domain` |
 | `ModelStore`/`Sha256Verifier`/`ModelProvisioner`/`ModelManager` + `ModelDownloadScheduler` port + `ModelDownloadConfig` *(Block Q ✅)* | `data/ai-local` |

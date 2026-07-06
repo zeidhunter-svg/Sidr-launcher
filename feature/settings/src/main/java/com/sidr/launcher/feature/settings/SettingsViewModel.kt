@@ -59,8 +59,10 @@ class SettingsViewModel @Inject constructor(
             aiSuggestionsEnabled = flags.aiSuggestionsEnabled,
             usageHistoryEnabled = flags.usageHistoryEnabled,
             themeName = preferences.themeName,
+            accentColor = preferences.accentColor,
             favoritesCount = preferences.favoritesCount,
             micInputEnabled = preferences.micInputEnabled,
+            llmRouterEnabled = flags.llmRouterEnabled,
             errorMessage = errorMessage,
         )
     }.stateIn(
@@ -112,6 +114,30 @@ class SettingsViewModel @Inject constructor(
     }
 
     /**
+     * Persist the brand accent (AIL-6 / DF-7). `green` is the default; `amber` is the alternative.
+     * Applied immediately by `LauncherActivity` (which reads `UserPreferences.accentColor` reactively)
+     * and survives restart. No-op when unchanged; a write failure surfaces a transient message.
+     */
+    fun setAccentColor(accentColor: String) {
+        viewModelScope.launch(ioDispatcher) {
+            saveError.value = null
+            try {
+                val current = userPreferencesRepository.getPreferences().first()
+                if (current.accentColor != accentColor) {
+                    when (userPreferencesRepository.updatePreferences(current.copy(accentColor = accentColor))) {
+                        is OperationResult.Success -> Unit
+                        is OperationResult.Failure -> saveError.value = SAVE_ERROR
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                saveError.value = SAVE_ERROR
+            }
+        }
+    }
+
+    /**
      * Persist the usage-history opt-in (Phase UX follow-up). When on, the launcher records app
      * launches so the home Favorites row and usage-based suggestion ranking can populate; off by
      * default (privacy-first). No-op when unchanged.
@@ -143,6 +169,30 @@ class SettingsViewModel @Inject constructor(
                 val current = userPreferencesRepository.getPreferences().first()
                 if (current.favoritesCount != count) {
                     when (userPreferencesRepository.updatePreferences(current.copy(favoritesCount = count))) {
+                        is OperationResult.Success -> Unit
+                        is OperationResult.Failure -> saveError.value = SAVE_ERROR
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                saveError.value = SAVE_ERROR
+            }
+        }
+    }
+
+    /**
+     * Persist the AIL-4 LLM Action Router opt-in. Off by default (privacy-first + BYOK cost); when on,
+     * low-confidence natural-language commands may be routed by the configured cloud LLM. No-op when
+     * unchanged; a write failure surfaces a transient, display-safe message.
+     */
+    fun setLlmRouterEnabled(enabled: Boolean) {
+        viewModelScope.launch(ioDispatcher) {
+            saveError.value = null
+            try {
+                val current = featureFlagRepository.getFlags().first()
+                if (current.llmRouterEnabled != enabled) {
+                    when (featureFlagRepository.updateFlags(current.copy(llmRouterEnabled = enabled))) {
                         is OperationResult.Success -> Unit
                         is OperationResult.Failure -> saveError.value = SAVE_ERROR
                     }

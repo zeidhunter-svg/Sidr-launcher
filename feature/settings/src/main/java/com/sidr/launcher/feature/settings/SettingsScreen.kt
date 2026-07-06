@@ -67,10 +67,12 @@ fun SettingsScreen(
         uiState = uiState,
         onBack = viewModel::navigateBack,
         onThemeSelected = viewModel::setThemeName,
+        onAccentSelected = viewModel::setAccentColor,
         onAiSuggestionsChanged = viewModel::setAiSuggestionsEnabled,
         onUsageHistoryChanged = viewModel::setUsageHistoryEnabled,
         onFavoritesCountSelected = viewModel::setFavoritesCount,
         onMicInputChanged = viewModel::setMicInputEnabled,
+        onLlmRouterChanged = viewModel::setLlmRouterEnabled,
         onAssistantProvider = viewModel::openAssistantProvider,
         onSetDefaultLauncher = {
             try {
@@ -88,10 +90,12 @@ private fun SettingsContent(
     uiState: SettingsUiState,
     onBack: () -> Unit,
     onThemeSelected: (String) -> Unit,
+    onAccentSelected: (String) -> Unit,
     onAiSuggestionsChanged: (Boolean) -> Unit,
     onUsageHistoryChanged: (Boolean) -> Unit,
     onFavoritesCountSelected: (Int) -> Unit,
     onMicInputChanged: (Boolean) -> Unit,
+    onLlmRouterChanged: (Boolean) -> Unit,
     onAssistantProvider: () -> Unit,
     onSetDefaultLauncher: () -> Unit,
     modifier: Modifier = Modifier,
@@ -152,6 +156,33 @@ private fun SettingsContent(
                             text = label,
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.padding(start = 16.dp),
+                        )
+                    }
+                }
+            }
+
+            // Accent (brand phosphor) — AIL-6 / DF-7. Applies immediately + persists.
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text(
+                    text = "Accent",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = "The luminous brand colour of the terminal interface.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                        .selectableGroup(),
+                ) {
+                    AccentOption.ALL.forEach { (value, label) ->
+                        FilterChip(
+                            selected = uiState.accentColor == value,
+                            onClick = { onAccentSelected(value) },
+                            label = { Text(label) },
                         )
                     }
                 }
@@ -268,6 +299,32 @@ private fun SettingsContent(
                     .padding(horizontal = 16.dp),
             ) {
                 Text(text = "AI provider settings")
+            }
+            // AIL-4 — LLM Action Router opt-in. Off by default; needs a provider configured above.
+            // When on, natural-language commands the rules can't handle are routed by the cloud LLM to
+            // a registered action (proposals always confirm, never auto-execute).
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Smart command routing",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = "Use your AI provider to understand natural-language commands. " +
+                            "Suggested actions always ask before running.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Switch(
+                    checked = uiState.llmRouterEnabled,
+                    onCheckedChange = onLlmRouterChanged,
+                )
             }
 
             // ── Default launcher ────────────────────────────────────────────────

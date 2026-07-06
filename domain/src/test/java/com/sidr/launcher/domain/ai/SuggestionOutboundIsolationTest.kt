@@ -7,22 +7,35 @@ import org.junit.Test
 
 /**
  * Block U5 — proves the suggestion engine (Block U) added no outbound surface. [AiRequestGuardTest]
- * already pins [OutboundContextPolicy.ALLOWED] to exactly the three vetted categories and proves
+ * pins [OutboundContextPolicy.ALLOWED] to exactly the vetted categories and proves
  * [PromptContextBuilder] assembles nothing else; this test is the Block-U-scoped regression on top of
  * that — it fails closed if a suggestion/calendar/location field is ever folded into the outbound
  * surface instead of staying inside [com.sidr.launcher.domain.suggestions.Suggestion]/`CachedSuggestion`.
+ *
+ * AIL-4 deliberately added exactly one category — [AllowedContext.ACTION_CATALOG_SCHEMA] (the static
+ * router tool schema, guard-tested in `RouterOutboundGuardTest`). This test still fails closed if a
+ * *suggestion/calendar/location* category were ever added.
  */
 class SuggestionOutboundIsolationTest {
 
     @Test
-    fun `allow-list is still exactly the three pre-Block-U categories`() {
+    fun `allow-list adds only the AIL-4 schema category, never a suggestion-context category`() {
         assertEquals(
             setOf(
                 AllowedContext.USER_COMMAND,
                 AllowedContext.STATIC_SYSTEM_PROMPT,
                 AllowedContext.GENERATION_LIMITS,
+                AllowedContext.ACTION_CATALOG_SCHEMA,
             ),
             OutboundContextPolicy.ALLOWED,
+        )
+        val forbiddenCategoryTerms = listOf("suggestion", "calendar", "location", "usage")
+        val violations = OutboundContextPolicy.ALLOWED.flatMap { category ->
+            forbiddenCategoryTerms.filter { term -> category.name.contains(term, ignoreCase = true) }
+        }
+        assertFalse(
+            "No suggestion/calendar/location/usage context category may be allow-listed: $violations",
+            violations.isNotEmpty(),
         )
     }
 

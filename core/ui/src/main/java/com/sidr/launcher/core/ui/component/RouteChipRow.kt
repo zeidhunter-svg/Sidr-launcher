@@ -1,6 +1,9 @@
 package com.sidr.launcher.core.ui.component
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -11,6 +14,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -38,17 +43,26 @@ fun RouteChipRow(
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
         items(chips) { chip ->
+            // DF-5 press-invert: while held, the chip flips to solid accent with ground-coloured text —
+            // a tactile terminal "selected" flash. Discrete press state (no per-frame animation), so it
+            // stays on for all tiers; motion gating covers the continuous effects (caret/scanlines).
+            val interaction = remember { MutableInteractionSource() }
+            val pressed by interaction.collectIsPressedAsState()
+            val accent = MaterialTheme.colorScheme.primary
             Text(
                 text = "[ ${chip.label} ]",
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
+                color = if (pressed) MaterialTheme.colorScheme.onPrimary else accent,
                 modifier = Modifier
                     .clickable(
+                        interactionSource = interaction,
+                        indication = null,
                         onClickLabel = chip.label,
                         role = Role.Button,
                         onClick = chip.onClick,
                     )
                     .heightIn(min = Sizes.minTouchTarget)
+                    .background(if (pressed) accent else androidx.compose.ui.graphics.Color.Transparent)
                     .wrapContentHeight(Alignment.CenterVertically)
                     .padding(horizontal = Spacing.sm),
             )

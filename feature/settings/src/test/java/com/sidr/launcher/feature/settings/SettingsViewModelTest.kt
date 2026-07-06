@@ -138,6 +138,46 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `enabling the llm router updates the flag and reflects in state`() = runTest(testDispatcher) {
+        val flagRepo = FakeFeatureFlagRepository(FeatureFlags(llmRouterEnabled = false))
+        val vm = buildViewModel(flagRepo)
+
+        vm.setLlmRouterEnabled(true)
+        advanceUntilIdle()
+
+        assertTrue(flagRepo.getFlags().first().llmRouterEnabled)
+        assertTrue(vm.uiState.value.llmRouterEnabled)
+        assertEquals(null, vm.uiState.value.errorMessage)
+    }
+
+    @Test
+    fun `llm router write failure surfaces a safe error`() = runTest(testDispatcher) {
+        val flagRepo = FakeFeatureFlagRepository(FeatureFlags(llmRouterEnabled = false)).apply {
+            errorToReturn = OperationError.UnknownError("datastore down")
+        }
+        val vm = buildViewModel(flagRepo)
+
+        vm.setLlmRouterEnabled(true)
+        advanceUntilIdle()
+
+        assertFalse(flagRepo.getFlags().first().llmRouterEnabled)
+        assertEquals("Couldn't update launcher settings. Please try again.", vm.uiState.value.errorMessage)
+    }
+
+    @Test
+    fun `unchanged llm router setting skips flag write`() = runTest(testDispatcher) {
+        val flagRepo = FakeFeatureFlagRepository(FeatureFlags(llmRouterEnabled = true))
+        val vm = buildViewModel(flagRepo)
+
+        vm.setLlmRouterEnabled(true)
+        advanceUntilIdle()
+
+        assertTrue(flagRepo.getFlags().first().llmRouterEnabled)
+        assertEquals(0, flagRepo.updateCount)
+        assertEquals(null, vm.uiState.value.errorMessage)
+    }
+
+    @Test
     fun `selecting a theme persists the preference`() = runTest(testDispatcher) {
         val prefsRepo = FakeUserPreferencesRepository(UserPreferences(themeName = "system"))
         val vm = buildViewModel(prefsRepo = prefsRepo)
@@ -161,6 +201,33 @@ class SettingsViewModelTest {
         advanceUntilIdle()
 
         assertEquals("system", prefsRepo.getPreferences().first().themeName)
+        assertEquals("Couldn't update launcher settings. Please try again.", vm.uiState.value.errorMessage)
+    }
+
+    @Test
+    fun `selecting an accent persists the preference and reflects in state`() = runTest(testDispatcher) {
+        val prefsRepo = FakeUserPreferencesRepository(UserPreferences(accentColor = AccentOption.GREEN))
+        val vm = buildViewModel(prefsRepo = prefsRepo)
+
+        vm.setAccentColor(AccentOption.AMBER)
+        advanceUntilIdle()
+
+        assertEquals("amber", prefsRepo.getPreferences().first().accentColor)
+        assertEquals("amber", vm.uiState.value.accentColor)
+        assertEquals(null, vm.uiState.value.errorMessage)
+    }
+
+    @Test
+    fun `accent write failure surfaces a safe error`() = runTest(testDispatcher) {
+        val prefsRepo = FakeUserPreferencesRepository(UserPreferences(accentColor = AccentOption.GREEN)).apply {
+            errorToReturn = OperationError.UnknownError("datastore down")
+        }
+        val vm = buildViewModel(prefsRepo = prefsRepo)
+
+        vm.setAccentColor(AccentOption.AMBER)
+        advanceUntilIdle()
+
+        assertEquals("green", prefsRepo.getPreferences().first().accentColor)
         assertEquals("Couldn't update launcher settings. Please try again.", vm.uiState.value.errorMessage)
     }
 

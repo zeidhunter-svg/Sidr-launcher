@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -15,9 +16,15 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -26,13 +33,16 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.sidr.launcher.core.ui.R
+import com.sidr.launcher.core.ui.theme.LocalSidrMotionEnabled
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Spacing
+import kotlinx.coroutines.delay
 
 /**
  * The terminal `>`-prompt universal-input field (AIL-3 / DF-2). A leading `>` glyph replaces the search
- * magnifier, JetBrains Mono renders the text, an accent caret marks the cursor (a full block caret and
- * blink are DF-5/AIL-6 motion polish, deferred), and thin grid borders carry glowing accent corner ticks.
+ * magnifier, JetBrains Mono renders the text, an idle phosphor **block caret** blinks after the prompt
+ * while empty+unfocused (DF-5; LOW_END-gated), the native accent cursor marks the insertion point while
+ * typing, and thin grid borders carry glowing accent corner ticks.
  * Same callback contract as [SidrSearchField] so it is a drop-in for the home field; the App Drawer keeps
  * [SidrSearchField]. Pure presentation — routing is the caller's decision in [onSubmit] / [onValueChange].
  *
@@ -52,6 +62,25 @@ fun SidrCommandPrompt(
 ) {
     val accent = MaterialTheme.colorScheme.primary
     val onSurface = MaterialTheme.colorScheme.onSurface
+
+    // DF-5 idle block caret: while the field is empty and unfocused, a phosphor block blinks after the
+    // prompt (classic terminal idle state). Once focused, the native accent cursor takes over, so the
+    // block hides to avoid a double cursor. LOW_END-gated via LocalSidrMotionEnabled — motion off holds
+    // the block solid (no per-frame work). While typing, only the native cursor shows.
+    val motionEnabled = LocalSidrMotionEnabled.current
+    var focused by remember { mutableStateOf(false) }
+    var caretVisible by remember { mutableStateOf(true) }
+    LaunchedEffect(motionEnabled) {
+        if (!motionEnabled) {
+            caretVisible = true
+            return@LaunchedEffect
+        }
+        while (true) {
+            delay(CARET_BLINK_MS)
+            caretVisible = !caretVisible
+        }
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -85,11 +114,21 @@ fun SidrCommandPrompt(
         )
         Box(modifier = Modifier.weight(1f)) {
             if (value.isEmpty()) {
-                Text(
-                    text = placeholder,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = onSurface.copy(alpha = 0.4f),
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (!focused) {
+                        Box(
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .size(width = 9.dp, height = 18.dp)
+                                .background(accent.copy(alpha = if (caretVisible) 1f else 0f)),
+                        )
+                    }
+                    Text(
+                        text = placeholder,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = onSurface.copy(alpha = 0.4f),
+                    )
+                }
             }
             BasicTextField(
                 value = value,
@@ -101,7 +140,9 @@ fun SidrCommandPrompt(
                 cursorBrush = SolidColor(accent),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { onSubmit(value) }),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { focused = it.isFocused },
             )
         }
         if (showMic) {
@@ -122,6 +163,9 @@ fun SidrCommandPrompt(
         }
     }
 }
+
+/** Terminal caret cadence — ~530ms on/off, a familiar CRT blink rate. */
+private const val CARET_BLINK_MS = 530L
 
 @Preview(showBackground = true, backgroundColor = 0xFF08090A)
 @Composable

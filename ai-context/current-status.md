@@ -44,7 +44,35 @@ resolver +2 / use-case +2; privacy guard green. ADR: "ADR 2026-07-05 — AIL-2 c
 `SIDR//` arm + `//dev-mode` toggle, no persisted key). Command pipeline **byte-for-byte** (intent-file diff
 empty); voice (R8) reuses the path; launcher fully offline; no LLM. `testDebugUnitTest`+`assembleDebug`
 green (router 7 / VM 62→69). Deferred to DF-5/AIL-6: true block caret + CRT motion, `>`-glyph a11y polish.
-ADR: "ADR 2026-07-05 — AIL-3 complete". **Active block = AIL-4 (LLM Action Router, BYOK cloud).**
+ADR: "ADR 2026-07-05 — AIL-3 complete". **AIL-4 ✅ done (2026-07-06)** — LLM Action Router (BYOK cloud, the
+sanctioned **third pipeline**): `domain/ai/router/` `CommandPlanner` port + `PlanResult` + `ActionProposal`
++ fail-closed `ProposalValidator` + `CatalogSchemaRenderer` + `RouteCommandUseCase` (rule-first; planner
+consulted **only** on `Unknown`/`LowConfidence`, only when `llmRouterEnabled` + online; proposals surface as
+non-executing `CommandOutcome.RoutedAction`, never auto-execute — R4). `data/ai-cloud/LlmCommandPlanner` = a
+**separate non-streaming** OpenAI-compatible call reusing the shared `HttpClient`/config/Keystore key;
+hard-timeout→`NoPlan` (AIL-Q1), strict content-JSON parse (tolerates fences), prose/hallucination/
+non-tool-capable→`NoPlan` (AIL-Q2), **never throws**. `FeatureFlags.llmRouterEnabled` (default off,
+denylist-clean key) + "Smart command routing" Settings toggle; `:app` `RouterProvidesModule`; VM injects
+`RouteCommandUseCase` (`HandleUserCommandUseCase` unmodified). **§0 guards green:** privacy allow-list
+widened by exactly `ACTION_CATALOG_SCHEMA` (domain + real-catalog + outbound-body guard tests; planted
+sensitive value never leaves); **router-off / confident / offline ⇒ byte-for-byte rule-only parity** (planner
+never consulted). Forks R1–R4 as recommended (no deviation); three ports kept distinct; launcher fully
+offline. `:domain:test`+`testDebugUnitTest`+`assembleDebug` green. Device acceptance + confirmation-card/
+execution deferred to AIL-6/AIL-5. ADR: "ADR 2026-07-06 — AIL-4 complete". **AIL-5 ✅ done (2026-07-06)** —
+Confirmation & safety gating: turned AIL-4's display-only `CommandOutcome.RoutedAction` into an executing
+surface (**router-proposals only** → the rule path + its parity are untouched). New pure
+`domain/intent/ExecuteActionUseCase` maps a confirmed `LauncherAction` → `LauncherIntent` → the **unchanged**
+`IntentActionResolver` + `ActionExecutor` (never throws). VM gained Android-free `PendingRoutedAction` +
+`pendingRoutedAction` state: `needsConfirmation` → **confirm card** (CONFIRM / unregistered) or **one-tap**
+(SAFE); `confirmRoutedAction()` executes + re-applies the outcome, `cancelRoutedAction()` dismisses; neither
+auto-executes (R4). Permission gate handled in the screen via the existing education route (inert in MVP —
+all catalog gates `null` — but wired + tested). New dumb `core/ui` `ConfirmActionCard` = **DF-4 terminal
+confirm block** (`EXECUTE?` + bracketed `[CONFIRM]` accent risk chip + `> commandLine` + bracketed
+CANCEL/CONFIRM; AIL-0 tokens; no `domain→ui` edge). `:app` `provideExecuteActionUseCase`; VM injects it + the
+bound `ActionCatalog`. Hard rules intact; rule-only parity structural. New `ExecuteActionUseCaseTest` (11) +
+5 VM tests (VM 70→75); `:domain:test`+`testDebugUnitTest`+`assembleDebug` green. Device acceptance deferred
+to AIL-6. ADR: "ADR 2026-07-06 — AIL-5 complete". **Active block = AIL-6 (Polish + SM-A325F device
+acceptance).**
 
 ## Where we are (foundation — done)
 

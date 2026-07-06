@@ -55,6 +55,7 @@ import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.core.ui.R
 import com.sidr.launcher.core.ui.component.AppTile
+import com.sidr.launcher.core.ui.component.ConfirmActionCard
 import com.sidr.launcher.core.ui.component.EmptyState
 import com.sidr.launcher.core.ui.component.ErrorState
 import com.sidr.launcher.core.ui.component.RouteChip
@@ -90,6 +91,7 @@ fun LauncherScreen(
     val feedback by viewModel.commandFeedback.collectAsStateWithLifecycle()
     val showMic by viewModel.showMic.collectAsStateWithLifecycle()
     val inputResults by viewModel.inputResults.collectAsStateWithLifecycle()
+    val pendingRoutedAction by viewModel.pendingRoutedAction.collectAsStateWithLifecycle()
     val devConsoleOn by viewModel.devConsoleOn.collectAsStateWithLifecycle()
     val consoleLines by viewModel.consoleLines.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -186,6 +188,26 @@ fun LauncherScreen(
                 onCandidateClick = viewModel::onAppClicked,
                 onDismiss = viewModel::dismissFeedback,
             )
+
+            // AIL-5: a router-proposed action awaiting the user's go-ahead. CONFIRM-risk → the DF-4
+            // confirm card; SAFE → a one-tap accelerator. Neither auto-executes (R4). Confirm routes
+            // through the education flow first when the action declares a permission gate (inert in the
+            // MVP catalog — no family gates — but wired so a future gated family is safe by design).
+            pendingRoutedAction?.let { pending ->
+                val onConfirm: () -> Unit = {
+                    val gate = pending.permissionGate
+                    if (gate != null) {
+                        viewModel.navigateTo(Routes.PermissionEducation.routeFor(gate.name))
+                    } else {
+                        viewModel.confirmRoutedAction()
+                    }
+                }
+                PendingActionArea(
+                    pending = pending,
+                    onConfirm = onConfirm,
+                    onCancel = viewModel::cancelRoutedAction,
+                )
+            }
 
             Box(modifier = Modifier.weight(1f)) {
                 when {
@@ -437,6 +459,36 @@ private fun CommandConsole(
                 modifier = Modifier.padding(bottom = Spacing.xs),
             )
         }
+    }
+}
+
+// ── Router proposal confirmation (AIL-5) ─────────────────────────────────────
+
+/**
+ * Renders a pending router proposal: the DF-4 [ConfirmActionCard] for a CONFIRM-risk action, or a
+ * lighter one-tap [RouteChipRow] accelerator for a SAFE one. Both dispatch through [onConfirm]
+ * (which the screen has already wrapped with the permission-gate check); the card also exposes CANCEL.
+ */
+@Composable
+private fun PendingActionArea(
+    pending: PendingRoutedAction,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (pending.requiresConfirmation) {
+        ConfirmActionCard(
+            commandLine = pending.commandLine,
+            riskLabel = pending.riskLabel,
+            onConfirm = onConfirm,
+            onCancel = onCancel,
+            modifier = modifier,
+        )
+    } else {
+        RouteChipRow(
+            chips = listOf(RouteChip("▸ ${pending.commandLine}", onConfirm)),
+            modifier = modifier.padding(vertical = Spacing.sm),
+        )
     }
 }
 

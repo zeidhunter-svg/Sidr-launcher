@@ -6,6 +6,7 @@ import com.sidr.launcher.domain.history.IntentMatchHistoryRepository
 import com.sidr.launcher.domain.intent.ActionExecutor
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
+import com.sidr.launcher.domain.intent.ExecuteActionUseCase
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.intent.IntentConfidencePolicy
@@ -55,6 +56,20 @@ object IntentProvidesModule {
     fun provideIntentActionResolver(
         repository: InstalledAppsRepository,
     ): IntentActionResolver = IntentActionResolver(repository)
+
+    /**
+     * AIL-5 — executes a *confirmed* router-proposed `LauncherAction` over the same resolver/executor
+     * path the rule pipeline uses. Only reached after the user confirms/one-taps a proposal.
+     */
+    @Provides
+    @Singleton
+    fun provideExecuteActionUseCase(
+        resolver: IntentActionResolver,
+        executor: ActionExecutor,
+    ): ExecuteActionUseCase = ExecuteActionUseCase(
+        resolver = resolver,
+        executor = executor,
+    )
 
     @Provides
     @Singleton

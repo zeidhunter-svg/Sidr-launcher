@@ -13,12 +13,26 @@ object OutboundContextPolicy {
      * entry is a privacy decision (Fork P5-3) — forbidden categories (device/usage/calendar/
      * location/history/contacts/clipboard) are deliberately **absent**.
      */
-    enum class AllowedContext { USER_COMMAND, STATIC_SYSTEM_PROMPT, GENERATION_LIMITS }
+    enum class AllowedContext {
+        USER_COMMAND,
+        STATIC_SYSTEM_PROMPT,
+        GENERATION_LIMITS,
+
+        /**
+         * The static Action Registry tool schema the AIL-4 router sends alongside the user command
+         * (`CatalogSchemaRenderer`): action ids + human descriptions + argument names/descriptions.
+         * Content-free and device-context-free by construction — it names *capabilities*, never any
+         * calendar/location/usage/history/device value. Adding it is the one privacy widening AIL-4
+         * makes, and it is guard-tested (the rendered schema is scanned for forbidden terms).
+         */
+        ACTION_CATALOG_SCHEMA,
+    }
 
     val ALLOWED: Set<AllowedContext> = setOf(
         AllowedContext.USER_COMMAND,
         AllowedContext.STATIC_SYSTEM_PROMPT,
         AllowedContext.GENERATION_LIMITS,
+        AllowedContext.ACTION_CATALOG_SCHEMA,
     )
 
     /**

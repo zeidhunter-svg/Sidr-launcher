@@ -41,6 +41,8 @@ internal object PreferencesKeys {
 
     // User preferences — prefix: user_
     val USER_THEME_NAME             = stringPreferencesKey("user_theme_name")
+    // AIL-6 / DF-7 — brand accent phosphor ("green" | "amber"). Denylist-clean ("accent"/"color").
+    val USER_ACCENT_COLOR           = stringPreferencesKey("user_accent_color")
     val USER_COMMAND_INPUT_ENABLED  = booleanPreferencesKey("user_command_input_enabled")
     // Block X6 deferred UI prefs. All three names are denylist-clean (no forbidden term):
     // "favorites"/"count", "mic"/"input" (deliberately NOT "voice"), "setup"/"hint"/"dismissed".
@@ -60,6 +62,9 @@ internal object PreferencesKeys {
     // is the only history carrier. Domain field stays FeatureFlags.usageHistoryEnabled.
     val FLAG_USAGE_HISTORY_ENABLED     = booleanPreferencesKey("flag_usage_tracking_enabled")
     val FLAG_PERMISSION_EDU_DISMISSED  = booleanPreferencesKey("flag_permission_edu_dismissed")
+    // AIL-4 — BYOK LLM Action Router toggle (off by default). Denylist-clean: "llm"/"router"/"enabled"
+    // are not forbidden terms. Domain field: FeatureFlags.llmRouterEnabled.
+    val FLAG_LLM_ROUTER_ENABLED        = booleanPreferencesKey("flag_llm_router_enabled")
 
     // Device-profile cache — prefix: device_
     // Flattened primitives; no Android types. When DeviceProfile is formalised in
@@ -111,6 +116,7 @@ internal object PreferencesKeys {
     // not the Kotlin variable name USER_THEME_NAME).
     val ALL_KEY_NAMES: Set<String> = setOf(
         USER_THEME_NAME.name,
+        USER_ACCENT_COLOR.name,
         USER_COMMAND_INPUT_ENABLED.name,
         USER_FAVORITES_COUNT.name,
         USER_MIC_INPUT_ENABLED.name,
@@ -119,6 +125,7 @@ internal object PreferencesKeys {
         FLAG_AI_SUGGESTIONS_ENABLED.name,
         FLAG_USAGE_HISTORY_ENABLED.name,
         FLAG_PERMISSION_EDU_DISMISSED.name,
+        FLAG_LLM_ROUTER_ENABLED.name,
         DEVICE_IS_LOW_END.name,
         DEVICE_CACHED_AT_EPOCH_MS.name,
         DEVICE_HAS_CACHE.name,

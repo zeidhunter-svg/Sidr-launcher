@@ -4,9 +4,13 @@ import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
+import com.sidr.launcher.core.testing.FakeActionCatalog
 import com.sidr.launcher.core.testing.FakeActionExecutor
+import com.sidr.launcher.core.testing.FakeCommandPlanner
+import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import androidx.lifecycle.SavedStateHandle
+import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeSuggestionEngine
 import com.sidr.launcher.core.testing.FakeSuggestionsCacheRepository
@@ -32,14 +36,22 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import com.sidr.launcher.domain.action.ActionCategory
+import com.sidr.launcher.domain.action.ActionDescriptor
+import com.sidr.launcher.domain.action.ActionIds
+import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.action.LauncherAction
+import com.sidr.launcher.domain.ai.router.PlanResult
 import com.sidr.launcher.domain.history.AppUsageRecord
 import com.sidr.launcher.domain.intent.ActionExecutionResult
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
 import com.sidr.launcher.domain.intent.ExecutableAction
+import com.sidr.launcher.domain.intent.ExecuteActionUseCase
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.model.InstalledApp
+import com.sidr.launcher.domain.permission.PermissionFeature
 import com.sidr.launcher.domain.result.OperationError
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CompletableDeferred
@@ -82,6 +94,23 @@ class LauncherViewModelTest {
         recordingScope = CoroutineScope(testDispatcher + SupervisorJob()),
     )
 
+    // AIL-4: the VM now routes through RouteCommandUseCase. With the router flag OFF (fakeFlagRepo's
+    // default), route() returns the unchanged HandleUserCommandUseCase outcome byte-for-byte, so every
+    // existing VM test holds. Router-on behavior is covered in the domain RouteCommandUseCaseTest.
+    private val routeUseCase = RouteCommandUseCase(
+        handleUserCommand = useCase,
+        planner = FakeCommandPlanner(),
+        catalog = FakeActionCatalog(),
+        featureFlagRepository = fakeFlagRepo,
+        connectivityChecker = FakeConnectivityChecker(),
+    )
+
+    // AIL-5: executes a confirmed router-proposed action through the same resolver/executor path.
+    private val executeAction = ExecuteActionUseCase(
+        resolver = IntentActionResolver(fakeRepo),
+        executor = fakeExecutor,
+    )
+
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
@@ -105,10 +134,13 @@ class LauncherViewModelTest {
         suggestionEngine: SuggestionEngine = FakeSuggestionEngine(),
         suggestionsCacheRepository: SuggestionsCacheRepository = FakeSuggestionsCacheRepository(),
         prefsRepo: UserPreferencesRepository = fakePrefsRepo,
+        actionCatalog: FakeActionCatalog = FakeActionCatalog(),
     ) = LauncherViewModel(
         installedAppsRepository = fakeRepo,
-        handleUserCommand = useCase,
+        routeCommand = routeUseCase,
+        executeAction = executeAction,
         actionExecutor = fakeExecutor,
+        actionCatalog = actionCatalog,
         usageHistoryRepository = fakeUsageRepo,
         featureFlagRepository = flagRepo,
         userPreferencesRepository = prefsRepo,
@@ -118,6 +150,149 @@ class LauncherViewModelTest {
         ioDispatcher = testDispatcher,
         savedStateHandle = savedStateHandle,
     )
+
+    /**
+     * Builds a router-ON ViewModel whose planner returns [plannerResult]. [catalog] is shared by the
+     * route use case (risk → needsConfirmation) and the VM (permissionGate lookup), matching production
+     * where both read the same [DefaultActionCatalog]. The rule matcher is forced to Unknown so the
+     * planner is always consulted (AIL-4 trigger).
+     */
+    private fun buildRouterViewModel(
+        plannerResult: PlanResult,
+        catalog: FakeActionCatalog = FakeActionCatalog(),
+        online: Boolean = true,
+    ): LauncherViewModel {
+        fakeMatcher.intentToReturn = LauncherIntent.UnknownIntent(originalInput = "nl command", reason = "x")
+        fakeMatcher.confidenceToReturn = 0.0f
+        val router = RouteCommandUseCase(
+            handleUserCommand = useCase,
+            planner = FakeCommandPlanner(resultToReturn = plannerResult),
+            catalog = catalog,
+            featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(llmRouterEnabled = true)),
+            connectivityChecker = FakeConnectivityChecker(initiallyOnline = online),
+        )
+        return LauncherViewModel(
+            installedAppsRepository = fakeRepo,
+            routeCommand = router,
+            executeAction = executeAction,
+            actionExecutor = fakeExecutor,
+            actionCatalog = catalog,
+            usageHistoryRepository = fakeUsageRepo,
+            featureFlagRepository = fakeFlagRepo,
+            userPreferencesRepository = fakePrefsRepo,
+            suggestionEngine = FakeSuggestionEngine(),
+            suggestionsCacheRepository = FakeSuggestionsCacheRepository(),
+            speechInputSource = fakeSpeech,
+            ioDispatcher = testDispatcher,
+            savedStateHandle = SavedStateHandle(),
+        )
+    }
+
+    private fun safeDescriptor(id: com.sidr.launcher.domain.action.ActionId) = ActionDescriptor(
+        id = id,
+        title = "t",
+        description = "d",
+        category = ActionCategory.WEB,
+        risk = ActionRiskLevel.SAFE,
+    )
+
+    // ── AIL-5 confirmation & safety gating ──────────────────────────────────
+
+    @Test
+    fun `a CONFIRM router proposal surfaces a confirm card and never auto-executes`() =
+        runTest(testDispatcher) {
+            // Empty catalog ⇒ needsConfirmation = true (fail-safe): the card is required.
+            val vm = buildRouterViewModel(
+                plannerResult = PlanResult.RoutedAction(LauncherAction.OpenUrl("https://x.com"), 0.9f),
+            )
+
+            vm.onCommandSubmitted("go to x")
+            advanceUntilIdle()
+
+            val pending = vm.pendingRoutedAction.value
+            assertTrue("expected a pending confirm card, got $pending", pending != null)
+            assertTrue("expected requiresConfirmation", pending!!.requiresConfirmation)
+            // R4: nothing executed until the user confirms.
+            assertTrue(fakeExecutor.executedActions.isEmpty())
+        }
+
+    @Test
+    fun `a SAFE router proposal surfaces a one-tap pending action, not a card`() =
+        runTest(testDispatcher) {
+            val catalog = FakeActionCatalog(listOf(safeDescriptor(ActionIds.WEB_SEARCH)))
+            val vm = buildRouterViewModel(
+                plannerResult = PlanResult.RoutedAction(LauncherAction.WebSearch("weather"), 0.8f),
+                catalog = catalog,
+            )
+
+            vm.onCommandSubmitted("what's the weather")
+            advanceUntilIdle()
+
+            val pending = vm.pendingRoutedAction.value
+            assertTrue("expected a pending one-tap action, got $pending", pending != null)
+            assertFalse("SAFE proposal must not require a card", pending!!.requiresConfirmation)
+            // R4: still never silently executed — the user must tap.
+            assertTrue(fakeExecutor.executedActions.isEmpty())
+        }
+
+    @Test
+    fun `confirming a pending action executes it and clears the card and input`() =
+        runTest(testDispatcher) {
+            fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
+            val vm = buildRouterViewModel(
+                plannerResult = PlanResult.RoutedAction(LauncherAction.LaunchApp("Telegram"), 0.9f),
+            )
+            vm.onCommandSubmitted("fire up telegram")
+            advanceUntilIdle()
+            assertTrue(vm.pendingRoutedAction.value != null)
+
+            vm.confirmRoutedAction()
+            advanceUntilIdle()
+
+            assertEquals(
+                ExecutableAction.LaunchAppAction("org.telegram.messenger", null),
+                fakeExecutor.executedActions.single(),
+            )
+            assertEquals(null, vm.pendingRoutedAction.value)
+            assertEquals("", vm.commandInput.value)
+        }
+
+    @Test
+    fun `cancelling a pending action clears it without executing`() = runTest(testDispatcher) {
+        val vm = buildRouterViewModel(
+            plannerResult = PlanResult.RoutedAction(LauncherAction.OpenUrl("https://x.com"), 0.9f),
+        )
+        vm.onCommandSubmitted("go to x")
+        advanceUntilIdle()
+        assertTrue(vm.pendingRoutedAction.value != null)
+
+        vm.cancelRoutedAction()
+        advanceUntilIdle()
+
+        assertEquals(null, vm.pendingRoutedAction.value)
+        assertTrue(fakeExecutor.executedActions.isEmpty())
+    }
+
+    @Test
+    fun `a pending confirmation carries the descriptor permission gate`() = runTest(testDispatcher) {
+        val gatedDescriptor = ActionDescriptor(
+            id = ActionIds.OPEN_URL,
+            title = "t",
+            description = "d",
+            category = ActionCategory.WEB,
+            risk = ActionRiskLevel.CONFIRM,
+            permissionGate = PermissionFeature.VOICE_INPUT,
+        )
+        val vm = buildRouterViewModel(
+            plannerResult = PlanResult.RoutedAction(LauncherAction.OpenUrl("https://x.com"), 0.9f),
+            catalog = FakeActionCatalog(listOf(gatedDescriptor)),
+        )
+
+        vm.onCommandSubmitted("go to x")
+        advanceUntilIdle()
+
+        assertEquals(PermissionFeature.VOICE_INPUT, vm.pendingRoutedAction.value?.permissionGate)
+    }
 
     // ── App list loading ───────────────────────────────────────────────────
 
@@ -286,8 +461,10 @@ class LauncherViewModelTest {
         }
         val vm = LauncherViewModel(
             installedAppsRepository = gatedRepo,
-            handleUserCommand = useCase,
+            routeCommand = routeUseCase,
+            executeAction = executeAction,
             actionExecutor = fakeExecutor,
+            actionCatalog = FakeActionCatalog(),
             usageHistoryRepository = fakeUsageRepo,
             featureFlagRepository = fakeFlagRepo,
             userPreferencesRepository = fakePrefsRepo,
@@ -524,8 +701,10 @@ class LauncherViewModelTest {
         }
         val vm = LauncherViewModel(
             installedAppsRepository = gatedRepo,
-            handleUserCommand = useCase,
+            routeCommand = routeUseCase,
+            executeAction = executeAction,
             actionExecutor = fakeExecutor,
+            actionCatalog = FakeActionCatalog(),
             usageHistoryRepository = fakeUsageRepo,
             featureFlagRepository = FakeFeatureFlagRepository(
                 FeatureFlags(aiSuggestionsEnabled = true, usageHistoryEnabled = true),

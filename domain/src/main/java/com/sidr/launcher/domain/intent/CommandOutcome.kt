@@ -1,5 +1,6 @@
 package com.sidr.launcher.domain.intent
 
+import com.sidr.launcher.domain.action.LauncherAction
 import com.sidr.launcher.domain.model.InstalledApp
 
 /**
@@ -53,4 +54,18 @@ sealed interface CommandOutcome {
 
     /** Clear the command input — handled by the ViewModel, not the executor. */
     data object ClearInput : CommandOutcome
+
+    /**
+     * The LLM router (AIL-4) proposed a registered [action] for a low-confidence / natural-language
+     * command. Per Fork R4 it is **never auto-executed**: [needsConfirmation] (`true` for a
+     * [com.sidr.launcher.domain.action.ActionRiskLevel.CONFIRM] action, `false` for `SAFE`) tells the
+     * UI whether to require an explicit confirm card or offer a one-tap suggestion. [confidence] is the
+     * model's advisory 0..1. The confirmation card + execution wiring land in AIL-5; AIL-4 surfaces it
+     * display-safely only.
+     */
+    data class RoutedAction(
+        val action: LauncherAction,
+        val confidence: Float,
+        val needsConfirmation: Boolean,
+    ) : CommandOutcome
 }

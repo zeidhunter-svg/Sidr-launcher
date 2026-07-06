@@ -42,6 +42,7 @@ class UserPreferencesRepositoryImplTest {
 
         val updated = UserPreferences(
             themeName = "dark",
+            accentColor = "amber",
             commandInputEnabled = false,
             favoritesCount = 4,
             micInputEnabled = false,
@@ -60,6 +61,7 @@ class UserPreferencesRepositoryImplTest {
         val target = file()
         val updated = UserPreferences(
             themeName = "light",
+            accentColor = "amber",
             commandInputEnabled = false,
             favoritesCount = 10,
             micInputEnabled = false,

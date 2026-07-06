@@ -30,6 +30,7 @@ internal object PreferencesMapper {
         val defaults = UserPreferences()
         return UserPreferences(
             themeName = prefs[PreferencesKeys.USER_THEME_NAME] ?: defaults.themeName,
+            accentColor = prefs[PreferencesKeys.USER_ACCENT_COLOR] ?: defaults.accentColor,
             commandInputEnabled = prefs[PreferencesKeys.USER_COMMAND_INPUT_ENABLED]
                 ?: defaults.commandInputEnabled,
             favoritesCount = prefs[PreferencesKeys.USER_FAVORITES_COUNT] ?: defaults.favoritesCount,
@@ -43,6 +44,7 @@ internal object PreferencesMapper {
 
     fun writeUserPreferences(prefs: androidx.datastore.preferences.core.MutablePreferences, value: UserPreferences) {
         prefs[PreferencesKeys.USER_THEME_NAME] = value.themeName
+        prefs[PreferencesKeys.USER_ACCENT_COLOR] = value.accentColor
         prefs[PreferencesKeys.USER_COMMAND_INPUT_ENABLED] = value.commandInputEnabled
         prefs[PreferencesKeys.USER_FAVORITES_COUNT] = value.favoritesCount
         prefs[PreferencesKeys.USER_MIC_INPUT_ENABLED] = value.micInputEnabled
@@ -60,6 +62,8 @@ internal object PreferencesMapper {
                 ?: defaults.usageHistoryEnabled,
             permissionEducationDismissed = prefs[PreferencesKeys.FLAG_PERMISSION_EDU_DISMISSED]
                 ?: defaults.permissionEducationDismissed,
+            llmRouterEnabled = prefs[PreferencesKeys.FLAG_LLM_ROUTER_ENABLED]
+                ?: defaults.llmRouterEnabled,
         )
     }
 
@@ -67,6 +71,7 @@ internal object PreferencesMapper {
         prefs[PreferencesKeys.FLAG_AI_SUGGESTIONS_ENABLED] = value.aiSuggestionsEnabled
         prefs[PreferencesKeys.FLAG_USAGE_HISTORY_ENABLED] = value.usageHistoryEnabled
         prefs[PreferencesKeys.FLAG_PERMISSION_EDU_DISMISSED] = value.permissionEducationDismissed
+        prefs[PreferencesKeys.FLAG_LLM_ROUTER_ENABLED] = value.llmRouterEnabled
     }
 
     // ── Device-profile cache (nullable: absent until first write) ──────────────

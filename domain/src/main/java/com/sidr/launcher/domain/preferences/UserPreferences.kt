@@ -2,6 +2,11 @@ package com.sidr.launcher.domain.preferences
 
 data class UserPreferences(
     val themeName: String = "system",          // "system" | "light" | "dark"
+    // AIL-6 / DF-7 — brand accent ("phosphor") choice. "green" is the default brand; "amber" is the
+    // shipped alternative (both schemes already exist in core/ui). Stored as a plain string so :domain
+    // stays free of the core/ui AccentColor enum; the string → enum mapping lives in :app (LauncherActivity).
+    // Key is denylist-clean ("accent"/"color" are not forbidden terms).
+    val accentColor: String = "green",          // "green" | "amber"
     val commandInputEnabled: Boolean = true,
     // Block X6 — deferred UI preferences.
     // Home "Favorites" row size (top-N most-used apps); read by LauncherViewModel.deriveFavorites.

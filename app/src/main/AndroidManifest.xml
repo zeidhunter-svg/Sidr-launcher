@@ -68,6 +68,13 @@
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+            <!-- Also expose Sidr as a normal, tappable app in other launchers' drawers so it can be
+                 opened right after install (before it is the default home). Kept as a separate filter
+                 from the HOME one; the launcher already filters itself out of its own app list. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
         </activity>
 
         <receiver

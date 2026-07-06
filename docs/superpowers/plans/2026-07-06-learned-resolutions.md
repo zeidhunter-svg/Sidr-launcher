@@ -3,9 +3,10 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development (recommended)
 > or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 >
-> **STATUS: PLAN — awaiting owner approval. Do NOT start execution** (no production code, no Room schema
-> change, no use-case wiring) until the owner approves this plan. Source of truth for behavior is the
-> design spec: [2026-07-06-learned-resolutions-design.md](../specs/2026-07-06-learned-resolutions-design.md).
+> **STATUS: APPROVED (owner, 2026-07-06)** after pre-flight edits + the v1-slot edit. Ready for execution
+> task-by-task: start with **Phase A** (pure domain, zero behavior change); **Phases B/C** are gated on
+> schema/wiring as marked. Source of truth for behavior is the design spec:
+> [2026-07-06-learned-resolutions-design.md](../specs/2026-07-06-learned-resolutions-design.md).
 
 **Goal:** Teach the launcher, entirely on-device, which app the user meant for an ambiguous launch
 command — rank the learned target first, then (after K consistent explicit choices) auto-resolve it —
@@ -851,7 +852,7 @@ uninstalled targets. **DoD:** `:domain:test` green; no placeholder assertions co
 
 ---
 
-### Task 6: Read-path decorator `ResolveCommandWithPreferenceUseCase`
+### Task 6: Launch slot extractor + read-path decorator `ResolveCommandWithPreferenceUseCase`
 
 > **Owner-decided fork (a):** `LauncherAction.LaunchApp` takes a *query* (re-resolves), so AutoResolve of a
 > **specific** package cannot go through it. The decorator does **not** produce `Executed`; it returns a
@@ -866,16 +867,81 @@ behind a testable `CommandRouteStep` seam here); `CommandNormalizer.normalize(ra
 `CommandOutcome.NeedsConfirmation(candidates: List<InstalledApp>)`.
 
 **Files:**
+- Create: `domain/src/main/java/com/sidr/launcher/domain/memory/resolution/LaunchSlotExtractor.kt`
 - Create: `domain/src/main/java/com/sidr/launcher/domain/memory/resolution/ResolveCommandWithPreferenceUseCase.kt`
   (defines `ResolvedCommand` + `CommandRouteStep`)
+- Test: `domain/src/test/java/com/sidr/launcher/domain/memory/resolution/LaunchSlotExtractorTest.kt`
 - Test: `domain/src/test/java/com/sidr/launcher/domain/memory/resolution/ResolveCommandWithPreferenceUseCaseTest.kt`
 
-**Interfaces produced:** `CommandRouteStep` (fun interface), `ResolvedCommand` (`Outcome` | `AutoLaunch`),
+**Interfaces produced:** `LaunchSlotExtractor.slotOf(normalizedCommand): String`, `CommandRouteStep` (fun
+interface), `ResolvedCommand` (`Outcome` | `AutoLaunch`),
 `ResolveCommandWithPreferenceUseCase.resolve(rawInput): ResolvedCommand`.
 
-> **v1 query = the normalized full command** (`CommandNormalizer.normalize(rawInput)`, e.g. `"open bank"`).
-> Verb-stripping to the bare slot (`"bank"`) is a documented refinement (see backlog); keying on the
-> normalized command is the deterministic v1 baseline. (Flagged to owner in the hand-off.)
+> **v1 query = the normalized SLOT** (`LaunchSlotExtractor.slotOf(CommandNormalizer.normalize(rawInput))`,
+> e.g. `open bank` → `bank`, `open my bank app` → `bank`). This is a **narrow, deterministic** verb/filler
+> strip for the LAUNCH_APP ambiguity flow only — **not** a general NLU/parser.
+
+#### Part A — `LaunchSlotExtractor`
+
+- [ ] **Step A1: Write the failing test** — `LaunchSlotExtractorTest.kt`:
+
+```kotlin
+package com.sidr.launcher.domain.memory.resolution
+
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class LaunchSlotExtractorTest {
+    private fun slot(s: String) = LaunchSlotExtractor.slotOf(s)
+
+    @Test fun `strips leading launch verb`() = assertEquals("bank", slot("open bank"))
+    @Test fun `strips other launch verb`() = assertEquals("bank", slot("launch bank"))
+    @Test fun `strips possessive and trailing app`() = assertEquals("bank", slot("open my bank app"))
+    @Test fun `strips go to`() = assertEquals("bank", slot("go to bank"))
+    @Test fun `keeps a bare slot`() = assertEquals("bank", slot("bank"))
+    @Test fun `preserves a multi-word slot`() = assertEquals("bank of scotland", slot("open bank of scotland"))
+    @Test fun `falls back when stripping empties it`() = assertEquals("open", slot("open"))
+}
+```
+
+- [ ] **Step A2: Run test to verify it fails** — `:domain:test` → FAIL.
+
+- [ ] **Step A3: Create `LaunchSlotExtractor.kt`:**
+
+```kotlin
+package com.sidr.launcher.domain.memory.resolution
+
+/**
+ * Minimal deterministic slot extractor for the LAUNCH_APP ambiguity flow ONLY — NOT a general NLU/parser.
+ * From an already-normalized command it strips a leading launch verb + leading determiner/possessive and a
+ * trailing "app"/"application", yielding the app slot. Falls back to the input if stripping empties it.
+ *
+ *   open bank → bank ; launch bank → bank ; open my bank app → bank ; go to bank → bank
+ */
+object LaunchSlotExtractor {
+    private val LEADING = setOf(
+        "open", "launch", "start", "run", "go", "to", "show", "get", "the", "a", "an", "my", "this",
+    )
+    private val TRAILING = setOf("app", "application")
+
+    fun slotOf(normalizedCommand: String): String {
+        val tokens = normalizedCommand.split(' ').filter { it.isNotBlank() }.toMutableList()
+        while (tokens.isNotEmpty() && tokens.first() in LEADING) tokens.removeAt(0)
+        while (tokens.isNotEmpty() && tokens.last() in TRAILING) tokens.removeAt(tokens.size - 1)
+        return tokens.joinToString(" ").ifBlank { normalizedCommand }
+    }
+}
+```
+
+- [ ] **Step A4: Run tests to verify they pass** — `:domain:test` → PASS. **Commit:**
+
+```bash
+git add domain/src/main/java/com/sidr/launcher/domain/memory/resolution/LaunchSlotExtractor.kt \
+        domain/src/test/java/com/sidr/launcher/domain/memory/resolution/LaunchSlotExtractorTest.kt
+git commit -m "feat(s2-1): narrow deterministic LaunchSlotExtractor (LAUNCH_APP ambiguity only)"
+```
+
+#### Part B — the decorator
 
 - [ ] **Step 1: Write the failing test:**
 
@@ -905,7 +971,7 @@ class ResolveCommandWithPreferenceUseCaseTest {
     private fun installed(p: String, l: String = p) = InstalledApp(p, l)
     private val ambiguous = CommandOutcome.NeedsConfirmation(listOf(installed("com.a", "A"), installed("com.b", "B")))
     private fun target(p: String) = ResolvedTarget.App(p)
-    private val key = CapabilityKey(ActionIds.LAUNCH_APP, "open bank")   // normalize("open bank") == "open bank"
+    private val key = CapabilityKey(ActionIds.LAUNCH_APP, "bank")   // slotOf(normalize("open bank")) == "bank"
     private val candidates = CandidateSet(listOf(target("com.a"), target("com.b")))
     private fun useCase(routeReturns: CommandOutcome) =
         ResolveCommandWithPreferenceUseCase({ routeReturns }, store, policy, catalog)
@@ -987,7 +1053,9 @@ class ResolveCommandWithPreferenceUseCase(
         if (outcome !is CommandOutcome.NeedsConfirmation) return ResolvedCommand.Outcome(outcome, null)
 
         val candidates = CandidateSet(outcome.candidates.map { ResolvedTarget.App(it.packageName) })
-        val key = CapabilityKey(ActionIds.LAUNCH_APP, CommandNormalizer.normalize(rawInput))
+        // v1 slot: narrow deterministic verb/filler strip for LAUNCH_APP ambiguity only (not a parser).
+        val slot = LaunchSlotExtractor.slotOf(CommandNormalizer.normalize(rawInput))
+        val key = CapabilityKey(ActionIds.LAUNCH_APP, slot)
         val token = ResolutionLearningToken(
             capabilityKey = key, context = ResolutionContext.None, candidateSet = candidates,
             fingerprint = fingerprintOf(candidates), isAppAmbiguityFlow = true,
@@ -1300,8 +1368,10 @@ navigable Settings → Learned Choices; list + delete render; safe error state.
   `RecordResolutionChoiceUseCase.record(key,context,chosen,candidates,now): OperationResult<Unit>`,
   `ResolvedCommand.Outcome(outcome,learningToken)` / `ResolvedCommand.AutoLaunch(target,fallback)`,
   `CommandRouteStep`, `LearnedChoiceDisplayState` (5 variants) — used consistently across tasks.
-- **Residual note for owner:** v1 `query` = normalized full command (verb-strip to the bare slot is a
-  documented backlog refinement).
+- **v1 slot (owner-required, included):** `query` = the normalized slot via the narrow deterministic
+  `LaunchSlotExtractor` (Task 6 Part A) — LAUNCH_APP ambiguity only, **not** a general NLU/parser:
+  `open bank` / `launch bank` / `open my bank app` → `bank`. This matches the design spec's §3 "normalized
+  slot, e.g. 'bank'".
 
 ## Execution Handoff
 

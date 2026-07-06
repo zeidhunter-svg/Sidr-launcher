@@ -8,12 +8,15 @@
 
 Owner reframed the project into **Stage 1 — AI Launcher (MVP, now)** → **Stage 2 — AI Framework** →
 **Stage 3 — Agentic OS** (ADR "2026-07-05 — Project reframed into three stages"). The Phase 0–9 + Phase
-UX foundation below is **done and device-accepted**, but the shipped routing is still **rule-based only**
-— the launcher is not yet genuinely AI. The **active work** is the Stage-1 AI-Launcher completion track
-(blocks **AIL-1…6**): universal input + **BYOK cloud LLM action router** (`CommandPlanner`, a sanctioned
-third pipeline) + Action Registry + web/URL/Play-Store routing + confirmation gating. Router-off =
-byte-for-byte rule-only parity. Plan: `ai-context/ai-launcher-mvp-plan.md`; roadmap: `docs/roadmap.md`.
-The model track (OQ#1–#4), device matrix, and RC/hardening polish run in parallel, off the ship gate.
+UX foundation below is **done and device-accepted**. The **Stage-1 AI-Launcher MVP is now CLOSED
+(2026-07-06, blocks AIL-0…6)** and device-accepted on SM-A325F: universal input + **BYOK cloud LLM action
+router** (`CommandPlanner`, a sanctioned third pipeline) + Action Registry + web/URL/Play-Store routing +
+risk-gated confirmation — the launcher is genuinely AI-first, with router-off/offline = byte-for-byte
+rule-only parity. Plan (closed): `ai-context/ai-launcher-mvp-plan.md`; roadmap: `docs/roadmap.md`. The
+**active work is now Stage 2 — AI Framework** (generalize router/registry/context/memory into a reusable
+on-device AI framework: Action Registry v2, Context Engine v2, User Memory — open a Stage-2 plan before
+coding). The model track (OQ#1–#4), device matrix, and RC/hardening polish run in parallel, off the ship
+gate.
 
 **Stage-1B progress:** **AIL-0 ✅ done (2026-07-05)** — `core/ui` re-skinned to the "ultra-cyberpunk /
 early-computer terminal" identity (4 `ColorScheme`s green-default/amber-alt × dark/light, dynamic colour
@@ -71,8 +74,24 @@ confirm block** (`EXECUTE?` + bracketed `[CONFIRM]` accent risk chip + `> comman
 CANCEL/CONFIRM; AIL-0 tokens; no `domain→ui` edge). `:app` `provideExecuteActionUseCase`; VM injects it + the
 bound `ActionCatalog`. Hard rules intact; rule-only parity structural. New `ExecuteActionUseCaseTest` (11) +
 5 VM tests (VM 70→75); `:domain:test`+`testDebugUnitTest`+`assembleDebug` green. Device acceptance deferred
-to AIL-6. ADR: "ADR 2026-07-06 — AIL-5 complete". **Active block = AIL-6 (Polish + SM-A325F device
-acceptance).**
+to AIL-6. ADR: "ADR 2026-07-06 — AIL-5 complete". **AIL-6 ✅ done (2026-07-06) — closes the Stage-1 MVP
+(AIL-0…6).** Polish + mandatory SM-A325F device acceptance; no new product runtime. Cleared the RC gate
+(`:app:assembleRelease`, plus `:domain:test`+`testDebugUnitTest`+`assembleDebug`) — env note (machine-only,
+no repo change): system JDK had rolled to 25 (Gradle 8.10.2 can't parse it → `IllegalArgumentException:
+25.0.3`), fixed via JBR 21 to run Gradle + a locally-downloaded Temurin **JDK 17** toolchain
+(`-Porg.gradle.java.installations.paths`) + git-ignored `local.properties`. **Device pass (SM-A325F/A13,
+agent-drove `adb`, owner typed the BYOK key on-device only):** one-field routing (app/site/web/Play-Store/
+settings/assistant, external `ACTION_VIEW`, mic visible); **NL router** (real OpenRouter/gpt-4o-mini) —
+CONFIRM proposal ("take me to the github homepage" → `open https://github.com`) → **DF-4 confirm card**,
+CANCEL = no-op, CONFIRM → github opens; SAFE ("see everything installed" → `show_apps`) → **one-tap
+accelerator**; **R4** nothing auto-runs; **router-off/offline ⇒ rule-only parity** (airplane + flag-on NL →
+"Unknown command" fallback; launcher fully offline); **privacy** 0 `sk-or-` in logcat + guard tests green;
+**DF-7** green↔amber instant + persists across force-stop, **DF-5** block caret + chip press-invert, **DF-6**
+`>_` mark / no white flash. Honest partials (non-gating): DF-5 scanlines too faint to frame-capture;
+assistant chat streaming (Phase-5 item, not an AIL-6 gate) not re-driven via adb but its transport is proven
+by the router round-trip; boot-warmup + LOW_END motion suppression unexercised on this MID/HIGH device. ADR:
+"ADR 2026-07-06 — AIL-6 complete". **Stage-1 AI-Launcher MVP CLOSED; active work = Stage 2 — AI Framework
+(open a Stage-2 plan before coding).**
 
 ## Where we are (foundation — done)
 

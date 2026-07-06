@@ -1,14 +1,20 @@
 # CLAUDE.md — Sidr Launcher
 
-Session digest. Read this first. **Last synced: 2026-07-06 — AIL-5 complete (risk-gated confirm card +
-execution of router proposals shipped); active block is now AIL-6 (Polish + SM-A325F device acceptance).**
+Session digest. Read this first. **Last synced: 2026-07-06 — AIL-6 complete → Stage-1 AI-Launcher MVP
+CLOSED (blocks AIL-0…6). The RC build gate (`:app:assembleRelease`) is green under a JDK-17 toolchain and a
+full SM-A325F device-acceptance pass with a real BYOK provider passed: NL routing → DF-4 confirm card
+(CONFIRM) / one-tap (SAFE) → execution, nothing auto-runs (R4); router-off / offline ⇒ byte-for-byte
+rule-only parity; DF-5/6/7 polish (block caret, chip press-invert, `>_` mark, green↔amber accent that
+persists across force-stop). No code change was required by the device pass. Active work is now Stage 2 —
+AI Framework.**
 Project reframed into three
-stages (AI Launcher → AI Framework → Agentic OS); active work is the Stage-1 AI-Launcher completion track.
-Foundation (Phases 3 → 9 + Phase UX) is built and device-accepted; routing is now **AI-first behind a
-default-off flag** — AIL-4 added the BYOK cloud `CommandPlanner` and AIL-5 added the confirmation +
-execution surface for its proposals. Router-off ⇒ byte-for-byte rule-only parity. The original framing of that work: a **BYOK cloud LLM
+stages (AI Launcher → AI Framework → Agentic OS); the Stage-1 AI-Launcher completion track is done.
+Foundation (Phases 3 → 9 + Phase UX) is built and device-accepted; routing is **AI-first behind a
+default-off flag** — AIL-4 added the BYOK cloud `CommandPlanner`, AIL-5 added the confirmation + execution
+surface for its proposals, and AIL-6 device-proved the whole loop. Router-off ⇒ byte-for-byte rule-only
+parity. The original framing of that work: a **BYOK cloud LLM
 router** that understands natural language and routes it to safe, registered actions with confirmation.
-Reframed roadmap: [docs/roadmap.md](docs/roadmap.md); active plan:
+Reframed roadmap: [docs/roadmap.md](docs/roadmap.md); Stage-1 plan (closed):
 [ai-context/ai-launcher-mvp-plan.md](ai-context/ai-launcher-mvp-plan.md).
 
 **Three-stage vision (owner reframe 2026-07-05).**
@@ -71,16 +77,19 @@ The offline launcher core (home, app grid, app launch) must work fully without A
 
 ## Current goal (active work)
 
-**NOW (2026-07-06): Stage-1 AI-Launcher completion track — active block = AIL-6 (Polish + SM-A325F device
-acceptance).** The foundation is built and device-accepted; AIL-3 unified the home input over the unchanged
-pipeline, **AIL-4 made routing AI-first** (the BYOK cloud `CommandPlanner` — a sanctioned third pipeline —
-proposes **registered** actions as non-executing `CommandOutcome.RoutedAction`, never auto-executed (R4),
-behind a default-off flag so **router-off ⇒ byte-for-byte rule-only parity**), and **AIL-5 turned those
-proposals into a risk-gated confirmation surface**: a CONFIRM-risk proposal shows the DF-4 terminal confirm
-card, a SAFE one shows a one-tap accelerator, and confirming executes the `LauncherAction` (resolve →
-`ExecutableAction` → executor) via the new `ExecuteActionUseCase` — **router-proposals only, so the rule
-path (and its parity) is untouched**. AIL-6 is the final device-acceptance + polish pass. The active track
-(blocks **AIL-1…6**, plan: [ai-context/ai-launcher-mvp-plan.md](ai-context/ai-launcher-mvp-plan.md)) adds:
+**NOW (2026-07-06): Stage 2 — AI Framework. The Stage-1 AI-Launcher MVP (blocks AIL-0…6) is CLOSED and
+device-accepted on SM-A325F.** Next work generalizes the router/registry/context/memory into a reusable
+on-device AI framework (Action Registry v2, Context Engine v2, User Memory) per the three-stage reframe;
+open a Stage-2 plan before coding. The launcher ships AI-first today: AIL-3 unified the home input over the
+unchanged pipeline, **AIL-4 made routing AI-first** (the BYOK cloud `CommandPlanner` — a sanctioned third
+pipeline — proposes **registered** actions as non-executing `CommandOutcome.RoutedAction`, never
+auto-executed (R4), behind a default-off flag so **router-off ⇒ byte-for-byte rule-only parity**), **AIL-5
+turned those proposals into a risk-gated confirmation surface** (CONFIRM → DF-4 confirm card, SAFE →
+one-tap accelerator, confirm executes the `LauncherAction` via `ExecuteActionUseCase` — router-proposals
+only, rule path untouched), and **AIL-6 device-proved the whole loop on SM-A325F** with a real BYOK
+provider (NL → confirm card / one-tap → execution; CANCEL = no-op; offline & router-off = rule-only parity;
+0 key leaks; DF-5/6/7 polish) and cleared the `:app:assembleRelease` RC gate. Stage-1 track history
+(blocks **AIL-0…6**, plan: [ai-context/ai-launcher-mvp-plan.md](ai-context/ai-launcher-mvp-plan.md)):
 
 - **AIL-0 ✅ DONE (2026-07-05)** Design tokens & visual identity (`core/ui`, presentation-only) — replaced
   the neutral-indigo Material-You look with the "ultra-cyberpunk / early-computer terminal" identity: 4
@@ -155,7 +164,24 @@ path (and its parity) is untouched**. AIL-6 is the final device-acceptance + pol
   parity structural. New `ExecuteActionUseCaseTest` (11) + 5 VM tests (VM 70→75); `:domain:test` +
   `testDebugUnitTest` + `assembleDebug` green. Device acceptance deferred to AIL-6. ADR: decisions.md "ADR
   2026-07-06 — AIL-5 complete".
-- **AIL-6 — NEXT** Polish + SM-A325F device acceptance with a real BYOK provider; offline parity.
+- **AIL-6 ✅ DONE (2026-07-06)** Polish + SM-A325F device acceptance — **closes the Stage-1 MVP**. Landed the
+  bundled AIL-4/5 code + DF-5/6/7 polish (owner forks pre-decided), cleared the RC gate, and executed the
+  mandatory device pass with a real BYOK provider. **Env note (no repo change):** the machine's JDK had
+  rolled to 25 (Gradle 8.10.2 can't parse it → `IllegalArgumentException: 25.0.3`); fixed by running Gradle
+  under JBR 21 + a locally-downloaded Temurin **JDK 17** toolchain (`-Porg.gradle.java.installations.paths`)
+  + a git-ignored `local.properties` — `:domain:test`+`testDebugUnitTest`+`assembleDebug`+`:app:assembleRelease`
+  green. **Device (SM-A325F/A13, agent-drove adb, owner typed the key on-device only):** one-field routing
+  (app/site/web/Play-Store/settings/assistant, all external `ACTION_VIEW`, mic visible); **NL router**
+  ("take me to the github homepage" → `open https://github.com` CONFIRM → **DF-4 confirm card**; CANCEL =
+  no execution, CONFIRM → github opens; "see everything installed" → `show_apps` SAFE → **one-tap `[ ▸ apps ]`**);
+  **R4** nothing auto-runs; **offline/router-off ⇒ rule-only parity** (airplane + flag-on NL → "Unknown
+  command" rule fallback; settings nav offline OK); **privacy** 0 `sk-or-` in logcat + guard tests green;
+  **DF-7** green↔amber instant + survives force-stop, **DF-5** block caret + chip press-invert, **DF-6** `>_`
+  brand mark / no white flash. Honest partials (non-gating): DF-5 scanlines code-verified but too faint to
+  frame-capture; assistant chat streaming (a Phase-5 item, not an AIL-6 gate) not re-driven via adb but its
+  cloud transport is proven by the router round-trip; boot-warmup reboot + LOW_END motion suppression
+  unexercised on this MID/HIGH device. No acceptance-blocking bug found. ADR: decisions.md "ADR 2026-07-06 —
+  AIL-6 complete". **Stage-1 AI-Launcher MVP CLOSED (AIL-0…6); next = Stage 2 — AI Framework.**
 
 **Blocking ADR for AIL-4 (✅ honored):** `CommandPlanner` is a *third* pipeline (structured
 routing-via-LLM); "local matching runs before any LLM call" is preserved (rule path always first);

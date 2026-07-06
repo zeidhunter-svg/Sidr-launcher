@@ -332,8 +332,29 @@ softened toward a default.
   rules intact; new `ExecuteActionUseCaseTest` (11) + 5 VM tests (VM 70→75); `:domain:test` +
   `testDebugUnitTest` + `assembleDebug` green. Device acceptance deferred to AIL-6. ADR: decisions.md
   "ADR 2026-07-06 — AIL-5 complete".
-- **AIL-6 — Polish + device acceptance.** SM-A325F pass with a real BYOK provider: NL routing, web/URL/
-  Play-Store, confirmation, **offline parity**. Docs + ADR + `current-status.md` sync.
+- **AIL-6 ✅ DONE (2026-07-06)** Polish + SM-A325F device acceptance — **closes the Stage-1 MVP (AIL-0…6)**.
+  No new product runtime: landed the WIP-bundled AIL-4/5 code + DF-5/6/7 polish (owner forks pre-decided —
+  Moderate motion / terminal `>_` mark / green↔amber accent switcher), cleared the RC build gate, and ran the
+  mandatory device pass. **Env note (machine-only, no repo change):** system JDK had rolled to 25 (Gradle
+  8.10.2's embedded Kotlin can't parse it → `IllegalArgumentException: 25.0.3`); fixed by running Gradle under
+  Android Studio's JBR 21 + a locally-downloaded Temurin **JDK 17** to satisfy the strict `jvmToolchain(17)`
+  (`-Porg.gradle.java.installations.paths`) + a git-ignored `local.properties`. **Gate green:** `:domain:test`
+  + `testDebugUnitTest` + `assembleDebug` + `:app:assembleRelease` (R8/shrunk release APK). **Device
+  (SM-A325F/A13, agent-drove `adb`+`screencap`, owner entered the BYOK key on-device only, never echoed):**
+  §8 one-field routing (app/site/web/Play-Store/settings/assistant — all external `ACTION_VIEW`, SITE chip
+  URL-gated, mic affordance visible); **NL router** with a real OpenRouter/gpt-4o-mini provider —
+  *"take me to the github homepage"* → `open https://github.com` (CONFIRM) → **DF-4 confirm card**, CANCEL =
+  no execution, CONFIRM → github opens (`ACTION_VIEW` in logcat); *"see everything installed"* → `show_apps`
+  (SAFE) → **one-tap `[ ▸ apps ]` accelerator**; **R4** nothing auto-runs; **router-off / offline ⇒
+  byte-for-byte rule-only parity** (airplane + flag-on NL → "Unknown command" rule fallback; settings nav +
+  launcher fully offline); **privacy** 0 `sk-or-` in logcat + outbound-allow-list guard tests green; **DF-7**
+  green↔amber accent applies instantly + persists across `force-stop`, **DF-5** idle block caret + chip
+  press-invert captured, **DF-6** `>_` phosphor mark / no white flash. Honest partials (non-gating): DF-5
+  scanlines code-verified but too faint to frame-capture; assistant chat streaming (a Phase-5 item, not an
+  AIL-6 §8 gate) not re-driven via adb though its cloud transport is proven by the router round-trip;
+  boot-warmup reboot + LOW_END motion suppression unexercised on this MID/HIGH device. No acceptance-blocking
+  bug found (no code change required by the pass). ADR: decisions.md "ADR 2026-07-06 — AIL-6 complete".
+  **Stage-1 AI-Launcher MVP CLOSED; next = Stage 2 — AI Framework.**
 
 ## 6. Module & topology impact (hard-rules compliance)
 

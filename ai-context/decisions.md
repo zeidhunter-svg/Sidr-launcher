@@ -4024,3 +4024,82 @@ execution; offline parity), CRT motion/typing on the card (DF-5), and `>`-glyph/
 
 **Next = AIL-6** — Polish + device acceptance: SM-A325F pass with a real BYOK provider (NL routing,
 web/URL/Play-Store, confirmation, **offline parity**); docs + ADR + `current-status.md` sync.
+
+## ADR 2026-07-06 — AIL-6 complete (Polish + SM-A325F device acceptance → Stage-1 AI-Launcher MVP CLOSED)
+
+**What this block was.** The final AIL block: no new product runtime — it landed the (already-written,
+build-green) AIL-4/5 code + the DF-5/6/7 polish that the WIP checkpoint bundled, cleared the RC build gate,
+and executed the **mandatory SM-A325F device-acceptance pass** that every prior AIL block deferred here.
+Forks DF-5/6/7 were pre-decided by the owner (Moderate motion / terminal `>_` mark / green↔amber accent
+switcher); no fork was re-opened. Closing AIL-6 **closes the Stage-1 AI-Launcher MVP** (blocks AIL-0…6).
+
+**Environment fix (no repo change).** The RC build first failed for an environment reason, not a code one:
+the machine's system JDK had rolled to **25.0.3** (java-25/26 only; no 17/21), and Gradle 8.10.2's embedded
+Kotlin cannot parse a Java-25 version string → cryptic `IllegalArgumentException: 25.0.3` during build-script
+compilation. Fixed by running Gradle under Android Studio's bundled **JBR 21** and satisfying the project's
+strict `jvmToolchain(17)` with a locally-downloaded **Temurin JDK 17** (`~/jdks/jdk-17.0.19+10`) via
+`-Porg.gradle.java.installations.paths`, plus a git-ignored `local.properties` (`sdk.dir=~/Android/Sdk`).
+No `build.gradle.kts`, toolchain pin, or committed file changed — this is a machine-setup note, recorded so
+the next session doesn't re-derive it. **Gate green under JDK 17:**
+`./gradlew --no-daemon :domain:test testDebugUnitTest assembleDebug :app:assembleRelease` → BUILD
+SUCCESSFUL (release APK R8/resource-shrunk, ~79 MB; debug ~107 MB). `:app:assembleRelease` is the AIL-6-only
+RC gate (§0) and is now proven.
+
+**Device acceptance — SM-A325F / Android 13, fresh debug build, real BYOK provider.** Executed
+agent-directed with the device on the build host: the agent drove `adb` (install, `am start`, taps, text,
+`screencap`, `dumpsys`, airplane-mode) and adjudicated from screenshots + activity/log output; the **owner
+entered the secret API key on-device only** (pre-filled non-secret Base URL `https://openrouter.ai/api/v1`
++ Model `openai/gpt-4o-mini` via adb; key typed on the phone, never echoed to chat/logs/files). Old
+2026-07-04 build was signature-incompatible (different debug keystore) → uninstall+reinstall (wiped
+`sidr_preferences`/`sidr_secrets`; key re-entered, as expected).
+
+- **§8 one-field routing (router OFF = rule pipeline):** `youtube` → app match → launches YouTube; `github.com`
+  → **SITE chip appears** (URL-gated; absent for non-URL queries) → opens Opera via `ACTION_VIEW`; `weather
+  forecast` → WEB chip → browser search; `install spotify` → Play Store (`com.android.vending`, `market://`);
+  typed `settings` → Settings screen; sparkle / typed → Assistant. **No embedded browser** (all external
+  `ACTION_VIEW`). Mic affordance **visible** on the command row (ADR-262 probe fix confirmed on hardware).
+- **NL router (llmRouterEnabled ON + provider + online):** *"can you take me to the github homepage"* →
+  LLM proposed `open https://github.com` (open_url = **CONFIRM**) → **DF-4 confirm card** rendered (`EXECUTE?`
+  + bracketed `[CONFIRM]` risk chip + `> open https://github.com` + `[ CANCEL ] / [ CONFIRM ]`); nothing
+  auto-ran (**R4**). **CANCEL** dismissed with no execution (still on launcher); re-submit + **CONFIRM**
+  executed (`START act=VIEW dat=https://github.com/... cmp=com.opera.browser` in logcat). *"I want to see
+  everything installed on my phone"* → `show_apps` (**SAFE**) → **one-tap `[ ▸ apps ]` accelerator** (not a
+  card) → tap dispatched. Full AIL-4→AIL-5 loop (LLM → RoutedAction → resolve → execute) proven on device.
+- **Router-off / offline parity:** airplane-mode ON with the router flag still ON, the *same* NL command
+  returned the plain rule fallback **"Unknown command. Try: open <app>, search <query>"** — the planner is
+  not consulted offline (degrades byte-for-byte to the rule outcome). Typed `settings` nav + rendering work
+  fully offline, no crash. Launcher core is offline-complete.
+- **Privacy:** `adb logcat | grep sk-or- → 0` across the entire session (key never logged); the outbound
+  allow-list guard tests are green (only command + action-catalog schema leaves); offline degradation
+  corroborates no rogue calls. Key stored (form collapsed to the configured chat view) but **never
+  displayed back**.
+- **Visual polish (device is MID/HIGH → motion gate ON, not suppressed):** **DF-7** green↔amber accent
+  switch applies **instantly** (whole UI recolors) and **survives `force-stop`** (persisted via
+  `user_accent_color`); **DF-5** idle **block caret** visible on the empty prompt, and **chip press-invert**
+  captured (held chip → solid-accent fill + ground-colored text); **DF-6** `>_` phosphor-green brand mark on
+  the brand-dark launch surface (no white boot flash). Left the device on the owner default (green).
+
+**Honest partials / not-driven (non-gating).** DF-5 **scanline overlay** is code-verified + motion-gated ON
+but too faint (low-alpha lines) to distinguish in compressed `screencap` PNGs — not independently
+frame-captured. **Assistant chat streaming** (C.1, a Phase-5 item, *not* an AIL-6 §8 gate) was not re-driven
+via adb (on-screen-keyboard layout shift ate the input); the identical cloud transport
+(`HttpClient`/config/Keystore) is nonetheless proven working end-to-end by the LLM-router round-trip.
+**Boot-warmup reboot** (`RECEIVE_BOOT_COMPLETED` re-enqueue) and the **LOW_END motion-suppression** path
+remain unexercised on this MID/HIGH device (separate device-matrix track). Cold-start perf remains
+`PENDING/PERF-RISK` and is explicitly **not** a ship gate.
+
+**§0 closure checklist — all pass.** Scope matches §5 AIL-6; forks were pre-decided (none silently
+re-decided). Hard rules intact (`domain` pure; no `feature→feature`; ops return `OperationResult`; launcher
+fully offline; the three ports `IntentMatcher`/`GenerativeAiEngine`/`CommandPlanner` stay distinct).
+Router-off/offline/no-key ⇒ rule-only parity proven on device; privacy guard green. `:domain:test` +
+`testDebugUnitTest` + `assembleDebug` + `:app:assembleRelease` green. Device pass executed on SM-A325F. ADR
+appended; `CLAUDE.md` `Current goal` advanced to **Stage 2 (AI Framework)**; `current-status.md` + this
+plan's §5 synced. **No code change was required by the device pass** (no acceptance-blocking bug found).
+
+**Stage-1 AI-Launcher MVP is CLOSED (AIL-0…6).** The launcher ships AI-first: one universal input +
+BYOK cloud LLM action router + Action Registry + web/URL/Play-Store routing + risk-gated confirmation, with
+byte-for-byte rule-only parity when the router is off/offline/unconfigured. **Next = Stage 2 — AI
+Framework** (generalize router/registry/context/memory into a reusable on-device AI framework: Action
+Registry v2, Context Engine v2, User Memory), per the three-stage reframe. Separate/parallel tracks remain:
+ONNX NLU (OQ#1/#2), embeddings (OQ#3), STT matrix (OQ#4), Android 9/11/14 + LOW_END device matrix, boot
+warmup, cold-start perf.

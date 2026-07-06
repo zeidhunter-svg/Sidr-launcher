@@ -58,7 +58,7 @@ breaking callers.
 2. **Non-ambiguous commands are never touched.**
 3. **UI/VM hold no business logic** — the VM shuttles an opaque token; all decisions live in domain.
 4. **Auto-resolve only for SAFE actions.** CONFIRM/RISKY never inherit auto-resolve, even at CONFIDENT.
-5. **Correction / reset / invalidation are mandatory.**
+5. **Correction / delete-to-relearn / invalidation are mandatory in v1; explicit reset is backlog.**
 6. **Everything deterministic and on-device.** No LLM, no cloud, no network on this path.
 7. **`HandleUserCommandUseCase` contract is not broken** — preference is an additive layer over its
    ambiguous outcome.
@@ -411,9 +411,9 @@ All deterministic, on-device, never throw (except rethrowing `CancellationExcept
 - Everything deterministic, on-device, never throws (except `CancellationException`).
 - New tests green (policy, evidence, store + migration, display, management VM, guards); `:domain:test`
   + `testDebugUnitTest` + `assembleDebug` green.
-- SM-A325F device acceptance: the whole slice observable (ambiguous → choice → `learning n/K` → after K
-  auto-resolve → correction switches → management screen shows/deletes → uninstalling the target
-  invalidates).
+- SM-A325F device acceptance: the whole slice observable — ambiguous → choice → `learning n/K` →
+  learning-phase correction switches target → after K auto-resolve → Settings delete → re-learn →
+  uninstall target invalidates.
 - ADR appended; `CLAUDE.md` / `current-status.md` synced; recorded as Stage-2 block **S2-1**.
 
 ## 12. Scope

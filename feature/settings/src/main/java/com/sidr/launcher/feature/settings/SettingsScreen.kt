@@ -353,15 +353,21 @@ private fun SettingsContent(
 /**
  * Builds the intent for the system default-launcher surface (Fork X5-C).
  *
- * API 29+ uses [RoleManager.ROLE_HOME] (`createRequestRoleIntent`) when the role is available;
- * otherwise falls back to the Home-settings screen. The caller launches it through an
- * `ActivityResultContracts.StartActivityForResult` launcher — a role request delivered via a plain
- * `startActivity` arrives with a null calling package and the system's RequestRoleActivity rejects it.
+ * API 29+ uses [RoleManager.ROLE_HOME] (`createRequestRoleIntent`) when the role is available **and not
+ * already held**; otherwise falls back to the Home-settings picker. Requesting a role you already hold
+ * returns `RESULT_CANCELED` with no UI, so once Sidr is the default launcher the request would silently
+ * no-op and the user could never switch away — [Settings.ACTION_HOME_SETTINGS] opens the changeable
+ * Home-app picker instead. The caller launches it through an `ActivityResultContracts.StartActivityForResult`
+ * launcher — a role request delivered via a plain `startActivity` arrives with a null calling package and
+ * the system's RequestRoleActivity rejects it.
  */
 private fun defaultLauncherIntent(context: Context): Intent =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         val roleManager = context.getSystemService(RoleManager::class.java)
-        if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
+        if (roleManager != null &&
+            roleManager.isRoleAvailable(RoleManager.ROLE_HOME) &&
+            !roleManager.isRoleHeld(RoleManager.ROLE_HOME)
+        ) {
             roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)
         } else {
             Intent(Settings.ACTION_HOME_SETTINGS)

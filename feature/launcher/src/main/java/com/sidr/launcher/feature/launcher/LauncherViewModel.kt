@@ -13,6 +13,7 @@ import com.sidr.launcher.domain.action.LauncherAction
 import com.sidr.launcher.domain.history.AppUsageRecord
 import com.sidr.launcher.domain.history.UsageHistoryRepository
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
+import com.sidr.launcher.domain.connectivity.ConnectivityChecker
 import com.sidr.launcher.domain.input.InputIntent
 import com.sidr.launcher.domain.input.UniversalInputRouter
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
@@ -81,6 +82,9 @@ class LauncherViewModel @Inject constructor(
     // Voice input modality (Block T). Produces the same text the keyboard does; rides the existing
     // command path. The launcher core never depends on it — when unavailable the mic is hidden.
     private val speechInputSource: SpeechInputSource,
+    // AIL-6: drives the home status line (● online / ○ offline). Domain port — the VM stays
+    // Android-free; reachability signals whether the cloud router/assistant is available.
+    private val connectivityChecker: ConnectivityChecker,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     // Survives process death — the user's typed command text is restored on relaunch (H3).
     // Hilt auto-provides this for @HiltViewModel; tests pass a SavedStateHandle() directly.
@@ -125,6 +129,15 @@ class LauncherViewModel @Inject constructor(
             scope = viewModelScope,
             started = SharingStarted.Eagerly,
             initialValue = speechInputSource.isAvailable(),
+        )
+
+    // AIL-6 home status line: live network reachability (● online / ○ offline). The initial value is
+    // the synchronous snapshot so the status is correct on first frame without waiting for collection.
+    val isOnline: StateFlow<Boolean> = connectivityChecker.connectivity
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = connectivityChecker.isOnline(),
         )
 
     // Derived state: combines the loaded app list with live usage records so the grid

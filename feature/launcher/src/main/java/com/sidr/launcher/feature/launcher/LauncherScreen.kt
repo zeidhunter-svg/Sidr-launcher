@@ -31,20 +31,20 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -53,8 +53,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.navigation.Routes
-import com.sidr.launcher.core.ui.R
 import com.sidr.launcher.core.ui.component.AppTile
+import com.sidr.launcher.core.ui.component.CommandBar
+import com.sidr.launcher.core.ui.component.CommandBarItem
 import com.sidr.launcher.core.ui.component.ConfirmActionCard
 import com.sidr.launcher.core.ui.component.EmptyState
 import com.sidr.launcher.core.ui.component.ErrorState
@@ -69,6 +70,7 @@ import com.sidr.launcher.core.ui.theme.Spacing
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.permission.PermissionFeature
 import com.sidr.launcher.domain.suggestions.Suggestion
+import kotlinx.coroutines.delay
 
 /**
  * The redesigned, decluttered home surface (Phase UX, Block X2).
@@ -94,7 +96,17 @@ fun LauncherScreen(
     val pendingRoutedAction by viewModel.pendingRoutedAction.collectAsStateWithLifecycle()
     val devConsoleOn by viewModel.devConsoleOn.collectAsStateWithLifecycle()
     val consoleLines by viewModel.consoleLines.collectAsStateWithLifecycle()
+    val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    // AIL-6 status-line clock — ticks within the minute; screen-local (time is a pure UI concern).
+    var currentTime by remember { mutableStateOf(currentHhMm()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentTime = currentHhMm()
+            delay(20_000L)
+        }
+    }
 
     // First-run nudge (Block X6): whether this launcher is already the system default HOME app.
     // A runtime Android query kept in the screen (like Settings' "Set as default"); the persisted
@@ -126,8 +138,8 @@ fun LauncherScreen(
     SidrScaffold(
         modifier = modifier,
         topBar = {
-            // Discoverable entry points — the only way to reach Settings / Assistant without typing
-            // a command (both stay as typed power-user shortcuts too). Labelled for TalkBack.
+            // Top bar = identity (SIDR//) + a terminal status line (AIL-6). The discoverable Settings /
+            // Assistant entry points moved to the bottom CommandBar (both stay typed shortcuts too).
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -153,16 +165,9 @@ fun LauncherScreen(
                             }
                         },
                 )
-                TopBarIcon(
-                    icon = Icons.Filled.Settings,
-                    contentDescription = "Settings",
-                    onClick = { viewModel.navigateTo(Routes.Settings.ROUTE) },
-                )
-                TopBarIcon(
-                    painter = painterResource(R.drawable.ic_assistant_24),
-                    contentDescription = "Assistant",
-                    onClick = { viewModel.navigateTo(Routes.Assistant.ROUTE) },
-                )
+                // AIL-6: terminal status line instead of Material icons. Settings/Assistant moved to
+                // the bottom CommandBar; the top bar now carries identity (SIDR//) + system state.
+                HomeStatus(isOnline = isOnline, time = currentTime)
             }
         },
     ) { innerPadding ->
@@ -234,7 +239,6 @@ fun LauncherScreen(
                             state = state.data,
                             onAppClick = viewModel::onAppClicked,
                             onSuggestionTap = viewModel::onSuggestionClicked,
-                            onAllApps = { viewModel.navigateTo(Routes.AppDrawer.ROUTE) },
                             showSetupHint = !isDefaultLauncher && !state.data.setupHintDismissed,
                             onSetDefault = {
                                 viewModel.dismissSetupHint()
@@ -250,6 +254,18 @@ fun LauncherScreen(
                     }
                 }
             }
+
+            // AIL-6 command bar: the launcher's persistent shell actions as bracketed terminal tokens
+            // (replaces the top-bar icons). Hidden while the search-overtakes body or dev console is up.
+            if (!inputResults.active && !devConsoleOn) {
+                CommandBar(
+                    items = listOf(
+                        CommandBarItem("ask", "Assistant") { viewModel.navigateTo(Routes.Assistant.ROUTE) },
+                        CommandBarItem("all apps", "All apps") { viewModel.navigateTo(Routes.AppDrawer.ROUTE) },
+                        CommandBarItem("cfg", "Settings") { viewModel.navigateTo(Routes.Settings.ROUTE) },
+                    ),
+                )
+            }
         }
     }
 }
@@ -261,7 +277,6 @@ private fun HomeContent(
     state: LauncherUiState,
     onAppClick: (InstalledApp) -> Unit,
     onSuggestionTap: (Suggestion) -> Unit,
-    onAllApps: () -> Unit,
     showSetupHint: Boolean,
     onSetDefault: () -> Unit,
     onDismissHint: () -> Unit,
@@ -279,16 +294,8 @@ private fun HomeContent(
             SectionHeader(text = "Favorites")
             FavoritesRow(favorites = state.favorites, onAppClick = onAppClick)
         }
-        // Push the All apps affordance to the bottom of the (small) home surface.
+        // Favorites/suggestions stay top-aligned; the All-apps action lives in the bottom CommandBar.
         Spacer(modifier = Modifier.weight(1f))
-        TextButton(
-            onClick = onAllApps,
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .padding(vertical = Spacing.md),
-        ) {
-            Text(text = "All apps")
-        }
     }
 }
 
@@ -599,6 +606,33 @@ private fun isDefaultLauncher(context: Context): Boolean = try {
 } catch (_: Exception) {
     false
 }
+
+/**
+ * AIL-6 home status line — replaces the off-theme Material top-bar icons. A monospace terminal status:
+ * a phosphor `● online` (accent) / dim `○ offline` reachability indicator plus the clock, so the top bar
+ * carries identity + live system state rather than glyphs from a different visual language.
+ */
+@Composable
+private fun HomeStatus(
+    isOnline: Boolean,
+    time: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = (if (isOnline) "● online" else "○ offline") + "  ·  " + time,
+        style = MaterialTheme.typography.labelMedium,
+        color = if (isOnline) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        modifier = modifier,
+    )
+}
+
+/** Current wall-clock time as `HH:mm` for the status line. */
+private fun currentHhMm(): String =
+    java.time.LocalTime.now().let { "%02d:%02d".format(it.hour, it.minute) }
 
 /**
  * Builds the intent for the system default-launcher surface. Mirrors the Settings screen helper

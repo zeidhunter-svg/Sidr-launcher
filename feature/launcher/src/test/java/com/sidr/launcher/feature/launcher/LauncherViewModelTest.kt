@@ -135,6 +135,7 @@ class LauncherViewModelTest {
         suggestionsCacheRepository: SuggestionsCacheRepository = FakeSuggestionsCacheRepository(),
         prefsRepo: UserPreferencesRepository = fakePrefsRepo,
         actionCatalog: FakeActionCatalog = FakeActionCatalog(),
+        connectivity: FakeConnectivityChecker = FakeConnectivityChecker(),
     ) = LauncherViewModel(
         installedAppsRepository = fakeRepo,
         routeCommand = routeUseCase,
@@ -147,9 +148,18 @@ class LauncherViewModelTest {
         suggestionEngine = suggestionEngine,
         suggestionsCacheRepository = suggestionsCacheRepository,
         speechInputSource = fakeSpeech,
+        connectivityChecker = connectivity,
         ioDispatcher = testDispatcher,
         savedStateHandle = savedStateHandle,
     )
+
+    @Test
+    fun `isOnline reflects the connectivity checker snapshot`() = runTest {
+        val offline = buildViewModel(connectivity = FakeConnectivityChecker(initiallyOnline = false))
+        assertFalse(offline.isOnline.value)
+        val online = buildViewModel(connectivity = FakeConnectivityChecker(initiallyOnline = true))
+        assertTrue(online.isOnline.value)
+    }
 
     /**
      * Builds a router-ON ViewModel whose planner returns [plannerResult]. [catalog] is shared by the
@@ -183,6 +193,7 @@ class LauncherViewModelTest {
             suggestionEngine = FakeSuggestionEngine(),
             suggestionsCacheRepository = FakeSuggestionsCacheRepository(),
             speechInputSource = fakeSpeech,
+            connectivityChecker = FakeConnectivityChecker(),
             ioDispatcher = testDispatcher,
             savedStateHandle = SavedStateHandle(),
         )
@@ -471,6 +482,7 @@ class LauncherViewModelTest {
             suggestionEngine = FakeSuggestionEngine(),
             suggestionsCacheRepository = FakeSuggestionsCacheRepository(),
             speechInputSource = fakeSpeech,
+            connectivityChecker = FakeConnectivityChecker(),
             ioDispatcher = testDispatcher,
             savedStateHandle = SavedStateHandle(),
         )
@@ -713,6 +725,7 @@ class LauncherViewModelTest {
             suggestionEngine = gatedEngine,
             suggestionsCacheRepository = cacheRepo,
             speechInputSource = fakeSpeech,
+            connectivityChecker = FakeConnectivityChecker(),
             ioDispatcher = testDispatcher,
             savedStateHandle = SavedStateHandle(),
         )

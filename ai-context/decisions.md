@@ -4103,3 +4103,42 @@ Framework** (generalize router/registry/context/memory into a reusable on-device
 Registry v2, Context Engine v2, User Memory), per the three-stage reframe. Separate/parallel tracks remain:
 ONNX NLU (OQ#1/#2), embeddings (OQ#3), STT matrix (OQ#4), Android 9/11/14 + LOW_END device matrix, boot
 warmup, cold-start perf.
+
+## ADR 2026-07-06 — Stage 2 kickoff: "Learned Resolutions" design spec (block S2-1, DESIGN-ONLY)
+
+**Status: DESIGN, not started — no code, no implementation plan, no Room schema change, no use-case
+wiring.** This entry records only that the first Stage-2 slice has an owner-approved *design spec*; the
+`writing-plans` step is deferred until the owner approves the written document.
+
+**Decision (owner, 2026-07-06):** Stage 2 starts **feature-first** — build one narrow complete user
+capability and grow only the minimal memory/context abstractions it needs; do **not** build a universal
+User Memory / Context Engine up front. The chosen first capability is **context-aware routing → learned
+on-device resolutions**: when a launch command is ambiguous, the launcher learns which app the user meant
+and prefers it next time (rank-first, then threshold auto-resolve), fully on-device, no LLM/cloud.
+
+**Design spec:** [docs/superpowers/specs/2026-07-06-learned-resolutions-design.md](../docs/superpowers/specs/2026-07-06-learned-resolutions-design.md)
+— brainstormed and approved section-by-section. Key locked points:
+- Memory model is **`(Capability/Intent, CandidateSet awareness, ResolutionContext) → PreferredTarget +
+  Evidence`**, not `command → target` (owner's steer). v1 minimal (Context = `None`, target = app), shaped
+  to grow toward User Memory → Context Engine → World Model.
+- Deterministic **`ResolutionPreferencePolicy`** (pure): `NoPreference` / `Stale` / `RankFirst` /
+  `AutoResolve`; auto-resolve **only** SAFE + CONFIDENT (`streak ≥ K=3`, `DEFAULT_AUTO_RESOLVE_STREAK_THRESHOLD`)
+  + candidate-set-fingerprint match. Confidence lives in the policy (a replaceable `strength()` seam), not
+  storage; storage holds only raw evidence.
+- Integration **Approach A** (policy in `domain`, `domain/memory/resolution/`), applied only on the rule
+  ambiguity branch, recorded only after a **successful explicit** choice; the VM shuttles an opaque
+  transient `ResolutionLearningToken` (no business logic in UI). **`HandleUserCommandUseCase` untouched;
+  no-preference / non-ambiguous ⇒ byte-for-byte parity.**
+- Persistence: Room table `resolution_preferences` in `:data:repository` (never-throw store, lazy +
+  display-time invalidation, `MAX_RESOLUTION_PREFERENCES = 500` LRU, migration + privacy-inventory guard).
+- Privacy: `query`/packageName classified **local-sensitive metadata**; strictly on-device; **outbound
+  allow-list widened by zero** (preferences never enter an `AiRequest`); `query` = normalized slot only,
+  `MAX_QUERY_LENGTH = 64`, non-empty, app-ambiguity-only; no PII in external logs.
+- Management: Settings → **Learned Choices** (`Routes.LearnedChoices`, `:feature:settings`) — See + Delete
+  in v1 (change = delete-then-relearn); **honest display state** (`Auto` shown only when the same
+  eligibility the policy checks is verifiable, else a safe `AutoReady`/`learned`/`needs reconfirm` label).
+- Correction (v1): hard-switch in the learning/rank-first phase; **no in-flow correction after
+  auto-resolve** — the post-auto-resolve channel is Settings → Learned Choices → delete → re-learn.
+
+**Explicitly NOT authorized yet (owner):** production code, implementation plans, Room schema changes,
+use-case wiring. Next action after approval = `writing-plans` for block S2-1.

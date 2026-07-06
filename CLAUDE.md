@@ -80,7 +80,12 @@ The offline launcher core (home, app grid, app launch) must work fully without A
 **NOW (2026-07-06): Stage 2 — AI Framework. The Stage-1 AI-Launcher MVP (blocks AIL-0…6) is CLOSED and
 device-accepted on SM-A325F.** Next work generalizes the router/registry/context/memory into a reusable
 on-device AI framework (Action Registry v2, Context Engine v2, User Memory) per the three-stage reframe;
-open a Stage-2 plan before coding. The launcher ships AI-first today: AIL-3 unified the home input over the
+open a Stage-2 plan before coding. **First Stage-2 slice (block S2-1) has an owner-approved DESIGN SPEC
+(design-only — no code/plan/schema/wiring yet):** "Learned Resolutions" — on-device learning of which app
+the user meant for an ambiguous launch command (rank-first → threshold auto-resolve, no LLM/cloud). Spec:
+[docs/superpowers/specs/2026-07-06-learned-resolutions-design.md](docs/superpowers/specs/2026-07-06-learned-resolutions-design.md);
+ADR: decisions.md "2026-07-06 — Stage 2 kickoff". Next action after owner approval = `writing-plans` for
+S2-1. The launcher ships AI-first today: AIL-3 unified the home input over the
 unchanged pipeline, **AIL-4 made routing AI-first** (the BYOK cloud `CommandPlanner` — a sanctioned third
 pipeline — proposes **registered** actions as non-executing `CommandOutcome.RoutedAction`, never
 auto-executed (R4), behind a default-off flag so **router-off ⇒ byte-for-byte rule-only parity**), **AIL-5

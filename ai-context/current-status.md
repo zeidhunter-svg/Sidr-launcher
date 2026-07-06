@@ -15,8 +15,11 @@ risk-gated confirmation — the launcher is genuinely AI-first, with router-off/
 rule-only parity. Plan (closed): `ai-context/ai-launcher-mvp-plan.md`; roadmap: `docs/roadmap.md`. The
 **active work is now Stage 2 — AI Framework** (generalize router/registry/context/memory into a reusable
 on-device AI framework: Action Registry v2, Context Engine v2, User Memory — open a Stage-2 plan before
-coding). The model track (OQ#1–#4), device matrix, and RC/hardening polish run in parallel, off the ship
-gate.
+coding). **First slice (S2-1) is at DESIGN-SPEC stage only** (no code/plan yet, awaiting owner approval):
+"Learned Resolutions" — on-device learning of which app the user meant for an ambiguous launch command.
+Spec: `docs/superpowers/specs/2026-07-06-learned-resolutions-design.md`; ADR: decisions.md "2026-07-06 —
+Stage 2 kickoff". The model track (OQ#1–#4), device matrix, and RC/hardening polish run in parallel, off
+the ship gate.
 
 **Stage-1B progress:** **AIL-0 ✅ done (2026-07-05)** — `core/ui` re-skinned to the "ultra-cyberpunk /
 early-computer terminal" identity (4 `ColorScheme`s green-default/amber-alt × dark/light, dynamic colour

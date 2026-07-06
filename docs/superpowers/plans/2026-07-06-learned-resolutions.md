@@ -107,6 +107,10 @@ class CandidateSetFingerprintTest {
         val a = CandidateSet(listOf(app("com.a"), app("com.b")))
         assertEquals(fingerprintOf(a), fingerprintOf(a))
     }
+
+    @Test fun `target id is type-prefixed (stable across ResolvedTarget growth)`() {
+        assertEquals("app:com.a", targetId(ResolvedTarget.App("com.a")))
+    }
 }
 ```
 
@@ -140,14 +144,19 @@ data class CandidateSet(val targets: List<ResolvedTarget>)
 
 @JvmInline value class CandidateSetFingerprint(val value: String)
 
+/** Stable, type-prefixed id for a target — exhaustive `when`, no unsafe cast; grows with ResolvedTarget. */
+fun targetId(target: ResolvedTarget): String = when (target) {
+    is ResolvedTarget.App -> "app:${target.packageName}"
+}
+
+/** The app package for an [ResolvedTarget.App], or null for a non-app target. Exhaustive, cast-free. */
+fun ResolvedTarget.appPackageOrNull(): String? = when (this) {
+    is ResolvedTarget.App -> packageName
+}
+
 /** Deterministic, order-independent fingerprint of the candidate target ids. NOT anonymization. */
 fun fingerprintOf(set: CandidateSet): CandidateSetFingerprint =
-    CandidateSetFingerprint(
-        set.targets
-            .map { (it as ResolvedTarget.App).packageName }
-            .sorted()
-            .joinToString("|"),
-    )
+    CandidateSetFingerprint(set.targets.map(::targetId).sorted().joinToString("|"))
 
 /** Raw deterministic evidence the policy interprets. */
 data class PreferenceEvidence(val streak: Int, val totalChoices: Int, val lastChosenAtEpochMs: Long)
@@ -410,6 +419,7 @@ import com.sidr.launcher.domain.action.ActionId
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RecordResolutionChoiceUseCaseTest {
@@ -453,9 +463,10 @@ class RecordResolutionChoiceUseCaseTest {
             com.sidr.launcher.domain.result.OperationResult.Success).value)
     }
 
-    @Test fun `store write failure does not throw`() = runTest {
+    @Test fun `store write failure returns Failure without throwing`() = runTest {
         store.failWrites = true
-        useCase.record(key, ResolutionContext.None, app("com.a"), candidates) // must not throw
+        val r = useCase.record(key, ResolutionContext.None, app("com.a"), candidates)
+        assertTrue(r is com.sidr.launcher.domain.result.OperationResult.Failure)
     }
 }
 ```
@@ -467,13 +478,16 @@ class RecordResolutionChoiceUseCaseTest {
 ```kotlin
 package com.sidr.launcher.domain.memory.resolution
 
+import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
 import kotlinx.coroutines.CancellationException
 
 class RecordResolutionChoiceUseCase(private val store: ResolutionPreferenceStore) {
     /**
      * Records an explicit candidate choice. Deterministic evidence update (create / reinforce /
-     * hard-switch). Never throws (rethrows CancellationException); an empty/over-length query is a no-op.
+     * hard-switch). Returns [OperationResult] per the global contract (the VM may ignore it in
+     * fire-and-forget). Never throws (rethrows CancellationException); an empty/over-length query is a
+     * no-op that returns [OperationResult.Success].
      */
     suspend fun record(
         key: CapabilityKey,
@@ -481,8 +495,8 @@ class RecordResolutionChoiceUseCase(private val store: ResolutionPreferenceStore
         chosen: ResolvedTarget,
         candidates: CandidateSet,
         nowEpochMs: Long = System.currentTimeMillis(),
-    ) {
-        if (key.query.isBlank() || key.query.length > MAX_QUERY_LENGTH) return
+    ): OperationResult<Unit> {
+        if (key.query.isBlank() || key.query.length > MAX_QUERY_LENGTH) return OperationResult.Success(Unit)
         try {
             val existing = (store.find(key, context) as? OperationResult.Success)?.value
             val fp = fingerprintOf(candidates)
@@ -495,7 +509,7 @@ class RecordResolutionChoiceUseCase(private val store: ResolutionPreferenceStore
                 )
                 else -> PreferenceEvidence(streak = 1, totalChoices = existing.evidence.totalChoices + 1, lastChosenAtEpochMs = nowEpochMs)
             }
-            store.upsert(
+            return store.upsert(
                 ResolutionPreference(
                     capabilityKey = key, context = context, preferredTarget = chosen,
                     evidence = evidence, learnedInSetFingerprint = fp,
@@ -503,8 +517,8 @@ class RecordResolutionChoiceUseCase(private val store: ResolutionPreferenceStore
             )
         } catch (e: CancellationException) {
             throw e
-        } catch (_: Throwable) {
-            // best-effort — "not learned this time"; never propagate.
+        } catch (t: Throwable) {
+            return OperationResult.Failure(OperationError.Unknown(t.message ?: "record failed"))
         }
     }
 }
@@ -662,50 +676,16 @@ git commit -m "feat(s2-1): honest display-state use-case (Auto only when policy-
 - Create: `domain/src/main/java/com/sidr/launcher/domain/memory/resolution/PruneUnavailableLearnedChoicesUseCase.kt`
 - Test: `domain/src/test/java/com/sidr/launcher/domain/memory/resolution/LearnedChoiceUseCasesTest.kt`
 
-**Interfaces:** Consumes the store + `InstalledAppsRepository` (read `installedPackages(): Set<String>` /
-label lookup — confirm the exact method by reading
-`domain/.../InstalledAppsRepository.kt`). Produces `LearnedChoiceView(capabilityKey, targetPackageName,
-targetLabel, displayState)`, `ObserveLearnedChoicesUseCase.observe(): Flow<List<LearnedChoiceView>>`,
-`DeleteLearnedChoiceUseCase.delete(key, context)`, `PruneUnavailableLearnedChoicesUseCase.prune()`.
+**Confirmed signatures:** `InstalledAppsRepository.getInstalledApps(): OperationResult<List<InstalledApp>>`;
+`InstalledApp(packageName, label, activityName? = null)`; `FakeInstalledAppsRepository { var appsToReturn }`.
+v1 scope is LAUNCH_APP (SAFE), so `ObserveLearnedChoicesUseCase` passes `risk = ActionRiskLevel.SAFE` and
+`currentCandidates = null` to the display use-case (→ confident rows read `AutoReady`; below-threshold read
+`Learning`; uninstalled are filtered out). **Interfaces produced:** `LearnedChoiceView(capabilityKey,
+targetPackageName, targetLabel, displayState)`, `ObserveLearnedChoicesUseCase.observe():
+Flow<List<LearnedChoiceView>>`, `DeleteLearnedChoiceUseCase.delete(key, context): OperationResult<Unit>`,
+`PruneUnavailableLearnedChoicesUseCase.prune(): OperationResult<Unit>`.
 
-- [ ] **Step 1: Write the failing test** (`observe` joins installed apps → view + display state; prune
-  deletes rows whose target is not installed; delete removes one). Use `FakeResolutionPreferenceStore` +
-  the existing `FakeInstalledAppsRepository` from `:core:testing`:
-
-```kotlin
-package com.sidr.launcher.domain.memory.resolution
-
-import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
-import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
-import com.sidr.launcher.domain.action.ActionId
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
-
-class LearnedChoiceUseCasesTest {
-    private val store = FakeResolutionPreferenceStore()
-    private val apps = FakeInstalledAppsRepository()  // seed com.a (installed); com.gone absent
-    private fun app(p: String) = ResolvedTarget.App(p)
-    private val keyA = CapabilityKey(ActionId("launch_app"), "bank")
-
-    @Test fun `observe emits a view only for known state`() = runTest {
-        // seed store with one installed-target preference; assert the view carries its label + a state.
-        // (fill from FakeInstalledAppsRepository's seeded label)
-        // ...
-        assertTrue(true) // replace with concrete assertions once InstalledAppsRepository shape is confirmed
-    }
-}
-```
-
-> **Implementer note:** Task 5's exact test bodies depend on `InstalledAppsRepository`'s method names
-> (`installedPackages` / label accessor) and `FakeInstalledAppsRepository`'s seeding API. **Step 0 of this
-> task:** read both files, then write concrete assertions (installed → view with label + `Learning`/`Auto`
-> per evidence; uninstalled → excluded by `observe`; `prune()` deletes the uninstalled row; `delete()`
-> removes exactly one). Do not leave the `assertTrue(true)` placeholder in the committed test.
-
-- [ ] **Step 2: Create `LearnedChoiceView.kt`:**
+- [ ] **Step 1: Create `LearnedChoiceView.kt`:**
 
 ```kotlin
 package com.sidr.launcher.domain.memory.resolution
@@ -718,15 +698,144 @@ data class LearnedChoiceView(
 )
 ```
 
-- [ ] **Step 3: Create the three use-cases.** `ObserveLearnedChoicesUseCase` maps
-  `store.observeAll()` → joins installed-app label/availability → filters out uninstalled → derives
-  `displayState` via `EvaluateLearnedChoiceDisplayStateUseCase` (with `currentCandidates = null` at this
-  layer unless the caller supplies a reconstruction; v1 passes `null` → `AutoReady`). `DeleteLearnedChoiceUseCase`
-  delegates to `store.delete`. `PruneUnavailableLearnedChoicesUseCase` reads current install set and calls
-  `store.delete` for each preference whose target is absent. Show the concrete code once the
-  `InstalledAppsRepository` accessor names are confirmed in Step 0.
+- [ ] **Step 2: Write the failing test** — `LearnedChoiceUseCasesTest.kt`:
 
-- [ ] **Step 4: Run tests** — `:domain:test` → PASS. **Step 5: Commit**
+```kotlin
+package com.sidr.launcher.domain.memory.resolution
+
+import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
+import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
+import com.sidr.launcher.domain.action.ActionId
+import com.sidr.launcher.domain.model.InstalledApp
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+
+class LearnedChoiceUseCasesTest {
+    private val store = FakeResolutionPreferenceStore()
+    private val apps = FakeInstalledAppsRepository()
+    private val display = EvaluateLearnedChoiceDisplayStateUseCase(autoResolveStreakThreshold = 3)
+    private fun app(p: String) = ResolvedTarget.App(p)
+    private fun key(q: String) = CapabilityKey(ActionId("launch_app"), q)
+    private fun pref(q: String, target: String, streak: Int) = ResolutionPreference(
+        key(q), ResolutionContext.None, app(target), PreferenceEvidence(streak, streak, 0L),
+        fingerprintOf(CandidateSet(listOf(app(target)))))
+
+    @Before fun setup() { apps.appsToReturn = listOf(InstalledApp("com.a", "MyBank")) }
+
+    @Test fun `observe surfaces installed target with label and Learning state`() = runTest {
+        store.upsert(pref("bank", "com.a", streak = 1))
+        val list = ObserveLearnedChoicesUseCase(store, apps, display).observe().first()
+        assertEquals(1, list.size)
+        assertEquals("MyBank", list[0].targetLabel)
+        assertEquals("com.a", list[0].targetPackageName)
+        assertEquals(LearnedChoiceDisplayState.Learning(1, 3), list[0].displayState)
+    }
+
+    @Test fun `observe reads AutoReady for a confident installed target`() = runTest {
+        store.upsert(pref("bank", "com.a", streak = 5))
+        val list = ObserveLearnedChoicesUseCase(store, apps, display).observe().first()
+        assertEquals(LearnedChoiceDisplayState.AutoReady, list[0].displayState)
+    }
+
+    @Test fun `observe excludes an uninstalled target`() = runTest {
+        store.upsert(pref("news", "com.gone", streak = 5)) // com.gone not in appsToReturn
+        val list = ObserveLearnedChoicesUseCase(store, apps, display).observe().first()
+        assertTrue(list.isEmpty())
+    }
+
+    @Test fun `delete removes exactly one preference`() = runTest {
+        store.upsert(pref("bank", "com.a", streak = 1))
+        DeleteLearnedChoiceUseCase(store).delete(key("bank"), ResolutionContext.None)
+        assertTrue(store.observeAll().first().isEmpty())
+    }
+
+    @Test fun `prune deletes rows whose target is not installed`() = runTest {
+        store.upsert(pref("bank", "com.a", streak = 1))     // installed → kept
+        store.upsert(pref("news", "com.gone", streak = 5))  // absent → pruned
+        PruneUnavailableLearnedChoicesUseCase(store, apps).prune()
+        val remaining = store.observeAll().first()
+        assertEquals(1, remaining.size)
+        assertEquals(app("com.a"), remaining[0].preferredTarget)
+    }
+}
+```
+
+- [ ] **Step 3: Run test to verify it fails** — `:domain:test` → FAIL.
+
+- [ ] **Step 4: Create the three use-cases:**
+
+```kotlin
+// ObserveLearnedChoicesUseCase.kt
+package com.sidr.launcher.domain.memory.resolution
+
+import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.repository.InstalledAppsRepository
+import com.sidr.launcher.domain.result.OperationResult
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+
+class ObserveLearnedChoicesUseCase(
+    private val store: ResolutionPreferenceStore,
+    private val installedApps: InstalledAppsRepository,
+    private val displayState: EvaluateLearnedChoiceDisplayStateUseCase,
+) {
+    fun observe(): Flow<List<LearnedChoiceView>> = store.observeAll().map { prefs ->
+        val installed = (installedApps.getInstalledApps() as? OperationResult.Success)?.value.orEmpty()
+        val byPkg = installed.associateBy { it.packageName }
+        prefs.mapNotNull { pref ->
+            val pkg = pref.preferredTarget.appPackageOrNull() ?: return@mapNotNull null
+            val app = byPkg[pkg] ?: return@mapNotNull null // filter uninstalled
+            LearnedChoiceView(
+                capabilityKey = pref.capabilityKey,
+                targetPackageName = pkg,
+                targetLabel = app.label,
+                // v1 scope = LAUNCH_APP (SAFE); currentCandidates unknown on this screen → AutoReady/Learning.
+                displayState = displayState.evaluate(pref, currentCandidates = null, ActionRiskLevel.SAFE, targetInstalled = true),
+            )
+        }
+    }
+}
+```
+
+```kotlin
+// DeleteLearnedChoiceUseCase.kt
+package com.sidr.launcher.domain.memory.resolution
+import com.sidr.launcher.domain.result.OperationResult
+class DeleteLearnedChoiceUseCase(private val store: ResolutionPreferenceStore) {
+    suspend fun delete(key: CapabilityKey, context: ResolutionContext): OperationResult<Unit> = store.delete(key, context)
+}
+```
+
+```kotlin
+// PruneUnavailableLearnedChoicesUseCase.kt
+package com.sidr.launcher.domain.memory.resolution
+
+import com.sidr.launcher.domain.repository.InstalledAppsRepository
+import com.sidr.launcher.domain.result.OperationResult
+import kotlinx.coroutines.flow.first
+
+class PruneUnavailableLearnedChoicesUseCase(
+    private val store: ResolutionPreferenceStore,
+    private val installedApps: InstalledAppsRepository,
+) {
+    /** Best-effort: delete preferences whose target app is no longer installed. Never throws. */
+    suspend fun prune(): OperationResult<Unit> {
+        val installed = (installedApps.getInstalledApps() as? OperationResult.Success)?.value.orEmpty()
+            .map { it.packageName }.toSet()
+        store.observeAll().first().forEach { pref ->
+            val pkg = pref.preferredTarget.appPackageOrNull() ?: return@forEach
+            if (pkg !in installed) store.delete(pref.capabilityKey, pref.context)
+        }
+        return OperationResult.Success(Unit)
+    }
+}
+```
+
+- [ ] **Step 5: Run tests to verify they pass** — `:domain:test` → PASS. **Step 6: Commit**
 
 ```bash
 git add domain/src/main/java/com/sidr/launcher/domain/memory/resolution/LearnedChoice*.kt \
@@ -744,80 +853,180 @@ uninstalled targets. **DoD:** `:domain:test` green; no placeholder assertions co
 
 ### Task 6: Read-path decorator `ResolveCommandWithPreferenceUseCase`
 
-> **⚠ OPEN INTEGRATION FORK — confirm with owner before implementing (see hand-off).** `LauncherAction.LaunchApp`
-> takes a *query* (re-resolves), so AutoResolve of a **specific** package cannot go through it. v1 default:
-> the decorator returns a `ResolvedCommand` whose `autoLaunch` field names the package; the **VM launches it
-> via its existing `launchApp(package, activity)`** path (launch mechanics already live in the VM), and the
-> decorator also carries a `fallbackOutcome` (reordered `NeedsConfirmation`) the VM renders if that launch
-> fails. Alternative: add a domain `LaunchResolvedAppUseCase` wrapping the executor for a specific app
-> (decision+exec+fallback fully in domain, more code). This plan encodes the v1 default.
+> **Owner-decided fork (a):** `LauncherAction.LaunchApp` takes a *query* (re-resolves), so AutoResolve of a
+> **specific** package cannot go through it. The decorator does **not** produce `Executed`; it returns a
+> `ResolvedCommand.AutoLaunch(target, fallback)` **directive**, and the VM launches the specific package via
+> its existing `launchApp(package, activity)` path. `CommandOutcome.Executed` appears only in the VM **after
+> a successful launch** (its existing launch-success behavior). On launch failure the VM renders `fallback`
+> (the reordered candidate list).
+
+**Confirmed signatures:** `RouteCommandUseCase.route(rawInput): CommandOutcome` (concrete class — wrapped
+behind a testable `CommandRouteStep` seam here); `CommandNormalizer.normalize(raw): String`;
+`ActionCatalog.descriptor(id): ActionDescriptor?` with `.risk: ActionRiskLevel`; `ActionIds.LAUNCH_APP`;
+`CommandOutcome.NeedsConfirmation(candidates: List<InstalledApp>)`.
 
 **Files:**
 - Create: `domain/src/main/java/com/sidr/launcher/domain/memory/resolution/ResolveCommandWithPreferenceUseCase.kt`
-  (defines `ResolvedCommand`)
+  (defines `ResolvedCommand` + `CommandRouteStep`)
 - Test: `domain/src/test/java/com/sidr/launcher/domain/memory/resolution/ResolveCommandWithPreferenceUseCaseTest.kt`
 
-**Interfaces:** Consumes `RouteCommandUseCase` (call `route(rawInput): CommandOutcome`),
-`ResolutionPreferenceStore`, `ResolutionPreferencePolicy`, `CommandNormalizer`, `ActionCatalog` (risk for
-LAUNCH_APP). Produces `ResolvedCommand(outcome, learningToken, autoLaunch, fallbackOutcome)` and
-`ResolveCommandWithPreferenceUseCase.route(rawInput): ResolvedCommand`.
+**Interfaces produced:** `CommandRouteStep` (fun interface), `ResolvedCommand` (`Outcome` | `AutoLaunch`),
+`ResolveCommandWithPreferenceUseCase.resolve(rawInput): ResolvedCommand`.
 
-Behavior: call `routeCommand.route(rawInput)`. If the outcome is **not** `NeedsConfirmation`, return
-`ResolvedCommand(outcome, null, null, null)` (parity). If it is `NeedsConfirmation(candidates)`:
-build `CapabilityKey(LAUNCH_APP, normalize(rawInput))`, `CandidateSet` from candidate packageNames,
-`risk` from catalog; `store.find` → `policy.decide`. Map:
-- `NoPreference` → `ResolvedCommand(originalOutcome, token, null, null)`.
-- `Stale(p)` → best-effort `store.delete`; `ResolvedCommand(originalOutcome, token, null, null)`.
-- `RankFirst(t)` → `ResolvedCommand(NeedsConfirmation(reordered t-first), token, null, null)`.
-- `AutoResolve(App(pkg))` → `ResolvedCommand(CommandOutcome.Executed, token=null, autoLaunch=App(pkg),
-  fallbackOutcome=NeedsConfirmation(reordered t-first))`.
+> **v1 query = the normalized full command** (`CommandNormalizer.normalize(rawInput)`, e.g. `"open bank"`).
+> Verb-stripping to the bare slot (`"bank"`) is a documented refinement (see backlog); keying on the
+> normalized command is the deterministic v1 baseline. (Flagged to owner in the hand-off.)
 
-`token` (for the non-auto branches) = `ResolutionLearningToken(key, None, candidateSet, fingerprint,
-isAppAmbiguityFlow=true)`.
-
-- [ ] **Step 1: Write the failing test** (fakes for store/policy/route; assert each branch):
+- [ ] **Step 1: Write the failing test:**
 
 ```kotlin
 package com.sidr.launcher.domain.memory.resolution
 
+import com.sidr.launcher.core.testing.FakeActionCatalog
+import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
+import com.sidr.launcher.domain.action.ActionCategory
+import com.sidr.launcher.domain.action.ActionDescriptor
+import com.sidr.launcher.domain.action.ActionIds
+import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.model.InstalledApp
+import com.sidr.launcher.domain.result.OperationResult
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ResolveCommandWithPreferenceUseCaseTest {
-    // Build the use-case with: a fake RouteCommandUseCase returning a fixed CommandOutcome; a
-    // FakeResolutionPreferenceStore; DefaultResolutionPreferencePolicy; the real CommandNormalizer;
-    // a fake ActionCatalog returning SAFE for LAUNCH_APP.
-    // (wire per the confirmed constructors)
+    private val store = FakeResolutionPreferenceStore()
+    private val policy = DefaultResolutionPreferencePolicy(autoResolveStreakThreshold = 3)
+    private val catalog = FakeActionCatalog(listOf(
+        ActionDescriptor(ActionIds.LAUNCH_APP, "Open app", "", ActionCategory.APP, ActionRiskLevel.SAFE)))
+    private fun installed(p: String, l: String = p) = InstalledApp(p, l)
+    private val ambiguous = CommandOutcome.NeedsConfirmation(listOf(installed("com.a", "A"), installed("com.b", "B")))
+    private fun target(p: String) = ResolvedTarget.App(p)
+    private val key = CapabilityKey(ActionIds.LAUNCH_APP, "open bank")   // normalize("open bank") == "open bank"
+    private val candidates = CandidateSet(listOf(target("com.a"), target("com.b")))
+    private fun useCase(routeReturns: CommandOutcome) =
+        ResolveCommandWithPreferenceUseCase({ routeReturns }, store, policy, catalog)
+    private suspend fun stored() = (store.find(key, ResolutionContext.None) as OperationResult.Success).value
 
     @Test fun `non-ambiguous outcome passes through unchanged (parity)`() = runTest {
-        // route returns CommandOutcome.Executed → ResolvedCommand.outcome == Executed, token null, autoLaunch null
+        val r = useCase(CommandOutcome.Executed).resolve("show apps")
+        assertEquals(ResolvedCommand.Outcome(CommandOutcome.Executed, null), r)
     }
-    @Test fun `ambiguous + no preference returns original list + a learning token`() = runTest { }
-    @Test fun `RankFirst reorders candidates preferred-first`() = runTest { }
-    @Test fun `AutoResolve yields Executed + autoLaunch + reordered fallback`() = runTest { }
-    @Test fun `Stale prunes and returns original list`() = runTest { }
+
+    @Test fun `ambiguous + no preference returns original list + a learning token`() = runTest {
+        val r = useCase(ambiguous).resolve("open bank") as ResolvedCommand.Outcome
+        assertEquals(ambiguous, r.outcome)
+        assertTrue(r.learningToken!!.isAppAmbiguityFlow)
+        assertEquals(key, r.learningToken.capabilityKey)
+    }
+
+    @Test fun `RankFirst reorders candidates preferred-first (streak below K)`() = runTest {
+        store.upsert(ResolutionPreference(key, ResolutionContext.None, target("com.b"),
+            PreferenceEvidence(1, 1, 0L), fingerprintOf(candidates)))
+        val r = useCase(ambiguous).resolve("open bank") as ResolvedCommand.Outcome
+        val out = r.outcome as CommandOutcome.NeedsConfirmation
+        assertEquals("com.b", out.candidates.first().packageName)
+    }
+
+    @Test fun `AutoResolve yields AutoLaunch directive with reordered fallback (never Executed)`() = runTest {
+        store.upsert(ResolutionPreference(key, ResolutionContext.None, target("com.b"),
+            PreferenceEvidence(3, 3, 0L), fingerprintOf(candidates)))
+        val r = useCase(ambiguous).resolve("open bank")
+        assertTrue(r is ResolvedCommand.AutoLaunch)
+        r as ResolvedCommand.AutoLaunch
+        assertEquals(target("com.b"), r.target)
+        assertEquals("com.b", (r.fallback as CommandOutcome.NeedsConfirmation).candidates.first().packageName)
+    }
+
+    @Test fun `Stale prunes the record and returns the original list`() = runTest {
+        store.upsert(ResolutionPreference(key, ResolutionContext.None, target("com.gone"),
+            PreferenceEvidence(5, 5, 0L), fingerprintOf(CandidateSet(listOf(target("com.gone"))))))
+        val r = useCase(ambiguous).resolve("open bank") as ResolvedCommand.Outcome
+        assertEquals(ambiguous, r.outcome)
+        assertNull(stored()) // pruned
+    }
 }
 ```
 
-> **Implementer:** flesh each `@Test` with concrete `InstalledApp` candidates and assertions. Confirm
-> `RouteCommandUseCase`/`CommandNormalizer`/`ActionCatalog` constructor + method names first
-> (`RouteCommandUseCase.route`, `CommandNormalizer.normalize` or equivalent, `ActionCatalog` risk lookup).
-> No empty-body tests may be committed.
+- [ ] **Step 2: Run test to verify it fails** — `:domain:test` → FAIL.
 
-- [ ] **Step 2–5:** verify red → implement `ResolvedCommand` + the use-case per the mapping above → verify
-  green (`:domain:test`) → commit.
+- [ ] **Step 3: Create `ResolveCommandWithPreferenceUseCase.kt`:**
 
-```bash
-git commit -m "feat(s2-1): ResolveCommandWithPreferenceUseCase (rank-first / auto-resolve / stale, parity)"
+```kotlin
+package com.sidr.launcher.domain.memory.resolution
+
+import com.sidr.launcher.domain.action.ActionCatalog
+import com.sidr.launcher.domain.action.ActionIds
+import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.intent.CommandNormalizer
+import com.sidr.launcher.domain.intent.CommandOutcome
+import com.sidr.launcher.domain.result.OperationResult
+
+/** The underlying rule-first router, wrapped as a seam so the decorator is trivially testable. */
+fun interface CommandRouteStep { suspend fun route(rawInput: String): CommandOutcome }
+
+/** Result of preference-aware resolution. `AutoLaunch` is a directive — NOT an executed outcome. */
+sealed interface ResolvedCommand {
+    /** Render [outcome] as-is. [learningToken] is present only for an app-ambiguity list (for recording). */
+    data class Outcome(val outcome: CommandOutcome, val learningToken: ResolutionLearningToken?) : ResolvedCommand
+    /** Auto-resolve directive: the VM launches [target] via launchApp; on failure it renders [fallback]. */
+    data class AutoLaunch(val target: ResolvedTarget.App, val fallback: CommandOutcome) : ResolvedCommand
+}
+
+class ResolveCommandWithPreferenceUseCase(
+    private val route: CommandRouteStep,
+    private val store: ResolutionPreferenceStore,
+    private val policy: ResolutionPreferencePolicy,
+    private val catalog: ActionCatalog,
+) {
+    suspend fun resolve(rawInput: String): ResolvedCommand {
+        val outcome = route.route(rawInput)
+        if (outcome !is CommandOutcome.NeedsConfirmation) return ResolvedCommand.Outcome(outcome, null)
+
+        val candidates = CandidateSet(outcome.candidates.map { ResolvedTarget.App(it.packageName) })
+        val key = CapabilityKey(ActionIds.LAUNCH_APP, CommandNormalizer.normalize(rawInput))
+        val token = ResolutionLearningToken(
+            capabilityKey = key, context = ResolutionContext.None, candidateSet = candidates,
+            fingerprint = fingerprintOf(candidates), isAppAmbiguityFlow = true,
+        )
+        val risk = catalog.descriptor(ActionIds.LAUNCH_APP)?.risk ?: ActionRiskLevel.CONFIRM // fail-safe
+        val pref = (store.find(key, ResolutionContext.None) as? OperationResult.Success)?.value
+
+        return when (val decision = policy.decide(pref, candidates, risk)) {
+            ResolutionDecision.NoPreference -> ResolvedCommand.Outcome(outcome, token)
+            is ResolutionDecision.Stale -> {
+                store.delete(key, ResolutionContext.None) // best-effort prune; result ignored
+                ResolvedCommand.Outcome(outcome, token)
+            }
+            is ResolutionDecision.RankFirst -> ResolvedCommand.Outcome(reorder(outcome, decision.target), token)
+            is ResolutionDecision.AutoResolve -> when (val t = decision.target) {
+                is ResolvedTarget.App -> ResolvedCommand.AutoLaunch(t, reorder(outcome, t))
+            }
+        }
+    }
+
+    private fun reorder(outcome: CommandOutcome.NeedsConfirmation, first: ResolvedTarget): CommandOutcome.NeedsConfirmation {
+        val pkg = first.appPackageOrNull()
+        return CommandOutcome.NeedsConfirmation(outcome.candidates.sortedByDescending { it.packageName == pkg })
+    }
+}
 ```
 
-**Invariants:** non-`NeedsConfirmation` outcomes pass through untouched (parity); no LLM involved;
-`AutoResolve` never records; token only on non-auto branches. **DoD:** `:domain:test` green; parity branch
-asserted.
+- [ ] **Step 4: Run tests to verify they pass** — `:domain:test` → PASS.
+- [ ] **Step 5: Commit**
+
+```bash
+git add domain/src/main/java/com/sidr/launcher/domain/memory/resolution/ResolveCommandWithPreferenceUseCase.kt \
+        domain/src/test/java/com/sidr/launcher/domain/memory/resolution/ResolveCommandWithPreferenceUseCaseTest.kt
+git commit -m "feat(s2-1): ResolveCommandWithPreferenceUseCase (rank-first / auto-launch directive / stale, parity)"
+```
+
+**Invariants:** non-`NeedsConfirmation` passes through untouched (parity); no LLM involved; `AutoResolve`
+becomes an `AutoLaunch` **directive** (never a premature `Executed`) and never records; a token rides only
+the non-auto branches. **DoD:** `:domain:test` green; parity + AutoLaunch-not-Executed asserted.
 
 ---
 
@@ -957,9 +1166,11 @@ privacy guard covers the new table/columns. **DoD:** migration test + guard gree
 
 - [ ] Provide/bind: `ResolutionPreferenceStore` → `ResolutionPreferenceStoreImpl` (with the DAO from the
   DB + `@ApplicationScope`); `ResolutionPreferencePolicy` → `DefaultResolutionPreferencePolicy()`;
-  the use-cases (`RecordResolutionChoiceUseCase`, `ResolveCommandWithPreferenceUseCase`,
-  `ObserveLearnedChoicesUseCase`, `DeleteLearnedChoiceUseCase`, `PruneUnavailableLearnedChoicesUseCase`,
-  `EvaluateLearnedChoiceDisplayStateUseCase`). Provide the DB `resolutionPreferenceDao()`. **Verify
+  a `CommandRouteStep` provider that delegates to the existing `RouteCommandUseCase`
+  (`CommandRouteStep { routeCommandUseCase.route(it) }`); the use-cases (`RecordResolutionChoiceUseCase`,
+  `ResolveCommandWithPreferenceUseCase`, `ObserveLearnedChoicesUseCase`, `DeleteLearnedChoiceUseCase`,
+  `PruneUnavailableLearnedChoicesUseCase`, `EvaluateLearnedChoiceDisplayStateUseCase`). Provide the DB
+  `resolutionPreferenceDao()`. **Verify
   `:app:assembleDebug` (Hilt graph valid).** Commit. **DoD:** graph compiles; no behavior yet (nothing
   injects the new use-cases until Task 11).
 
@@ -968,15 +1179,24 @@ privacy guard covers the new table/columns. **DoD:** migration test + guard gree
 **Files:** Modify `feature/launcher/.../LauncherViewModel.kt` (+ its test).
 
 - [ ] Inject `ResolveCommandWithPreferenceUseCase` + `RecordResolutionChoiceUseCase`. In
-  `onCommandSubmitted`: replace `routeCommand.route(text)` with `resolveCommand.route(text)`; on the result
-  — if `autoLaunch != null` → `launchApp(pkg, activityName?)` and, on the executor's failure signal, render
-  `fallbackOutcome`; else `applyOutcome(outcome)` and store `_pendingLearningToken = learningToken`. In
-  `onAppClicked(app)`: after a **successful** launch, if `_pendingLearningToken != null` and
+  `onCommandSubmitted`: replace `routeCommand.route(text)` with `resolveCommand.resolve(text)` and branch on
+  the sealed result:
+  - `is ResolvedCommand.Outcome` → `applyOutcome(outcome)`; set `_pendingLearningToken = learningToken`
+    (may be null for non-ambiguous).
+  - `is ResolvedCommand.AutoLaunch` → `_pendingLearningToken = null`; call the existing
+    `launchApp(target.packageName, activityName = <lookup or null>)`. **`Executed` semantics come only from
+    `launchApp`'s existing success path** (it clears input on success). If `launchApp` reports failure,
+    `applyOutcome(fallback)` (the reordered list). *(No premature `Executed`.)*
+  In `onAppClicked(app)`: after a **successful** launch, if `_pendingLearningToken != null` and
   `app.packageName` ∈ token candidate set → `recordResolutionChoice.record(token.capabilityKey,
   token.context, ResolvedTarget.App(app.packageName), token.candidateSet)` on the `@ApplicationScope`
-  (fire-and-forget; rethrow Cancellation); clear the token. Clear the token on new submit / clear-input.
-  **Parity:** `RouteCommandUseCase` stays the decorator's dependency; a null-store / no-preference decorator
-  returns the original outcome, so existing `LauncherViewModelTest` passes unchanged.
+  (fire-and-forget — the returned `OperationResult` is ignored; rethrow Cancellation); clear the token.
+  Clear the token on new submit / clear-input. **Parity:** the decorator delegates to `RouteCommandUseCase`
+  via `CommandRouteStep`; a no-preference decorator returns `Outcome(originalOutcome, …)`, so existing
+  `LauncherViewModelTest` passes unchanged.
+  > *Implementer note:* confirm `launchApp`'s failure signal (it currently drives `CommandFeedback`); if it
+  > has no direct success/failure return, thread one minimally or gate the fallback on the executor result
+  > it already consumes. This is the only VM-internal detail to confirm against `launchApp`.
 
 - [ ] **Tests:** ambiguous → token set; candidate tap after success → record called (fake); grid tap (no
   token) → not recorded; auto-launch path launches the package; parity: existing suite unchanged. Add
@@ -1056,28 +1276,40 @@ navigable Settings → Learned Choices; list + delete render; safe error state.
 
 ---
 
-## Self-Review (author checklist — completed)
+## Self-Review (author checklist — completed, incl. pre-flight edits)
 
 - **Spec coverage:** every spec section maps to a task — types §3→T1, policy §4→T2, write §5.2→T3,
   display §8→T4, observe/delete/prune §8→T5, read path §5.1→T6, persistence §6→T7–T9, privacy §7→T9/T15,
   management UI §8→T12–T14, failure/fallback §9→spread across T3/T6/T8/T13, tests §10→each task, DoD §11→T16.
-- **Placeholder scan:** two tasks (T5, T6) intentionally defer *exact test bodies* to a documented Step 0
-  read of `InstalledAppsRepository` / `RouteCommandUseCase` shapes — flagged as "no empty-body / no
-  `assertTrue(true)` may be committed." These are the only spots needing a read-first; every production
-  code block is concrete. No `TBD`/"add error handling"/"handle edge cases".
-- **Type consistency:** `fingerprintOf`, `ResolutionDecision`, `PreferenceEvidence(streak,totalChoices,
-  lastChosenAtEpochMs)`, `RecordResolutionChoiceUseCase.record(key,context,chosen,candidates,now)`,
-  `ResolvedCommand(outcome,learningToken,autoLaunch,fallbackOutcome)`, `LearnedChoiceDisplayState`
-  (5 variants) are used consistently across tasks.
-- **Open fork (T6):** AutoResolve of a specific package via the VM's `launchApp` vs a new domain
-  `LaunchResolvedAppUseCase` — flagged for owner decision; v1 default encoded.
+- **Placeholder scan:** none. T5 and T6 tests are now **fully concrete** (real `FakeInstalledAppsRepository`
+  / `FakeActionCatalog` / `CommandRouteStep` seam; no `assertTrue(true)`, no empty bodies). Every production
+  code block is concrete; no `TBD`/"add error handling"/"handle edge cases".
+- **Pre-flight edits applied (owner-requested):**
+  1. `fingerprintOf` uses a type-prefixed, cast-free `targetId` (`app:<pkg>`) via exhaustive `when`; a
+     cast-free `appPackageOrNull()` helper replaces all `as ResolvedTarget.App` reads.
+  2. `RecordResolutionChoiceUseCase.record(...)` returns `OperationResult<Unit>` (VM ignores it in
+     fire-and-forget). Also `DeleteLearnedChoiceUseCase.delete`/`PruneUnavailableLearnedChoicesUseCase.prune`
+     return `OperationResult<Unit>`.
+  3. `ResolvedCommand` is a sealed `Outcome | AutoLaunch` — AutoResolve yields an **`AutoLaunch` directive**,
+     never a premature `CommandOutcome.Executed`; `Executed` arises only in the VM after a successful
+     `launchApp`.
+  4. Fork (a) chosen by the owner: the VM launches the specific package via existing `launchApp`; encoded in
+     T6 (`AutoLaunch(target, fallback)`) + T11.
+- **Type consistency:** `fingerprintOf`/`targetId`/`appPackageOrNull`, `ResolutionDecision` (4 variants),
+  `PreferenceEvidence(streak,totalChoices,lastChosenAtEpochMs)`,
+  `RecordResolutionChoiceUseCase.record(key,context,chosen,candidates,now): OperationResult<Unit>`,
+  `ResolvedCommand.Outcome(outcome,learningToken)` / `ResolvedCommand.AutoLaunch(target,fallback)`,
+  `CommandRouteStep`, `LearnedChoiceDisplayState` (5 variants) — used consistently across tasks.
+- **Residual note for owner:** v1 `query` = normalized full command (verb-strip to the bare slot is a
+  documented backlog refinement).
 
 ## Execution Handoff
 
 Plan complete and saved to `docs/superpowers/plans/2026-07-06-learned-resolutions.md`.
 
 **Do not execute yet** — the owner has deferred implementation, Room schema changes, and use-case wiring;
-this plan is for approval first. One open integration fork (Task 6 AutoResolve execution path) needs an
-owner decision before Phase C. After approval, the two execution options are:
+this plan is for a final read first. The Task 6 integration fork is **resolved (owner: fork a — VM
+`launchApp`)** and encoded as the `AutoLaunch` directive. After the owner clears execution, the two options
+are:
 1. **Subagent-Driven (recommended):** a fresh subagent per task with review between tasks.
 2. **Inline Execution:** batch tasks in-session with checkpoints.

@@ -301,6 +301,10 @@ class LauncherViewModel @Inject constructor(
         // Editing a new command clears stale feedback and any pending confirm card.
         _commandFeedback.value = CommandFeedback.None
         _pendingRoutedAction.value = null
+        // Editing/clearing the buffer without submitting abandons any pending ambiguity: drop the
+        // learning token so a later unrelated grid/suggestion tap (both funnel through onAppClicked)
+        // can't be misrecorded as an explicit resolution of that stale ambiguity.
+        _pendingLearningToken.value = null
     }
 
     /** Arm the hidden developer console (called by the screen after 7 rapid wordmark taps). */

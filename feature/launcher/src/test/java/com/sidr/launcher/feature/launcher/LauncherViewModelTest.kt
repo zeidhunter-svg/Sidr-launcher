@@ -1801,6 +1801,31 @@ class LauncherViewModelTest {
         }
 
     @Test
+    fun `clearing the input after an ambiguous submit drops the token so a later tap does not record`() =
+        runTest(testDispatcher) {
+            fakeRepo.appsToReturn = listOf(
+                InstalledApp("com.a", "Maps"),
+                InstalledApp("com.b", "Maps"),
+            )
+            fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent("maps")
+            fakeMatcher.confidenceToReturn = 0.90f
+            val vm = buildViewModel()
+
+            vm.onCommandSubmitted("open maps")
+            advanceUntilIdle()
+
+            // User abandons the ambiguity by clearing the field — NO new submit.
+            vm.onCommandChanged("")
+            advanceUntilIdle()
+
+            // A later tap of a FORMER candidate (grid or suggestion — both funnel here) must not record.
+            vm.onAppClicked(InstalledApp("com.a", "Maps"))
+            advanceUntilIdle()
+
+            assertTrue(fakeResolutionStore.observeAll().first().isEmpty())
+        }
+
+    @Test
     fun `grid tap with no pending token does not record a choice`() = runTest(testDispatcher) {
         val vm = buildViewModel()
 

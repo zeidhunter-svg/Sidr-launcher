@@ -18,10 +18,13 @@ import javax.inject.Singleton
 /**
  * Provides the Room [SidrDatabase] and its DAOs (Fork 2 / F7).
  *
- * `fallbackToDestructiveMigration` is enabled only in debug builds — all three history tables
- * are recreatable, so a missing migration wipes and rebuilds rather than crashing during
- * development. Release builds get no destructive fallback: a missing migration will crash loudly
- * (expected — signals that a Migration object and schema bump are required).
+ * `fallbackToDestructiveMigration` is enabled only in debug builds, so a missing migration wipes
+ * and rebuilds rather than crashing during development. The history/cache tables (`app_usage`,
+ * `suggestion_ranking`, `intent_match`) are recreatable; `resolution_preferences` (Stage-2 S2-1)
+ * is user-learned state, so a real migration is provided (see [Migration1To2]) rather than relying
+ * on the debug-only destructive path. Release builds get no destructive fallback: a missing
+ * migration will crash loudly (expected — signals that a Migration object and schema bump are
+ * required).
  *
  * @Binds for the three history repository interfaces lives in [HistoryBindsModule] (kept separate
  * because Hilt forbids mixing @Provides and @Binds in one module — see Block D ADR).

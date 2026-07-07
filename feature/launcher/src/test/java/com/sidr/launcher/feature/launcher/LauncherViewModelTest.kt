@@ -9,8 +9,20 @@ import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeCommandPlanner
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
+import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
 import androidx.lifecycle.SavedStateHandle
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
+import com.sidr.launcher.domain.memory.resolution.CandidateSet
+import com.sidr.launcher.domain.memory.resolution.CapabilityKey
+import com.sidr.launcher.domain.memory.resolution.CommandRouteStep
+import com.sidr.launcher.domain.memory.resolution.DefaultResolutionPreferencePolicy
+import com.sidr.launcher.domain.memory.resolution.PreferenceEvidence
+import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
+import com.sidr.launcher.domain.memory.resolution.ResolutionContext
+import com.sidr.launcher.domain.memory.resolution.ResolutionPreference
+import com.sidr.launcher.domain.memory.resolution.ResolveCommandWithPreferenceUseCase
+import com.sidr.launcher.domain.memory.resolution.ResolvedTarget
+import com.sidr.launcher.domain.memory.resolution.fingerprintOf
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeSuggestionEngine
 import com.sidr.launcher.core.testing.FakeSuggestionsCacheRepository
@@ -83,6 +95,10 @@ class LauncherViewModelTest {
     private val fakePrefsRepo = FakeUserPreferencesRepository()
     // Default: usageHistoryEnabled = true so existing recording tests remain valid.
     private val fakeFlagRepo = FakeFeatureFlagRepository(FeatureFlags(usageHistoryEnabled = true))
+    // S2-1 Task 11: empty by default — every existing (pre-S2-1) assertion is exercised against an
+    // empty store, proving no-preference parity. A fresh instance per test (JUnit4 instantiates the
+    // test class per @Test method), so tests never leak preferences into one another.
+    private val fakeResolutionStore = FakeResolutionPreferenceStore()
     private val useCase = HandleUserCommandUseCase(
         matcher = fakeMatcher,
         resolver = IntentActionResolver(fakeRepo),
@@ -136,9 +152,16 @@ class LauncherViewModelTest {
         prefsRepo: UserPreferencesRepository = fakePrefsRepo,
         actionCatalog: FakeActionCatalog = FakeActionCatalog(),
         connectivity: FakeConnectivityChecker = FakeConnectivityChecker(),
+        resolutionStore: FakeResolutionPreferenceStore = fakeResolutionStore,
     ) = LauncherViewModel(
         installedAppsRepository = fakeRepo,
-        routeCommand = routeUseCase,
+        resolveCommand = ResolveCommandWithPreferenceUseCase(
+            route = CommandRouteStep { routeUseCase.route(it) },
+            store = resolutionStore,
+            policy = DefaultResolutionPreferencePolicy(),
+            catalog = actionCatalog,
+        ),
+        recordResolutionChoice = RecordResolutionChoiceUseCase(resolutionStore),
         executeAction = executeAction,
         actionExecutor = fakeExecutor,
         actionCatalog = actionCatalog,
@@ -150,6 +173,7 @@ class LauncherViewModelTest {
         speechInputSource = fakeSpeech,
         connectivityChecker = connectivity,
         ioDispatcher = testDispatcher,
+        applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
         savedStateHandle = savedStateHandle,
     )
 
@@ -171,6 +195,7 @@ class LauncherViewModelTest {
         plannerResult: PlanResult,
         catalog: FakeActionCatalog = FakeActionCatalog(),
         online: Boolean = true,
+        resolutionStore: FakeResolutionPreferenceStore = fakeResolutionStore,
     ): LauncherViewModel {
         fakeMatcher.intentToReturn = LauncherIntent.UnknownIntent(originalInput = "nl command", reason = "x")
         fakeMatcher.confidenceToReturn = 0.0f
@@ -183,7 +208,13 @@ class LauncherViewModelTest {
         )
         return LauncherViewModel(
             installedAppsRepository = fakeRepo,
-            routeCommand = router,
+            resolveCommand = ResolveCommandWithPreferenceUseCase(
+                route = CommandRouteStep { router.route(it) },
+                store = resolutionStore,
+                policy = DefaultResolutionPreferencePolicy(),
+                catalog = catalog,
+            ),
+            recordResolutionChoice = RecordResolutionChoiceUseCase(resolutionStore),
             executeAction = executeAction,
             actionExecutor = fakeExecutor,
             actionCatalog = catalog,
@@ -195,6 +226,7 @@ class LauncherViewModelTest {
             speechInputSource = fakeSpeech,
             connectivityChecker = FakeConnectivityChecker(),
             ioDispatcher = testDispatcher,
+            applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),
         )
     }
@@ -472,7 +504,13 @@ class LauncherViewModelTest {
         }
         val vm = LauncherViewModel(
             installedAppsRepository = gatedRepo,
-            routeCommand = routeUseCase,
+            resolveCommand = ResolveCommandWithPreferenceUseCase(
+                route = CommandRouteStep { routeUseCase.route(it) },
+                store = fakeResolutionStore,
+                policy = DefaultResolutionPreferencePolicy(),
+                catalog = FakeActionCatalog(),
+            ),
+            recordResolutionChoice = RecordResolutionChoiceUseCase(fakeResolutionStore),
             executeAction = executeAction,
             actionExecutor = fakeExecutor,
             actionCatalog = FakeActionCatalog(),
@@ -484,6 +522,7 @@ class LauncherViewModelTest {
             speechInputSource = fakeSpeech,
             connectivityChecker = FakeConnectivityChecker(),
             ioDispatcher = testDispatcher,
+            applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),
         )
         advanceUntilIdle()
@@ -713,7 +752,13 @@ class LauncherViewModelTest {
         }
         val vm = LauncherViewModel(
             installedAppsRepository = gatedRepo,
-            routeCommand = routeUseCase,
+            resolveCommand = ResolveCommandWithPreferenceUseCase(
+                route = CommandRouteStep { routeUseCase.route(it) },
+                store = fakeResolutionStore,
+                policy = DefaultResolutionPreferencePolicy(),
+                catalog = FakeActionCatalog(),
+            ),
+            recordResolutionChoice = RecordResolutionChoiceUseCase(fakeResolutionStore),
             executeAction = executeAction,
             actionExecutor = fakeExecutor,
             actionCatalog = FakeActionCatalog(),
@@ -727,6 +772,7 @@ class LauncherViewModelTest {
             speechInputSource = fakeSpeech,
             connectivityChecker = FakeConnectivityChecker(),
             ioDispatcher = testDispatcher,
+            applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),
         )
 
@@ -1719,4 +1765,108 @@ class LauncherViewModelTest {
         advanceUntilIdle()
         assertEquals(listOf("open telegram"), vm.consoleLines.value.map { it.command })
     }
+
+    // ── S2-1 Task 11: learned-resolution decorator + record-on-choice wiring ──────────────────
+    // Parity is the hard requirement: with an empty fakeResolutionStore (the default for every
+    // buildViewModel()/buildRouterViewModel() call above), ResolveCommandWithPreferenceUseCase.resolve()
+    // always returns Outcome(originalOutcome, null) or Outcome(originalOutcome, token) for an ambiguous
+    // list — never AutoLaunch — so every assertion in this file above holds byte-for-byte. These tests
+    // exercise the NEW behavior: token-set-on-ambiguity, record-on-candidate-tap, no-record-otherwise,
+    // and the confident-preference auto-launch directive.
+
+    @Test
+    fun `ambiguous submit sets a learning token that a later candidate tap records`() =
+        runTest(testDispatcher) {
+            fakeRepo.appsToReturn = listOf(
+                InstalledApp("com.a", "Maps"),
+                InstalledApp("com.b", "Maps"),
+            )
+            fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent("maps")
+            fakeMatcher.confidenceToReturn = 0.90f
+            val vm = buildViewModel()
+
+            vm.onCommandSubmitted("open maps")
+            advanceUntilIdle()
+            // Sanity: parity — the ambiguity list itself renders exactly as before, nothing recorded yet.
+            assertTrue(vm.commandFeedback.value is CommandFeedback.Ambiguous)
+            assertTrue(fakeResolutionStore.observeAll().first().isEmpty())
+
+            vm.onAppClicked(InstalledApp("com.a", "Maps"))
+            advanceUntilIdle()
+
+            val stored = fakeResolutionStore.observeAll().first()
+            assertEquals(1, stored.size)
+            assertEquals(ResolvedTarget.App("com.a"), stored.single().preferredTarget)
+            assertEquals(CapabilityKey(ActionIds.LAUNCH_APP, "maps"), stored.single().capabilityKey)
+        }
+
+    @Test
+    fun `grid tap with no pending token does not record a choice`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+
+        vm.onAppClicked(InstalledApp("org.telegram.messenger", "Telegram"))
+        advanceUntilIdle()
+
+        assertEquals(1, fakeExecutor.callCount) // the launch still happens
+        assertTrue(fakeResolutionStore.observeAll().first().isEmpty())
+    }
+
+    @Test
+    fun `candidate tap on an app the ambiguity list never offered does not record`() =
+        runTest(testDispatcher) {
+            fakeRepo.appsToReturn = listOf(
+                InstalledApp("com.a", "Maps"),
+                InstalledApp("com.b", "Maps"),
+            )
+            fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent("maps")
+            fakeMatcher.confidenceToReturn = 0.90f
+            val vm = buildViewModel()
+
+            vm.onCommandSubmitted("open maps")
+            advanceUntilIdle()
+
+            vm.onAppClicked(InstalledApp("org.telegram.messenger", "Telegram"))
+            advanceUntilIdle()
+
+            assertTrue(fakeResolutionStore.observeAll().first().isEmpty())
+        }
+
+    @Test
+    fun `a confident learned preference auto-launches the preferred app and clears input`() =
+        runTest(testDispatcher) {
+            fakeRepo.appsToReturn = listOf(
+                InstalledApp("com.a", "Maps"),
+                InstalledApp("com.b", "Maps"),
+            )
+            fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent("maps")
+            fakeMatcher.confidenceToReturn = 0.90f
+            // LAUNCH_APP must be SAFE-risk for AutoResolve eligibility (DefaultActionCatalog agrees).
+            val catalog = FakeActionCatalog(listOf(safeDescriptor(ActionIds.LAUNCH_APP)))
+            val candidateSet = CandidateSet(listOf(ResolvedTarget.App("com.a"), ResolvedTarget.App("com.b")))
+            fakeResolutionStore.upsert(
+                ResolutionPreference(
+                    capabilityKey = CapabilityKey(ActionIds.LAUNCH_APP, "maps"),
+                    context = ResolutionContext.None,
+                    preferredTarget = ResolvedTarget.App("com.a"),
+                    evidence = PreferenceEvidence(streak = 3, totalChoices = 3, lastChosenAtEpochMs = 0L),
+                    learnedInSetFingerprint = fingerprintOf(candidateSet),
+                ),
+            )
+            val vm = buildViewModel(actionCatalog = catalog)
+
+            vm.onCommandSubmitted("open maps")
+            advanceUntilIdle()
+
+            val action = fakeExecutor.executedActions.single() as ExecutableAction.LaunchAppAction
+            assertEquals("com.a", action.packageName)
+            assertEquals("", vm.commandInput.value)
+            // Auto-launch never sets a pending learning token (it is not the app-ambiguity confirm flow).
+            vm.onAppClicked(InstalledApp("com.b", "Maps"))
+            advanceUntilIdle()
+            assertEquals(
+                "auto-launch must not itself record a second preference",
+                1,
+                fakeResolutionStore.observeAll().first().size,
+            )
+        }
 }

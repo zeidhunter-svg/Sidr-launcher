@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
+import com.sidr.launcher.core.common.di.ApplicationScope
 import com.sidr.launcher.core.common.di.IoDispatcher
 import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
@@ -12,7 +13,11 @@ import com.sidr.launcher.domain.action.ActionCatalog
 import com.sidr.launcher.domain.action.LauncherAction
 import com.sidr.launcher.domain.history.AppUsageRecord
 import com.sidr.launcher.domain.history.UsageHistoryRepository
-import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
+import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
+import com.sidr.launcher.domain.memory.resolution.ResolutionLearningToken
+import com.sidr.launcher.domain.memory.resolution.ResolveCommandWithPreferenceUseCase
+import com.sidr.launcher.domain.memory.resolution.ResolvedCommand
+import com.sidr.launcher.domain.memory.resolution.ResolvedTarget
 import com.sidr.launcher.domain.connectivity.ConnectivityChecker
 import com.sidr.launcher.domain.input.InputIntent
 import com.sidr.launcher.domain.input.UniversalInputRouter
@@ -39,6 +44,7 @@ import com.sidr.launcher.domain.voice.SpeechRecognitionState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -62,10 +68,15 @@ import javax.inject.Inject
 @HiltViewModel
 class LauncherViewModel @Inject constructor(
     private val installedAppsRepository: InstalledAppsRepository,
-    // AIL-4: routing goes through RouteCommandUseCase (rule-first, then the LLM router only on a
-    // low-confidence/NL command when the feature flag is on). With the flag off it returns the
-    // unchanged HandleUserCommandUseCase outcome byte-for-byte, so typed commands are unaffected.
-    private val routeCommand: RouteCommandUseCase,
+    // S2-1 Task 11: the learned-resolution read decorator wraps the AIL-4 RouteCommandUseCase (via a
+    // CommandRouteStep seam bound in MemoryProvidesModule). With no stored preference — or any
+    // non-ambiguous outcome — it returns the original outcome unchanged, so the rule/router path stays
+    // byte-for-byte (router-off / no-preference ⇒ parity, same as pre-S2-1).
+    private val resolveCommand: ResolveCommandWithPreferenceUseCase,
+    // S2-1 Task 11: records an explicit candidate choice from the app-ambiguity flow, fire-and-forget
+    // on [applicationScope]. Never consulted for decision-making in the VM — only invoked after a
+    // successful launch of a candidate the pending token actually offered.
+    private val recordResolutionChoice: RecordResolutionChoiceUseCase,
     // AIL-5: executes a *confirmed* router-proposed LauncherAction (resolve → execute) via the same
     // proven resolver/executor path. Only reached from confirmRoutedAction() — never on submit.
     private val executeAction: ExecuteActionUseCase,
@@ -86,6 +97,9 @@ class LauncherViewModel @Inject constructor(
     // Android-free; reachability signals whether the cloud router/assistant is available.
     private val connectivityChecker: ConnectivityChecker,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    // S2-1 Task 11: fire-and-forget scope for recording a learned choice — survives the launch's own
+    // viewModelScope coroutine (Block-F recordUsage precedent) so a quick nav-away never drops it.
+    @ApplicationScope private val applicationScope: CoroutineScope,
     // Survives process death — the user's typed command text is restored on relaunch (H3).
     // Hilt auto-provides this for @HiltViewModel; tests pass a SavedStateHandle() directly.
     private val savedStateHandle: SavedStateHandle,
@@ -227,6 +241,11 @@ class LauncherViewModel @Inject constructor(
     private val _pendingRoutedAction = MutableStateFlow<PendingRoutedAction?>(null)
     val pendingRoutedAction: StateFlow<PendingRoutedAction?> = _pendingRoutedAction
 
+    // ── Pending learned-resolution token (S2-1 Task 11) — transient, VM-internal only. Set whenever
+    // the last outcome was an app-ambiguity list; consumed by a subsequent successful app launch to
+    // record the user's explicit choice. No public UI surface — nothing renders it directly.
+    private val _pendingLearningToken = MutableStateFlow<ResolutionLearningToken?>(null)
+
     // ── Developer Command console (AIL-3 / DF-1) — session-only, in-memory. No persisted key, so the
     // privacy denylist guard is untouched; both flags reset on process death. Two-factor unlock:
     // arm via 7 wordmark taps (screen), then submit the "//dev-mode" sentinel to toggle.
@@ -303,10 +322,40 @@ class LauncherViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            val outcome = routeCommand.route(text)
-            applyOutcome(outcome)
-            if (_devConsoleOn.value) {
-                _consoleLines.value = _consoleLines.value + ConsoleLine(text, outcomeSummary(outcome))
+            when (val resolved = resolveCommand.resolve(text)) {
+                is ResolvedCommand.Outcome -> {
+                    // Non-ambiguous → learningToken is null (parity: identical to the pre-S2-1 outcome
+                    // path). Ambiguous with no stored preference → outcome is the original
+                    // NeedsConfirmation, unchanged, plus a token for a later candidate tap to record.
+                    _pendingLearningToken.value = resolved.learningToken
+                    applyOutcome(resolved.outcome)
+                    if (_devConsoleOn.value) {
+                        _consoleLines.value =
+                            _consoleLines.value + ConsoleLine(text, outcomeSummary(resolved.outcome))
+                    }
+                }
+                is ResolvedCommand.AutoLaunch -> {
+                    // A confident learned preference — launch it directly. Executed-like semantics
+                    // (input clear) come only from launchApp's real success; a failure renders the
+                    // decorator's reordered fallback outcome exactly as a typed command would.
+                    _pendingLearningToken.value = null
+                    val packageName = resolved.target.packageName
+                    val activityName = (uiState.value as? UiState.Success)
+                        ?.data
+                        ?.apps
+                        ?.firstOrNull { it.packageName == packageName }
+                        ?.activityName
+                    if (_devConsoleOn.value) {
+                        _consoleLines.value = _consoleLines.value + ConsoleLine(text, "auto $packageName")
+                    }
+                    launchApp(
+                        packageName = packageName,
+                        activityName = activityName,
+                        onResult = { success ->
+                            if (success) setCommandInput("") else applyOutcome(resolved.fallback)
+                        },
+                    )
+                }
             }
         }
     }
@@ -375,7 +424,34 @@ class LauncherViewModel @Inject constructor(
         launchApp(
             packageName = app.packageName,
             activityName = app.activityName,
+            onResult = { success -> if (success) recordChoiceIfPending(app.packageName) },
         )
+    }
+
+    /**
+     * S2-1 Task 11: if the last outcome was an app-ambiguity list awaiting a choice, and
+     * [packageName] is one of the candidates that list actually offered, records the explicit choice
+     * fire-and-forget on [applicationScope] — the returned [OperationResult] is ignored (the launch
+     * already completed; a failed/aborted record must never surface as a launch error). Any app
+     * launch (grid tap or candidate tap) ends the pending interaction. A grid tap with no pending
+     * token, or a tap on an app the ambiguity list never offered, is a plain launch and never records
+     * — the VM makes no other decision here; membership/streak/risk logic lives in the use-cases.
+     */
+    private fun recordChoiceIfPending(packageName: String) {
+        val token = _pendingLearningToken.value ?: return
+        _pendingLearningToken.value = null
+        if (!token.isAppAmbiguityFlow) return
+        val chosen = ResolvedTarget.App(packageName)
+        if (chosen !in token.candidateSet.targets) return
+        applicationScope.launch {
+            try {
+                recordResolutionChoice.record(token.capabilityKey, token.context, chosen, token.candidateSet)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                // Non-critical — the app already launched successfully.
+            }
+        }
     }
 
     fun dismissFeedback() {
@@ -669,6 +745,10 @@ class LauncherViewModel @Inject constructor(
     private fun launchApp(
         packageName: String,
         activityName: String?,
+        // S2-1 Task 11: optional success signal for callers that need to react to a real launch
+        // result (e.g. recording a learned choice, or falling back on an AutoLaunch failure).
+        // Existing callers pass nothing, so their behavior is byte-for-byte unchanged.
+        onResult: ((success: Boolean) -> Unit)? = null,
     ) {
         viewModelScope.launch {
             val action = ExecutableAction.LaunchAppAction(
@@ -688,6 +768,7 @@ class LauncherViewModel @Inject constructor(
             if (result is ActionExecutionResult.Success) {
                 recordUsage(packageName)
             }
+            onResult?.invoke(result is ActionExecutionResult.Success)
         }
     }
 

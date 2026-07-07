@@ -6,9 +6,11 @@ import androidx.room.TypeConverters
 import com.sidr.launcher.data.repository.db.converter.IntentMatchTypeConverter
 import com.sidr.launcher.data.repository.db.dao.AppUsageDao
 import com.sidr.launcher.data.repository.db.dao.IntentMatchDao
+import com.sidr.launcher.data.repository.db.dao.ResolutionPreferenceDao
 import com.sidr.launcher.data.repository.db.dao.SuggestionRankingDao
 import com.sidr.launcher.data.repository.db.entity.AppUsageEntity
 import com.sidr.launcher.data.repository.db.entity.IntentMatchEntity
+import com.sidr.launcher.data.repository.db.entity.ResolutionPreferenceEntity
 import com.sidr.launcher.data.repository.db.entity.SuggestionRankingEntity
 
 /**
@@ -26,6 +28,11 @@ import com.sidr.launcher.data.repository.db.entity.SuggestionRankingEntity
         AppUsageEntity::class,
         SuggestionRankingEntity::class,
         IntentMatchEntity::class,
+        // Stage-2 S2-1 Task 7: registered so the DAO is reachable for testing. `version` is
+        // deliberately left at 1 here — the version bump + Migration1To2 + regenerated golden
+        // schema (schemas/1.json currently reflects only the first 3 entities) is Task 9. Nothing
+        // consumes this table yet.
+        ResolutionPreferenceEntity::class,
     ],
     version = 1,
     exportSchema = true,
@@ -35,6 +42,7 @@ abstract class SidrDatabase : RoomDatabase() {
     abstract fun appUsageDao(): AppUsageDao
     abstract fun suggestionRankingDao(): SuggestionRankingDao
     abstract fun intentMatchDao(): IntentMatchDao
+    abstract fun resolutionPreferenceDao(): ResolutionPreferenceDao
 
     companion object {
         const val DATABASE_NAME = "sidr_history.db"

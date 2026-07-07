@@ -3,12 +3,14 @@ package com.sidr.launcher.data.repository.db
 import androidx.room.testing.MigrationTestHelper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.sidr.launcher.data.repository.db.migrations.Migration1To2
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Instrumented migration runway test (Block F, step F8.5 / Fork 2).
+ * Instrumented migration runway test (Block F, step F8.5 / Fork 2; v1->v2 case added Stage-2
+ * S2-1 Task 9).
  *
  * Validates that the v1 golden schema (schemas/1.json) matches what Room actually creates.
  * This is the baseline for all future migrations: any entity change must bump the version,
@@ -39,6 +41,17 @@ class MigrationTest {
         // Validate schema after running no migrations (empty list) — confirms the schema
         // validator is wired and ready for future Migration objects.
         helper.runMigrationsAndValidate(TEST_DB, 1, true).close()
+    }
+
+    @Test
+    fun v1_to_v2_migration_addsResolutionPreferencesTable_andValidatesAgainstGoldenSchema() {
+        // Create the DB at v1 (schemas/1.json — the frozen 3-entity historical shape).
+        helper.createDatabase(TEST_DB, 1).close()
+
+        // Run Migration1To2 and validate the resulting schema against schemas/2.json (4 entities,
+        // incl. resolution_preferences). Throws if Migration1To2's CREATE TABLE SQL drifts from
+        // the golden schema (column order, NOT NULL, or the composite primary key).
+        helper.runMigrationsAndValidate(TEST_DB, 2, true, Migration1To2).close()
     }
 
     private companion object {

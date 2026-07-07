@@ -2,8 +2,9 @@
 
 Package: `com.sidr.launcher.data.repository.db.migrations`
 
-`SidrDatabase` ships at **version 1** (Block F), so there are no `Migration` objects yet — this
-package is the seeded runway (Fork 2). When an entity changes:
+`SidrDatabase` shipped at **version 1** (Block F) with no `Migration` objects — this package was
+the seeded runway (Fork 2). **Stage-2 S2-1 Task 9** bumped the database to **version 2** and added
+`Migration1To2` (adds the `resolution_preferences` table). When an entity changes again:
 
 1. Bump `SidrDatabase` `version`.
 2. Add a `Migration(from, to)` here (prefer `@AutoMigration` where Room can derive it; a manual

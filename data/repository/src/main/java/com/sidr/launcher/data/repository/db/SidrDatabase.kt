@@ -14,10 +14,13 @@ import com.sidr.launcher.data.repository.db.entity.ResolutionPreferenceEntity
 import com.sidr.launcher.data.repository.db.entity.SuggestionRankingEntity
 
 /**
- * Room database for Block F history tables (Fork 2).
+ * Room database for Block F history tables (Fork 2) + the Stage-2 S2-1 `resolution_preferences`
+ * table (Task 7/9).
  *
- * - `version = 1`, `exportSchema = true` → schema JSON committed under `data/repository/schemas/`.
- * - All three tables are recreatable learning/cache tables. `fallbackToDestructiveMigration` may be
+ * - `version = 2`, `exportSchema = true` → schema JSON committed under `data/repository/schemas/`.
+ *   `1.json` is the frozen historical 3-entity shape; `2.json` (Task 9) adds `resolution_preferences`
+ *   via `Migration1To2`.
+ * - All four tables are recreatable learning/cache tables. `fallbackToDestructiveMigration` may be
  *   enabled by the DI builder (F7) **only for debug builds**; release builds get no destructive
  *   fallback, so a missing migration fails loudly instead of silently wiping data.
  * - When an entity changes: bump `version`, add a `Migration` under `db/migrations/`, commit the new
@@ -28,13 +31,13 @@ import com.sidr.launcher.data.repository.db.entity.SuggestionRankingEntity
         AppUsageEntity::class,
         SuggestionRankingEntity::class,
         IntentMatchEntity::class,
-        // Stage-2 S2-1 Task 7: registered so the DAO is reachable for testing. `version` is
-        // deliberately left at 1 here — the version bump + Migration1To2 + regenerated golden
-        // schema (schemas/1.json currently reflects only the first 3 entities) is Task 9. Nothing
-        // consumes this table yet.
+        // Stage-2 S2-1 Task 7: registered so the DAO is reachable for testing. Task 9 bumped
+        // `version` to 2, added `Migration1To2`, and committed the regenerated golden schema
+        // (schemas/2.json) — schemas/1.json stays frozen as the historical 3-entity v1 shape.
+        // Nothing consumes this table yet (deferred to Phase C wiring).
         ResolutionPreferenceEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 @TypeConverters(IntentMatchTypeConverter::class)

@@ -7,6 +7,7 @@ import com.sidr.launcher.data.repository.db.SidrDatabase
 import com.sidr.launcher.data.repository.db.dao.AppUsageDao
 import com.sidr.launcher.data.repository.db.dao.IntentMatchDao
 import com.sidr.launcher.data.repository.db.dao.SuggestionRankingDao
+import com.sidr.launcher.data.repository.db.migrations.Migration1To2
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -36,7 +37,7 @@ object DatabaseModule {
             context,
             SidrDatabase::class.java,
             SidrDatabase.DATABASE_NAME,
-        )
+        ).addMigrations(Migration1To2)
         if (BuildConfig.DEBUG) {
             builder.fallbackToDestructiveMigration()
         }

@@ -31,6 +31,12 @@ class EvaluateLearnedChoiceDisplayStateUseCaseTest {
             useCase.evaluate(pref(9, learned), current, ActionRiskLevel.SAFE, targetInstalled = true))
     }
 
+    @Test fun `confident + same set + installed but non-SAFE risk is NeedsReconfirm`() {
+        val s = set("com.a", "com.b")   // same fingerprint + installed: only risk demotes it (ladder step 3)
+        assertEquals(LearnedChoiceDisplayState.NeedsReconfirm,
+            useCase.evaluate(pref(9, s), s, ActionRiskLevel.CONFIRM, targetInstalled = true))
+    }
+
     @Test fun `confident + safe + same set + installed is Auto`() {
         val s = set("com.a", "com.b")
         assertEquals(LearnedChoiceDisplayState.Auto,

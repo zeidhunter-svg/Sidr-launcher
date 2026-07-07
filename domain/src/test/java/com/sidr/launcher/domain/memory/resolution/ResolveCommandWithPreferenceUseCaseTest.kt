@@ -59,6 +59,20 @@ class ResolveCommandWithPreferenceUseCaseTest {
         assertEquals("com.b", (r.fallback as CommandOutcome.NeedsConfirmation).candidates.first().packageName)
     }
 
+    @Test fun `missing catalog descriptor fails safe to non-SAFE and never AutoLaunch`() = runTest {
+        // Confident streak + matching fingerprint would AutoLaunch under SAFE — but with no descriptor
+        // the risk lookup falls back to CONFIRM, so the policy demotes to RankFirst (Outcome, not AutoLaunch).
+        val emptyCatalog = FakeActionCatalog(emptyList())
+        val uc = ResolveCommandWithPreferenceUseCase({ ambiguous }, store, policy, emptyCatalog)
+        store.upsert(ResolutionPreference(key, ResolutionContext.None, target("com.b"),
+            PreferenceEvidence(9, 9, 0L), fingerprintOf(candidates)))
+        val r = uc.resolve("open bank")
+        assertTrue(r is ResolvedCommand.Outcome)   // fail-safe: NOT an AutoLaunch directive
+        r as ResolvedCommand.Outcome
+        val out = r.outcome as CommandOutcome.NeedsConfirmation
+        assertEquals("com.b", out.candidates.first().packageName)   // still RankFirst-reordered
+    }
+
     @Test fun `Stale prunes the record and returns the original list`() = runTest {
         store.upsert(ResolutionPreference(key, ResolutionContext.None, target("com.gone"),
             PreferenceEvidence(5, 5, 0L), fingerprintOf(CandidateSet(listOf(target("com.gone"))))))

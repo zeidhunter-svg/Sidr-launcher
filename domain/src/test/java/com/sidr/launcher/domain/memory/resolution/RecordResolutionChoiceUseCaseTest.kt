@@ -2,6 +2,8 @@ package com.sidr.launcher.domain.memory.resolution
 
 import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
 import com.sidr.launcher.domain.action.ActionId
+import com.sidr.launcher.domain.result.OperationResult
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -47,6 +49,23 @@ class RecordResolutionChoiceUseCaseTest {
         useCase.record(CapabilityKey(ActionId("launch_app"), "  "), ResolutionContext.None, app("com.a"), candidates)
         assertNull((store.find(CapabilityKey(ActionId("launch_app"), ""), ResolutionContext.None) as
             com.sidr.launcher.domain.result.OperationResult.Success).value)
+    }
+
+    @Test fun `blank query no-ops returns Success and stores nothing (checked against the actual key)`() = runTest {
+        val blankKey = CapabilityKey(ActionId("launch_app"), "  ")
+        val r = useCase.record(blankKey, ResolutionContext.None, app("com.a"), candidates)
+        assertTrue(r is OperationResult.Success)
+        // Assert against the SAME key that was passed in — removes any "  " vs "" ambiguity.
+        assertNull((store.find(blankKey, ResolutionContext.None) as OperationResult.Success).value)
+        assertTrue(store.observeAll().first().isEmpty())
+    }
+
+    @Test fun `over-length query no-ops returns Success and stores nothing`() = runTest {
+        val longKey = CapabilityKey(ActionId("launch_app"), "a".repeat(MAX_QUERY_LENGTH + 1))
+        val r = useCase.record(longKey, ResolutionContext.None, app("com.a"), candidates)
+        assertTrue(r is OperationResult.Success)
+        assertNull((store.find(longKey, ResolutionContext.None) as OperationResult.Success).value)
+        assertTrue(store.observeAll().first().isEmpty())
     }
 
     @Test fun `store write failure returns Failure without throwing`() = runTest {

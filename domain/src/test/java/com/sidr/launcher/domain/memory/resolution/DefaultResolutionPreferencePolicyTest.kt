@@ -51,6 +51,12 @@ class DefaultResolutionPreferencePolicyTest {
         assertEquals(ResolutionDecision.RankFirst(app("com.a")), d)
     }
 
+    @Test fun `confident + SAFE set but DANGEROUS risk is RankFirst never AutoResolve`() {
+        val s = set("com.a", "com.b")   // confident streak + same fingerprint: only risk blocks auto
+        val d = policy.decide(pref("com.a", 9, s), s, ActionRiskLevel.DANGEROUS)
+        assertEquals(ResolutionDecision.RankFirst(app("com.a")), d)
+    }
+
     @Test fun `confident + SAFE but fingerprint changed is RankFirst`() {
         val learned = set("com.a", "com.b")
         val current = set("com.a", "com.c")   // set changed → demote, don't erase

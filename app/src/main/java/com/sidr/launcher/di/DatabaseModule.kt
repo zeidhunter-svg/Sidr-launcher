@@ -6,6 +6,7 @@ import com.sidr.launcher.BuildConfig
 import com.sidr.launcher.data.repository.db.SidrDatabase
 import com.sidr.launcher.data.repository.db.dao.AppUsageDao
 import com.sidr.launcher.data.repository.db.dao.IntentMatchDao
+import com.sidr.launcher.data.repository.db.dao.ResolutionPreferenceDao
 import com.sidr.launcher.data.repository.db.dao.SuggestionRankingDao
 import com.sidr.launcher.data.repository.db.migrations.Migration1To2
 import dagger.Module
@@ -56,4 +57,8 @@ object DatabaseModule {
 
     @Provides
     fun provideIntentMatchDao(db: SidrDatabase): IntentMatchDao = db.intentMatchDao()
+
+    @Provides
+    fun provideResolutionPreferenceDao(db: SidrDatabase): ResolutionPreferenceDao =
+        db.resolutionPreferenceDao()
 }

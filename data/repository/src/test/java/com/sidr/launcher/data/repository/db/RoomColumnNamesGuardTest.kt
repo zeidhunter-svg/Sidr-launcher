@@ -1,5 +1,6 @@
 package com.sidr.launcher.data.repository.db
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -130,6 +131,16 @@ class RoomColumnNamesGuardTest {
             "Expected resolution_preferences.query to be exempted, but it was flagged: $violations",
             violations.none { (qualified, _) -> qualified == "resolution_preferences.query" },
         )
+    }
+
+    @Test
+    fun `resolution preference local-sensitive column inventory is pinned`() {
+        assertEquals(
+            setOf("resolution_preferences.query"),
+            RoomColumnNames.APPROVED_SENSITIVE_COLUMNS,
+        )
+        assertTrue(RoomColumnNames.TABLE_NAMES.contains("resolution_preferences"))
+        assertTrue(RoomColumnNames.BY_TABLE["resolution_preferences"]?.contains("query") == true)
     }
 
     /**

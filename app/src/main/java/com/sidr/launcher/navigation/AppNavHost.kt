@@ -20,6 +20,7 @@ import com.sidr.launcher.feature.launcher.AppDrawerViewModel
 import com.sidr.launcher.feature.launcher.LauncherScreen
 import com.sidr.launcher.feature.launcher.LauncherViewModel
 import com.sidr.launcher.feature.permission_education.PermissionEducationScreen
+import com.sidr.launcher.feature.settings.LearnedChoicesScreen
 import com.sidr.launcher.feature.settings.SettingsScreen
 import com.sidr.launcher.feature.settings.SettingsViewModel
 import com.sidr.launcher.feature.suggestions.SuggestionsRow
@@ -145,6 +146,14 @@ fun AppNavHost(
                 vm.navigationEvents.collect { handleNavigationEvent(navController, it) }
             }
             SettingsScreen(viewModel = vm)
+        }
+
+        composable(Routes.LearnedChoices.ROUTE) {
+            LearnedChoicesScreen(
+                onBack = {
+                    handleNavigationEvent(navController, NavigationEvent.NavigateBack)
+                },
+            )
         }
 
         // Real destination (Block G; Block T routes the feature in). The optional `feature` arg

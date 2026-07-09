@@ -74,6 +74,7 @@ fun SettingsScreen(
         onMicInputChanged = viewModel::setMicInputEnabled,
         onLlmRouterChanged = viewModel::setLlmRouterEnabled,
         onAssistantProvider = viewModel::openAssistantProvider,
+        onLearnedChoices = viewModel::openLearnedChoices,
         onSetDefaultLauncher = {
             try {
                 setDefaultLauncher.launch(defaultLauncherIntent(context))
@@ -97,6 +98,7 @@ private fun SettingsContent(
     onMicInputChanged: (Boolean) -> Unit,
     onLlmRouterChanged: (Boolean) -> Unit,
     onAssistantProvider: () -> Unit,
+    onLearnedChoices: () -> Unit,
     onSetDefaultLauncher: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -288,6 +290,17 @@ private fun SettingsContent(
                     checked = uiState.micInputEnabled,
                     onCheckedChange = onMicInputChanged,
                 )
+            }
+
+            // ── Memory ──────────────────────────────────────────────────────────
+            SectionHeader(text = "MEMORY")
+            Button(
+                onClick = onLearnedChoices,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            ) {
+                Text(text = "[ learned choices ]")
             }
 
             // ── Assistant ───────────────────────────────────────────────────────

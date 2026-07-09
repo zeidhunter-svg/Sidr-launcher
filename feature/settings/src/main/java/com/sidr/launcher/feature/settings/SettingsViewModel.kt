@@ -230,6 +230,10 @@ class SettingsViewModel @Inject constructor(
         _navigationEvents.trySend(NavigationEvent.NavigateTo(Routes.Assistant.ROUTE))
     }
 
+    fun openLearnedChoices() {
+        _navigationEvents.trySend(NavigationEvent.NavigateTo(Routes.LearnedChoices.ROUTE))
+    }
+
     fun navigateBack() {
         _navigationEvents.trySend(NavigationEvent.NavigateBack)
     }

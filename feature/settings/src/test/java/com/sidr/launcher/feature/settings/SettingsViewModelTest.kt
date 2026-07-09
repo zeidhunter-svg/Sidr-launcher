@@ -316,6 +316,16 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `learned choices entry emits navigation to learned choices route`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+
+        vm.openLearnedChoices()
+        val event = vm.navigationEvents.first()
+
+        assertEquals(NavigationEvent.NavigateTo(Routes.LearnedChoices.ROUTE), event)
+    }
+
+    @Test
     fun `back action emits navigate back`() = runTest(testDispatcher) {
         val vm = buildViewModel()
 

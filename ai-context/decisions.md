@@ -4239,3 +4239,44 @@ loop); provenance on every consequential action. **Golden rule: a surface's UI i
 engine is real** (no "agent dashboard without agents"). **Roadmap mapping:** A1–A3 ≈ Stage 2 (Framework),
 A4–A5 bridge into Stage 3, A6 = Stage 3. **Next architectural slice = A1** (also enriches S2-2:
 `alias → tool-call`). Deferred: the 5-tab nav / live Agents surface (until A4/A6 exist).
+
+## ADR 2026-07-11 — DS-1 complete (soft-classic-grey token layer + Roborazzi screenshot harness)
+
+**Presentation-only; no domain/data/routing/execution/privacy/memory/navigation change.** Landed the
+approved "soft classic grey" identity
+([spec](../docs/superpowers/specs/2026-07-10-visual-identity-soft-grey-design.md) §2/§3/§4) at the
+`core/ui/theme/` token level and stood up the Roborazzi screenshot harness the repo lacked. Plan:
+[docs/superpowers/plans/2026-07-10-ds1-grey-token-layer.md](../docs/superpowers/plans/2026-07-10-ds1-grey-token-layer.md)
+(STATUS DONE).
+
+- **New `SidrColors`** (`@Immutable` data class) + `SidrDarkColors`/`SidrLightColors` (every §2 role, both
+  themes) + `LocalSidrColors` CompositionLocal. **Accent (pewter) and fixed status
+  (`success/attention/caution/danger/info`) are separate token sets** — status is never re-tinted by the
+  accent (spec-lock, guard-tested `accent_and_status_are_distinct_tokens`).
+- **Grey Material `ColorScheme`** — `GreyDarkColorScheme`/`GreyLightColorScheme` derived from `SidrColors`
+  **replace** the four green/amber terminal schemes (`Green*/Amber*` deleted from `Color.kt`).
+- **Tri-font typography** (spec §3): `SidrSans = FontFamily.SansSerif` (prose), `SidrSerif =
+  FontFamily.Serif` (sacred); `SidrTypography` remaps body/title slots → sans while label slots stay
+  `JetBrainsMono` (the identity). New `SidrTextStyles.Default` (`command`/`system`/`provenance`/`sacred`)
+  read via `SidrTheme.textStyles`.
+- **Softened shape scale** (spec §4): `SidrShapes` 4/7/10/12dp (was brutalist 0–8dp).
+- **`SidrTheme` unchanged signature** `(darkTheme, accent, dynamicColor, content)` — `accent` retained for
+  source compat but **inert** (grey for every value; `AccentColor{GREEN,AMBER}` enum kept, stored
+  `accentColor`/`themeName` preference keys untouched). Provides `LocalSidrColors` + exposes
+  `SidrTheme.colors`/`SidrTheme.textStyles`. `dynamicColor` branch kept (off by default). No screen
+  restructuring (that is DS-3/DS-4).
+- **Global CRT scanline overlay dropped** from `LauncherActivity` (identity is grey, not phosphor);
+  `Modifier.sidrScanlines` stays defined for optional dev/boot use, `LocalSidrMotionEnabled` (block caret)
+  intact.
+- **Roborazzi harness** (`io.github.takahirom.roborazzi` 1.26.0, JVM/Robolectric, no device) in `:core:ui`
+  + `robolectric.properties` (sdk 34, w360dp-h800dp-xhdpi) + committed goldens under
+  `core/ui/src/test/screenshots/` (`harness_smoke`, `grey_sample_dark`, `grey_sample_light`) +
+  `@SidrThemePreviews` dark+light multipreview. **Env note:** on this machine `~/.gradle/gradle.properties`
+  pins `org.gradle.java.home` to a local JDK 17, so a plain `./gradlew` works (no JAVA_HOME prefix). Golden
+  capture paths are **module-relative** (`src/test/screenshots/…`), since the unit-test JVM's working
+  directory is the module dir.
+
+**Build gate green:** `:core:ui:testDebugUnitTest testDebugUnitTest assembleDebug
+:core:ui:verifyRoborazziDebug` BUILD SUCCESSFUL. Existing feature tests unchanged (they assert behaviour,
+not colour). Follow-ups per spec: DS-2/3 primitives (provenance line, press-invert chips), DS-4 Home, DS-6A
+sacred header, DS-7 memory-migration (absorbs the S2-2 Aliases UI so it is built in the grey language).

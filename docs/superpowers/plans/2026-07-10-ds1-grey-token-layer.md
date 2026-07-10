@@ -1,5 +1,13 @@
 # DS-1 — Soft-Classic-Grey Token Layer + Screenshot Harness (Implementation Plan)
 
+> **STATUS: DONE (2026-07-11).** All 9 tasks implemented on `launcher-4`. Grey tokens (both themes) +
+> tri-font + softened shapes live at the `core/ui/theme/` token level; `SidrTheme.colors`/`textStyles`
+> available; `AccentColor` inert but compiling (stored preference keys untouched); global CRT scanlines
+> gone; Roborazzi harness + grey goldens (`harness_smoke`/`grey_sample_dark`/`grey_sample_light`) green.
+> Full gate `:core:ui:testDebugUnitTest testDebugUnitTest assembleDebug :core:ui:verifyRoborazziDebug`
+> BUILD SUCCESSFUL. No screen restructured (that is DS-3/DS-4). ADR: decisions.md "2026-07-11 — DS-1
+> complete". Tasks 3+6 were committed together (a Task-3-only commit would not build).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
 **Goal:** Replace the AIL-0 green/amber terminal theme with the approved **soft classic grey** identity at

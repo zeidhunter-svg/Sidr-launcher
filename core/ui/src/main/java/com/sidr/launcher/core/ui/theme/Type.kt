@@ -9,14 +9,19 @@ import androidx.compose.ui.unit.sp
 import com.sidr.launcher.core.ui.R
 
 /**
- * Sidr typography — **JetBrains Mono** everywhere, the monospace core of the terminal identity (AIL-0).
+ * Sidr typography — **tri-font** roles (2026-07-10 visual-identity spec §3). The boundary is *interface vs
+ * prose vs sacred*: the mono shell stays wide (a launcher is mostly interface, and the mono signature is
+ * the recognizable identity), sans is reserved for genuine prose, serif is the sacred face.
  *
- * The face is bundled (Regular/Medium/SemiBold/Bold; OFL, see `core/ui/OFL-JetBrainsMono.txt`) so it
- * renders identically across the device matrix. A launcher's text is short (app labels, commands, section
- * headers), so full monospace costs little readability and pays off the "advanced AI terminal" look.
+ * - **Mono — JetBrains Mono** ([JetBrainsMono], bundled Regular/Medium/SemiBold/Bold; OFL, see
+ *   `core/ui/OFL-JetBrainsMono.txt`): the `>` prompt, commands, statuses, section labels, chips, captions,
+ *   provenance, all metadata. Section headers keep wide tracking.
+ * - **Sans — system sans** ([SidrSans]): app labels in prose contexts, buttons, descriptions, settings
+ *   copy, assistant answers, long-form prose.
+ * - **Serif — system serif** ([SidrSerif]): the Shahada / sacred and optionally long-form prose.
  *
- * Monospace glyphs already carry their own rhythm, so tracking is tightened versus a proportional scale;
- * only the small uppercase section label keeps wide tracking for the CRT feel.
+ * In [SidrTypography] the body/title Material slots resolve to sans (readable prose) while the label slots
+ * stay mono (the identity). Role styles beyond the Material set live in [SidrTextStyles].
  */
 val JetBrainsMono = FontFamily(
     Font(R.font.jetbrains_mono_regular, FontWeight.Normal),
@@ -25,30 +30,36 @@ val JetBrainsMono = FontFamily(
     Font(R.font.jetbrains_mono_bold, FontWeight.Bold),
 )
 
+/** Human/prose face — the platform sans (system-ui). */
+val SidrSans = FontFamily.SansSerif
+
+/** Sacred face — the platform serif (Shahada / long-form prose). */
+val SidrSerif = FontFamily.Serif
+
 val SidrTypography = Typography(
     titleLarge = TextStyle(
-        fontFamily = JetBrainsMono,
+        fontFamily = SidrSans,
         fontWeight = FontWeight.Bold,
         fontSize = 22.sp,
         lineHeight = 28.sp,
         letterSpacing = 0.sp,
     ),
     titleMedium = TextStyle(
-        fontFamily = JetBrainsMono,
+        fontFamily = SidrSans,
         fontWeight = FontWeight.SemiBold,
         fontSize = 16.sp,
         lineHeight = 24.sp,
         letterSpacing = 0.sp,
     ),
     bodyLarge = TextStyle(
-        fontFamily = JetBrainsMono,
+        fontFamily = SidrSans,
         fontWeight = FontWeight.Normal,
         fontSize = 16.sp,
         lineHeight = 24.sp,
         letterSpacing = 0.sp,
     ),
     bodyMedium = TextStyle(
-        fontFamily = JetBrainsMono,
+        fontFamily = SidrSans,
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
         lineHeight = 20.sp,

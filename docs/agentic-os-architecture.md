@@ -122,6 +122,23 @@ Each layer: **purpose · grows-from · domain shape · invariants · the surface
   consequential action audit-visible and revocable.
 - **Enables:** safe automation; the Agents / Automation surfaces.
 
+### A-drawer — AI app categorization  *(a capability spanning A2/A3, shipping-adjacent)*
+
+The App Drawer groups apps into **thematic categories via an AI model**, with **user-creatable/editable
+categories** — not the static coarse Play class. Same rule-first / local-first / privacy discipline:
+
+- **Rule-first base:** `ApplicationInfo.category` (offline, deterministic; `UNDEFINED` → "Other").
+- **AI refinement:** an **on-device** classifier (small model / embeddings over app name + package +
+  base category) produces richer thematic groups (Banking, Ride-hailing, Health…) and may **propose new
+  categories** when a cluster doesn't fit an existing one.
+- **Privacy (important):** the **installed-app list is sensitive** (it profiles the user). Categorization is
+  therefore **local-first**; any cloud classification is **opt-in and disclosed** and goes through the
+  `OutboundContextPolicy` allow-list — the app list never leaves the device silently.
+- **User Memory (A3):** categorization results + user overrides (move an app, rename/create/merge a
+  category) are stored as editable local memory; the AI suggests, the user disposes.
+- **Presentation:** the drawer is presentation-only (icon grids by category, spec §5.1); it renders what the
+  categorization layer produces and holds no grouping logic.
+
 ## 2. Cross-cutting invariants (every layer honors these)
 
 1. **Clean architecture** — pure domain, ports in `domain`, impls in `data/*`; no `feature→feature`; single

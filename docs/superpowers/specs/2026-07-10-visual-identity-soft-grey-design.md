@@ -127,6 +127,29 @@ Top → bottom. Dense and functional; ceremony is minimal.
 
 Idle Home is calm; typing overtakes with results (existing AIL-3 "search overtakes" behavior, unchanged).
 
+### 5.1 App Drawer (approved)
+
+Reached from Home's "All apps". A **utility** surface (no command routing — doctrine).
+
+- **Layout: icon grids grouped by category** (not a flat A–Z list). Each category = a mono uppercase header
+  + a **4-column** grid of app icons.
+- **Icons only** in the grouped grid — fastest recognition, densest, launcher-native. The label is shown
+  on **long-press**, always in the **A–Z** list mode, and in **search results** (icon + label);
+  `contentDescription` = the app label is always set (TalkBack).
+- **Toggle `Groups · A–Z`** (user preference): Groups = icon grids by category; A–Z = the labelled list.
+- **Local search** at top (icon + label results). No command routing here.
+- **"Other"** (uncategorized) group is last and shown **only when non-empty** — nothing is lost, nothing
+  clutters when everything is placed.
+- **Categorization is an AI capability, not a static Play class** — see the architecture doc
+  ([agentic-os-architecture.md](../../agentic-os-architecture.md) §A-drawer): rule-first `ApplicationInfo.category`
+  → on-device AI classifier (richer thematic groups, may propose **new** categories) → user-editable/creatable
+  categories stored in User Memory (A3). The drawer is **presentation-only**: it renders whatever the
+  categorization layer produces and holds no grouping logic.
+
+The approved compositions in the screen set (Home, App Drawer, Settings, Memory, Assistant, Permission
+Education + the interaction moments) are the **DS-3/DS-4 targets**. The agentic task-flow screens
+(intent → plan → execution+consent → result) are a **FUTURE contract** built only when A1/A4 exist.
+
 ## 6. Governing rules (carried + owner additions)
 
 1. **Accent ≠ status.** Two separate palettes (§2.1/§2.2 vs §2.3). Accent is barely present; status is fixed.

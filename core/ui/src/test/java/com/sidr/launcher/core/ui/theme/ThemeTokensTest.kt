@@ -1,6 +1,8 @@
 package com.sidr.launcher.core.ui.theme
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -23,5 +25,11 @@ class ThemeTokensTest {
         // spec-lock: brand accent is never a status colour
         assertEquals(false, SidrDarkColors.accent == SidrDarkColors.caution)
         assertEquals(false, SidrDarkColors.accent == SidrDarkColors.success)
+    }
+
+    @Test fun shapes_are_softened() {
+        assertEquals(RoundedCornerShape(10.dp), SidrShapes.medium)   // default 10dp
+        assertEquals(RoundedCornerShape(7.dp), SidrShapes.small)     // chips 7dp
+        assertEquals(RoundedCornerShape(12.dp), SidrShapes.large)    // modal 12dp
     }
 }

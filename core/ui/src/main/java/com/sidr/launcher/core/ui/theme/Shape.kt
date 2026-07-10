@@ -5,15 +5,15 @@ import androidx.compose.material3.Shapes
 import androidx.compose.ui.unit.dp
 
 /**
- * Sidr corner-shape scale — **brutalist / sharp** (AIL-0). The terminal identity reads as crisp
- * rectangular blocks divided by thin grid borders, not soft cards, so corners are near-square
- * (0–8dp) rather than the Phase-UX 4–28dp rounded scale. Elevation is carried by 1px `outline`
- * borders (see `Color.kt`); animated glow is deferred to the screen blocks (AIL-3/5/6).
+ * Sidr corner-shape scale — **softened classic** (2026-07-10 visual-identity spec §4). Not brutalist-sharp
+ * and not pill: 7dp chips, 10dp default (input, tiles, moments), 12dp modals. Replaces the AIL-0 brutalist
+ * 0–8dp scale. Elevation is still carried by 1px `line`/`border` hairlines (see `SidrColors`), not tonal
+ * shadow; `2px` is reserved for focus/risk.
  */
 val SidrShapes = Shapes(
-    extraSmall = RoundedCornerShape(0.dp),
-    small = RoundedCornerShape(2.dp),
-    medium = RoundedCornerShape(4.dp),
-    large = RoundedCornerShape(8.dp),
-    extraLarge = RoundedCornerShape(8.dp),
+    extraSmall = RoundedCornerShape(4.dp),
+    small = RoundedCornerShape(7.dp),
+    medium = RoundedCornerShape(10.dp),
+    large = RoundedCornerShape(12.dp),
+    extraLarge = RoundedCornerShape(12.dp),
 )

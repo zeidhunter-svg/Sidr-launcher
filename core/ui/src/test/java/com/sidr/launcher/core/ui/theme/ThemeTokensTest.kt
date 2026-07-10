@@ -32,4 +32,11 @@ class ThemeTokensTest {
         assertEquals(RoundedCornerShape(7.dp), SidrShapes.small)     // chips 7dp
         assertEquals(RoundedCornerShape(12.dp), SidrShapes.large)    // modal 12dp
     }
+
+    @Test fun grey_scheme_maps_ground_and_accent() {
+        assertEquals(SidrDarkColors.ground, GreyDarkColorScheme.background)
+        assertEquals(SidrDarkColors.accent, GreyDarkColorScheme.primary)
+        assertEquals(SidrDarkColors.danger, GreyDarkColorScheme.error)
+        assertEquals(SidrLightColors.ground, GreyLightColorScheme.background)
+    }
 }

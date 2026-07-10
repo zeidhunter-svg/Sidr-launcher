@@ -36,4 +36,24 @@ class ThemeScreenshotTest {
         }
         compose.onRoot().captureRoboImage("src/test/screenshots/harness_smoke.png")
     }
+
+    @Test fun grey_sample_dark() = captureSample(dark = true, name = "grey_sample_dark")
+    @Test fun grey_sample_light() = captureSample(dark = false, name = "grey_sample_light")
+
+    private fun captureSample(dark: Boolean, name: String) {
+        compose.setContent {
+            SidrTheme(darkTheme = dark) {
+                Surface(color = MaterialTheme.colorScheme.background) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("SIDR", style = MaterialTheme.typography.titleLarge)
+                        Text("FAVORITES", style = MaterialTheme.typography.labelSmall)
+                        Text("Open Telegram", style = MaterialTheme.typography.bodyMedium)
+                        Text("LOCAL · 14 MS", style = SidrTheme.textStyles.provenance)
+                        Text("There is no deity except Allah", style = SidrTheme.textStyles.sacred)
+                    }
+                }
+            }
+        }
+        compose.onRoot().captureRoboImage("src/test/screenshots/$name.png")
+    }
 }

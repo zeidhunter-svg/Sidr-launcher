@@ -117,6 +117,11 @@ Not blockers for Stage 1. Resolve or explicitly de-scope; stop carrying inert co
 
 # Stage 2 — AI Framework
 
+> **Engineering target for Stage 2 → Stage 3:** the six-layer agentic architecture **A1–A6** in
+> [agentic-os-architecture.md](agentic-os-architecture.md) (ADR 2026-07-10). A1–A3 flesh out this Framework
+> stage (tools · context · memory); A4–A5 bridge into Stage 3; A6 is Stage 3. Visual identity is governed by
+> [superpowers/specs/2026-07-10-visual-identity-soft-grey-design.md](superpowers/specs/2026-07-10-visual-identity-soft-grey-design.md).
+
 **Status: FUTURE (starts after Stage 1 ships).** Generalize the launcher's routing machinery into a
 reusable on-device AI framework. Every layer must keep the Stage-1 principles (offline core, local
 routing before LLM, confidence/permission/confirmation gating, no feature→feature edges, domain purity,

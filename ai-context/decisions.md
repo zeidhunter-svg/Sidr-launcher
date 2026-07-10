@@ -4142,3 +4142,100 @@ and prefers it next time (rank-first, then threshold auto-resolve), fully on-dev
 
 **Explicitly NOT authorized yet (owner):** production code, implementation plans, Room schema changes,
 use-case wiring. Next action after approval = `writing-plans` for block S2-1.
+
+## ADR 2026-07-10 — S2-1 "Learned Resolutions" complete (code-closed; device-pending)
+
+**Status: CODE-CLOSED, build-green, device-acceptance-pending.** The plan
+([docs/superpowers/plans/2026-07-06-learned-resolutions.md](../docs/superpowers/plans/2026-07-06-learned-resolutions.md))
+Tasks 1–15 (Phases A–E) are implemented and merged on `launcher-4`; Task 16's build gate is green; only
+the on-device SM-A325F acceptance pass + screenshots remain before the block is fully CLOSED. Supersedes
+the DESIGN-ONLY status of the 2026-07-06 kickoff ADR — everything that entry marked "NOT authorized yet"
+(production code, Room schema change, use-case wiring) is now built exactly to the approved design.
+
+**What shipped (on-device learning of which app an ambiguous launch command meant — rank-first → threshold
+auto-resolve, fully offline, no LLM/cloud):**
+- **Domain** (`domain/memory/resolution/`, pure): value types + `ResolutionPreferenceStore` port +
+  `fingerprintOf`; deterministic `DefaultResolutionPreferencePolicy` (`NoPreference`/`Stale`/`RankFirst`/
+  `AutoResolve`; auto-resolve **only** SAFE + `streak ≥ DEFAULT_AUTO_RESOLVE_STREAK_THRESHOLD = 3` +
+  candidate-set-fingerprint match); `RecordResolutionChoiceUseCase` (create/reinforce/hard-switch,
+  never-throws, no-op on blank/over-`MAX_QUERY_LENGTH = 64` query); `ResolveCommandWithPreferenceUseCase`
+  decorator (wraps the rule-first router via the `CommandRouteStep` seam; applies the policy **only** on
+  `CommandOutcome.NeedsConfirmation`; emits `ResolvedCommand.Outcome`(+opaque `ResolutionLearningToken`)
+  or the `AutoLaunch` **directive** — never a premature `Executed`); narrow deterministic
+  `LaunchSlotExtractor` (LAUNCH_APP-ambiguity only, not a parser); observe/delete/prune use-cases +
+  `EvaluateLearnedChoiceDisplayStateUseCase` (**honest** display: `Auto` only when policy-verifiable, else
+  `AutoReady`/`Learning n/K`/`NeedsReconfirm`).
+- **Persistence** (`:data:repository`): `ResolutionPreferenceEntity` + DAO + `ResolutionPreferenceStoreImpl`
+  (+ mapper, never-throws); **`SidrDatabase` v1 → v2 + `Migration1To2`** adding table `resolution_preferences`
+  (migrated, NOT destructive-recreated), golden `schemas/2.json` committed; `RoomColumnNames`/privacy
+  inventory extended (the `resolution_preferences.query` vs forbidden-term `"query"` collision documented +
+  scoped).
+- **DI** (`:app`): `MemoryProvidesModule` (all use-cases + the `CommandRouteStep` seam over
+  `RouteCommandUseCase`) + `MemoryBindsModule` (`ResolutionPreferenceStore` `@Binds`).
+- **Runtime wiring** (`:feature:launcher`): `LauncherViewModel` routes `onCommandSubmitted` through
+  `resolveCommand.resolve()`; `AutoLaunch` → direct `launchApp` (input clears only on real success, else
+  renders the reordered fallback); `recordChoiceIfPending()` records on an explicit candidate/grid tap
+  **only** when a `token.isAppAmbiguityFlow` pending token covers the chosen package (fire-and-forget on
+  `applicationScope`); pending token cleared on clear-input.
+- **Management UI**: `Routes.LearnedChoices` + dumb `core/ui` `LearnedChoiceRow` (no `domain→ui` edge) +
+  `LearnedChoicesViewModel` (`:feature:settings`, guarded flow, prune-on-load, fire-and-forget delete) +
+  `LearnedChoicesScreen` + Settings `[ learned choices ]` entry + `AppNavHost` registration.
+
+**Guards / parity (Task 15, green):** `ResolutionPrivacyScopeGuardTest` (recording only via an
+`isAppAmbiguityFlow` token; scope contract); outbound allow-list **widened by zero** (preferences never
+enter an `AiRequest`); `domain/memory/resolution` sources carry no generative/`AiRequest` import;
+`RoomColumnNamesGuardTest`. **Parity:** `HandleUserCommandUseCase`/`RouteCommandUseCase` untouched →
+no-preference / non-ambiguous / router-off ⇒ byte-for-byte the pre-S2-1 outcome path (proven in the
+`LauncherViewModelTest` + `ResolveCommandWithPreferenceUseCaseTest` suites).
+
+**Build gate (Task 16, green, 2026-07-10):** `:domain:test` + `testDebugUnitTest` + `assembleDebug`
+BUILD SUCCESSFUL. **Env note (no repo change, same as AIL-6):** the machine's JDK had rolled to 25/26
+(Gradle 8.10.2 can't parse it); built by running Gradle under Android Studio's **JBR 21** with a
+locally-downloaded **JDK 17** toolchain (`-Porg.gradle.java.installations.paths=…/jdk-17.0.19+10`).
+
+**Still open (blocks full CLOSE):** SM-A325F device-acceptance pass — drive the whole slice observably
+(ambiguous → choice → `Learning n/K` in Settings → after K auto-resolves with no list → learning-phase
+correction switches target → delete → re-learn → uninstall invalidates), on-device parity check, +
+screenshots. No code change expected.
+
+## ADR 2026-07-10 — Agentic OS target architecture (A1–A6) + visual identity (soft classic grey)
+
+**Status: DIRECTION ACCEPTED (owner).** Records two owner-approved strategic decisions from a
+design+architecture audit. Neither is a committed implementation plan; both are north-star direction that
+each future slice honors (spec → plan → build, in the existing feature-first / ports / rule-first /
+fail-closed / privacy-bounded style).
+
+**1. Visual identity = "soft classic grey" (supersedes green/amber).** A single neutral grey identity
+(dark default + light "paper"), full token set in
+[docs/superpowers/specs/2026-07-10-visual-identity-soft-grey-design.md](../docs/superpowers/specs/2026-07-10-visual-identity-soft-grey-design.md).
+Drops the user-selectable green/amber accent (AIL-0 / imported v1.1 Doctrine) and the amber-only v1
+palette. Locked points: **brand accent (pewter) and semantic status are separate palettes** (risk always
+reads the same); **provenance line** is a named primitive; **press-invert** selection (colourless);
+terminal *gestures* kept (`>`, block caret) but terminal *colour* (phosphor green / CRT / scanlines)
+dropped; **tri-font** roles (mono = interface shell, sans = prose, serif = sacred/Shahada); Home shows an
+English Shahada + Gregorian/Hijri date (no Android-statusbar duplication) + a demoted prayer strip.
+Everything else in the imported doctrine (principles, base-4 spacing, motion, accessibility, risk-not-by-
+colour-alone, confirmation model, `core/ui` boundaries) remains in force.
+
+**2. Agentic OS target architecture = A1–A6.** Full doc:
+[docs/agentic-os-architecture.md](../docs/agentic-os-architecture.md). Core finding: today's pipeline is a
+single-shot smart router (`RouteCommandUseCase` → `CommandPlanner` → `ExecuteActionUseCase`), not an agent;
+the imported design docs draw agentic *UI* with **no engine behind it**. The originality and the hard work
+live in four missing layers. The six-layer target, each grown from an existing seed:
+- **A1 Tool/Capability** (from `ActionCatalog`/`ActionRiskLevel`/`LauncherAction`) — typed tools with
+  risk/preconditions/tier(IN_APP/SYSTEM_INTENT/ACCESSIBILITY)/cost; the *only* world-effecting boundary.
+- **A2 Context Engine v2** — `ContextSnapshot` (reduced, never raw) + fault-isolated providers + extended
+  `OutboundContextPolicy` allow-list.
+- **A3 User Memory** (generalizes S2-1 `ResolutionPreferenceStore` + S2-2 `AliasStore`) — typed
+  editable/deletable/local memory; never auto-enters cloud.
+- **A4 Agent Runtime (the missing core)** — rule-first `Planner` (template → local → cloud) + bounded,
+  fail-closed, cancellable `AgentExecutor` with **consent woven into the loop** + persisted `ExecutionTrace`.
+- **A5 Activity/Trace** — honest history from real traces; **ephemeral by default, opt-in persist**.
+- **A6 Grants + automation (Stage 3)** — per-agent grants, quiet hours, audit; accessibility tier opt-in only.
+
+**Cross-cutting invariants (all layers):** clean-arch/ports; rule-first/deterministic-first; fail-closed;
+privacy allow-list as the sole egress; consent & human authority (risky never auto-runs, user owns the
+loop); provenance on every consequential action. **Golden rule: a surface's UI is built only when its
+engine is real** (no "agent dashboard without agents"). **Roadmap mapping:** A1–A3 ≈ Stage 2 (Framework),
+A4–A5 bridge into Stage 3, A6 = Stage 3. **Next architectural slice = A1** (also enriches S2-2:
+`alias → tool-call`). Deferred: the 5-tab nav / live Agents surface (until A4/A6 exist).

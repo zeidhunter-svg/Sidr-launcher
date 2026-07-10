@@ -7,7 +7,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
@@ -19,7 +18,6 @@ import androidx.compose.ui.Modifier
 import com.sidr.launcher.core.ui.theme.AccentColor
 import com.sidr.launcher.core.ui.theme.LocalSidrMotionEnabled
 import com.sidr.launcher.core.ui.theme.SidrTheme
-import com.sidr.launcher.core.ui.theme.sidrScanlines
 import com.sidr.launcher.domain.device.DeviceProfile
 import com.sidr.launcher.domain.device.DeviceProfileProvider
 import com.sidr.launcher.domain.preferences.UserPreferences
@@ -39,8 +37,10 @@ class LauncherActivity : ComponentActivity() {
     @Inject
     lateinit var userPreferencesRepository: UserPreferencesRepository
 
-    // AIL-6 / DF-5: CRT motion (blinking caret, scanline overlay) is LOW_END-gated. The device tier is
-    // read once (the profiler caches) and provided down as LocalSidrMotionEnabled; LOW_END → static look.
+    // DF-5 / DS-1: the block caret is LOW_END-gated. The device tier is read once (the profiler caches)
+    // and provided down as LocalSidrMotionEnabled; LOW_END → static look. The global CRT scanline overlay
+    // was removed by the 2026-07-10 visual-identity spec (identity is grey, not phosphor); `sidrScanlines`
+    // stays defined for optional dev/boot use only.
     @Inject
     lateinit var deviceProfileProvider: DeviceProfileProvider
 
@@ -62,14 +62,9 @@ class LauncherActivity : ComponentActivity() {
             }
             val motionEnabled = remember { deviceProfileProvider.profile() != DeviceProfile.LOW_END }
             SidrTheme(darkTheme = darkTheme, accent = accent) {
-                val scanlineColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.035f)
                 CompositionLocalProvider(LocalSidrMotionEnabled provides motionEnabled) {
                     Surface(modifier = Modifier.fillMaxSize()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .sidrScanlines(enabled = motionEnabled, color = scanlineColor),
-                        ) {
+                        Box(modifier = Modifier.fillMaxSize()) {
                             AppNavHost(homeResetSignal = homeResetSignal)
                         }
                     }

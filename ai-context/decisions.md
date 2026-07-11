@@ -4283,6 +4283,72 @@ approved "soft classic grey" identity
 not colour). Follow-ups per spec: DS-2/3 primitives (provenance line, press-invert chips), DS-4 Home, DS-6A
 sacred header, DS-7 memory-migration (absorbs the S2-2 Aliases UI so it is built in the grey language).
 
+## ADR 2026-07-11 — DS-0 (design provenance backfill: imported docs committed + conflict/deviation record)
+
+**Status: RECORD (docs-only, zero production code).** DS-0 was skipped when the redesign leap-frogged
+straight to the grey identity spec (2026-07-10) + DS-1 (2026-07-11). This ADR backfills it: it commits the
+seven imported source documents into the repo and writes the reconciliation that was previously only
+implicit — the three v1-vs-v1.1 conflicts, the nine engineering deviations/additions from implementation,
+and the DS-block sequence. It **records** decisions already accepted (see ADR 2026-07-10 "Agentic OS target
+architecture + visual identity"); it changes no code and introduces no new direction.
+
+**Imported docs now in-repo** ([docs/design/](../docs/design/), index in its `README.md`): `SIDR Design
+System v1` (**v1 = Vision/North-Star**), `SIDR Design Doctrine & Foundation v1.1` (**v1.1 = Governing
+doctrine**), `SIDR Component Library v1.1`, `SIDR Design Migration Plan v1.1`, `SIDR Visual Acceptance Spec
+v1.1` (v1.1 supporting), plus two inputs — `SIDR Current UI Inventory & Gap Map` and `SIDR Design &
+Architecture Audit`. These are an **archive of inputs**, not the governing spec; the living specs are
+[visual identity (soft classic grey)](../docs/superpowers/specs/2026-07-10-visual-identity-soft-grey-design.md)
+and [agentic-os-architecture.md](../docs/agentic-os-architecture.md).
+
+**Three v1-vs-v1.1 conflicts — resolved (v1.1 governs, then reduced):**
+1. **Information architecture / navigation.** v1 draws a **5-tab** bottom nav (incl. a live *Agents* tab);
+   v1.1 is more restrained. → **4 surfaces** (Home · App Drawer · Assistant · Settings). No standalone
+   Agents tab, no persistent Activity journal, until the A4 agent runtime is real (golden rule). Agentic
+   task-flow screens stay a FUTURE contract.
+2. **Agentic surfaces shown as live.** v1 renders Agents + an Activity journal as if the engine exists. →
+   **deferred to A4/A6**; Activity is ephemeral-by-default (opt-in persist), built only on real
+   `ExecutionTrace`s.
+3. **Accent / colour.** v1 = amber-only; v1.1 = green-default / amber-alt, user-selectable. → **both
+   dropped** for a single **soft-classic-grey** identity; brand accent (pewter) and semantic status are
+   **separate** palettes (accent ≠ risk).
+
+**Nine engineering deviations/additions (from implementation, folded into the specs):**
+1. **4 surfaces, not 5** (as above) — cut the surface the engine can't yet back.
+2. **Accent ≠ status.** Two fixed, separate palettes; status never re-tinted; risk = label + marker +
+   consequence text + separate confirm, never colour alone.
+3. **Mono stays wide.** A launcher is mostly interface, and the mono shell is the recognizable signature →
+   **tri-font** (mono = interface shell, sans = genuine prose only, serif = sacred/Shahada). Deliberate
+   deviation from the docs' sans-widening dual-font, plus the added serif sacred role.
+4. **Activity is ephemeral by default** — real traces, opt-in persist; not a standing journal surface (A5).
+5. **Prayer = correctness-bar, not a widget.** Explicit user-selectable calculation authority/method,
+   TZ/DST-correct, cached-offline; **never show a computed time without provenance, and fail visibly rather
+   than show a plausible-but-wrong time**; precise location never leaves the device / never enters an
+   `AiRequest`. (Own track — DS-6B.)
+6. **Provenance line — one named primitive.** `SOURCE · detail · freshness` (faint mono), reused everywhere
+   a thing has an origin (learned pref, routed-by-AI, local/cloud, cached, method · latency). "System truth"
+   made reusable. (DS-2/3.)
+7. **The more ordinary the action, the less UI it generates.** A plain app launch produces **no** result
+   card, **no** disclosure, **no** toast; disclosures/result surfaces appear only for routed/agentic/risky
+   actions or a meaningful learning event. First-class principle — the design system is measured by how
+   invisible it is for the boring 95%.
+8. **Screenshot-test harness is a DS-1 prerequisite.** The imported plan's "each block ends with screenshot
+   tests" assumed infra the repo lacked (no Paparazzi/Roborazzi/Showkase) → DS-1 had to stand up **Roborazzi**
+   + a preview matrix. **DONE** (see ADR 2026-07-11 — DS-1).
+9. **Keep the terminal *signature*, drop the CRT.** `>` prompt, block caret, press-invert chips are cheap,
+   functional, distinctive → retained as a residual terminal signature so the evolution reads as "matured",
+   not "replaced by generic sans". Global scanline/phosphor overlay dropped.
+
+**Preserved strengths (explicitly NOT touched):** system-truth-over-visual-effect + no-fake-agency;
+risk-not-by-colour-alone + consequence-always-visible; reuse→evolve→replace + token/primitive/component/
+pattern layering; privacy visible at the point of decision (local/cloud disclosure).
+
+**DS-block sequence (authoritative):** DS-0 (this) → **DS-1** tokens + Roborazzi harness (**DONE**) →
+DS-2/3 primitives & controls (provenance-line primitive + press-invert chips) → DS-4 Home (§5 composition,
+routing parity) → DS-6A sacred header (English Shahada, Arabic-capable) → DS-6B prayer data (separate spec:
+brainstorm → plan) → DS-7 memory-migration (absorbs the S2-2 Aliases UI so it is built in grey). No routing/
+execution/privacy/memory/navigation semantics change anywhere in the DS track — presentation only, parity
+rules from the migration apply.
+
 ## ADR 2026-07-11 — S2-1 Learned Resolutions device accepted + closed
 
 **Status: CLOSED.** This closes Task 16 and the S2-1 "Learned Resolutions" plan:

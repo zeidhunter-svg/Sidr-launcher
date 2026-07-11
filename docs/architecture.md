@@ -4,6 +4,12 @@
 
 Sidr Launcher is an AI-first Android launcher for Android 9+ (API 28+) that lets users start actions through text, voice, and contextual suggestions.
 
+> **Design & agentic direction (pointers, not duplicated here).** Visual identity = "soft classic grey"
+> ([spec](superpowers/specs/2026-07-10-visual-identity-soft-grey-design.md)); target IA = **4 surfaces**
+> (Home · App Drawer · Assistant · Settings). Six-layer agentic target A1–A6 in
+> [agentic-os-architecture.md](agentic-os-architecture.md). Imported design source docs + reconciliation:
+> [design/](design/) + ADR "2026-07-11 — DS-0" in [../ai-context/decisions.md](../ai-context/decisions.md).
+
 ## Principles
 
 - AI-first UX, but Android launcher behavior must remain reliable without AI.

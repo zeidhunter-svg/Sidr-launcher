@@ -121,6 +121,14 @@ Not blockers for Stage 1. Resolve or explicitly de-scope; stop carrying inert co
 > [agentic-os-architecture.md](agentic-os-architecture.md) (ADR 2026-07-10). A1–A3 flesh out this Framework
 > stage (tools · context · memory); A4–A5 bridge into Stage 3; A6 is Stage 3. Visual identity is governed by
 > [superpowers/specs/2026-07-10-visual-identity-soft-grey-design.md](superpowers/specs/2026-07-10-visual-identity-soft-grey-design.md).
+>
+> **Design system track.** The seven imported source docs are archived in [design/](design/) (v1 = Vision,
+> v1.1 = Governing; index in its `README.md`); the reconciliation of record (three v1-vs-v1.1 conflicts + nine
+> engineering deviations + DS sequence) is ADR "2026-07-11 — DS-0" in
+> [ai-context/decisions.md](../ai-context/decisions.md). Target **IA = 4 surfaces** (Home · App Drawer ·
+> Assistant · Settings) — the imported 5-tab nav / live Agents surface is deferred until the A4 runtime
+> exists. DS blocks: DS-0 (provenance) → **DS-1 tokens + Roborazzi harness (DONE)** → DS-2/3 primitives →
+> DS-4 Home → DS-6A sacred header → DS-6B prayer data → DS-7 memory-migration.
 
 **Status: FUTURE (starts after Stage 1 ships).** Generalize the launcher's routing machinery into a
 reusable on-device AI framework. Every layer must keep the Stage-1 principles (offline core, local

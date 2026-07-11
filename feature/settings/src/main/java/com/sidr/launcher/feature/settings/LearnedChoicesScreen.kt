@@ -36,10 +36,20 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sidr.launcher.core.ui.component.EmptyState
 import com.sidr.launcher.core.ui.component.ErrorState
-import com.sidr.launcher.core.ui.component.LearnedChoiceRow
-import com.sidr.launcher.core.ui.component.SectionHeader
+import com.sidr.launcher.core.ui.component.SidrDestructiveButton
+import com.sidr.launcher.core.ui.component.SidrIconButton
+import com.sidr.launcher.core.ui.component.SidrPreviewBadge
+import com.sidr.launcher.core.ui.component.SidrPreviewBanner
 import com.sidr.launcher.core.ui.component.SidrScaffold
-import com.sidr.launcher.core.ui.component.TopBarIcon
+import com.sidr.launcher.core.ui.component.SidrSecondaryButton
+import com.sidr.launcher.core.ui.component.SidrSectionHeader
+import com.sidr.launcher.core.ui.component.SidrTerminalAction
+import com.sidr.launcher.core.ui.component.SidrTopBar
+import com.sidr.launcher.core.ui.primitive.SidrProgress
+import com.sidr.launcher.core.ui.primitive.SidrSurface
+import com.sidr.launcher.core.ui.primitive.SidrSurfaceTone
+import com.sidr.launcher.core.ui.primitive.SidrText
+import com.sidr.launcher.core.ui.primitive.SidrTextRole
 import com.sidr.launcher.core.ui.theme.Sizes
 import com.sidr.launcher.core.ui.theme.Spacing
 import com.sidr.launcher.domain.memory.resolution.LearnedChoiceDisplayState
@@ -74,23 +84,16 @@ private fun LearnedChoicesContent(
     SidrScaffold(
         modifier = modifier,
         topBar = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Spacing.sm, vertical = Spacing.xs),
-            ) {
-                TopBarIcon(
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    onClick = onBack,
-                )
-                Text(
-                    text = "Learned choices",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(start = Spacing.sm),
-                )
-            }
+            SidrTopBar(
+                title = "Memory",
+                navigationIcon = {
+                    SidrIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        onClick = onBack,
+                    )
+                },
+            )
         },
     ) { inner ->
         Column(
@@ -98,7 +101,7 @@ private fun LearnedChoicesContent(
                 .fillMaxSize()
                 .padding(inner),
         ) {
-            SectionHeader(text = "LEARNED CHOICES")
+            SidrSectionHeader(text = "LEARNED CHOICES")
             when {
                 uiState.isLoading -> LoadingState(modifier = Modifier.weight(1f))
                 uiState.errorMessage != null -> ErrorState(
@@ -116,6 +119,12 @@ private fun LearnedChoicesContent(
                     modifier = Modifier.weight(1f),
                 )
             }
+            // Preview-only surface (Vision MVP task 5). Not backed by any real bulk-delete/export
+            // use case (none exists in domain/memory/resolution) — everything below stays inert
+            // and badged so it never reads as a shipped feature.
+            if (!uiState.isLoading && uiState.errorMessage == null) {
+                MemoryPreviewSection()
+            }
         }
     }
 }
@@ -128,11 +137,7 @@ private fun LoadingState(modifier: Modifier = Modifier) {
             .padding(Spacing.xl),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = "Loading learned choices",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        SidrProgress(modifier = Modifier.fillMaxWidth(0.5f))
     }
 }
 
@@ -144,7 +149,7 @@ private fun LearnedChoicesList(
 ) {
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(vertical = Spacing.sm),
+        contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = Spacing.sm),
         verticalArrangement = Arrangement.spacedBy(Spacing.xs),
     ) {
         items(choices, key = { "${it.capabilityKey.actionId.value}:${it.capabilityKey.query}" }) { choice ->
@@ -161,24 +166,36 @@ private fun LearnedChoiceItem(
     choice: LearnedChoiceView,
     onDelete: () -> Unit,
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Spacing.sm),
+    SidrSurface(
+        tone = SidrSurfaceTone.SURFACE,
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        LearnedChoiceIcon(
-            packageName = choice.targetPackageName,
-            label = choice.targetLabel,
-        )
-        LearnedChoiceRow(
-            query = choice.capabilityKey.query,
-            label = choice.targetLabel,
-            stateLabel = displayStateLabel(choice.displayState),
-            onDelete = onDelete,
-            modifier = Modifier.weight(1f),
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.sm),
+        ) {
+            LearnedChoiceIcon(
+                packageName = choice.targetPackageName,
+                label = choice.targetLabel,
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                SidrText(
+                    text = "\"${choice.capabilityKey.query}\" → ${choice.targetLabel}",
+                    role = SidrTextRole.HUMAN_BODY,
+                )
+                SidrText(
+                    text = displayStateLabel(choice.displayState),
+                    role = SidrTextRole.PROVENANCE,
+                )
+            }
+            SidrTerminalAction(
+                text = "Forget",
+                onClick = onDelete,
+            )
+        }
     }
 }
 
@@ -243,4 +260,78 @@ private fun displayStateLabel(state: LearnedChoiceDisplayState): String = when (
     LearnedChoiceDisplayState.NeedsReconfirm -> "needs reconfirm"
     LearnedChoiceDisplayState.Auto -> "auto"
     LearnedChoiceDisplayState.AutoReady -> "auto-ready"
+}
+
+/**
+ * Preview-only "Memory" surface (Vision MVP task 5 / A3-S2-2/DS-7). Aliases/Facts/Dismissed are fixed
+ * sample rows — not read from any real store, because no such store exists yet. Export/Delete all are
+ * deliberately inert (`onClick = {}`): there is no bulk-delete or export use case in the domain layer,
+ * and wiring "Delete all" to a loop of single deletes would fabricate an unreviewed feature.
+ */
+@Composable
+private fun MemoryPreviewSection(modifier: Modifier = Modifier) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        SidrPreviewBanner()
+
+        PreviewSectionHeader(title = "ALIASES")
+        PreviewSampleRow(phrase = "open docs", target = "GitHub Docs")
+        PreviewSampleRow(phrase = "the group chat", target = "Telegram")
+
+        PreviewSectionHeader(title = "FACTS")
+        PreviewSampleRow(phrase = "my timezone", target = "Africa/Cairo")
+
+        PreviewSectionHeader(title = "DISMISSED")
+        PreviewSampleRow(phrase = "weather widget suggestion", target = "dismissed")
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md),
+        ) {
+            SidrSecondaryButton(
+                text = "Export",
+                onClick = {},
+                modifier = Modifier.weight(1f),
+            )
+            SidrDestructiveButton(
+                text = "Delete all",
+                onClick = {},
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PreviewSectionHeader(title: String, modifier: Modifier = Modifier) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        SidrSectionHeader(text = title, modifier = Modifier.weight(1f))
+        SidrPreviewBadge(modifier = Modifier.padding(end = Spacing.lg))
+    }
+}
+
+@Composable
+private fun PreviewSampleRow(phrase: String, target: String, modifier: Modifier = Modifier) {
+    SidrSurface(
+        tone = SidrSurfaceTone.SURFACE,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.sm, vertical = Spacing.xs),
+    ) {
+        Column(modifier = Modifier.padding(Spacing.sm)) {
+            SidrText(
+                text = "\"$phrase\" → $target",
+                role = SidrTextRole.HUMAN_BODY,
+            )
+            SidrText(
+                text = "sample · not real",
+                role = SidrTextRole.PROVENANCE,
+            )
+        }
+    }
 }

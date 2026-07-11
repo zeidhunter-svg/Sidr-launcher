@@ -22,6 +22,12 @@ android {
     buildFeatures {
         compose = true
     }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 kotlin {
@@ -52,4 +58,11 @@ dependencies {
     testImplementation(project(":core:testing"))
     testImplementation(libs.junit4)
     testImplementation(libs.coroutines.test)
+
+    // Robolectric compose-test harness (Vision MVP Task 8: TasksPreviewScreenTest), mirrors core/ui's setup.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.ext.junit)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
 }

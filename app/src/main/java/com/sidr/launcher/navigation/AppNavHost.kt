@@ -28,6 +28,7 @@ import com.sidr.launcher.feature.launcher.AppDrawerScreen
 import com.sidr.launcher.feature.launcher.AppDrawerViewModel
 import com.sidr.launcher.feature.launcher.LauncherScreen
 import com.sidr.launcher.feature.launcher.LauncherViewModel
+import com.sidr.launcher.feature.launcher.preview.TasksPreviewScreen
 import com.sidr.launcher.feature.permission_education.PermissionEducationScreen
 import com.sidr.launcher.feature.settings.LearnedChoicesScreen
 import com.sidr.launcher.feature.settings.SettingsScreen
@@ -164,18 +165,12 @@ fun AppNavHost(
         }
 
         // Vision MVP preview tab roots (Task 7): four additive, non-functional tab destinations.
-        // Each renders only a centred SidrPreviewBanner inline for now — Tasks 8–11 replace these
-        // bodies with real TasksPreviewScreen/AgentsPreviewScreen/ActivityPreviewScreen/
-        // TerminalPreviewScreen composables (deliberately NOT declared here to avoid colliding with
-        // those future definitions).
+        // Tasks 8–11 replace each stub body with its own real preview composable
+        // (TasksPreviewScreen/AgentsPreviewScreen/ActivityPreviewScreen/TerminalPreviewScreen,
+        // deliberately NOT declared here to avoid colliding with those future definitions).
         composable(Routes.Tasks.ROUTE) {
             TabRootScaffold(SidrTab.TASKS, navController) { inner ->
-                Box(
-                    modifier = Modifier.padding(inner).fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    SidrPreviewBanner()
-                }
+                TasksPreviewScreen(modifier = Modifier.padding(inner))
             }
         }
 

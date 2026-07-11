@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -37,14 +38,35 @@ class ControlsScreenshotTest {
 
     @Test fun preview_controls() {
         compose.setContent {
-            SidrTheme(darkTheme = true) {
-                Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-                    SidrPreviewBadge()
-                    SidrPreviewBanner()
-                }
-            }
+            SidrTheme(darkTheme = true) { PreviewControlsContent() }
         }
         compose.onRoot().captureRoboImage("src/test/screenshots/preview_controls.png")
+    }
+
+    @Test fun preview_controls_light() {
+        compose.setContent {
+            SidrTheme(darkTheme = false) { PreviewControlsContent() }
+        }
+        compose.onRoot().captureRoboImage("src/test/screenshots/preview_controls_light.png")
+    }
+
+    @Test fun preview_controls_fontscale2() {
+        compose.setContent {
+            val d = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(d.density, fontScale = 2.0f)) {
+                SidrTheme(darkTheme = true) { PreviewControlsContent() }
+            }
+        }
+        compose.onRoot().captureRoboImage("src/test/screenshots/preview_controls_fontscale2.png")
+    }
+
+    @Test fun preview_controls_rtl() {
+        compose.setContent {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                SidrTheme(darkTheme = true) { PreviewControlsContent() }
+            }
+        }
+        compose.onRoot().captureRoboImage("src/test/screenshots/preview_controls_rtl.png")
     }
 
     @Test fun universal_input_idle() = captureInput(dark = true, name = "universal_input_idle", value = "")
@@ -68,6 +90,14 @@ class ControlsScreenshotTest {
             }
         }
         compose.onRoot().captureRoboImage("src/test/screenshots/controls_rtl.png")
+    }
+
+    @Composable
+    private fun PreviewControlsContent() {
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+            SidrPreviewBadge()
+            SidrPreviewBanner()
+        }
     }
 
     private fun capture(dark: Boolean, name: String) {

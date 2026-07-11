@@ -29,6 +29,7 @@ import com.sidr.launcher.feature.launcher.LauncherScreen
 import com.sidr.launcher.feature.launcher.LauncherViewModel
 import com.sidr.launcher.feature.launcher.preview.ActivityPreviewScreen
 import com.sidr.launcher.feature.launcher.preview.AgentsPreviewScreen
+import com.sidr.launcher.feature.launcher.preview.MomentsPreviewScreen
 import com.sidr.launcher.feature.launcher.preview.TasksPreviewScreen
 import com.sidr.launcher.feature.launcher.preview.TerminalPreviewScreen
 import com.sidr.launcher.feature.permission_education.PermissionEducationScreen
@@ -171,7 +172,10 @@ fun AppNavHost(
         // (Tasks 8/9/10/11) — no stub bodies remain.
         composable(Routes.Tasks.ROUTE) {
             TabRootScaffold(SidrTab.TASKS, navController) { inner ->
-                TasksPreviewScreen(modifier = Modifier.padding(inner))
+                TasksPreviewScreen(
+                    modifier = Modifier.padding(inner),
+                    onOpenMoments = { navController.navigate(Routes.Moments.ROUTE) },
+                )
             }
         }
 
@@ -253,6 +257,14 @@ fun AppNavHost(
                 onBack = {
                     handleNavigationEvent(navController, NavigationEvent.NavigateBack)
                 },
+            )
+        }
+
+        // Interaction-moment previews (Task 12): a pushed, non-tab destination reachable from the
+        // Tasks preview footer. Non-functional sample-data screen; only `onBack` is real.
+        composable(Routes.Moments.ROUTE) {
+            MomentsPreviewScreen(
+                onBack = { handleNavigationEvent(navController, NavigationEvent.NavigateBack) },
             )
         }
 

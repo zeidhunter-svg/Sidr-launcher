@@ -84,4 +84,13 @@ sealed class Routes {
     object Terminal : Routes() {
         const val ROUTE = "preview_terminal"
     }
+
+    /**
+     * Interaction-moment previews (Task 12): a pushed, non-tab destination reachable from the
+     * Tasks preview footer. Static samples of the Result / Partial / Error command-outcome
+     * moments — no args needed.
+     */
+    object Moments : Routes() {
+        const val ROUTE = "preview_moments"
+    }
 }

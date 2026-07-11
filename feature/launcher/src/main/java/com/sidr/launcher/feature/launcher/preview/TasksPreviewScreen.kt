@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.sidr.launcher.core.ui.component.SidrActionGate
 import com.sidr.launcher.core.ui.component.SidrActionGateType
+import com.sidr.launcher.core.ui.component.SidrNavigationRow
 import com.sidr.launcher.core.ui.component.SidrPreviewBanner
 import com.sidr.launcher.core.ui.component.SidrSectionHeader
 import com.sidr.launcher.core.ui.component.SidrStatusChip
@@ -37,7 +38,7 @@ import com.sidr.launcher.core.ui.theme.Spacing
  * depend on `core/ui`, but must not reach into another feature module or into `domain`/`data`).
  */
 @Composable
-fun TasksPreviewScreen(modifier: Modifier = Modifier) {
+fun TasksPreviewScreen(modifier: Modifier = Modifier, onOpenMoments: () -> Unit = {}) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -49,6 +50,11 @@ fun TasksPreviewScreen(modifier: Modifier = Modifier) {
         IntentAndPlanSection()
         ExecutionSection()
         ResultSection()
+
+        SidrNavigationRow(
+            title = "Interaction moments",
+            onClick = onOpenMoments,
+        )
     }
 }
 

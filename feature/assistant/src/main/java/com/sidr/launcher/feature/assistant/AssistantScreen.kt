@@ -311,10 +311,17 @@ private fun ChatView(
 
 /**
  * Host-only display for the provenance line (Task 3 step 3) — never the raw base URL/scheme, never
- * the key. Falls back to the raw string if it doesn't parse as a URI or carries no host.
+ * the key. Falls back to a neutral sentinel (never the raw string) if the URL doesn't parse or
+ * carries no host, so a malformed `baseUrl` (e.g. `"https://my org.com"` or `"https://"`, both of
+ * which throw `URISyntaxException`) can never leak the scheme onto the screen.
+ *
+ * `internal` (not `private`) solely so it's directly unit-testable from `feature/assistant/src/test`;
+ * it is otherwise presentation-only and unused outside this file.
  */
-private fun providerHost(baseUrl: String): String =
-    runCatching { URI(baseUrl).host }.getOrNull() ?: baseUrl
+internal fun providerHost(baseUrl: String): String =
+    runCatching { URI(baseUrl).host }.getOrNull()?.takeIf { it.isNotBlank() } ?: UNKNOWN_HOST
+
+private const val UNKNOWN_HOST = "(unknown host)"
 
 /**
  * Provider-settings form. Fields: base URL, model (free-text), API key (masked).

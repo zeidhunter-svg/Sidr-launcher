@@ -19,13 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sidr.launcher.core.common.UiError
@@ -43,6 +38,7 @@ import com.sidr.launcher.core.ui.component.SidrIconButton
 import com.sidr.launcher.core.ui.component.SidrPrimaryButton
 import com.sidr.launcher.core.ui.component.SidrScaffold
 import com.sidr.launcher.core.ui.component.SidrSecondaryButton
+import com.sidr.launcher.core.ui.component.SidrSectionHeader
 import com.sidr.launcher.core.ui.component.SidrTopBar
 import com.sidr.launcher.core.ui.primitive.SidrDivider
 import com.sidr.launcher.core.ui.primitive.SidrProgress
@@ -131,33 +127,34 @@ fun AssistantProviderScreen(
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp)
-            .verticalScroll(rememberScrollState()),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(top = 8.dp),
+    SidrScaffold(
+        modifier = modifier,
+        topBar = {
+            SidrTopBar(
+                title = "AI provider",
+                navigationIcon = {
+                    SidrIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        onClick = viewModel::navigateBack,
+                    )
+                },
+            )
+        },
+    ) { inner ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(inner)
+                .padding(horizontal = Spacing.lg)
+                .verticalScroll(rememberScrollState()),
         ) {
-            IconButton(onClick = viewModel::navigateBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                )
-            }
-            Text(
-                text = "AI provider",
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(start = 8.dp),
+            Spacer(modifier = Modifier.height(Spacing.lg))
+            ProviderSettingsForm(
+                form = uiState.form,
+                onSave = viewModel::saveProvider,
             )
         }
-        Spacer(modifier = Modifier.height(16.dp))
-        ProviderSettingsForm(
-            form = uiState.form,
-            onSave = viewModel::saveProvider,
-        )
     }
 }
 
@@ -340,53 +337,106 @@ private fun ProviderSettingsForm(
 ) {
     var baseUrl by remember(form.baseUrl) { mutableStateOf(form.baseUrl) }
     var model by remember(form.modelId) { mutableStateOf(form.modelId) }
+    // Never seeded from `form` — the key is write-only from this screen's point of view.
     var apiKey by remember { mutableStateOf("") }
+    val colors = SidrTheme.colors
 
     Column(modifier = modifier.fillMaxWidth()) {
-        OutlinedTextField(
+        ProviderField(
+            label = "BASE URL",
             value = baseUrl,
             onValueChange = { baseUrl = it },
-            label = { Text("Base URL (https://…)") },
-            placeholder = { Text("https://openrouter.ai/api/v1") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            placeholder = "https://openrouter.ai/api/v1",
         )
-        Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(
+        Spacer(modifier = Modifier.height(Spacing.md))
+        ProviderField(
+            label = "MODEL",
             value = model,
             onValueChange = { model = it },
-            label = { Text("Model") },
-            placeholder = { Text("mistralai/mistral-7b-instruct") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            placeholder = "mistralai/mistral-7b-instruct",
         )
-        Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(
+        Spacer(modifier = Modifier.height(Spacing.md))
+        ProviderField(
+            label = "API KEY",
             value = apiKey,
             onValueChange = { apiKey = it },
-            label = {
-                Text(if (form.keySet) "API Key (set — replace to update)" else "API Key")
-            },
-            placeholder = { Text("sk-…") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            placeholder = "sk-…",
             visualTransformation = PasswordVisualTransformation(),
         )
-        if (form.saveError != null) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = form.saveError,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
+        if (form.keySet) {
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            SidrText(
+                text = "Key set — replace to update.",
+                role = SidrTextRole.PROVENANCE,
+                modifier = Modifier.padding(horizontal = Spacing.lg),
             )
         }
-        Spacer(modifier = Modifier.height(12.dp))
-        Button(
+        if (form.saveError != null) {
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            SidrText(
+                text = form.saveError,
+                role = SidrTextRole.PROVENANCE,
+                color = colors.danger,
+                modifier = Modifier.padding(horizontal = Spacing.lg),
+            )
+        }
+        Spacer(modifier = Modifier.height(Spacing.lg))
+        SidrPrimaryButton(
+            text = "Save",
             onClick = { onSave(baseUrl, model, apiKey) },
             modifier = Modifier.fillMaxWidth(),
             enabled = baseUrl.isNotBlank() && model.isNotBlank(),
+        )
+    }
+}
+
+/**
+ * Local labeled-field composition for the provider form: a [SidrSectionHeader] label over a
+ * [SidrSurface]-wrapped mono [BasicTextField], matching the idiom used by the App Drawer's
+ * `DrawerSearchField` (Task 2) and this screen's own chat composer (Task 3). Feature-local — not
+ * promoted to `core/ui` since no other caller needs a labeled field yet.
+ */
+@Composable
+private fun ProviderField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+) {
+    val colors = SidrTheme.colors
+    Column(modifier = modifier.fillMaxWidth()) {
+        SidrSectionHeader(text = label, modifier = Modifier.padding(horizontal = 0.dp))
+        SidrSurface(
+            tone = SidrSurfaceTone.SURFACE,
+            shape = SidrShapes.medium,
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Save")
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(Spacing.md),
+            ) {
+                if (value.isEmpty()) {
+                    SidrText(
+                        text = placeholder,
+                        role = SidrTextRole.HUMAN_BODY,
+                        color = colors.faint,
+                    )
+                }
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    singleLine = true,
+                    textStyle = LocalTextStyle.current.merge(
+                        SidrTheme.textStyles.command.copy(color = colors.text),
+                    ),
+                    cursorBrush = SolidColor(colors.accent),
+                    visualTransformation = visualTransformation,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }

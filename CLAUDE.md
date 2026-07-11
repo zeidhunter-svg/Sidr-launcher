@@ -1,5 +1,16 @@
 # CLAUDE.md — Sidr Launcher
 
+**Stage 2 — S2-2 "Explicit Aliases" CODE-CLOSED A-C (2026-07-11).** Explicit nickname → app memory is now
+real for the approved non-UI slice: pure `domain/memory/alias/` model/port/use-cases/decorator,
+`FakeAliasStore`, Room `aliases` (`SidrDatabase` v3 + `Migration2To3` + golden `3.json`), `AliasStoreImpl`,
+Hilt providers/binds, Room privacy inventory, and `LauncherViewModel` wiring. Alias lookup wraps S2-1 and
+fires **only** on `CommandOutcome.Unknown`; installed alias targets become `AutoLaunch` directives through
+the existing `launchApp` path. `HandleUserCommandUseCase`, `RouteCommandUseCase`, and the rule matcher were
+untouched; no-alias/non-Unknown/router-off parity is intact; outbound allow-list widened by **zero**.
+Build gate `:domain:test testDebugUnitTest assembleDebug` is green. **Phase D UI (Settings → Aliases,
+route, `AliasRow`) + device acceptance are deferred to DS-7** so the memory surface is built in the approved
+soft-classic-grey language. ADR: decisions.md "2026-07-11 — S2-2 Explicit Aliases code-closed".
+
 **Design track (DS) — DS-1 + DS-2 DONE (2026-07-11).** A parallel, presentation-only design-system
 migration to the approved **soft-classic-grey** identity, governed by `docs/design/SIDR Design System
 Master Plan v1.2` (the principles rulebook was folded into it: §5.1 precedence, §5.2 verify-vocab, §20.1
@@ -9,15 +20,13 @@ calm budgets). **DS-1** = grey token layer + tri-font + softened shapes + `SidrT
 `SidrProvenanceLine` (semantic `source`+`details`, TalkBack); status≠accent; **no production
 screen/nav/VM/persistence/domain change** — parity fully intact. Next design block: **DS-3** (controls).
 ADRs: decisions.md "2026-07-11 — DS-1 complete" / "2026-07-11 — DS-2 primitives complete"; specs+plans under
-`docs/superpowers/`. Stage-2 S2-2 "Explicit Aliases" (domain/data/DI Phase A–C already on `launcher-4`) is
-paused pending its grey UI in DS-7. The AI-launcher stage digest below is unchanged.
+`docs/superpowers/`. The AI-launcher stage digest below is unchanged.
 
-Session digest. Read this first. **Last synced: 2026-07-11 — Stage-2 block S2-1 "Learned Resolutions" is
-CLOSED. Tasks 1–16 are done on `launcher-4`; build gate `:domain:test` + `testDebugUnitTest` +
-`assembleDebug` was green; SM-A325F device acceptance passed with screenshots under
-`/tmp/sidr_acceptance_*.png`. Details: ADR "2026-07-11 — S2-1 Learned Resolutions device accepted +
-closed" in `ai-context/decisions.md`; plan `docs/superpowers/plans/2026-07-06-learned-resolutions.md`
-(STATUS CLOSED). The prior Stage-1 sync is retained below.**
+Session digest. Read this first. **Last synced: 2026-07-11 — Stage-2 block S2-2 "Explicit Aliases" is
+CODE-CLOSED for Phases A-C + guards; Phase D UI is deferred to DS-7.** S2-1 remains CLOSED/device-accepted.
+Details: ADR "2026-07-11 — S2-2 Explicit Aliases code-closed" in `ai-context/decisions.md`; plan
+`docs/superpowers/plans/2026-07-10-explicit-aliases.md` (STATUS CODE-CLOSED A-C). The prior Stage-1 sync is
+retained below.
 
 **Prior sync (2026-07-06) — AIL-6 complete → Stage-1 AI-Launcher MVP
 CLOSED (blocks AIL-0…6). The RC build gate (`:app:assembleRelease`) is green under a JDK-17 toolchain and a
@@ -96,7 +105,8 @@ The offline launcher core (home, app grid, app launch) must work fully without A
 
 ## Current goal (active work)
 
-**NOW (2026-07-11): Stage 2 — AI Framework, block S2-1 "Learned Resolutions" is CLOSED.** The Stage-1
+**NOW (2026-07-11): Stage 2 — AI Framework, block S2-2 "Explicit Aliases" is CODE-CLOSED A-C; DS-7 owns
+the deferred memory UI.** The Stage-1
 AI-Launcher MVP (blocks AIL-0…6) is CLOSED and
 device-accepted on SM-A325F. Stage 2 generalizes the router/registry/context/memory into a reusable
 on-device AI framework (Action Registry v2, Context Engine v2, User Memory) per the three-stage reframe,
@@ -118,8 +128,8 @@ auto-resolve, and router-off `open Salatuk` parity. Spec:
 [docs/superpowers/specs/2026-07-06-learned-resolutions-design.md](docs/superpowers/specs/2026-07-06-learned-resolutions-design.md);
 plan: [docs/superpowers/plans/2026-07-06-learned-resolutions.md](docs/superpowers/plans/2026-07-06-learned-resolutions.md);
 ADRs: decisions.md "2026-07-06 — Stage 2 kickoff" (design), "2026-07-10 — S2-1 complete
-(code-closed; device-pending)", and "2026-07-11 — S2-1 device accepted + closed". **Next Stage-2 slice
-(S2-2) is not yet scoped — brainstorm before planning.**
+(code-closed; device-pending)", and "2026-07-11 — S2-1 device accepted + closed". **S2-2 now follows this:
+code-closed for domain/data/DI/guards/runtime wiring, with Settings UI deferred to DS-7.**
 
 The launcher ships AI-first today: AIL-3 unified the home input over the
 unchanged pipeline, **AIL-4 made routing AI-first** (the BYOK cloud `CommandPlanner` — a sanctioned third

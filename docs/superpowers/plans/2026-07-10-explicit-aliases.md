@@ -1,6 +1,16 @@
 # Explicit Aliases (S2-2) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **STATUS (2026-07-11): CODE-CLOSED for the approved scoped slice.** Phases A-C plus the privacy/parity/
+> Room guards are complete on `launcher-4`; build gate `:domain:test testDebugUnitTest assembleDebug` is
+> green. **Phase D (Settings → Aliases UI, `AliasRow`, route/screen) is deliberately deferred to DS-7**
+> so the memory surface is built in the approved soft-classic-grey language, not the old theme. Device
+> acceptance for the management UI is therefore deferred to DS-7; the runtime alias launch path is covered
+> by domain + `LauncherViewModel` tests.
+>
+> **Completion ledger:** DONE = Tasks 1-8, Task 12, Task 13 build/docs. DEFERRED = Tasks 9-11 and the
+> Settings-driven device acceptance in Task 13.
 
 **Goal:** Let the user declare, entirely on-device, an explicit nickname → app mapping ("рабочий чат" → Telegram) that launches the app when the rule matcher would otherwise return `Unknown`.
 
@@ -33,11 +43,14 @@
 
 **New (`:core:testing`):** `FakeAliasStore.kt`.
 
-**New (`:core:ui`):** `component/AliasRow.kt`.
+**Deferred to DS-7 (`:core:ui`):** `component/AliasRow.kt`.
 
-**New (`:feature:settings`):** `AliasesViewModel.kt`, `AliasesScreen.kt`.
+**Deferred to DS-7 (`:feature:settings`):** `AliasesViewModel.kt`, `AliasesScreen.kt`.
 
 **Modified:** `db/SidrDatabase.kt` (register entity + bump v3), `di/DatabaseModule.kt` (+DAO provider, +migration), `di/MemoryProvidesModule.kt` (+use-case providers), `di/MemoryBindsModule.kt` (+`AliasStore` bind), `db/RoomColumnNames.kt` (+`aliases`), `feature/launcher/LauncherViewModel.kt` (swap `resolveCommand` type), `core/common/navigation/Routes.kt` (+`Aliases`), `feature/settings/SettingsScreen.kt` + `SettingsViewModel.kt` (+entry), `navigation/AppNavHost.kt` (+composable).
+
+**Deferred modified files (DS-7):** `core/common/navigation/Routes.kt`, `feature/settings/SettingsScreen.kt`,
+`feature/settings/SettingsViewModel.kt`, `navigation/AppNavHost.kt`.
 
 ---
 
@@ -1119,6 +1132,10 @@ git commit -m "feat(s2-2): wire alias decorator into LauncherViewModel (fill-the
 
 ## Phase D — Management UI (Settings → Aliases)
 
+> **DEFERRED TO DS-7 (owner instruction, 2026-07-11).** Tasks 9-11 are intentionally not executed in this
+> S2-2 closeout. The engine/storage/runtime wiring is real; the UI will be built during the memory
+> migration in the new soft-classic-grey design language.
+
 ### Task 9: `Routes.Aliases` + `core/ui` `AliasRow`
 
 **Files:**
@@ -1475,6 +1492,9 @@ git commit -m "feat(s2-2): Aliases screen + Settings entry + NavHost route"
 ---
 
 ## Phase E — Guards, parity, build gate, acceptance
+
+> **Scoped closeout note (2026-07-11):** Task 12 and the non-UI parts of Task 13 are complete. The device
+> acceptance matrix that depends on Settings → Aliases is deferred with Phase D to DS-7.
 
 ### Task 12: Privacy / scope / dependency / room-inventory guard tests
 

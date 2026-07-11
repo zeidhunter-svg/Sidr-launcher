@@ -2,7 +2,7 @@
 
 > **Authoritative status lives in `CLAUDE.md` (session digest), `ai-context/decisions.md` (ADR log),
 > and the per-phase plans.** This file is a short pointer/snapshot only — if it disagrees with those,
-> they win. Last re-based: 2026-07-11 (S2-1 closed).
+> they win. Last re-based: 2026-07-11 (S2-2 A-C code-closed; UI deferred to DS-7).
 
 ## Design track (DS) — DS-1 + DS-2 DONE (2026-07-11)
 
@@ -14,6 +14,19 @@ shapes + `SidrTheme.colors`/`textStyles` (accent inert) + global CRT removed + *
 (dark/light/font-scale-2.0/RTL); keystone `SidrProvenanceLine` (semantic `source`+`details`, TalkBack);
 status≠accent; **no production screen/nav/VM/persistence/domain change**. Full gate green. Next: **DS-3**
 (controls). ADRs: decisions.md "2026-07-11 — DS-1 complete" and "2026-07-11 — DS-2 primitives complete".
+
+## Stage 2 — AI Framework · S2-2 "Explicit Aliases" — CODE-CLOSED A-C (2026-07-11)
+
+Explicit nickname → app memory is now real on-device for the non-UI slice. Landed:
+`domain/memory/alias/` model/port/use-cases/decorator, `FakeAliasStore`, Room `aliases` (`SidrDatabase` v3 +
+`Migration2To3` + golden `3.json`), `AliasStoreImpl`, Hilt providers/binds, Room privacy inventory, and
+`LauncherViewModel` wiring. Alias lookup wraps S2-1 and fires **only** on `CommandOutcome.Unknown`; installed
+alias targets become `AutoLaunch` directives through the existing `launchApp` path. `HandleUserCommandUseCase`,
+`RouteCommandUseCase`, and the rule matcher were untouched; no-alias/non-Unknown/router-off parity is intact.
+Outbound allow-list widened by **zero** and guard tests prove alias memory has no outbound/generative
+dependency. Build gate `:domain:test testDebugUnitTest assembleDebug` is green. **Phase D UI (Settings →
+Aliases, route, `AliasRow`) and device acceptance are deferred to DS-7** so the memory surface ships in the
+approved soft-classic-grey language. ADR: decisions.md "2026-07-11 — S2-2 Explicit Aliases code-closed".
 
 ## Stage 2 — AI Framework · S2-1 "Learned Resolutions" — CLOSED (2026-07-11)
 
@@ -31,7 +44,7 @@ choice, `learning 1/3`, threshold auto-launch, delete/relearn, correction before
 uninstall invalidation, no stale auto-resolve, and router-off non-ambiguous parity (`open Salatuk`).
 Plan: `docs/superpowers/plans/2026-07-06-learned-resolutions.md`; ADR: decisions.md "2026-07-11 — S2-1
 Learned Resolutions device accepted + closed".
-**Next Stage-2 slice (S2-2) not yet scoped — brainstorm before planning.**
+**Next S2-2 work:** DS-7 memory-migration builds the Aliases management UI and runs device acceptance.
 
 ## Project reframed (2026-07-05) — three stages
 

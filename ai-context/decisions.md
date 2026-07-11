@@ -4415,3 +4415,35 @@ plan (DONE): [docs/superpowers/plans/2026-07-11-ds2-primitives.md](../docs/super
 **Build gate green:** `:core:ui:testDebugUnitTest testDebugUnitTest assembleDebug :core:ui:verifyRoborazziDebug`
 BUILD SUCCESSFUL. Feature tests unaffected (additive). **Next design block:** DS-3 (controls — buttons,
 chips incl. press-invert, rows), which composes these primitives; production-screen migration begins there.
+
+## ADR 2026-07-11 — S2-2 Explicit Aliases code-closed (A-C + guards; UI deferred to DS-7)
+
+**Status: CODE-CLOSED for the approved scoped slice.** This closes S2-2 Phases A-C plus guard/build work:
+explicit, user-authored alias memory is now real in domain/data/DI/runtime wiring, while the Settings
+management UI (Phase D: `AliasRow`, route, Aliases screen) is intentionally deferred to **DS-7** so the
+memory surface is built in the approved soft-classic-grey visual language. Plan:
+[docs/superpowers/plans/2026-07-10-explicit-aliases.md](../docs/superpowers/plans/2026-07-10-explicit-aliases.md).
+
+**What landed:** pure `domain/memory/alias/` (`Alias`, `AliasTarget.App`, `AliasStore`,
+`SaveAliasUseCase`, `DeleteAliasUseCase`, `ObserveAliasesUseCase`, `PruneUnavailableAliasesUseCase`,
+`ResolveCommandWithAliasUseCase` + `ResolvedCommandStep`); `FakeAliasStore`; Room `aliases` table
+(`SidrDatabase` v3, `Migration2To3`, golden `schemas/3.json`, DAO, mapper, `AliasStoreImpl`); Hilt
+providers/binds; and `LauncherViewModel` now injects the alias decorator over S2-1's learned-resolution
+decorator.
+
+**Runtime behavior:** aliases are exact normalized phrase matches and fire **only** when the inner
+resolver returns `CommandOutcome.Unknown`. An installed alias target becomes a `ResolvedCommand.AutoLaunch`
+directive and reuses the existing `launchApp` path; missing/uninstalled/store-failed aliases fall back to
+the original Unknown outcome. S2-1 learned resolutions still handle ambiguity; aliases do not record
+learning and do not shadow real app names or confident commands.
+
+**Hard invariants held:** `HandleUserCommandUseCase`, `RouteCommandUseCase`, and the rule matcher were not
+modified. Empty alias store / non-Unknown / router-off parity stays structurally intact and is covered by
+the full `LauncherViewModelTest` suite. Outbound privacy allow-list widened by **zero**; alias phrases and
+packages stay local-sensitive metadata and never enter an `AiRequest`. Room privacy inventory now includes
+`aliases`; alias domain sources are guard-tested to have no outbound/generative dependency.
+
+**Verification:** `:domain:test testDebugUnitTest assembleDebug` BUILD SUCCESSFUL under the pinned
+JBR/JDK-17 Gradle command. Focused checks included alias domain/use-case/decorator tests, DAO/store tests,
+Room migration AndroidTest compile, Hilt `:app:assembleDebug`, alias VM launch test, zero-widen outbound
+guard, and Room inventory guard. Device acceptance for Settings → Aliases is deferred with Phase D to DS-7.

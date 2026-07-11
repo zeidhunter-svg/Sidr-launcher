@@ -4550,3 +4550,92 @@ Changes (still parity-preserving — `LauncherViewModelTest` unchanged):
 usage-derived apps (2 on the test device), not the artifact's 8 concept tiles. Full gate green +
 re-verified on SM-A325F: idle Home matches the artifact (Shahada, bordered APP/WEB/ASK lane, favorites
 grid); typing shows APP/WEB/SITE/ASK with APP inverted and SITE URL-gated.
+
+## ADR 2026-07-11 — Vision MVP preview + all screens to artifact
+
+**Status: DONE, device-accepted (SM-A325F / RF8R705H38F).** Plan:
+[docs/superpowers/plans/2026-07-11-vision-mvp-preview.md](../docs/superpowers/plans/2026-07-11-vision-mvp-preview.md)
+(13 tasks, executed via subagent-driven-development — a fresh implementer + a fresh spec/quality
+reviewer per task, one fix round where review found an issue, whole-branch review after). Presentation-only
+across every task: no `domain`/`data` change, no ViewModel contract change, no route-semantics change,
+no persistence change. `LauncherViewModelTest`/`AppDrawerViewModelTest`/`AssistantViewModelTest`/
+`SettingsViewModelTest`/`LearnedChoicesViewModelTest`/`PermissionEducationViewModelTest` all pass
+byte-for-byte throughout.
+
+**What landed:**
+- **Task 1** — `core/ui/component/SidrPreview.kt`: `SidrPreviewBadge`/`SidrPreviewBanner`, the two
+  primitives every preview surface below badges itself with. Roborazzi goldens across dark/light/
+  font-scale-2.0/RTL (a below-the-fold gap in the full-gallery capture was fixed in-task by adding
+  dedicated per-variant goldens for the new component).
+- **Tasks 2–6 — existing screens migrated to the DS-3/DS-4 artifact look** (continuing DS-3/DS-4's
+  pattern onto the remaining production screens): **App Drawer** → 4-column `AppTile` grid with sticky
+  `SidrAlphabetHeader`s, a DS search row, and a `Groups`/`A-Z` toggle (`A-Z` = the real, unchanged
+  `groupIntoSections` grid; `Groups` = an explicitly preview-badged sample-category grid — round-robin
+  bucketing over the real installed-app list, no real categorization engine exists yet); **Assistant**
+  chat screen → `SidrTopBar`/`SidrText`/`SidrSurface` composer, a new "CLOUD · host · model" provenance
+  line (a malformed-base-URL edge case that could have leaked the URL scheme into that line was caught in
+  task review and fixed to a safe `"(unknown host)"` fallback); **AI provider** settings form → labelled
+  DS fields, the API-key-never-prefilled/never-displayed invariant re-verified intact; **Learned
+  Choices → Memory** surface → real memory cards (phrase→app + real `displayStateLabel` evidence, no
+  fabricated timestamps) plus a badged preview block (Aliases/Facts/Dismissed samples) with genuinely
+  inert Export/Delete-all (no bulk-delete/export use case exists in the domain layer, so those stay
+  `onClick = {}` rather than fabricating one); **Permission Education** → `SidrTopBar` + a "WITHOUT THIS
+  PERMISSION" card, all four real branches (`!requestable`/`GRANTED`/`PERMANENTLY_DENIED`/`DENIED`)
+  restyled with byte-identical callbacks, never imitating a system dialog.
+- **Task 7 — 5-tab bottom bar + Home reconciliation.** New `app/navigation/SidrTabScaffold.kt`
+  (`SidrTab` enum + `SidrTabBar`, an M3 `NavigationBar` with a press-invert-style selected/unselected
+  color mapping, no navigation logic). `AppNavHost` wraps only the 5 tab roots (Home + the 4 new preview
+  routes) in a `Scaffold(bottomBar = SidrTabBar)`; the existing 6 pushed destinations (Assistant,
+  Settings, App Drawer, AI provider, Learned Choices, Permission Education, and the new Task-12 Moments
+  screen) stay unwrapped so the bar disappears on push and reappears on pop. Tab switches use
+  `popUpTo(Launcher) + launchSingleTop` (no back-stack growth). Home dropped the redundant standalone
+  "Assistant" row (still reachable via the existing ASK route chip — a de-dup, not a functionality loss)
+  and gained a Settings gear immediately left of the "SIDR OS" wordmark.
+- **Tasks 8–11 — the four preview tabs**, each a new `feature/launcher/preview/*PreviewScreen.kt`:
+  **Tasks** (sample intent → plan → execution → result flow, `SidrActionGate`-styled consent row, all
+  callbacks inert); **Agents** (one sample "Research agent" card, tools/permissions rows, Pause/Open —
+  all inert); **Activity** (four sample timeline rows incl. one **DANGER**-status failure row, ending
+  "EPHEMERAL BY DEFAULT · OPT-IN PERSIST"); **Terminal** (a Python-REPL look that is **architecturally
+  incapable of producing output** — the transcript has no backing state to append to at all, not merely
+  "no append call today" — proven by a test that types a real command, submits via a real IME action, and
+  asserts the transcript's child count is exactly zero). Every screen carries zero `domain`/`data`/
+  ViewModel/navigation reference; every sample string self-discloses as sample/fictional.
+- **Task 12 — Interaction-moment previews.** New `MomentsPreviewScreen` (Result/Partial/Error sample
+  cards, all buttons inert) reachable via a real "Interaction moments" row in the Tasks preview's footer;
+  registered as an unwrapped pushed destination (not a 6th tab).
+- **Task 13 (this entry) — full gate + device acceptance + docs.**
+
+**No prayer times anywhere:** grepped every file this plan touched for prayer/salah/adhan/namaz/
+fajr/dhuhr/asr/maghrib/isha — the only hits are pre-existing comments *disclaiming* prayer data (Home's
+`HomeAnchorSlot`/date line, unchanged by this plan); no task added prayer-time UI or copy.
+
+**Full gate green** (JDK-17 toolchain): `:core:ui:recordRoborazziDebug :core:ui:verifyRoborazziDebug`
+then `:core:ui:testDebugUnitTest :feature:launcher:testDebugUnitTest :feature:assistant:testDebugUnitTest
+:feature:settings:testDebugUnitTest :feature:permission_education:testDebugUnitTest testDebugUnitTest
+assembleDebug` — BUILD SUCCESSFUL throughout, no regressions.
+
+**Device acceptance PASS (SM-A325F / RF8R705H38F):** Home real flow unchanged — typed `chrome` →
+overtake → real launch (`com.android.chrome` foregrounded); typed `github.com` → `SITE` chip appeared
+→ real browser opened on the URL; Settings gear → real Settings; App Drawer A-Z grid and Groups preview
+both render over the real installed-app list; Assistant shows a real configured provider's provenance
+line; AI provider form renders the masked key + "Key set — replace to update."; all 5 tabs switch with
+the bar persisting; Tasks → Interaction Moments footer row navigates to real Result/Partial/Error cards;
+Agents/Activity/Terminal each show their `PREVIEW` banner; Terminal confirmed live — typed text +
+Enter cleared the field and produced no output anywhere; no crash across the full session; the
+`Smart command routing` flag was confirmed off (default), consistent with rule-only parity already
+proven by the real launch/SITE tests above.
+
+**Session note:** one task implementer's connection was interrupted mid-run (before any file was
+written) and was resumed cleanly from its transcript with no rework; one task landed real code but the
+implementer didn't commit it itself (over-cautious reading of the no-auto-commit default) — the
+controller reviewed the diff for secrets/unexpected files and committed on its behalf. Neither affected
+the delivered code or the review record.
+
+**Minor findings carried forward (non-blocking, rolled up from every task review):** `ControlGallery.kt`'s
+PREVIEW section and a few other bottom sections sit below the fixed-viewport fold in the full gallery
+goldens (pre-existing, not unique to this plan); the Task-8 gallery's `SidrRiskChip("EXTERNALHANDOFF")`
+label wraps with no space and its "queued" `SidrStatusMarker` wraps to three vertical lines in a narrow
+row (cosmetic, spotted during this session's device pass); the Memory preview block still renders
+alongside a genuinely-empty real list (mitigated by banner+badge+caption, not gated on `isEmpty()`); the
+two "PREVIEW —" lines on the Terminal screen use the same role/color and read as one repeated banner.
+None block this closure; candidates for a future DS polish pass.

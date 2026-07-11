@@ -1,6 +1,7 @@
 # CLAUDE.md — Sidr Launcher
 
-**Design track (DS) — DS-1 + DS-2 + DS-3 + DS-4 DONE (2026-07-11).** A parallel, presentation-only design-system
+**Design track (DS) — DS-1 + DS-2 + DS-3 + DS-4 DONE (2026-07-11); Vision MVP (Preview) DONE (2026-07-11).**
+A parallel, presentation-only design-system
 migration to the approved **soft-classic-grey** identity, governed by `docs/design/SIDR Design System
 Master Plan v1.2` (the principles rulebook was folded into it: §5.1 precedence, §5.2 verify-vocab, §20.1
 calm budgets). **DS-1** = grey token layer + tri-font + softened shapes + `SidrTheme.colors`/`textStyles`
@@ -14,8 +15,18 @@ proof surface; routed confirmation → `SidrActionGate`. **DS-4** = Home migrate
 results overtake on DS-3 chips + DS-2 text; bottom CommandBar retired → All Apps/Assistant rows +
 local-first privacy line); `SidrCommandPrompt` `@Deprecated`. **All four: no production
 nav/VM/persistence/domain change — command pipeline / routing / voice / offline / router-off parity fully
-intact** (`LauncherViewModelTest` byte-for-byte); DS-4 **device-accepted on SM-A325F**. Next design block:
-**DS-5** (Action & Safety). ADRs: decisions.md "2026-07-11 — DS-1/DS-2/DS-3/DS-4 complete"; specs+plans under
+intact** (`LauncherViewModelTest` byte-for-byte); DS-4 **device-accepted on SM-A325F**.
+
+**Vision MVP (Preview)** (13 tasks, `docs/superpowers/plans/2026-07-11-vision-mvp-preview.md`) extends
+DS-3/DS-4's artifact look to every remaining production screen — App Drawer (grid + Groups/A-Z toggle),
+Assistant, AI provider settings, Memory/Learned Choices, Permission Education — adds the 5-tab bottom bar
+(`SidrTab`/`SidrTabBar`) with Home reconciliation, and delivers DS-8/DS-9/DS-10's Tasks/Agents/Activity/
+Terminal surfaces as `PREVIEW`-badged, non-functional mock-ups (every callback inert, zero fabricated
+data, Terminal test-proven incapable of producing output) plus an Interaction-Moments preview. Same hard
+rule as DS-1..4: **no production nav/VM/persistence/domain change**; every ViewModel test suite passes
+byte-for-byte. **Device-accepted on SM-A325F.** Next design block: **DS-5** (Action & Safety). ADRs:
+decisions.md "2026-07-11 — DS-1/DS-2/DS-3/DS-4 complete" and "2026-07-11 — Vision MVP preview + all
+screens to artifact"; specs+plans under
 `docs/superpowers/`. Stage-2 S2-2 "Explicit Aliases" (domain/data/DI Phase A–C already on `launcher-4`) is
 paused pending its grey UI in DS-7. The AI-launcher stage digest below is unchanged.
 

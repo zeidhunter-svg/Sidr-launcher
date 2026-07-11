@@ -1,0 +1,23 @@
+# Kodik Hosting local analysis. Managed by Kodik.
+configVersion = 1
+appId = ""
+deploymentId = ""
+deploymentUrl = ""
+workspacePath = "/home/Suleiman/Sidr-launcher"
+status = "analyzing"
+hostable = false
+projectName = "Sidr-launcher"
+summary = ""
+runtime = ""
+framework = ""
+packageManager = ""
+installCommand = ""
+buildCommand = ""
+runCommand = ""
+healthcheckPath = ""
+dockerfilePath = ""
+requiredEnvVars = []
+optionalEnvVars = []
+envVarsJson = "[]"
+blockers = []
+updatedAt = "2026-07-11T20:26:53.444Z"

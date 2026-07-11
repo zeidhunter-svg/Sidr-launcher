@@ -2,9 +2,22 @@
 
 > **Authoritative status lives in `CLAUDE.md` (session digest), `ai-context/decisions.md` (ADR log),
 > and the per-phase plans.** This file is a short pointer/snapshot only — if it disagrees with those,
-> they win. Last re-based: 2026-07-11 (S2-1 closed).
+> they win. Last re-based: 2026-07-11 (Vision MVP preview closed).
 
-## Design track (DS) — DS-1 + DS-2 + DS-3 + DS-4 DONE (2026-07-11)
+## Design track (DS) — DS-1 + DS-2 + DS-3 + DS-4 DONE; Vision MVP (Preview) DONE (2026-07-11)
+
+**Vision MVP (Preview) is DONE, device-accepted (SM-A325F).** Plan:
+`docs/superpowers/plans/2026-07-11-vision-mvp-preview.md` (13 tasks). Extends the DS-3/DS-4 artifact look
+to every remaining production screen (App Drawer grid + Groups/A-Z toggle, Assistant, AI provider
+settings, Memory/Learned Choices, Permission Education), adds the 5-tab bottom bar
+(`SidrTab`/`SidrTabBar` in `app/navigation/SidrTabScaffold.kt`) with Home reconciliation (gear icon,
+de-duped Assistant row), and delivers DS-8/DS-9/DS-10's Tasks/Agents/Activity/Terminal surfaces in the
+**preview-only** form those specs already called for (`feature/launcher/preview/*PreviewScreen.kt` — every
+screen `PREVIEW`-badged, every callback inert, zero fabricated data, Terminal architecturally incapable of
+producing output), plus an Interaction-Moments (Result/Partial/Error) preview. Presentation-only
+throughout — no domain/data/VM/route/persistence change; every ViewModel test suite passes byte-for-byte.
+Full gate + SM-A325F device acceptance green. ADR: decisions.md "2026-07-11 — Vision MVP preview + all
+screens to artifact".
 
 Parallel presentation-only design-system migration to the approved **soft-classic-grey** identity, governed
 by `docs/design/SIDR Design System Master Plan v1.2` (§5.1 precedence, §5.2 verify-vocab, §20.1 calm budgets

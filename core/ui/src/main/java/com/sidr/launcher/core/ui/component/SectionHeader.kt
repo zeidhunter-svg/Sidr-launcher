@@ -14,6 +14,9 @@ import com.sidr.launcher.core.ui.theme.Spacing
 /**
  * A small, understated section label ("Suggestions", "Favorites") used to group home rows.
  * Marked as an accessibility heading so screen-reader users can navigate section-by-section.
+ *
+ * **Deprecated (DS-3):** semantic section usage migrated to [SidrSectionHeader]. Kept as a
+ * compatibility wrapper until all references are removed; no new call sites should use this.
  */
 @Composable
 fun SectionHeader(

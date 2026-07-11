@@ -13,6 +13,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
+import com.sidr.launcher.feature.assistant.AssistantProviderScreen
 import com.sidr.launcher.feature.assistant.AssistantScreen
 import com.sidr.launcher.feature.assistant.AssistantViewModel
 import com.sidr.launcher.feature.launcher.AppDrawerScreen
@@ -146,6 +147,16 @@ fun AppNavHost(
                 vm.navigationEvents.collect { handleNavigationEvent(navController, it) }
             }
             SettingsScreen(viewModel = vm)
+        }
+
+        // Dedicated AI-provider setup surface (base URL / model / API key), reached from Settings.
+        // Kept separate from the Assistant chat so the key-bearing form never overlaps it.
+        composable(Routes.AssistantProvider.ROUTE) {
+            val vm: AssistantViewModel = hiltViewModel()
+            LaunchedEffect(vm.navigationEvents) {
+                vm.navigationEvents.collect { handleNavigationEvent(navController, it) }
+            }
+            AssistantProviderScreen(viewModel = vm)
         }
 
         composable(Routes.LearnedChoices.ROUTE) {

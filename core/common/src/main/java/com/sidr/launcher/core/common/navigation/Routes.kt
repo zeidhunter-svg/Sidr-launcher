@@ -32,6 +32,12 @@ sealed class Routes {
         const val ROUTE = "settings"
     }
 
+    /** Dedicated AI-provider setup surface (base URL / model / API key). Reached from Settings; kept
+     *  separate from the [Assistant] chat so the two never overlap. */
+    object AssistantProvider : Routes() {
+        const val ROUTE = "assistant_provider"
+    }
+
     object LearnedChoices : Routes() {
         const val ROUTE = "learned_choices"
     }

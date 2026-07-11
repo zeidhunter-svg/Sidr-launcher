@@ -48,7 +48,15 @@ import kotlinx.coroutines.delay
  *
  * @param listening true while a voice recognizer is capturing — the mic affordance switches to the
  *   active accent state (a static fill; pulse/flicker is DF-5 motion, deferred).
+ *
+ * @deprecated DS-4 replaced this at Home with [SidrUniversalInput] (soft-classic-grey identity, DS-2/DS-3
+ *   primitives, parameterless `onSubmit`). Production usage is now zero; kept only until any remaining
+ *   references are migrated, then removed.
  */
+@Deprecated(
+    message = "Replaced by SidrUniversalInput (DS-4). Migrate remaining call sites, then remove.",
+    replaceWith = ReplaceWith("SidrUniversalInput"),
+)
 @Composable
 fun SidrCommandPrompt(
     value: String,
@@ -167,6 +175,7 @@ fun SidrCommandPrompt(
 /** Terminal caret cadence — ~530ms on/off, a familiar CRT blink rate. */
 private const val CARET_BLINK_MS = 530L
 
+@Suppress("DEPRECATION")
 @Preview(showBackground = true, backgroundColor = 0xFF08090A)
 @Composable
 private fun SidrCommandPromptEmptyPreview() {
@@ -175,6 +184,7 @@ private fun SidrCommandPromptEmptyPreview() {
     }
 }
 
+@Suppress("DEPRECATION")
 @Preview(showBackground = true, backgroundColor = 0xFF08090A)
 @Composable
 private fun SidrCommandPromptTypedPreview() {

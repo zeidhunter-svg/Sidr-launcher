@@ -306,13 +306,13 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `assistant provider entry emits navigation to the assistant route`() = runTest(testDispatcher) {
+    fun `assistant provider entry emits navigation to the dedicated provider route`() = runTest(testDispatcher) {
         val vm = buildViewModel()
 
         vm.openAssistantProvider()
         val event = vm.navigationEvents.first()
 
-        assertEquals(NavigationEvent.NavigateTo(Routes.Assistant.ROUTE), event)
+        assertEquals(NavigationEvent.NavigateTo(Routes.AssistantProvider.ROUTE), event)
     }
 
     @Test

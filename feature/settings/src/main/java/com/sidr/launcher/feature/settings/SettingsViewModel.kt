@@ -225,9 +225,9 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    /** Route to the existing Assistant provider form (Block N); never duplicate the key-bearing form. */
+    /** Route to the dedicated AI-provider setup surface (not the Assistant chat). Single key-bearing form. */
     fun openAssistantProvider() {
-        _navigationEvents.trySend(NavigationEvent.NavigateTo(Routes.Assistant.ROUTE))
+        _navigationEvents.trySend(NavigationEvent.NavigateTo(Routes.AssistantProvider.ROUTE))
     }
 
     fun openLearnedChoices() {

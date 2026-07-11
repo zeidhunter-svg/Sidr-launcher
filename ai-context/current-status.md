@@ -4,7 +4,7 @@
 > and the per-phase plans.** This file is a short pointer/snapshot only — if it disagrees with those,
 > they win. Last re-based: 2026-07-11 (S2-1 closed).
 
-## Design track (DS) — DS-1 + DS-2 DONE (2026-07-11)
+## Design track (DS) — DS-1 + DS-2 + DS-3 + DS-4 DONE (2026-07-11)
 
 Parallel presentation-only design-system migration to the approved **soft-classic-grey** identity, governed
 by `docs/design/SIDR Design System Master Plan v1.2` (§5.1 precedence, §5.2 verify-vocab, §20.1 calm budgets
@@ -12,8 +12,67 @@ folded in from the principles rulebook). **DS-1** = grey token layer (both theme
 shapes + `SidrTheme.colors`/`textStyles` (accent inert) + global CRT removed + **Roborazzi harness**.
 **DS-2** = eight additive `core/ui/primitive/` primitives + `Strokes` token + preview gallery goldens
 (dark/light/font-scale-2.0/RTL); keystone `SidrProvenanceLine` (semantic `source`+`details`, TalkBack);
-status≠accent; **no production screen/nav/VM/persistence/domain change**. Full gate green. Next: **DS-3**
-(controls). ADRs: decisions.md "2026-07-11 — DS-1 complete" and "2026-07-11 — DS-2 primitives complete".
+status≠accent; **no production screen/nav/VM/persistence/domain change**. Full gate green. **DS-3 is DONE**:
+SIDR controls (buttons, chips with press-invert, rows, top bar, Action Gate) live in `core/ui/component/`;
+Settings migrated as proof surface (no VM/key/routing change); routed confirmation migrated to
+`SidrActionGate` (SAFE one-tap parity preserved). Artifact captures: `docs/design/artifacts/e34033dd/`;
+spec: `docs/superpowers/specs/2026-07-11-ds3-controls-design.md`; plan (DONE):
+`docs/superpowers/plans/2026-07-11-ds3-controls.md`. ADR: decisions.md "2026-07-11 — DS-3 controls complete".
+**DS-4 is DONE (2026-07-11, device-accepted)**: Home migrated to the soft-classic-grey intent-first layout
+and `SidrCommandPrompt` replaced by `core/ui` `SidrUniversalInput` (`>` prompt/block-caret/mic/clear/route
+slot, parameterless `onSubmit`). `LauncherScreen` recomposed feature-locally: `HomeTopRow` (SIDR wordmark +
+dev-arm + **Gregorian+Hijri** date via `java.time.chrono.HijrahDate` + Settings icon), **empty
+`HomeAnchorSlot`** seam reserved for DS-6A (no fake prayer/sacred data), results overtake on DS-3
+`SidrRouteChip` + DS-2 `SidrText` with stable row heights, feedback/pending on DS-2/DS-3
+(`Ambiguous`=clarification, CONFIRM=`SidrActionGate`, SAFE=one-tap chip), bottom `CommandBar` **retired** →
+All Apps + Assistant `SidrNavigationRow`s + local-first `HomePrivacyLine`. **Command pipeline / routing /
+voice / offline / router-off parity intact** (`LauncherViewModelTest` byte-for-byte). Owner decisions: empty
+sacred seam, Gregorian+Hijri, retire+redistribute CommandBar. `SidrCommandPrompt` `@Deprecated` (usage
+zero). 3 new `universal_input_*` Roborazzi goldens. Full gate green (JDK-17 toolchain) + **SM-A325F device
+pass** (typed launch, WEB/SITE/ASK, router-off "Unknown command" parity, Settings/All apps/Assistant
+discoverability, no crash). Spec:
+`docs/superpowers/specs/2026-07-11-ds4-home-universal-input-design.md`; plan (DONE):
+`docs/superpowers/plans/2026-07-11-ds4-home-universal-input.md`; ADR: decisions.md "2026-07-11 — DS-4
+complete". **Next design block: DS-5 (Action & Safety).** **DS-5 Action & Safety is drafted and
+restores the skipped production safety block**:
+`docs/superpowers/specs/2026-07-11-ds5-action-safety-design.md` +
+`docs/superpowers/plans/2026-07-11-ds5-action-safety.md`. **DS-6A Sacred Header is drafted but gated after
+DS-5, DS-4 Home integration, and Arabic rendering approval**:
+`docs/superpowers/specs/2026-07-11-ds6a-sacred-header-design.md` +
+`docs/superpowers/plans/2026-07-11-ds6a-sacred-header.md`. **DS-6B Prayer Correctness is now drafted as
+the separate religious-correctness capability track**:
+`docs/superpowers/specs/2026-07-11-ds6b-prayer-correctness-design.md` +
+`docs/superpowers/plans/2026-07-11-ds6b-prayer-correctness.md`; it requires authority/method/privacy
+requirements before code and forbids fake prayer times or precise-location leakage into AI/cloud. **DS-7 Memory Surfaces is drafted as the
+Learned Choices migration + conditional Aliases path**:
+`docs/superpowers/specs/2026-07-11-ds7-memory-surfaces-design.md` +
+`docs/superpowers/plans/2026-07-11-ds7-memory-surfaces.md`; production work should wait for DS-3/DS-5
+controls/safety to land and for S2-2 scope before shipping Aliases UI. **DS-8 Activity Foundations, DS-9
+Execution Foundations, and DS-10 Assistant Migration are also drafted as next design-track specs/plans**:
+`docs/superpowers/specs/2026-07-11-ds8-activity-foundations-design.md` +
+`docs/superpowers/plans/2026-07-11-ds8-activity-foundations.md`,
+`docs/superpowers/specs/2026-07-11-ds9-execution-foundations-design.md` +
+`docs/superpowers/plans/2026-07-11-ds9-execution-foundations.md`, and
+`docs/superpowers/specs/2026-07-11-ds10-assistant-migration-design.md` +
+`docs/superpowers/plans/2026-07-11-ds10-assistant-migration.md`. DS-8/DS-9 are preview/contract-only until
+real A4/A5 runtime/activity backing exists; DS-10 is the next practical existing-surface migration after
+DS-3/DS-5 components land. **Downstream A4/A5/A6 architecture specs/plans and the DS v1.1 release gate are
+now drafted, and the missing A1-A3 prerequisite specs/plans have been added**:
+`docs/superpowers/specs/2026-07-11-a1-tool-capability-design.md` +
+`docs/superpowers/plans/2026-07-11-a1-tool-capability.md`,
+`docs/superpowers/specs/2026-07-11-a2-context-engine-design.md` +
+`docs/superpowers/plans/2026-07-11-a2-context-engine.md`,
+`docs/superpowers/specs/2026-07-11-a3-user-memory-design.md` +
+`docs/superpowers/plans/2026-07-11-a3-user-memory.md`,
+`docs/superpowers/specs/2026-07-11-a4-agent-runtime-design.md` +
+`docs/superpowers/plans/2026-07-11-a4-agent-runtime.md`,
+`docs/superpowers/specs/2026-07-11-a5-activity-trace-design.md` +
+`docs/superpowers/plans/2026-07-11-a5-activity-trace.md`,
+`docs/superpowers/specs/2026-07-11-a6-grants-automation-design.md` +
+`docs/superpowers/plans/2026-07-11-a6-grants-automation.md`, and
+`docs/superpowers/plans/2026-07-11-design-system-v11-release-gate.md`. A1 is the next architectural slice
+after S2-2/Alias scope; A4/A5/A6 remain gated on A1-A3 and the golden rule: no agentic surface without real engine backing. ADRs: decisions.md "2026-07-11 — DS-1 complete"
+and "2026-07-11 — DS-2 primitives complete".
 
 ## Stage 2 — AI Framework · S2-1 "Learned Resolutions" — CLOSED (2026-07-11)
 

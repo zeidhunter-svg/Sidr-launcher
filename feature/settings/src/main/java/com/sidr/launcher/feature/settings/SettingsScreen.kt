@@ -15,30 +15,24 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.sidr.launcher.core.ui.component.SectionHeader
+import com.sidr.launcher.core.ui.component.SidrChoiceRow
+import com.sidr.launcher.core.ui.component.SidrFilterChip
+import com.sidr.launcher.core.ui.component.SidrIconButton
+import com.sidr.launcher.core.ui.component.SidrNavigationRow
 import com.sidr.launcher.core.ui.component.SidrScaffold
-import com.sidr.launcher.core.ui.component.TopBarIcon
+import com.sidr.launcher.core.ui.component.SidrSectionHeader
+import com.sidr.launcher.core.ui.component.SidrToggleRow
+import com.sidr.launcher.core.ui.component.SidrTopBar
+import com.sidr.launcher.core.ui.theme.SidrTheme
 
 /**
  * Real launcher settings surface (Block X5). Stateless render over [SettingsViewModel]; built on the
@@ -105,27 +99,20 @@ private fun SettingsContent(
     SidrScaffold(
         modifier = modifier,
         topBar = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-            ) {
-                TopBarIcon(
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    onClick = onBack,
-                )
-                Text(
-                    text = "Settings",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-            }
+            SidrTopBar(
+                title = "Settings",
+                navigationIcon = {
+                    SidrIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        onClick = onBack,
+                    )
+                },
+            )
         },
     ) { inner ->
         Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(inner)
@@ -133,229 +120,103 @@ private fun SettingsContent(
                 // make it scrollable so the SYSTEM section stays reachable. Scaffold insets stay outside
                 // the scroll; content padding is inside it.
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 8.dp, vertical = 8.dp),
+                .padding(vertical = 8.dp),
         ) {
             // ── Appearance ──────────────────────────────────────────────────────
-            SectionHeader(text = "APPEARANCE")
-            Column(Modifier.selectableGroup().fillMaxWidth()) {
-                ThemeOption.ALL.forEach { (value, label) ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .selectable(
-                                selected = uiState.themeName == value,
-                                role = Role.RadioButton,
-                                onClick = { onThemeSelected(value) },
-                            )
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                    ) {
-                        RadioButton(
-                            selected = uiState.themeName == value,
-                            onClick = null,
-                        )
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(start = 16.dp),
-                        )
-                    }
-                }
+            SidrSectionHeader(text = "APPEARANCE")
+            ThemeOption.ALL.forEach { (value, label) ->
+                SidrChoiceRow(
+                    title = label,
+                    selected = uiState.themeName == value,
+                    onClick = { onThemeSelected(value) },
+                )
             }
 
             // Accent (brand phosphor) — AIL-6 / DF-7. Applies immediately + persists.
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text(
-                    text = "Accent",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = "The luminous brand colour of the terminal interface.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp)
-                        .selectableGroup(),
-                ) {
-                    AccentOption.ALL.forEach { (value, label) ->
-                        FilterChip(
-                            selected = uiState.accentColor == value,
-                            onClick = { onAccentSelected(value) },
-                            label = { Text(label) },
-                        )
-                    }
+            // DS-1/ADR: accent is inert (grey identity), but the stored preference key is preserved.
+            SidrSectionHeader(text = "ACCENT")
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                AccentOption.ALL.forEach { (value, label) ->
+                    SidrFilterChip(
+                        label = label,
+                        selected = uiState.accentColor == value,
+                        onClick = { onAccentSelected(value) },
+                    )
                 }
             }
 
             // ── Suggestions ─────────────────────────────────────────────────────
-            SectionHeader(text = "SUGGESTIONS")
+            SidrSectionHeader(text = "SUGGESTIONS")
+            SidrToggleRow(
+                title = "AI suggestions",
+                checked = uiState.aiSuggestionsEnabled,
+                onCheckedChange = onAiSuggestionsChanged,
+                description = "Show launcher suggestions and allow background precompute scheduling.",
+            )
+
+            // ── Home ────────────────────────────────────────────────────────────
+            SidrSectionHeader(text = "HOME")
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "AI suggestions",
-                        style = MaterialTheme.typography.titleMedium,
+                FAVORITES_COUNT_OPTIONS.forEach { count ->
+                    SidrFilterChip(
+                        label = count.toString(),
+                        selected = uiState.favoritesCount == count,
+                        onClick = { onFavoritesCountSelected(count) },
                     )
-                    Text(
-                        text = "Show launcher suggestions and allow background precompute scheduling.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                Switch(
-                    checked = uiState.aiSuggestionsEnabled,
-                    onCheckedChange = onAiSuggestionsChanged,
-                )
-            }
-
-            // ── Home ────────────────────────────────────────────────────────────
-            SectionHeader(text = "HOME")
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text(
-                    text = "Favorites shown",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = "How many most-used apps appear on the home screen.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp)
-                        .selectableGroup(),
-                ) {
-                    FAVORITES_COUNT_OPTIONS.forEach { count ->
-                        FilterChip(
-                            selected = uiState.favoritesCount == count,
-                            onClick = { onFavoritesCountSelected(count) },
-                            label = { Text(count.toString()) },
-                            modifier = Modifier.semantics {
-                                contentDescription = "Show $count favorites"
-                            },
-                        )
-                    }
                 }
             }
             // Usage-history opt-in — without it no launches are recorded, so the Favorites row above
             // (and usage-based suggestion ranking) stay empty. Off by default (privacy-first).
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Personalize from usage",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        text = "Remember which apps you open to fill Favorites and improve suggestions.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                Switch(
-                    checked = uiState.usageHistoryEnabled,
-                    onCheckedChange = onUsageHistoryChanged,
-                )
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Voice input",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        text = "Show the microphone on the search field for spoken commands.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                Switch(
-                    checked = uiState.micInputEnabled,
-                    onCheckedChange = onMicInputChanged,
-                )
-            }
+            SidrToggleRow(
+                title = "Personalize from usage",
+                checked = uiState.usageHistoryEnabled,
+                onCheckedChange = onUsageHistoryChanged,
+                description = "Remember which apps you open to fill Favorites and improve suggestions.",
+            )
+            SidrToggleRow(
+                title = "Voice input",
+                checked = uiState.micInputEnabled,
+                onCheckedChange = onMicInputChanged,
+                description = "Show the microphone on the search field for spoken commands.",
+            )
 
             // ── Memory ──────────────────────────────────────────────────────────
-            SectionHeader(text = "MEMORY")
-            Button(
-                onClick = onLearnedChoices,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-            ) {
-                Text(text = "[ learned choices ]")
-            }
+            SidrSectionHeader(text = "MEMORY")
+            SidrNavigationRow(title = "Learned choices", onClick = onLearnedChoices)
 
             // ── Assistant ───────────────────────────────────────────────────────
-            SectionHeader(text = "ASSISTANT")
-            Button(
-                onClick = onAssistantProvider,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-            ) {
-                Text(text = "AI provider settings")
-            }
+            SidrSectionHeader(text = "ASSISTANT")
+            SidrNavigationRow(title = "AI provider settings", onClick = onAssistantProvider)
             // AIL-4 — LLM Action Router opt-in. Off by default; needs a provider configured above.
             // When on, natural-language commands the rules can't handle are routed by the cloud LLM to
             // a registered action (proposals always confirm, never auto-execute).
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Smart command routing",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        text = "Use your AI provider to understand natural-language commands. " +
-                            "Suggested actions always ask before running.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                Switch(
-                    checked = uiState.llmRouterEnabled,
-                    onCheckedChange = onLlmRouterChanged,
-                )
-            }
+            SidrToggleRow(
+                title = "Smart command routing",
+                checked = uiState.llmRouterEnabled,
+                onCheckedChange = onLlmRouterChanged,
+                description = "Use your AI provider to understand natural-language commands. " +
+                    "Suggested actions always ask before running.",
+            )
 
             // ── Default launcher ────────────────────────────────────────────────
-            SectionHeader(text = "SYSTEM")
-            Button(
-                onClick = onSetDefaultLauncher,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-            ) {
-                Text(text = "Set as default launcher")
-            }
+            SidrSectionHeader(text = "SYSTEM")
+            SidrNavigationRow(title = "Set as default launcher", onClick = onSetDefaultLauncher)
 
             uiState.errorMessage?.let { message ->
-                Text(
+                com.sidr.launcher.core.ui.primitive.SidrText(
                     text = message,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
+                    role = com.sidr.launcher.core.ui.primitive.SidrTextRole.PROVENANCE,
+                    color = SidrTheme.colors.danger,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }

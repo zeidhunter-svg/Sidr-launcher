@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.navigation.NavigationEvent
+import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.domain.ai.AiChunk
 import com.sidr.launcher.domain.ai.AiError
 import com.sidr.launcher.domain.ai.AiModelId
@@ -87,6 +88,11 @@ class AssistantViewModel @Inject constructor(
 
     fun navigateBack() {
         _navigationEvents.trySend(NavigationEvent.NavigateBack)
+    }
+
+    /** Navigate to the dedicated AI-provider setup surface (the chat itself never hosts the form). */
+    fun openProviderSettings() {
+        _navigationEvents.trySend(NavigationEvent.NavigateTo(Routes.AssistantProvider.ROUTE))
     }
 
     fun send(prompt: String) {

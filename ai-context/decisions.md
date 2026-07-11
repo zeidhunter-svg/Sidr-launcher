@@ -4415,3 +4415,138 @@ plan (DONE): [docs/superpowers/plans/2026-07-11-ds2-primitives.md](../docs/super
 **Build gate green:** `:core:ui:testDebugUnitTest testDebugUnitTest assembleDebug :core:ui:verifyRoborazziDebug`
 BUILD SUCCESSFUL. Feature tests unaffected (additive). **Next design block:** DS-3 (controls — buttons,
 chips incl. press-invert, rows), which composes these primitives; production-screen migration begins there.
+
+## ADR 2026-07-11 — DS-3 controls complete (presentation-only)
+
+**Design-track block DS-3** ("SIDR Controls", Master Plan v1.2 §11 DS-3, spec §1) is DONE on `launcher-4`.
+Presentation-only, parity-preserving: new reusable controls land in `core/ui/component`, Settings proves the
+row/control language, and routed confirmation migrates through `SidrActionGate`. Spec:
+[docs/superpowers/specs/2026-07-11-ds3-controls-design.md](../docs/superpowers/specs/2026-07-11-ds3-controls-design.md);
+plan (DONE): [docs/superpowers/plans/2026-07-11-ds3-controls.md](../docs/superpowers/plans/2026-07-11-ds3-controls.md).
+
+- **New `core/ui/component/` controls** (6 files): `SidrButton.kt` (`SidrPrimaryButton`,
+  `SidrSecondaryButton`, `SidrTertiaryButton`, `SidrDestructiveButton`, `SidrTerminalAction` — shared
+  internal frame, 48dp min target, loading disables duplicate taps, destructive muted border/text not red
+  fill), `SidrChip.kt` (`SidrRouteChip`, `SidrFilterChip`, `SidrSuggestionChip`, `SidrActionChip`,
+  `SidrStatusChip`, `SidrRiskChip` + `SidrRiskTone{Safe,Confirm,External,Destructive}` — press-invert
+  selected/pressed flips fg/bg, no glow/scale/layout shift; status/risk use fixed tokens never accent),
+  `SidrRow.kt` (`SidrNavigationRow`, `SidrToggleRow` — single `toggleable` owner, switch `onCheckedChange=null`,
+  `SidrChoiceRow` — radio role, `SidrStatusRow`, `SidrDestructiveRow` — explicit danger label),
+  `SidrTopBar.kt` (`SidrSectionHeader`, `SidrAlphabetHeader`, `SidrTopBar` — presentation-only, never owns
+  navigation), `SidrIconButton.kt` (`ImageVector` + `Painter` overloads; `TopBarIcon` kept as compat wrapper),
+  `SidrActionGate.kt` (`SidrActionGateType{Confirmation,Permission,SensitiveData,ExternalHandoff,Destructive}`
+  + `SidrActionGate` — composes `SidrSurface`/`SidrText`/`SidrRiskChip`/SIDR buttons; consequence always
+  visible; Cancel always visible; `confirming` disables both; URL wraps).
+- **Tests:** `ControlsDependencyGuardTest` (no domain/data/feature in `Sidr*.kt`), `SidrButtonTest` (disabled
+  blocks click, loading blocks duplicate, terminal action), `SidrChipTest` (risk->status mapping never
+  accent, label readable, filter click), `SidrRowSemanticsTest` (toggle single owner, choice radio,
+  navigation title/value, destructive label, status row), `SidrActionGateTest` (consequence visible, target
+  visible, cancel once, confirm once, confirming disables both). **Roborazzi goldens**
+  `controls_{dark,light,fontscale2,rtl}` cover the full control-state matrix.
+- **Settings proof surface:** `SettingsScreen` migrated to `SidrTopBar` + `SidrIconButton`, `SidrSectionHeader`,
+  `SidrToggleRow`, `SidrChoiceRow`, `SidrNavigationRow`, `SidrFilterChip`. **No ViewModel contract change, no
+  persisted key change, no new setting, no routing change** — all `SettingsViewModel` callbacks, the
+  `defaultLauncherIntent` flow, and every preference key are byte-for-byte preserved. Existing Settings VM
+  tests pass unchanged.
+- **Routed confirmation migration:** `ConfirmActionCard` usage in `LauncherScreen.PendingActionArea` ->
+  `SidrActionGate` (CONFIRM-risk branch only; SAFE one-tap `RouteChipRow` left intact for parity).
+  `onConfirm`/`onCancel` callbacks preserved exactly; SAFE vs CONFIRM distinction intact; no auto-execution.
+  Launcher VM tests pass unchanged (behavior-level, not UI-level).
+- **Legacy components** (`ConfirmActionCard`, `SectionHeader`, `TopBarIcon`, `RouteChipRow`) kept as compat
+  wrappers / deprecated-in-comments only after call sites reach zero; no mass deletion.
+
+**Full verification gate green:** `:core:ui:testDebugUnitTest :core:ui:verifyRoborazziDebug
+:feature:settings:testDebugUnitTest :feature:launcher:testDebugUnitTest testDebugUnitTest assembleDebug`
+BUILD SUCCESSFUL. **Next design block:** DS-4 (Home / Universal Input), which builds on these controls.
+
+## ADR 2026-07-11 — DS-4 complete (Home shell + Universal Input; device-accepted)
+
+**Design-track block DS-4** ("Home Shell and Universal Input", Master Plan v1.2 DS-4, Migration Plan v1.1
+DS-4) is DONE on `launcher-6`. Presentation/composition migration only: Home moves from the transitional
+terminal shell to the approved soft-classic-grey intent-first layout, and the legacy `SidrCommandPrompt`
+Home field is replaced by `SidrUniversalInput`. **The command pipeline, input routing, voice path, app
+launch, and offline/router-off parity are unchanged — `LauncherViewModelTest` passes byte-for-byte throughout.**
+Spec: [docs/superpowers/specs/2026-07-11-ds4-home-universal-input-design.md](../docs/superpowers/specs/2026-07-11-ds4-home-universal-input-design.md);
+plan (DONE): [docs/superpowers/plans/2026-07-11-ds4-home-universal-input.md](../docs/superpowers/plans/2026-07-11-ds4-home-universal-input.md).
+
+**Prior-session handoff fix (found first):** `SidrUniversalInput.kt` + `SidrUniversalInputTest.kt` were
+pre-built but `:core:ui:testDebugUnitTest` was **red** — `ControlsScreenshotTest` referenced an undefined
+`captureInput` helper, and `SidrUniversalInputTest` was missing `@RunWith(RobolectricTestRunner::class)` +
+`@Config(sdk=[34])` (9 NPEs at `ComposeUiTest`). Both fixed; core:ui green.
+
+- **`core/ui/component/SidrUniversalInput.kt`** (spec §7): deep presentation module — `>` prompt marker
+  (semantics `contentDescription="Prompt"`, never read as "greater than"), block caret (idle+empty+unfocused),
+  mic (explicit `voiceAvailable`/`onVoiceClick`, Listening state), 48dp clear affordance, `routeContent`
+  slot (feature-owned route mapping), `supportingText`, **parameterless `onSubmit`** wired to IME Search.
+  `SidrUniversalInputState{Idle,Focused,Typing,Listening,Interpreting,Ambiguous,Proposed,Executing,Error,
+  Disabled}` — only observable states mapped in production (Idle/Typing); the rest stay preview-only (no
+  faked spinner/waveform). Composes DS-2 `SidrSurface`/`SidrText` + DS-3 controls; no domain/feature import.
+- **`LauncherScreen` migration** (feature-local, no `core/ui` LauncherScreen):
+  - **Input:** `SidrCommandPrompt` → `SidrUniversalInput`; `onValueChange=onCommandChanged`,
+    `onSubmit={ onCommandSubmitted(commandInput) }`, clear via `onCommandChanged("")`, mic via existing
+    `onMicTap`. `onCommandSubmitted` semantics untouched.
+  - **Route chips (Task 3/6):** results overtake reworked — DS-3 `SidrRouteChip` (WEB/ASK/SITE, colourless
+    press-invert, order preserved, `horizontalScroll` for large font) replaces legacy `RouteChip`/`RouteChipRow`;
+    app rows use DS-2 `SidrText` + fixed `heightIn(minTouchTarget)` so async icons never resize the row or
+    shift the input. Callbacks (`submitWebSearch`/`submitSite`/Ask-prefill via `Uri.encode`) unchanged.
+  - **Feedback + pending (Task 7):** `CommandFeedback` on DS-2 `SidrText`; `Ambiguous` reads as
+    "Did you mean:" clarification (not error); CONFIRM → `SidrActionGate`, SAFE → one-tap `SidrRouteChip`
+    (last legacy route-chip usage removed). Behavioural parity: candidate/SAFE/CONFIRM all require a
+    deliberate tap; Cancel dismisses; nothing auto-executes (R4).
+  - **Home shell (Task 4/8, owner decisions):** new `HomeTopRow` = `SIDR` wordmark (7-tap dev-arm preserved)
+    + **Gregorian + Hijri** date (real `java.time.chrono.HijrahDate`, NOT prayer data — DS-6B owns
+    correctness) + Settings `SidrIconButton`; **empty `HomeAnchorSlot`** seam reserved for DS-6A (renders
+    nothing — no fake prayer/sacred data, spec §6); bottom `CommandBar` **retired** → All Apps + Assistant
+    as `SidrNavigationRow`s + local-first `HomePrivacyLine`, kept outside the state Box so all three
+    (+ Settings) stay discoverable across loading/empty/error. Retired AIL-6 online/clock `HomeStatus`.
+- **Owner decisions (AskUserQuestion 2026-07-11):** sacred anchor = **empty seam only**; date =
+  **Gregorian + Hijri**; CommandBar = **retire + redistribute**.
+- **Screenshots:** 3 new `universal_input_{idle,typing,light}` Roborazzi goldens recorded + verified.
+- **`SidrCommandPrompt` `@Deprecated`** (`ReplaceWith("SidrUniversalInput")`) — production usage is zero;
+  self-referencing previews `@Suppress("DEPRECATION")`.
+
+**Full gate green** (JDK 17 toolchain at `/home/Suleiman/jdks/jdk-17.0.19+10`; the machine's system JDK is
+25 again, which Gradle 8.10.2 can't parse — same env note as AIL-6): `:core:ui:testDebugUnitTest
+:core:ui:verifyRoborazziDebug :feature:launcher:testDebugUnitTest testDebugUnitTest assembleDebug` BUILD
+SUCCESSFUL. **Device acceptance PASS (SM-A325F / RF8R705H38F, agent-drove adb):** first frame no
+spinner/flash; typed `salat` → overtake + stable `Salatuk` row → launch (`com.masarat.salati` foreground);
+**WEB** + **SITE** (URL-gated chip, `github.com`) → Opera; **ASK** → Assistant with prompt prefilled and
+**not auto-sent**; **router-off NL** (`take me somewhere nice`) → "Unknown command" rule fallback (parity);
+Settings icon → DS-3 Settings; All apps row → App Drawer; clear input works; Gregorian `сб, 11 июл.` +
+Hijri `26 мухаррам` render; empty sacred seam renders nothing; privacy line present; **no launcher crash**
+across the session. Not exercised (owner-driven / unchanged by DS-4): SAFE/CONFIRM router proposals (need
+router ON + BYOK key on-device; `SidrActionGate` path unchanged, proven in AIL-6/DS-3), mic-education (mic
+already granted), airplane fallback (parity). **Next design block:** DS-5 (Action & Safety).
+
+### DS-4 addendum (2026-07-11) — visual-fidelity pass to the artifact HTML
+
+Owner feedback after the first DS-4 pass: "changed nothing but colours — why doesn't it match the
+artifact?" Correct. The first pass preserved the **cyberpunk-terminal structure** and only swapped tokens;
+worse, the DS-3 primitives still encoded the terminal look. Root cause verified in code:
+`SidrPressInvertChip` rendered **borderless** text at rest, so route chips read as bare mono text, not the
+artifact's outlined pill buttons. Read the **actual artifact HTML** (not the PNG captures) via WebFetch of
+`claude.ai/code/artifact/e34033dd…` and mapped its CSS to the repo — the DS-1 tokens already match the
+artifact byte-for-byte (`ground #131415`, `surface #1B1C1E`, `border #3A3D42`, `accent/--sig #9BA1AB`,
+`accentBorder/--sigbd #494D54`, `sacred #CBCDD1`); the gap was purely structural. Owner decisions
+(AskUserQuestion): render the **Shahada**; **full Home pass** to the artifact.
+
+Changes (still parity-preserving — `LauncherViewModelTest` unchanged):
+- **DS-3 chip primitive fixed** (`SidrPressInvertChip`): resting = hairline-bordered (`Strokes.hairline`,
+  `colors.border`) transparent chip in `colors.dim`; selected/pressed inverts to the artifact's **light
+  text fill** (`bg=colors.text`, `fg=colors.ground`, border `colors.text`) — was incorrectly the pewter
+  accent. Restructured to a `Box` so equal-width (`weight`) chips centre their labels. Affects all
+  press-invert chips consistently; DS-3 goldens re-recorded.
+- **Home route lane:** four equal-width bordered pills `APP/WEB/SITE/ASK` moved to the persistent
+  `SidrUniversalInput.routeContent` slot. APP = selected lane (presentation-only); WEB/ASK always; SITE
+  only for a safe URL; WEB/SITE no-op on blank. `InputResultsPanel` now renders only the app-match list.
+- **Sacred anchor:** `HomeAnchorSlot` renders the quiet English Shahada (serif via `SidrTextRole.SACRED`,
+  centred), hidden while typing. Static — **no prayer times/sources** (DS-6B).
+- **Favorites grid:** 4-column tile grid with labels + mono `SidrSectionHeader` (was a `LazyRow`).
+- **Input:** signal-toned hairline border (`accentBorder`) added, non-error only.
+- **Tri-font realised on Home:** serif sacred, sans placeholder/labels, mono shell/chips/dates.
+
+**Honest deviations (data-gated, not styling):** the **prayer strip** and **Recent** rows are NOT rendered
+— real prayer times are DS-6B (no fake data) and recent-command history is not wired; favorites shows real
+usage-derived apps (2 on the test device), not the artifact's 8 concept tiles. Full gate green +
+re-verified on SM-A325F: idle Home matches the artifact (Shahada, bordered APP/WEB/ASK lane, favorites
+grid); typing shows APP/WEB/SITE/ASK with APP inverted and SITE URL-gated.

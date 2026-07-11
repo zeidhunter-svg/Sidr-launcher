@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -16,7 +15,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -26,7 +24,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,11 +38,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sidr.launcher.core.common.UiError
 
 /**
- * Assistant screen — pure render, no business logic.
- *
- * If no provider is configured ([AssistantUiState.form.baseUrl] blank) the provider-settings form
- * is surfaced prominently (first-run). Otherwise the streaming chat UI is shown with an expandable
- * edit-provider section.
+ * Assistant screen — pure render, no business logic. Chat only: the provider-settings form lives on
+ * the separate [AssistantProviderScreen] (reached from Settings), so this surface never hosts the
+ * key-bearing form or an "Edit provider" control. When no provider is configured it points the user to
+ * that surface instead of embedding the form.
  */
 @Composable
 fun AssistantScreen(
@@ -81,23 +77,69 @@ fun AssistantScreen(
         if (!isConfigured) {
             Spacer(modifier = Modifier.height(24.dp))
             Text(
-                text = "Set up a provider to start chatting",
+                text = "No AI provider configured yet.",
                 style = MaterialTheme.typography.bodyLarge,
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            ProviderSettingsForm(
-                form = uiState.form,
-                onSave = viewModel::saveProvider,
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Set one up in Settings → AI provider settings.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = viewModel::openProviderSettings) {
+                Text("Open provider settings")
+            }
         } else {
             ChatView(
                 uiState = uiState,
                 initialPrompt = initialPrompt,
                 onSend = viewModel::send,
                 onRetry = viewModel::retry,
-                onSaveProvider = viewModel::saveProvider,
+                onOpenProvider = viewModel::openProviderSettings,
             )
         }
+    }
+}
+
+/**
+ * Dedicated AI-provider setup surface (base URL / model / API key). This is the single place the
+ * key-bearing provider form lives; it is reached from Settings → "AI provider settings" and is kept
+ * entirely separate from the [AssistantScreen] chat so the two never overlap.
+ */
+@Composable
+fun AssistantProviderScreen(
+    viewModel: AssistantViewModel,
+    modifier: Modifier = Modifier,
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(top = 8.dp),
+        ) {
+            IconButton(onClick = viewModel::navigateBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                )
+            }
+            Text(
+                text = "AI provider",
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        ProviderSettingsForm(
+            form = uiState.form,
+            onSave = viewModel::saveProvider,
+        )
     }
 }
 
@@ -106,7 +148,7 @@ private fun ChatView(
     uiState: AssistantUiState,
     onSend: (String) -> Unit,
     onRetry: () -> Unit,
-    onSaveProvider: (String, String, String) -> Unit,
+    onOpenProvider: () -> Unit,
     modifier: Modifier = Modifier,
     initialPrompt: String? = null,
 ) {
@@ -114,7 +156,6 @@ private fun ChatView(
     // per navigation and never clobbers subsequent user edits). Prefill only — never auto-sent, and
     // it never touches SavedStateHandle (the assistant holds none by design).
     var prompt by remember(initialPrompt) { mutableStateOf(initialPrompt ?: "") }
-    var showProviderForm by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -172,47 +213,12 @@ private fun ChatView(
                         if (status.retryable) {
                             Button(onClick = onRetry) { Text("Retry") }
                         } else if (status.showProviderCta) {
-                            OutlinedButton(onClick = { showProviderForm = true }) {
-                                Text("Set up / fix provider")
+                            OutlinedButton(onClick = onOpenProvider) {
+                                Text("Fix provider settings")
                             }
                         }
                     }
                 }
-            }
-        }
-
-        // Provider form (expandable — relocated to :feature:settings in a later phase)
-        if (showProviderForm) {
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    text = "Provider settings",
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = { showProviderForm = false }) { Text("Close") }
-            }
-            ProviderSettingsForm(
-                form = uiState.form,
-                onSave = onSaveProvider,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-        } else {
-            TextButton(
-                onClick = { showProviderForm = true },
-                modifier = Modifier.align(Alignment.End),
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Edit,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Edit provider")
             }
         }
 

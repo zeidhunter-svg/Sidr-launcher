@@ -24,6 +24,9 @@ import com.sidr.launcher.core.ui.theme.Spacing
 /**
  * DF-4 confirmation card — the "terminal confirm block" for a risk-gated router proposal (AIL-5).
  *
+ * **Deprecated (DS-3):** production usage migrated to [SidrActionGate]. Kept as a compatibility
+ * wrapper until all references are removed; no new call sites should use this.
+ *
  * Reads as an early-computer terminal prompt on the AIL-0 tokens: a 1px accent-bordered block with
  * near-square corners and monospace text. The header pairs the `EXECUTE?` prompt with a bracketed
  * `[riskLabel]` accent chip (the risk tag); the body echoes the pending command as a `>`-prefixed

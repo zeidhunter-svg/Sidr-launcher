@@ -24,6 +24,9 @@ import com.sidr.launcher.core.ui.theme.Sizes
  *
  * [contentDescription] is required and non-null — these icons are the *only* way to discover
  * Settings / Assistant on the redesigned home, so they must be labelled for TalkBack.
+ *
+ * **Deprecated (DS-3):** migrated to [SidrIconButton]. Kept as a compatibility wrapper until all
+ * references are removed; no new call sites should use this.
  */
 @Composable
 fun TopBarIcon(

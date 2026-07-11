@@ -28,8 +28,19 @@
   [`../../ai-context/decisions.md`](../../ai-context/decisions.md) — the three v1-vs-v1.1 conflict
   resolutions, the nine engineering deviations/additions from implementation, and the DS-block sequence.
 
+## Visual north-star artifacts
+
+- [`artifacts/e34033dd/`](artifacts/e34033dd/) — owner-provided Claude artifact screenshots for the
+  soft-classic-grey Home direction and screen set. These are composition references for DS-3/DS-4 and
+  future-contract references for agentic surfaces; they do not override ADRs or living specs.
+
 ## Where these fit in the DS sequence
 
 `DS-0` (this archive + the reconciliation ADR) → `DS-1` tokens + Roborazzi harness (**DONE**) →
 `DS-2/3` primitives & controls (provenance line, press-invert chips) → `DS-4` Home → `DS-6A` sacred header →
-`DS-6B` prayer data (separate spec) → `DS-7` memory-migration (absorbs the S2-2 Aliases UI in the grey language).
+`DS-6B` prayer correctness capability / prayer data (separate spec) → `DS-7` memory surfaces /
+memory-migration (Learned Choices first, S2-2 Aliases conditional, in the grey language) → `DS-8`
+Activity foundations (component/contract first; production only after real Activity scope) → `DS-9`
+Execution foundations (preview contracts only until A4 runtime) → `DS-10` Assistant migration → DS v1.1
+release gate. Agentic production surfaces remain gated by the separate A1/A2/A3 → A4/A5/A6 architecture
+specs; A1 Tool/Capability is the next architecture slice before any runtime-backed agentic surface.

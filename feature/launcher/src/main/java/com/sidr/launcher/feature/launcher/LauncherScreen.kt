@@ -14,20 +14,22 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -37,7 +39,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,23 +55,25 @@ import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.core.ui.component.AppTile
-import com.sidr.launcher.core.ui.component.CommandBar
-import com.sidr.launcher.core.ui.component.CommandBarItem
-import com.sidr.launcher.core.ui.component.ConfirmActionCard
+import com.sidr.launcher.core.ui.component.SidrActionGate
+import com.sidr.launcher.core.ui.component.SidrActionGateType
 import com.sidr.launcher.core.ui.component.EmptyState
 import com.sidr.launcher.core.ui.component.ErrorState
-import com.sidr.launcher.core.ui.component.RouteChip
-import com.sidr.launcher.core.ui.component.RouteChipRow
-import com.sidr.launcher.core.ui.component.SectionHeader
-import com.sidr.launcher.core.ui.component.SidrCommandPrompt
+import com.sidr.launcher.core.ui.component.SidrNavigationRow
+import com.sidr.launcher.core.ui.component.SidrSectionHeader
+import com.sidr.launcher.core.ui.component.SidrRouteChip
 import com.sidr.launcher.core.ui.component.SidrScaffold
+import com.sidr.launcher.core.ui.component.SidrUniversalInput
+import com.sidr.launcher.core.ui.component.SidrUniversalInputState
 import com.sidr.launcher.core.ui.component.TopBarIcon
+import com.sidr.launcher.core.ui.primitive.SidrText
+import com.sidr.launcher.core.ui.primitive.SidrTextRole
+import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Sizes
 import com.sidr.launcher.core.ui.theme.Spacing
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.permission.PermissionFeature
 import com.sidr.launcher.domain.suggestions.Suggestion
-import kotlinx.coroutines.delay
 
 /**
  * The redesigned, decluttered home surface (Phase UX, Block X2).
@@ -96,17 +99,7 @@ fun LauncherScreen(
     val pendingRoutedAction by viewModel.pendingRoutedAction.collectAsStateWithLifecycle()
     val devConsoleOn by viewModel.devConsoleOn.collectAsStateWithLifecycle()
     val consoleLines by viewModel.consoleLines.collectAsStateWithLifecycle()
-    val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
     val context = LocalContext.current
-
-    // AIL-6 status-line clock — ticks within the minute; screen-local (time is a pure UI concern).
-    var currentTime by remember { mutableStateOf(currentHhMm()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            currentTime = currentHhMm()
-            delay(20_000L)
-        }
-    }
 
     // First-run nudge (Block X6): whether this launcher is already the system default HOME app.
     // A runtime Android query kept in the screen (like Settings' "Set as default"); the persisted
@@ -137,39 +130,6 @@ fun LauncherScreen(
 
     SidrScaffold(
         modifier = modifier,
-        topBar = {
-            // Top bar = identity (SIDR//) + a terminal status line (AIL-6). The discoverable Settings /
-            // Assistant entry points moved to the bottom CommandBar (both stay typed shortcuts too).
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Spacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Wordmark + hidden dev-mode arm: 7 rapid taps arm the Command console (DF-1).
-                var tapCount by remember { androidx.compose.runtime.mutableStateOf(0) }
-                var lastTap by remember { androidx.compose.runtime.mutableStateOf(0L) }
-                Text(
-                    text = "SIDR//",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable {
-                            val now = System.currentTimeMillis()
-                            tapCount = if (now - lastTap < 3000L) tapCount + 1 else 1
-                            lastTap = now
-                            if (tapCount >= 7) {
-                                tapCount = 0
-                                viewModel.armDevMode()
-                            }
-                        },
-                )
-                // AIL-6: terminal status line instead of Material icons. Settings/Assistant moved to
-                // the bottom CommandBar; the top bar now carries identity (SIDR//) + system state.
-                HomeStatus(isOnline = isOnline, time = currentTime)
-            }
-        },
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -177,14 +137,40 @@ fun LauncherScreen(
                 .padding(innerPadding)
                 .imePadding(),
         ) {
-            // Unified search + command field (Block X1). Submit drives the existing command pipeline
-            // byte-for-byte; live app filtering lands in Block X4.
-            SidrCommandPrompt(
+            // Shahada is the topmost element, then the date line (Hijri · Gregorian) directly beneath it
+            // (owner layout). Both static — no prayer data — and hidden while typing so results overtake.
+            HomeAnchorSlot(visible = !inputResults.active && !devConsoleOn)
+            HomeDateLine(visible = !inputResults.active && !devConsoleOn)
+
+            // DS-4: Universal Input replaces the legacy SidrCommandPrompt. Submit drives the existing
+            // command pipeline byte-for-byte — `onSubmit` is parameterless (spec §7) and the screen owns
+            // the value it forwards to the unchanged onCommandSubmitted. Clear routes through the existing
+            // input-change path (no dedicated clear callback exists in the VM).
+            SidrUniversalInput(
                 value = commandInput,
                 onValueChange = viewModel::onCommandChanged,
-                onSubmit = viewModel::onCommandSubmitted,
-                showMic = showMic,
-                onMic = onMicTap,
+                onSubmit = { viewModel.onCommandSubmitted(commandInput) },
+                state = if (commandInput.isNotBlank()) {
+                    SidrUniversalInputState.Typing
+                } else {
+                    SidrUniversalInputState.Idle
+                },
+                voiceAvailable = showMic,
+                onVoiceClick = onMicTap,
+                onClearClick = { viewModel.onCommandChanged("") },
+                routeContent = {
+                    // Persistent route lane under the input (artifact): APP is the selected lane (its
+                    // content is the app results / favorites below — no behaviour), WEB/ASK are always
+                    // available, SITE appears only for a safe URL. WEB/SITE no-op on a blank query.
+                    HomeRouteChips(
+                        hasSiteRoute = inputResults.chips.contains(RouteChipKind.SITE),
+                        onWeb = { viewModel.submitWebSearch(commandInput) },
+                        onAsk = {
+                            viewModel.navigateTo(Routes.Assistant.routeFor(Uri.encode(commandInput.trim())))
+                        },
+                        onSite = { viewModel.submitSite(commandInput) },
+                    )
+                },
             )
 
             // Command feedback — fallback UI for the last submitted command, shown just under the field.
@@ -222,11 +208,6 @@ fun LauncherScreen(
                     inputResults.active -> InputResultsPanel(
                         results = inputResults,
                         onAppClick = viewModel::onAppClicked,
-                        onWeb = { viewModel.submitWebSearch(commandInput) },
-                        onSite = { viewModel.submitSite(commandInput) },
-                        onAsk = {
-                            viewModel.navigateTo(Routes.Assistant.routeFor(Uri.encode(commandInput.trim())))
-                        },
                     )
                     else -> when (val state = uiState) {
                         is UiState.Loading -> LoadingContent()
@@ -255,20 +236,173 @@ fun LauncherScreen(
                 }
             }
 
-            // AIL-6 command bar: the launcher's persistent shell actions as bracketed terminal tokens
-            // (replaces the top-bar icons). Hidden while the search-overtakes body or dev console is up.
+            // DS-4 (spec §8): the retired bottom CommandBar's actions are redistributed — Settings to
+            // the top-row icon, All Apps + Assistant to persistent Home rows here, with the local-first
+            // privacy line beneath. Kept outside the state Box so they stay discoverable across
+            // loading/empty/error too. Hidden while the search-overtakes body or dev console is up.
             if (!inputResults.active && !devConsoleOn) {
-                CommandBar(
-                    items = listOf(
-                        CommandBarItem("ask", "Assistant") { viewModel.navigateTo(Routes.Assistant.ROUTE) },
-                        CommandBarItem("all apps", "All apps") { viewModel.navigateTo(Routes.AppDrawer.ROUTE) },
-                        CommandBarItem("cfg", "Settings") { viewModel.navigateTo(Routes.Settings.ROUTE) },
-                    ),
+                HomeBottomNav(
+                    onAllApps = { viewModel.navigateTo(Routes.AppDrawer.ROUTE) },
+                    onAssistant = { viewModel.navigateTo(Routes.Assistant.ROUTE) },
+                    onSettings = { viewModel.navigateTo(Routes.Settings.ROUTE) },
                 )
+                HomePrivacyLine(onArmDevMode = viewModel::armDevMode)
             }
         }
     }
 }
+
+// ── DS-4 Home shell (sacred anchor, date line, bottom nav, brand/privacy) ────
+
+/**
+ * Date line under the Shahada (owner layout): Hijri first, then Gregorian, on one centred row. Hidden
+ * while typing. A real calendar conversion (`HijrahDate`) — NOT prayer data (DS-6B owns that).
+ */
+@Composable
+private fun HomeDateLine(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    if (!visible) return
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = Spacing.md),
+        contentAlignment = Alignment.Center,
+    ) {
+        SidrText(
+            text = "${currentHijriDate()} · ${currentGregorianDate()}",
+            role = SidrTextRole.SYSTEM,
+            color = SidrTheme.colors.dim,
+        )
+    }
+}
+
+/**
+ * DS-4 sacred anchor (spec §6, §8): the quiet English Shahada, serif, centered — a static spiritual
+ * anchor, NOT prayer data. DS-6A owns the full Sacred Header and DS-6B owns prayer-time correctness;
+ * neither prayer times nor sources are rendered here. Hidden while typing so results can overtake.
+ */
+@Composable
+private fun HomeAnchorSlot(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    if (!visible) return
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        SidrText(text = "There is no deity except Allah", role = SidrTextRole.SACRED)
+        SidrText(text = "Muhammad is the messenger of Allah", role = SidrTextRole.SACRED)
+    }
+}
+
+/**
+ * DS-4 route lane (artifact): four equal-width, hairline-bordered chips under the input. APP is the
+ * selected lane (presentation-only — its content is the results/favorites below), WEB/ASK are always
+ * present, SITE appears only for a safe URL. No route auto-submits.
+ */
+@Composable
+private fun HomeRouteChips(
+    hasSiteRoute: Boolean,
+    onWeb: () -> Unit,
+    onAsk: () -> Unit,
+    onSite: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+    ) {
+        SidrRouteChip("APP", selected = true, onClick = {}, modifier = Modifier.weight(1f))
+        SidrRouteChip("WEB", selected = false, onClick = onWeb, modifier = Modifier.weight(1f))
+        if (hasSiteRoute) {
+            SidrRouteChip("SITE", selected = false, onClick = onSite, modifier = Modifier.weight(1f))
+        }
+        SidrRouteChip("ASK", selected = false, onClick = onAsk, modifier = Modifier.weight(1f))
+    }
+}
+
+/**
+ * Persistent Home navigation: All apps, Assistant, and Settings as full-width DS-3 navigation rows
+ * (Settings moved down here from the old top gear). All three remain typed shortcuts too.
+ */
+@Composable
+private fun HomeBottomNav(
+    onAllApps: () -> Unit,
+    onAssistant: () -> Unit,
+    onSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        SidrNavigationRow(title = "All apps", onClick = onAllApps)
+        SidrNavigationRow(title = "Assistant", onClick = onAssistant)
+        SidrNavigationRow(title = "Settings", onClick = onSettings)
+    }
+}
+
+/**
+ * Bottom-most line: the local-first privacy note on the left, and the `SIDR OS` brand wordmark on the
+ * right in the same provenance (mono) style. The hidden dev-mode arm (7 rapid taps → [onArmDevMode])
+ * now lives on the wordmark here. Honest: the launcher core resolves commands on-device; the assistant
+ * and smart routing are separate opt-in surfaces.
+ */
+@Composable
+private fun HomePrivacyLine(
+    onArmDevMode: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var tapCount by remember { mutableStateOf(0) }
+    var lastTap by remember { mutableStateOf(0L) }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SidrText(
+            text = "Local-first · on-device",
+            role = SidrTextRole.PROVENANCE,
+            modifier = Modifier.weight(1f),
+        )
+        SidrText(
+            text = "SIDR OS",
+            role = SidrTextRole.PROVENANCE,
+            color = SidrTheme.colors.dim,
+            modifier = Modifier.clickable {
+                val now = System.currentTimeMillis()
+                tapCount = if (now - lastTap < 3000L) tapCount + 1 else 1
+                lastTap = now
+                if (tapCount >= 7) {
+                    tapCount = 0
+                    onArmDevMode()
+                }
+            },
+        )
+    }
+}
+
+/** Today's Gregorian date for the top row, e.g. `Sat, 11 Jul`. */
+private fun currentGregorianDate(): String =
+    java.time.LocalDate.now().format(
+        java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM", java.util.Locale.getDefault()),
+    )
+
+/**
+ * Today's Hijri date, e.g. `25 Muharram`, via the platform [java.time.chrono.HijrahDate] (Umm al-Qura).
+ * A real calendar conversion — NOT prayer data — so the day can differ from a local moon sighting;
+ * authority/method-correct dates are DS-6B's concern.
+ */
+private fun currentHijriDate(): String =
+    java.time.chrono.HijrahDate.now().format(
+        java.time.format.DateTimeFormatter.ofPattern("d MMMM", java.util.Locale.getDefault()),
+    )
 
 // ── Home content (no full grid — Block X2) ──────────────────────────────────
 
@@ -291,8 +425,8 @@ private fun HomeContent(
             suggestionsContent(state.suggestions, onSuggestionTap)
         }
         if (state.favorites.isNotEmpty()) {
-            SectionHeader(text = "Favorites")
-            FavoritesRow(favorites = state.favorites, onAppClick = onAppClick)
+            SidrSectionHeader(text = "Favorites")
+            FavoritesGrid(favorites = state.favorites, onAppClick = onAppClick)
         }
         // Favorites/suggestions stay top-aligned; the All-apps action lives in the bottom CommandBar.
         Spacer(modifier = Modifier.weight(1f))
@@ -345,26 +479,46 @@ private fun SetupNudge(
     }
 }
 
+/**
+ * Favorites as a 4-column tile grid (artifact): monogram/icon tiles with labels, rows of four. A plain
+ * chunked grid (favorites are capped small) so it composes inside the scrolling Home column; empty cells
+ * keep the last row aligned.
+ */
 @Composable
-private fun FavoritesRow(
+private fun FavoritesGrid(
     favorites: List<InstalledApp>,
     onAppClick: (InstalledApp) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LazyRow(
-        modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = Spacing.md),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.md),
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
-        items(favorites, key = { it.packageName }) { app ->
-            AppTile(
-                label = app.label,
-                onClick = { onAppClick(app) },
-                icon = { AppTileIcon(app) },
-            )
+        favorites.chunked(FAVORITES_COLUMNS).forEach { rowApps ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                rowApps.forEach { app ->
+                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        AppTile(
+                            label = app.label,
+                            onClick = { onAppClick(app) },
+                            icon = { AppTileIcon(app) },
+                        )
+                    }
+                }
+                repeat(FAVORITES_COLUMNS - rowApps.size) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
         }
     }
 }
+
+private const val FAVORITES_COLUMNS = 4
 
 /**
  * Icon slot for an [AppTile]: loads the app's launcher icon (a `PackageManager`/`Drawable` concern
@@ -400,43 +554,33 @@ private fun AppTileIcon(app: InstalledApp) {
 }
 
 /**
- * "Search overtakes" results (AIL-3 / DF-1 + DF-3 hybrid): app matches as an icon+label list over a
- * bracketed route-chip row (`⌕ web`, `✦ ask`, `⌂ site`). App icons use the feature-local [AppTileIcon].
+ * "Search overtakes" results (DS-4): app matches as an icon+label list. The route lane (APP/WEB/SITE/ASK)
+ * is the persistent strip under the input, so it is not repeated here. App icons use the feature-local
+ * [AppTileIcon]; each row carries a fixed minimum height so an async-loaded icon never resizes the row
+ * or shifts the input above it (spec §4, §8).
  */
 @Composable
 private fun InputResultsPanel(
     results: HomeInputResults,
     onAppClick: (InstalledApp) -> Unit,
-    onWeb: () -> Unit,
-    onSite: () -> Unit,
-    onAsk: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val chips = results.chips.map { kind ->
-        when (kind) {
-            RouteChipKind.WEB -> RouteChip("⌕ web", onWeb)
-            RouteChipKind.ASK -> RouteChip("✦ ask", onAsk)
-            RouteChipKind.SITE -> RouteChip("⌂ site", onSite)
-        }
-    }
-    Column(modifier = modifier.fillMaxSize()) {
-        RouteChipRow(chips = chips, modifier = Modifier.padding(vertical = Spacing.sm))
-        LazyColumn(modifier = Modifier.fillMaxWidth()) {
-            items(results.appMatches, key = { it.packageName }) { app ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onAppClick(app) }
-                        .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-                ) {
-                    AppTileIcon(app)
-                    Text(
-                        text = app.label,
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.padding(start = Spacing.md),
-                    )
-                }
+    LazyColumn(modifier = modifier.fillMaxSize()) {
+        items(results.appMatches, key = { it.packageName }) { app ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = Sizes.minTouchTarget)
+                    .clickable { onAppClick(app) }
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+            ) {
+                AppTileIcon(app)
+                SidrText(
+                    text = app.label,
+                    role = SidrTextRole.HUMAN_BODY,
+                    modifier = Modifier.padding(start = Spacing.md),
+                )
             }
         }
     }
@@ -472,9 +616,9 @@ private fun CommandConsole(
 // ── Router proposal confirmation (AIL-5) ─────────────────────────────────────
 
 /**
- * Renders a pending router proposal: the DF-4 [ConfirmActionCard] for a CONFIRM-risk action, or a
+ * Renders a pending router proposal: the DS-3 [SidrActionGate] for a CONFIRM-risk action, or a
  * lighter one-tap [RouteChipRow] accelerator for a SAFE one. Both dispatch through [onConfirm]
- * (which the screen has already wrapped with the permission-gate check); the card also exposes CANCEL.
+ * (which the screen has already wrapped with the permission-gate check); the gate also exposes CANCEL.
  */
 @Composable
 private fun PendingActionArea(
@@ -484,18 +628,31 @@ private fun PendingActionArea(
     modifier: Modifier = Modifier,
 ) {
     if (pending.requiresConfirmation) {
-        ConfirmActionCard(
-            commandLine = pending.commandLine,
-            riskLabel = pending.riskLabel,
+        SidrActionGate(
+            type = SidrActionGateType.ExternalHandoff,
+            title = "Execute?",
+            consequence = "This will run: ${pending.commandLine}",
+            target = pending.commandLine,
+            confirmLabel = "Confirm",
             onConfirm = onConfirm,
             onCancel = onCancel,
             modifier = modifier,
         )
     } else {
-        RouteChipRow(
-            chips = listOf(RouteChip("▸ ${pending.commandLine}", onConfirm)),
-            modifier = modifier.padding(vertical = Spacing.sm),
-        )
+        // SAFE routed proposal — a one-tap accelerator, deliberately distinct from the CONFIRM gate.
+        // Still requires a deliberate tap (R4: nothing auto-executes).
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+        ) {
+            SidrRouteChip(
+                label = "▸ ${pending.commandLine}",
+                selected = false,
+                onClick = onConfirm,
+            )
+        }
     }
 }
 
@@ -523,25 +680,25 @@ private fun CommandFeedbackArea(
             modifier = modifier,
         )
 
+        // Ambiguity reads as a clarification prompt, not an error (spec §8): a quiet "Did you mean:"
+        // header over the candidate list. A candidate launches only on an explicit tap.
         is CommandFeedback.Ambiguous -> Column(
             modifier = modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
         ) {
-            Text(
-                text = "Did you mean:",
-                style = MaterialTheme.typography.labelMedium,
-            )
-            Spacer(modifier = Modifier.height(4.dp))
+            SidrText(text = "Did you mean:", role = SidrTextRole.PROVENANCE)
+            Spacer(modifier = Modifier.height(Spacing.xs))
             feedback.candidates.forEach { app ->
-                Text(
+                SidrText(
                     text = app.label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    role = SidrTextRole.HUMAN_BODY,
+                    color = SidrTheme.colors.accent,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .heightIn(min = Sizes.minTouchTarget)
                         .clickable { onCandidateClick(app) }
-                        .padding(vertical = 8.dp),
+                        .padding(vertical = Spacing.sm),
                 )
             }
         }
@@ -554,13 +711,15 @@ private fun FeedbackText(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Text(
+    SidrText(
         text = text,
-        style = MaterialTheme.typography.bodyMedium,
+        role = SidrTextRole.HUMAN_BODY,
         modifier = modifier
             .fillMaxWidth()
+            .heightIn(min = Sizes.minTouchTarget)
             .clickable(onClick = onDismiss)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = Spacing.lg, vertical = Spacing.sm)
+            .wrapContentHeight(),
     )
 }
 
@@ -606,33 +765,6 @@ private fun isDefaultLauncher(context: Context): Boolean = try {
 } catch (_: Exception) {
     false
 }
-
-/**
- * AIL-6 home status line — replaces the off-theme Material top-bar icons. A monospace terminal status:
- * a phosphor `● online` (accent) / dim `○ offline` reachability indicator plus the clock, so the top bar
- * carries identity + live system state rather than glyphs from a different visual language.
- */
-@Composable
-private fun HomeStatus(
-    isOnline: Boolean,
-    time: String,
-    modifier: Modifier = Modifier,
-) {
-    Text(
-        text = (if (isOnline) "● online" else "○ offline") + "  ·  " + time,
-        style = MaterialTheme.typography.labelMedium,
-        color = if (isOnline) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        },
-        modifier = modifier,
-    )
-}
-
-/** Current wall-clock time as `HH:mm` for the status line. */
-private fun currentHhMm(): String =
-    java.time.LocalTime.now().let { "%02d:%02d".format(it.hour, it.minute) }
 
 /**
  * Builds the intent for the system default-launcher surface. Mirrors the Settings screen helper

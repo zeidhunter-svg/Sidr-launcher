@@ -1,14 +1,21 @@
 # CLAUDE.md — Sidr Launcher
 
-**Design track (DS) — DS-1 + DS-2 DONE (2026-07-11).** A parallel, presentation-only design-system
+**Design track (DS) — DS-1 + DS-2 + DS-3 + DS-4 DONE (2026-07-11).** A parallel, presentation-only design-system
 migration to the approved **soft-classic-grey** identity, governed by `docs/design/SIDR Design System
 Master Plan v1.2` (the principles rulebook was folded into it: §5.1 precedence, §5.2 verify-vocab, §20.1
 calm budgets). **DS-1** = grey token layer + tri-font + softened shapes + `SidrTheme.colors`/`textStyles`
 (accent kept but inert) + global CRT removed + Roborazzi screenshot harness. **DS-2** = eight additive
 `core/ui/primitive/` primitives + `Strokes` token + gallery goldens (dark/light/font-scale/RTL); keystone
-`SidrProvenanceLine` (semantic `source`+`details`, TalkBack); status≠accent; **no production
-screen/nav/VM/persistence/domain change** — parity fully intact. Next design block: **DS-3** (controls).
-ADRs: decisions.md "2026-07-11 — DS-1 complete" / "2026-07-11 — DS-2 primitives complete"; specs+plans under
+`SidrProvenanceLine` (semantic `source`+`details`, TalkBack); status≠accent. **DS-3** = SIDR controls
+(buttons/chips-press-invert/rows/top-bar/`SidrActionGate`) in `core/ui/component/`; Settings migrated as
+proof surface; routed confirmation → `SidrActionGate`. **DS-4** = Home migrated to the intent-first layout;
+`SidrCommandPrompt` → `core/ui` `SidrUniversalInput`; `LauncherScreen` recomposed feature-locally
+(`HomeTopRow` SIDR wordmark + Gregorian+Hijri date + Settings icon; empty `HomeAnchorSlot` seam for DS-6A;
+results overtake on DS-3 chips + DS-2 text; bottom CommandBar retired → All Apps/Assistant rows +
+local-first privacy line); `SidrCommandPrompt` `@Deprecated`. **All four: no production
+nav/VM/persistence/domain change — command pipeline / routing / voice / offline / router-off parity fully
+intact** (`LauncherViewModelTest` byte-for-byte); DS-4 **device-accepted on SM-A325F**. Next design block:
+**DS-5** (Action & Safety). ADRs: decisions.md "2026-07-11 — DS-1/DS-2/DS-3/DS-4 complete"; specs+plans under
 `docs/superpowers/`. Stage-2 S2-2 "Explicit Aliases" (domain/data/DI Phase A–C already on `launcher-4`) is
 paused pending its grey UI in DS-7. The AI-launcher stage digest below is unchanged.
 

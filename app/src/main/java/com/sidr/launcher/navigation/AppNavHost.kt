@@ -1,8 +1,15 @@
 package com.sidr.launcher.navigation
 
 import android.util.Log
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
@@ -13,6 +20,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
+import com.sidr.launcher.core.ui.component.SidrPreviewBanner
 import com.sidr.launcher.feature.assistant.AssistantProviderScreen
 import com.sidr.launcher.feature.assistant.AssistantScreen
 import com.sidr.launcher.feature.assistant.AssistantViewModel
@@ -27,6 +35,54 @@ import com.sidr.launcher.feature.settings.SettingsViewModel
 import com.sidr.launcher.feature.suggestions.SuggestionsRow
 
 private const val TAG = "AppNavHost"
+
+/** Maps a [SidrTab] to its root [Routes] destination (Task 7). */
+private fun routeForTab(tab: SidrTab): String = when (tab) {
+    SidrTab.HOME -> Routes.Launcher.ROUTE
+    SidrTab.TASKS -> Routes.Tasks.ROUTE
+    SidrTab.AGENTS -> Routes.Agents.ROUTE
+    SidrTab.ACTIVITY -> Routes.Activity.ROUTE
+    SidrTab.TERMINAL -> Routes.Terminal.ROUTE
+}
+
+/**
+ * Switches the visible tab root. `popUpTo(Routes.Launcher.ROUTE)` keeps tab switches from
+ * growing the back stack (Home is the permanent base of the tab back-stack), and
+ * `launchSingleTop` avoids stacking duplicate copies of the same tab.
+ */
+private fun navigateToTab(navController: NavHostController, tab: SidrTab) {
+    navController.navigate(routeForTab(tab)) {
+        popUpTo(Routes.Launcher.ROUTE) { inclusive = false }
+        launchSingleTop = true
+    }
+}
+
+/**
+ * Wraps a single tab-root destination's content in a [Scaffold] with the shared [SidrTabBar] as
+ * its bottom bar. Only the five tab roots (Home + the four preview tabs) use this — pushed
+ * destinations (App Drawer, Settings, Assistant, provider setup, learned choices, permission
+ * education) render unwrapped so the tab bar naturally disappears on push and reappears on pop.
+ *
+ * [Modifier.consumeWindowInsets] marks [inner] as already handled for the subtree below: since
+ * [LauncherScreen] (and the preview stubs) wrap their own content in a `SidrScaffold` internally,
+ * without this the nested Scaffold would independently re-measure the same system-bar insets
+ * (e.g. the status bar) that this outer Scaffold already accounted for, double-padding the top of
+ * the screen. Consuming here keeps that inner Scaffold's own inset calculation correct.
+ */
+@Composable
+private fun TabRootScaffold(
+    tab: SidrTab,
+    navController: NavHostController,
+    content: @Composable (PaddingValues) -> Unit,
+) {
+    Scaffold(
+        bottomBar = { SidrTabBar(selected = tab, onSelect = { navigateToTab(navController, it) }) },
+    ) { inner ->
+        Box(modifier = Modifier.consumeWindowInsets(inner)) {
+            content(inner)
+        }
+    }
+}
 
 private fun navigateHome(navController: NavHostController) {
     navController.navigate(Routes.Launcher.ROUTE) {
@@ -93,15 +149,67 @@ fun AppNavHost(
                     handleNavigationEvent(navController, event)
                 }
             }
-            LauncherScreen(
-                viewModel = viewModel,
-                suggestionsContent = { suggestions, onSuggestionTap ->
-                    SuggestionsRow(
-                        suggestions = suggestions,
-                        onSuggestionTap = onSuggestionTap,
-                    )
-                },
-            )
+            TabRootScaffold(SidrTab.HOME, navController) { inner ->
+                LauncherScreen(
+                    viewModel = viewModel,
+                    suggestionsContent = { suggestions, onSuggestionTap ->
+                        SuggestionsRow(
+                            suggestions = suggestions,
+                            onSuggestionTap = onSuggestionTap,
+                        )
+                    },
+                    modifier = Modifier.padding(inner),
+                )
+            }
+        }
+
+        // Vision MVP preview tab roots (Task 7): four additive, non-functional tab destinations.
+        // Each renders only a centred SidrPreviewBanner inline for now — Tasks 8–11 replace these
+        // bodies with real TasksPreviewScreen/AgentsPreviewScreen/ActivityPreviewScreen/
+        // TerminalPreviewScreen composables (deliberately NOT declared here to avoid colliding with
+        // those future definitions).
+        composable(Routes.Tasks.ROUTE) {
+            TabRootScaffold(SidrTab.TASKS, navController) { inner ->
+                Box(
+                    modifier = Modifier.padding(inner).fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    SidrPreviewBanner()
+                }
+            }
+        }
+
+        composable(Routes.Agents.ROUTE) {
+            TabRootScaffold(SidrTab.AGENTS, navController) { inner ->
+                Box(
+                    modifier = Modifier.padding(inner).fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    SidrPreviewBanner()
+                }
+            }
+        }
+
+        composable(Routes.Activity.ROUTE) {
+            TabRootScaffold(SidrTab.ACTIVITY, navController) { inner ->
+                Box(
+                    modifier = Modifier.padding(inner).fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    SidrPreviewBanner()
+                }
+            }
+        }
+
+        composable(Routes.Terminal.ROUTE) {
+            TabRootScaffold(SidrTab.TERMINAL, navController) { inner ->
+                Box(
+                    modifier = Modifier.padding(inner).fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    SidrPreviewBanner()
+                }
+            }
         }
 
         // Assistant (Block N; Block X6-C adds the optional prompt prefill). The `prompt` arg is

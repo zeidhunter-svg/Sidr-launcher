@@ -33,6 +33,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -59,6 +60,7 @@ import com.sidr.launcher.core.ui.component.SidrActionGate
 import com.sidr.launcher.core.ui.component.SidrActionGateType
 import com.sidr.launcher.core.ui.component.EmptyState
 import com.sidr.launcher.core.ui.component.ErrorState
+import com.sidr.launcher.core.ui.component.SidrIconButton
 import com.sidr.launcher.core.ui.component.SidrNavigationRow
 import com.sidr.launcher.core.ui.component.SidrSectionHeader
 import com.sidr.launcher.core.ui.component.SidrRouteChip
@@ -236,17 +238,23 @@ fun LauncherScreen(
                 }
             }
 
-            // DS-4 (spec §8): the retired bottom CommandBar's actions are redistributed — Settings to
-            // the top-row icon, All Apps + Assistant to persistent Home rows here, with the local-first
-            // privacy line beneath. Kept outside the state Box so they stay discoverable across
-            // loading/empty/error too. Hidden while the search-overtakes body or dev console is up.
+            // Task 7: the app-level bottom tab bar now owns Home/Tasks/Agents/Activity/Terminal
+            // switching (AppNavHost's TabRootScaffold), and Settings moved onto the privacy line's
+            // gear icon below — so the old three-row HomeBottomNav is retired down to a single
+            // "All apps" row (the App Drawer is not a tab, so it still needs an explicit affordance)
+            // plus the local-first privacy line. Assistant stays reachable via the ASK route chip
+            // above (spec: no duplicate standalone Assistant row). Kept outside the state Box so it
+            // stays discoverable across loading/empty/error too. Hidden while the search-overtakes
+            // body or dev console is up.
             if (!inputResults.active && !devConsoleOn) {
-                HomeBottomNav(
-                    onAllApps = { viewModel.navigateTo(Routes.AppDrawer.ROUTE) },
-                    onAssistant = { viewModel.navigateTo(Routes.Assistant.ROUTE) },
-                    onSettings = { viewModel.navigateTo(Routes.Settings.ROUTE) },
+                SidrNavigationRow(
+                    title = "All apps",
+                    onClick = { viewModel.navigateTo(Routes.AppDrawer.ROUTE) },
                 )
-                HomePrivacyLine(onArmDevMode = viewModel::armDevMode)
+                HomePrivacyLine(
+                    onSettings = { viewModel.navigateTo(Routes.Settings.ROUTE) },
+                    onArmDevMode = viewModel::armDevMode,
+                )
             }
         }
     }
@@ -330,31 +338,15 @@ private fun HomeRouteChips(
 }
 
 /**
- * Persistent Home navigation: All apps, Assistant, and Settings as full-width DS-3 navigation rows
- * (Settings moved down here from the old top gear). All three remain typed shortcuts too.
- */
-@Composable
-private fun HomeBottomNav(
-    onAllApps: () -> Unit,
-    onAssistant: () -> Unit,
-    onSettings: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        SidrNavigationRow(title = "All apps", onClick = onAllApps)
-        SidrNavigationRow(title = "Assistant", onClick = onAssistant)
-        SidrNavigationRow(title = "Settings", onClick = onSettings)
-    }
-}
-
-/**
- * Bottom-most line: the local-first privacy note on the left, and the `SIDR OS` brand wordmark on the
- * right in the same provenance (mono) style. The hidden dev-mode arm (7 rapid taps → [onArmDevMode])
- * now lives on the wordmark here. Honest: the launcher core resolves commands on-device; the assistant
- * and smart routing are separate opt-in surfaces.
+ * Bottom-most line: the local-first privacy note on the left, a Settings gear (Task 7 — Settings
+ * moved off the retired three-row bottom nav onto this line, immediately left of the wordmark), and
+ * the `SIDR OS` brand wordmark on the right in the same provenance (mono) style. The hidden dev-mode
+ * arm (7 rapid taps → [onArmDevMode]) stays on the wordmark, unchanged. Honest: the launcher core
+ * resolves commands on-device; the assistant and smart routing are separate opt-in surfaces.
  */
 @Composable
 private fun HomePrivacyLine(
+    onSettings: () -> Unit,
     onArmDevMode: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -370,6 +362,11 @@ private fun HomePrivacyLine(
             text = "Local-first · on-device",
             role = SidrTextRole.PROVENANCE,
             modifier = Modifier.weight(1f),
+        )
+        SidrIconButton(
+            icon = Icons.Filled.Settings,
+            contentDescription = "Settings",
+            onClick = onSettings,
         )
         SidrText(
             text = "SIDR OS",

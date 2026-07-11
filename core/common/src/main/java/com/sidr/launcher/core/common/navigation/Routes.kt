@@ -64,4 +64,24 @@ sealed class Routes {
         /** Build a concrete route for a feature, e.g. `routeFor("VOICE_INPUT")`. */
         fun routeFor(feature: String): String = "$ROUTE?$ARG_FEATURE=$feature"
     }
+
+    // ── Vision MVP preview tab roots (Task 7) ───────────────────────────────
+    // Four additive, non-functional preview destinations behind the new app-level bottom tab bar.
+    // Each is a plain tab root (no nav args) — Tasks 8–11 fill in their real screens later.
+
+    object Tasks : Routes() {
+        const val ROUTE = "preview_tasks"
+    }
+
+    object Agents : Routes() {
+        const val ROUTE = "preview_agents"
+    }
+
+    object Activity : Routes() {
+        const val ROUTE = "preview_activity"
+    }
+
+    object Terminal : Routes() {
+        const val ROUTE = "preview_terminal"
+    }
 }

@@ -3,9 +3,11 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development (recommended)
 > or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 >
-> **STATUS: APPROVED (owner, 2026-07-06)** after pre-flight edits + the v1-slot edit. Ready for execution
-> task-by-task: start with **Phase A** (pure domain, zero behavior change); **Phases B/C** are gated on
-> schema/wiring as marked. Source of truth for behavior is the design spec:
+> **STATUS: CLOSED (2026-07-11) — Tasks 1–16 done on `launcher-4`; build gate green; SM-A325F
+> device acceptance passed with screenshots.** See ADR
+> "2026-07-11 — S2-1 Learned Resolutions device accepted + closed" in
+> [decisions.md](../../../ai-context/decisions.md). Originally: APPROVED (owner, 2026-07-06) after
+> pre-flight edits + the v1-slot edit. Source of truth for behavior is the design spec:
 > [2026-07-06-learned-resolutions-design.md](../specs/2026-07-06-learned-resolutions-design.md).
 
 **Goal:** Teach the launcher, entirely on-device, which app the user meant for an ambiguous launch
@@ -1314,7 +1316,8 @@ navigable Settings → Learned Choices; list + delete render; safe error state.
 
 **Files:** Create guard tests in `:domain` and/or `:data:repository`.
 
-- [ ] **Outbound-allow-list guard:** assert `OutboundContextPolicy`'s allow-list set is exactly its prior
+- [x] **Outbound-allow-list guard (Task 15, commit `59babbb`, 2026-07-10):** assert
+  `OutboundContextPolicy`'s allow-list set is exactly its prior
   value (byte-for-byte; the memory work adds nothing). **Dependency guard:** a test that scans the
   `domain/memory/resolution` sources for any `AiRequest`/generative import and asserts none (grep-style,
   precedent: existing vendor-neutrality greps). **Scope guard:** `RecordResolutionChoiceUseCase` no-ops on
@@ -1327,18 +1330,25 @@ navigable Settings → Learned Choices; list + delete render; safe error state.
 
 ### Task 16: Full build, device acceptance, docs
 
-- [ ] **Build gate:** `env -u JAVA_HOME ./gradlew --no-daemon :domain:test testDebugUnitTest assembleDebug`
-  → all green.
-- [ ] **SM-A325F device acceptance** (install debug; drive the slice): ambiguous launch command (e.g. two
-  apps matching a query) → choice → repeat → `learning n/K` visible in Settings → Learned Choices → after
-  K consistent choices the command auto-resolves (no list) → learning-phase correction (pick the other
-  candidate before K) switches the target → Settings → Learned Choices → delete → next command re-shows
-  candidates (re-learn) → uninstall the target → the preference is invalidated (no stale auto-resolve; row
-  gone from the screen). Capture screenshots.
-- [ ] **Parity check on device:** with no learned preferences, typed commands behave exactly as before;
-  non-ambiguous commands unaffected; router-off unaffected.
-- [ ] **Docs:** append an ADR ("S2-1 Learned Resolutions complete") to `decisions.md`; sync `CLAUDE.md`
-  Current goal + `current-status.md`; mark this plan done. Commit.
+- [x] **Build gate (2026-07-10):** `:domain:test` + `testDebugUnitTest` + `assembleDebug` → BUILD
+  SUCCESSFUL (run under JBR 21 + a locally-downloaded JDK-17 toolchain
+  `-Porg.gradle.java.installations.paths=…/jdk-17.0.19+10`, because the machine JDK had rolled to 25/26 —
+  same env workaround as AIL-6, no repo change).
+- [x] **SM-A325F device acceptance (2026-07-11):** installed the debug APK and drove the slice with two
+  temporary same-label local fixture apps (`com.sidr.probe.a` / `com.sidr.probe.b`, label `SidrProbe`;
+  both uninstalled after the run). Covered: ambiguous `open SidrProbe` → explicit choice →
+  `learning 1/3` in Settings → repeated choices → subsequent command auto-launched the learned target
+  without showing the list → Settings displayed the honest `[auto-ready]` state → delete produced
+  "No learned choices yet" and the next command re-showed candidates → correction before K switched the
+  ranked-first target from A to B → uninstalling preferred B invalidated the preference and the command
+  launched remaining A without stale auto-resolve. Screenshots captured under `/tmp/sidr_acceptance_*.png`.
+- [x] **Parity check on device (2026-07-11):** with no learned preferences, typed commands behaved as
+  before; non-ambiguous `open Salatuk` launched the app with Smart command routing temporarily OFF, and
+  the flag was restored to ON. With only one same-label fixture remaining after preferred-target uninstall,
+  `open SidrProbe` launched the remaining app rather than a stale learned target.
+- [x] **Docs (2026-07-11):** appended ADR "2026-07-11 — S2-1 Learned Resolutions device accepted +
+  closed" to `decisions.md`; synced `CLAUDE.md` Current goal + `current-status.md`; marked this plan
+  CLOSED.
 
 **DoD:** build green; device slice observed end-to-end; parity confirmed; ADR + docs synced.
 

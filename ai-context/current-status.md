@@ -2,7 +2,25 @@
 
 > **Authoritative status lives in `CLAUDE.md` (session digest), `ai-context/decisions.md` (ADR log),
 > and the per-phase plans.** This file is a short pointer/snapshot only — if it disagrees with those,
-> they win. Last re-based: 2026-07-05 (three-stage reframe).
+> they win. Last re-based: 2026-07-11 (S2-1 closed).
+
+## Stage 2 — AI Framework · S2-1 "Learned Resolutions" — CLOSED (2026-07-11)
+
+On-device learning of which app the user meant for an ambiguous launch command (rank-first → threshold
+auto-resolve at `streak ≥ 3`, fully offline, no LLM/cloud), correctable via Settings → Learned Choices.
+**Tasks 1–16 are done on `launcher-4`; build gate (`:domain:test` + `testDebugUnitTest` +
+`assembleDebug`) green; SM-A325F device acceptance passed.** Pure
+`domain/memory/resolution/` policy + use-cases + decorator (applied only on the rule `NeedsConfirmation`
+app-ambiguity branch, record-on-explicit-choice); Room `resolution_preferences` (`SidrDatabase` v2 +
+`Migration1To2` + golden `2.json`); DI; `LauncherViewModel` wiring (`AutoLaunch` directive → real
+`launchApp`); Settings management screen. Parity intact (`HandleUserCommandUseCase`/`RouteCommandUseCase`
+untouched; outbound allow-list widened by zero). Device pass used temporary same-label local `SidrProbe`
+fixture APKs, then removed them; screenshots live under `/tmp/sidr_acceptance_*.png`. Observed ambiguous
+choice, `learning 1/3`, threshold auto-launch, delete/relearn, correction before K, preferred-target
+uninstall invalidation, no stale auto-resolve, and router-off non-ambiguous parity (`open Salatuk`).
+Plan: `docs/superpowers/plans/2026-07-06-learned-resolutions.md`; ADR: decisions.md "2026-07-11 — S2-1
+Learned Resolutions device accepted + closed".
+**Next Stage-2 slice (S2-2) not yet scoped — brainstorm before planning.**
 
 ## Project reframed (2026-07-05) — three stages
 
@@ -14,12 +32,10 @@ router** (`CommandPlanner`, a sanctioned third pipeline) + Action Registry + web
 risk-gated confirmation — the launcher is genuinely AI-first, with router-off/offline = byte-for-byte
 rule-only parity. Plan (closed): `ai-context/ai-launcher-mvp-plan.md`; roadmap: `docs/roadmap.md`. The
 **active work is now Stage 2 — AI Framework** (generalize router/registry/context/memory into a reusable
-on-device AI framework: Action Registry v2, Context Engine v2, User Memory — open a Stage-2 plan before
-coding). **First slice (S2-1) is at DESIGN-SPEC stage only** (no code/plan yet, awaiting owner approval):
-"Learned Resolutions" — on-device learning of which app the user meant for an ambiguous launch command.
-Spec: `docs/superpowers/specs/2026-07-06-learned-resolutions-design.md`; ADR: decisions.md "2026-07-06 —
-Stage 2 kickoff". The model track (OQ#1–#4), device matrix, and RC/hardening polish run in parallel, off
-the ship gate.
+on-device AI framework: Action Registry v2, Context Engine v2, User Memory — built feature-first). **First
+slice (S2-1 "Learned Resolutions") is CLOSED (2026-07-11)** — see the dedicated section at the top of this
+file. The model track (OQ#1–#4), device matrix, and
+RC/hardening polish run in parallel, off the ship gate.
 
 **Stage-1B progress:** **AIL-0 ✅ done (2026-07-05)** — `core/ui` re-skinned to the "ultra-cyberpunk /
 early-computer terminal" identity (4 `ColorScheme`s green-default/amber-alt × dark/light, dynamic colour
@@ -324,6 +340,6 @@ after reboot (C.5).
 ## Source of truth
 
 - Session digest + hard rules: `CLAUDE.md`
-- Decisions log (latest: ADR 2026-07-04 — Phase 9 Block Y7 residual cosmetic cleanup): `ai-context/decisions.md`
+- Decisions log (latest: ADR 2026-07-11 — S2-1 Learned Resolutions device accepted + closed): `ai-context/decisions.md`
 - Architecture (in sync): `docs/architecture.md` · Roadmap: `docs/roadmap.md`
-- Active/last plan: `ai-context/phase-9-plan.md`
+- Active/last plan: `docs/superpowers/plans/2026-07-06-learned-resolutions.md` (S2-1, CLOSED)

@@ -4152,6 +4152,10 @@ the on-device SM-A325F acceptance pass + screenshots remain before the block is 
 the DESIGN-ONLY status of the 2026-07-06 kickoff ADR — everything that entry marked "NOT authorized yet"
 (production code, Room schema change, use-case wiring) is now built exactly to the approved design.
 
+**Closing note (2026-07-11):** the pending SM-A325F acceptance pass is now complete; S2-1 is CLOSED by ADR
+"2026-07-11 — S2-1 Learned Resolutions device accepted + closed". This entry remains the code-closed /
+build-green record.
+
 **What shipped (on-device learning of which app an ambiguous launch command meant — rank-first → threshold
 auto-resolve, fully offline, no LLM/cloud):**
 - **Domain** (`domain/memory/resolution/`, pure): value types + `ResolutionPreferenceStore` port +
@@ -4193,10 +4197,8 @@ BUILD SUCCESSFUL. **Env note (no repo change, same as AIL-6):** the machine's JD
 (Gradle 8.10.2 can't parse it); built by running Gradle under Android Studio's **JBR 21** with a
 locally-downloaded **JDK 17** toolchain (`-Porg.gradle.java.installations.paths=…/jdk-17.0.19+10`).
 
-**Still open (blocks full CLOSE):** SM-A325F device-acceptance pass — drive the whole slice observably
-(ambiguous → choice → `Learning n/K` in Settings → after K auto-resolves with no list → learning-phase
-correction switches target → delete → re-learn → uninstall invalidates), on-device parity check, +
-screenshots. No code change expected.
+**Closed by follow-up ADR (2026-07-11):** SM-A325F device acceptance, on-device parity, and screenshots
+completed with no production code changes.
 
 ## ADR 2026-07-10 — Agentic OS target architecture (A1–A6) + visual identity (soft classic grey)
 
@@ -4280,3 +4282,41 @@ approved "soft classic grey" identity
 :core:ui:verifyRoborazziDebug` BUILD SUCCESSFUL. Existing feature tests unchanged (they assert behaviour,
 not colour). Follow-ups per spec: DS-2/3 primitives (provenance line, press-invert chips), DS-4 Home, DS-6A
 sacred header, DS-7 memory-migration (absorbs the S2-2 Aliases UI so it is built in the grey language).
+
+## ADR 2026-07-11 — S2-1 Learned Resolutions device accepted + closed
+
+**Status: CLOSED.** This closes Task 16 and the S2-1 "Learned Resolutions" plan:
+[docs/superpowers/plans/2026-07-06-learned-resolutions.md](../docs/superpowers/plans/2026-07-06-learned-resolutions.md).
+The 2026-07-10 ADR remains the code-closed/build-green record; this entry records the SM-A325F acceptance
+pass that was pending there. No production code changed in this closeout.
+
+**Device acceptance (SM-A325F / Android 13, debug APK):** used two temporary local fixture apps with the
+same launcher label, `SidrProbe` (`com.sidr.probe.a` and `com.sidr.probe.b`), created under `/tmp` only for
+this acceptance run, installed with `adb install -r`, and uninstalled before finishing. The fixtures let
+the launcher exercise a real same-label app ambiguity without relying on whatever apps happened to be on
+the device.
+
+**Observed slice:**
+- `open SidrProbe` showed two `Did you mean:` candidates.
+- Choosing the same candidate recorded learning; Settings → Learned Choices showed `sidrprobe` with
+  `learning 1/3`.
+- After three explicit choices, the next `open SidrProbe` auto-launched the learned target with no
+  candidate tap. The management screen displayed `[auto-ready]` rather than `[auto]`; this is honest for
+  display-verification purposes, while runtime auto-launch was directly observed.
+- Deleting the learned row returned the screen to `No learned choices yet`; the next `open SidrProbe`
+  re-shown the candidates.
+- Correction before K worked: after one A choice, choosing B switched the ranked-first target; tapping the
+  upper candidate then opened `SidrProbe B`.
+- Preferred-target uninstall invalidated the learned preference: uninstalling `com.sidr.probe.b` made
+  `open SidrProbe` launch remaining A, and Learned Choices showed `No learned choices yet` (no stale
+  auto-resolve / no stale row).
+
+**Parity / privacy:** with no learned preferences, a non-ambiguous typed command still worked; with Smart
+command routing temporarily OFF, `open Salatuk` launched Salatuk, and the flag was restored to ON. The
+learned-resolution path stayed on-device only: `query`/packageName were displayed locally in Sidr, not sent
+to an LLM/cloud path, and Task 15's outbound/dependency/scope guard tests remain the privacy gate.
+
+**Evidence:** screenshots were captured under `/tmp/sidr_acceptance_*.png`, including ambiguity,
+`learning 1/3`, auto-launch, delete/relearn, correction A→B, preferred-target uninstall invalidation, and
+router-off parity. Temporary `SidrProbe` packages were removed; `adb shell pm list packages com.sidr.probe`
+returned no packages after cleanup.

@@ -1,6 +1,13 @@
 # CLAUDE.md — Sidr Launcher
 
-Session digest. Read this first. **Last synced: 2026-07-06 — AIL-6 complete → Stage-1 AI-Launcher MVP
+Session digest. Read this first. **Last synced: 2026-07-11 — Stage-2 block S2-1 "Learned Resolutions" is
+CLOSED. Tasks 1–16 are done on `launcher-4`; build gate `:domain:test` + `testDebugUnitTest` +
+`assembleDebug` was green; SM-A325F device acceptance passed with screenshots under
+`/tmp/sidr_acceptance_*.png`. Details: ADR "2026-07-11 — S2-1 Learned Resolutions device accepted +
+closed" in `ai-context/decisions.md`; plan `docs/superpowers/plans/2026-07-06-learned-resolutions.md`
+(STATUS CLOSED). The prior Stage-1 sync is retained below.**
+
+**Prior sync (2026-07-06) — AIL-6 complete → Stage-1 AI-Launcher MVP
 CLOSED (blocks AIL-0…6). The RC build gate (`:app:assembleRelease`) is green under a JDK-17 toolchain and a
 full SM-A325F device-acceptance pass with a real BYOK provider passed: NL routing → DF-4 confirm card
 (CONFIRM) / one-tap (SAFE) → execution, nothing auto-runs (R4); router-off / offline ⇒ byte-for-byte
@@ -77,15 +84,32 @@ The offline launcher core (home, app grid, app launch) must work fully without A
 
 ## Current goal (active work)
 
-**NOW (2026-07-06): Stage 2 — AI Framework. The Stage-1 AI-Launcher MVP (blocks AIL-0…6) is CLOSED and
-device-accepted on SM-A325F.** Next work generalizes the router/registry/context/memory into a reusable
-on-device AI framework (Action Registry v2, Context Engine v2, User Memory) per the three-stage reframe;
-open a Stage-2 plan before coding. **First Stage-2 slice (block S2-1) has an owner-approved DESIGN SPEC
-(design-only — no code/plan/schema/wiring yet):** "Learned Resolutions" — on-device learning of which app
-the user meant for an ambiguous launch command (rank-first → threshold auto-resolve, no LLM/cloud). Spec:
+**NOW (2026-07-11): Stage 2 — AI Framework, block S2-1 "Learned Resolutions" is CLOSED.** The Stage-1
+AI-Launcher MVP (blocks AIL-0…6) is CLOSED and
+device-accepted on SM-A325F. Stage 2 generalizes the router/registry/context/memory into a reusable
+on-device AI framework (Action Registry v2, Context Engine v2, User Memory) per the three-stage reframe,
+built **feature-first** (grow only the minimal memory abstractions each narrow capability needs).
+
+**S2-1 "Learned Resolutions" — CLOSED (2026-07-11).** On-device learning of which app the user meant
+for an ambiguous launch command (rank-first → threshold auto-resolve at `streak ≥ 3`, fully offline, no
+LLM/cloud), always correctable via Settings → Learned Choices. Fully built to the approved design and
+device-accepted on SM-A325F: pure `domain/memory/resolution/` policy + use-cases + decorator (applied **only**
+on the rule `NeedsConfirmation` app-ambiguity branch), Room `resolution_preferences` (`SidrDatabase` v2 +
+`Migration1To2` + golden `schemas/2.json`), DI, `LauncherViewModel` wiring (`AutoLaunch` directive → real
+`launchApp`; record-on-explicit-choice), and the Settings management screen. **Parity intact:**
+`HandleUserCommandUseCase`/`RouteCommandUseCase` untouched → no-preference / non-ambiguous / router-off ⇒
+byte-for-byte pre-S2-1 path; **outbound allow-list widened by zero** (preferences never enter an
+`AiRequest`). Build gate green. Device pass used two temporary same-label local `SidrProbe` fixture APKs
+(installed only for the run, then removed) and covered ambiguous choice, `learning 1/3`, threshold
+auto-launch, delete/relearn, correction before K, preferred-target uninstall invalidation, no stale
+auto-resolve, and router-off `open Salatuk` parity. Spec:
 [docs/superpowers/specs/2026-07-06-learned-resolutions-design.md](docs/superpowers/specs/2026-07-06-learned-resolutions-design.md);
-ADR: decisions.md "2026-07-06 — Stage 2 kickoff". Next action after owner approval = `writing-plans` for
-S2-1. The launcher ships AI-first today: AIL-3 unified the home input over the
+plan: [docs/superpowers/plans/2026-07-06-learned-resolutions.md](docs/superpowers/plans/2026-07-06-learned-resolutions.md);
+ADRs: decisions.md "2026-07-06 — Stage 2 kickoff" (design), "2026-07-10 — S2-1 complete
+(code-closed; device-pending)", and "2026-07-11 — S2-1 device accepted + closed". **Next Stage-2 slice
+(S2-2) is not yet scoped — brainstorm before planning.**
+
+The launcher ships AI-first today: AIL-3 unified the home input over the
 unchanged pipeline, **AIL-4 made routing AI-first** (the BYOK cloud `CommandPlanner` — a sanctioned third
 pipeline — proposes **registered** actions as non-executing `CommandOutcome.RoutedAction`, never
 auto-executed (R4), behind a default-off flag so **router-off ⇒ byte-for-byte rule-only parity**), **AIL-5

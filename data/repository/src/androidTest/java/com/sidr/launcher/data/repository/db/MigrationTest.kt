@@ -4,6 +4,7 @@ import androidx.room.testing.MigrationTestHelper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.sidr.launcher.data.repository.db.migrations.Migration1To2
+import com.sidr.launcher.data.repository.db.migrations.Migration2To3
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -52,6 +53,15 @@ class MigrationTest {
         // incl. resolution_preferences). Throws if Migration1To2's CREATE TABLE SQL drifts from
         // the golden schema (column order, NOT NULL, or the composite primary key).
         helper.runMigrationsAndValidate(TEST_DB, 2, true, Migration1To2).close()
+    }
+
+    @Test
+    fun v2_to_v3_migration_addsAliasesTable_andValidatesAgainstGoldenSchema() {
+        // Create the DB at v2 (schemas/2.json — history tables + resolution_preferences).
+        helper.createDatabase(TEST_DB, 2).close()
+
+        // Run Migration2To3 and validate the resulting schema against schemas/3.json (adds aliases).
+        helper.runMigrationsAndValidate(TEST_DB, 3, true, Migration2To3).close()
     }
 
     private companion object {

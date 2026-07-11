@@ -1,0 +1,259 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style></head><body>
+<title>SIDR — Visual Direction Study</title>
+<style>
+  :root{
+    --page-bg:#0d0e0f; --page-panel:#151618; --page-ink:#e9ebee; --page-dim:#9ba1a8;
+    --page-faint:#6c7178; --page-line:#23262a;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;
+    --serif:"Iowan Old Style","Palatino Linotype",Georgia,serif;
+  }
+  @media (prefers-color-scheme:light){
+    :root{ --page-bg:#eceef0; --page-panel:#f7f8f9; --page-ink:#1a1d21; --page-dim:#565c63; --page-faint:#828990; --page-line:#d9dbde; }
+  }
+  :root[data-theme="dark"]{ --page-bg:#0d0e0f; --page-panel:#151618; --page-ink:#e9ebee; --page-dim:#9ba1a8; --page-faint:#6c7178; --page-line:#23262a; }
+  :root[data-theme="light"]{ --page-bg:#eceef0; --page-panel:#f7f8f9; --page-ink:#1a1d21; --page-dim:#565c63; --page-faint:#828990; --page-line:#d9dbde; }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--page-bg);color:var(--page-ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 80px}
+  header.top{max-width:720px}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--page-faint)}
+  h1{font-size:clamp(24px,3.4vw,32px);line-height:1.14;margin:.4em 0 .3em;text-wrap:balance;letter-spacing:-.01em}
+  .lede{color:var(--page-dim);font-size:15.5px;max-width:66ch}
+  .mono{font-family:var(--mono)}
+
+  .stage{display:flex;flex-wrap:wrap;gap:40px;margin-top:40px;align-items:flex-start}
+  .frameblk{display:flex;flex-direction:column;gap:11px;align-items:center}
+  .frameblk .cap{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--page-faint)}
+
+  /* ---- phone ---- */
+  .phone{width:300px;border-radius:26px;padding:10px;background:linear-gradient(#212429,#0e0f12);
+    box-shadow:0 20px 48px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.05) inset}
+  .screen{border-radius:17px;overflow:hidden;background:var(--ground);color:var(--tx);font-size:12.5px}
+  .andbar{display:flex;justify-content:space-between;align-items:center;padding:5px 12px 4px;font-family:var(--mono);
+    font-size:9px;color:var(--faint);opacity:.5}
+  .home{padding:12px 14px 12px}
+
+  .brow{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+  .brow .mk{font-family:var(--mono);font-size:14px;font-weight:600;letter-spacing:.03em;color:var(--tx)}
+  .brow .date{text-align:right;font-family:var(--mono);font-size:9px;line-height:1.5;color:var(--faint)}
+  .brow .date b{color:var(--dim);font-weight:500}
+  .brow .gear{font-size:13px;color:var(--dim);margin-left:10px}
+  .brow .rt{display:flex;align-items:flex-start}
+
+  .shahada{text-align:center;padding:4px 6px 12px}
+  .shahada .l{font-family:var(--serif);font-size:13px;line-height:1.72;color:var(--sacred);letter-spacing:.005em}
+  .sep{height:1px;background:var(--line);margin:0 2px 11px}
+
+  .pray{display:flex;align-items:center;justify-content:space-between;font-variant-numeric:tabular-nums;padding:0 2px 12px}
+  .pray .p{flex:1;text-align:center;font-family:var(--mono);font-size:8.5px;color:var(--faint);line-height:1.4}
+  .pray .p .t{display:block;color:var(--dim);font-size:9.5px;margin-top:1px}
+  .pray .p.nx .t{color:var(--tx);font-weight:600}
+  .pray .nh{flex:none;font-family:var(--mono);font-size:8px;color:var(--sig);padding-left:9px;border-left:1px solid var(--line);margin-left:7px;text-align:left;line-height:1.35}
+  .pray .nh b{color:var(--sig)}
+
+  .uinput{display:flex;align-items:center;gap:8px;border:1px solid var(--sig-bd);border-radius:10px;padding:12px 12px;background:var(--surface)}
+  .uinput .pr{font-family:var(--mono);color:var(--sig);font-size:14px}
+  .uinput .caret{width:7px;height:15px;background:var(--sig);display:inline-block;margin-left:-4px;animation:blink 1.1s step-end infinite}
+  .uinput .ph{font-family:var(--mono);font-size:11px;color:var(--dim);flex:1}
+  .uinput .mic{color:var(--faint);font-size:13px}
+  @keyframes blink{50%{opacity:0}}
+  @media (prefers-reduced-motion:reduce){ .caret{animation:none} }
+
+  .chips{display:flex;gap:6px;margin-top:9px}
+  .chip{flex:1;text-align:center;font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;padding:7px 0;
+    border:1px solid var(--border);border-radius:7px;color:var(--dim)}
+  .chip.on{color:var(--ground);background:var(--tx);border-color:var(--tx);font-weight:600}
+
+  .lbl{font-family:var(--mono);font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin:15px 2px 8px;display:flex;justify-content:space-between}
+  .lbl .more{color:var(--dim)}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px 8px}
+  .app{text-align:center}
+  .app .tile{aspect-ratio:1;border-radius:10px;background:var(--surface);border:1px solid var(--border);display:grid;place-items:center;font-weight:600;font-size:13px;color:var(--dim)}
+  .app .cap{font-size:8px;color:var(--faint);margin-top:3px;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  .rec{display:flex;flex-direction:column}
+  .rec .r{display:flex;align-items:center;gap:9px;padding:7px 2px;border-bottom:1px solid var(--line)}
+  .rec .r:last-child{border-bottom:0}
+  .rec .g{width:20px;height:20px;border-radius:6px;background:var(--surface);border:1px solid var(--border);display:grid;place-items:center;font-family:var(--mono);font-size:10px;color:var(--faint);flex:none}
+  .rec .tx{flex:1;min-width:0;font-size:11.5px;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rec .mt{font-family:var(--mono);font-size:8px;color:var(--faint);flex:none}
+
+  .allapps{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--dim);margin-top:12px;padding:9px 2px;border-top:1px solid var(--line)}
+  .allapps .arw{margin-left:auto;color:var(--faint)}
+  .privline{font-family:var(--mono);font-size:8px;color:var(--faint);letter-spacing:.04em;text-align:center;padding:8px 0 1px}
+  .privline b{color:var(--dim);font-weight:500}
+
+  /* ---- spec rail ---- */
+  .rail{flex:1;min-width:280px;max-width:420px;display:flex;flex-direction:column;gap:26px;padding-top:6px}
+  .rail h3{font-size:16px;margin:0 0 4px;letter-spacing:-.01em}
+  .rail p{margin:0;color:var(--page-dim);font-size:13.5px;line-height:1.55}
+  .rail p b{color:var(--page-ink);font-weight:600}
+  .tokens{display:flex;flex-direction:column;gap:7px}
+  .tk{display:flex;align-items:center;gap:11px}
+  .tk .ch{width:34px;height:22px;border-radius:5px;border:1px solid rgba(128,128,128,.22);flex:none}
+  .tk .nm{font-family:var(--mono);font-size:11px;color:var(--page-ink);width:96px}
+  .tk .hx{font-family:var(--mono);font-size:11px;color:var(--page-faint)}
+  .tk .use{font-size:11.5px;color:var(--page-dim);margin-left:auto;text-align:right}
+  .subh{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--page-faint);margin-bottom:2px}
+
+  .moments{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px}
+  .moment{flex:1;min-width:150px;border-radius:12px;background:var(--ground);color:var(--tx);border:1px solid var(--line);padding:11px 12px}
+  .moment.dark{ --ground:#131415;--surface:#1b1c1e;--line:#2a2c30;--border:#3a3d42;--tx:#e8e9eb;--dim:#a0a2a8;--faint:#6e7076;--sig:#9ba1ab;--risk:#b8836a; }
+  .moment .mh{font-family:var(--mono);font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+  .gate .kw{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;color:var(--risk);margin-bottom:7px}
+  .gate .rw{font-family:var(--mono);font-size:11px;color:var(--tx);margin-bottom:8px;word-break:break-all}
+  .gate .cs{font-size:10.5px;color:var(--dim);margin-bottom:10px;line-height:1.4}
+  .gate .bt{display:flex;gap:6px}
+  .gate .b{flex:1;text-align:center;font-family:var(--mono);font-size:9px;padding:7px 0;border-radius:6px;border:1px solid var(--border);color:var(--dim)}
+  .gate .b.go{background:var(--tx);color:var(--ground);border-color:var(--tx);font-weight:600}
+  .mem .q{font-size:12px;color:var(--tx)} .mem .q b{color:var(--tx);font-weight:600}
+  .mem .ev{font-size:10px;color:var(--dim);margin-top:4px}
+  .mem .pl{font-family:var(--mono);font-size:8px;color:var(--faint);margin-top:7px}
+  .mem .ac{display:flex;gap:12px;margin-top:8px;font-family:var(--mono);font-size:9px}
+  .mem .ac .a{color:var(--dim)} .mem .ac .a.d{color:var(--risk)}
+
+  /* ===== SOFT CLASSIC GREY — dark ===== */
+  .grey-d{ --ground:#131415; --surface:#1b1c1e; --raised:#212325; --line:#2a2c30; --border:#3a3d42;
+    --tx:#e8e9eb; --sacred:#cbcdd1; --dim:#a0a2a8; --faint:#6e7076; --sig:#9ba1ab; --sig-bd:#494d54; --risk:#b8836a; }
+  /* ===== SOFT CLASSIC GREY — light ===== */
+  .grey-l{ --ground:#eceded; --surface:#f5f6f7; --raised:#ffffff; --line:#e0e1e4; --border:#c9cbcf;
+    --tx:#1c1e21; --sacred:#3d4046; --dim:#5c5f65; --faint:#8a8d93; --sig:#5f6773; --sig-bd:#bcc0c6; --risk:#a5623f; }
+
+  footer.ft{margin-top:56px;border-top:1px solid var(--page-line);padding-top:20px;color:var(--page-faint);font-size:12.5px;max-width:76ch}
+  footer.ft b{color:var(--page-dim)}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">Visual Direction Study · v3 · soft classic grey</div>
+    <h1>SIDR — soft classic grey, functional Home</h1>
+    <p class="lede">One refined neutral grey, dark and light. English Shahada restored as a quiet two-line anchor.
+      The top line doesn't duplicate Android's status bar — it shows the date in <b>Gregorian + Hijri</b> only.
+      Prayer stays a thin strip; the command line and app access do the work.</p>
+  </header>
+
+  <div class="stage">
+    <div class="frameblk">
+      <div class="cap">Dark · default</div>
+      <div class="phone grey-d"><div class="screen">
+        <div class="andbar"><span>9:41</span><span>▪ ▪ ▪  ▮</span></div>
+        <div class="home">
+          <div class="brow"><span class="mk">SIDR</span>
+            <span class="rt"><span class="date"><b>8 Jul 2026</b><br>23 Muḥarram 1448</span><span class="gear">⚙</span></span></div>
+          <div class="shahada"><div class="l">There is no deity except Allah<br>Muhammad is the messenger of Allah</div></div>
+          <div class="sep"></div>
+          <div class="pray">
+            <div class="p">FAJR<span class="t">04:38</span></div>
+            <div class="p">DHUHR<span class="t">12:45</span></div>
+            <div class="p">ASR<span class="t">16:22</span></div>
+            <div class="p nx">MAGHRIB<span class="t">19:39</span></div>
+            <div class="p">ISHA<span class="t">21:12</span></div>
+            <div class="nh">Maghrib<br><b>1h 17m</b></div>
+          </div>
+          <div class="uinput"><span class="pr">&gt;</span><span class="caret"></span><span class="ph">Ask, search, open or automate</span><span class="mic">◍</span></div>
+          <div class="chips"><span class="chip on">APP</span><span class="chip">WEB</span><span class="chip">SITE</span><span class="chip">ASK</span></div>
+          <div class="lbl"><span>Favorites</span></div>
+          <div class="grid">
+            <div class="app"><div class="tile">W</div><div class="cap">WhatsApp</div></div>
+            <div class="app"><div class="tile">T</div><div class="cap">Telegram</div></div>
+            <div class="app"><div class="tile">C</div><div class="cap">Chrome</div></div>
+            <div class="app"><div class="tile">Y</div><div class="cap">YouTube</div></div>
+            <div class="app"><div class="tile">M</div><div class="cap">Maps</div></div>
+            <div class="app"><div class="tile">G</div><div class="cap">Gmail</div></div>
+            <div class="app"><div class="tile">P</div><div class="cap">Photos</div></div>
+            <div class="app"><div class="tile">◱</div><div class="cap">Cal</div></div>
+          </div>
+          <div class="lbl"><span>Recent</span><span class="more">clear</span></div>
+          <div class="rec">
+            <div class="r"><span class="g">▸</span><span class="tx">Open Telegram</span><span class="mt">last cmd</span></div>
+            <div class="r"><span class="g">◈</span><span class="tx">github.com</span><span class="mt">2m</span></div>
+            <div class="r"><span class="g">⌕</span><span class="tx">"ktor docs" · web</span><span class="mt">1h</span></div>
+          </div>
+          <div class="allapps"><span>▦</span><span>ALL APPS</span><span class="arw">→</span></div>
+          <div class="privline">LOCAL-FIRST · <b>cloud only when you ask</b></div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="frameblk">
+      <div class="cap">Light</div>
+      <div class="phone grey-l"><div class="screen">
+        <div class="andbar"><span>9:41</span><span>▪ ▪ ▪  ▮</span></div>
+        <div class="home">
+          <div class="brow"><span class="mk">SIDR</span>
+            <span class="rt"><span class="date"><b>8 Jul 2026</b><br>23 Muḥarram 1448</span><span class="gear">⚙</span></span></div>
+          <div class="shahada"><div class="l">There is no deity except Allah<br>Muhammad is the messenger of Allah</div></div>
+          <div class="sep"></div>
+          <div class="pray">
+            <div class="p">FAJR<span class="t">04:38</span></div>
+            <div class="p">DHUHR<span class="t">12:45</span></div>
+            <div class="p">ASR<span class="t">16:22</span></div>
+            <div class="p nx">MAGHRIB<span class="t">19:39</span></div>
+            <div class="p">ISHA<span class="t">21:12</span></div>
+            <div class="nh">Maghrib<br><b>1h 17m</b></div>
+          </div>
+          <div class="uinput"><span class="pr">&gt;</span><span class="caret"></span><span class="ph">Ask, search, open or automate</span><span class="mic">◍</span></div>
+          <div class="chips"><span class="chip on">APP</span><span class="chip">WEB</span><span class="chip">SITE</span><span class="chip">ASK</span></div>
+          <div class="lbl"><span>Favorites</span></div>
+          <div class="grid">
+            <div class="app"><div class="tile">W</div><div class="cap">WhatsApp</div></div>
+            <div class="app"><div class="tile">T</div><div class="cap">Telegram</div></div>
+            <div class="app"><div class="tile">C</div><div class="cap">Chrome</div></div>
+            <div class="app"><div class="tile">Y</div><div class="cap">YouTube</div></div>
+            <div class="app"><div class="tile">M</div><div class="cap">Maps</div></div>
+            <div class="app"><div class="tile">G</div><div class="cap">Gmail</div></div>
+            <div class="app"><div class="tile">P</div><div class="cap">Photos</div></div>
+            <div class="app"><div class="tile">◱</div><div class="cap">Cal</div></div>
+          </div>
+          <div class="lbl"><span>Recent</span><span class="more">clear</span></div>
+          <div class="rec">
+            <div class="r"><span class="g">▸</span><span class="tx">Open Telegram</span><span class="mt">last cmd</span></div>
+            <div class="r"><span class="g">◈</span><span class="tx">github.com</span><span class="mt">2m</span></div>
+            <div class="r"><span class="g">⌕</span><span class="tx">"ktor docs" · web</span><span class="mt">1h</span></div>
+          </div>
+          <div class="allapps"><span>▦</span><span>ALL APPS</span><span class="arw">→</span></div>
+          <div class="privline">LOCAL-FIRST · <b>cloud only when you ask</b></div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="rail">
+      <div>
+        <h3>Soft classic grey</h3>
+        <p>Neutral, timeless, low-drama. The accent — a soft <b>pewter</b> — appears only on the input prompt/caret,
+          the next-prayer hint, and focus. Selection is <b>press-invert</b> (light-on-dark), so the active chip reads
+          without introducing colour. Corners softened to 10dp; the terminal <span class="mono">&gt;</span> and block caret stay.</p>
+      </div>
+      <div>
+        <div class="subh">Tokens · dark</div>
+        <div class="tokens">
+          <div class="tk"><span class="ch" style="background:#131415"></span><span class="nm">ground</span><span class="hx">#131415</span><span class="use">screen base</span></div>
+          <div class="tk"><span class="ch" style="background:#1b1c1e"></span><span class="nm">surface</span><span class="hx">#1B1C1E</span><span class="use">tiles, input</span></div>
+          <div class="tk"><span class="ch" style="background:#2a2c30"></span><span class="nm">line</span><span class="hx">#2A2C30</span><span class="use">hairlines</span></div>
+          <div class="tk"><span class="ch" style="background:#e8e9eb"></span><span class="nm">text</span><span class="hx">#E8E9EB</span><span class="use">primary / invert fill</span></div>
+          <div class="tk"><span class="ch" style="background:#cbcdd1"></span><span class="nm">sacred</span><span class="hx">#CBCDD1</span><span class="use">Shahada</span></div>
+          <div class="tk"><span class="ch" style="background:#9ba1ab"></span><span class="nm">accent</span><span class="hx">#9BA1AB</span><span class="use">pewter · sparingly</span></div>
+          <div class="tk"><span class="ch" style="background:#b8836a"></span><span class="nm">risk</span><span class="hx">#B8836A</span><span class="use">fixed · terracotta</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="subh">Moments · dark</div>
+        <div class="moments">
+          <div class="moment dark gate"><div class="mh">Confirm</div><div class="kw">□ REQUIRES CONFIRMATION</div><div class="rw">&gt; open github.com</div><div class="cs">Leaves SIDR, opens an external app.</div><div class="bt"><span class="b">CANCEL</span><span class="b go">CONFIRM</span></div></div>
+          <div class="moment dark mem"><div class="mh">Memory</div><div class="q">"open bank" → <b>Türkiye Finans</b></div><div class="ev">3 confirmed choices</div><div class="pl">LOCAL · 8 JUL</div><div class="ac"><span class="a">EDIT</span><span class="a d">FORGET</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="ft">
+    Concept mockup — not production UI; app icons are monograms, Android's real status bar is faint at top for context only.
+    <b>Dials I can still turn:</b> Shahada bigger/smaller or in a serif vs the current one; accent warmer or cooler; prayer
+    down to a single "Maghrib · 1h17m" chip; date order (Hijri first). Say what to adjust, or confirm <b>soft classic grey</b>
+    and I'll write it up as the DS-1 token spec.
+  </footer>
+</div>
+
+</body></html>

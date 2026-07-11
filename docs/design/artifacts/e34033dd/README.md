@@ -1,13 +1,24 @@
 # Claude artifact e34033dd — SIDR soft classic grey
 
-Source artifact:
-`https://claude.ai/code/artifact/e34033dd-f8ec-4bc6-a2c9-82f951349ade?org=3ad289cb-2ed0-4a18-aadc-05e5b90860f3`
+Source artifacts (two separate Claude artifacts referenced across this design track):
+- **e34033dd** ("SIDR — Screen Set (soft classic grey)"):
+  `https://claude.ai/code/artifact/e34033dd-f8ec-4bc6-a2c9-82f951349ade?org=3ad289cb-2ed0-4a18-aadc-05e5b90860f3`
+- **177507de** ("SIDR — Visual Direction Study", referenced from
+  `docs/superpowers/specs/2026-07-10-visual-identity-soft-grey-design.md`, the earlier study that fed the
+  DS-1 token spec):
+  `https://claude.ai/code/artifact/177507de-9dc2-4cdb-95f1-75e92f1ca26f`
 
-Captured from owner-provided screenshots on 2026-07-11. The Claude artifact is protected by an
-interactive browser challenge, so these local captures are the durable in-repo visual source.
+Captured from owner-provided screenshots on 2026-07-11, plus (2026-07-12) the **raw HTML source of both
+artifacts**, fetched directly and committed alongside the screenshots — a plain `curl`/headless fetch of
+a `claude.ai/code/artifact/{uuid}` URL returns only a Cloudflare/SPA shell, but `WebFetch` retrieves the
+real content using the owner's `claude.ai` login, so the source is now durable in-repo in its own right,
+not just as pixels.
 
 ## Files
 
+- `source.html` — raw HTML source of artifact **e34033dd** (the Screen Set below).
+- `visual-direction-study-soft-classic-grey.source.html` — raw HTML source of artifact **177507de** (the
+  Visual Direction Study below).
 - `visual-direction-study-soft-classic-grey.png` — Home visual direction study, dark + light, token notes, and two moment cards.
 - `screen-set-01-shipping-screens.png` — approved shipping surfaces: Home, Home typing/results, App Drawer, Settings.
 - `screen-set-02-memory-assistant-permission.png` — Memory, Assistant, Permission Education, plus the start of interaction moments.
@@ -82,3 +93,16 @@ Future-contract targets:
 2. Implement Settings as the DS-3 proof surface before touching Home.
 3. Migrate the existing routed confirmation card to `SidrActionGate` only with full parity tests.
 4. Use the Home study for DS-4 after controls are stable.
+
+## Status (2026-07-11) — the running app now renders this artifact set
+
+DS-1 through DS-4 and the **Vision MVP (Preview)** plan
+(`docs/superpowers/plans/2026-07-11-vision-mvp-preview.md`) together bring every shipping surface in this
+artifact set onto the approved soft-classic-grey look: Home, App Drawer (grid + Groups/A-Z toggle),
+Settings, Memory, Assistant, and Permission Education are real, functional DS screens; the 5-tab bottom
+bar now hosts Home alongside Tasks/Agents/Activity/Terminal. The **agentic future-contract surfaces**
+(screen-set-04) are intentionally still previews, not implementations: Tasks/Agents/Activity/Terminal and
+an Interaction-Moments screen render the same visual language, each carrying a persistent `PREVIEW` badge
+or banner, with every action inert and no fabricated task/execution/activity/agent data — matching this
+README's own "do not use them to prematurely implement" guidance above. They will graduate to real
+surfaces only once their real backing (A1/A4/A5/A6) exists.

@@ -937,6 +937,10 @@ Future execution UI            A6 Automation later
 
 # DS-2 — SIDR primitives
 
+**Статус:** DONE (2026-07-11) — `core/ui/primitive/` (8 primitives) + `Strokes` token + preview gallery
+goldens (dark/light/font-scale/RTL); keystone `SidrProvenanceLine` semantic + TalkBack; presentation-only,
+additive. ADR: decisions.md "2026-07-11 — DS-2 primitives complete".
+
 ## Цель
 
 Создать минимальные строительные элементы, выражающие identity и system truth.

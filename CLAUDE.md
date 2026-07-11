@@ -1,5 +1,17 @@
 # CLAUDE.md — Sidr Launcher
 
+**Design track (DS) — DS-1 + DS-2 DONE (2026-07-11).** A parallel, presentation-only design-system
+migration to the approved **soft-classic-grey** identity, governed by `docs/design/SIDR Design System
+Master Plan v1.2` (the principles rulebook was folded into it: §5.1 precedence, §5.2 verify-vocab, §20.1
+calm budgets). **DS-1** = grey token layer + tri-font + softened shapes + `SidrTheme.colors`/`textStyles`
+(accent kept but inert) + global CRT removed + Roborazzi screenshot harness. **DS-2** = eight additive
+`core/ui/primitive/` primitives + `Strokes` token + gallery goldens (dark/light/font-scale/RTL); keystone
+`SidrProvenanceLine` (semantic `source`+`details`, TalkBack); status≠accent; **no production
+screen/nav/VM/persistence/domain change** — parity fully intact. Next design block: **DS-3** (controls).
+ADRs: decisions.md "2026-07-11 — DS-1 complete" / "2026-07-11 — DS-2 primitives complete"; specs+plans under
+`docs/superpowers/`. Stage-2 S2-2 "Explicit Aliases" (domain/data/DI Phase A–C already on `launcher-4`) is
+paused pending its grey UI in DS-7. The AI-launcher stage digest below is unchanged.
+
 Session digest. Read this first. **Last synced: 2026-07-11 — Stage-2 block S2-1 "Learned Resolutions" is
 CLOSED. Tasks 1–16 are done on `launcher-4`; build gate `:domain:test` + `testDebugUnitTest` +
 `assembleDebug` was green; SM-A325F device acceptance passed with screenshots under

@@ -1,5 +1,13 @@
 # DS-2 — SIDR Primitives Implementation Plan
 
+> **STATUS: DONE (2026-07-11).** All 8 tasks implemented on `launcher-4`. Eight `core/ui/primitive/`
+> primitives + `Strokes` token live and additive; keystone `SidrProvenanceLine` semantic + TalkBack-proven;
+> role/format/status/tone logic unit-tested; dark/light/font-scale-2.0/RTL goldens green; no `domain`/
+> `feature` import in `primitive/` (guard green); status≠accent; full gate
+> `:core:ui:testDebugUnitTest testDebugUnitTest assembleDebug :core:ui:verifyRoborazziDebug` BUILD SUCCESSFUL;
+> no production screen/nav/VM/persistence touched. ADR: decisions.md "2026-07-11 — DS-2 primitives complete".
+> Next: DS-3 (controls).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the eight additive DS-2 presentation primitives (keystone `SidrProvenanceLine`) + a stroke token + a preview-only gallery with dark/light/font-scale/RTL Roborazzi goldens, so DS-3+ compose from a stable, tested primitive layer.

@@ -4,6 +4,17 @@
 > and the per-phase plans.** This file is a short pointer/snapshot only — if it disagrees with those,
 > they win. Last re-based: 2026-07-11 (S2-1 closed).
 
+## Design track (DS) — DS-1 + DS-2 DONE (2026-07-11)
+
+Parallel presentation-only design-system migration to the approved **soft-classic-grey** identity, governed
+by `docs/design/SIDR Design System Master Plan v1.2` (§5.1 precedence, §5.2 verify-vocab, §20.1 calm budgets
+folded in from the principles rulebook). **DS-1** = grey token layer (both themes) + tri-font + softened
+shapes + `SidrTheme.colors`/`textStyles` (accent inert) + global CRT removed + **Roborazzi harness**.
+**DS-2** = eight additive `core/ui/primitive/` primitives + `Strokes` token + preview gallery goldens
+(dark/light/font-scale-2.0/RTL); keystone `SidrProvenanceLine` (semantic `source`+`details`, TalkBack);
+status≠accent; **no production screen/nav/VM/persistence/domain change**. Full gate green. Next: **DS-3**
+(controls). ADRs: decisions.md "2026-07-11 — DS-1 complete" and "2026-07-11 — DS-2 primitives complete".
+
 ## Stage 2 — AI Framework · S2-1 "Learned Resolutions" — CLOSED (2026-07-11)
 
 On-device learning of which app the user meant for an ambiguous launch command (rank-first → threshold

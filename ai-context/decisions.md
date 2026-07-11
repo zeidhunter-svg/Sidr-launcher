@@ -4386,3 +4386,32 @@ to an LLM/cloud path, and Task 15's outbound/dependency/scope guard tests remain
 `learning 1/3`, auto-launch, delete/relearn, correction A→B, preferred-target uninstall invalidation, and
 router-off parity. Temporary `SidrProbe` packages were removed; `adb shell pm list packages com.sidr.probe`
 returned no packages after cleanup.
+
+## ADR 2026-07-11 — DS-2 primitives complete (presentation-only)
+
+**Design-track block DS-2** ("SIDR primitives", Master Plan v1.2 §11) is DONE on `launcher-4`. Presentation-
+only, additive: **no production screen / nav / ViewModel / persistence / domain change**. Spec:
+[docs/superpowers/specs/2026-07-11-ds2-primitives-design.md](../docs/superpowers/specs/2026-07-11-ds2-primitives-design.md);
+plan (DONE): [docs/superpowers/plans/2026-07-11-ds2-primitives.md](../docs/superpowers/plans/2026-07-11-ds2-primitives.md).
+
+- **New `core/ui/primitive/`** (8 primitives) + **`theme/Strokes.kt`** (hairline 1dp / focus 2dp):
+  `SidrText` (tri-font entry via `SidrTextRole{COMMAND,SYSTEM,PROVENANCE,SACRED,HUMAN_BODY,HUMAN_TITLE,LABEL}`
+  → `SidrTextStyles`/Typography + colour role), `SidrSystemLabel` (mono uppercase), **`SidrProvenanceLine`
+  (keystone** — semantic `source: String, details: List<String>`, faint-mono `SOURCE · detail`, uppercased,
+  wraps, TalkBack reads a composed sentence not glyphs), `SidrStatusMarker` (fixed status dot **+** label —
+  status never colour-only, never the accent), `SidrSurface` (`SidrSurfaceTone{GROUND,SURFACE,RAISED,SACRED,
+  RISK}`; elevation-by-1px-line; RISK gets a caution hairline border; press-invert deferred to DS-3),
+  `SidrDivider`, `Modifier.sidrFocusRing()` (2px accent), `SidrProgress` (quiet indeterminate/determinate).
+- **Logic unit-tested on JVM** (role→style/colour, provenance format+description, status→token, tone→
+  background/border); **look verified by Roborazzi goldens** `primitives_{dark,light,fontscale2,rtl}` — the
+  §14/§20.1 acceptance (dark/light, font-scale 2.0 wraps not truncates, RTL mirrors, status≠accent). A
+  **dependency guard** proves no `domain`/`feature` import in `core/ui/primitive/`; a semantics test proves
+  the provenance composed description + status label are TalkBack-readable.
+- **Reconciliation note:** the standalone "principles rulebook" spec was folded into Master Plan v1.2 (§5.1
+  precedence, §5.2 verification vocabulary, §20.1 calm budgets) and removed — one governing source.
+- **Env:** built with plain `./gradlew` (this machine pins `org.gradle.java.home` to a local JDK 17 in
+  `~/.gradle/gradle.properties`; no `JAVA_HOME` prefix). Goldens use module-relative paths.
+
+**Build gate green:** `:core:ui:testDebugUnitTest testDebugUnitTest assembleDebug :core:ui:verifyRoborazziDebug`
+BUILD SUCCESSFUL. Feature tests unaffected (additive). **Next design block:** DS-3 (controls — buttons,
+chips incl. press-invert, rows), which composes these primitives; production-screen migration begins there.

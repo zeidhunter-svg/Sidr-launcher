@@ -28,6 +28,7 @@ import com.sidr.launcher.feature.launcher.AppDrawerScreen
 import com.sidr.launcher.feature.launcher.AppDrawerViewModel
 import com.sidr.launcher.feature.launcher.LauncherScreen
 import com.sidr.launcher.feature.launcher.LauncherViewModel
+import com.sidr.launcher.feature.launcher.preview.AgentsPreviewScreen
 import com.sidr.launcher.feature.launcher.preview.TasksPreviewScreen
 import com.sidr.launcher.feature.permission_education.PermissionEducationScreen
 import com.sidr.launcher.feature.settings.LearnedChoicesScreen
@@ -176,12 +177,7 @@ fun AppNavHost(
 
         composable(Routes.Agents.ROUTE) {
             TabRootScaffold(SidrTab.AGENTS, navController) { inner ->
-                Box(
-                    modifier = Modifier.padding(inner).fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    SidrPreviewBanner()
-                }
+                AgentsPreviewScreen(modifier = Modifier.padding(inner))
             }
         }
 

@@ -1,5 +1,6 @@
 package com.sidr.launcher.feature.assistant
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,21 +8,22 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,11 +33,27 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sidr.launcher.core.common.UiError
+import com.sidr.launcher.core.ui.component.SidrIconButton
+import com.sidr.launcher.core.ui.component.SidrPrimaryButton
+import com.sidr.launcher.core.ui.component.SidrScaffold
+import com.sidr.launcher.core.ui.component.SidrSecondaryButton
+import com.sidr.launcher.core.ui.component.SidrTopBar
+import com.sidr.launcher.core.ui.primitive.SidrDivider
+import com.sidr.launcher.core.ui.primitive.SidrProgress
+import com.sidr.launcher.core.ui.primitive.SidrSurface
+import com.sidr.launcher.core.ui.primitive.SidrSurfaceTone
+import com.sidr.launcher.core.ui.primitive.SidrText
+import com.sidr.launcher.core.ui.primitive.SidrTextRole
+import com.sidr.launcher.core.ui.theme.SidrShapes
+import com.sidr.launcher.core.ui.theme.SidrTheme
+import com.sidr.launcher.core.ui.theme.Spacing
+import java.net.URI
 
 /**
  * Assistant screen — pure render, no business logic. Chat only: the provider-settings form lives on
@@ -52,52 +70,52 @@ fun AssistantScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isConfigured = uiState.form.baseUrl.isNotBlank()
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(top = 8.dp),
+    SidrScaffold(
+        modifier = modifier,
+        topBar = {
+            SidrTopBar(
+                title = "Assistant",
+                navigationIcon = {
+                    SidrIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        onClick = viewModel::navigateBack,
+                    )
+                },
+            )
+        },
+    ) { inner ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(inner)
+                .padding(horizontal = Spacing.lg),
         ) {
-            IconButton(onClick = viewModel::navigateBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+            if (!isConfigured) {
+                Spacer(modifier = Modifier.height(Spacing.xl))
+                SidrText(
+                    text = "No AI provider configured yet.",
+                    role = SidrTextRole.HUMAN_BODY,
+                )
+                Spacer(modifier = Modifier.height(Spacing.sm))
+                SidrText(
+                    text = "Set one up in Settings → AI provider settings.",
+                    role = SidrTextRole.PROVENANCE,
+                )
+                Spacer(modifier = Modifier.height(Spacing.lg))
+                SidrPrimaryButton(
+                    text = "Open provider settings",
+                    onClick = viewModel::openProviderSettings,
+                )
+            } else {
+                ChatView(
+                    uiState = uiState,
+                    initialPrompt = initialPrompt,
+                    onSend = viewModel::send,
+                    onRetry = viewModel::retry,
+                    onOpenProvider = viewModel::openProviderSettings,
                 )
             }
-            Text(
-                text = "Assistant",
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(start = 8.dp),
-            )
-        }
-
-        if (!isConfigured) {
-            Spacer(modifier = Modifier.height(24.dp))
-            Text(
-                text = "No AI provider configured yet.",
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Set one up in Settings → AI provider settings.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = viewModel::openProviderSettings) {
-                Text("Open provider settings")
-            }
-        } else {
-            ChatView(
-                uiState = uiState,
-                initialPrompt = initialPrompt,
-                onSend = viewModel::send,
-                onRetry = viewModel::retry,
-                onOpenProvider = viewModel::openProviderSettings,
-            )
         }
     }
 }
@@ -157,6 +175,7 @@ private fun ChatView(
     // it never touches SavedStateHandle (the assistant holds none by design).
     var prompt by remember(initialPrompt) { mutableStateOf(initialPrompt ?: "") }
     val scrollState = rememberScrollState()
+    val colors = SidrTheme.colors
 
     Column(modifier = modifier.fillMaxSize()) {
 
@@ -167,33 +186,29 @@ private fun ChatView(
                 .fillMaxWidth()
                 .verticalScroll(scrollState),
         ) {
-            Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            Column(modifier = Modifier.padding(vertical = Spacing.sm)) {
                 when (val status = uiState.status) {
                     AssistantStatus.Idle -> {
                         if (uiState.reply.isNotEmpty()) {
-                            Text(text = uiState.reply, style = MaterialTheme.typography.bodyMedium)
+                            SidrText(text = uiState.reply, role = SidrTextRole.HUMAN_BODY)
                         }
                     }
 
                     AssistantStatus.Streaming -> {
                         if (uiState.reply.isNotEmpty()) {
-                            Text(
-                                text = uiState.reply,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            SidrText(text = uiState.reply, role = SidrTextRole.HUMAN_BODY)
+                            Spacer(modifier = Modifier.height(Spacing.sm))
                         }
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        SidrProgress(modifier = Modifier.fillMaxWidth())
                     }
 
                     is AssistantStatus.Done -> {
-                        Text(text = uiState.reply, style = MaterialTheme.typography.bodyMedium)
+                        SidrText(text = uiState.reply, role = SidrTextRole.HUMAN_BODY)
                         if (status.refused) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
+                            Spacer(modifier = Modifier.height(Spacing.xs))
+                            SidrText(
                                 text = "The assistant declined to respond.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                role = SidrTextRole.PROVENANCE,
                             )
                         }
                     }
@@ -204,64 +219,102 @@ private fun ChatView(
                             UiError.Network -> "No network connection."
                             UiError.Unknown -> "Something went wrong."
                         }
-                        Text(
+                        SidrText(
                             text = errorText,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
+                            role = SidrTextRole.HUMAN_BODY,
+                            color = colors.danger,
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(Spacing.sm))
                         if (status.retryable) {
-                            Button(onClick = onRetry) { Text("Retry") }
+                            SidrPrimaryButton(text = "Retry", onClick = onRetry)
                         } else if (status.showProviderCta) {
-                            OutlinedButton(onClick = onOpenProvider) {
-                                Text("Fix provider settings")
-                            }
+                            SidrSecondaryButton(text = "Fix provider settings", onClick = onOpenProvider)
                         }
                     }
+                }
+
+                // Provenance line (Task 3 step 3): host + model only — never the raw URL/scheme or key.
+                if (uiState.form.baseUrl.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(Spacing.sm))
+                    SidrText(
+                        text = "CLOUD · ${providerHost(uiState.form.baseUrl)} · ${uiState.form.modelId}",
+                        role = SidrTextRole.PROVENANCE,
+                    )
                 }
             }
         }
 
-        HorizontalDivider()
+        SidrDivider()
 
-        // Prompt input
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
+        // Prompt input (Task 3 step 4): a single SidrSurface wraps the mono BasicTextField + send icon,
+        // matching the DrawerSearchField idiom. Enablement/dispatch logic is unchanged from before.
+        SidrSurface(
+            tone = SidrSurfaceTone.SURFACE,
+            shape = SidrShapes.medium,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
+                .imePadding()
+                .padding(vertical = Spacing.sm),
         ) {
-            OutlinedTextField(
-                value = prompt,
-                onValueChange = { prompt = it },
-                placeholder = { Text("Ask something…") },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(
-                    onSend = {
-                        if (prompt.isNotBlank() && uiState.status !is AssistantStatus.Streaming) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(Spacing.md),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    if (prompt.isEmpty()) {
+                        SidrText(
+                            text = "Message",
+                            role = SidrTextRole.HUMAN_BODY,
+                            color = colors.faint,
+                        )
+                    }
+                    BasicTextField(
+                        value = prompt,
+                        onValueChange = { prompt = it },
+                        singleLine = true,
+                        textStyle = LocalTextStyle.current.merge(
+                            SidrTheme.textStyles.command.copy(color = colors.text),
+                        ),
+                        cursorBrush = SolidColor(colors.accent),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(
+                            onSend = {
+                                if (prompt.isNotBlank() && uiState.status !is AssistantStatus.Streaming) {
+                                    onSend(prompt)
+                                    prompt = ""
+                                }
+                            },
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                SidrIconButton(
+                    icon = Icons.AutoMirrored.Filled.Send,
+                    contentDescription = "Send",
+                    onClick = {
+                        if (prompt.isNotBlank()) {
                             onSend(prompt)
                             prompt = ""
                         }
                     },
-                ),
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(
-                onClick = {
-                    if (prompt.isNotBlank()) {
-                        onSend(prompt)
-                        prompt = ""
-                    }
-                },
-                enabled = prompt.isNotBlank() && uiState.status !is AssistantStatus.Streaming,
-            ) {
-                Text("Send")
+                    enabled = prompt.isNotBlank() && uiState.status !is AssistantStatus.Streaming,
+                    tint = colors.accent,
+                )
             }
         }
     }
 }
+
+/**
+ * Host-only display for the provenance line (Task 3 step 3) — never the raw base URL/scheme, never
+ * the key. Falls back to the raw string if it doesn't parse as a URI or carries no host.
+ */
+private fun providerHost(baseUrl: String): String =
+    runCatching { URI(baseUrl).host }.getOrNull() ?: baseUrl
 
 /**
  * Provider-settings form. Fields: base URL, model (free-text), API key (masked).

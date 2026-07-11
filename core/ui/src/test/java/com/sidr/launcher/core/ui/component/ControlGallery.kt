@@ -138,6 +138,11 @@ fun ControlGallery() {
                 enabled = false,
             )
 
+            // ── Preview ────────────────────────────────────────────────────────
+            SidrSystemLabel("PREVIEW")
+            SidrPreviewBadge()
+            SidrPreviewBanner()
+
             // ── Action Gate ─────────────────────────────────────────────────────
             SidrSystemLabel("ACTION GATE")
             SidrActionGate(

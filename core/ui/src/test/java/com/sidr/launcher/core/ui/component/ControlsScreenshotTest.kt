@@ -1,6 +1,7 @@
 package com.sidr.launcher.core.ui.component
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.CompositionLocalProvider
@@ -33,6 +34,18 @@ class ControlsScreenshotTest {
 
     @Test fun controls_dark() = capture(dark = true, name = "controls_dark")
     @Test fun controls_light() = capture(dark = false, name = "controls_light")
+
+    @Test fun preview_controls() {
+        compose.setContent {
+            SidrTheme(darkTheme = true) {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                    SidrPreviewBadge()
+                    SidrPreviewBanner()
+                }
+            }
+        }
+        compose.onRoot().captureRoboImage("src/test/screenshots/preview_controls.png")
+    }
 
     @Test fun universal_input_idle() = captureInput(dark = true, name = "universal_input_idle", value = "")
     @Test fun universal_input_typing() = captureInput(dark = true, name = "universal_input_typing", value = "open telegram")

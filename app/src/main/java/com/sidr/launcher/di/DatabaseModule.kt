@@ -4,11 +4,13 @@ import android.content.Context
 import androidx.room.Room
 import com.sidr.launcher.BuildConfig
 import com.sidr.launcher.data.repository.db.SidrDatabase
+import com.sidr.launcher.data.repository.db.dao.AliasDao
 import com.sidr.launcher.data.repository.db.dao.AppUsageDao
 import com.sidr.launcher.data.repository.db.dao.IntentMatchDao
 import com.sidr.launcher.data.repository.db.dao.ResolutionPreferenceDao
 import com.sidr.launcher.data.repository.db.dao.SuggestionRankingDao
 import com.sidr.launcher.data.repository.db.migrations.Migration1To2
+import com.sidr.launcher.data.repository.db.migrations.Migration2To3
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -24,8 +26,8 @@ import javax.inject.Singleton
  * `suggestion_ranking`, `intent_match`) are recreatable; `resolution_preferences` (Stage-2 S2-1)
  * is user-learned state, so a real migration is provided (see [Migration1To2]) rather than relying
  * on the debug-only destructive path. Release builds get no destructive fallback: a missing
- * migration will crash loudly (expected — signals that a Migration object and schema bump are
- * required).
+     * migration will crash loudly (expected — signals that a Migration object and schema bump are
+     * required).
  *
  * @Binds for the three history repository interfaces lives in [HistoryBindsModule] (kept separate
  * because Hilt forbids mixing @Provides and @Binds in one module — see Block D ADR).
@@ -41,7 +43,7 @@ object DatabaseModule {
             context,
             SidrDatabase::class.java,
             SidrDatabase.DATABASE_NAME,
-        ).addMigrations(Migration1To2)
+        ).addMigrations(Migration1To2, Migration2To3)
         if (BuildConfig.DEBUG) {
             builder.fallbackToDestructiveMigration()
         }
@@ -61,4 +63,7 @@ object DatabaseModule {
     @Provides
     fun provideResolutionPreferenceDao(db: SidrDatabase): ResolutionPreferenceDao =
         db.resolutionPreferenceDao()
+
+    @Provides
+    fun provideAliasDao(db: SidrDatabase): AliasDao = db.aliasDao()
 }

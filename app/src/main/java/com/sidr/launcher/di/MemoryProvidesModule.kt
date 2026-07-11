@@ -2,6 +2,13 @@ package com.sidr.launcher.di
 
 import com.sidr.launcher.domain.action.ActionCatalog
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
+import com.sidr.launcher.domain.memory.alias.AliasStore
+import com.sidr.launcher.domain.memory.alias.DeleteAliasUseCase
+import com.sidr.launcher.domain.memory.alias.ObserveAliasesUseCase
+import com.sidr.launcher.domain.memory.alias.PruneUnavailableAliasesUseCase
+import com.sidr.launcher.domain.memory.alias.ResolvedCommandStep
+import com.sidr.launcher.domain.memory.alias.ResolveCommandWithAliasUseCase
+import com.sidr.launcher.domain.memory.alias.SaveAliasUseCase
 import com.sidr.launcher.domain.memory.resolution.CommandRouteStep
 import com.sidr.launcher.domain.memory.resolution.DefaultResolutionPreferencePolicy
 import com.sidr.launcher.domain.memory.resolution.DeleteLearnedChoiceUseCase
@@ -89,6 +96,40 @@ object MemoryProvidesModule {
         store: ResolutionPreferenceStore,
         installedApps: InstalledAppsRepository,
     ): PruneUnavailableLearnedChoicesUseCase = PruneUnavailableLearnedChoicesUseCase(
+        store = store,
+        installedApps = installedApps,
+    )
+
+    @Provides
+    @Singleton
+    fun provideSaveAliasUseCase(store: AliasStore): SaveAliasUseCase = SaveAliasUseCase(store)
+
+    @Provides
+    @Singleton
+    fun provideDeleteAliasUseCase(store: AliasStore): DeleteAliasUseCase = DeleteAliasUseCase(store)
+
+    @Provides
+    @Singleton
+    fun provideObserveAliasesUseCase(
+        store: AliasStore,
+        installedApps: InstalledAppsRepository,
+    ): ObserveAliasesUseCase = ObserveAliasesUseCase(store, installedApps)
+
+    @Provides
+    @Singleton
+    fun providePruneUnavailableAliasesUseCase(
+        store: AliasStore,
+        installedApps: InstalledAppsRepository,
+    ): PruneUnavailableAliasesUseCase = PruneUnavailableAliasesUseCase(store, installedApps)
+
+    @Provides
+    @Singleton
+    fun provideResolveCommandWithAliasUseCase(
+        inner: ResolveCommandWithPreferenceUseCase,
+        store: AliasStore,
+        installedApps: InstalledAppsRepository,
+    ): ResolveCommandWithAliasUseCase = ResolveCommandWithAliasUseCase(
+        inner = ResolvedCommandStep { rawInput -> inner.resolve(rawInput) },
         store = store,
         installedApps = installedApps,
     )

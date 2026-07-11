@@ -1,6 +1,8 @@
 package com.sidr.launcher.di
 
+import com.sidr.launcher.data.repository.db.AliasStoreImpl
 import com.sidr.launcher.data.repository.db.ResolutionPreferenceStoreImpl
+import com.sidr.launcher.domain.memory.alias.AliasStore
 import com.sidr.launcher.domain.memory.resolution.ResolutionPreferenceStore
 import dagger.Binds
 import dagger.Module
@@ -23,4 +25,10 @@ abstract class MemoryBindsModule {
     abstract fun bindResolutionPreferenceStore(
         impl: ResolutionPreferenceStoreImpl,
     ): ResolutionPreferenceStore
+
+    @Binds
+    @Singleton
+    abstract fun bindAliasStore(
+        impl: AliasStoreImpl,
+    ): AliasStore
 }

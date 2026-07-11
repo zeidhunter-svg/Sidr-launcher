@@ -20,7 +20,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
-import com.sidr.launcher.core.ui.component.SidrPreviewBanner
 import com.sidr.launcher.feature.assistant.AssistantProviderScreen
 import com.sidr.launcher.feature.assistant.AssistantScreen
 import com.sidr.launcher.feature.assistant.AssistantViewModel
@@ -31,6 +30,7 @@ import com.sidr.launcher.feature.launcher.LauncherViewModel
 import com.sidr.launcher.feature.launcher.preview.ActivityPreviewScreen
 import com.sidr.launcher.feature.launcher.preview.AgentsPreviewScreen
 import com.sidr.launcher.feature.launcher.preview.TasksPreviewScreen
+import com.sidr.launcher.feature.launcher.preview.TerminalPreviewScreen
 import com.sidr.launcher.feature.permission_education.PermissionEducationScreen
 import com.sidr.launcher.feature.settings.LearnedChoicesScreen
 import com.sidr.launcher.feature.settings.SettingsScreen
@@ -167,9 +167,8 @@ fun AppNavHost(
         }
 
         // Vision MVP preview tab roots (Task 7): four additive, non-functional tab destinations.
-        // Task 11 replaces the remaining stub body with its own real preview composable
-        // (TerminalPreviewScreen, deliberately NOT declared here to avoid colliding with that
-        // future definition).
+        // All four (Tasks/Agents/Activity/Terminal) are now real, non-functional preview screens
+        // (Tasks 8/9/10/11) — no stub bodies remain.
         composable(Routes.Tasks.ROUTE) {
             TabRootScaffold(SidrTab.TASKS, navController) { inner ->
                 TasksPreviewScreen(modifier = Modifier.padding(inner))
@@ -190,12 +189,7 @@ fun AppNavHost(
 
         composable(Routes.Terminal.ROUTE) {
             TabRootScaffold(SidrTab.TERMINAL, navController) { inner ->
-                Box(
-                    modifier = Modifier.padding(inner).fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    SidrPreviewBanner()
-                }
+                TerminalPreviewScreen(modifier = Modifier.padding(inner))
             }
         }
 

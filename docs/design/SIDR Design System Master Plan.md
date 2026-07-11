@@ -490,6 +490,42 @@ AI не расширяет полномочия самостоятельно.
 | Sukun           | Покой является default state                             | Home idle, sacred header                            | DS-4, DS-6A              | idle screenshot density gate                            |
 | Human authority | Пользователь управляет consequential loop                | Action Gate, execution controls, undo               | DS-3, A4, A6             | Cancel не вызывает действие; pause/stop честны          |
 
+## 5.1. Приоритет принципов (разрешение конфликтов)
+
+Восемь принципов **не равны на моменте решения** — они конфликтуют (объяснить vs. промолчать;
+раскрыть облако vs. сохранить покой Home). Порядок разрешения:
+
+```text
+Human-authority + Amanah  (безопасность и правда)  — не-негоциируемы, абсолютны
+        ↓
+Adl               (одинаковый риск = одинаковый UI) — применяет безопасность единообразно
+        ↓
+Ilm               (объяснить неочевидное)           — заслуживает место прогрессивно
+        ↓
+Mizan             (минимум для решения)             — дефолтный бюджет раскрытия
+        ↓
+Haya + Sukun      (сдержанность и покой)            — состояние по умолчанию
+```
+
+**Эвристика (одна строка):** правда и безопасность не-негоциируемы; консистентность их защищает;
+информация, **необходимая** для осознанного решения, никогда не подавляется ради покоя — но **не**
+необходимая деталь уступает покою (progressive disclosure). При конфликте правил одного ранга —
+эскалация, не молчаливый выбор.
+
+## 5.2. Verification vocabulary для «Обязательной проверки»
+
+Каждая «Обязательная проверка» в §5 и каждый gate ссылается на один из закрытого набора типов,
+привязанных к реальным механизмам репозитория:
+
+* `screenshot` — Roborazzi golden (`:core:ui:verifyRoborazziDebug`, DS-1 harness);
+* `semantics` — Compose semantics / TalkBack / focus order;
+* `arch-guard` — dependency / privacy guard (`OutboundContextPolicy`, `AiRequestGuardTest`, `PrivacyInventoryGuardTest`, `accent_and_status_are_distinct_tokens`);
+* `unit` — domain / ViewModel behavior (`RouteCommandUseCaseTest`, `ExecuteActionUseCaseTest`, `LauncherViewModelTest`);
+* `device` — SM-A325F device-acceptance;
+* `manual` — ручной visual/content review (§20; честно не-автоматизируемо).
+
+Правило может быть только `manual` — тогда оно так и помечается; аспирационное «should be tested» запрещено.
+
 ---
 
 # 6. Visual identity contract
@@ -1821,6 +1857,20 @@ Automation
 [ ] Не скрыта ли ошибка религиозно значимой функции?
 [ ] Можно ли исправить или удалить сохранённое?
 ```
+
+## 20.1. Calm budgets (числовые прокси Sukun/Haya)
+
+«Покой» и «сдержанность» непроверяемы как настроение — поэтому задаются счётчиками, а не вкусом:
+
+```text
+[ ] Idle animation budget = 0        (idle-поверхность без анимированных элементов)
+[ ] Accent budget ≤ 2–3 на экран     (accent «едва присутствует»; остальное — нейтральный grey/text)
+[ ] Нет status-только-цветом         (каждый статус несёт text + marker, не один цвет)
+[ ] Sacred-density: только Shahada (+ опц. одна prayer-строка), ничто не конкурирует за внимание
+[ ] Motion в пределах doctrine-токенов (100–360мс), reduce-motion соблюдён
+```
+
+Точное N для accent-бюджета фиксируется в планах DS-2/DS-3. Проверка: `screenshot` (idle/плотность) + `manual`.
 
 ---
 

@@ -34,7 +34,7 @@ class TerminalPreviewScreenTest {
     @get:Rule val compose = createComposeRule()
 
     @Test fun terminal_never_produces_output() {
-        compose.setContent { SidrTheme(darkTheme = true) { TerminalPreviewScreen() } }
+        compose.setContent { SidrTheme(darkTheme = true) { TerminalPreviewScreen(onBack = {}) } }
         compose.onNodeWithText("PREVIEW — this screen is a design of what's coming; it isn't live yet.")
             .assertIsDisplayed()
         // typing + submit must NOT add any transcript output (no fake REPL result)
@@ -43,7 +43,7 @@ class TerminalPreviewScreenTest {
     }
 
     @Test fun typing_and_submitting_produces_no_output() {
-        compose.setContent { SidrTheme(darkTheme = true) { TerminalPreviewScreen() } }
+        compose.setContent { SidrTheme(darkTheme = true) { TerminalPreviewScreen(onBack = {}) } }
 
         // Transcript starts empty.
         compose.onNodeWithTag(TERMINAL_TRANSCRIPT_TEST_TAG).onChildren().assertCountEquals(0)

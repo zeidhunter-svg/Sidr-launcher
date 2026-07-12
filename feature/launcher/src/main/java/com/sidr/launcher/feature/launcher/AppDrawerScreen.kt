@@ -61,10 +61,14 @@ import com.sidr.launcher.core.ui.theme.Spacing
 import com.sidr.launcher.domain.model.InstalledApp
 
 /**
- * App Drawer (Block X3, restyled to the Vision-MVP artifact look — Task 2): the full installed-app
- * list, rendered as a 4-column icon grid with sticky alphabet headers by default. Reached from the
- * home "All apps" affordance. Tapping an app launches it (feeding Favorites / Suggestions on home);
- * Back returns to home via the ViewModel's [NavigationEvent].
+ * App Drawer (Block X3, restyled to the Vision-MVP artifact look — Task 2; promoted to the "Apps"
+ * bottom tab 2026-07-12): the full installed-app list, rendered as a 4-column icon grid with sticky
+ * alphabet headers by default. Tapping an app launches it (feeding Favorites / Suggestions on home).
+ *
+ * [onBack] is optional: it renders a back arrow only when this screen is reached as a *pushed*
+ * destination (none currently do — it's kept for a future non-tab entry point). As a tab root
+ * (the "Apps" tab) it is `null`, matching every other tab root (Home/Tasks/Agents/Activity/Terminal),
+ * none of which have a back arrow — the tab bar itself is how you leave.
  *
  * A screen-local `Groups`/`A-Z` toggle lets the user preview a future grouped-by-category layout.
  * `A-Z` is the real, VM-backed alphabetical grid ([groupIntoSections], unit-tested); `Groups` is a
@@ -74,7 +78,7 @@ import com.sidr.launcher.domain.model.InstalledApp
  */
 @Composable
 fun AppDrawerScreen(
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: AppDrawerViewModel = hiltViewModel(),
 ) {
@@ -87,12 +91,14 @@ fun AppDrawerScreen(
         topBar = {
             SidrTopBar(
                 title = "All apps",
-                navigationIcon = {
-                    SidrIconButton(
-                        icon = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        onClick = onBack,
-                    )
+                navigationIcon = onBack?.let { back ->
+                    {
+                        SidrIconButton(
+                            icon = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            onClick = back,
+                        )
+                    }
                 },
                 actions = {
                     GroupsAzToggle(mode = mode, onModeChange = { mode = it })

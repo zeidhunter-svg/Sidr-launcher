@@ -14,6 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,9 +30,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -44,7 +46,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -60,8 +64,6 @@ import com.sidr.launcher.core.ui.component.SidrActionProposal
 import com.sidr.launcher.core.ui.component.SidrActionProposalTone
 import com.sidr.launcher.core.ui.component.EmptyState
 import com.sidr.launcher.core.ui.component.ErrorState
-import com.sidr.launcher.core.ui.component.SidrIconButton
-import com.sidr.launcher.core.ui.component.SidrNavigationRow
 import com.sidr.launcher.core.ui.component.SidrSectionHeader
 import com.sidr.launcher.core.ui.component.SidrRouteChip
 import com.sidr.launcher.core.ui.component.SidrScaffold
@@ -107,6 +109,9 @@ fun LauncherScreen(
     // A runtime Android query kept in the screen (like Settings' "Set as default"); the persisted
     // "dismissed" half lives in UserPreferences (LauncherUiState.setupHintDismissed).
     val isDefaultLauncher = remember { isDefaultLauncher(context) }
+    // Tap anywhere outside a text field / clickable to dismiss the soft keyboard (2026-07-12). A tap
+    // on the input, chips, tiles etc. is consumed by those; only taps on empty home area reach this.
+    val focusManager = LocalFocusManager.current
 
     // The ROLE_HOME request must go through startActivityForResult so the permission controller can
     // read the calling package; a plain startActivity delivers a null caller and RequestRoleActivity
@@ -130,6 +135,14 @@ fun LauncherScreen(
         }
     }
 
+    // Default home (Success, not typing, not the dev console) scrolls the WHOLE column as one unit so
+    // nothing is clipped on landscape rotation (Bug fix 2026-07-12). The scroll is enabled ONLY in that
+    // state: the "search-overtakes" panel and the dev console are LazyColumns and the Loading/Empty/Error
+    // states fill the body, none of which may live inside a parent verticalScroll (infinite-height
+    // measure). In those states the body keeps its weight(1f) box instead.
+    val homeScrollState = rememberScrollState()
+    val scrollDefaultHome = uiState is UiState.Success && !inputResults.active && !devConsoleOn
+
     SidrScaffold(
         modifier = modifier,
     ) { innerPadding ->
@@ -137,7 +150,13 @@ fun LauncherScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .imePadding(),
+                .imePadding()
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = { focusManager.clearFocus() })
+                }
+                .then(
+                    if (scrollDefaultHome) Modifier.verticalScroll(homeScrollState) else Modifier,
+                ),
         ) {
             // Shahada is the topmost element, then the date line (Hijri · Gregorian) directly beneath it
             // (owner layout). Both static — no prayer data — and hidden while typing so results overtake.
@@ -151,7 +170,12 @@ fun LauncherScreen(
             SidrUniversalInput(
                 value = commandInput,
                 onValueChange = viewModel::onCommandChanged,
-                onSubmit = { viewModel.onCommandSubmitted(commandInput) },
+                // Submit the command AND drop focus so the soft keyboard closes on send (parity with
+                // terminal/assistant and the tap-to-dismiss behaviour above).
+                onSubmit = {
+                    viewModel.onCommandSubmitted(commandInput)
+                    focusManager.clearFocus()
+                },
                 state = if (commandInput.isNotBlank()) {
                     SidrUniversalInputState.Typing
                 } else {
@@ -202,60 +226,58 @@ fun LauncherScreen(
                 )
             }
 
-            Box(modifier = Modifier.weight(1f)) {
-                when {
-                    // Hidden developer transcript (DF-1) — takes over the body while on.
-                    devConsoleOn -> CommandConsole(lines = consoleLines)
-                    // "Search overtakes": a non-blank buffer replaces the home body with results.
-                    inputResults.active -> InputResultsPanel(
+            when {
+                // Hidden developer transcript (DF-1) — takes over the body while on. LazyColumn: keep it
+                // in a weighted box (parent scroll is disabled in this state).
+                devConsoleOn -> Box(modifier = Modifier.weight(1f)) {
+                    CommandConsole(lines = consoleLines)
+                }
+                // "Search overtakes": a non-blank buffer replaces the home body with results (LazyColumn).
+                inputResults.active -> Box(modifier = Modifier.weight(1f)) {
+                    InputResultsPanel(
                         results = inputResults,
                         onAppClick = viewModel::onAppClicked,
                     )
-                    else -> when (val state = uiState) {
-                        is UiState.Loading -> LoadingContent()
-                        is UiState.Empty -> EmptyState(message = "No apps found")
-                        is UiState.Error -> ErrorState(
+                }
+                else -> when (val state = uiState) {
+                    is UiState.Loading -> Box(modifier = Modifier.weight(1f)) { LoadingContent() }
+                    is UiState.Empty -> Box(modifier = Modifier.weight(1f)) {
+                        EmptyState(message = "No apps found")
+                    }
+                    is UiState.Error -> Box(modifier = Modifier.weight(1f)) {
+                        ErrorState(
                             message = errorMessage(state.error),
                             onRetry = if (state.retryable) viewModel::retry else null,
                         )
-                        is UiState.Success -> HomeContent(
-                            state = state.data,
-                            onAppClick = viewModel::onAppClicked,
-                            onSuggestionTap = viewModel::onSuggestionClicked,
-                            showSetupHint = !isDefaultLauncher && !state.data.setupHintDismissed,
-                            onSetDefault = {
-                                viewModel.dismissSetupHint()
-                                try {
-                                    setDefaultLauncher.launch(defaultLauncherIntent(context))
-                                } catch (_: ActivityNotFoundException) {
-                                    // No handler — never crash the launcher.
-                                }
-                            },
-                            onDismissHint = viewModel::dismissSetupHint,
-                            suggestionsContent = suggestionsContent,
-                        )
                     }
+                    // Default home: rendered inline (no weight) so it scrolls with the whole column
+                    // (see [scrollDefaultHome]). HomeContent is a plain top-aligned column.
+                    is UiState.Success -> HomeContent(
+                        state = state.data,
+                        onAppClick = viewModel::onAppClicked,
+                        onSuggestionTap = viewModel::onSuggestionClicked,
+                        showSetupHint = !isDefaultLauncher && !state.data.setupHintDismissed,
+                        onSetDefault = {
+                            viewModel.dismissSetupHint()
+                            try {
+                                setDefaultLauncher.launch(defaultLauncherIntent(context))
+                            } catch (_: ActivityNotFoundException) {
+                                // No handler — never crash the launcher.
+                            }
+                        },
+                        onDismissHint = viewModel::dismissSetupHint,
+                        suggestionsContent = suggestionsContent,
+                    )
                 }
             }
 
-            // Task 7: the app-level bottom tab bar now owns Home/Tasks/Agents/Activity/Terminal
-            // switching (AppNavHost's TabRootScaffold), and Settings moved onto the privacy line's
-            // gear icon below — so the old three-row HomeBottomNav is retired down to a single
-            // "All apps" row (the App Drawer is not a tab, so it still needs an explicit affordance)
-            // plus the local-first privacy line. Assistant stays reachable via the ASK route chip
-            // above (spec: no duplicate standalone Assistant row). Kept outside the state Box so it
-            // stays discoverable across loading/empty/error too. Hidden while the search-overtakes
-            // body or dev console is up.
-            if (!inputResults.active && !devConsoleOn) {
-                SidrNavigationRow(
-                    title = "All apps",
-                    onClick = { viewModel.navigateTo(Routes.AppDrawer.ROUTE) },
-                )
-                HomePrivacyLine(
-                    onSettings = { viewModel.navigateTo(Routes.Settings.ROUTE) },
-                    onArmDevMode = viewModel::armDevMode,
-                )
-            }
+            // Task 7 + 2026-07-12 revision: the app-level bottom tab bar now owns
+            // Home/Apps/Tasks/Agents/Activity/Terminal switching (AppNavHost's TabRootScaffold) —
+            // "All apps" was promoted from a Home-body row into the "Apps" tab itself, so the old
+            // three-row HomeBottomNav is retired with no replacement row here. Assistant stays
+            // reachable via the ASK route chip above (spec: no duplicate standalone Assistant row).
+            // The local-first privacy line now lives in AppNavHost's TabRootScaffold, below the tab
+            // bar itself, not here (see [HomePrivacyLine] callers).
         }
     }
 }
@@ -337,53 +359,10 @@ private fun HomeRouteChips(
     }
 }
 
-/**
- * Bottom-most line: the local-first privacy note on the left, a Settings gear (Task 7 — Settings
- * moved off the retired three-row bottom nav onto this line, immediately left of the wordmark), and
- * the `SIDR OS` brand wordmark on the right in the same provenance (mono) style. The hidden dev-mode
- * arm (7 rapid taps → [onArmDevMode]) stays on the wordmark, unchanged. Honest: the launcher core
- * resolves commands on-device; the assistant and smart routing are separate opt-in surfaces.
- */
-@Composable
-private fun HomePrivacyLine(
-    onSettings: () -> Unit,
-    onArmDevMode: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var tapCount by remember { mutableStateOf(0) }
-    var lastTap by remember { mutableStateOf(0L) }
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        SidrText(
-            text = "Local-first · on-device",
-            role = SidrTextRole.PROVENANCE,
-            modifier = Modifier.weight(1f),
-        )
-        SidrIconButton(
-            icon = Icons.Filled.Settings,
-            contentDescription = "Settings",
-            onClick = onSettings,
-        )
-        SidrText(
-            text = "SIDR OS",
-            role = SidrTextRole.PROVENANCE,
-            color = SidrTheme.colors.dim,
-            modifier = Modifier.clickable {
-                val now = System.currentTimeMillis()
-                tapCount = if (now - lastTap < 3000L) tapCount + 1 else 1
-                lastTap = now
-                if (tapCount >= 7) {
-                    tapCount = 0
-                    onArmDevMode()
-                }
-            },
-        )
-    }
-}
+// HomePrivacyLine moved to app/navigation/SidrTabScaffold.kt as SidrAppFooter (2026-07-12) — it now
+// renders below the tab bar on every tab root, not just Home, so it lives with the shared tab-bar
+// chrome rather than as Home-local content. LauncherViewModel::armDevMode is still threaded through
+// from AppNavHost's Home call site (see TabRootScaffold's onArmDevMode param).
 
 /** Today's Gregorian date for the top row, e.g. `Sat, 11 Jul`. */
 private fun currentGregorianDate(): String =
@@ -414,7 +393,11 @@ private fun HomeContent(
     suggestionsContent: @Composable (suggestions: List<Suggestion>, onSuggestionTap: (Suggestion) -> Unit) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.fillMaxSize()) {
+    // Plain top-aligned column: the caller scrolls the WHOLE default-home column (Shahada → date →
+    // input → chips → this content) together, so on landscape rotation everything scrolls as one and
+    // the Favorites grid stays reachable instead of being clipped off the bottom (2026-07-12 fix).
+    // Hence fillMaxWidth (not fillMaxSize) and no weight(1f) spacer — both would break the parent scroll.
+    Column(modifier = modifier.fillMaxWidth()) {
         if (showSetupHint) {
             SetupNudge(onSetDefault = onSetDefault, onDismiss = onDismissHint)
         }
@@ -425,8 +408,6 @@ private fun HomeContent(
             SidrSectionHeader(text = "Favorites")
             FavoritesGrid(favorites = state.favorites, onAppClick = onAppClick)
         }
-        // Favorites/suggestions stay top-aligned; the All-apps action lives in the bottom CommandBar.
-        Spacer(modifier = Modifier.weight(1f))
     }
 }
 

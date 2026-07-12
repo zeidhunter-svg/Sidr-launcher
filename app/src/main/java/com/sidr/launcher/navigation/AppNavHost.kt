@@ -2,14 +2,19 @@ package com.sidr.launcher.navigation
 
 import android.util.Log
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
@@ -37,16 +42,20 @@ import com.sidr.launcher.feature.settings.LearnedChoicesScreen
 import com.sidr.launcher.feature.settings.SettingsScreen
 import com.sidr.launcher.feature.settings.SettingsViewModel
 import com.sidr.launcher.feature.suggestions.SuggestionsRow
+import kotlinx.coroutines.delay
 
 private const val TAG = "AppNavHost"
 
-/** Maps a [SidrTab] to its root [Routes] destination (Task 7). */
+/** Idle delay before the bottom nav chrome auto-hides to its handle on a tab root (2026-07-12). */
+private const val NAV_AUTO_HIDE_MILLIS = 5_000L
+
+/** Maps a [SidrTab] to its root [Routes] destination (Task 7; Apps added 2026-07-12). */
 private fun routeForTab(tab: SidrTab): String = when (tab) {
     SidrTab.HOME -> Routes.Launcher.ROUTE
+    SidrTab.APPS -> Routes.AppDrawer.ROUTE
     SidrTab.TASKS -> Routes.Tasks.ROUTE
     SidrTab.AGENTS -> Routes.Agents.ROUTE
     SidrTab.ACTIVITY -> Routes.Activity.ROUTE
-    SidrTab.TERMINAL -> Routes.Terminal.ROUTE
 }
 
 /**
@@ -62,25 +71,83 @@ private fun navigateToTab(navController: NavHostController, tab: SidrTab) {
 }
 
 /**
- * Wraps a single tab-root destination's content in a [Scaffold] with the shared [SidrTabBar] as
- * its bottom bar. Only the five tab roots (Home + the four preview tabs) use this — pushed
- * destinations (App Drawer, Settings, Assistant, provider setup, learned choices, permission
- * education) render unwrapped so the tab bar naturally disappears on push and reappears on pop.
+ * Wraps a single tab-root destination's content in a [Scaffold] whose bottom chrome is
+ * [SidrTabBar] (the true bottom-most strip on every tab) plus, **Home only**, the shared
+ * [SidrAppFooter] (privacy note / Terminal icon / Settings gear / `SIDR OS` wordmark) stacked
+ * above it (order fixed 2026-07-12 per owner direction). The footer was found (2026-07-12) to be
+ * appearing on every tab root when it was only ever meant to be Home's; it is now gated on
+ * `tab == SidrTab.HOME` so Apps/Tasks/Agents/Activity show only the tab bar. Pushed destinations
+ * (Settings, Assistant, provider setup, learned choices, permission education, interaction
+ * moments, Terminal) render unwrapped so this whole bottom chrome naturally disappears on push and
+ * reappears on pop.
+ *
+ * [onArmDevMode] is the hidden dev-console arm on the footer's `SIDR OS` wordmark — a Home-only
+ * concept (it drives `LauncherViewModel`'s console overlay); since the footer itself is now
+ * Home-only, only the Home call site ever supplies a real callback.
  *
  * [Modifier.consumeWindowInsets] marks [inner] as already handled for the subtree below: since
  * [LauncherScreen] (and the preview stubs) wrap their own content in a `SidrScaffold` internally,
  * without this the nested Scaffold would independently re-measure the same system-bar insets
  * (e.g. the status bar) that this outer Scaffold already accounted for, double-padding the top of
  * the screen. Consuming here keeps that inner Scaffold's own inset calculation correct.
+ *
+ * `contentWindowInsets = WindowInsets.systemBars` (2026-07-12, part of the keyboard-bug fix): M3
+ * [Scaffold]'s own default is `WindowInsets.safeDrawing`, which — unlike the name suggests —
+ * includes the **IME** inset, not just status/navigation bars; restricting this outer chrome
+ * Scaffold to `systemBars` stops it reacting to the keyboard at the Compose-insets level. The
+ * other half of that fix is in [com.sidr.launcher.LauncherActivity]: without
+ * `WindowCompat.setDecorFitsSystemWindows(window, false)` there, `windowSoftInputMode="adjustResize"`
+ * (manifest) makes the OS physically shrink the whole Activity window when the IME opens on API<35
+ * devices, which this Scaffold's own `contentWindowInsets` alone cannot undo — the window itself has
+ * to stop resizing. The screens that actually need to dodge the keyboard apply their own
+ * `Modifier.imePadding()` at the right level ([LauncherScreen], [com.sidr.launcher.feature.launcher.preview.TerminalPreviewScreen]).
  */
 @Composable
 private fun TabRootScaffold(
     tab: SidrTab,
     navController: NavHostController,
+    alwaysShowNav: Boolean = false,
+    onArmDevMode: () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
+    // Calm/idle-hide bottom nav (2026-07-12): the chrome is visible when a tab root appears and
+    // auto-hides to a thin [SidrChromeHandle] after [NAV_AUTO_HIDE_MILLIS] of no navigation, leaving a
+    // quieter, roomier screen. Tapping the handle summons it back and restarts the idle timer. Active
+    // tab-hopping never has to summon it: tapping a tab re-navigates, and because Navigation-Compose
+    // disposes a non-current tab root, the destination re-enters composition with `chromeVisible = true`
+    // — hence plain `remember` (NOT `rememberSaveable`): each arrival re-initialises to visible for free.
+    // When the user pins nav in Settings ([alwaysShowNav]) the chrome is permanently shown and the
+    // handle/timer are inert.
+    var chromeVisible by remember { mutableStateOf(true) }
+    LaunchedEffect(alwaysShowNav, chromeVisible) {
+        if (!alwaysShowNav && chromeVisible) {
+            delay(NAV_AUTO_HIDE_MILLIS)
+            chromeVisible = false
+        }
+    }
+    val showChrome = alwaysShowNav || chromeVisible
+
     Scaffold(
-        bottomBar = { SidrTabBar(selected = tab, onSelect = { navigateToTab(navController, it) }) },
+        contentWindowInsets = WindowInsets.systemBars,
+        bottomBar = {
+            // The bottomBar is EITHER the full chrome OR the thin reveal handle. Swapping to the (much
+            // shorter) handle shrinks the content inset so the screen breathes. Both are single-purpose
+            // composables that own their size and their own system-nav clearance.
+            if (showChrome) {
+                Column {
+                    if (tab == SidrTab.HOME) {
+                        SidrAppFooter(
+                            onSettings = { navController.navigate(Routes.Settings.ROUTE) },
+                            onTerminal = { navController.navigate(Routes.Terminal.ROUTE) },
+                            onArmDevMode = onArmDevMode,
+                        )
+                    }
+                    SidrTabBar(selected = tab, onSelect = { navigateToTab(navController, it) })
+                }
+            } else {
+                SidrChromeHandle(onReveal = { chromeVisible = true })
+            }
+        },
     ) { inner ->
         Box(modifier = Modifier.consumeWindowInsets(inner)) {
             content(inner)
@@ -134,6 +201,9 @@ fun AppNavHost(
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
     homeResetSignal: Int = 0,
+    // When true, the bottom nav chrome is pinned permanently visible instead of auto-hiding after idle
+    // (2026-07-12; sourced from UserPreferences.alwaysShowNavBar via LauncherActivity).
+    alwaysShowNav: Boolean = false,
 ) {
     LaunchedEffect(homeResetSignal) {
         if (homeResetSignal > 0) {
@@ -153,7 +223,7 @@ fun AppNavHost(
                     handleNavigationEvent(navController, event)
                 }
             }
-            TabRootScaffold(SidrTab.HOME, navController) { inner ->
+            TabRootScaffold(SidrTab.HOME, navController, alwaysShowNav = alwaysShowNav, onArmDevMode = viewModel::armDevMode) { inner ->
                 LauncherScreen(
                     viewModel = viewModel,
                     suggestionsContent = { suggestions, onSuggestionTap ->
@@ -167,11 +237,26 @@ fun AppNavHost(
             }
         }
 
-        // Vision MVP preview tab roots (Task 7): four additive, non-functional tab destinations.
-        // All four (Tasks/Agents/Activity/Terminal) are now real, non-functional preview screens
-        // (Tasks 8/9/10/11) — no stub bodies remain.
+        // "Apps" tab (2026-07-12): the App Drawer, promoted from a Home-body row into a real tab
+        // root — a peer of Home, not a pushed destination, so (like every other tab root) it has no
+        // back arrow of its own (onBack stays null; the tab bar is how you leave). Own ViewModel +
+        // navigation channel for anything besides "back" (e.g. the "Ask assistant" affordance).
+        composable(Routes.AppDrawer.ROUTE) {
+            val vm: AppDrawerViewModel = hiltViewModel()
+            LaunchedEffect(vm.navigationEvents) {
+                vm.navigationEvents.collect { handleNavigationEvent(navController, it) }
+            }
+            TabRootScaffold(SidrTab.APPS, navController, alwaysShowNav = alwaysShowNav) { inner ->
+                AppDrawerScreen(viewModel = vm, modifier = Modifier.padding(inner))
+            }
+        }
+
+        // Vision MVP preview tab roots (Task 7): additive, non-functional tab destinations.
+        // Tasks/Agents/Activity are real, non-functional preview screens (Tasks 8/9/10) — no stub
+        // bodies remain. Terminal (Task 11) is no longer a tab root — see the registration below,
+        // reached via the icon-only button in [SidrAppFooter] instead (2026-07-12).
         composable(Routes.Tasks.ROUTE) {
-            TabRootScaffold(SidrTab.TASKS, navController) { inner ->
+            TabRootScaffold(SidrTab.TASKS, navController, alwaysShowNav = alwaysShowNav) { inner ->
                 TasksPreviewScreen(
                     modifier = Modifier.padding(inner),
                     onOpenMoments = { navController.navigate(Routes.Moments.ROUTE) },
@@ -180,21 +265,25 @@ fun AppNavHost(
         }
 
         composable(Routes.Agents.ROUTE) {
-            TabRootScaffold(SidrTab.AGENTS, navController) { inner ->
+            TabRootScaffold(SidrTab.AGENTS, navController, alwaysShowNav = alwaysShowNav) { inner ->
                 AgentsPreviewScreen(modifier = Modifier.padding(inner))
             }
         }
 
         composable(Routes.Activity.ROUTE) {
-            TabRootScaffold(SidrTab.ACTIVITY, navController) { inner ->
+            TabRootScaffold(SidrTab.ACTIVITY, navController, alwaysShowNav = alwaysShowNav) { inner ->
                 ActivityPreviewScreen(modifier = Modifier.padding(inner))
             }
         }
 
+        // Terminal preview (Task 11; demoted from a tab root to a pushed destination 2026-07-12):
+        // reached via the icon-only button in every tab's [SidrAppFooter], not a tab of its own —
+        // so, like every other pushed destination, it renders unwrapped (no tab bar/footer) with its
+        // own real back arrow.
         composable(Routes.Terminal.ROUTE) {
-            TabRootScaffold(SidrTab.TERMINAL, navController) { inner ->
-                TerminalPreviewScreen(modifier = Modifier.padding(inner))
-            }
+            TerminalPreviewScreen(
+                onBack = { handleNavigationEvent(navController, NavigationEvent.NavigateBack) },
+            )
         }
 
         // Assistant (Block N; Block X6-C adds the optional prompt prefill). The `prompt` arg is
@@ -216,22 +305,6 @@ fun AppNavHost(
                 vm.navigationEvents.collect { handleNavigationEvent(navController, it) }
             }
             AssistantScreen(viewModel = vm, initialPrompt = initialPrompt)
-        }
-
-        // App Drawer (Block X3): the full installed-apps list, opened from the home "All apps"
-        // affordance. Own ViewModel + navigation channel; Back returns to home via the shared
-        // safe-fallback helper. Registering it retires the interim safe-fallback-to-home behaviour.
-        composable(Routes.AppDrawer.ROUTE) {
-            val vm: AppDrawerViewModel = hiltViewModel()
-            LaunchedEffect(vm.navigationEvents) {
-                vm.navigationEvents.collect { handleNavigationEvent(navController, it) }
-            }
-            AppDrawerScreen(
-                viewModel = vm,
-                onBack = {
-                    handleNavigationEvent(navController, NavigationEvent.NavigateBack)
-                },
-            )
         }
 
         composable(Routes.Settings.ROUTE) {

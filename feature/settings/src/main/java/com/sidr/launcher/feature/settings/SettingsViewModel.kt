@@ -62,6 +62,7 @@ class SettingsViewModel @Inject constructor(
             accentColor = preferences.accentColor,
             favoritesCount = preferences.favoritesCount,
             micInputEnabled = preferences.micInputEnabled,
+            alwaysShowNavBar = preferences.alwaysShowNavBar,
             llmRouterEnabled = flags.llmRouterEnabled,
             errorMessage = errorMessage,
         )
@@ -114,7 +115,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     /**
-     * Persist the brand accent (AIL-6 / DF-7). `green` is the default; `amber` is the alternative.
+     * Persist the brand accent (AIL-6 / DF-7; grey/green/amber, grey is the default since 2026-07-12).
      * Applied immediately by `LauncherActivity` (which reads `UserPreferences.accentColor` reactively)
      * and survives restart. No-op when unchanged; a write failure surfaces a transient message.
      */
@@ -193,6 +194,30 @@ class SettingsViewModel @Inject constructor(
                 val current = featureFlagRepository.getFlags().first()
                 if (current.llmRouterEnabled != enabled) {
                     when (featureFlagRepository.updateFlags(current.copy(llmRouterEnabled = enabled))) {
+                        is OperationResult.Success -> Unit
+                        is OperationResult.Failure -> saveError.value = SAVE_ERROR
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                saveError.value = SAVE_ERROR
+            }
+        }
+    }
+
+    /**
+     * Persist the "always show navigation bar" toggle (2026-07-12). When off (default) the bottom nav
+     * auto-hides after idle; when on it stays pinned. No-op when unchanged; a write failure surfaces a
+     * transient, display-safe message.
+     */
+    fun setAlwaysShowNavBar(enabled: Boolean) {
+        viewModelScope.launch(ioDispatcher) {
+            saveError.value = null
+            try {
+                val current = userPreferencesRepository.getPreferences().first()
+                if (current.alwaysShowNavBar != enabled) {
+                    when (userPreferencesRepository.updatePreferences(current.copy(alwaysShowNavBar = enabled))) {
                         is OperationResult.Success -> Unit
                         is OperationResult.Failure -> saveError.value = SAVE_ERROR
                     }

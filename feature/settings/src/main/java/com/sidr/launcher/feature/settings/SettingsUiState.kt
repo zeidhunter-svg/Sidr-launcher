@@ -15,10 +15,13 @@ data class SettingsUiState(
     val aiSuggestionsEnabled: Boolean = false,
     val usageHistoryEnabled: Boolean = false,
     val themeName: String = ThemeOption.SYSTEM,
-    /** Mirrors `UserPreferences.accentColor` — the brand phosphor (`green | amber`), AIL-6 / DF-7. */
-    val accentColor: String = AccentOption.GREEN,
+    /** Mirrors `UserPreferences.accentColor` — the brand accent (`grey | green | amber`), AIL-6 / DF-7. */
+    val accentColor: String = AccentOption.GREY,
     val favoritesCount: Int = 8,
     val micInputEnabled: Boolean = true,
+    /** Mirrors `UserPreferences.alwaysShowNavBar` — when on, the bottom navigation stays permanently
+     *  visible instead of auto-hiding after idle. Off by default (auto-hide on). */
+    val alwaysShowNavBar: Boolean = false,
     /**
      * Mirrors `FeatureFlags.llmRouterEnabled` — the AIL-4 BYOK LLM Action Router. Off by default; when
      * on, natural-language commands the rules can't handle are routed by the configured cloud LLM
@@ -31,13 +34,16 @@ data class SettingsUiState(
 /** Selectable sizes for the home Favorites row (Block X6). */
 val FAVORITES_COUNT_OPTIONS: List<Int> = listOf(4, 6, 8, 10)
 
-/** The two brand accents (AIL-6 / DF-7). Values match `UserPreferences.accentColor`. */
+/** The three brand accents (AIL-6 / DF-7; grey reactivated as default 2026-07-12). Values match
+ *  `UserPreferences.accentColor`. */
 object AccentOption {
+    const val GREY = "grey"
     const val GREEN = "green"
     const val AMBER = "amber"
 
     /** Ordered options for the accent selector, each paired with its display label. */
     val ALL: List<Pair<String, String>> = listOf(
+        GREY to "Grey",
         GREEN to "Green",
         AMBER to "Amber",
     )

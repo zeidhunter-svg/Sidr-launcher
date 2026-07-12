@@ -34,9 +34,11 @@ class ThemeTokensTest {
     }
 
     @Test fun grey_scheme_maps_ground_and_accent() {
-        assertEquals(SidrDarkColors.ground, GreyDarkColorScheme.background)
-        assertEquals(SidrDarkColors.accent, GreyDarkColorScheme.primary)
-        assertEquals(SidrDarkColors.danger, GreyDarkColorScheme.error)
-        assertEquals(SidrLightColors.ground, GreyLightColorScheme.background)
+        val dark = greyColorScheme(darkTheme = true, colors = SidrDarkColors)
+        val light = greyColorScheme(darkTheme = false, colors = SidrLightColors)
+        assertEquals(SidrDarkColors.ground, dark.background)
+        assertEquals(SidrDarkColors.accent, dark.primary)
+        assertEquals(SidrDarkColors.danger, dark.error)
+        assertEquals(SidrLightColors.ground, light.background)
     }
 }

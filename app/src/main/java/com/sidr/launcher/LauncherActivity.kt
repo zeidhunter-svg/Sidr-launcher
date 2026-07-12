@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.core.view.WindowCompat
 import com.sidr.launcher.core.ui.theme.AccentColor
 import com.sidr.launcher.core.ui.theme.LocalSidrMotionEnabled
 import com.sidr.launcher.core.ui.theme.SidrTheme
@@ -48,6 +49,16 @@ class LauncherActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 2026-07-12 bug fix: without this, `windowSoftInputMode="adjustResize"` (manifest) makes the
+        // OS physically shrink this Activity's window whenever the IME opens — on API < 35 devices
+        // (edge-to-edge isn't yet OS-enforced there) that shrink happens *before* Compose sees
+        // anything, so no `contentWindowInsets`/`imePadding()` choice inside Compose can prevent the
+        // whole bottom chrome (tab bar + footer) from visually rising with the keyboard, because the
+        // physical canvas they're laid out in got smaller. Declaring the window edge-to-edge here
+        // stops that OS-level resize; the window's physical size is now constant regardless of the
+        // IME, and only composables that explicitly opt in via `Modifier.imePadding()` (the actual
+        // input fields) react to the keyboard at all.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContent {
             val preferences by userPreferencesRepository.getPreferences()
                 .collectAsState(initial = UserPreferences())
@@ -57,15 +68,19 @@ class LauncherActivity : ComponentActivity() {
                 else -> isSystemInDarkTheme()
             }
             val accent = when (preferences.accentColor) {
+                "green" -> AccentColor.GREEN
                 "amber" -> AccentColor.AMBER
-                else -> AccentColor.GREEN
+                else -> AccentColor.GREY
             }
             val motionEnabled = remember { deviceProfileProvider.profile() != DeviceProfile.LOW_END }
             SidrTheme(darkTheme = darkTheme, accent = accent) {
                 CompositionLocalProvider(LocalSidrMotionEnabled provides motionEnabled) {
                     Surface(modifier = Modifier.fillMaxSize()) {
                         Box(modifier = Modifier.fillMaxSize()) {
-                            AppNavHost(homeResetSignal = homeResetSignal)
+                            AppNavHost(
+                                homeResetSignal = homeResetSignal,
+                                alwaysShowNav = preferences.alwaysShowNavBar,
+                            )
                         }
                     }
                 }

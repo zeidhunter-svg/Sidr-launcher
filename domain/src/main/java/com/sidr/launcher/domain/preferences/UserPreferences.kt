@@ -2,11 +2,13 @@ package com.sidr.launcher.domain.preferences
 
 data class UserPreferences(
     val themeName: String = "system",          // "system" | "light" | "dark"
-    // AIL-6 / DF-7 — brand accent ("phosphor") choice. "green" is the default brand; "amber" is the
-    // shipped alternative (both schemes already exist in core/ui). Stored as a plain string so :domain
-    // stays free of the core/ui AccentColor enum; the string → enum mapping lives in :app (LauncherActivity).
+    // AIL-6 / DF-7, reactivated 2026-07-12 (owner decision) — brand accent choice. "grey" is the
+    // soft-classic-grey default; "green"/"amber" are the historical AIL-0 accents, restored as real,
+    // user-selectable hues (only the accent/border pair changes — see SidrColors.withAccent; the
+    // Shahada and status colours are never affected). Stored as a plain string so :domain stays free
+    // of the core/ui AccentColor enum; the string → enum mapping lives in :app (LauncherActivity).
     // Key is denylist-clean ("accent"/"color" are not forbidden terms).
-    val accentColor: String = "green",          // "green" | "amber"
+    val accentColor: String = "grey",          // "grey" | "green" | "amber"
     val commandInputEnabled: Boolean = true,
     // Block X6 — deferred UI preferences.
     // Home "Favorites" row size (top-N most-used apps); read by LauncherViewModel.deriveFavorites.
@@ -22,4 +24,8 @@ data class UserPreferences(
     // appended. No switcher UI ships in AIL-2 (deferred to AIL-3/DF-7); the default retires the
     // former hardcoded-Google TODO in the executor. Persisted key is denylist-clean.
     val webProviderTemplate: String = "https://www.google.com/search?q={q}",
+    // 2026-07-12 — when false (default) the bottom navigation chrome auto-hides after ~5s of idle on
+    // each tab root and is summoned back via a thin handle (calm/minimal Home). When true the user
+    // pins it permanently visible. Presentation-only; key is denylist-clean ("nav"/"bar" not forbidden).
+    val alwaysShowNavBar: Boolean = false,
 )

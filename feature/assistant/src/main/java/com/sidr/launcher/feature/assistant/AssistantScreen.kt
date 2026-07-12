@@ -1,5 +1,6 @@
 package com.sidr.launcher.feature.assistant
 
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -65,6 +68,9 @@ fun AssistantScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isConfigured = uiState.form.baseUrl.isNotBlank()
+    // Tap outside the composer to dismiss the soft keyboard (2026-07-12) — taps on the field/buttons
+    // are consumed by them; only taps on the empty chat area reach this handler.
+    val focusManager = LocalFocusManager.current
 
     SidrScaffold(
         modifier = modifier,
@@ -85,7 +91,10 @@ fun AssistantScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(inner)
-                .padding(horizontal = Spacing.lg),
+                .padding(horizontal = Spacing.lg)
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = { focusManager.clearFocus() })
+                },
         ) {
             if (!isConfigured) {
                 Spacer(modifier = Modifier.height(Spacing.xl))
@@ -173,6 +182,7 @@ private fun ChatView(
     var prompt by remember(initialPrompt) { mutableStateOf(initialPrompt ?: "") }
     val scrollState = rememberScrollState()
     val colors = SidrTheme.colors
+    val focusManager = LocalFocusManager.current
 
     Column(modifier = modifier.fillMaxSize()) {
 
@@ -282,6 +292,7 @@ private fun ChatView(
                                 if (prompt.isNotBlank() && uiState.status !is AssistantStatus.Streaming) {
                                     onSend(prompt)
                                     prompt = ""
+                                    focusManager.clearFocus()
                                 }
                             },
                         ),
@@ -296,6 +307,7 @@ private fun ChatView(
                         if (prompt.isNotBlank()) {
                             onSend(prompt)
                             prompt = ""
+                            focusManager.clearFocus()
                         }
                     },
                     enabled = prompt.isNotBlank() && uiState.status !is AssistantStatus.Streaming,

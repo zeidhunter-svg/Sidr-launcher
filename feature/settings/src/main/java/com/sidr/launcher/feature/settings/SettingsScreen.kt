@@ -66,6 +66,7 @@ fun SettingsScreen(
         onUsageHistoryChanged = viewModel::setUsageHistoryEnabled,
         onFavoritesCountSelected = viewModel::setFavoritesCount,
         onMicInputChanged = viewModel::setMicInputEnabled,
+        onAlwaysShowNavBarChanged = viewModel::setAlwaysShowNavBar,
         onLlmRouterChanged = viewModel::setLlmRouterEnabled,
         onAssistantProvider = viewModel::openAssistantProvider,
         onLearnedChoices = viewModel::openLearnedChoices,
@@ -90,6 +91,7 @@ private fun SettingsContent(
     onUsageHistoryChanged: (Boolean) -> Unit,
     onFavoritesCountSelected: (Int) -> Unit,
     onMicInputChanged: (Boolean) -> Unit,
+    onAlwaysShowNavBarChanged: (Boolean) -> Unit,
     onLlmRouterChanged: (Boolean) -> Unit,
     onAssistantProvider: () -> Unit,
     onLearnedChoices: () -> Unit,
@@ -149,6 +151,16 @@ private fun SettingsContent(
                     )
                 }
             }
+
+            // Auto-hiding bottom nav (2026-07-12). Off = the nav bar recedes after idle and is summoned
+            // via a handle (calmer Home); on = it stays pinned. Presentation-only shell behaviour.
+            SidrToggleRow(
+                title = "Always show navigation bar",
+                checked = uiState.alwaysShowNavBar,
+                onCheckedChange = onAlwaysShowNavBarChanged,
+                description = "Keep the bottom bar visible at all times. When off, it hides after a few " +
+                    "seconds and reappears when you tap the handle at the bottom.",
+            )
 
             // ── Suggestions ─────────────────────────────────────────────────────
             SidrSectionHeader(text = "SUGGESTIONS")

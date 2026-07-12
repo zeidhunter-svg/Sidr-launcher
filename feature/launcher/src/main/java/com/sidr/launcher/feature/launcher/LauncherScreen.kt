@@ -14,7 +14,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,7 +27,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -58,6 +56,8 @@ import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.core.ui.component.AppTile
 import com.sidr.launcher.core.ui.component.SidrActionGate
 import com.sidr.launcher.core.ui.component.SidrActionGateType
+import com.sidr.launcher.core.ui.component.SidrActionProposal
+import com.sidr.launcher.core.ui.component.SidrActionProposalTone
 import com.sidr.launcher.core.ui.component.EmptyState
 import com.sidr.launcher.core.ui.component.ErrorState
 import com.sidr.launcher.core.ui.component.SidrIconButton
@@ -638,18 +638,15 @@ private fun PendingActionArea(
     } else {
         // SAFE routed proposal — a one-tap accelerator, deliberately distinct from the CONFIRM gate.
         // Still requires a deliberate tap (R4: nothing auto-executes).
-        Row(
-            modifier = modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
-        ) {
-            SidrRouteChip(
-                label = "▸ ${pending.commandLine}",
-                selected = false,
-                onClick = onConfirm,
-            )
-        }
+        SidrActionProposal(
+            title = pending.commandLine,
+            description = "Safe proposal. It still waits for your tap.",
+            tone = SidrActionProposalTone.Safe,
+            onExecute = onConfirm,
+            onCancel = onCancel,
+            executeLabel = "Run",
+            modifier = modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+        )
     }
 }
 

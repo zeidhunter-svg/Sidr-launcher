@@ -6,6 +6,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.sidr.launcher.core.ui.primitive.SidrSurface
@@ -47,6 +51,14 @@ private fun SidrActionGateType.riskTone(): SidrRiskTone = when (this) {
     SidrActionGateType.Destructive -> SidrRiskTone.Destructive
 }
 
+private fun SidrActionGateType.label(): String = when (this) {
+    SidrActionGateType.Confirmation -> "CONFIRM"
+    SidrActionGateType.Permission -> "PERMISSION"
+    SidrActionGateType.SensitiveData -> "SENSITIVE"
+    SidrActionGateType.ExternalHandoff -> "EXTERNAL"
+    SidrActionGateType.Destructive -> "DESTRUCTIVE"
+}
+
 /**
  * Shared consent gate. Composes [SidrSurface] (risk tone), [SidrText], [SidrRiskChip], [SidrProvenanceLine]
  * slot, and SIDR buttons. [confirming] disables both controls and prevents duplicate confirm.
@@ -67,8 +79,10 @@ fun SidrActionGate(
     details: (@Composable (() -> Unit))? = null,
     confirming: Boolean = false,
 ) {
-    val colors = SidrTheme.colors
     val tone = if (type == SidrActionGateType.Destructive) SidrSurfaceTone.RISK else SidrSurfaceTone.SURFACE
+    var confirmDispatched by remember(title, consequence, target) { mutableStateOf(false) }
+    var cancelDispatched by remember(title, consequence, target) { mutableStateOf(false) }
+    val controlsDisabled = confirming || confirmDispatched || cancelDispatched
 
     SidrSurface(tone = tone, modifier = modifier.fillMaxWidth(), shape = SidrShapes.medium) {
         Column(Modifier.padding(Spacing.md), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
@@ -78,7 +92,7 @@ fun SidrActionGate(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 SidrText(text = title, role = SidrTextRole.HUMAN_TITLE)
-                SidrRiskChip(label = type.name.uppercase(), tone = type.riskTone())
+                SidrRiskChip(label = type.label(), tone = type.riskTone())
             }
 
             // Consequence is always visible (spec §5.6).
@@ -105,25 +119,23 @@ fun SidrActionGate(
             // Details slot (optional, for extra structured content).
             details?.invoke()
 
-            // Actions: Cancel always visible + does not perform the action; Confirm disabled while confirming.
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = Spacing.sm),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-            ) {
-                SidrSecondaryButton(
-                    text = "Cancel",
-                    onClick = onCancel,
-                    enabled = !confirming,
-                )
-                SidrPrimaryButton(
-                    text = confirmLabel,
-                    onClick = onConfirm,
-                    enabled = !confirming,
-                    loading = confirming,
-                    modifier = Modifier.padding(start = Spacing.md),
-                )
-            }
+            // Actions: Cancel always visible + does not perform the action; Confirm is one-shot.
+            SidrSurfaceActions(
+                primary = SidrSurfaceAction(confirmLabel) {
+                    if (!confirming && !confirmDispatched && !cancelDispatched) {
+                        confirmDispatched = true
+                        onConfirm()
+                    }
+                },
+                secondary = SidrSurfaceAction("Cancel") {
+                    if (!confirming && !confirmDispatched && !cancelDispatched) {
+                        cancelDispatched = true
+                        onCancel()
+                    }
+                },
+                primaryLoading = confirming,
+                enabled = !controlsDisabled,
+            )
         }
     }
 }

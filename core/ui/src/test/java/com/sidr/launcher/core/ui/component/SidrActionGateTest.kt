@@ -94,6 +94,41 @@ class SidrActionGateTest {
         assertEquals(1, confirmClicks.get())
     }
 
+    @Test fun double_confirm_click_is_ignored_after_first_dispatch() {
+        val confirmClicks = AtomicInteger(0)
+        compose.setContent {
+            SidrTheme(darkTheme = true) {
+                SidrActionGate(
+                    type = SidrActionGateType.Confirmation,
+                    title = "Run",
+                    consequence = "Executes the action.",
+                    confirmLabel = "Confirm",
+                    onConfirm = { confirmClicks.incrementAndGet() },
+                    onCancel = {},
+                )
+            }
+        }
+        compose.onNodeWithText("Confirm").performClick()
+        compose.onNodeWithText("Confirm").performClick()
+        assertEquals(1, confirmClicks.get())
+    }
+
+    @Test fun risk_label_is_visible() {
+        compose.setContent {
+            SidrTheme(darkTheme = true) {
+                SidrActionGate(
+                    type = SidrActionGateType.ExternalHandoff,
+                    title = "Open",
+                    consequence = "Opens the URL.",
+                    confirmLabel = "Continue",
+                    onConfirm = {},
+                    onCancel = {},
+                )
+            }
+        }
+        compose.onNodeWithText("EXTERNAL").assertIsDisplayed()
+    }
+
     @Test fun confirming_disables_both_controls() {
         val confirmClicks = AtomicInteger(0)
         val cancelClicks = AtomicInteger(0)

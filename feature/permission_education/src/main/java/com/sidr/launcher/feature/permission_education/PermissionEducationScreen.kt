@@ -11,19 +11,15 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -34,17 +30,13 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sidr.launcher.core.ui.component.SidrIconButton
-import com.sidr.launcher.core.ui.component.SidrPrimaryButton
+import com.sidr.launcher.core.ui.component.SidrPermissionNotice
+import com.sidr.launcher.core.ui.component.SidrPrivacyNotice
 import com.sidr.launcher.core.ui.component.SidrScaffold
-import com.sidr.launcher.core.ui.component.SidrSectionHeader
 import com.sidr.launcher.core.ui.component.SidrTertiaryButton
 import com.sidr.launcher.core.ui.component.SidrTopBar
-import com.sidr.launcher.core.ui.primitive.SidrSurface
-import com.sidr.launcher.core.ui.primitive.SidrSurfaceTone
 import com.sidr.launcher.core.ui.primitive.SidrText
 import com.sidr.launcher.core.ui.primitive.SidrTextRole
-import com.sidr.launcher.core.ui.theme.SidrTheme
-import com.sidr.launcher.core.ui.theme.Spacing
 import com.sidr.launcher.domain.permission.PermissionFeature
 import com.sidr.launcher.domain.permission.PermissionStatus
 
@@ -56,9 +48,9 @@ import com.sidr.launcher.domain.permission.PermissionStatus
  * destination and is never blocked. The system request + wallpaper launch are the only Android
  * glue here; all decisions live in [PermissionEducationViewModel].
  *
- * DS-5 restyle notes: the previous bottom `TextButton("Back")` is retired in favour of the new
- * [SidrTopBar] navigation icon (same [onBack] callback) — there is now exactly one back affordance,
- * not two. Every other branch keeps its exact real callback; only composition/styling changed.
+ * DS-5 restyle notes: permission states render through [SidrPermissionNotice], with Back and "Not now"
+ * both resolving to the same safe [onBack] callback. Every branch keeps its exact real callback; only
+ * composition/styling changed.
  */
 @Composable
 fun PermissionEducationScreen(
@@ -121,88 +113,74 @@ fun PermissionEducationScreen(
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            SidrText(text = state.rationale.body, role = SidrTextRole.HUMAN_BODY)
-
-            SidrSurface(tone = SidrSurfaceTone.SURFACE) {
-                Column(modifier = Modifier.padding(vertical = Spacing.sm)) {
-                    SidrSectionHeader("WITHOUT THIS PERMISSION")
-                    SidrText(
-                        text = "The launcher keeps working normally — this only affects " +
-                            "${state.feature.capabilityLabel()}.",
-                        role = SidrTextRole.HUMAN_BODY,
-                        modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.xs),
-                        color = SidrTheme.colors.dim,
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
+            val withoutPermission = "The launcher keeps working normally - this only affects " +
+                "${state.feature.capabilityLabel()}."
 
             when {
                 // Dormant feature: education only, no request flow exists yet.
                 !state.requestable -> {
-                    SidrText(
-                        text = "Not available yet.",
-                        role = SidrTextRole.HUMAN_BODY,
-                        color = SidrTheme.colors.faint,
+                    SidrPrivacyNotice(
+                        title = state.rationale.title,
+                        body = state.rationale.body,
+                        provenance = {
+                            SidrText(text = "NOT AVAILABLE YET", role = SidrTextRole.PROVENANCE)
+                        },
                     )
                 }
 
                 state.status == PermissionStatus.GRANTED -> {
-                    SidrText(
-                        text = "Enabled.",
-                        role = SidrTextRole.HUMAN_BODY,
-                        color = SidrTheme.colors.dim,
+                    SidrPermissionNotice(
+                        title = state.rationale.title,
+                        body = state.rationale.body,
+                        primaryLabel = if (state.feature == PermissionFeature.WALLPAPER) "Set wallpaper" else "Done",
+                        onPrimary = {
+                            if (state.feature == PermissionFeature.WALLPAPER) {
+                                context.launchWallpaperPicker()
+                            } else {
+                                onBack()
+                            }
+                        },
+                        withoutPermission = withoutPermission,
+                        status = "ENABLED",
                     )
-                    // Only wallpaper has an in-screen action; voice is used from the launcher mic.
-                    if (state.feature == PermissionFeature.WALLPAPER) {
-                        SidrPrimaryButton(
-                            text = "Set wallpaper",
-                            onClick = { context.launchWallpaperPicker() },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
                 }
 
                 state.status == PermissionStatus.PERMANENTLY_DENIED -> {
-                    SidrText(
-                        text = "Permission was permanently denied. Enable it from system settings to " +
+                    SidrPermissionNotice(
+                        title = state.rationale.title,
+                        body = "Permission was permanently denied. Enable it from system settings to " +
                             "use this feature. The launcher keeps working without it.",
-                        role = SidrTextRole.HUMAN_BODY,
-                        color = SidrTheme.colors.danger,
-                    )
-                    SidrPrimaryButton(
-                        text = "Open settings",
-                        onClick = { context.openAppSettings() },
+                        primaryLabel = "Open settings",
+                        onPrimary = { context.openAppSettings() },
+                        withoutPermission = withoutPermission,
+                        secondaryLabel = "Not now",
+                        onSecondary = onBack,
+                        status = "BLOCKED",
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
 
                 else -> {
                     // DENIED (incl. not-yet-requested): offer the system request.
-                    if (state.status == PermissionStatus.DENIED) {
-                        SidrText(
-                            text = "Not enabled. The launcher works fine without it.",
-                            role = SidrTextRole.HUMAN_BODY,
-                            color = SidrTheme.colors.dim,
-                        )
-                    }
-                    SidrPrimaryButton(
-                        text = state.rationale.ctaLabel,
-                        onClick = { androidPermission?.let { permissionLauncher.launch(it) } },
+                    SidrPermissionNotice(
+                        title = state.rationale.title,
+                        body = state.rationale.body,
+                        primaryLabel = state.rationale.ctaLabel,
+                        onPrimary = { androidPermission?.let { permissionLauncher.launch(it) } },
+                        withoutPermission = withoutPermission,
+                        secondaryLabel = "Not now",
+                        onSecondary = onBack,
+                        status = "OPTIONAL",
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                SidrText(
-                    text = "NOT A SYSTEM DIALOG · YOU CHOOSE",
-                    role = SidrTextRole.PROVENANCE,
-                )
-            }
+            SidrText(
+                text = "NOT A SYSTEM DIALOG · YOU CHOOSE",
+                role = SidrTextRole.PROVENANCE,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             if (!state.dismissed && state.requestable && state.status != PermissionStatus.GRANTED) {
                 SidrTertiaryButton(

@@ -26,7 +26,9 @@ class AppNavHostReentryGuardTest {
         )
         assertTrue(
             "LauncherActivity must pass the re-entry signal into AppNavHost",
-            activity.contains("AppNavHost(homeResetSignal = homeResetSignal)"),
+            // Argument-level check: the AppNavHost call gained more parameters (alwaysShowNav,
+            // 2026-07-12), so the guard must not pin the exact single-argument call syntax.
+            activity.contains("homeResetSignal = homeResetSignal"),
         )
         assertTrue(
             "AppNavHost must expose a home reset signal",

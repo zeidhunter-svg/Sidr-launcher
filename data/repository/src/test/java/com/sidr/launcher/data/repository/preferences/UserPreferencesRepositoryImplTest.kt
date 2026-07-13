@@ -47,6 +47,7 @@ class UserPreferencesRepositoryImplTest {
             favoritesCount = 4,
             micInputEnabled = false,
             setupHintDismissed = true,
+            alwaysShowNavBar = true,
         )
         val result = repo.updatePreferences(updated)
 
@@ -66,6 +67,7 @@ class UserPreferencesRepositoryImplTest {
             favoritesCount = 10,
             micInputEnabled = false,
             setupHintDismissed = true,
+            alwaysShowNavBar = true,
         )
 
         // First "process": write, then release the file lock.

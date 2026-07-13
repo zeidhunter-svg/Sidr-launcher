@@ -4639,3 +4639,63 @@ row (cosmetic, spotted during this session's device pass); the Memory preview bl
 alongside a genuinely-empty real list (mitigated by banner+badge+caption, not gated on `isEmpty()`); the
 two "PREVIEW —" lines on the Terminal screen use the same role/color and read as one repeated banner.
 None block this closure; candidates for a future DS polish pass.
+
+## ADR 2026-07-13 — DS-5 + auto-hide nav + accent reactivation closed (code) + stabilization pass
+
+**Status: CODE-CLOSED; device acceptance PENDING (no device attached during this pass).** This ADR
+retro-documents two commits that landed without their own ADR/docs-sync — `5c8bc58` "Implement DS-5
+action safety surfaces" (2026-07-12) and `a6ec4e6` "DS" (2026-07-13) — and records the stabilization
+pass that reconciled them (plan: `.claude/plans/recursive-sleeping-chipmunk.md`, approved by owner).
+
+**What `5c8bc58` delivered (DS-5 Action & Safety, presentation-only):**
+- New `core/ui/component/SidrActionSafety.kt`: `SidrActionProposal` (one-shot execute, `executing`
+  disables), `SidrPermissionNotice`, `SidrPrivacyNotice`, `SidrResultSurface` (+`SidrResultTone`
+  Completed/Partial/Failed — partial is never labelled completed), `SidrErrorSurface` (WHAT/WHY/NEXT,
+  retry only when caller supplies it), `SidrOfflineState`, `SidrBlockedState`, shared
+  `SidrSurfaceActions` (stacks buttons at fontScale ≥ 1.7) and `SidrSurfaceAction`.
+- `SidrActionGate` hardened: confirm/cancel one-shot, `confirming` disables both controls, consequence
+  always visible, target wraps. `ErrorState` now delegates to `SidrErrorSurface` (retry preserved).
+- Adopted in production: `LauncherScreen` maps SAFE routed proposals → `SidrActionProposal` and
+  CONFIRM → `SidrActionGate(ExternalHandoff)`; `PermissionEducationScreen` renders through
+  `SidrPermissionNotice`/`SidrPrivacyNotice`. `ConfirmActionCard` production usage is now zero (not
+  yet `@Deprecated` — follow-up). No ViewModel touched → routing/execution/permission parity structural.
+- Tests: `SidrActionGateTest` (7) + `SidrActionSafetyTest` (7) — behavioural. **Deviation vs the DS-5
+  plan:** Task 2's `ActionSafetyGallery` + Roborazzi matrix was NOT delivered (follow-up); Task 1's
+  parity notes were not captured. Plan `2026-07-11-ds5-action-safety.md` updated to CODE-CLOSED with
+  boxes reconciled.
+
+**What `a6ec4e6` delivered (owner features):**
+- **Auto-hide bottom navigation** per approved spec `2026-07-12-auto-hide-nav-bar-design.md`:
+  per-tab-root `TabRootScaffold` chrome state (visible on entry, hides after 5 s idle, thin
+  `SidrChromeHandle` pill reveals; deliberate `remember`, not `rememberSaveable`), pin toggle
+  `UserPreferences.alwaysShowNavBar` (default false; key `user_always_show_nav_bar` inventoried in
+  `ALL_KEY_NAMES`) + Settings "Always show navigation bar" row; `LauncherActivity` threads
+  `alwaysShowNav` into `AppNavHost`.
+- **Accent reactivation (owner decision 2026-07-12):** `AccentColor {GREY, GREEN, AMBER}` — green/amber
+  restored as **full themes** (own ground/surface/text/dim/faint/accent in `SidrColors.kt`
+  `GreenDark/GreenLight/AmberDark/AmberLight`, resolved by `sidrColorsFor`), derived from the pre-DS-1
+  AIL-0 palettes; `sacred` and all status colours pinned to the grey palette in every theme.
+  `UserPreferences.accentColor` default changed `"green"` → `"grey"`; Settings accent selector
+  (`AccentOption`). Plus `docs/demo-script.md` and Terminal-preview/theme polish.
+
+**Stabilization pass (2026-07-13, this ADR):**
+- `UserPreferencesRepositoryImplTest`: both round-trip payloads now set `alwaysShowNavBar = true`
+  (mapper read/write of the new key is asserted; was uncovered, despite the spec requiring it).
+- `ThemeScreenshotTest`: +4 goldens `green/amber_sample_dark/light`; sample gained `> ACCENT`
+  (accent-coloured) and `DANGER` (status-coloured) lines so goldens prove "accent changes, status +
+  sacred pinned" — the 2 grey samples were re-recorded with those lines (reviewed: correct).
+- Stale comment fixed: `UserPreferences.accentColor` referenced non-existent `SidrColors.withAccent`
+  and claimed "only the accent/border pair changes" — now points at `sidrColorsFor` and says full themes.
+- **Found by the gate:** `AppNavHostReentryGuardTest` was RED at HEAD (the un-gated `a6ec4e6` broke it):
+  the guard pinned the literal single-argument call `AppNavHost(homeResetSignal = homeResetSignal)`,
+  which stopped matching when the call gained `alwaysShowNav`. Root-caused: the Y7 re-entry behaviour
+  itself is intact (`onNewIntent`/`setIntent`/increment, signal passed, `LaunchedEffect` +
+  `if (homeResetSignal > 0)` + `navigateHome` all present); only the assertion was brittle. Guard
+  relaxed to the argument-level check `homeResetSignal = homeResetSignal`.
+- **Full gate GREEN** (JDK-17 toolchain `/home/Suleiman/jdks/jdk-17.0.19+10`):
+  `:core:ui:verifyRoborazziDebug :domain:test testDebugUnitTest assembleDebug` — BUILD SUCCESSFUL.
+
+**Device-pending (SM-A325F, next session with the device):** auto-hide (visible-on-entry → 5 s hide →
+handle reveal → tab-hop keeps it up → Settings pin, portrait+landscape); DS-5 surfaces on real branches
+(URL/Play-Store confirm, SAFE one-tap, cancel, permission education paths, font-scale-2.0 stacking);
+grey/green/amber switching (persists across force-stop); router-off/offline parity smoke.

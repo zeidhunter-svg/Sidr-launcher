@@ -2,11 +2,12 @@ package com.sidr.launcher.domain.preferences
 
 data class UserPreferences(
     val themeName: String = "system",          // "system" | "light" | "dark"
-    // AIL-6 / DF-7, reactivated 2026-07-12 (owner decision) — brand accent choice. "grey" is the
-    // soft-classic-grey default; "green"/"amber" are the historical AIL-0 accents, restored as real,
-    // user-selectable hues (only the accent/border pair changes — see SidrColors.withAccent; the
-    // Shahada and status colours are never affected). Stored as a plain string so :domain stays free
-    // of the core/ui AccentColor enum; the string → enum mapping lives in :app (LauncherActivity).
+    // AIL-6 / DF-7, reactivated 2026-07-12 (owner decision) — brand theme choice. "grey" is the
+    // soft-classic-grey default; "green"/"amber" are the historical AIL-0 identities, restored as
+    // real, user-selectable full themes (each resolves its own ground/surface/text/dim/faint/accent
+    // palette — see sidrColorsFor in core/ui SidrColors.kt; the Shahada (sacred) and status colours
+    // are never affected). Stored as a plain string so :domain stays free of the core/ui AccentColor
+    // enum; the string → enum mapping lives in :app (LauncherActivity).
     // Key is denylist-clean ("accent"/"color" are not forbidden terms).
     val accentColor: String = "grey",          // "grey" | "green" | "amber"
     val commandInputEnabled: Boolean = true,

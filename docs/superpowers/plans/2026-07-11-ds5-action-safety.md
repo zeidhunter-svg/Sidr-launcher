@@ -1,8 +1,12 @@
 # DS-5 — Action and Safety Family Implementation Plan
 
-> **STATUS: PROPOSED (2026-07-11).** This plan restores DS-5 as the production action/safety migration
-> block. It must start only after DS-3 controls are green. Another agent may already be implementing DS-3;
-> do not edit DS-3 files while that work is active.
+> **STATUS: CODE-CLOSED (implemented 2026-07-12 in commit `5c8bc58`; reconciled against this checklist
+> 2026-07-13 — ADR: decisions.md "2026-07-13 — DS-5 + auto-hide nav + accent reactivation closed +
+> stabilization"). Device acceptance (Task 8) PENDING.** Honest deviations, recorded during
+> reconciliation: **Task 1** ran implicitly (no parity-checklist notes were captured); **Task 2's
+> `ActionSafetyGallery` + screenshot matrix was NOT delivered** — the family is covered by behavioural
+> tests only (`SidrActionGateTest` 7 tests, `SidrActionSafetyTest` 7 tests), gallery goldens remain a
+> follow-up; `ConfirmActionCard` production usage is zero but it is not yet marked `@Deprecated`.
 
 **Goal:** Replace legacy routed confirmation and raw permission/error surfaces with SIDR's production
 action/safety family while preserving routing, execution, permission, and offline parity.
@@ -82,16 +86,16 @@ Acceptance:
 
 **Purpose:** Move from DS-3 control availability to production-safe action semantics.
 
-- [ ] Add or harden `SidrActionProposal`.
-- [ ] Harden `SidrActionGate` if DS-3 introduced it:
+- [x] Add or harden `SidrActionProposal`.
+- [x] Harden `SidrActionGate` if DS-3 introduced it:
       - no confirm on render/focus;
       - Cancel exactly once;
       - Confirm exactly once;
       - `confirming` disables controls;
       - long targets wrap;
       - consequence always visible.
-- [ ] Add tests for duplicate-click prevention where practical.
-- [ ] Add semantics tests for risk label + marker.
+- [x] Add tests for duplicate-click prevention where practical.
+- [x] Add semantics tests for risk label + marker.
 
 Acceptance:
 
@@ -102,11 +106,11 @@ Acceptance:
 
 **Purpose:** Create production-ready surfaces for real completion/failure states.
 
-- [ ] Add `SidrResultSurface`, `SidrResultTone`, and `SidrSurfaceAction`.
-- [ ] Add `SidrErrorSurface`.
-- [ ] Add `SidrOfflineState`.
-- [ ] Add `SidrBlockedState`.
-- [ ] Keep future variants preview-only until real callers exist.
+- [x] Add `SidrResultSurface`, `SidrResultTone`, and `SidrSurfaceAction`.
+- [x] Add `SidrErrorSurface`.
+- [x] Add `SidrOfflineState`.
+- [x] Add `SidrBlockedState`.
+- [x] Keep future variants preview-only until real callers exist.
 
 Acceptance:
 
@@ -119,15 +123,15 @@ Acceptance:
 
 **Purpose:** Migrate Permission Education to the same safety language without changing request flow.
 
-- [ ] Add `SidrPermissionNotice`.
-- [ ] Add `SidrPrivacyNotice`.
-- [ ] Migrate `PermissionEducationScreen` presentation:
+- [x] Add `SidrPermissionNotice`.
+- [x] Add `SidrPrivacyNotice`.
+- [x] Migrate `PermissionEducationScreen` presentation:
       - rationale remains before request;
       - system dialog only launches from explicit primary tap;
       - `Not now` / Back remains available;
       - permanently denied still opens app settings;
       - feature-specific post-grant action remains unchanged.
-- [ ] Run `:feature:permission_education:testDebugUnitTest`.
+- [x] Run `:feature:permission_education:testDebugUnitTest`.
 
 Forbidden:
 
@@ -146,13 +150,13 @@ Acceptance:
 
 **Purpose:** Replace `ConfirmActionCard` / legacy one-tap proposal presentation with DS-5 surfaces.
 
-- [ ] Map `PendingRoutedAction` to `SidrActionProposal` for SAFE.
-- [ ] Map CONFIRM/external handoff to `SidrActionGate`.
-- [ ] Preserve `onConfirm` and `onCancel` callbacks.
-- [ ] Preserve permission gate routing inside `LauncherScreen`.
-- [ ] Do not change `LauncherViewModel` execution semantics.
-- [ ] Add focused UI/semantics tests where practical.
-- [ ] Run `:feature:launcher:testDebugUnitTest`.
+- [x] Map `PendingRoutedAction` to `SidrActionProposal` for SAFE.
+- [x] Map CONFIRM/external handoff to `SidrActionGate`.
+- [x] Preserve `onConfirm` and `onCancel` callbacks.
+- [x] Preserve permission gate routing inside `LauncherScreen`.
+- [x] Do not change `LauncherViewModel` execution semantics.
+- [x] Add focused UI/semantics tests where practical.
+- [x] Run `:feature:launcher:testDebugUnitTest`.
 
 Acceptance:
 
@@ -167,11 +171,12 @@ Acceptance:
 
 **Purpose:** Replace generic old states only where DS-5 can improve truthfulness without behavioural churn.
 
-- [ ] Identify `ErrorState` callers.
-- [ ] Migrate callers with meaningful `what/why/next` data to `SidrErrorSurface`.
-- [ ] Leave simple empty states alone unless a DS-5 sibling (`SidrOfflineState`, `SidrBlockedState`) is
+- [x] Identify `ErrorState` callers.
+- [x] Migrate callers with meaningful `what/why/next` data to `SidrErrorSurface` (`ErrorState` itself
+      now delegates to `SidrErrorSurface`, retry preserved).
+- [x] Leave simple empty states alone unless a DS-5 sibling (`SidrOfflineState`, `SidrBlockedState`) is
       semantically correct.
-- [ ] Avoid creating fake explanation text where no reliable reason exists.
+- [x] Avoid creating fake explanation text where no reliable reason exists.
 
 Acceptance:
 
@@ -193,10 +198,12 @@ Mandatory after code gates:
 
 ## Task 9: Documentation and Status
 
-- [ ] Add DS-5 completion ADR only after implementation and device acceptance.
-- [ ] Update `ai-context/current-status.md`.
+- [x] Add DS-5 completion ADR only after implementation and device acceptance *(retro code-close ADR
+      written 2026-07-13; a device-acceptance addendum is still required before DS-5 counts as DONE)*.
+- [x] Update `ai-context/current-status.md`.
 - [ ] Update `docs/design/artifacts/e34033dd/README.md` only if implementation deviates from the artifact.
-- [ ] Mark `ConfirmActionCard` deprecated only after production usage reaches zero.
+- [ ] Mark `ConfirmActionCard` deprecated only after production usage reaches zero *(usage IS zero as of
+      2026-07-13 — deprecation is a small follow-up)*.
 
 ## Full Verification Gate
 

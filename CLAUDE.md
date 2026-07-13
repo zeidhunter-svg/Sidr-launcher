@@ -1,6 +1,23 @@
 # CLAUDE.md — Sidr Launcher
 
-**Design track (DS) — DS-1 + DS-2 + DS-3 + DS-4 DONE (2026-07-11); Vision MVP (Preview) DONE (2026-07-11).**
+**Design track (DS) — DS-1…DS-4 + Vision MVP (Preview) DONE (2026-07-11); DS-5 CODE-CLOSED
+(2026-07-13, device-pending).**
+
+**DS-5 Action & Safety CODE-CLOSED + two owner features (2026-07-12/13; retro-ADR "2026-07-13 — DS-5 +
+auto-hide nav + accent reactivation closed" in decisions.md).** DS-5: `core/ui/component/SidrActionSafety.kt`
+(`SidrActionProposal`/`SidrPermissionNotice`/`SidrPrivacyNotice`/`SidrResultSurface`/`SidrErrorSurface`/
+`SidrOfflineState`/`SidrBlockedState` + `SidrSurfaceActions` fontScale-stacking) + hardened one-shot
+`SidrActionGate`; adopted in `LauncherScreen` (SAFE→proposal, CONFIRM→gate) + `PermissionEducationScreen`;
+`ErrorState`→`SidrErrorSurface`; `ConfirmActionCard` usage zero (not yet `@Deprecated`); no VM change ⇒
+parity structural; deviation: plan's `ActionSafetyGallery` goldens not delivered (behavioural tests only).
+Owner features: **auto-hide bottom nav** (5 s idle → `SidrChromeHandle`; pin =
+`UserPreferences.alwaysShowNavBar` + Settings toggle; spec `2026-07-12-auto-hide-nav-bar-design.md`) and
+**accent reactivation** — `AccentColor {GREY,GREEN,AMBER}` as full themes (`sidrColorsFor`; sacred+status
+pinned; default now `"grey"`). Stabilization pass 2026-07-13: `alwaysShowNavBar` round-trip test, 4
+green/amber goldens (+accent/status proof lines), stale-comment fix, brittle
+`AppNavHostReentryGuardTest` literal relaxed (re-entry behaviour verified intact), **full gate green**
+(JDK-17). **Device acceptance PENDING on SM-A325F** (checklist in the ADR). **Next design block: DS-7
+Memory Surfaces** (recommended; unblocks paused S2-2 Explicit Aliases UI) after DS-5 device acceptance.
 A parallel, presentation-only design-system
 migration to the approved **soft-classic-grey** identity, governed by `docs/design/SIDR Design System
 Master Plan v1.2` (the principles rulebook was folded into it: §5.1 precedence, §5.2 verify-vocab, §20.1
@@ -24,9 +41,9 @@ Assistant, AI provider settings, Memory/Learned Choices, Permission Education �
 Terminal surfaces as `PREVIEW`-badged, non-functional mock-ups (every callback inert, zero fabricated
 data, Terminal test-proven incapable of producing output) plus an Interaction-Moments preview. Same hard
 rule as DS-1..4: **no production nav/VM/persistence/domain change**; every ViewModel test suite passes
-byte-for-byte. **Device-accepted on SM-A325F.** Next design block: **DS-5** (Action & Safety). ADRs:
-decisions.md "2026-07-11 — DS-1/DS-2/DS-3/DS-4 complete" and "2026-07-11 — Vision MVP preview + all
-screens to artifact"; specs+plans under
+byte-for-byte. **Device-accepted on SM-A325F.** ADRs:
+decisions.md "2026-07-11 — DS-1/DS-2/DS-3/DS-4 complete", "2026-07-11 — Vision MVP preview + all
+screens to artifact", and "2026-07-13 — DS-5 + auto-hide nav + accent reactivation closed"; specs+plans under
 `docs/superpowers/`. Stage-2 S2-2 "Explicit Aliases" (domain/data/DI Phase A–C already on `launcher-4`) is
 paused pending its grey UI in DS-7. The AI-launcher stage digest below is unchanged.
 

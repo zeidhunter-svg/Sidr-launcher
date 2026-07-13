@@ -2,9 +2,28 @@
 
 > **Authoritative status lives in `CLAUDE.md` (session digest), `ai-context/decisions.md` (ADR log),
 > and the per-phase plans.** This file is a short pointer/snapshot only — if it disagrees with those,
-> they win. Last re-based: 2026-07-11 (Vision MVP preview closed).
+> they win. Last re-based: 2026-07-13 (DS-5 + auto-hide nav + accent reactivation code-closed).
 
-## Design track (DS) — DS-1 + DS-2 + DS-3 + DS-4 DONE; Vision MVP (Preview) DONE (2026-07-11)
+## Design track (DS) — DS-1…DS-4 + Vision MVP DONE; DS-5 CODE-CLOSED (2026-07-13, device-pending)
+
+**DS-5 Action & Safety is CODE-CLOSED (implemented 2026-07-12, reconciled + gated 2026-07-13);
+device acceptance PENDING.** `core/ui/component/SidrActionSafety.kt` (`SidrActionProposal`,
+`SidrPermissionNotice`, `SidrPrivacyNotice`, `SidrResultSurface`, `SidrErrorSurface`,
+`SidrOfflineState`, `SidrBlockedState`, shared `SidrSurfaceActions` stacking at fontScale ≥ 1.7) +
+hardened one-shot `SidrActionGate`; adopted in `LauncherScreen` (SAFE → `SidrActionProposal`,
+CONFIRM → `SidrActionGate`) and `PermissionEducationScreen`; `ErrorState` delegates to
+`SidrErrorSurface`; `ConfirmActionCard` usage now zero (not yet `@Deprecated`). No ViewModel change →
+parity structural. Deviation: the plan's `ActionSafetyGallery` screenshot matrix was not delivered
+(behavioural tests only; follow-up). **Same pass closed two owner features (commit `a6ec4e6`):
+auto-hide bottom nav** (5 s idle → `SidrChromeHandle` pill; pin via `UserPreferences.alwaysShowNavBar`
++ Settings toggle; spec `2026-07-12-auto-hide-nav-bar-design.md`) **and accent reactivation** —
+`AccentColor {GREY, GREEN, AMBER}` as full themes (`sidrColorsFor`; sacred + status pinned; default now
+`"grey"`; Settings selector). **Stabilization (2026-07-13):** `alwaysShowNavBar` round-trip test added;
+4 new `green/amber_sample_*` goldens (+ accent/status proof lines in the theme samples); stale
+`withAccent` comment fixed; brittle `AppNavHostReentryGuardTest` literal relaxed (re-entry behaviour
+itself verified intact); **full gate green** (JDK-17): `:core:ui:verifyRoborazziDebug` `:domain:test`
+`testDebugUnitTest` `assembleDebug`. ADR: decisions.md "2026-07-13 — DS-5 + auto-hide nav + accent
+reactivation closed". Device-pending list lives in that ADR.
 
 **Vision MVP (Preview) is DONE, device-accepted (SM-A325F).** Plan:
 `docs/superpowers/plans/2026-07-11-vision-mvp-preview.md` (13 tasks). Extends the DS-3/DS-4 artifact look
@@ -46,10 +65,11 @@ pass** (typed launch, WEB/SITE/ASK, router-off "Unknown command" parity, Setting
 discoverability, no crash). Spec:
 `docs/superpowers/specs/2026-07-11-ds4-home-universal-input-design.md`; plan (DONE):
 `docs/superpowers/plans/2026-07-11-ds4-home-universal-input.md`; ADR: decisions.md "2026-07-11 — DS-4
-complete". **Next design block: DS-5 (Action & Safety).** **DS-5 Action & Safety is drafted and
-restores the skipped production safety block**:
+complete". **DS-5 Action & Safety is CODE-CLOSED (2026-07-13, see the section above; device-pending)**:
 `docs/superpowers/specs/2026-07-11-ds5-action-safety-design.md` +
-`docs/superpowers/plans/2026-07-11-ds5-action-safety.md`. **DS-6A Sacred Header is drafted but gated after
+`docs/superpowers/plans/2026-07-11-ds5-action-safety.md`. **Next design block: DS-7 Memory Surfaces
+(recommended — its DS-5 dependency is now met and it unblocks the paused S2-2 Explicit Aliases UI),
+after DS-5 device acceptance.** **DS-6A Sacred Header is drafted but gated after
 DS-5, DS-4 Home integration, and Arabic rendering approval**:
 `docs/superpowers/specs/2026-07-11-ds6a-sacred-header-design.md` +
 `docs/superpowers/plans/2026-07-11-ds6a-sacred-header.md`. **DS-6B Prayer Correctness is now drafted as

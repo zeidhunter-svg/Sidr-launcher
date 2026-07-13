@@ -40,15 +40,25 @@ class ThemeScreenshotTest {
     @Test fun grey_sample_dark() = captureSample(dark = true, name = "grey_sample_dark")
     @Test fun grey_sample_light() = captureSample(dark = false, name = "grey_sample_light")
 
-    private fun captureSample(dark: Boolean, name: String) {
+    // 2026-07-12 accent reactivation — green/amber are full themes (own ground/surface/text/accent);
+    // the samples must show the accent hue itself plus the two roles that are pinned across every
+    // theme choice: sacred and semantic status (release-gate "accent ≠ status" review).
+    @Test fun green_sample_dark() = captureSample(dark = true, name = "green_sample_dark", accent = AccentColor.GREEN)
+    @Test fun green_sample_light() = captureSample(dark = false, name = "green_sample_light", accent = AccentColor.GREEN)
+    @Test fun amber_sample_dark() = captureSample(dark = true, name = "amber_sample_dark", accent = AccentColor.AMBER)
+    @Test fun amber_sample_light() = captureSample(dark = false, name = "amber_sample_light", accent = AccentColor.AMBER)
+
+    private fun captureSample(dark: Boolean, name: String, accent: AccentColor = AccentColor.GREY) {
         compose.setContent {
-            SidrTheme(darkTheme = dark) {
+            SidrTheme(darkTheme = dark, accent = accent) {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     Column(Modifier.padding(16.dp)) {
                         Text("SIDR", style = MaterialTheme.typography.titleLarge)
                         Text("FAVORITES", style = MaterialTheme.typography.labelSmall)
                         Text("Open Telegram", style = MaterialTheme.typography.bodyMedium)
                         Text("LOCAL · 14 MS", style = SidrTheme.textStyles.provenance)
+                        Text("> ACCENT", color = SidrTheme.colors.accent, style = SidrTheme.textStyles.provenance)
+                        Text("DANGER", color = SidrTheme.colors.danger, style = MaterialTheme.typography.labelSmall)
                         Text("There is no deity except Allah", style = SidrTheme.textStyles.sacred)
                     }
                 }

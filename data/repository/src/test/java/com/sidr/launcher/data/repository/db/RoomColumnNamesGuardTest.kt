@@ -143,6 +143,16 @@ class RoomColumnNamesGuardTest {
         assertTrue(RoomColumnNames.BY_TABLE["resolution_preferences"]?.contains("query") == true)
     }
 
+    @Test
+    fun `alias local-sensitive table and columns are inventoried`() {
+        assertTrue(RoomColumnNames.TABLE_NAMES.contains("aliases"))
+        assertEquals(
+            setOf("phrase", "target_type", "target_package", "created_at"),
+            RoomColumnNames.BY_TABLE["aliases"],
+        )
+        assertTrue(RoomColumnNames.ALL.containsAll(RoomColumnNames.ALIASES))
+    }
+
     /**
      * Task 9 scoped-exemption teeth test, part (b): the exemption is table+column scoped, NOT a
      * bare "query" allow. An unrelated table's `query` column must still be flagged even though

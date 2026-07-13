@@ -18,6 +18,10 @@ package com.sidr.launcher.data.repository.db
  * user command), is local-only, user-visible & deletable, and is never sent to cloud AI/LLM. The
  * owner decision is to keep the column name and grant a narrow, table+column-scoped exemption
  * rather than relax the guard globally (see [APPROVED_SENSITIVE_COLUMNS]).
+ *
+ * Stage-2 S2-2 adds [ALIASES]. Alias phrases and target packages are local-sensitive explicit
+ * memory, but their column names do not collide with the forbidden term inventory, so no scoped
+ * exemption is needed.
  */
 internal object RoomColumnNames {
 
@@ -65,7 +69,15 @@ internal object RoomColumnNames {
         "learned_in_fingerprint",
     )
 
-    val ALL: Set<String> = APP_USAGE + SUGGESTION_RANKING + INTENT_MATCH + RESOLUTION_PREFERENCES
+    /** [com.sidr.launcher.data.repository.db.entity.AliasEntity] — table: aliases (Stage-2 S2-2). */
+    val ALIASES: Set<String> = setOf(
+        "phrase",
+        "target_type",
+        "target_package",
+        "created_at",
+    )
+
+    val ALL: Set<String> = APP_USAGE + SUGGESTION_RANKING + INTENT_MATCH + RESOLUTION_PREFERENCES + ALIASES
 
     /**
      * Every `@Entity(tableName = ...)` in [SidrDatabase]. Kept in sync by hand with the entity
@@ -76,6 +88,7 @@ internal object RoomColumnNames {
         "suggestion_ranking",     // SuggestionRankingEntity
         "intent_match",           // IntentMatchEntity
         "resolution_preferences", // ResolutionPreferenceEntity
+        "aliases",                // AliasEntity
     )
 
     /**
@@ -89,6 +102,7 @@ internal object RoomColumnNames {
         "suggestion_ranking" to SUGGESTION_RANKING,
         "intent_match" to INTENT_MATCH,
         "resolution_preferences" to RESOLUTION_PREFERENCES,
+        "aliases" to ALIASES,
     )
 
     /**

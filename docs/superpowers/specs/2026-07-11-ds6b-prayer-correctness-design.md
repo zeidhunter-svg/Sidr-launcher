@@ -1,7 +1,10 @@
 # DS-6B - Prayer Correctness Capability (Design Spec)
 
-> **Status: PROPOSED (2026-07-11).** DS-6B is a separate religious-correctness capability track for prayer
-> data, provenance, privacy, and failure states.
+> **Status: APPROVED (2026-07-13).** The requirements/authority/privacy decisions below (§0) were made by
+> the owner in the 2026-07-13 brainstorming session, completing plan Tasks 1–2 (Requirements and Authority
+> Discovery + Privacy Review). Implementation may start per the updated plan. Originally PROPOSED
+> 2026-07-11 as a separate religious-correctness capability track for prayer data, provenance, privacy,
+> and failure states.
 >
 > **Important:** DS-6B is not a normal presentation-only design-system block. A wrong prayer time is a real
 > product and religious correctness failure. Do not implement prayer calculation casually inside Home,
@@ -11,6 +14,52 @@
 > `docs/design/SIDR Design System Master Plan.md` DS-6B, `docs/design/SIDR Design Migration Plan v1.1.md`
 > DS-6B, `docs/design/SIDR Design and Architecture Audit.md` Prayer Times, and
 > `docs/design/SIDR Component Library v1.1.md` `SidrPrayerSummary`.
+
+## 0. Approved Owner Decisions (2026-07-13)
+
+These resolve every open question this spec deferred to "a product decision". Sections below remain the
+governing framework; where they said "must be decided", the decision is here.
+
+1. **Locality: global launch, no regional default.** No authority/method is ever guessed from system
+   language, SIM, or location. The `MethodRequired` state is a real first-run state.
+2. **Method AND madhab are explicit user choices at first prayer setup.** Method list = the standard
+   parameterized methods (MWL, ISNA, Egyptian, Umm al-Qura, Karachi, Tehran, Turkey/Diyanet-compatible,
+   Singapore, …). Asr madhab (Standard/Hanafi) is a separate mandatory choice — also no default.
+3. **Source: maintained calculation library — adhan-java (Batoul Apps, MIT), fully offline.** No network
+   anywhere in DS-6B v1: no prayer API, no outbound traffic, so authority-outage handling collapses to
+   `CalculationFailed`. The `PrayerAuthority` seam stays in the domain model so official-source adapters
+   (e.g., Diyanet) can be added later as a separate block. Provenance source label: `LOCAL CALC`.
+4. **Location v1: bundled offline city index + optional one-shot device location.**
+   - Primary path: a bundled GeoNames-derived city index (~10–20k cities; name, country, rounded
+     lat/lon, tzId; one compressed asset, target ≤ ~500 KB) searched fully offline — works with zero
+     permissions.
+   - Optional path: a "use device location" button inside prayer settings (never Home) → the existing
+     DS-5 permission-education flow → one-shot read → coordinates immediately rounded; no continuous
+     tracking. Denial changes nothing: the city path remains primary.
+5. **Stored location precision: 2 decimal places (~1.1 km; ≤ ~1 min schedule error).** Cache/settings key
+   shape: city ID for index picks, rounded coordinates for device picks; plus display label, tzId, and
+   source (`CITY` | `DEVICE`). Exact coordinates are never persisted, never logged, never leave the
+   device (v1 has no outbound path at all). Preference keys are `prayer_*`, denylist-clean, inventoried
+   in `ALL_KEY_NAMES`; a Block-U-style guard test plants a coordinate/city and proves it cannot enter
+   `AiRequest`.
+6. **Freshness threshold: end of the current day in the prayer-location timezone.** The persisted last
+   schedule exists only for instant first-frame render. Same day + same settings = `CachedFresh`; any
+   change of day/method/madhab/location/timezone triggers immediate local recompute (`Updating` →
+   `VerifiedCurrent`). `CachedStale` is reachable only when recompute fails: stale times stay visible
+   with an explicit STALE label plus `CalculationFailed` — never silently hidden.
+7. **Home strip: all five prayers in one quiet mono row, next prayer highlighted (label + marker, never
+   colour alone), provenance line underneath** (`LOCAL CALC · <METHOD> · <MADHAB> · <LOCATION LABEL>`).
+   The strip renders only after setup is complete — prayer context is opt-in; before setup Home shows
+   nothing and no nudge. Sunrise appears in the detail surface only, explicitly marked as not one of the
+   five prayers.
+8. **Module split (per §10):** new `:data:prayer` (the ONLY module with the adhan-java dependency +
+   city-index asset) and new `:feature:prayer` (setup/detail screens, pushed route — no new tab);
+   `domain/prayer/` stays pure (no Adhan import); `core/ui` gets `SidrPrayerSummary` only;
+   `LauncherViewModel` injecting `GetPrayerContextUseCase` is a sanctioned production change (DS-6B is
+   not presentation-only). DS-6A note: the quiet English Shahada in `HomeAnchorSlot` (DS-4) satisfies
+   the "stable enough to preserve Home hierarchy" prerequisite; the strip renders below it.
+9. **New dependencies (explicit, both confined to `:data:prayer`):** adhan-java (MIT) and the bundled
+   city index (GeoNames, CC-BY attribution recorded in the ADR). License review is a plan task gate.
 
 ## 1. Goal
 
@@ -84,9 +133,11 @@ The user must be able to see and change:
 - location;
 - timezone basis when relevant.
 
-Default authority/method is a product decision, not a hidden constant. For Turkiye, a locally accepted
-source such as Diyanet may be appropriate, but DS-6B must not hardcode that globally or assume the user's
-location from system language.
+Default authority/method is a product decision, not a hidden constant. **Decided (§0.1–0.3): global
+launch, no default — method and madhab are explicit first-run choices; source is local calculation
+(adhan-java), so no authority is contacted in v1.** For Turkiye, a locally accepted source such as
+Diyanet may be an appropriate future adapter, but DS-6B does not hardcode that globally or assume the
+user's location from system language.
 
 If an official source/API is used:
 
@@ -123,7 +174,8 @@ Rules:
 - stale location state is visible.
 
 DS-6B must define whether cached schedule keys use precise coordinates, rounded coordinates, city IDs, or
-authority-specific location IDs before implementation.
+authority-specific location IDs before implementation. **Decided (§0.5): city ID for index picks, 2-decimal
+rounded coordinates for device picks; exact coordinates are never persisted or logged.**
 
 ## 6. Data Freshness and Cache
 

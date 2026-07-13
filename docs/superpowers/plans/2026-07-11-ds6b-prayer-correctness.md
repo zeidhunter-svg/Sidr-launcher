@@ -366,6 +366,14 @@ Decisions are final: offline adhan-java calculation, explicit method+madhab at s
 bundled city index + optional one-shot device location, new :data:prayer and :feature:prayer modules,
 zero network in v1.
 
+Execute task-by-task with superpowers:subagent-driven-development (fresh implementer + fresh reviewer
+per task). Subagent policy — custom agent types are defined in .claude/agents/:
+- Tasks 5, 6, 7, 12: subagent_type "implementer" (sonnet, effort high).
+- Tasks 3, 8: subagent_type "implementer" with model override "fable" (effort stays high).
+- Tasks 4, 9, 10 (correctness-critical): subagent_type "implementer-critical" (fable, effort xhigh).
+- Every per-task review: subagent_type "reviewer" (fable, effort high; cannot edit files).
+- Never use haiku. Give each subagent ONLY its task text + the spec/plan excerpts it needs.
+
 Hard rules:
 - no fake prayer times; no schedule without provenance;
 - no startup network/location/calculation wait;

@@ -2,6 +2,22 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **STATUS (2026-07-13): PAUSED pending DS-7 grey UI — and the last mile lives on `launcher-4` only.**
+> Phases A–C (domain `memory/alias/` + Room data layer + `MemoryBindsModule` DI) are merged into the
+> main line (`launcher--7`), but the code is INERT there: `LauncherViewModel` has zero alias references.
+> Three finishing commits exist **only on branch `launcher-4`** (pushed to origin) and were never carried
+> forward:
+> - `b5469bc` `feat(s2-2): wire alias decorator into LauncherViewModel (fill-the-gap launch)` — the
+>   activation; do NOT cherry-pick before DS-7 provides the alias management surface (recorded owner
+>   pause), and expect conflicts: `LauncherViewModel`/tests evolved through S2-1/DS-4/Vision MVP since.
+> - `680268c` `test(s2-2): privacy/scope/dependency/room-inventory guards + zero-widen allow-list` —
+>   guard tests; reconcile against the current `RoomColumnNames` inventory rather than blind-picking
+>   (the main line is already green with the alias table, so the inventory may partially overlap).
+> - `cef4111` `docs(s2-2): ADR + status sync + mark plan code-closed` — stale vs. later doc evolution;
+>   salvage the ADR text when S2-2 resumes, do not cherry-pick.
+> When DS-7 Memory Surfaces starts, fold "recover launcher-4 last mile" into its conditional Aliases
+> task: re-apply the two code commits by hand, re-derive the docs, then close S2-2 properly.
+
 **Goal:** Let the user declare, entirely on-device, an explicit nickname → app mapping ("рабочий чат" → Telegram) that launches the app when the rule matcher would otherwise return `Unknown`.
 
 **Architecture:** A pure `Alias` concept (`domain/memory/alias/`) + `AliasStore` port + use-cases; a decorator `ResolveCommandWithAliasUseCase` wraps S2-1's `ResolveCommandWithPreferenceUseCase` (via a `ResolvedCommandStep` seam) and, **only** when the inner result is `Outcome(CommandOutcome.Unknown)`, resolves an alias to an `AutoLaunch` directive; a Room table `aliases` persists it; a dedicated Settings → Aliases screen manages it. `HandleUserCommandUseCase`/`RouteCommandUseCase`/the rule matcher are untouched → no-alias / non-Unknown ⇒ byte-for-byte pre-S2-2.

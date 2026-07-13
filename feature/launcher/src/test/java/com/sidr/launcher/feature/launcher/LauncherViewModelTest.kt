@@ -6,12 +6,17 @@ import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.core.testing.FakeActionCatalog
 import com.sidr.launcher.core.testing.FakeActionExecutor
+import com.sidr.launcher.core.testing.FakeAliasStore
 import com.sidr.launcher.core.testing.FakeCommandPlanner
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
 import androidx.lifecycle.SavedStateHandle
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
+import com.sidr.launcher.domain.memory.alias.Alias
+import com.sidr.launcher.domain.memory.alias.AliasTarget
+import com.sidr.launcher.domain.memory.alias.ResolvedCommandStep
+import com.sidr.launcher.domain.memory.alias.ResolveCommandWithAliasUseCase
 import com.sidr.launcher.domain.memory.resolution.CandidateSet
 import com.sidr.launcher.domain.memory.resolution.CapabilityKey
 import com.sidr.launcher.domain.memory.resolution.CommandRouteStep
@@ -99,6 +104,7 @@ class LauncherViewModelTest {
     // empty store, proving no-preference parity. A fresh instance per test (JUnit4 instantiates the
     // test class per @Test method), so tests never leak preferences into one another.
     private val fakeResolutionStore = FakeResolutionPreferenceStore()
+    private val fakeAliasStore = FakeAliasStore()
     private val useCase = HandleUserCommandUseCase(
         matcher = fakeMatcher,
         resolver = IntentActionResolver(fakeRepo),
@@ -126,6 +132,26 @@ class LauncherViewModelTest {
         resolver = IntentActionResolver(fakeRepo),
         executor = fakeExecutor,
     )
+
+    private fun aliasAwareResolveCommand(
+        route: CommandRouteStep,
+        resolutionStore: FakeResolutionPreferenceStore = fakeResolutionStore,
+        actionCatalog: FakeActionCatalog = FakeActionCatalog(),
+        aliasStore: FakeAliasStore = fakeAliasStore,
+        installedApps: InstalledAppsRepository = fakeRepo,
+    ): ResolveCommandWithAliasUseCase {
+        val preferenceResolver = ResolveCommandWithPreferenceUseCase(
+            route = route,
+            store = resolutionStore,
+            policy = DefaultResolutionPreferencePolicy(),
+            catalog = actionCatalog,
+        )
+        return ResolveCommandWithAliasUseCase(
+            inner = ResolvedCommandStep { rawInput -> preferenceResolver.resolve(rawInput) },
+            store = aliasStore,
+            installedApps = installedApps,
+        )
+    }
 
     @Before
     fun setUp() {
@@ -155,11 +181,10 @@ class LauncherViewModelTest {
         resolutionStore: FakeResolutionPreferenceStore = fakeResolutionStore,
     ) = LauncherViewModel(
         installedAppsRepository = fakeRepo,
-        resolveCommand = ResolveCommandWithPreferenceUseCase(
+        resolveCommand = aliasAwareResolveCommand(
             route = CommandRouteStep { routeUseCase.route(it) },
-            store = resolutionStore,
-            policy = DefaultResolutionPreferencePolicy(),
-            catalog = actionCatalog,
+            resolutionStore = resolutionStore,
+            actionCatalog = actionCatalog,
         ),
         recordResolutionChoice = RecordResolutionChoiceUseCase(resolutionStore),
         executeAction = executeAction,
@@ -208,11 +233,10 @@ class LauncherViewModelTest {
         )
         return LauncherViewModel(
             installedAppsRepository = fakeRepo,
-            resolveCommand = ResolveCommandWithPreferenceUseCase(
+            resolveCommand = aliasAwareResolveCommand(
                 route = CommandRouteStep { router.route(it) },
-                store = resolutionStore,
-                policy = DefaultResolutionPreferencePolicy(),
-                catalog = catalog,
+                resolutionStore = resolutionStore,
+                actionCatalog = catalog,
             ),
             recordResolutionChoice = RecordResolutionChoiceUseCase(resolutionStore),
             executeAction = executeAction,
@@ -504,11 +528,9 @@ class LauncherViewModelTest {
         }
         val vm = LauncherViewModel(
             installedAppsRepository = gatedRepo,
-            resolveCommand = ResolveCommandWithPreferenceUseCase(
+            resolveCommand = aliasAwareResolveCommand(
                 route = CommandRouteStep { routeUseCase.route(it) },
-                store = fakeResolutionStore,
-                policy = DefaultResolutionPreferencePolicy(),
-                catalog = FakeActionCatalog(),
+                installedApps = gatedRepo,
             ),
             recordResolutionChoice = RecordResolutionChoiceUseCase(fakeResolutionStore),
             executeAction = executeAction,
@@ -752,11 +774,9 @@ class LauncherViewModelTest {
         }
         val vm = LauncherViewModel(
             installedAppsRepository = gatedRepo,
-            resolveCommand = ResolveCommandWithPreferenceUseCase(
+            resolveCommand = aliasAwareResolveCommand(
                 route = CommandRouteStep { routeUseCase.route(it) },
-                store = fakeResolutionStore,
-                policy = DefaultResolutionPreferencePolicy(),
-                catalog = FakeActionCatalog(),
+                installedApps = gatedRepo,
             ),
             recordResolutionChoice = RecordResolutionChoiceUseCase(fakeResolutionStore),
             executeAction = executeAction,
@@ -1853,6 +1873,37 @@ class LauncherViewModelTest {
             vm.onAppClicked(InstalledApp("org.telegram.messenger", "Telegram"))
             advanceUntilIdle()
 
+            assertTrue(fakeResolutionStore.observeAll().first().isEmpty())
+        }
+
+    @Test
+    fun `alias hit after unknown launches the declared app directly`() =
+        runTest(testDispatcher) {
+            fakeRepo.appsToReturn = listOf(
+                InstalledApp(
+                    packageName = "com.telegram",
+                    label = "Telegram",
+                    activityName = "com.telegram.MainActivity",
+                ),
+            )
+            fakeMatcher.intentToReturn = LauncherIntent.UnknownIntent(
+                originalInput = "work chat",
+                reason = "no rule match",
+            )
+            fakeMatcher.confidenceToReturn = 0.10f
+            fakeAliasStore.upsert(Alias("work chat", AliasTarget.App("com.telegram"), 1L))
+            val vm = buildViewModel()
+            advanceUntilIdle()
+            vm.onCommandChanged("Work   Chat")
+
+            vm.onCommandSubmitted("Work   Chat")
+            advanceUntilIdle()
+
+            val action = fakeExecutor.executedActions.single() as ExecutableAction.LaunchAppAction
+            assertEquals("com.telegram", action.packageName)
+            assertEquals("com.telegram.MainActivity", action.activityName)
+            assertEquals("", vm.commandInput.value)
+            assertEquals(CommandFeedback.None, vm.commandFeedback.value)
             assertTrue(fakeResolutionStore.observeAll().first().isEmpty())
         }
 

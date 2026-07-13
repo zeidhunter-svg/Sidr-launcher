@@ -13,9 +13,9 @@ import com.sidr.launcher.domain.action.ActionCatalog
 import com.sidr.launcher.domain.action.LauncherAction
 import com.sidr.launcher.domain.history.AppUsageRecord
 import com.sidr.launcher.domain.history.UsageHistoryRepository
+import com.sidr.launcher.domain.memory.alias.ResolveCommandWithAliasUseCase
 import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
 import com.sidr.launcher.domain.memory.resolution.ResolutionLearningToken
-import com.sidr.launcher.domain.memory.resolution.ResolveCommandWithPreferenceUseCase
 import com.sidr.launcher.domain.memory.resolution.ResolvedCommand
 import com.sidr.launcher.domain.memory.resolution.ResolvedTarget
 import com.sidr.launcher.domain.connectivity.ConnectivityChecker
@@ -68,11 +68,9 @@ import javax.inject.Inject
 @HiltViewModel
 class LauncherViewModel @Inject constructor(
     private val installedAppsRepository: InstalledAppsRepository,
-    // S2-1 Task 11: the learned-resolution read decorator wraps the AIL-4 RouteCommandUseCase (via a
-    // CommandRouteStep seam bound in MemoryProvidesModule). With no stored preference — or any
-    // non-ambiguous outcome — it returns the original outcome unchanged, so the rule/router path stays
-    // byte-for-byte (router-off / no-preference ⇒ parity, same as pre-S2-1).
-    private val resolveCommand: ResolveCommandWithPreferenceUseCase,
+    // S2-2 Task 8: alias resolution wraps S2-1's learned-resolution decorator. It only fills Unknown,
+    // so no-alias and every non-Unknown outcome stay byte-for-byte on the existing rule/router path.
+    private val resolveCommand: ResolveCommandWithAliasUseCase,
     // S2-1 Task 11: records an explicit candidate choice from the app-ambiguity flow, fire-and-forget
     // on [applicationScope]. Never consulted for decision-making in the VM — only invoked after a
     // successful launch of a candidate the pending token actually offered.

@@ -2,12 +2,14 @@ package com.sidr.launcher.feature.settings
 
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
+import com.sidr.launcher.core.ui.component.SidrMemoryStatus
 import com.sidr.launcher.domain.action.ActionId
 import com.sidr.launcher.domain.memory.resolution.CandidateSet
 import com.sidr.launcher.domain.memory.resolution.CapabilityKey
 import com.sidr.launcher.domain.memory.resolution.DeleteLearnedChoiceUseCase
 import com.sidr.launcher.domain.memory.resolution.EvaluateLearnedChoiceDisplayStateUseCase
 import com.sidr.launcher.domain.memory.resolution.LearnedChoiceDisplayState
+import com.sidr.launcher.domain.memory.resolution.LearnedChoiceView
 import com.sidr.launcher.domain.memory.resolution.ObserveLearnedChoicesUseCase
 import com.sidr.launcher.domain.memory.resolution.PreferenceEvidence
 import com.sidr.launcher.domain.memory.resolution.PruneUnavailableLearnedChoicesUseCase
@@ -69,7 +71,7 @@ class LearnedChoicesViewModelTest {
         advanceUntilIdle()
 
         assertEquals(1, vm.uiState.value.choices.size)
-        vm.onDelete(key("bank"))
+        vm.onDelete(vm.uiState.value.choices.single().stableId)
         advanceUntilIdle()
 
         assertTrue(store.observeAll().first().isEmpty())
@@ -102,8 +104,28 @@ class LearnedChoicesViewModelTest {
 
         val choices = vm.uiState.value.choices
         assertEquals(1, choices.size)
-        assertEquals("bank", choices[0].capabilityKey.query)
-        assertEquals(LearnedChoiceDisplayState.Learning(1, 3), choices[0].displayState)
+        assertEquals("bank", choices[0].phrase)
+        assertEquals(SidrMemoryStatus.Learning, choices[0].status)
+        assertEquals("Learning from confirmed choices (1/3)", choices[0].evidence)
+    }
+
+    @Test
+    fun `maps learned-choice display states to DS-7 memory status and evidence`() {
+        val learning = view(LearnedChoiceDisplayState.Learning(1, 3)).toMemoryUiModel()
+        val active = view(LearnedChoiceDisplayState.Auto).toMemoryUiModel()
+        val ready = view(LearnedChoiceDisplayState.AutoReady).toMemoryUiModel()
+        val reconfirm = view(LearnedChoiceDisplayState.NeedsReconfirm).toMemoryUiModel()
+        val unavailable = view(LearnedChoiceDisplayState.Unavailable).toMemoryUiModel()
+
+        assertEquals(SidrMemoryStatus.Learning, learning.status)
+        assertEquals("Learning from confirmed choices (1/3)", learning.evidence)
+        assertEquals(SidrMemoryStatus.Active, active.status)
+        assertEquals("Based on confirmed choices", active.evidence)
+        assertEquals(SidrMemoryStatus.Active, ready.status)
+        assertEquals(SidrMemoryStatus.NeedsReconfirmation, reconfirm.status)
+        assertEquals("Needs reconfirmation before auto-open", reconfirm.evidence)
+        assertEquals(SidrMemoryStatus.Unavailable, unavailable.status)
+        assertEquals("Target unavailable", unavailable.evidence)
     }
 
     private fun buildViewModel(
@@ -140,6 +162,13 @@ class LearnedChoicesViewModelTest {
             lastChosenAtEpochMs = 0L,
         ),
         learnedInSetFingerprint = fingerprintOf(CandidateSet(listOf(ResolvedTarget.App(target)))),
+    )
+
+    private fun view(displayState: LearnedChoiceDisplayState) = LearnedChoiceView(
+        capabilityKey = key("bank"),
+        targetPackageName = "com.a",
+        targetLabel = "MyBank",
+        displayState = displayState,
     )
 
     private class ThrowingObserveStore : ResolutionPreferenceStore {

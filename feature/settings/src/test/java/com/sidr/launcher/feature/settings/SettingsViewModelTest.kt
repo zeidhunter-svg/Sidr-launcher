@@ -326,6 +326,16 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `aliases entry emits navigation to aliases route`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+
+        vm.openAliases()
+        val event = vm.navigationEvents.first()
+
+        assertEquals(NavigationEvent.NavigateTo(Routes.Aliases.ROUTE), event)
+    }
+
+    @Test
     fun `back action emits navigate back`() = runTest(testDispatcher) {
         val vm = buildViewModel()
 

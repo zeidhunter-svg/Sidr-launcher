@@ -38,6 +38,7 @@ import com.sidr.launcher.feature.launcher.preview.MomentsPreviewScreen
 import com.sidr.launcher.feature.launcher.preview.TasksPreviewScreen
 import com.sidr.launcher.feature.launcher.preview.TerminalPreviewScreen
 import com.sidr.launcher.feature.permission_education.PermissionEducationScreen
+import com.sidr.launcher.feature.settings.AliasesScreen
 import com.sidr.launcher.feature.settings.LearnedChoicesScreen
 import com.sidr.launcher.feature.settings.SettingsScreen
 import com.sidr.launcher.feature.settings.SettingsViewModel
@@ -327,6 +328,14 @@ fun AppNavHost(
 
         composable(Routes.LearnedChoices.ROUTE) {
             LearnedChoicesScreen(
+                onBack = {
+                    handleNavigationEvent(navController, NavigationEvent.NavigateBack)
+                },
+            )
+        }
+
+        composable(Routes.Aliases.ROUTE) {
+            AliasesScreen(
                 onBack = {
                     handleNavigationEvent(navController, NavigationEvent.NavigateBack)
                 },

@@ -259,6 +259,10 @@ class SettingsViewModel @Inject constructor(
         _navigationEvents.trySend(NavigationEvent.NavigateTo(Routes.LearnedChoices.ROUTE))
     }
 
+    fun openAliases() {
+        _navigationEvents.trySend(NavigationEvent.NavigateTo(Routes.Aliases.ROUTE))
+    }
+
     fun navigateBack() {
         _navigationEvents.trySend(NavigationEvent.NavigateBack)
     }

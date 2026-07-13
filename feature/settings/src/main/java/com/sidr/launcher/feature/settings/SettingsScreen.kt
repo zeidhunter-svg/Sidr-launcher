@@ -70,6 +70,7 @@ fun SettingsScreen(
         onLlmRouterChanged = viewModel::setLlmRouterEnabled,
         onAssistantProvider = viewModel::openAssistantProvider,
         onLearnedChoices = viewModel::openLearnedChoices,
+        onAliases = viewModel::openAliases,
         onSetDefaultLauncher = {
             try {
                 setDefaultLauncher.launch(defaultLauncherIntent(context))
@@ -95,6 +96,7 @@ private fun SettingsContent(
     onLlmRouterChanged: (Boolean) -> Unit,
     onAssistantProvider: () -> Unit,
     onLearnedChoices: () -> Unit,
+    onAliases: () -> Unit,
     onSetDefaultLauncher: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -205,6 +207,7 @@ private fun SettingsContent(
             // ── Memory ──────────────────────────────────────────────────────────
             SidrSectionHeader(text = "MEMORY")
             SidrNavigationRow(title = "Learned choices", onClick = onLearnedChoices)
+            SidrNavigationRow(title = "Aliases", onClick = onAliases)
 
             // ── Assistant ───────────────────────────────────────────────────────
             SidrSectionHeader(text = "ASSISTANT")

@@ -27,7 +27,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class LearnedChoicesUiState(
-    val choices: List<LearnedChoiceView> = emptyList(),
+    val choices: List<LearnedChoiceMemoryUiModel> = emptyList(),
     val isLoading: Boolean = true,
     val errorMessage: String? = null,
     val canRetry: Boolean = false,
@@ -43,6 +43,7 @@ class LearnedChoicesViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val reloadSignal = MutableStateFlow(0)
+    private val deleteKeys = mutableMapOf<String, CapabilityKey>()
 
     val uiState: StateFlow<LearnedChoicesUiState> = reloadSignal
         .flatMapLatest { observeChoices() }
@@ -56,7 +57,8 @@ class LearnedChoicesViewModel @Inject constructor(
         reloadSignal.value = reloadSignal.value + 1
     }
 
-    fun onDelete(key: CapabilityKey) {
+    fun onDelete(stableId: String) {
+        val key = deleteKeys[stableId] ?: return
         viewModelScope.launch(ioDispatcher) {
             try {
                 deleteLearnedChoice.delete(key, ResolutionContext.None)
@@ -73,8 +75,10 @@ class LearnedChoicesViewModel @Inject constructor(
         pruneUnavailableBestEffort()
         emitAll(
             observeLearnedChoices.observe().map { choices ->
+                val mapped = choices.mapNotNull(::safeChoiceOrNull)
+                deleteKeys.keys.retainAll(mapped.mapTo(mutableSetOf()) { it.stableId })
                 LearnedChoicesUiState(
-                    choices = choices.mapNotNull(::safeChoiceOrNull),
+                    choices = mapped,
                     isLoading = false,
                 )
             },
@@ -100,13 +104,14 @@ class LearnedChoicesViewModel @Inject constructor(
         }
     }
 
-    private fun safeChoiceOrNull(choice: LearnedChoiceView): LearnedChoiceView? =
+    private fun safeChoiceOrNull(choice: LearnedChoiceView): LearnedChoiceMemoryUiModel? =
         try {
             choice.takeUnless {
                 it.capabilityKey.query.isBlank() ||
                     it.targetPackageName.isBlank() ||
                     it.targetLabel.isBlank()
-            }
+            }?.toMemoryUiModel()
+                ?.also { deleteKeys[it.stableId] = choice.capabilityKey }
         } catch (e: CancellationException) {
             throw e
         } catch (_: RuntimeException) {

@@ -42,6 +42,10 @@ sealed class Routes {
         const val ROUTE = "learned_choices"
     }
 
+    object Aliases : Routes() {
+        const val ROUTE = "aliases"
+    }
+
     /**
      * The App Drawer (full installed-apps list). Registered as a real destination in Block X3;
      * the home's "All apps" affordance navigates here already in X2, so until X3 wires the

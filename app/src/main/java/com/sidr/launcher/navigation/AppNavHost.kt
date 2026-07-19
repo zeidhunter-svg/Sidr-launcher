@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.material3.Scaffold
@@ -15,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
@@ -131,9 +134,8 @@ private fun TabRootScaffold(
     Scaffold(
         contentWindowInsets = WindowInsets.systemBars,
         bottomBar = {
-            // The bottomBar is EITHER the full chrome OR the thin reveal handle. Swapping to the (much
-            // shorter) handle shrinks the content inset so the screen breathes. Both are single-purpose
-            // composables that own their size and their own system-nav clearance.
+            // The full chrome stays in Scaffold's bottomBar. The hidden reveal handle is an overlay
+            // below, so it can apply navigationBarsPadding in the edge-to-edge window.
             if (showChrome) {
                 Column {
                     if (tab == SidrTab.HOME) {
@@ -145,13 +147,21 @@ private fun TabRootScaffold(
                     }
                     SidrTabBar(selected = tab, onSelect = { navigateToTab(navController, it) })
                 }
-            } else {
-                SidrChromeHandle(onReveal = { chromeVisible = true })
             }
         },
     ) { inner ->
-        Box(modifier = Modifier.consumeWindowInsets(inner)) {
-            content(inner)
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.consumeWindowInsets(inner)) {
+                content(inner)
+            }
+            if (!showChrome) {
+                SidrChromeHandle(
+                    onReveal = { chromeVisible = true },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding(),
+                )
+            }
         }
     }
 }

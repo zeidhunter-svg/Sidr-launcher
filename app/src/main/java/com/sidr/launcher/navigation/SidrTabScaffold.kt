@@ -31,6 +31,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.sidr.launcher.core.ui.component.SidrIconButton
 import com.sidr.launcher.core.ui.primitive.SidrText
@@ -173,22 +175,19 @@ fun SidrAppFooter(
  * `TabRootScaffold`, which renders this as a bottom-anchored overlay on the content (with its own
  * `navigationBarsPadding`) so its size/position are predictable, rather than fighting the Scaffold's
  * `bottomBar` measurement. Reveal is a **tap**, not a bottom-edge swipe, deliberately: a bottom-edge
- * upward swipe collides with Android's system gesture-nav home gesture. `onClickLabel` gives TalkBack
- * a real action name.
+ * upward swipe collides with Android's system gesture-nav home gesture.
  */
 @Composable
 fun SidrChromeHandle(
     onReveal: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Sized by padding (wrap-content), NOT a fixed height: a fixed height taller than the slot the
-    // Scaffold gives the bottomBar overflowed upward into the content, where LauncherScreen's
-    // tap-to-dismiss swallowed the taps and left the visible pill sitting in a dead zone. Wrapping to
-    // ~32 dp keeps the whole strip inside the bar so the centred pill's pixels ARE its touch target.
-    // No `navigationBarsPadding`: on this window the bottomBar already sits above the system nav.
+    // Sized by padding (wrap-content), not a fixed height: the caller anchors this as a bottom
+    // overlay and applies system-nav clearance, while this composable owns the tap target itself.
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .semantics { contentDescription = "Show navigation bar" }
             .clickable(onClickLabel = "Show navigation bar", onClick = onReveal)
             .padding(vertical = 14.dp),
         contentAlignment = Alignment.Center,

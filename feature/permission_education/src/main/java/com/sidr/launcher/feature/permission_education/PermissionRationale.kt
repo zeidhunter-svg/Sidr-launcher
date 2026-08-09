@@ -53,4 +53,17 @@ fun rationaleFor(feature: PermissionFeature): PermissionRationale = when (featur
             "fine without it, and you can change your mind any time.",
         ctaLabel = "Enable location suggestions",
     )
+
+    // DS-6B Task 8 — deliberately separate from LOCATION_SUGGESTIONS' copy above: that rationale is
+    // suggestion-specific ("suggesting a maps app") and would be misleading here, where the location
+    // is used only to compute prayer times.
+    PermissionFeature.PRAYER_LOCATION -> PermissionRationale(
+        title = "Prayer location",
+        body = "Using your device location lets Sidr compute accurate prayer times for where you " +
+            "are, rounded to about a kilometre before it's ever stored. Your coordinates stay on " +
+            "this device — they are never sent anywhere or logged. It's entirely optional: picking " +
+            "a city from the list works without this permission, and you can change your mind any " +
+            "time.",
+        ctaLabel = "Enable device location",
+    )
 }

@@ -132,6 +132,12 @@ Roborazzi; new deps confined to `:data:prayer`: **adhan-java (MIT)** + bundled G
 
 **Purpose:** Prove the calculation source with golden tests before any UI exists.
 
+> **Owner amendment (2026-08-07):** use the Kotlin port **`com.batoulapps.adhan:adhan2:0.0.5`**, not the
+> Java `adhan-java`. The Java port lacks a `TURKEY`/Diyanet method (verified), which §0.2 requires;
+> adhan2 (same author, MIT-in-POM) has it. Pinned at **0.0.5** specifically: 0.0.6/0.0.7 pull a
+> kotlin-stdlib newer than this project's Kotlin 2.0.21 compiler, while 0.0.5 pulls stdlib 1.9.22 +
+> kotlinx-datetime 0.5.0 (compatible). All "adhan-java" references in the steps below now mean adhan2.
+
 **Files:**
 - Create: `data/prayer/build.gradle.kts` (android-library, Hilt-free like `:data:ai-cloud`; deps:
   `:domain`, coroutines, adhan-java) + `settings.gradle.kts` include.

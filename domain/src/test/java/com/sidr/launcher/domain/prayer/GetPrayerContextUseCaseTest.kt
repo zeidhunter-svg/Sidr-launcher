@@ -321,6 +321,35 @@ class GetPrayerContextUseCaseTest {
         assertEquals(TimeZoneState.MATCHES_DEVICE, available.timeZoneState)
     }
 
+    // ── locationTzId (Task 9 Step 0 correctness fix) ───────────────────────────
+
+    @Test
+    fun `freshly computed Available carries the location tzId, not the device tzId`() = runTest {
+        prefs.saveSetup(turkeySetup())
+        scriptCalcSuccess()
+        val deviceOnUtc = Clock.fixed(NOW, ZoneId.of("UTC"))
+
+        val available = useCase(deviceOnUtc).get().toList().single() as PrayerContext.Available
+
+        assertEquals("Europe/Istanbul", available.locationTzId)
+    }
+
+    @Test
+    fun `cached Available (fresh and stale) also carries the location tzId`() = runTest {
+        val setup = turkeySetup()
+        prefs.saveSetup(setup)
+        val cachedSchedule = scheduleFor(TODAY_ISTANBUL)
+        cache.stored = CachedPrayerSchedule(cachedSchedule, provenanceFor(setup))
+        scriptCalcSuccess(scheduleFor(TODAY_ISTANBUL))
+
+        val contexts = useCase().get().toList()
+
+        assertEquals(2, contexts.size)
+        contexts.forEach { context ->
+            assertEquals("Europe/Istanbul", (context as PrayerContext.Available).locationTzId)
+        }
+    }
+
     @Test
     fun `every Available emission carries provenance by construction`() = runTest {
         val setup = turkeySetup()

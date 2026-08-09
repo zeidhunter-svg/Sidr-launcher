@@ -47,6 +47,22 @@ sealed class Routes {
     }
 
     /**
+     * Prayer setup (DS-6B Task 8): method/madhab/location choice. Reached from Settings; a pushed,
+     * unwrapped destination like [LearnedChoices]/[Aliases] (bottom tab bar hides on push).
+     */
+    object PrayerSettings : Routes() {
+        const val ROUTE = "prayer_settings"
+    }
+
+    /**
+     * Prayer detail (DS-6B Task 8): the five prayers + Sunrise + provenance/freshness/method/madhab/
+     * location, linking back to [PrayerSettings]. Reached from the (Task 9) Home strip.
+     */
+    object PrayerDetail : Routes() {
+        const val ROUTE = "prayer_detail"
+    }
+
+    /**
      * The App Drawer (full installed-apps list). Registered as a real destination in Block X3;
      * the home's "All apps" affordance navigates here already in X2, so until X3 wires the
      * `composable(...)`, [com.sidr.launcher.core.common.navigation.NavigationEvent] safe-fallback

@@ -10,6 +10,9 @@ import com.sidr.launcher.core.testing.FakeAliasStore
 import com.sidr.launcher.core.testing.FakeCommandPlanner
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
+import com.sidr.launcher.core.testing.FakePrayerCalculator
+import com.sidr.launcher.core.testing.FakePrayerPreferencesRepository
+import com.sidr.launcher.core.testing.FakePrayerScheduleCache
 import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
 import androidx.lifecycle.SavedStateHandle
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
@@ -69,13 +72,31 @@ import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.permission.PermissionFeature
+import com.sidr.launcher.domain.prayer.CalculationMethodId
+import com.sidr.launcher.domain.prayer.GetPrayerContextUseCase
+import com.sidr.launcher.domain.prayer.Madhab
+import com.sidr.launcher.domain.prayer.PrayerContext
+import com.sidr.launcher.domain.prayer.PrayerDaySchedule
+import com.sidr.launcher.domain.prayer.PrayerInstant
+import com.sidr.launcher.domain.prayer.PrayerLocation
+import com.sidr.launcher.domain.prayer.PrayerLocationSource
+import com.sidr.launcher.domain.prayer.PrayerName
+import com.sidr.launcher.domain.prayer.PrayerSetup
+import com.sidr.launcher.domain.prayer.UnavailableReason
 import com.sidr.launcher.domain.result.OperationError
+import java.time.Clock
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -105,6 +126,16 @@ class LauncherViewModelTest {
     // test class per @Test method), so tests never leak preferences into one another.
     private val fakeResolutionStore = FakeResolutionPreferenceStore()
     private val fakeAliasStore = FakeAliasStore()
+
+    // DS-6B Task 9: parity-only default — an unconfigured prayer use case over fresh fakes, so every
+    // pre-Task-9 test (which never touches prayerContext) is unaffected. Tests that care about prayer
+    // behaviour build and pass their own [GetPrayerContextUseCase] via [buildViewModel]'s parameter.
+    private val defaultGetPrayerContext = GetPrayerContextUseCase(
+        FakePrayerPreferencesRepository(),
+        FakePrayerScheduleCache(),
+        FakePrayerCalculator(),
+        Clock.fixed(Instant.parse("2026-07-13T10:00:00Z"), ZoneId.of("UTC")),
+    )
     private val useCase = HandleUserCommandUseCase(
         matcher = fakeMatcher,
         resolver = IntentActionResolver(fakeRepo),
@@ -179,6 +210,7 @@ class LauncherViewModelTest {
         actionCatalog: FakeActionCatalog = FakeActionCatalog(),
         connectivity: FakeConnectivityChecker = FakeConnectivityChecker(),
         resolutionStore: FakeResolutionPreferenceStore = fakeResolutionStore,
+        getPrayerContext: GetPrayerContextUseCase = defaultGetPrayerContext,
     ) = LauncherViewModel(
         installedAppsRepository = fakeRepo,
         resolveCommand = aliasAwareResolveCommand(
@@ -197,6 +229,7 @@ class LauncherViewModelTest {
         suggestionsCacheRepository = suggestionsCacheRepository,
         speechInputSource = fakeSpeech,
         connectivityChecker = connectivity,
+        getPrayerContext = getPrayerContext,
         ioDispatcher = testDispatcher,
         applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
         savedStateHandle = savedStateHandle,
@@ -249,6 +282,7 @@ class LauncherViewModelTest {
             suggestionsCacheRepository = FakeSuggestionsCacheRepository(),
             speechInputSource = fakeSpeech,
             connectivityChecker = FakeConnectivityChecker(),
+            getPrayerContext = defaultGetPrayerContext,
             ioDispatcher = testDispatcher,
             applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),
@@ -543,6 +577,7 @@ class LauncherViewModelTest {
             suggestionsCacheRepository = FakeSuggestionsCacheRepository(),
             speechInputSource = fakeSpeech,
             connectivityChecker = FakeConnectivityChecker(),
+            getPrayerContext = defaultGetPrayerContext,
             ioDispatcher = testDispatcher,
             applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),
@@ -791,6 +826,7 @@ class LauncherViewModelTest {
             suggestionsCacheRepository = cacheRepo,
             speechInputSource = fakeSpeech,
             connectivityChecker = FakeConnectivityChecker(),
+            getPrayerContext = defaultGetPrayerContext,
             ioDispatcher = testDispatcher,
             applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),
@@ -1945,4 +1981,128 @@ class LauncherViewModelTest {
                 fakeResolutionStore.observeAll().first().size,
             )
         }
+
+    // ── Prayer context (DS-6B Task 9) ───────────────────────────────────────
+
+    private fun istanbulPrayerLocation() = PrayerLocation(
+        label = "Istanbul",
+        lat2dp = 41.01,
+        lon2dp = 28.98,
+        tzId = "Europe/Istanbul",
+        source = PrayerLocationSource.CITY,
+    )
+
+    /** Fajr 04:30, Dhuhr 13:10, Asr 17:05, Maghrib 20:35, Isha 22:15 local on 2026-07-13, Istanbul. */
+    private fun istanbulPrayerSchedule(): PrayerDaySchedule {
+        val date = LocalDate.of(2026, 7, 13)
+        val zone = ZoneId.of("Europe/Istanbul")
+        fun epoch(hour: Int, minute: Int) = date.atTime(hour, minute).atZone(zone).toInstant().toEpochMilli()
+        return PrayerDaySchedule(
+            dateInLocationTz = date,
+            instants = listOf(
+                PrayerInstant(PrayerName.FAJR, epoch(4, 30)),
+                PrayerInstant(PrayerName.DHUHR, epoch(13, 10)),
+                PrayerInstant(PrayerName.ASR, epoch(17, 5)),
+                PrayerInstant(PrayerName.MAGHRIB, epoch(20, 35)),
+                PrayerInstant(PrayerName.ISHA, epoch(22, 15)),
+            ),
+        )
+    }
+
+    /** 13:00 local Istanbul on 2026-07-13 — Dhuhr (13:10) is the next prayer. */
+    private fun istanbulNoonClock(): Clock =
+        Clock.fixed(Instant.parse("2026-07-13T10:00:00Z"), ZoneId.of("Europe/Istanbul"))
+
+    /**
+     * Starts a real subscriber on [LauncherViewModel.prayerContext] — required to start the
+     * `WhileSubscribed` sharing coroutine (the same collection the screen's
+     * `collectAsStateWithLifecycle` performs in production), returning a scope to cancel afterwards.
+     *
+     * Deliberately NOT `backgroundScope` (`TestScope`'s built-in background-job scope): empirically
+     * reproduced (in an isolated `stateIn`/`WhileSubscribed` case, independent of this VM) that a
+     * `backgroundScope.launch { ... }` issued *after* a prior `advanceUntilIdle()` call in the same
+     * `runTest` never actually gets dispatched by a later `advanceUntilIdle()` — the collector body
+     * never runs. A plain scope on the same [testDispatcher] does not have this problem.
+     */
+    private fun subscribeToPrayerContext(vm: LauncherViewModel): CoroutineScope {
+        val scope = CoroutineScope(testDispatcher + Job())
+        scope.launch { vm.prayerContext.collect {} }
+        return scope
+    }
+
+    @Test
+    fun `prayerContext maps through to Available with the correct nextPrayer once subscribed`() =
+        runTest(testDispatcher) {
+            val prefs = FakePrayerPreferencesRepository(
+                initial = PrayerSetup(CalculationMethodId("MWL"), Madhab.STANDARD, istanbulPrayerLocation()),
+            )
+            val calculator = FakePrayerCalculator().apply {
+                resultToReturn = OperationResult.Success(istanbulPrayerSchedule())
+            }
+            val vm = buildViewModel(
+                getPrayerContext = GetPrayerContextUseCase(
+                    prefs, FakePrayerScheduleCache(), calculator, istanbulNoonClock(),
+                ),
+            )
+
+            val collector = subscribeToPrayerContext(vm)
+            advanceUntilIdle()
+
+            val available = vm.prayerContext.value as PrayerContext.Available
+            assertEquals(PrayerName.DHUHR, available.nextPrayer)
+            assertEquals("Europe/Istanbul", available.locationTzId)
+            collector.cancel()
+        }
+
+    @Test
+    fun `no calculation runs before anything subscribes to prayerContext`() = runTest(testDispatcher) {
+        val prefs = FakePrayerPreferencesRepository(
+            initial = PrayerSetup(CalculationMethodId("MWL"), Madhab.STANDARD, istanbulPrayerLocation()),
+        )
+        val calculator = FakePrayerCalculator().apply {
+            resultToReturn = OperationResult.Success(istanbulPrayerSchedule())
+        }
+        val vm = buildViewModel(
+            getPrayerContext = GetPrayerContextUseCase(
+                prefs, FakePrayerScheduleCache(), calculator, istanbulNoonClock(),
+            ),
+        )
+
+        // Drive every other startup path (app list load, suggestions, connectivity, etc.) to
+        // completion. prayerContext must stay untouched — nobody has collected it yet.
+        advanceUntilIdle()
+
+        assertEquals(
+            "construction + startup must perform zero PrayerCalculator calls",
+            0,
+            calculator.callCount,
+        )
+
+        // Sanity check: the flow really is wired — subscribing does eventually calculate.
+        val collector = subscribeToPrayerContext(vm)
+        advanceUntilIdle()
+        assertTrue("expected a calculation once subscribed", calculator.callCount >= 1)
+        collector.cancel()
+    }
+
+    @Test
+    fun `prayerContext is Unavailable NOT_CONFIGURED with no prayer setup`() = runTest(testDispatcher) {
+        val vm = buildViewModel(
+            getPrayerContext = GetPrayerContextUseCase(
+                FakePrayerPreferencesRepository(),
+                FakePrayerScheduleCache(),
+                FakePrayerCalculator(),
+                istanbulNoonClock(),
+            ),
+        )
+
+        val collector = subscribeToPrayerContext(vm)
+        advanceUntilIdle()
+
+        assertEquals(
+            PrayerContext.Unavailable(UnavailableReason.NOT_CONFIGURED),
+            vm.prayerContext.value,
+        )
+        collector.cancel()
+    }
 }

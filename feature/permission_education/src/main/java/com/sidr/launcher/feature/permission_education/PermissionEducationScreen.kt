@@ -207,6 +207,7 @@ private fun PermissionFeature.androidPermission(): String? = when (this) {
     PermissionFeature.VOICE_INPUT -> Manifest.permission.RECORD_AUDIO
     PermissionFeature.CALENDAR_SUGGESTIONS -> Manifest.permission.READ_CALENDAR
     PermissionFeature.LOCATION_SUGGESTIONS -> Manifest.permission.ACCESS_FINE_LOCATION
+    PermissionFeature.PRAYER_LOCATION -> Manifest.permission.ACCESS_FINE_LOCATION
 }
 
 /**
@@ -218,6 +219,7 @@ private fun PermissionFeature.capabilityLabel(): String = when (this) {
     PermissionFeature.VOICE_INPUT -> "voice commands"
     PermissionFeature.CALENDAR_SUGGESTIONS -> "calendar-based suggestions"
     PermissionFeature.LOCATION_SUGGESTIONS -> "location-based suggestions"
+    PermissionFeature.PRAYER_LOCATION -> "using your device location for prayer times"
 }
 
 /** Unwraps the Activity from a (possibly wrapped) Context; null if none in the chain. */

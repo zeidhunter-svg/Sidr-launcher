@@ -25,6 +25,9 @@ import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.preferences.SuggestionsCacheRepository
 import com.sidr.launcher.domain.preferences.UserPreferences
 import com.sidr.launcher.domain.preferences.UserPreferencesRepository
+import com.sidr.launcher.domain.prayer.GetPrayerContextUseCase
+import com.sidr.launcher.domain.prayer.PrayerContext
+import com.sidr.launcher.domain.prayer.UnavailableReason
 import com.sidr.launcher.domain.intent.ActionExecutionResult
 import com.sidr.launcher.domain.intent.ActionExecutor
 import com.sidr.launcher.domain.intent.CommandOutcome
@@ -58,6 +61,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -94,6 +98,10 @@ class LauncherViewModel @Inject constructor(
     // AIL-6: drives the home status line (● online / ○ offline). Domain port — the VM stays
     // Android-free; reachability signals whether the cloud router/assistant is available.
     private val connectivityChecker: ConnectivityChecker,
+    // DS-6B Task 9: the sanctioned production addition — the opt-in prayer context for the Home
+    // strip. Its own [prayerContext] StateFlow is cold + WhileSubscribed, so nothing calculates on
+    // the construction/startup path before the UI actually subscribes.
+    private val getPrayerContext: GetPrayerContextUseCase,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     // S2-1 Task 11: fire-and-forget scope for recording a learned choice — survives the launch's own
     // viewModelScope coroutine (Block-F recordUsage precedent) so a quick nav-away never drops it.
@@ -150,6 +158,20 @@ class LauncherViewModel @Inject constructor(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = connectivityChecker.isOnline(),
+        )
+
+    // DS-6B Task 9: Home's opt-in prayer strip. [GetPrayerContextUseCase.get] is a COLD flow, and
+    // WhileSubscribed(5_000) means the sharing coroutine — and therefore any adhan2 calculation —
+    // never starts until the UI actually collects this; construction/startup does zero calculation.
+    // flowOn(ioDispatcher) keeps that recompute off the main thread once it does run. The use case
+    // itself emits cache-first (CACHED_FRESH) then a fresh recompute (VERIFIED_CURRENT) — Home never
+    // shows a spinner for the gap, only a quiet "Updating" label inside the strip.
+    val prayerContext: StateFlow<PrayerContext> = getPrayerContext.get()
+        .flowOn(ioDispatcher)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = PrayerContext.Unavailable(UnavailableReason.NOT_CONFIGURED),
         )
 
     // Derived state: combines the loaded app list with live usage records so the grid

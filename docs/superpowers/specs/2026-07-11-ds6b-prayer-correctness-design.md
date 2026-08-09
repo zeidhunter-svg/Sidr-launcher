@@ -29,6 +29,14 @@ governing framework; where they said "must be decided", the decision is here.
    anywhere in DS-6B v1: no prayer API, no outbound traffic, so authority-outage handling collapses to
    `CalculationFailed`. The `PrayerAuthority` seam stays in the domain model so official-source adapters
    (e.g., Diyanet) can be added later as a separate block. Provenance source label: `LOCAL CALC`.
+   **Amendment (owner, 2026-08-07):** the concrete library is the Kotlin port
+   **adhan2 (`com.batoulapps.adhan:adhan2`, MIT declared in POM)**, not the Java port originally named
+   "adhan-java". Reason: the Java port `com.batoulapps.adhan:adhan:1.2.1` has no `TURKEY`/Diyanet method
+   in its `CalculationMethod` enum (verified against the decompiled jar + source at v1.2.1 and master),
+   which would make the §0.2 Turkey/Diyanet requirement impossible without hand-transcribing method
+   parameters onto a religious-correctness surface. adhan2 (same Batoul Apps author, same MIT license,
+   Kotlin-native) ships every method including TURKEY. The §0.3 "maintained, offline, MIT calculation
+   library" intent is unchanged.
 4. **Location v1: bundled offline city index + optional one-shot device location.**
    - Primary path: a bundled GeoNames-derived city index (~10–20k cities; name, country, rounded
      lat/lon, tzId; one compressed asset, target ≤ ~500 KB) searched fully offline — works with zero

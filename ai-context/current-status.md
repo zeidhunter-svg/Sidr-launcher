@@ -2,9 +2,47 @@
 
 > **Authoritative status lives in `CLAUDE.md` (session digest), `ai-context/decisions.md` (ADR log),
 > and the per-phase plans.** This file is a short pointer/snapshot only — if it disagrees with those,
-> they win. Last re-based: 2026-07-13 (DS-5 + auto-hide nav + accent reactivation code-closed).
+> they win. Last re-based: 2026-08-08 (DS-6B Prayer Correctness COMPLETE — device-accepted by owner; prior
+> re-base 2026-07-13 DS-5 + auto-hide nav + accent reactivation code-closed).
 
-## Design track (DS) — DS-1…DS-4 + Vision MVP DONE; DS-5 CODE-CLOSED (2026-07-13, device-pending)
+## Design track (DS) — DS-1…DS-4 + Vision MVP DONE; DS-5 CODE-CLOSED (2026-07-13, device-pending);
+DS-6B COMPLETE — device-accepted by owner (2026-08-08)
+
+**DS-6B Prayer Correctness is COMPLETE — device-accepted by the owner on SM-A325F (2026-08-08); the
+shipped Home strip is times-only (calm status chip + provenance line hidden, degraded-state warnings kept,
+provenance invariant intact — retained in TalkBack + on the detail screen).** All
+build tasks are implemented and each passed a fresh-reviewer gate (ledger:
+`.superpowers/sdd/progress.md`). New `:data:prayer` (offline `AdhanPrayerCalculator` over
+`com.batoulapps.adhan:adhan2:0.0.5`, MIT-in-POM, pinned for Kotlin/kotlinx-datetime compatibility, the
+Kotlin port used instead of the originally-named Java "adhan-java" because that port lacks a
+`TURKEY`/Diyanet method) + new `:feature:prayer` (setup/detail screens, pushed route, no new tab).
+Method + Asr madhab are explicit first-run choices with no default (11 supported methods; `OTHER`/
+`TEHRAN` excluded — genuinely absent from adhan2:0.0.5). Location: a bundled offline GeoNames city index
+(19,481 cities, 286.8 KB gzipped, CC-BY 4.0 attributed) plus an optional one-shot device-location read
+that rounds to 2dp before crossing the port boundary — no continuous tracking, no coordinate logging.
+Privacy proven by a 10-guard `PrayerLocationPrivacyGuardTest`: `OutboundContextPolicy.ALLOWED` unchanged
+(4 values, zero new outbound surface), no prayer/location field in `AiRequest`, a planted coordinate
+sentinel never reaches `PromptContextBuilder.build`. New `PermissionFeature.PRAYER_LOCATION` (documented
+deviation — honest prayer-specific copy instead of reusing `LOCATION_SUGGESTIONS`'; no new manifest
+permission, `ACCESS_FINE_LOCATION` already present since Block U). `LauncherViewModel` gained exactly one
+new dependency (`GetPrayerContextUseCase`) behind a lazy `WhileSubscribed` `StateFlow`; the strip renders
+below the Shahada anchor, opt-in, only when `Available` — never fabricated times; `LauncherViewModelTest`
+parity held byte-for-byte. **Owner UI refinement (2026-08-08, on-device SM-A325F):** the shipped strip is
+**times-only** — status chip hidden for calm states but kept as a warning label for degraded/stale
+states, prayer names moved to per-cell `contentDescription`, provenance line removed from the strip
+(still required by its invariant, still in the strip's own `contentDescription`, still full on the
+detail screen). **Full Verification Gate GREEN** (JDK-17): `:domain:test :data:prayer:testDebugUnitTest
+:data:repository:testDebugUnitTest :feature:prayer:testDebugUnitTest :feature:settings:testDebugUnitTest
+:feature:launcher:testDebugUnitTest :core:ui:testDebugUnitTest :core:ui:verifyRoborazziDebug
+testDebugUnitTest assembleDebug` — BUILD SUCCESSFUL. **Device status is PARTIAL**: on SM-A325F the
+no-data invariant passed (fresh install → calm Home, no strip/prompt/fabricated times) and a real
+Diyanet/Turkey setup rendered a correct-looking strip, but the full interactive + religious-correctness
+acceptance (authority-table cross-check, airplane-mode cache, stale path, device-location grant,
+tz-conflict, font-scale 2.0, TalkBack, router-off parity) is **PENDING the owner** — mirrors the DS-5
+device-pending precedent. **Known limitation:** Istanbul (Diyanet) and Makkah (Umm al-Qura) golden times
+are authority-table-anchored; London and Kazan (MWL) are cross-implementation-verified only (MWL has no
+official authority portal). DS-6A (the Shahada component) stays UI-only and separate from DS-6B. ADR:
+decisions.md "2026-08-08 — DS-6B Prayer Correctness (COMPLETE — device-accepted by owner)".
 
 **DS-5 Action & Safety is CODE-CLOSED (implemented 2026-07-12, reconciled + gated 2026-07-13);
 device acceptance PENDING.** `core/ui/component/SidrActionSafety.kt` (`SidrActionProposal`,

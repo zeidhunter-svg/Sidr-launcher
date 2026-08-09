@@ -263,6 +263,11 @@ class SettingsViewModel @Inject constructor(
         _navigationEvents.trySend(NavigationEvent.NavigateTo(Routes.Aliases.ROUTE))
     }
 
+    /** DS-6B Task 8 — routes to the prayer setup screen. */
+    fun openPrayerSettings() {
+        _navigationEvents.trySend(NavigationEvent.NavigateTo(Routes.PrayerSettings.ROUTE))
+    }
+
     fun navigateBack() {
         _navigationEvents.trySend(NavigationEvent.NavigateBack)
     }

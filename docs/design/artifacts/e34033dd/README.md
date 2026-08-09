@@ -94,6 +94,20 @@ Future-contract targets:
 3. Migrate the existing routed confirmation card to `SidrActionGate` only with full parity tests.
 4. Use the Home study for DS-4 after controls are stable.
 
+## Deviation note (2026-08-08) — shipped Home prayer strip is times-only
+
+DS-6B Prayer Correctness landed code-complete (device-pending; ADR "2026-08-08 — DS-6B Prayer
+Correctness (code-complete, device-pending)" in `ai-context/decisions.md`). During on-device iteration
+on SM-A325F the owner requested a minimal look for the Home prayer strip: it now shows **times only**
+(`HH:MM` per prayer cell, next prayer marked by an inverted chip). This is a deliberate deviation from
+this artifact set's depiction of a labelled strip (see "prayer strip remains thin and secondary, with
+next-prayer emphasis and provenance expected later" above) — prayer names moved to each cell's
+`contentDescription` (still announced by TalkBack) and the provenance line (`LOCAL CALC · METHOD ·
+MADHAB · LOCATION`) is no longer drawn on the strip itself. Provenance and method/madhab detail remain
+fully visible on the prayer detail screen, and the strip's own `contentDescription` still carries
+provenance. The status chip stays hidden only for calm states; it still surfaces as an explicit warning
+label for stale/tz-conflict/failed states, so the "stale must be labelled stale" invariant is unaffected.
+
 ## Status (2026-07-11) — the running app now renders this artifact set
 
 DS-1 through DS-4 and the **Vision MVP (Preview)** plan

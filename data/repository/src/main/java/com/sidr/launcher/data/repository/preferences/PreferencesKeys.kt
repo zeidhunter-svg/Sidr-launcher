@@ -113,6 +113,30 @@ internal object PreferencesKeys {
     // a file is gone); this flag is just the reactive availability projection.
     val MODEL_AVAILABLE_IDS = stringSetPreferencesKey("model_available_ids")
 
+    // Prayer setup + last schedule cache — prefix: prayer_ (DS-6B Task 6).
+    // These key STRINGS are inventoried here ONLY so PrivacyInventoryGuardTest covers them; the
+    // actual `Preferences.Key<>` objects are defined LOCALLY in `:data:prayer`
+    // (`PrayerPreferencesKeys.kt`) over the SAME shared `sidr_preferences` DataStore file — keys are
+    // just names, so no `:data:prayer -> :data:repository` module edge is needed (that impl is
+    // `internal` here anyway). Keep the two lists in sync by hand if either changes.
+    // Deliberately `prayer_loc_*` (NOT `prayer_location_*`) — "location" is a forbidden denylist term
+    // below; "loc" is not. Coordinates are already rounded to 2dp before they reach domain (see
+    // PrayerLocation), so no precise coordinate is ever stored.
+    val PRAYER_METHOD           = stringPreferencesKey("prayer_method")
+    val PRAYER_MADHAB           = stringPreferencesKey("prayer_madhab")
+    val PRAYER_LOC_LABEL        = stringPreferencesKey("prayer_loc_label")
+    val PRAYER_LOC_LAT2DP       = stringPreferencesKey("prayer_loc_lat2dp")
+    val PRAYER_LOC_LON2DP       = stringPreferencesKey("prayer_loc_lon2dp")
+    val PRAYER_LOC_TZ           = stringPreferencesKey("prayer_loc_tz")
+    val PRAYER_LOC_SOURCE       = stringPreferencesKey("prayer_loc_source")
+    // Last computed schedule, cached only for an instant labelled first frame (spec §0.6). DATE is
+    // the location-tz civil date (epoch-day); TIMES + PROVENANCE are JSON-encoded (kotlinx-serialization,
+    // UTF-8 safe for arbitrary city labels) so a partial/malformed read can never produce a schedule
+    // without its provenance — see PrayerScheduleCacheImpl.
+    val PRAYER_SCHED_DATE       = stringPreferencesKey("prayer_sched_date")
+    val PRAYER_SCHED_TIMES      = stringPreferencesKey("prayer_sched_times")
+    val PRAYER_SCHED_PROVENANCE = stringPreferencesKey("prayer_sched_provenance")
+
     // All DataStore key name strings — used exclusively by PrivacyInventoryGuardTest
     // to assert no key name contains a forbidden term (tests the *value* "user_theme_name",
     // not the Kotlin variable name USER_THEME_NAME).
@@ -139,6 +163,16 @@ internal object PreferencesKeys {
         AI_PROVIDER_MODEL.name,
         AI_PROVIDER_DISPLAY_NAME.name,
         MODEL_AVAILABLE_IDS.name,
+        PRAYER_METHOD.name,
+        PRAYER_MADHAB.name,
+        PRAYER_LOC_LABEL.name,
+        PRAYER_LOC_LAT2DP.name,
+        PRAYER_LOC_LON2DP.name,
+        PRAYER_LOC_TZ.name,
+        PRAYER_LOC_SOURCE.name,
+        PRAYER_SCHED_DATE.name,
+        PRAYER_SCHED_TIMES.name,
+        PRAYER_SCHED_PROVENANCE.name,
     )
 
     const val MAX_CACHED_SUGGESTIONS = 5

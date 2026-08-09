@@ -3,7 +3,6 @@ package com.sidr.launcher.domain.prayer
 import com.sidr.launcher.domain.result.OperationResult
 import java.time.Clock
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
@@ -59,7 +58,10 @@ class GetPrayerContextUseCase(
         }
 
         val now = clock.instant()
-        val today = LocalDate.ofInstant(now, locationZone)
+        // NOTE: LocalDate.ofInstant is API 34 on Android (no core-library desugaring here, minSdk 28).
+        // atZone(...).toLocalDate() is the identical computation and API-26-safe. Domain is a JVM
+        // module, so Android lint cannot police the java.time API surface — keep it within API 26.
+        val today = now.atZone(locationZone).toLocalDate()
         val timeZoneState =
             if (clock.zone == locationZone) TimeZoneState.MATCHES_DEVICE else TimeZoneState.CONFLICT
 
@@ -68,7 +70,7 @@ class GetPrayerContextUseCase(
         val usableCache = cached?.takeIf { matchesSetup(it.provenance, setup, location) }
 
         if (usableCache != null && usableCache.schedule.dateInLocationTz == today) {
-            emit(usableCache.toAvailable(Freshness.CACHED_FRESH, timeZoneState, now))
+            emit(usableCache.toAvailable(Freshness.CACHED_FRESH, timeZoneState, now, location.tzId))
         }
 
         when (val result = calculator.calculate(location, setup.methodId, setup.madhab, today)) {
@@ -90,13 +92,14 @@ class GetPrayerContextUseCase(
                         freshness = Freshness.VERIFIED_CURRENT,
                         timeZoneState = timeZoneState,
                         nextPrayer = nextPrayer(result.value, now),
+                        locationTzId = location.tzId,
                     ),
                 )
             }
 
             is OperationResult.Failure ->
                 if (usableCache != null) {
-                    emit(usableCache.toAvailable(Freshness.CACHED_STALE, timeZoneState, now))
+                    emit(usableCache.toAvailable(Freshness.CACHED_STALE, timeZoneState, now, location.tzId))
                 } else {
                     emit(PrayerContext.Unavailable(UnavailableReason.CALCULATION_FAILED))
                 }
@@ -117,12 +120,14 @@ class GetPrayerContextUseCase(
         freshness: Freshness,
         timeZoneState: TimeZoneState,
         now: Instant,
+        locationTzId: String,
     ): PrayerContext.Available = PrayerContext.Available(
         schedule = schedule,
         provenance = provenance,
         freshness = freshness,
         timeZoneState = timeZoneState,
         nextPrayer = nextPrayer(schedule, now),
+        locationTzId = locationTzId,
     )
 
     /**

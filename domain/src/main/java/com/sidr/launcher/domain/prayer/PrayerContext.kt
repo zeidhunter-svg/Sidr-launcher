@@ -19,6 +19,10 @@ sealed interface PrayerContext {
      * [nextPrayer] is the first of the five prayers still ahead of "now" in the **location**
      * timezone, or `null` when all of today's prayers have passed (the schedule holds no
      * tomorrow-instant, and highlighting FAJR against a past time would be untruthful).
+     *
+     * [locationTzId] is the IANA zone id the schedule was computed in (spec §6). The five
+     * [PrayerInstant.epochMillis] values are absolute instants — formatting them as a wall-clock
+     * time requires THIS zone, never the device zone, or a TZ CONFLICT would render wrong times.
      */
     data class Available(
         val schedule: PrayerDaySchedule,
@@ -26,6 +30,7 @@ sealed interface PrayerContext {
         val freshness: Freshness,
         val timeZoneState: TimeZoneState,
         val nextPrayer: PrayerName?,
+        val locationTzId: String,
     ) : PrayerContext {
         init {
             // Defensive restatement of the plan's hard rule: an Available context can never carry

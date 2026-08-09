@@ -65,6 +65,7 @@ import com.sidr.launcher.core.ui.component.SidrActionProposalTone
 import com.sidr.launcher.core.ui.component.EmptyState
 import com.sidr.launcher.core.ui.component.ErrorState
 import com.sidr.launcher.core.ui.component.SidrSectionHeader
+import com.sidr.launcher.core.ui.component.SidrPrayerSummary
 import com.sidr.launcher.core.ui.component.SidrRouteChip
 import com.sidr.launcher.core.ui.component.SidrScaffold
 import com.sidr.launcher.core.ui.component.SidrUniversalInput
@@ -100,6 +101,7 @@ fun LauncherScreen(
     val feedback by viewModel.commandFeedback.collectAsStateWithLifecycle()
     val showMic by viewModel.showMic.collectAsStateWithLifecycle()
     val inputResults by viewModel.inputResults.collectAsStateWithLifecycle()
+    val prayerContext by viewModel.prayerContext.collectAsStateWithLifecycle()
     val pendingRoutedAction by viewModel.pendingRoutedAction.collectAsStateWithLifecycle()
     val devConsoleOn by viewModel.devConsoleOn.collectAsStateWithLifecycle()
     val consoleLines by viewModel.consoleLines.collectAsStateWithLifecycle()
@@ -162,6 +164,15 @@ fun LauncherScreen(
             // (owner layout). Both static — no prayer data — and hidden while typing so results overtake.
             HomeAnchorSlot(visible = !inputResults.active && !devConsoleOn)
             HomeDateLine(visible = !inputResults.active && !devConsoleOn)
+
+            // DS-6B Task 9: the opt-in prayer strip, immediately below the Shahada + date line. Same
+            // visibility rule as the Shahada (hidden while typing/results overtake/dev console); renders
+            // nothing at all — no empty placeholder — unless the mapped context is truthfully Available.
+            HomePrayerStrip(
+                visible = !inputResults.active && !devConsoleOn,
+                summary = prayerContext.toHomePrayerSummaryUi(),
+                onOpenDetails = { viewModel.navigateTo(Routes.PrayerDetail.ROUTE) },
+            )
 
             // DS-4: Universal Input replaces the legacy SidrCommandPrompt. Submit drives the existing
             // command pipeline byte-for-byte — `onSubmit` is parameterless (spec §7) and the screen owns
@@ -329,6 +340,30 @@ private fun HomeAnchorSlot(
         SidrText(text = "There is no deity except Allah", role = SidrTextRole.SACRED)
         SidrText(text = "Muhammad is the messenger of Allah", role = SidrTextRole.SACRED)
     }
+}
+
+/**
+ * DS-6B Task 9: the Home prayer strip, immediately below the Shahada + date line. Presentation-only
+ * dispatch — [summary] is already mapped by [toHomePrayerSummaryUi]; this composable only applies the
+ * Shahada's visibility rule and the "render nothing, never an empty placeholder" rule for a `null`
+ * (not-`Available`) mapping.
+ */
+@Composable
+private fun HomePrayerStrip(
+    visible: Boolean,
+    summary: HomePrayerSummaryUi?,
+    onOpenDetails: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (!visible || summary == null) return
+    SidrPrayerSummary(
+        prayers = summary.prayers,
+        status = summary.status,
+        provenance = summary.provenance,
+        modifier = modifier,
+        locationLabel = summary.locationLabel,
+        onOpenDetails = onOpenDetails,
+    )
 }
 
 /**

@@ -41,6 +41,10 @@ import com.sidr.launcher.feature.launcher.preview.MomentsPreviewScreen
 import com.sidr.launcher.feature.launcher.preview.TasksPreviewScreen
 import com.sidr.launcher.feature.launcher.preview.TerminalPreviewScreen
 import com.sidr.launcher.feature.permission_education.PermissionEducationScreen
+import com.sidr.launcher.feature.prayer.PrayerDetailScreen
+import com.sidr.launcher.feature.prayer.PrayerDetailViewModel
+import com.sidr.launcher.feature.prayer.PrayerSettingsScreen
+import com.sidr.launcher.feature.prayer.PrayerSettingsViewModel
 import com.sidr.launcher.feature.settings.AliasesScreen
 import com.sidr.launcher.feature.settings.LearnedChoicesScreen
 import com.sidr.launcher.feature.settings.SettingsScreen
@@ -350,6 +354,25 @@ fun AppNavHost(
                     handleNavigationEvent(navController, NavigationEvent.NavigateBack)
                 },
             )
+        }
+
+        // Prayer setup + detail (DS-6B Task 8): two pushed, unwrapped destinations (bottom tab bar
+        // hides on push, like every other node in this section) reached from Settings ("Prayer
+        // times" row) and from the (Task 9) Home strip respectively.
+        composable(Routes.PrayerSettings.ROUTE) {
+            val vm: PrayerSettingsViewModel = hiltViewModel()
+            LaunchedEffect(vm.navigationEvents) {
+                vm.navigationEvents.collect { handleNavigationEvent(navController, it) }
+            }
+            PrayerSettingsScreen(viewModel = vm)
+        }
+
+        composable(Routes.PrayerDetail.ROUTE) {
+            val vm: PrayerDetailViewModel = hiltViewModel()
+            LaunchedEffect(vm.navigationEvents) {
+                vm.navigationEvents.collect { handleNavigationEvent(navController, it) }
+            }
+            PrayerDetailScreen(viewModel = vm)
         }
 
         // Interaction-moment previews (Task 12): a pushed, non-tab destination reachable from the

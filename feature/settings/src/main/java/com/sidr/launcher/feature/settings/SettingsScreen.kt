@@ -71,6 +71,7 @@ fun SettingsScreen(
         onAssistantProvider = viewModel::openAssistantProvider,
         onLearnedChoices = viewModel::openLearnedChoices,
         onAliases = viewModel::openAliases,
+        onPrayerSettings = viewModel::openPrayerSettings,
         onSetDefaultLauncher = {
             try {
                 setDefaultLauncher.launch(defaultLauncherIntent(context))
@@ -97,6 +98,7 @@ private fun SettingsContent(
     onAssistantProvider: () -> Unit,
     onLearnedChoices: () -> Unit,
     onAliases: () -> Unit,
+    onPrayerSettings: () -> Unit,
     onSetDefaultLauncher: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -203,6 +205,10 @@ private fun SettingsContent(
                 onCheckedChange = onMicInputChanged,
                 description = "Show the microphone on the search field for spoken commands.",
             )
+
+            // ── Prayer ──────────────────────────────────────────────────────────
+            SidrSectionHeader(text = "PRAYER")
+            SidrNavigationRow(title = "Prayer times", onClick = onPrayerSettings)
 
             // ── Memory ──────────────────────────────────────────────────────────
             SidrSectionHeader(text = "MEMORY")

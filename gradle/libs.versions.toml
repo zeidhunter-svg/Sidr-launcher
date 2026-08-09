@@ -27,6 +27,12 @@ androidxTestUiAutomator = "2.3.0"
 benchmark = "1.3.3"
 roborazzi = "1.26.0"
 composeUiTest = "1.7.5"
+# DS-6B Task 4 — adhan2 (Kotlin port of "adhan", MIT). Pinned to 0.0.5 (not 0.0.6/0.0.7): 0.0.5 pulls
+# kotlin-stdlib 1.9.22 (older than this project's Kotlin 2.0.21 compiler, so Gradle keeps 2.0.21 — no
+# clash); 0.0.6 pulls stdlib 2.2.20 and 0.0.7 pulls stdlib 2.4.0, both NEWER than the compiler
+# (unsupported). Confined to :data:prayer only — see AdhanPrayerCalculatorGoldenTest.kt header.
+adhan2 = "0.0.5"
+kotlinxDatetime = "0.5.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
@@ -85,6 +91,10 @@ roborazzi-compose = { module = "io.github.takahirom.roborazzi:roborazzi-compose"
 roborazzi-junit = { module = "io.github.takahirom.roborazzi:roborazzi-junit-rule", version.ref = "roborazzi" }
 compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
+
+# DS-6B Task 4 — :data:prayer only (see build.gradle.kts + grep-confinement gate in the report).
+adhan2 = { module = "com.batoulapps.adhan:adhan2", version.ref = "adhan2" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

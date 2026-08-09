@@ -59,11 +59,13 @@ dependencies {
     implementation(project(":data:ai-cloud"))
     implementation(project(":data:ai-local"))
     implementation(project(":data:repository"))
+    implementation(project(":data:prayer"))
     implementation(project(":feature:launcher"))
     implementation(project(":feature:assistant"))
     implementation(project(":feature:suggestions"))
     implementation(project(":feature:permission_education"))
     implementation(project(":feature:settings"))
+    implementation(project(":feature:prayer"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

@@ -4699,3 +4699,126 @@ pass that reconciled them (plan: `.claude/plans/recursive-sleeping-chipmunk.md`,
 handle reveal → tab-hop keeps it up → Settings pin, portrait+landscape); DS-5 surfaces on real branches
 (URL/Play-Store confirm, SAFE one-tap, cancel, permission education paths, font-scale-2.0 stacking);
 grey/green/amber switching (persists across force-stop); router-off/offline parity smoke.
+
+## ADR 2026-08-08 — DS-6B Prayer Correctness (COMPLETE — device-accepted by owner)
+
+**Status: COMPLETE — device-accepted by the owner on SM-A325F, 2026-08-08 (closing addendum at the end
+of this ADR).** All 11 build tasks (3–10 + the verification gate, plan
+`docs/superpowers/plans/2026-07-11-ds6b-prayer-correctness.md`, spec
+`docs/superpowers/specs/2026-07-11-ds6b-prayer-correctness-design.md` §0) are implemented and each
+passed a fresh-reviewer gate (`.superpowers/sdd/progress.md` is the detailed per-task ledger); the Full
+Verification Gate is green; the whole-branch review (opus) returned "Ready to finish: Yes" with zero
+Critical/Important findings. The automated on-device pass below verified only the no-data invariant; the
+owner then ran the full interactive + religious-correctness acceptance and accepted the block.
+
+**Source (owner amendment 2026-08-07):** `com.batoulapps.adhan:adhan2:0.0.5` — the Kotlin port
+"adhan-kotlin" (Batoul Apps, MIT declared in POM), not the Java "adhan-java" the spec originally named.
+The Java port `adhan:1.2.1` has no `TURKEY`/Diyanet method in its `CalculationMethod` enum
+(verified against the decompiled jar + source), which would make the spec's mandatory Turkey/Diyanet
+method impossible without hand-transcribing method parameters onto a religious-correctness surface.
+adhan2 ships every method including `TURKEY`, is Kotlin-native, and is pinned at `0.0.5` (not the newer
+`0.0.7`) for `kotlin-stdlib 1.9.22`/`kotlinx-datetime 0.5.0` compatibility with the project's Kotlin
+2.0.21. Confined entirely to the new `:data:prayer` module (`AdhanPrayerCalculator`); zero network,
+fully offline.
+
+**Method/madhab:** explicit user choice with no default — `MethodRequired` is a real first-run state
+(per §0.1–0.2, no locale/SIM/location guessing). Domain `SupportedPrayerMethods` offers all 11 methods
+adhan2 actually implements; `OTHER` and `TEHRAN` are excluded (adhan2:0.0.5 genuinely lacks `TEHRAN`,
+`javap`-verified) with an anti-drift test iterating all 11 → `Success`. Asr madhab (Standard/Hanafi) is
+a separate mandatory choice, also no default.
+
+**Location:** primary path is a bundled GeoNames-derived city index — 19,481 cities, 286.8 KB gzipped
+(well under the ~500 KB budget), **CC-BY 4.0 attribution recorded** in `tools/prayer/README.md` and the
+asset header — searched fully offline via `BundledCityIndex`, zero permissions required. Optional path is
+a one-shot device-location read (`AndroidPrayerLocationProvider`, `:core:android`): no continuous
+tracking, coordinates rounded to 2 decimal places **before** the value crosses the port boundary, denial
+changes nothing (city path remains primary).
+
+**Privacy:** coordinates are rounded to 2dp (~1.1 km / ≤~1 min schedule error) and never persisted,
+logged, or leave the device — v1 has no outbound path at all. New `prayer_*` DataStore keys are
+denylist-clean and inventoried in `PreferencesKeys.ALL_KEY_NAMES`. `PrayerLocationPrivacyGuardTest` (10
+guards, `:domain`) proves: `OutboundContextPolicy.ALLOWED` stays the same 4-value set (prayer adds zero
+outbound surface); `AiRequest`'s field inventory has no prayer/location field; a planted
+Kazan-coordinate sentinel never reaches `PromptContextBuilder.build`; `com.batoulapps.adhan` and
+`android.location` stay confined to their expected reader sets; zero `Log.`/`println` in any prayer
+source file.
+
+**New `PermissionFeature.PRAYER_LOCATION` (documented deviation from the plan's "no new permission
+feature" line):** `LOCATION_SUGGESTIONS`' existing rationale copy is suggestion-specific and would
+mislead a user asked to grant location for prayer times, so a separate feature with honest prayer copy
+was added instead of reusing it. It maps to `ACCESS_FINE_LOCATION`, already present in the manifest
+since Block U — **no new manifest permission**. All 4 exhaustive `when`s over `PermissionFeature` were
+updated.
+
+**Domain addition:** `PrayerContext.Available.locationTzId` was added so times render in the
+**location's** timezone, not the device's — needed for the "location abroad, device still on home tz"
+case the spec's tz-conflict state exists to catch.
+
+**Home integration:** `LauncherViewModel` gained exactly one new constructor dependency
+(`GetPrayerContextUseCase`), exposed as a lazy `prayerContext` `StateFlow`
+(`SharingStarted.WhileSubscribed(5000)` + `flowOn(io)` — zero calculation happens before the UI
+subscribes; the reviewer proved this non-vacuous with a live eagerly-swap regression). The strip renders
+below the Shahada anchor, is opt-in, and renders **only** on `PrayerContext.Available` — never fabricated
+times, never a nudge before setup. `LauncherViewModelTest` parity held byte-for-byte (+160/-0, no
+existing assertion touched).
+
+**Owner UI refinement (2026-08-08, on-device on SM-A325F, real Diyanet/Turkey setup):** the shipped Home
+strip was changed to **times-only**. The status chip is now hidden for calm states (Verified,
+CachedFresh, ManualLocation, Updating) but still shown as a warning label for degraded states (Stale,
+TzConflict, CalculationFailed, empty) — the spec's "stale must be labelled stale" invariant is preserved,
+never silently hidden. Prayer names moved from the visible cell to each cell's `contentDescription`
+(TalkBack still announces "Fajr 04:21"); the provenance line is no longer drawn on the strip itself, but
+remains a structural invariant (`require`), remains present in the strip's own `contentDescription`, and
+remains fully visible on the prayer detail screen. Goldens were re-recorded against the new layout and
+`SidrPrayerSummarySemanticsTest` was updated to the times-only text.
+
+**Modules:** two new modules were added exactly per spec §0.8 — `:data:prayer` (the only module carrying
+the adhan2 dependency + the city-index asset) and `:feature:prayer` (setup/detail screens, pushed route,
+no new bottom-bar tab). `domain/prayer/` stays pure Kotlin (no Adhan import); `core/ui` gained
+`SidrPrayerSummary` only. DS-6A stays UI-only — the quiet English Shahada component in `HomeAnchorSlot`
+is unchanged and is a separate block from DS-6B's prayer-correctness data path.
+
+**Verification — Full Verification Gate GREEN (2026-08-08, JDK-17 toolchain):**
+```
+:domain:test :data:prayer:testDebugUnitTest :data:repository:testDebugUnitTest \
+:feature:prayer:testDebugUnitTest :feature:settings:testDebugUnitTest \
+:feature:launcher:testDebugUnitTest :core:ui:testDebugUnitTest :core:ui:verifyRoborazziDebug \
+testDebugUnitTest assembleDebug
+```
+BUILD SUCCESSFUL — all prayer modules, `core:ui` Roborazzi goldens, the full root JVM suite, and
+`assembleDebug` all pass.
+
+**Device status (SM-A325F / RF8R705H38F / Android 13) — PARTIAL, not full acceptance:** the no-data
+invariant was verified — `pm clear` for a genuine fresh install, launch, no crash, and the Home screen
+renders calmly (Shahada + date + Universal Input + chips) with **no prayer strip, no prompt, no
+fabricated times** before setup. Separately, a real Diyanet/Turkey setup on the same device rendered a
+correct-looking strip. **Still pending the owner:** interactive setup acceptance (method/madhab/city
+picking via Compose controls, not reliably drivable via `uiautomator`), and — most importantly — the
+**religious-correctness cross-check of computed times against published authority tables**
+(Diyanet/Umm al-Qura/MWL), airplane-mode cached render, the stale path, device-location grant +
+rounding, the tz-conflict label, font-scale 2.0, TalkBack, dark/light, and router-off/offline parity
+smoke. This mirrors the DS-5 device-pending precedent; do not treat DS-6B as accepted until the owner
+runs that pass.
+
+**Device acceptance — CLOSED 2026-08-08 (owner).** The owner ran the full on-device acceptance on
+SM-A325F and **accepted DS-6B**: interactive setup (method + madhab + city), the strip appearing with a
+correct schedule, and the religious-correctness cross-check of computed times were performed and signed
+off by the owner (the agent-driven pass had verified only the no-data invariant + that a Diyanet/Turkey
+setup renders). One owner-directed presentation change landed during acceptance: the Home strip was
+reduced to **times-only** — the calm-state status chip and the visible provenance line are hidden and the
+prayer-name labels dropped from the visible cells, while the "no schedule without provenance" invariant
+still holds (provenance is still supplied to the component, retained in the strip's TalkBack
+`contentDescription`, and shown in full on the detail screen), and every **degraded** state
+(`CachedStale`/`TimezoneConflict`/`CalculationFailed`) still renders a visible warning marker so
+stale/wrong times can never be presented as trustworthy (spec §2 preserved). `SidrPrayerSummary` goldens
+were re-recorded and `:core:ui` + `:feature:launcher` stayed green. **DS-6B is CLOSED.** The London/Kazan
+`MWL` golden limitation below stands as a documented follow-up (optionally swap to authority-anchored
+cities in a later pass).
+
+**Known limitation, recorded honestly:** golden-test times are **not uniformly authority-anchored**.
+Istanbul (`TURKEY`/Diyanet) and Makkah (`UMM_AL_QURA`) goldens are anchored directly to the respective
+authority portals (byte-exact to Diyanet's own portal; exact via Aladhan for Umm al-Qura). London and
+Kazan (`MWL`) goldens are **cross-implementation-verified only** — reproduced against both adhan2 and an
+independent solar-formula recomputation — because MWL (Muslim World League) has no official authority
+portal to anchor against. This is a real, disclosed limitation of the MWL golden values, not a defect in
+the other two methods.

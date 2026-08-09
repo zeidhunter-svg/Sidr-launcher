@@ -1,7 +1,39 @@
 # CLAUDE.md — Sidr Launcher
 
 **Design track (DS) — DS-1…DS-4 + Vision MVP (Preview) DONE (2026-07-11); DS-5 CODE-CLOSED
-(2026-07-13, device-pending).**
+(2026-07-13, device-pending); DS-6B Prayer Correctness COMPLETE — device-accepted by owner (2026-08-08).**
+
+**DS-6B Prayer Correctness COMPLETE — device-accepted by the owner on SM-A325F 2026-08-08; the Home strip
+was reduced to times-only during acceptance (calm status chip + provenance line hidden, names in TalkBack
+contentDescription, degraded-state warnings kept — provenance invariant intact). ADR "2026-08-08 — DS-6B
+Prayer Correctness (COMPLETE — device-accepted by owner)" in decisions.md.** New modules `:data:prayer` (offline
+`AdhanPrayerCalculator` over `com.batoulapps.adhan:adhan2:0.0.5`, MIT-in-POM, Kotlin port used instead of
+the originally-named Java "adhan-java" because that port lacks a `TURKEY`/Diyanet method; zero network)
+and `:feature:prayer` (setup/detail screens, pushed route, no new tab); `domain/prayer/` stays pure.
+Method + Asr madhab are explicit first-run choices, no default, no locale/SIM/location guessing (11
+supported methods; `OTHER`/`TEHRAN` excluded — genuinely absent from adhan2:0.0.5). Location = bundled
+offline GeoNames city index (19,481 cities, 286.8 KB gzipped, CC-BY 4.0 attributed) + optional one-shot
+device location that rounds to 2dp **before** crossing the port boundary — no continuous tracking, no
+coordinate logging, precise coords never persisted/leave the device. New `PermissionFeature.PRAYER_LOCATION`
+(documented deviation: honest prayer-specific copy instead of reusing `LOCATION_SUGGESTIONS`'s
+suggestion-specific copy; no new manifest permission). Privacy proven by a 10-guard
+`PrayerLocationPrivacyGuardTest` (`OutboundContextPolicy.ALLOWED` unchanged at 4 values; no prayer field
+in `AiRequest`; planted coordinate sentinel never reaches `PromptContextBuilder.build`). `LauncherViewModel`
+gained exactly one new dependency (`GetPrayerContextUseCase`) behind a lazy `WhileSubscribed` `StateFlow`;
+Home strip renders below the Shahada, opt-in, **only** on `PrayerContext.Available` — never fabricated
+times; `LauncherViewModelTest` parity byte-for-byte. **Owner refinement (2026-08-08, on-device):** shipped
+strip is **times-only** (status chip hidden for calm states, kept as a warning label for
+stale/tz-conflict/failed states; prayer names moved to per-cell `contentDescription`; provenance dropped
+from the strip's visible text but still required by its invariant and still on the detail screen). Full
+Verification Gate green (JDK-17): all prayer modules + `core:ui:verifyRoborazziDebug` + root
+`testDebugUnitTest` + `assembleDebug` BUILD SUCCESSFUL. **Device status PARTIAL** — SM-A325F no-data
+invariant passed (fresh install → calm Home, no strip/prompt/fabricated times) and a real Diyanet/Turkey
+setup rendered a correct-looking strip, but full interactive + religious-correctness acceptance (times
+cross-checked against published authority tables, airplane-mode cache, stale path, device-location grant,
+tz-conflict, font-scale 2.0, TalkBack, router-off parity) is **PENDING the owner** (DS-5 precedent).
+**Known limitation:** Istanbul (Diyanet) and Makkah (Umm al-Qura) golden times are authority-table-anchored;
+London and Kazan (MWL) are cross-implementation-verified only, since MWL has no official authority portal.
+DS-6A (the quiet Shahada component) stays UI-only and is a separate block from DS-6B's data path.
 
 **DS-5 Action & Safety CODE-CLOSED + two owner features (2026-07-12/13; retro-ADR "2026-07-13 — DS-5 +
 auto-hide nav + accent reactivation closed" in decisions.md).** DS-5: `core/ui/component/SidrActionSafety.kt`

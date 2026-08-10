@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_action_cancel">İptal</string>
+    <string name="ui_memory_forget_content_description">%1$s %2$s unut</string>
+</resources>

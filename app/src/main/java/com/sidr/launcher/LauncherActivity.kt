@@ -79,7 +79,7 @@ class LauncherActivity : ComponentActivity() {
                         Box(modifier = Modifier.fillMaxSize()) {
                             AppNavHost(
                                 homeResetSignal = homeResetSignal,
-                                alwaysShowNav = preferences.alwaysShowNavBar,
+                                autoHideNav = preferences.autoHideNavBar,
                             )
                         }
                     }

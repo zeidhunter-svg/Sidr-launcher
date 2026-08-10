@@ -54,8 +54,12 @@ internal object PreferencesKeys {
     // the URL-encoded query. Denylist-clean: "web"/"provider"/"template" are not forbidden terms
     // (deliberately NOT "search"/"query", which the privacy guard rejects), so it is inventoried below.
     val WEB_PROVIDER_TEMPLATE       = stringPreferencesKey("web_provider_template")
-    // 2026-07-12 — pin the auto-hiding bottom nav permanently visible. Denylist-clean ("nav"/"bar").
-    val USER_ALWAYS_SHOW_NAV_BAR    = booleanPreferencesKey("user_always_show_nav_bar")
+    // 2026-08-10 (DS-11 A1) — opt in to the auto-hiding bottom nav. Denylist-clean ("nav"/"bar").
+    // Deliberately a NEW key, replacing the abandoned `user_always_show_nav_bar` (which expressed the
+    // same setting inverted): existing installs have this key unset, so they pick up the new default
+    // (pinned) instead of an already-persisted old value. The orphaned boolean left behind in
+    // DataStore is inert — Preferences has no schema, and it holds no user content.
+    val USER_AUTO_HIDE_NAV_BAR      = booleanPreferencesKey("user_auto_hide_nav_bar")
 
     // Feature flags — prefix: flag_
     val FLAG_AI_SUGGESTIONS_ENABLED    = booleanPreferencesKey("flag_ai_suggestions_enabled")
@@ -148,7 +152,7 @@ internal object PreferencesKeys {
         USER_MIC_INPUT_ENABLED.name,
         USER_SETUP_HINT_DISMISSED.name,
         WEB_PROVIDER_TEMPLATE.name,
-        USER_ALWAYS_SHOW_NAV_BAR.name,
+        USER_AUTO_HIDE_NAV_BAR.name,
         FLAG_AI_SUGGESTIONS_ENABLED.name,
         FLAG_USAGE_HISTORY_ENABLED.name,
         FLAG_PERMISSION_EDU_DISMISSED.name,

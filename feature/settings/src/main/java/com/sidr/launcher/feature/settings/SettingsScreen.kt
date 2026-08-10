@@ -66,7 +66,7 @@ fun SettingsScreen(
         onUsageHistoryChanged = viewModel::setUsageHistoryEnabled,
         onFavoritesCountSelected = viewModel::setFavoritesCount,
         onMicInputChanged = viewModel::setMicInputEnabled,
-        onAlwaysShowNavBarChanged = viewModel::setAlwaysShowNavBar,
+        onAutoHideNavBarChanged = viewModel::setAutoHideNavBar,
         onLlmRouterChanged = viewModel::setLlmRouterEnabled,
         onAssistantProvider = viewModel::openAssistantProvider,
         onLearnedChoices = viewModel::openLearnedChoices,
@@ -93,7 +93,7 @@ private fun SettingsContent(
     onUsageHistoryChanged: (Boolean) -> Unit,
     onFavoritesCountSelected: (Int) -> Unit,
     onMicInputChanged: (Boolean) -> Unit,
-    onAlwaysShowNavBarChanged: (Boolean) -> Unit,
+    onAutoHideNavBarChanged: (Boolean) -> Unit,
     onLlmRouterChanged: (Boolean) -> Unit,
     onAssistantProvider: () -> Unit,
     onLearnedChoices: () -> Unit,
@@ -156,14 +156,16 @@ private fun SettingsContent(
                 }
             }
 
-            // Auto-hiding bottom nav (2026-07-12). Off = the nav bar recedes after idle and is summoned
-            // via a handle (calmer Home); on = it stays pinned. Presentation-only shell behaviour.
+            // Auto-hiding bottom nav (2026-07-12; inverted by DS-11 A1 2026-08-10). Off (the default)
+            // = the bar stays pinned; on = it recedes after idle and is summoned via a handle. The
+            // toggle is now named for the opt-in behaviour rather than for keeping the default on.
+            // Presentation-only shell behaviour.
             SidrToggleRow(
-                title = "Always show navigation bar",
-                checked = uiState.alwaysShowNavBar,
-                onCheckedChange = onAlwaysShowNavBarChanged,
-                description = "Keep the bottom bar visible at all times. When off, it hides after a few " +
-                    "seconds and reappears when you tap the handle at the bottom.",
+                title = "Auto-hide navigation bar",
+                checked = uiState.autoHideNavBar,
+                onCheckedChange = onAutoHideNavBarChanged,
+                description = "Let the bottom bar slide away after a few seconds of inactivity. Tap the " +
+                    "handle at the bottom to bring it back. Off by default — the bar stays visible.",
             )
 
             // ── Suggestions ─────────────────────────────────────────────────────

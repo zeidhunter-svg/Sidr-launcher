@@ -62,7 +62,7 @@ class SettingsViewModel @Inject constructor(
             accentColor = preferences.accentColor,
             favoritesCount = preferences.favoritesCount,
             micInputEnabled = preferences.micInputEnabled,
-            alwaysShowNavBar = preferences.alwaysShowNavBar,
+            autoHideNavBar = preferences.autoHideNavBar,
             llmRouterEnabled = flags.llmRouterEnabled,
             errorMessage = errorMessage,
         )
@@ -211,13 +211,13 @@ class SettingsViewModel @Inject constructor(
      * auto-hides after idle; when on it stays pinned. No-op when unchanged; a write failure surfaces a
      * transient, display-safe message.
      */
-    fun setAlwaysShowNavBar(enabled: Boolean) {
+    fun setAutoHideNavBar(enabled: Boolean) {
         viewModelScope.launch(ioDispatcher) {
             saveError.value = null
             try {
                 val current = userPreferencesRepository.getPreferences().first()
-                if (current.alwaysShowNavBar != enabled) {
-                    when (userPreferencesRepository.updatePreferences(current.copy(alwaysShowNavBar = enabled))) {
+                if (current.autoHideNavBar != enabled) {
+                    when (userPreferencesRepository.updatePreferences(current.copy(autoHideNavBar = enabled))) {
                         is OperationResult.Success -> Unit
                         is OperationResult.Failure -> saveError.value = SAVE_ERROR
                     }

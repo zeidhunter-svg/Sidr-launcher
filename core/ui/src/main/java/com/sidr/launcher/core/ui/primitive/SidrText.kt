@@ -16,12 +16,13 @@ import com.sidr.launcher.core.ui.theme.SidrTheme
  * The tri-font entry point (DS-2). A role picks the SIDR text style + default colour so callers stop
  * hand-selecting `MaterialTheme.typography`. Interface = mono; prose = sans; sacred = serif (grey spec §3).
  */
-enum class SidrTextRole { COMMAND, SYSTEM, PROVENANCE, SACRED, HUMAN_BODY, HUMAN_TITLE, LABEL }
+enum class SidrTextRole { COMMAND, SYSTEM, PROVENANCE, CAPTION, SACRED, HUMAN_BODY, HUMAN_TITLE, LABEL }
 
 internal fun SidrTextRole.textStyle(styles: SidrTextStyles, typography: Typography): TextStyle = when (this) {
     SidrTextRole.COMMAND -> styles.command
     SidrTextRole.SYSTEM -> styles.system
     SidrTextRole.PROVENANCE -> styles.provenance
+    SidrTextRole.CAPTION -> styles.caption
     SidrTextRole.SACRED -> styles.sacred
     SidrTextRole.HUMAN_BODY -> typography.bodyMedium
     SidrTextRole.HUMAN_TITLE -> typography.titleMedium
@@ -32,6 +33,7 @@ internal fun SidrTextRole.defaultColor(colors: SidrColors): Color = when (this) 
     SidrTextRole.COMMAND -> colors.text
     SidrTextRole.SYSTEM -> colors.dim
     SidrTextRole.PROVENANCE -> colors.faint
+    SidrTextRole.CAPTION -> colors.dim
     SidrTextRole.SACRED -> colors.sacred
     SidrTextRole.HUMAN_BODY -> colors.text
     SidrTextRole.HUMAN_TITLE -> colors.text

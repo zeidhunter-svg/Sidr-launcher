@@ -39,8 +39,8 @@ internal object PreferencesMapper {
                 ?: defaults.setupHintDismissed,
             webProviderTemplate = prefs[PreferencesKeys.WEB_PROVIDER_TEMPLATE]
                 ?: defaults.webProviderTemplate,
-            alwaysShowNavBar = prefs[PreferencesKeys.USER_ALWAYS_SHOW_NAV_BAR]
-                ?: defaults.alwaysShowNavBar,
+            autoHideNavBar = prefs[PreferencesKeys.USER_AUTO_HIDE_NAV_BAR]
+                ?: defaults.autoHideNavBar,
         )
     }
 
@@ -52,7 +52,7 @@ internal object PreferencesMapper {
         prefs[PreferencesKeys.USER_MIC_INPUT_ENABLED] = value.micInputEnabled
         prefs[PreferencesKeys.USER_SETUP_HINT_DISMISSED] = value.setupHintDismissed
         prefs[PreferencesKeys.WEB_PROVIDER_TEMPLATE] = value.webProviderTemplate
-        prefs[PreferencesKeys.USER_ALWAYS_SHOW_NAV_BAR] = value.alwaysShowNavBar
+        prefs[PreferencesKeys.USER_AUTO_HIDE_NAV_BAR] = value.autoHideNavBar
     }
 
     // ── Feature flags ─────────────────────────────────────────────────────────

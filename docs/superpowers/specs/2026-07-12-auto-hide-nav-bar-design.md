@@ -1,6 +1,26 @@
 # Design — Auto-hiding bottom navigation (idle-hide + reveal handle)
 
-**Date:** 2026-07-12 · **Status:** approved (owner) · **Track:** owner feature (not a DS block)
+**Date:** 2026-07-12 · **Status:** approved (owner), **default reversed 2026-08-10** ·
+**Track:** owner feature (not a DS block)
+
+> ## Amendment — DS-11 A1 (2026-08-10, owner decision)
+>
+> **The default is now "pinned", not "auto-hide".** `UserPreferences.alwaysShowNavBar` flipped from
+> `false` to `true`, so on every tab root the bottom chrome stays permanently visible unless the user
+> turns the Settings toggle off.
+>
+> Everything below still describes the mechanism accurately — the 5 s idle timer, `SidrChromeHandle`,
+> the per-tab-root `chromeVisible` state and the "Always show navigation bar" toggle are all still
+> present and unchanged. Only which side of the toggle ships as the default moved. Auto-hide became
+> the opt-in.
+>
+> Migration is free: `PreferencesMapper` reads `prefs[USER_ALWAYS_SHOW_NAV_BAR] ?: defaults.alwaysShowNavBar`,
+> so installs that never wrote the key inherit the new default with no data migration.
+>
+> Rationale: in daily use the owner found the disappearing bar cost more than the reclaimed space —
+> primary navigation that has to be summoned is friction, and the calm goal (motivation C) is better
+> served by DS-11's other changes (icon-free lowercase tab labels, removal of the "Local-first ·
+> on-device" footer line, borderless route chips) than by hiding the bar.
 
 ## Goal
 

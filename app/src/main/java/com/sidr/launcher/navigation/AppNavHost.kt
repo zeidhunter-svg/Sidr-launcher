@@ -114,7 +114,7 @@ private fun navigateToTab(navController: NavHostController, tab: SidrTab) {
 private fun TabRootScaffold(
     tab: SidrTab,
     navController: NavHostController,
-    alwaysShowNav: Boolean = false,
+    autoHideNav: Boolean = false,
     onArmDevMode: () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
@@ -124,16 +124,16 @@ private fun TabRootScaffold(
     // tab-hopping never has to summon it: tapping a tab re-navigates, and because Navigation-Compose
     // disposes a non-current tab root, the destination re-enters composition with `chromeVisible = true`
     // — hence plain `remember` (NOT `rememberSaveable`): each arrival re-initialises to visible for free.
-    // When the user pins nav in Settings ([alwaysShowNav]) the chrome is permanently shown and the
+    // Unless the user opts into auto-hide in Settings ([autoHideNav]) the chrome stays pinned and the
     // handle/timer are inert.
     var chromeVisible by remember { mutableStateOf(true) }
-    LaunchedEffect(alwaysShowNav, chromeVisible) {
-        if (!alwaysShowNav && chromeVisible) {
+    LaunchedEffect(autoHideNav, chromeVisible) {
+        if (autoHideNav && chromeVisible) {
             delay(NAV_AUTO_HIDE_MILLIS)
             chromeVisible = false
         }
     }
-    val showChrome = alwaysShowNav || chromeVisible
+    val showChrome = !autoHideNav || chromeVisible
 
     Scaffold(
         contentWindowInsets = WindowInsets.systemBars,
@@ -217,8 +217,8 @@ fun AppNavHost(
     navController: NavHostController = rememberNavController(),
     homeResetSignal: Int = 0,
     // When true, the bottom nav chrome is pinned permanently visible instead of auto-hiding after idle
-    // (2026-07-12; sourced from UserPreferences.alwaysShowNavBar via LauncherActivity).
-    alwaysShowNav: Boolean = false,
+    // (2026-07-12; sourced from UserPreferences.autoHideNavBar via LauncherActivity).
+    autoHideNav: Boolean = false,
 ) {
     LaunchedEffect(homeResetSignal) {
         if (homeResetSignal > 0) {
@@ -238,7 +238,7 @@ fun AppNavHost(
                     handleNavigationEvent(navController, event)
                 }
             }
-            TabRootScaffold(SidrTab.HOME, navController, alwaysShowNav = alwaysShowNav, onArmDevMode = viewModel::armDevMode) { inner ->
+            TabRootScaffold(SidrTab.HOME, navController, autoHideNav = autoHideNav, onArmDevMode = viewModel::armDevMode) { inner ->
                 LauncherScreen(
                     viewModel = viewModel,
                     suggestionsContent = { suggestions, onSuggestionTap ->
@@ -261,7 +261,7 @@ fun AppNavHost(
             LaunchedEffect(vm.navigationEvents) {
                 vm.navigationEvents.collect { handleNavigationEvent(navController, it) }
             }
-            TabRootScaffold(SidrTab.APPS, navController, alwaysShowNav = alwaysShowNav) { inner ->
+            TabRootScaffold(SidrTab.APPS, navController, autoHideNav = autoHideNav) { inner ->
                 AppDrawerScreen(viewModel = vm, modifier = Modifier.padding(inner))
             }
         }
@@ -271,7 +271,7 @@ fun AppNavHost(
         // bodies remain. Terminal (Task 11) is no longer a tab root — see the registration below,
         // reached via the icon-only button in [SidrAppFooter] instead (2026-07-12).
         composable(Routes.Tasks.ROUTE) {
-            TabRootScaffold(SidrTab.TASKS, navController, alwaysShowNav = alwaysShowNav) { inner ->
+            TabRootScaffold(SidrTab.TASKS, navController, autoHideNav = autoHideNav) { inner ->
                 TasksPreviewScreen(
                     modifier = Modifier.padding(inner),
                     onOpenMoments = { navController.navigate(Routes.Moments.ROUTE) },
@@ -280,13 +280,13 @@ fun AppNavHost(
         }
 
         composable(Routes.Agents.ROUTE) {
-            TabRootScaffold(SidrTab.AGENTS, navController, alwaysShowNav = alwaysShowNav) { inner ->
+            TabRootScaffold(SidrTab.AGENTS, navController, autoHideNav = autoHideNav) { inner ->
                 AgentsPreviewScreen(modifier = Modifier.padding(inner))
             }
         }
 
         composable(Routes.Activity.ROUTE) {
-            TabRootScaffold(SidrTab.ACTIVITY, navController, alwaysShowNav = alwaysShowNav) { inner ->
+            TabRootScaffold(SidrTab.ACTIVITY, navController, autoHideNav = autoHideNav) { inner ->
                 ActivityPreviewScreen(modifier = Modifier.padding(inner))
             }
         }

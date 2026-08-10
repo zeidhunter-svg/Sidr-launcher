@@ -561,31 +561,41 @@ Pewter accent и semantic status — разные системы.
 
 ## 6.2. Tri-font model
 
+> **Амендмент DS-11 B (2026-08-10, owner decision).** Территория mono сужена. Раньше mono владел всей
+> interface shell — чипы, лейблы табов, статусы, section labels, settings labels. Именно это давало
+> «технологичное» прочтение интерфейса при том, что заявленный характер §6.1 — `calm / mature /
+> restrained`. Теперь mono оставлен только там, где моноширинность несёт смысл, а вся оболочка —
+> sans. Правило закреплено тестом `TypographyRoleTest`, не только этим документом.
+
 ### Mono
 
-JetBrains Mono используется для interface shell:
+JetBrains Mono используется **только** для terminal signature (§6.3):
 
-* command;
-* input;
-* labels;
-* chips;
-* statuses;
-* provenance;
-* metadata;
-* timestamps;
-* settings labels;
-* execution state.
+* command line (`>` prompt, input);
+* provenance line (`LOCAL · 14 MS`).
+
+Обе роли требуют выравнивания по колонкам — это и есть обоснование моноширинности.
 
 ### Sans
 
-Sans используется для настоящей прозы:
+**Bundled IBM Plex Sans** (OFL, `core/ui/OFL-IBMPlexSans.txt`) — вся остальная типографика:
 
-* assistant answer;
-* permission explanation;
-* длинное описание;
-* error explanation;
-* result summary;
-* memory explanation.
+* настоящая проза: assistant answer, permission explanation, длинное описание, error explanation,
+  result summary, memory explanation;
+* **interface shell (перенесено из Mono в DS-11 B):** labels, chips, tab labels, statuses, section
+  labels, settings labels, metadata, timestamps, execution state.
+
+Гарнитура **bundled**, а не `FontFamily.SansSerif`: оболочка не должна наследовать шрифт вендора, и
+Latin/Cyrillic/Greek/Turkish обязаны приходить из одного известного файла — это предусловие блока i18n.
+
+Tracking, унаследованный от mono (1.4–1.6 sp), при переносе на пропорциональную гарнитуру снижен до
+0.6–0.8 sp: широкий трекинг компенсировал плотный фиксированный шаг mono, а на sans читается как
+искусственно разрежённый текст.
+
+**Известное ограничение.** Ни один sans-кандидат (IBM Plex Sans, Inter, Nunito Sans) не содержит
+арабского — проверено по cmap реальных TTF. Арабский остаётся отдельной гарнитурой по необходимости,
+см. Sacred ниже. Также в IBM Plex Sans отсутствует `◦` (U+25E6); маркеры превью используют `•`
+(U+2022), присутствующий и в sans, и в mono, чтобы не зависеть от системного font fallback.
 
 ### Sacred
 

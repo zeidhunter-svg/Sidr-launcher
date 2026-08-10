@@ -65,6 +65,12 @@ internal fun SidrRiskTone.status(): SidrStatus = when (this) {
 /**
  * Route chip - colourless press-invert selection (APP / WEB / SITE / ASK). Selected flips to accent fill
  * with ground text; unselected is transparent with accent text. No glow, no scale, no layout shift.
+ *
+ * DS-11 A4 (2026-08-10): **borderless**. The route lane sits directly under the universal input, where
+ * four hairline boxes read as heavy furniture rather than accelerators; press-invert alone carries the
+ * affordance (Master Plan §6.3 keeps press-invert as part of the terminal signature). The bordered
+ * frame is retained for [SidrFilterChip]/[SidrSuggestionChip]/[SidrActionChip], where a resting
+ * boundary is what separates one option from the next.
  */
 @Composable
 fun SidrRouteChip(
@@ -78,6 +84,7 @@ fun SidrRouteChip(
     onClick = onClick,
     modifier = modifier,
     enabled = true,
+    bordered = false,
 )
 
 /**
@@ -168,6 +175,10 @@ fun SidrRiskChip(
 /**
  * Shared internal press-invert chip frame. Selected/pressed flips fg/bg; no glow, no scale, no layout shift.
  * Disabled chips do not fire callbacks (spec §7).
+ *
+ * [bordered] controls only the **resting** hairline frame; the press-invert fill is unconditional, so a
+ * borderless chip loses no state signal. Borderless chips keep the identical box model (same shape,
+ * same padding, same 48dp minimum) — dropping the border must not move anything.
  */
 @Composable
 private fun SidrPressInvertChip(
@@ -176,6 +187,7 @@ private fun SidrPressInvertChip(
     onClick: () -> Unit,
     modifier: Modifier,
     enabled: Boolean,
+    bordered: Boolean = true,
 ) {
     val colors = SidrTheme.colors
     val interaction = remember { MutableInteractionSource() }
@@ -192,7 +204,9 @@ private fun SidrPressInvertChip(
             .heightIn(min = Sizes.minTouchTarget)
             .clip(chipShape)
             .background(bg)
-            .border(BorderStroke(Strokes.hairline, chipBorder), chipShape)
+            .let { base ->
+                if (bordered) base.border(BorderStroke(Strokes.hairline, chipBorder), chipShape) else base
+            }
             .semantics { role = Role.Button }
             .let { base ->
                 if (enabled) base.clickable(

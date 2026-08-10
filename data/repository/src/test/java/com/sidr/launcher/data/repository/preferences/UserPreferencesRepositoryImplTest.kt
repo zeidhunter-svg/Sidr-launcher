@@ -47,7 +47,9 @@ class UserPreferencesRepositoryImplTest {
             favoritesCount = 4,
             micInputEnabled = false,
             setupHintDismissed = true,
-            alwaysShowNavBar = true,
+            // Deliberately the NON-default value (DS-11 A1 made `false` the default): a round-trip
+            // assertion only proves persistence when the written value differs from the default.
+            autoHideNavBar = true,
         )
         val result = repo.updatePreferences(updated)
 
@@ -67,7 +69,8 @@ class UserPreferencesRepositoryImplTest {
             favoritesCount = 10,
             micInputEnabled = false,
             setupHintDismissed = true,
-            alwaysShowNavBar = true,
+            // Non-default on purpose — see the round-trip test above.
+            autoHideNavBar = true,
         )
 
         // First "process": write, then release the file lock.

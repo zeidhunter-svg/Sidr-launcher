@@ -19,9 +19,10 @@ data class SettingsUiState(
     val accentColor: String = AccentOption.GREY,
     val favoritesCount: Int = 8,
     val micInputEnabled: Boolean = true,
-    /** Mirrors `UserPreferences.alwaysShowNavBar` — when on, the bottom navigation stays permanently
-     *  visible instead of auto-hiding after idle. Off by default (auto-hide on). */
-    val alwaysShowNavBar: Boolean = false,
+    /** Mirrors `UserPreferences.autoHideNavBar` — when on, the bottom navigation recedes after idle
+     *  and is summoned back via a handle. **Off by default** since DS-11 (2026-08-10): pinned chrome
+     *  is the resting state and auto-hide is the opt-in. */
+    val autoHideNavBar: Boolean = false,
     /**
      * Mirrors `FeatureFlags.llmRouterEnabled` — the AIL-4 BYOK LLM Action Router. Off by default; when
      * on, natural-language commands the rules can't handle are routed by the configured cloud LLM

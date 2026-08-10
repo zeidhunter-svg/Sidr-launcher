@@ -2,26 +2,20 @@ package com.sidr.launcher.navigation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,14 +24,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.sidr.launcher.core.ui.R
 import com.sidr.launcher.core.ui.component.SidrIconButton
 import com.sidr.launcher.core.ui.primitive.SidrText
 import com.sidr.launcher.core.ui.primitive.SidrTextRole
+import com.sidr.launcher.core.ui.theme.SidrShapes
 import com.sidr.launcher.core.ui.theme.SidrTheme
+import com.sidr.launcher.core.ui.theme.Sizes
 import com.sidr.launcher.core.ui.theme.Spacing
 
 /**
@@ -55,21 +56,34 @@ enum class SidrTab { HOME, APPS, TASKS, AGENTS, ACTIVITY }
 private data class SidrTabSpec(
     val tab: SidrTab,
     val label: String,
-    val icon: ImageVector,
-    /** Preview (not-yet-live) tabs carry a tiny mono marker in their label (spec: status/preview
+    /** Preview (not-yet-live) tabs carry a tiny marker in their label (spec: status/preview
      *  is never colour-only) — see [com.sidr.launcher.core.ui.component.SidrPreviewBadge]. A full
-     *  badge does not fit the compact NavigationBarItem label slot, so a `◦` marker stands in. */
+     *  badge does not fit the compact tab label slot, so a [PREVIEW_MARKER] stands in. */
     val isPreview: Boolean,
 )
 
+/**
+ * Marker appended to a preview tab's label. **`•` (U+2022), deliberately not `◦` (U+25E6)**: the tab
+ * label now renders in the bundled sans, and IBM Plex Sans has no U+25E6 glyph (verified against the
+ * shipped TTF's cmap, as do Nunito Sans and the platform sans). Android would paper over that with
+ * font fallback, drawing the marker in some other typeface at some other weight — and on a thinned
+ * OEM font set it could tofu outright. Since "a preview tab is visibly a preview" is a release-gate
+ * requirement, the marker must be a glyph the bundled face actually owns. U+2022 is present in every
+ * candidate face *and* in JetBrains Mono, so it survives the DS-11 B typography swap either way.
+ */
+private const val PREVIEW_MARKER = "•"
+
+// DS-11 A2 (2026-08-10): labels are lowercase and icon-free. The icons were dropped on owner
+// direction ("ничего лишнего") — a launcher's five tab roots are learned by position and word, and
+// the glyph row was the loudest thing on an otherwise calm Home.
 private val SIDR_TAB_SPECS = listOf(
-    SidrTabSpec(SidrTab.HOME, "Home", Icons.Filled.Home, isPreview = false),
+    SidrTabSpec(SidrTab.HOME, "home", isPreview = false),
     // "Apps" (2026-07-12): the App Drawer, promoted from a Home-body row into a real tab peer of
     // Home — real, functional, not a preview.
-    SidrTabSpec(SidrTab.APPS, "Apps", Icons.AutoMirrored.Filled.List, isPreview = false),
-    SidrTabSpec(SidrTab.TASKS, "Tasks", Icons.Filled.CheckCircle, isPreview = true),
-    SidrTabSpec(SidrTab.AGENTS, "Agents", Icons.Filled.Person, isPreview = true),
-    SidrTabSpec(SidrTab.ACTIVITY, "Activity", Icons.Filled.Notifications, isPreview = true),
+    SidrTabSpec(SidrTab.APPS, "apps", isPreview = false),
+    SidrTabSpec(SidrTab.TASKS, "tasks", isPreview = true),
+    SidrTabSpec(SidrTab.AGENTS, "agents", isPreview = true),
+    SidrTabSpec(SidrTab.ACTIVITY, "activity", isPreview = true),
     // Terminal (2026-07-12) is no longer a tab — it moved to an icon-only button in
     // [SidrAppFooter], next to the Settings gear, so it doesn't crowd the 5-tab label row.
 )
@@ -77,6 +91,15 @@ private val SIDR_TAB_SPECS = listOf(
 /**
  * The 5-tab app-shell bottom bar: Home + Apps + 3 preview tabs. [selected] highlights the current
  * tab root; [onSelect] fires on tap (the caller drives the actual navigation).
+ *
+ * DS-11 A2 replaced Material's `NavigationBar`/`NavigationBarItem` with this plain themed row.
+ * `NavigationBarItem` requires a non-null `icon` and sizes/positions its selection indicator around
+ * that glyph, so an icon-free variant is not expressible through it — and dropping raw Material here
+ * also puts the last piece of app-shell chrome on the DS press-invert model (spec §5.3), the same
+ * `fg = ground / bg = text` inversion [com.sidr.launcher.core.ui.component.SidrRouteChip] uses.
+ *
+ * Insets: Material's `NavigationBar` applied its own window-inset padding; this row must do the same
+ * ([navigationBarsPadding]) or it renders underneath the system navigation bar.
  */
 @Composable
 fun SidrTabBar(
@@ -85,27 +108,76 @@ fun SidrTabBar(
     modifier: Modifier = Modifier,
 ) {
     val colors = SidrTheme.colors
-    NavigationBar(
-        modifier = modifier,
-        containerColor = colors.surface,
-        contentColor = colors.dim,
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(colors.surface)
+            .navigationBarsPadding()
+            .padding(horizontal = Spacing.sm, vertical = Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         SIDR_TAB_SPECS.forEach { spec ->
-            val label = if (spec.isPreview) "${spec.label} ◦" else spec.label
-            NavigationBarItem(
+            SidrTabLabel(
+                label = spec.label,
+                isPreview = spec.isPreview,
                 selected = selected == spec.tab,
                 onClick = { onSelect(spec.tab) },
-                icon = { Icon(imageVector = spec.icon, contentDescription = null) },
-                label = { Text(text = label) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = colors.ground,
-                    selectedTextColor = colors.ground,
-                    indicatorColor = colors.text,
-                    unselectedIconColor = colors.dim,
-                    unselectedTextColor = colors.dim,
-                ),
+                modifier = Modifier.weight(1f),
             )
         }
+    }
+}
+
+/**
+ * One tab label. Press-invert selection (spec §5.3): the active tab flips to the light text token
+ * with ground-coloured text; the rest sit dim. No glow, no scale, no layout shift — the inverted
+ * fill is the whole affordance.
+ *
+ * The [PREVIEW_MARKER] is appended to the visible label AND spelled out as ", preview" via
+ * `contentDescription`, so a TalkBack user learns a tab is a preview the same way a sighted one does
+ * (the marker must never be the visual-only signal — release gate: "no fake decorative
+ * agent/activity state"). `mergeDescendants = true` is required for that: without it the explicit
+ * description and the child `SidrText` are two separate semantics nodes and the label is announced
+ * twice. Merged, the description replaces the child text and TalkBack reads one phrase —
+ * "tasks, preview, selected, tab".
+ */
+@Composable
+private fun SidrTabLabel(
+    label: String,
+    isPreview: Boolean,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = SidrTheme.colors
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val active = selected || pressed
+    val shape = SidrShapes.small
+    Box(
+        modifier = modifier
+            .heightIn(min = Sizes.minTouchTarget)
+            .clip(shape)
+            .background(if (active) colors.text else Color.Transparent)
+            .semantics(mergeDescendants = true) {
+                role = Role.Tab
+                this.selected = selected
+                contentDescription = if (isPreview) "$label, preview" else label
+            }
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClickLabel = label,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        SidrText(
+            text = if (isPreview) "$label $PREVIEW_MARKER" else label,
+            role = SidrTextRole.SYSTEM,
+            color = if (active) colors.ground else colors.dim,
+            maxLines = 1,
+        )
     }
 }
 
@@ -113,13 +185,16 @@ fun SidrTabBar(
  * The app-wide footer ABOVE the tab bar (moved here from Home 2026-07-12, then reordered above
  * [SidrTabBar] the same day per owner direction — it used to be Home-only content above the retired
  * three-row bottom nav; now it is shared chrome, and the 5-tab row is the true bottom-most strip):
- * the local-first privacy note on the left, a Terminal icon-only button (2026-07-12 — Terminal was
- * demoted from a full tab to an icon here, since a 6th labelled tab crowded the row), a Settings
- * gear, and the `SIDR OS` brand wordmark on the right in provenance (mono) style. The hidden dev-mode
- * arm (7 rapid taps on the wordmark within 3s → [onArmDevMode]) is a Home-only concept (it arms
- * `LauncherViewModel`'s console overlay) — tabs other than Home pass no callback, so the tap is a
- * harmless no-op there. Honest: the launcher core resolves commands on-device; the assistant and
- * smart routing are separate opt-in surfaces.
+ * a Terminal icon-only button (2026-07-12 — Terminal was demoted from a full tab to an icon here,
+ * since a 6th labelled tab crowded the row), a Settings gear, and the `SIDR OS` brand wordmark on the
+ * right in provenance (mono) style. The hidden dev-mode arm (7 rapid taps on the wordmark within 3s →
+ * [onArmDevMode]) is a Home-only concept (it arms `LauncherViewModel`'s console overlay) — tabs other
+ * than Home pass no callback, so the tap is a harmless no-op there.
+ *
+ * DS-11 A3 (2026-08-10) removed the leading `Local-first · on-device` note on owner direction: it
+ * restated on every tab root what the product already is, and the privacy claims that actually carry
+ * information are the per-surface provenance lines (assistant cloud disclosure, prayer provenance,
+ * memory "local only"). A [Spacer] took over its `weight(1f)` so the wordmark stays right-aligned.
  */
 @Composable
 fun SidrAppFooter(
@@ -136,13 +211,13 @@ fun SidrAppFooter(
             .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SidrText(
-            text = "Local-first · on-device",
-            role = SidrTextRole.PROVENANCE,
-            modifier = Modifier.weight(1f),
-        )
+        Spacer(modifier = Modifier.weight(1f))
         SidrIconButton(
-            icon = Icons.Filled.Build,
+            // A real terminal glyph (DS-11 A3): this used to be `Icons.Filled.Build`, a wrench, which
+            // read as "tools/settings", not "terminal". `Icons.Filled.Terminal` lives in
+            // material-icons-extended — several MB of dependency for one glyph — so this follows the
+            // module's existing bundled-vector precedent (ic_mic_24 / ic_assistant_24).
+            painter = painterResource(R.drawable.ic_terminal_24),
             contentDescription = "Terminal preview",
             onClick = onTerminal,
         )

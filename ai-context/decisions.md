@@ -1,5 +1,151 @@
 # Decisions
 
+## ADR 2026-08-10 — DS-11 pre-gate UI refinement (Home chrome, route lane, typography)
+
+**Status: ACCEPTED — code-complete, gate green, device acceptance PENDING.** Owner-directed polish pass
+run immediately before the DS v1.1 release gate. Spec/plan: `/home/Suleiman/.claude/plans/` DS-11 plan
+(owner-approved 2026-08-10). Presentation-only except one persisted default.
+
+### Problem
+
+The owner reviewed the shipped surface before the release gate and raised five changes. Analysis split
+them by cost and feasibility: two were hours of work, one changed a design-system contract, one had no
+localisation infrastructure to build on, and one was not achievable as described.
+
+### Decision — scope
+
+| # | Owner proposal | Decision |
+|---|---|---|
+| 1 | Pin the bottom bar, icon-free text tabs, drop the "Local-first" line, fix the terminal icon | **Block A, pre-gate** |
+| 3 | Route chips narrower, borderless, un-highlight APP | **Block A, pre-gate** |
+| 2 | Softer, multilingual typeface | **Block B, pre-gate** ("sans + narrow mono" variant) |
+| 5 | Multilingual UI | **Deferred**, own block after the gate |
+| 4 | Corner-swipe → "all active windows" | **Deferred**; direction fixed as AccessibilityService |
+
+Block B was deliberately placed *before* the gate: it re-records all 34 Roborazzi goldens, and doing
+that twice (now, then again for i18n) is waste.
+
+### Decision — Block A (presentation-only + one default)
+
+- **Nav-bar flag inverted and renamed: `alwaysShowNavBar` → `autoHideNavBar` (default `false`), new
+  DataStore key `user_auto_hide_nav_bar`.** Pinned chrome is now the resting state; auto-hide is the
+  opt-in. The 5 s timer, `SidrChromeHandle` and the Settings toggle are all retained — the toggle is
+  simply named for the opt-in ("Auto-hide navigation bar") instead of for the old default. Amends the
+  2026-07-12 auto-hide spec.
+
+  **This started as a plain default flip and that was wrong** — caught on device, not in review. Merely
+  changing `alwaysShowNavBar`'s default to `true` had **no effect on the owner's install**: the bar
+  still auto-hid after 5 s, and `run-as ... cat sidr_preferences.preferences_pb` showed
+  `user_always_show_nav_bar` already persisted. Cause:
+  `PreferencesMapper.writeUserPreferences` writes the *whole* object on every update, so anyone who had
+  ever changed any setting had the old value stored, and a stored value always beats a changed default.
+  The `?: defaults.…` fallback only helps installs that never wrote the key — i.e. almost none.
+  Renaming the flag after the behaviour it enables, with a **new** key, means existing installs have
+  nothing stored for it and read the new default. Re-verified on device: pinned past 10 s.
+  The orphaned `user_always_show_nav_bar` boolean is left behind in DataStore — inert (Preferences has
+  no schema, and it holds no user content) and dropped from `ALL_KEY_NAMES`.
+- **`SidrTabBar` replaced Material `NavigationBar`/`NavigationBarItem` with a plain themed row.**
+  `NavigationBarItem` requires a non-null `icon` and sizes its selection indicator around that glyph,
+  so an icon-free variant is not expressible through it. Selection is now DS press-invert (§5.3), the
+  same `fg = ground / bg = text` inversion `SidrRouteChip` uses — which also puts the last piece of raw
+  Material app-shell chrome onto the design system. Labels are lowercase and icon-free.
+  Insets are re-applied manually (`navigationBarsPadding`), since Material's `NavigationBar` used to.
+- **Preview marker `◦` (U+25E6) → `•` (U+2022).** Verified against the shipped TTFs' cmap: IBM Plex
+  Sans, Nunito Sans and the platform sans all lack U+25E6 (JetBrains Mono has it, which is why it
+  worked before). Android font fallback would have drawn the marker in a foreign face, and a thinned
+  OEM font set could tofu it outright. "A preview tab is visibly a preview" is a release-gate
+  requirement, so the marker must be a glyph the bundled face actually owns. U+2022 is present in
+  every candidate *and* in JetBrains Mono, so it survives the Block B swap either way.
+- **`SidrAppFooter`:** the `Local-first · on-device` line removed (a `Spacer` took its `weight(1f)`);
+  the hidden 7-tap dev-mode arm on the `SIDR OS` wordmark **retained**. `Icons.Filled.Build` (a wrench)
+  replaced by a bundled `ic_terminal_24.xml` — `Icons.Filled.Terminal` lives in
+  `material-icons-extended`, several MB for one glyph, so this follows the module's existing
+  `ic_mic_24`/`ic_assistant_24` precedent. Zero new dependency.
+- **Route lane:** chips size to their text (`Modifier.weight(1f)` dropped) and the resting hairline
+  border is gone. Border became a `bordered` parameter on the shared press-invert frame, defaulting to
+  `true`, because `SidrFilterChip` (Settings accent, App Drawer Groups/A-Z) genuinely needs a resting
+  boundary — without it "Grey Green Amber" reads as three loose words.
+- **APP chip un-highlighted** (`selected = true` → `false`). It was a permanent inversion the user
+  could never turn off, for a lane that was never a state. The chip itself was **kept** on owner
+  direction. Known follow-up: APP still carries an empty `onClick`, i.e. a control that does nothing —
+  pre-existing, left alone rather than silently redesigned.
+
+### Decision — Block B (typography)
+
+**Mono's territory narrowed to `command` + `provenance`; everything else is bundled IBM Plex Sans.**
+
+Master Plan §6.2 previously assigned JetBrains Mono the entire interface shell — chips, tab labels,
+statuses, section labels, settings labels, metadata. That, rather than the typeface itself, was what
+made the UI read "technological" against the §6.1 stated character of `calm / mature / restrained`.
+Mono now covers only the two roles where fixed advance carries meaning and which §6.3 preserves as the
+terminal signature: the `>` command line and the provenance line.
+
+- `SidrSans`: `FontFamily.SansSerif` → bundled **IBM Plex Sans** (OFL, Regular/Medium/SemiBold/Bold,
+  ~800 KB). Chosen over Inter (neutral-technical), Nunito Sans (no Greek) and Manrope: humanist and
+  warm, Latin+Cyrillic+Greek+Turkish from one file, and part of a superfamily (IBM Plex Sans Arabic,
+  IBM Plex Mono) should the sacred or mono roles ever join it.
+- `SidrTextStyles.system`, `SidrTypography.labelLarge`, `SidrTypography.labelSmall`: mono → sans.
+- **New `SidrTextRole.CAPTION`** (`SidrTextStyles.caption`, sans 13/19 — Doctrine §16 "Body Small",
+  `dim`). All five `SidrRow` variants rendered their `description` as `PROVENANCE`, so every settings
+  and permission explanation stayed mono; the first device pass showed "Let the bottom bar slide away
+  after a few seconds of inactivity…" rendering as machine output. Borrowing `PROVENANCE` was harmless
+  while the whole shell was mono, but once mono means "command or attribution" it is a category error,
+  and without this fix mono had not actually narrowed to its stated territory — the single largest
+  block of small text in Settings would still have been mono. `PROVENANCE` keeps its real users
+  (`SidrProvenanceLine`, timestamps).
+- Tracking relaxed 1.4→0.6 sp and 1.6→0.8 sp: the wide CRT tracking compensated for mono's dense fixed
+  advance and reads as artificially spaced on a proportional face.
+- `SidrTextStyles.sacred` **untouched** (`FontFamily.Serif`). §6.2 defers the final Arabic-capable
+  sacred face to DS-6A pending shaping/RTL/diacritics/licence review. Verified against real TTF cmaps:
+  **no** sans candidate carries Arabic, so the sacred face is separate by necessity, not oversight.
+- `TypographyRoleTest` rewritten from 2 assertions to 4 tests that pin the whole boundary (which roles
+  are mono, which are sans, that sans is bundled rather than the platform default, and that sans roles
+  do not inherit mono's tracking) — the line is easy to erode one style at a time, so it is asserted
+  rather than left to the doc.
+
+### Verification (JDK 17, no piped output, exit codes checked)
+
+`:domain` 332/0 · `:core:ui` **119/0** (was 117; +2 typography contract tests) + `verifyRoborazziDebug`
+· `:feature:launcher` **130/0** · `:feature:settings` **33/0** · `:feature:assistant` **35/0** ·
+`:data:repository` 167/0 · `:app` 8/0 · root `testDebugUnitTest` + `assembleDebug` BUILD SUCCESSFUL.
+
+**Parity:** every ViewModel suite passes byte-for-byte against the pre-DS-11 baselines recorded in
+`CLAUDE.md` (130 / 33 / 35 / 332). No VM, domain, data, navigation-graph or persistence-schema change.
+
+**Goldens:** Block A moved exactly 5 (`controls_{dark,light,rtl}`, `universal_input_{typing,light}`) —
+inspected, the only delta is the removed chip border, filter chips kept theirs, no layout shift. Block B
+re-recorded all 34. Inspected diffs confirm typeface-only change: `primitives_rtl` grew 935→947 px from
+accumulated line-height across ~10 rows with no re-wrap or clipping, and at fontScale 2.0 the sans is
+*more* compact — "Open provider settings" and "IDLE — CLOUD DISCLOSURE" now fit on one line where mono
+wrapped to two.
+
+### Device verification (SM-A325F, agent-driven adb, owner connected the phone)
+
+**Confirmed on device:** pinned bottom chrome surviving 10 s idle (after the rename fix); lowercase
+icon-free tabs `home / apps / tasks • / agents • / activity •` with press-invert on `home`; the `•`
+preview markers rendering (no tofu, no fallback face); the terminal glyph reading as a terminal, not a
+wrench; the `Local-first · on-device` line gone with `SIDR OS` still in place; borderless
+wrap-to-content `APP WEB ASK` with APP no longer inverted; IBM Plex Sans throughout, including the
+Cyrillic date line `27 сафар · пн, 10 авг.`; the tab bar sitting flush above the system 3-button nav
+with no inset gap; Settings showing the re-labelled "Auto-hide navigation bar" toggle in its off state.
+
+**Not device-confirmed** (phone disconnected mid-pass; it is the owner's tethering link, so it was left
+alone): the `CAPTION` role's effect on Settings descriptions — code + goldens verified only; the 7-tap
+`SIDR OS` dev-mode arm; the Terminal button's navigation; toggling auto-hide back on; TalkBack on the
+new tab semantics; fontScale 2.0 and RTL on the live tab bar; light theme on device.
+
+### Known gaps
+
+- `SidrTabBar`/`SidrAppFooter` have **no automated visual coverage**: Roborazzi is wired only in
+  `:core:ui` and these live in `:app`. The device pass above is currently their only evidence.
+- The route chips are not covered at fontScale 2.0 by the golden harness: `ControlGallery` is taller
+  than the capture viewport at that scale and clips before the CHIPS section. Pre-existing.
+- Borderless route chips have no resting visual affordance — press-invert only shows during the press.
+  Deliberate owner choice; TalkBack is unaffected (`Role.Button` + `onClickLabel` retained).
+- APP route chip remains a control with an empty `onClick`.
+
+---
+
 ## ADR 2026-07-05 — AIL-4: LLM Action Router (`CommandPlanner`) — structured routing via BYOK LLM
 
 **Status: ACCEPTED (blocking design ADR — must precede AIL-4 implementation).** Depends on AIL-1

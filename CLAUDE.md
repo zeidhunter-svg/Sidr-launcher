@@ -1,5 +1,62 @@
 # CLAUDE.md — Sidr Launcher
 
+**DS-11 pre-gate UI refinement — CODE-COMPLETE 2026-08-10, gate green, DEVICE-VERIFIED IN PART.**
+Owner-directed polish immediately before the DS v1.1 release gate; five proposals triaged into
+**Block A** (ship now), **Block B** (ship now), and two deferrals. **Block A (presentation-only + one
+persisted flag):** nav-bar flag **inverted and renamed** `alwaysShowNavBar` → **`autoHideNavBar`
+(default `false`)** with a **new** key `user_auto_hide_nav_bar` — pinned bottom chrome is now the
+resting state and auto-hide is the opt-in (timer/`SidrChromeHandle`/Settings toggle all retained, the
+toggle relabelled "Auto-hide navigation bar"; amends the 2026-07-12 auto-hide spec). **A plain default
+flip was tried first and did nothing** — caught on device: `PreferencesMapper` writes the *whole*
+object on every update, so any install where a setting was ever changed already had
+`user_always_show_nav_bar` persisted, and a stored value beats a changed default; a new key is the
+migration-free fix (old boolean orphaned, inert, dropped from `ALL_KEY_NAMES`);
+`SidrTabBar` **replaced Material `NavigationBar`/`NavigationBarItem` with a
+plain themed row** (that component requires a non-null `icon` and sizes its indicator around the glyph,
+so icon-free is not expressible through it) — **lowercase icon-free labels** `home/apps/tasks/agents/
+activity` with DS **press-invert** selection, `navigationBarsPadding` re-applied by hand; preview marker
+`◦`→**`•`** (verified via TTF cmap: IBM Plex Sans / Nunito / platform sans lack U+25E6, so the marker
+would have come from font fallback in a foreign face); `SidrAppFooter` lost the `Local-first ·
+on-device` line (**7-tap dev-mode arm on `SIDR OS` retained**) and the wrench `Icons.Filled.Build`
+became a bundled `ic_terminal_24.xml` (no `material-icons-extended` dependency — follows the existing
+`ic_mic_24` precedent); route chips size to their text (`weight(1f)` dropped) and lost the resting
+border (border became a `bordered` param defaulting **true**, because `SidrFilterChip` in Settings/App
+Drawer genuinely needs a resting boundary); **APP chip un-highlighted** (was permanently `selected =
+true` for a lane that was never a state) but **kept** per owner. **Block B (typography):** mono's
+territory narrowed to **`command` + `provenance` only** — Master Plan §6.2 had assigned JetBrains Mono
+the whole interface shell, which is what read "technological" against §6.1's stated `calm / mature /
+restrained`; `SidrSans` went `FontFamily.SansSerif` → **bundled IBM Plex Sans** (OFL, 4 weights,
+~800 KB, Latin+Cyrillic+Greek+Turkish from one file), `system`/`labelLarge`/`labelSmall` moved mono→sans,
+tracking relaxed 1.4→0.6 and 1.6→0.8 sp; **new `SidrTextRole.CAPTION`** (sans 13/19, `dim`) because all
+five `SidrRow` variants rendered their `description` as `PROVENANCE` — every settings/permission
+explanation was still mono, so without this mono had not actually narrowed to its stated territory;
+**`sacred` deliberately untouched** (`FontFamily.Serif`) — §6.2 defers the Arabic-capable face to DS-6A,
+and **no** sans candidate carries Arabic (cmap-verified);
+`TypographyRoleTest` grown 2 assertions → 4 tests pinning the whole boundary. **Gate (JDK-17, exit 0):**
+`:domain` 332/0, `:core:ui` **119/0** (was 117) + `verifyRoborazziDebug`, `:feature:launcher` **130/0**,
+`:feature:settings` **33/0**, `:feature:assistant` **35/0**, `:data:repository` 167/0, `:app` 8/0, root
+`testDebugUnitTest` + `assembleDebug` SUCCESSFUL — **every VM suite byte-for-byte**; no VM/domain/data/
+nav-graph/schema change. Goldens: Block A moved exactly 5 (border removal only, no layout shift), Block B
+re-recorded all 34 (typeface-only; fontScale 2.0 got *better* — sans fits on one line where mono wrapped).
+**Device (SM-A325F, agent-driven adb):** pinned chrome past 10 s, lowercase text tabs with press-invert,
+`•` markers rendering, real terminal glyph, no `Local-first` line, `SIDR OS` intact, borderless
+un-highlighted route chips, Plex Sans incl. Cyrillic, tab bar flush above system nav, relabelled Settings
+toggle off. **Not device-confirmed** (phone disconnected mid-pass — it is the owner's tethering link):
+`CAPTION` in Settings, 7-tap dev-arm, Terminal navigation, auto-hide toggled back on, TalkBack,
+fontScale 2.0 / RTL / light on the live tab bar.
+**Deferred, direction fixed:** multilingual UI = its own post-gate block (**zero i18n infrastructure
+exists** — no `strings.xml`, `stringResource` = 0 occurrences, ~250–350 UI strings across 8 modules,
+plus three real locale bugs found: `Locale`-less `.uppercase()`/`.lowercase()` (Turkish dotted-İ) in
+`SidrSystemLabel`/`SidrProvenanceLine`/`SidrActionSafety`/`AppDrawerScreen`/`InstalledAppsRepositoryImpl`,
+`.lowercase()` instead of `Collator` for sorting, and forced uppercase + letter-spacing on
+`SidrTextRole.SYSTEM` which breaks Arabic letter-joining — forbidden by Doctrine §15.2); "show all active
+windows" gesture = post-gate AccessibilityService slice (the real system Overview is unreachable for a
+sideloaded launcher — `getRecentTasks()` returns only own tasks since API 21 — **and the proposed
+bottom-right-corner swipe collides with both system gesture-nav edges**, the very reason the auto-hide
+spec chose a tap; the gesture must be re-picked). **Known gaps:** device acceptance pending, and
+`SidrTabBar`/`SidrAppFooter` have **no automated visual coverage** (Roborazzi is wired only in
+`:core:ui`, these live in `:app`). ADR "2026-08-10 — DS-11 pre-gate UI refinement" in decisions.md.
+
 **Design track (DS) — DS-1…DS-4 + Vision MVP (Preview) DONE (2026-07-11); DS-5 CODE-CLOSED
 (2026-07-13, device-pending); DS-6B Prayer Correctness COMPLETE — device-accepted by owner (2026-08-08);
 DS-7 Memory Surfaces + Stage-2 S2-2 Explicit Aliases CLOSED — device-accepted (2026-08-10);

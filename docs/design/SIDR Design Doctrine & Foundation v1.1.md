@@ -727,7 +727,17 @@ localProcessing
 
 SIDR использует две основные гарнитуры.
 
+> **Амендмент DS-11 B (2026-08-10).** Выбран и **bundled** конкретный Interface Sans; граница между
+> sans и mono сдвинута в пользу sans. Каноническая формулировка — Master Plan §6.2.
+
 ### Interface Sans
+
+**IBM Plex Sans**, bundled в `core/ui/src/main/res/font/` (OFL, `core/ui/OFL-IBMPlexSans.txt`),
+начертания Regular / Medium / SemiBold / Bold. Выбран из числа перечисленных ниже предпочтительных
+вариантов (Inter, IBM Plex Sans, Geist, Manrope, системный sans-serif) по трём причинам:
+гуманистический тёплый характер вместо нейтрально-технического; покрытие Latin + Cyrillic + Greek +
+Turkish из одного файла; принадлежность к суперсемейству (IBM Plex Sans Arabic, IBM Plex Mono), если
+sacred- или mono-роль когда-нибудь захочет к нему присоединиться.
 
 Используется для:
 
@@ -738,32 +748,25 @@ SIDR использует две основные гарнитуры.
 * ответов;
 * memory content;
 * permission explanations;
-* кнопок.
+* кнопок;
+* **(DS-11 B, перенесено из System Mono)** statuses, route labels, tab labels, chips, section labels,
+  technical metadata, timestamps, execution steps.
 
-Предпочтительные варианты:
-
-* Inter;
-* IBM Plex Sans;
-* Geist;
-* Manrope;
-* системный sans-serif.
+Системный `FontFamily.SansSerif` больше **не** используется: оболочка не должна наследовать гарнитуру
+вендора.
 
 ### System Mono
 
-Используется для:
+**JetBrains Mono**, bundled (OFL, `core/ui/OFL-JetBrainsMono.txt`).
 
-* commands;
-* statuses;
-* timestamps;
-* execution steps;
-* route labels;
-* identifiers;
-* action arguments;
-* technical metadata.
+После DS-11 B используется **только** для:
 
-Основной вариант:
+* command line (`>` prompt и ввод команды);
+* provenance line.
 
-* JetBrains Mono.
+Обоснование сужения: моноширинность оправдана там, где нужно выравнивание по колонкам. Для чипов,
+лейблов и статусов она давала лишь «технологичное» прочтение, противоречащее заявленному характеру
+`calm / mature / restrained`.
 
 ---
 

@@ -76,7 +76,7 @@ fun SidrNavigationRow(
                 color = if (enabled) colors.text else colors.faint,
             )
             description?.let {
-                SidrText(text = it, role = SidrTextRole.PROVENANCE)
+                SidrText(text = it, role = SidrTextRole.CAPTION)
             }
         }
         value?.let {
@@ -126,7 +126,7 @@ fun SidrToggleRow(
                 color = if (enabled) colors.text else colors.faint,
             )
             description?.let {
-                SidrText(text = it, role = SidrTextRole.PROVENANCE)
+                SidrText(text = it, role = SidrTextRole.CAPTION)
             }
         }
         Switch(
@@ -180,7 +180,7 @@ fun SidrChoiceRow(
                 color = if (enabled) colors.text else colors.faint,
             )
             description?.let {
-                SidrText(text = it, role = SidrTextRole.PROVENANCE)
+                SidrText(text = it, role = SidrTextRole.CAPTION)
             }
         }
     }
@@ -209,7 +209,7 @@ fun SidrStatusRow(
     ) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             SidrText(text = title, role = SidrTextRole.HUMAN_TITLE)
-            description?.let { SidrText(text = it, role = SidrTextRole.PROVENANCE) }
+            description?.let { SidrText(text = it, role = SidrTextRole.CAPTION) }
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             value?.let {
@@ -255,7 +255,7 @@ fun SidrDestructiveRow(
                 color = if (enabled) colors.danger else colors.faint,
             )
             description?.let {
-                SidrText(text = it, role = SidrTextRole.PROVENANCE)
+                SidrText(text = it, role = SidrTextRole.CAPTION)
             }
         }
     }

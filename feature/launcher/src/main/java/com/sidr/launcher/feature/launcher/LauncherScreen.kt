@@ -367,9 +367,20 @@ private fun HomePrayerStrip(
 }
 
 /**
- * DS-4 route lane (artifact): four equal-width, hairline-bordered chips under the input. APP is the
- * selected lane (presentation-only — its content is the results/favorites below), WEB/ASK are always
+ * DS-4 route lane (artifact): the explicit route accelerators under the input. WEB/ASK are always
  * present, SITE appears only for a safe URL. No route auto-submits.
+ *
+ * DS-11 A4 (2026-08-10), two owner-directed corrections:
+ * - **Chips size to their text** instead of each taking `weight(1f)`. Four labels stretched across the
+ *   full width read as heavy furniture; the lane is an accelerator strip, not a segmented control.
+ * - **APP is no longer highlighted.** It used to render permanently `selected = true`, an inversion
+ *   the user could never turn off, because "the APP lane" was never a state — just a label for the
+ *   results already listed below. The chip stays (owner kept it as the lane's "you are here" marker)
+ *   but now rests like its neighbours.
+ *
+ * Known follow-up: APP still carries an empty `onClick`, so it is a control that does nothing when
+ * tapped. That is pre-existing and was left alone here rather than silently redesigned; it wants
+ * either a real behaviour or demotion to a non-interactive label.
  */
 @Composable
 private fun HomeRouteChips(
@@ -385,12 +396,12 @@ private fun HomeRouteChips(
             .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
         horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
     ) {
-        SidrRouteChip("APP", selected = true, onClick = {}, modifier = Modifier.weight(1f))
-        SidrRouteChip("WEB", selected = false, onClick = onWeb, modifier = Modifier.weight(1f))
+        SidrRouteChip("APP", selected = false, onClick = {})
+        SidrRouteChip("WEB", selected = false, onClick = onWeb)
         if (hasSiteRoute) {
-            SidrRouteChip("SITE", selected = false, onClick = onSite, modifier = Modifier.weight(1f))
+            SidrRouteChip("SITE", selected = false, onClick = onSite)
         }
-        SidrRouteChip("ASK", selected = false, onClick = onAsk, modifier = Modifier.weight(1f))
+        SidrRouteChip("ASK", selected = false, onClick = onAsk)
     }
 }
 

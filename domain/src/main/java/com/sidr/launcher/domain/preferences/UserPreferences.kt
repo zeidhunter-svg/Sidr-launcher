@@ -25,8 +25,19 @@ data class UserPreferences(
     // appended. No switcher UI ships in AIL-2 (deferred to AIL-3/DF-7); the default retires the
     // former hardcoded-Google TODO in the executor. Persisted key is denylist-clean.
     val webProviderTemplate: String = "https://www.google.com/search?q={q}",
-    // 2026-07-12 — when false (default) the bottom navigation chrome auto-hides after ~5s of idle on
-    // each tab root and is summoned back via a thin handle (calm/minimal Home). When true the user
-    // pins it permanently visible. Presentation-only; key is denylist-clean ("nav"/"bar" not forbidden).
-    val alwaysShowNavBar: Boolean = false,
+    // 2026-07-12, inverted 2026-08-10 (DS-11 A1, owner decision). When true the bottom navigation
+    // chrome auto-hides after ~5s of idle on each tab root and is summoned back via a thin handle;
+    // when false (the default) it stays pinned.
+    //
+    // This replaces the former `alwaysShowNavBar` flag, which expressed the same setting from the
+    // opposite side. Flipping that flag's *default* would not have reached existing installs:
+    // `PreferencesMapper.writeUserPreferences` writes the whole object on every update, so anyone who
+    // had ever changed any setting already had `user_always_show_nav_bar = false` persisted, and a
+    // stored value always beats a changed default (verified on SM-A325F — the key was present and the
+    // bar still auto-hid). Naming the flag after the opt-in behaviour and giving it a NEW key means
+    // existing installs have nothing stored for it, so they read the new default and get pinned
+    // chrome — the intended behaviour for everyone, with no migration step.
+    //
+    // Presentation-only; key is denylist-clean ("auto"/"hide"/"nav"/"bar" are not forbidden terms).
+    val autoHideNavBar: Boolean = false,
 )

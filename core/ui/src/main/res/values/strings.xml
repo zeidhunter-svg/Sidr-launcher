@@ -1,5 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Shared actions -->
     <string name="ui_action_cancel">Cancel</string>
+    <string name="ui_action_run">Run</string>
+    <string name="ui_action_not_now">Not now</string>
+    <string name="ui_action_open">Open</string>
+    <string name="ui_action_edit">Edit</string>
+    <string name="ui_action_view">View</string>
+    <string name="ui_action_forget">Forget</string>
+    <string name="ui_action_retry">Retry</string>
+    <string name="ui_action_clear">Clear</string>
+
+    <!-- Assistant composer + streaming indicator -->
+    <string name="ui_assistant_composer_placeholder">Message</string>
+    <string name="ui_assistant_streaming_label">Replying…</string>
+    <string name="ui_assistant_send_ready">Send message</string>
+    <string name="ui_assistant_send_empty">Send message, unavailable until you type a message</string>
+    <string name="ui_assistant_send_busy">Send message, unavailable while the assistant is replying</string>
+
+    <!-- Safety surfaces -->
+    <string name="ui_error_label_what">WHAT</string>
+    <string name="ui_error_label_why">WHY</string>
+    <string name="ui_error_label_next">NEXT</string>
+    <string name="ui_state_offline_title">Offline</string>
+    <string name="ui_error_state_title">Something went wrong</string>
+    <string name="ui_error_state_next">Try the action again.</string>
+
+    <!-- Memory surfaces -->
     <string name="ui_memory_forget_content_description">Forget %1$s %2$s</string>
+    <string name="ui_memory_provenance_source">memory</string>
+    <string name="ui_memory_provenance_local_only">local only</string>
+    <string name="ui_learned_choice_delete_action_label">Delete learned choice</string>
+
+    <!-- Terminal confirm card (DF-4) -->
+    <string name="ui_confirm_card_execute">EXECUTE?</string>
+    <string name="ui_confirm_card_cancel">CANCEL</string>
+    <string name="ui_confirm_card_confirm">CONFIRM</string>
+
+    <!-- Input surfaces -->
+    <string name="ui_search_field_placeholder">Search or type a command…</string>
+    <string name="ui_command_prompt_placeholder">type a command</string>
+    <string name="ui_universal_input_placeholder">Ask, search, open or automate</string>
+    <string name="ui_universal_input_prompt_content_description">Prompt</string>
+    <string name="ui_universal_input_clear_content_description">Clear input</string>
+    <string name="ui_voice_input_content_description">Voice input</string>
+    <string name="ui_voice_input_listening_short">Listening</string>
+    <string name="ui_voice_input_listening_content_description">Listening — voice input active</string>
+
+    <!-- Prayer summary strip -->
+    <string name="ui_prayer_status_verified">VERIFIED</string>
+    <string name="ui_prayer_status_cached">CACHED</string>
+    <string name="ui_prayer_status_stale">STALE</string>
+    <string name="ui_prayer_status_manual_location">MANUAL LOCATION</string>
+    <string name="ui_prayer_status_location_unavailable">LOCATION UNAVAILABLE</string>
+    <string name="ui_prayer_status_method_required">METHOD REQUIRED</string>
+    <string name="ui_prayer_status_authority_unavailable">AUTHORITY UNAVAILABLE</string>
+    <string name="ui_prayer_status_timezone_conflict">TZ CONFLICT</string>
+    <string name="ui_prayer_status_calculation_failed">CALCULATION FAILED</string>
+    <string name="ui_prayer_status_no_data">NO DATA</string>
+    <string name="ui_prayer_status_updating">UPDATING</string>
+    <string name="ui_prayer_summary_content_description">prayer times</string>
+    <string name="ui_prayer_summary_next_prayer">next %1$s %2$s</string>
+    <string name="ui_prayer_next_cell_content_description">Next %1$s</string>
+    <string name="ui_prayer_details_action_label">Prayer details</string>
+
+    <!-- Provenance line -->
+    <string name="ui_provenance_content_description">source %1$s</string>
+
+    <!-- Preview (not-yet-live surfaces) -->
+    <string name="ui_preview_badge">PREVIEW</string>
+    <string name="ui_preview_banner">PREVIEW — this screen is a design of what\'s coming; it isn\'t live yet.</string>
 </resources>

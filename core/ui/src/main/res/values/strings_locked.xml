@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 locked vocabulary (spec §7.1). translatable="false" is the barrier: AAPT rejects any
+  translation of these keys, so the machine-state vocabulary stays identical in every language.
+  Provenance/status tokens and gate-type chips only. Buttons and sentences are NOT locked - they live
+  in strings.xml and are translated (spec §7.3).
+-->
+<resources>
+    <string name="ui_memory_type_learned_preference" translatable="false">LEARNED PREFERENCE</string>
+    <string name="ui_memory_type_explicit_alias" translatable="false">EXPLICIT ALIAS</string>
+    <string name="ui_memory_type_user_provided_fact" translatable="false">USER PROVIDED FACT</string>
+    <string name="ui_memory_type_temporary_context" translatable="false">TEMPORARY CONTEXT</string>
+    <string name="ui_memory_type_system_policy" translatable="false">SYSTEM POLICY</string>
+    <string name="ui_memory_type_automation_state" translatable="false">AUTOMATION STATE</string>
+
+    <string name="ui_memory_status_active" translatable="false">ACTIVE</string>
+    <string name="ui_memory_status_learning" translatable="false">LEARNING</string>
+    <string name="ui_memory_status_needs_confirmation" translatable="false">NEEDS CONFIRMATION</string>
+    <string name="ui_memory_status_needs_reconfirmation" translatable="false">NEEDS RECONFIRMATION</string>
+    <string name="ui_memory_status_inactive" translatable="false">INACTIVE</string>
+    <string name="ui_memory_status_expired" translatable="false">EXPIRED</string>
+    <string name="ui_memory_status_unavailable" translatable="false">UNAVAILABLE</string>
+    <string name="ui_memory_status_deleted" translatable="false">DELETED</string>
+
+    <string name="ui_gate_type_confirmation" translatable="false">CONFIRM</string>
+    <string name="ui_gate_type_permission" translatable="false">PERMISSION</string>
+    <string name="ui_gate_type_sensitive" translatable="false">SENSITIVE</string>
+    <string name="ui_gate_type_external" translatable="false">EXTERNAL</string>
+    <string name="ui_gate_type_destructive" translatable="false">DESTRUCTIVE</string>
+
+    <string name="ui_scope_local" translatable="false">LOCAL</string>
+    <string name="ui_status_failed" translatable="false">FAILED</string>
+    <!--
+      Task-2 addition (reported): SidrOfflineState/SidrBlockedState render these through the same
+      SidrStatusChip as ui_status_failed above, so they belong to the same machine-status vocabulary.
+      The brief's locked list enumerated FAILED only; locking these keeps the class consistent.
+    -->
+    <string name="ui_status_offline" translatable="false">OFFLINE</string>
+    <string name="ui_status_blocked" translatable="false">BLOCKED</string>
+</resources>

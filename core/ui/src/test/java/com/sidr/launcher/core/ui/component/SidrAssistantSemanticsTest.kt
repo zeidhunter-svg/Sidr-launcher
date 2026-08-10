@@ -1,5 +1,6 @@
 package com.sidr.launcher.core.ui.component
 
+import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -13,6 +14,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
+import androidx.test.core.app.ApplicationProvider
+import com.sidr.launcher.core.ui.R
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
@@ -32,6 +35,17 @@ import org.robolectric.annotation.Config
 class SidrAssistantSemanticsTest {
     @get:Rule val compose = createComposeRule()
 
+    // The send descriptions moved from Kotlin constants into string resources (I18N-1 Task 2), so the
+    // test reads the same resources the composable does.
+    private fun string(id: Int): String =
+        ApplicationProvider.getApplicationContext<Context>().getString(id)
+
+    private val sendReady get() = string(R.string.ui_assistant_send_ready)
+    private val sendEmpty get() = string(R.string.ui_assistant_send_empty)
+    private val sendBusy get() = string(R.string.ui_assistant_send_busy)
+    private val placeholder get() = string(R.string.ui_assistant_composer_placeholder)
+    private val streamingLabel get() = string(R.string.ui_assistant_streaming_label)
+
     @Test fun blank_prompt_disables_send_and_says_why() {
         val sends = AtomicInteger(0)
         compose.setContent {
@@ -40,8 +54,8 @@ class SidrAssistantSemanticsTest {
             }
         }
 
-        compose.onNodeWithContentDescription(SEND_EMPTY_DESCRIPTION).assertIsDisplayed().assertIsNotEnabled()
-        compose.onNodeWithContentDescription(SEND_EMPTY_DESCRIPTION).performClick()
+        compose.onNodeWithContentDescription(sendEmpty).assertIsDisplayed().assertIsNotEnabled()
+        compose.onNodeWithContentDescription(sendEmpty).performClick()
         assertEquals(0, sends.get())
     }
 
@@ -58,8 +72,8 @@ class SidrAssistantSemanticsTest {
             }
         }
 
-        compose.onNodeWithContentDescription(SEND_BUSY_DESCRIPTION).assertIsDisplayed().assertIsNotEnabled()
-        compose.onNodeWithContentDescription(SEND_BUSY_DESCRIPTION).performClick()
+        compose.onNodeWithContentDescription(sendBusy).assertIsDisplayed().assertIsNotEnabled()
+        compose.onNodeWithContentDescription(sendBusy).performClick()
         assertEquals(0, sends.get())
     }
 
@@ -75,7 +89,7 @@ class SidrAssistantSemanticsTest {
             }
         }
 
-        compose.onNodeWithContentDescription(SEND_READY_DESCRIPTION).assertIsEnabled().performClick()
+        compose.onNodeWithContentDescription(sendReady).assertIsEnabled().performClick()
         assertEquals(1, sends.get())
     }
 
@@ -98,15 +112,15 @@ class SidrAssistantSemanticsTest {
         }
 
         // Blank field: the IME action must not dispatch.
-        compose.onNodeWithContentDescription("Message").performImeAction()
+        compose.onNodeWithContentDescription(placeholder).performImeAction()
         assertEquals(0, sends.get())
 
-        compose.onNodeWithContentDescription("Message").performTextInput("when is fajr")
-        compose.onNodeWithContentDescription("Message").performImeAction()
+        compose.onNodeWithContentDescription(placeholder).performTextInput("when is fajr")
+        compose.onNodeWithContentDescription(placeholder).performImeAction()
         assertEquals(1, sends.get())
 
         // Now streaming — a second IME action is ignored.
-        compose.onNodeWithContentDescription("Message").performImeAction()
+        compose.onNodeWithContentDescription(placeholder).performImeAction()
         assertEquals(1, sends.get())
     }
 
@@ -115,6 +129,6 @@ class SidrAssistantSemanticsTest {
             SidrTheme(darkTheme = true) { SidrStreamingIndicator() }
         }
 
-        compose.onNodeWithText("Replying…").assertIsDisplayed()
+        compose.onNodeWithText(streamingLabel).assertIsDisplayed()
     }
 }

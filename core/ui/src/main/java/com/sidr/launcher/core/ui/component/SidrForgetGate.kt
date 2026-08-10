@@ -3,6 +3,8 @@ package com.sidr.launcher.core.ui.component
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.sidr.launcher.core.ui.R
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.theme.SidrTheme
 
 @Composable
@@ -19,7 +21,7 @@ fun SidrForgetGate(
         type = SidrActionGateType.Destructive,
         title = title,
         consequence = consequence,
-        confirmLabel = "Forget",
+        confirmLabel = sidrString(R.string.ui_action_forget),
         onConfirm = onForget,
         onCancel = onCancel,
         modifier = modifier,

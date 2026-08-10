@@ -6,11 +6,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
+import com.sidr.launcher.core.ui.R
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrProvenanceLine
 import com.sidr.launcher.core.ui.primitive.SidrStatus
 import com.sidr.launcher.core.ui.primitive.SidrSurface
@@ -19,6 +22,7 @@ import com.sidr.launcher.core.ui.primitive.SidrText
 import com.sidr.launcher.core.ui.primitive.SidrTextRole
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Spacing
+import java.util.Locale
 
 enum class SidrMemoryType {
     LearnedPreference,
@@ -58,7 +62,15 @@ fun SidrMemoryItem(
 ) {
     val typeLabel = type.label()
     val statusLabel = status.label()
-    val scopeLabel = if (localOnly) "LOCAL" else null
+    val scopeLabel = if (localOnly) sidrString(R.string.ui_scope_local) else null
+    // `typeLabel` is locked machine vocabulary (strings_locked.xml), not human copy, so its case fold
+    // stays locale-independent — a Turkish default locale would lower "EXPLICIT ALIAS" to "explıcıt
+    // alıas". Locale.ROOT preserves today's behaviour exactly.
+    val forgetDescription = sidrString(
+        R.string.ui_memory_forget_content_description,
+        typeLabel.lowercase(Locale.ROOT),
+        title,
+    )
     val summary = listOfNotNull(
         typeLabel,
         "$title -> $value",
@@ -114,24 +126,22 @@ fun SidrMemoryItem(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     onOpen?.let {
-                        SidrSecondaryButton(text = "Open", onClick = it)
+                        SidrSecondaryButton(text = sidrString(R.string.ui_action_open), onClick = it)
                     }
                     onEdit?.let {
                         SidrSecondaryButton(
-                            text = "Edit",
+                            text = sidrString(R.string.ui_action_edit),
                             onClick = it,
                             modifier = Modifier.padding(start = Spacing.sm),
                         )
                     }
                     onForget?.let {
                         SidrDestructiveButton(
-                            text = "Forget",
+                            text = sidrString(R.string.ui_action_forget),
                             onClick = it,
                             modifier = Modifier
                                 .padding(start = Spacing.sm)
-                                .semantics {
-                                    contentDescription = "Forget ${typeLabel.lowercase()} $title"
-                                },
+                                .semantics { contentDescription = forgetDescription },
                         )
                     }
                 }
@@ -147,36 +157,41 @@ fun SidrMemoryEvidence(
     provenance: String? = null,
     localOnly: Boolean = true,
 ) {
+    val localOnlyLabel = sidrString(R.string.ui_memory_provenance_local_only)
     val details = buildList {
         add(evidence)
         provenance?.let { add(it) }
-        if (localOnly) add("local only")
+        if (localOnly) add(localOnlyLabel)
     }
     SidrProvenanceLine(
-        source = "memory",
+        source = sidrString(R.string.ui_memory_provenance_source),
         details = details,
         modifier = modifier,
     )
 }
 
+@Composable
+@ReadOnlyComposable
 internal fun SidrMemoryType.label(): String = when (this) {
-    SidrMemoryType.LearnedPreference -> "LEARNED PREFERENCE"
-    SidrMemoryType.ExplicitAlias -> "EXPLICIT ALIAS"
-    SidrMemoryType.UserProvidedFact -> "USER PROVIDED FACT"
-    SidrMemoryType.TemporaryContext -> "TEMPORARY CONTEXT"
-    SidrMemoryType.SystemPolicy -> "SYSTEM POLICY"
-    SidrMemoryType.AutomationState -> "AUTOMATION STATE"
+    SidrMemoryType.LearnedPreference -> sidrString(R.string.ui_memory_type_learned_preference)
+    SidrMemoryType.ExplicitAlias -> sidrString(R.string.ui_memory_type_explicit_alias)
+    SidrMemoryType.UserProvidedFact -> sidrString(R.string.ui_memory_type_user_provided_fact)
+    SidrMemoryType.TemporaryContext -> sidrString(R.string.ui_memory_type_temporary_context)
+    SidrMemoryType.SystemPolicy -> sidrString(R.string.ui_memory_type_system_policy)
+    SidrMemoryType.AutomationState -> sidrString(R.string.ui_memory_type_automation_state)
 }
 
+@Composable
+@ReadOnlyComposable
 internal fun SidrMemoryStatus.label(): String = when (this) {
-    SidrMemoryStatus.Active -> "ACTIVE"
-    SidrMemoryStatus.Learning -> "LEARNING"
-    SidrMemoryStatus.NeedsConfirmation -> "NEEDS CONFIRMATION"
-    SidrMemoryStatus.NeedsReconfirmation -> "NEEDS RECONFIRMATION"
-    SidrMemoryStatus.Inactive -> "INACTIVE"
-    SidrMemoryStatus.Expired -> "EXPIRED"
-    SidrMemoryStatus.Unavailable -> "UNAVAILABLE"
-    SidrMemoryStatus.Deleted -> "DELETED"
+    SidrMemoryStatus.Active -> sidrString(R.string.ui_memory_status_active)
+    SidrMemoryStatus.Learning -> sidrString(R.string.ui_memory_status_learning)
+    SidrMemoryStatus.NeedsConfirmation -> sidrString(R.string.ui_memory_status_needs_confirmation)
+    SidrMemoryStatus.NeedsReconfirmation -> sidrString(R.string.ui_memory_status_needs_reconfirmation)
+    SidrMemoryStatus.Inactive -> sidrString(R.string.ui_memory_status_inactive)
+    SidrMemoryStatus.Expired -> sidrString(R.string.ui_memory_status_expired)
+    SidrMemoryStatus.Unavailable -> sidrString(R.string.ui_memory_status_unavailable)
+    SidrMemoryStatus.Deleted -> sidrString(R.string.ui_memory_status_deleted)
 }
 
 private fun SidrMemoryStatus.statusToken(): SidrStatus = when (this) {

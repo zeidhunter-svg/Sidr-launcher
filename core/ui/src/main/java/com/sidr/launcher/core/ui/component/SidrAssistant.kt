@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
@@ -22,6 +23,8 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
+import com.sidr.launcher.core.ui.R
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrProgress
 import com.sidr.launcher.core.ui.primitive.SidrSurface
 import com.sidr.launcher.core.ui.primitive.SidrSurfaceTone
@@ -40,14 +43,12 @@ import com.sidr.launcher.core.ui.theme.Spacing
  */
 
 /** Content descriptions for the composer's send affordance, one per reason it can be unavailable. */
-internal const val SEND_READY_DESCRIPTION = "Send message"
-internal const val SEND_EMPTY_DESCRIPTION = "Send message, unavailable until you type a message"
-internal const val SEND_BUSY_DESCRIPTION = "Send message, unavailable while the assistant is replying"
-
+@Composable
+@ReadOnlyComposable
 internal fun sendDescription(hasText: Boolean, sending: Boolean): String = when {
-    sending -> SEND_BUSY_DESCRIPTION
-    !hasText -> SEND_EMPTY_DESCRIPTION
-    else -> SEND_READY_DESCRIPTION
+    sending -> sidrString(R.string.ui_assistant_send_busy)
+    !hasText -> sidrString(R.string.ui_assistant_send_empty)
+    else -> sidrString(R.string.ui_assistant_send_ready)
 }
 
 /**
@@ -69,7 +70,7 @@ fun SidrAssistantComposer(
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "Message",
+    placeholder: String = sidrString(R.string.ui_assistant_composer_placeholder),
     sending: Boolean = false,
 ) {
     val colors = SidrTheme.colors
@@ -129,7 +130,7 @@ fun SidrAssistantComposer(
 @Composable
 fun SidrStreamingIndicator(
     modifier: Modifier = Modifier,
-    label: String = "Replying…",
+    label: String = sidrString(R.string.ui_assistant_streaming_label),
 ) {
     Column(
         modifier = modifier

@@ -17,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.sidr.launcher.core.ui.R
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Sizes
 import com.sidr.launcher.core.ui.theme.Spacing
@@ -59,7 +61,7 @@ fun ConfirmActionCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "EXECUTE?",
+                text = sidrString(R.string.ui_confirm_card_execute),
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.weight(1f),
@@ -84,9 +86,9 @@ fun ConfirmActionCard(
                 .padding(top = Spacing.md),
             horizontalArrangement = Arrangement.End,
         ) {
-            BracketButton(label = "CANCEL", onClick = onCancel)
+            BracketButton(label = sidrString(R.string.ui_confirm_card_cancel), onClick = onCancel)
             BracketButton(
-                label = "CONFIRM",
+                label = sidrString(R.string.ui_confirm_card_confirm),
                 onClick = onConfirm,
                 modifier = Modifier.padding(start = Spacing.lg),
             )

@@ -33,6 +33,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.sidr.launcher.core.ui.R
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.theme.LocalSidrMotionEnabled
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Spacing
@@ -63,7 +64,7 @@ fun SidrCommandPrompt(
     onValueChange: (String) -> Unit,
     onSubmit: (String) -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "type a command",
+    placeholder: String = sidrString(R.string.ui_command_prompt_placeholder),
     showMic: Boolean = false,
     listening: Boolean = false,
     onMic: () -> Unit = {},
@@ -164,7 +165,11 @@ fun SidrCommandPrompt(
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_mic_24),
-                    contentDescription = if (listening) "Listening" else "Voice input",
+                    contentDescription = if (listening) {
+                        sidrString(R.string.ui_voice_input_listening_short)
+                    } else {
+                        sidrString(R.string.ui_voice_input_content_description)
+                    },
                     tint = if (listening) accent else onSurface,
                 )
             }

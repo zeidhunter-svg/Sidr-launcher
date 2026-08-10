@@ -18,6 +18,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import com.sidr.launcher.core.ui.R
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Spacing
 
@@ -41,7 +42,7 @@ fun SidrSearchField(
     onValueChange: (String) -> Unit,
     onSubmit: (String) -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "Search or type a command…",
+    placeholder: String = sidrString(R.string.ui_search_field_placeholder),
     showMic: Boolean = false,
     onMic: () -> Unit = {},
 ) {
@@ -65,13 +66,13 @@ fun SidrSearchField(
                 value.isNotEmpty() -> IconButton(onClick = { onValueChange("") }) {
                     Icon(
                         imageVector = Icons.Filled.Clear,
-                        contentDescription = "Clear",
+                        contentDescription = sidrString(R.string.ui_action_clear),
                     )
                 }
                 showMic -> IconButton(onClick = onMic) {
                     Icon(
                         painter = painterResource(R.drawable.ic_mic_24),
-                        contentDescription = "Voice input",
+                        contentDescription = sidrString(R.string.ui_voice_input_content_description),
                     )
                 }
             }

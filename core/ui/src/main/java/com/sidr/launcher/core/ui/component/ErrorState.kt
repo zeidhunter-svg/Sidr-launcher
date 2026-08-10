@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.sidr.launcher.core.ui.R
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Spacing
 
@@ -17,13 +19,13 @@ import com.sidr.launcher.core.ui.theme.Spacing
 fun ErrorState(
     message: String,
     modifier: Modifier = Modifier,
-    retryLabel: String = "Retry",
+    retryLabel: String = sidrString(R.string.ui_action_retry),
     onRetry: (() -> Unit)? = null,
 ) {
     SidrErrorSurface(
-        title = "Something went wrong",
+        title = sidrString(R.string.ui_error_state_title),
         whatFailed = message,
-        next = if (onRetry != null) "Try the action again." else null,
+        next = if (onRetry != null) sidrString(R.string.ui_error_state_next) else null,
         primaryAction = onRetry?.let { SidrSurfaceAction(retryLabel, it) },
         modifier = modifier
             .fillMaxSize()

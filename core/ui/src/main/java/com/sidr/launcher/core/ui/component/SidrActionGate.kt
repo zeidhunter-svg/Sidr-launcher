@@ -6,12 +6,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.sidr.launcher.core.ui.R
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrSurface
 import com.sidr.launcher.core.ui.primitive.SidrSurfaceTone
 import com.sidr.launcher.core.ui.primitive.SidrText
@@ -51,12 +54,14 @@ private fun SidrActionGateType.riskTone(): SidrRiskTone = when (this) {
     SidrActionGateType.Destructive -> SidrRiskTone.Destructive
 }
 
+@Composable
+@ReadOnlyComposable
 private fun SidrActionGateType.label(): String = when (this) {
-    SidrActionGateType.Confirmation -> "CONFIRM"
-    SidrActionGateType.Permission -> "PERMISSION"
-    SidrActionGateType.SensitiveData -> "SENSITIVE"
-    SidrActionGateType.ExternalHandoff -> "EXTERNAL"
-    SidrActionGateType.Destructive -> "DESTRUCTIVE"
+    SidrActionGateType.Confirmation -> sidrString(R.string.ui_gate_type_confirmation)
+    SidrActionGateType.Permission -> sidrString(R.string.ui_gate_type_permission)
+    SidrActionGateType.SensitiveData -> sidrString(R.string.ui_gate_type_sensitive)
+    SidrActionGateType.ExternalHandoff -> sidrString(R.string.ui_gate_type_external)
+    SidrActionGateType.Destructive -> sidrString(R.string.ui_gate_type_destructive)
 }
 
 /**
@@ -127,7 +132,7 @@ fun SidrActionGate(
                         onConfirm()
                     }
                 },
-                secondary = SidrSurfaceAction("Cancel") {
+                secondary = SidrSurfaceAction(sidrString(R.string.ui_action_cancel)) {
                     if (!confirming && !confirmDispatched && !cancelDispatched) {
                         cancelDispatched = true
                         onCancel()

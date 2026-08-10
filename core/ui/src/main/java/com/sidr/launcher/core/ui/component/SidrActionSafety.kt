@@ -13,6 +13,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import com.sidr.launcher.core.ui.R
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrStatus
 import com.sidr.launcher.core.ui.primitive.SidrSurface
 import com.sidr.launcher.core.ui.primitive.SidrSurfaceTone
@@ -21,6 +23,7 @@ import com.sidr.launcher.core.ui.primitive.SidrTextRole
 import com.sidr.launcher.core.ui.theme.SidrShapes
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Spacing
+import java.util.Locale
 
 enum class SidrActionProposalTone { Safe, Confirm, External, Destructive }
 
@@ -44,7 +47,10 @@ private fun SidrResultTone.status(): SidrStatus = when (this) {
     SidrResultTone.Failed -> SidrStatus.DANGER
 }
 
-private fun permissionNoticeStatus(label: String): SidrStatus = when (label.uppercase()) {
+// MATCHING, not display: the compared tokens are fixed ASCII machine states, so the case fold must
+// be locale-independent. Under a Turkish default locale `uppercase(Locale.getDefault())` maps "i" to
+// "İ", so "Denied" would stop matching "DENIED". Locale.ROOT keeps matching locale-proof.
+private fun permissionNoticeStatus(label: String): SidrStatus = when (label.uppercase(Locale.ROOT)) {
     "ENABLED", "GRANTED" -> SidrStatus.SUCCESS
     "BLOCKED", "DENIED" -> SidrStatus.DANGER
     "OPTIONAL" -> SidrStatus.INFO
@@ -61,7 +67,7 @@ fun SidrActionProposal(
     provenance: (@Composable (() -> Unit))? = null,
     onCancel: (() -> Unit)? = null,
     executing: Boolean = false,
-    executeLabel: String = "Run",
+    executeLabel: String = sidrString(R.string.ui_action_run),
 ) {
     var executeDispatched by remember(title, description) { mutableStateOf(false) }
     var cancelDispatched by remember(title, description) { mutableStateOf(false) }
@@ -78,7 +84,7 @@ fun SidrActionProposal(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 SidrText(text = title, role = SidrTextRole.HUMAN_TITLE, modifier = Modifier.weight(1f))
-                SidrRiskChip(label = tone.name.uppercase(), tone = tone.riskTone())
+                SidrRiskChip(label = tone.name.uppercase(Locale.ROOT), tone = tone.riskTone())
             }
             description?.let { SidrText(text = it, role = SidrTextRole.HUMAN_BODY) }
             provenance?.invoke()
@@ -90,7 +96,7 @@ fun SidrActionProposal(
                     }
                 },
                 secondary = onCancel?.let {
-                    SidrSurfaceAction("Cancel") {
+                    SidrSurfaceAction(sidrString(R.string.ui_action_cancel)) {
                         if (!executing && !executeDispatched && !cancelDispatched) {
                             cancelDispatched = true
                             it()
@@ -112,7 +118,7 @@ fun SidrPermissionNotice(
     onPrimary: () -> Unit,
     modifier: Modifier = Modifier,
     withoutPermission: String? = null,
-    secondaryLabel: String = "Not now",
+    secondaryLabel: String = sidrString(R.string.ui_action_not_now),
     onSecondary: (() -> Unit)? = null,
     status: String? = null,
     primaryLoading: Boolean = false,
@@ -182,7 +188,7 @@ fun SidrResultSurface(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 SidrText(text = title, role = SidrTextRole.HUMAN_TITLE, modifier = Modifier.weight(1f))
-                SidrStatusChip(label = tone.name.uppercase(), status = tone.status())
+                SidrStatusChip(label = tone.name.uppercase(Locale.ROOT), status = tone.status())
             }
             body?.let { SidrText(text = it, role = SidrTextRole.HUMAN_BODY) }
             provenance?.invoke()
@@ -213,11 +219,11 @@ fun SidrErrorSurface(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 SidrText(text = title, role = SidrTextRole.HUMAN_TITLE, modifier = Modifier.weight(1f))
-                SidrStatusChip(label = "FAILED", status = SidrStatus.DANGER)
+                SidrStatusChip(label = sidrString(R.string.ui_status_failed), status = SidrStatus.DANGER)
             }
-            whatFailed?.let { LabeledSafetyText(label = "WHAT", text = it) }
-            why?.let { LabeledSafetyText(label = "WHY", text = it) }
-            next?.let { LabeledSafetyText(label = "NEXT", text = it) }
+            whatFailed?.let { LabeledSafetyText(label = sidrString(R.string.ui_error_label_what), text = it) }
+            why?.let { LabeledSafetyText(label = sidrString(R.string.ui_error_label_why), text = it) }
+            next?.let { LabeledSafetyText(label = sidrString(R.string.ui_error_label_next), text = it) }
             if (primaryAction != null || secondaryAction != null) {
                 SidrSurfaceActions(primary = primaryAction, secondary = secondaryAction)
             }
@@ -227,7 +233,7 @@ fun SidrErrorSurface(
 
 @Composable
 fun SidrOfflineState(
-    title: String = "Offline",
+    title: String = sidrString(R.string.ui_state_offline_title),
     body: String,
     modifier: Modifier = Modifier,
     availableOffline: String? = null,
@@ -244,7 +250,7 @@ fun SidrOfflineState(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 SidrText(text = title, role = SidrTextRole.HUMAN_TITLE, modifier = Modifier.weight(1f))
-                SidrStatusChip(label = "OFFLINE", status = SidrStatus.ATTENTION)
+                SidrStatusChip(label = sidrString(R.string.ui_status_offline), status = SidrStatus.ATTENTION)
             }
             SidrText(text = body, role = SidrTextRole.HUMAN_BODY)
             availableOffline?.let { SidrText(text = it, role = SidrTextRole.PROVENANCE) }
@@ -274,10 +280,10 @@ fun SidrBlockedState(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 SidrText(text = title, role = SidrTextRole.HUMAN_TITLE, modifier = Modifier.weight(1f))
-                SidrStatusChip(label = "BLOCKED", status = SidrStatus.ATTENTION)
+                SidrStatusChip(label = sidrString(R.string.ui_status_blocked), status = SidrStatus.ATTENTION)
             }
             SidrText(text = body, role = SidrTextRole.HUMAN_BODY)
-            next?.let { LabeledSafetyText(label = "NEXT", text = it) }
+            next?.let { LabeledSafetyText(label = sidrString(R.string.ui_error_label_next), text = it) }
             if (primaryAction != null || secondaryAction != null) {
                 SidrSurfaceActions(primary = primaryAction, secondary = secondaryAction)
             }

@@ -15,6 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import com.sidr.launcher.core.ui.R
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Sizes
 import com.sidr.launcher.core.ui.theme.Spacing
@@ -62,7 +64,7 @@ fun LearnedChoiceRow(
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier
                 .clickable(
-                    onClickLabel = "Delete learned choice",
+                    onClickLabel = sidrString(R.string.ui_learned_choice_delete_action_label),
                     role = Role.Button,
                     onClick = onDelete,
                 )

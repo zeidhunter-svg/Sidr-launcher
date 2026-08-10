@@ -1,5 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Shared actions -->
     <string name="ui_action_cancel">Отмена</string>
+    <string name="ui_action_run">Выполнить</string>
+    <string name="ui_action_not_now">Не сейчас</string>
+    <string name="ui_action_open">Открыть</string>
+    <string name="ui_action_edit">Изменить</string>
+    <string name="ui_action_view">Посмотреть</string>
+    <string name="ui_action_forget">Забыть</string>
+    <string name="ui_action_retry">Повторить</string>
+    <string name="ui_action_clear">Очистить</string>
+
+    <!-- Assistant composer + streaming indicator -->
+    <string name="ui_assistant_composer_placeholder">Сообщение</string>
+    <string name="ui_assistant_streaming_label">Отвечает…</string>
+    <string name="ui_assistant_send_ready">Отправить сообщение</string>
+    <string name="ui_assistant_send_empty">Отправить сообщение, недоступно, пока вы не введёте сообщение</string>
+    <string name="ui_assistant_send_busy">Отправить сообщение, недоступно, пока ассистент отвечает</string>
+
+    <!-- Safety surfaces -->
+    <string name="ui_error_label_what">ЧТО</string>
+    <string name="ui_error_label_why">ПОЧЕМУ</string>
+    <string name="ui_error_label_next">ДАЛЬШЕ</string>
+    <string name="ui_state_offline_title">Нет сети</string>
+    <string name="ui_error_state_title">Что-то пошло не так</string>
+    <string name="ui_error_state_next">Попробуйте выполнить действие ещё раз.</string>
+
+    <!-- Memory surfaces -->
     <string name="ui_memory_forget_content_description">Забыть %1$s %2$s</string>
+    <string name="ui_memory_provenance_source">память</string>
+    <string name="ui_memory_provenance_local_only">только локально</string>
+    <string name="ui_learned_choice_delete_action_label">Удалить запомненный выбор</string>
+
+    <!-- Terminal confirm card (DF-4) -->
+    <string name="ui_confirm_card_execute">ВЫПОЛНИТЬ?</string>
+    <string name="ui_confirm_card_cancel">ОТМЕНА</string>
+    <string name="ui_confirm_card_confirm">ПОДТВЕРДИТЬ</string>
+
+    <!-- Input surfaces -->
+    <string name="ui_search_field_placeholder">Найдите или введите команду…</string>
+    <string name="ui_command_prompt_placeholder">введите команду</string>
+    <string name="ui_universal_input_placeholder">Спросите, найдите, откройте или автоматизируйте</string>
+    <string name="ui_universal_input_prompt_content_description">Приглашение ввода</string>
+    <string name="ui_universal_input_clear_content_description">Очистить ввод</string>
+    <string name="ui_voice_input_content_description">Голосовой ввод</string>
+    <string name="ui_voice_input_listening_short">Слушаю</string>
+    <string name="ui_voice_input_listening_content_description">Слушаю — голосовой ввод активен</string>
+
+    <!-- Prayer summary strip -->
+    <string name="ui_prayer_status_verified">ПРОВЕРЕНО</string>
+    <string name="ui_prayer_status_cached">ИЗ КЭША</string>
+    <string name="ui_prayer_status_stale">УСТАРЕЛО</string>
+    <string name="ui_prayer_status_manual_location">МЕСТО ВРУЧНУЮ</string>
+    <string name="ui_prayer_status_location_unavailable">МЕСТО НЕДОСТУПНО</string>
+    <string name="ui_prayer_status_method_required">НУЖЕН МЕТОД</string>
+    <string name="ui_prayer_status_authority_unavailable">ИСТОЧНИК НЕДОСТУПЕН</string>
+    <string name="ui_prayer_status_timezone_conflict">КОНФЛИКТ ЧАСОВОГО ПОЯСА</string>
+    <string name="ui_prayer_status_calculation_failed">ОШИБКА РАСЧЁТА</string>
+    <string name="ui_prayer_status_no_data">НЕТ ДАННЫХ</string>
+    <string name="ui_prayer_status_updating">ОБНОВЛЕНИЕ</string>
+    <string name="ui_prayer_summary_content_description">время намаза</string>
+    <string name="ui_prayer_summary_next_prayer">следующий %1$s %2$s</string>
+    <string name="ui_prayer_next_cell_content_description">Следующий %1$s</string>
+    <string name="ui_prayer_details_action_label">Подробности о намазе</string>
+
+    <!-- Provenance line -->
+    <string name="ui_provenance_content_description">источник %1$s</string>
+
+    <!-- Preview (not-yet-live surfaces) -->
+    <string name="ui_preview_badge">ПРЕДПРОСМОТР</string>
+    <string name="ui_preview_banner">ПРЕДПРОСМОТР — этот экран показывает, каким всё будет; он ещё не работает.</string>
 </resources>

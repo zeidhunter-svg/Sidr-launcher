@@ -36,6 +36,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.sidr.launcher.core.ui.R
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrSurface
 import com.sidr.launcher.core.ui.primitive.SidrSurfaceTone
 import com.sidr.launcher.core.ui.primitive.SidrText
@@ -88,7 +89,7 @@ fun SidrUniversalInput(
     onSubmit: () -> Unit,
     modifier: Modifier = Modifier,
     state: SidrUniversalInputState = SidrUniversalInputState.Idle,
-    placeholder: String = "Ask, search, open or automate",
+    placeholder: String = sidrString(R.string.ui_universal_input_placeholder),
     enabled: Boolean = true,
     voiceAvailable: Boolean = false,
     onVoiceClick: (() -> Unit)? = null,
@@ -132,6 +133,9 @@ fun SidrUniversalInput(
                     },
                 ),
         ) {
+            // Hoisted out of `semantics { }` below: that lambda is not inline, so it cannot call a
+            // @Composable string reader.
+            val promptDescription = sidrString(R.string.ui_universal_input_prompt_content_description)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -146,7 +150,7 @@ fun SidrUniversalInput(
                     color = accent,
                     modifier = Modifier.semantics {
                         // Prevent TalkBack from reading ">" as "greater than".
-                        contentDescription = "Prompt"
+                        contentDescription = promptDescription
                     },
                 )
 
@@ -190,7 +194,7 @@ fun SidrUniversalInput(
                 if (isTyping && onClearClick != null) {
                     SidrIconButton(
                         icon = Icons.Filled.Close,
-                        contentDescription = "Clear input",
+                        contentDescription = sidrString(R.string.ui_universal_input_clear_content_description),
                         onClick = onClearClick,
                         tint = colors.dim,
                     )
@@ -212,7 +216,11 @@ fun SidrUniversalInput(
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_mic_24),
-                            contentDescription = if (listening) "Listening — voice input active" else "Voice input",
+                            contentDescription = if (listening) {
+                                sidrString(R.string.ui_voice_input_listening_content_description)
+                            } else {
+                                sidrString(R.string.ui_voice_input_content_description)
+                            },
                             tint = if (listening) accent else colors.dim,
                         )
                     }

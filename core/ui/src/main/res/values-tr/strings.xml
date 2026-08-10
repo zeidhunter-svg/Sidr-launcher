@@ -1,5 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Shared actions -->
     <string name="ui_action_cancel">İptal</string>
+    <string name="ui_action_run">Çalıştır</string>
+    <string name="ui_action_not_now">Şimdi değil</string>
+    <string name="ui_action_open">Aç</string>
+    <string name="ui_action_edit">Düzenle</string>
+    <string name="ui_action_view">Görüntüle</string>
+    <string name="ui_action_forget">Unut</string>
+    <string name="ui_action_retry">Yeniden dene</string>
+    <string name="ui_action_clear">Temizle</string>
+
+    <!-- Assistant composer + streaming indicator -->
+    <string name="ui_assistant_composer_placeholder">Mesaj</string>
+    <string name="ui_assistant_streaming_label">Yanıtlıyor…</string>
+    <string name="ui_assistant_send_ready">Mesaj gönder</string>
+    <string name="ui_assistant_send_empty">Mesaj gönder, bir mesaj yazana kadar kullanılamaz</string>
+    <string name="ui_assistant_send_busy">Mesaj gönder, asistan yanıtlarken kullanılamaz</string>
+
+    <!-- Safety surfaces -->
+    <string name="ui_error_label_what">NE</string>
+    <string name="ui_error_label_why">NEDEN</string>
+    <string name="ui_error_label_next">SONRAKİ</string>
+    <string name="ui_state_offline_title">Çevrimdışı</string>
+    <string name="ui_error_state_title">Bir şeyler ters gitti</string>
+    <string name="ui_error_state_next">İşlemi yeniden deneyin.</string>
+
+    <!-- Memory surfaces -->
     <string name="ui_memory_forget_content_description">%1$s %2$s unut</string>
+    <string name="ui_memory_provenance_source">bellek</string>
+    <string name="ui_memory_provenance_local_only">yalnızca yerel</string>
+    <string name="ui_learned_choice_delete_action_label">Öğrenilen seçimi sil</string>
+
+    <!-- Terminal confirm card (DF-4) -->
+    <string name="ui_confirm_card_execute">ÇALIŞTIR?</string>
+    <string name="ui_confirm_card_cancel">İPTAL</string>
+    <string name="ui_confirm_card_confirm">ONAYLA</string>
+
+    <!-- Input surfaces -->
+    <string name="ui_search_field_placeholder">Arayın ya da bir komut yazın…</string>
+    <string name="ui_command_prompt_placeholder">bir komut yazın</string>
+    <string name="ui_universal_input_placeholder">Sorun, arayın, açın ya da otomatikleştirin</string>
+    <string name="ui_universal_input_prompt_content_description">Komut istemi</string>
+    <string name="ui_universal_input_clear_content_description">Girişi temizle</string>
+    <string name="ui_voice_input_content_description">Sesli giriş</string>
+    <string name="ui_voice_input_listening_short">Dinliyor</string>
+    <string name="ui_voice_input_listening_content_description">Dinliyor — sesli giriş etkin</string>
+
+    <!-- Prayer summary strip -->
+    <string name="ui_prayer_status_verified">DOĞRULANDI</string>
+    <string name="ui_prayer_status_cached">ÖNBELLEKTEN</string>
+    <string name="ui_prayer_status_stale">ESKİMİŞ</string>
+    <string name="ui_prayer_status_manual_location">KONUM ELLE</string>
+    <string name="ui_prayer_status_location_unavailable">KONUM YOK</string>
+    <string name="ui_prayer_status_method_required">YÖNTEM GEREKLİ</string>
+    <string name="ui_prayer_status_authority_unavailable">KAYNAK YOK</string>
+    <string name="ui_prayer_status_timezone_conflict">SAAT DİLİMİ ÇAKIŞMASI</string>
+    <string name="ui_prayer_status_calculation_failed">HESAPLAMA BAŞARISIZ</string>
+    <string name="ui_prayer_status_no_data">VERİ YOK</string>
+    <string name="ui_prayer_status_updating">GÜNCELLENİYOR</string>
+    <string name="ui_prayer_summary_content_description">namaz vakitleri</string>
+    <string name="ui_prayer_summary_next_prayer">sıradaki %1$s %2$s</string>
+    <string name="ui_prayer_next_cell_content_description">Sıradaki %1$s</string>
+    <string name="ui_prayer_details_action_label">Namaz ayrıntıları</string>
+
+    <!-- Provenance line -->
+    <string name="ui_provenance_content_description">kaynak %1$s</string>
+
+    <!-- Preview (not-yet-live surfaces) -->
+    <string name="ui_preview_badge">ÖNİZLEME</string>
+    <string name="ui_preview_banner">ÖNİZLEME — bu ekran yakında geleceklerin bir tasarımı; henüz çalışmıyor.</string>
 </resources>

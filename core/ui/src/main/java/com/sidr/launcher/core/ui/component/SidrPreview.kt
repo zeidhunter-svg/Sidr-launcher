@@ -10,6 +10,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import com.sidr.launcher.core.ui.R
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrSurface
 import com.sidr.launcher.core.ui.primitive.SidrSurfaceTone
 import com.sidr.launcher.core.ui.primitive.SidrText
@@ -41,7 +43,7 @@ fun SidrPreviewBadge(modifier: Modifier = Modifier) {
             .padding(Spacing.sm),
     ) {
         SidrText(
-            text = "PREVIEW",
+            text = sidrString(R.string.ui_preview_badge),
             role = SidrTextRole.SYSTEM,
             color = colors.attention,
         )
@@ -54,7 +56,7 @@ fun SidrPreviewBadge(modifier: Modifier = Modifier) {
  */
 @Composable
 fun SidrPreviewBanner(
-    text: String = "PREVIEW — this screen is a design of what's coming; it isn't live yet.",
+    text: String = sidrString(R.string.ui_preview_banner),
     modifier: Modifier = Modifier,
 ) {
     val colors = SidrTheme.colors

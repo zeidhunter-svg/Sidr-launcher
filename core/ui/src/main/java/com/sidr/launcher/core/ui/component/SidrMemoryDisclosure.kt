@@ -11,6 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
+import com.sidr.launcher.core.ui.R
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrSurface
 import com.sidr.launcher.core.ui.primitive.SidrSurfaceTone
 import com.sidr.launcher.core.ui.primitive.SidrText
@@ -63,11 +65,11 @@ fun SidrMemoryDisclosure(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     onView?.let {
-                        SidrSecondaryButton(text = "View", onClick = it)
+                        SidrSecondaryButton(text = sidrString(R.string.ui_action_view), onClick = it)
                     }
                     onForget?.let {
                         SidrDestructiveButton(
-                            text = "Forget",
+                            text = sidrString(R.string.ui_action_forget),
                             onClick = it,
                             modifier = Modifier.padding(start = Spacing.sm),
                         )

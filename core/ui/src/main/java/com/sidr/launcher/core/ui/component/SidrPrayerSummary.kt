@@ -8,11 +8,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import com.sidr.launcher.core.ui.R
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrStatus
 import com.sidr.launcher.core.ui.primitive.SidrStatusMarker
 import com.sidr.launcher.core.ui.primitive.SidrText
@@ -21,6 +24,7 @@ import com.sidr.launcher.core.ui.theme.SidrColors
 import com.sidr.launcher.core.ui.theme.SidrShapes
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Spacing
+import java.util.Locale
 
 /**
  * One prayer time slot for [SidrPrayerSummary] (DS-6B Task 7, spec §8). Pure presentation shape — no
@@ -53,18 +57,20 @@ enum class SidrPrayerSummaryStatus {
     Updating,
 }
 
+@Composable
+@ReadOnlyComposable
 internal fun SidrPrayerSummaryStatus.label(): String = when (this) {
-    SidrPrayerSummaryStatus.VerifiedCurrent -> "VERIFIED"
-    SidrPrayerSummaryStatus.CachedFresh -> "CACHED"
-    SidrPrayerSummaryStatus.CachedStale -> "STALE"
-    SidrPrayerSummaryStatus.ManualLocation -> "MANUAL LOCATION"
-    SidrPrayerSummaryStatus.LocationUnavailable -> "LOCATION UNAVAILABLE"
-    SidrPrayerSummaryStatus.MethodRequired -> "METHOD REQUIRED"
-    SidrPrayerSummaryStatus.AuthorityUnavailable -> "AUTHORITY UNAVAILABLE"
-    SidrPrayerSummaryStatus.TimezoneConflict -> "TZ CONFLICT"
-    SidrPrayerSummaryStatus.CalculationFailed -> "CALCULATION FAILED"
-    SidrPrayerSummaryStatus.NoData -> "NO DATA"
-    SidrPrayerSummaryStatus.Updating -> "UPDATING"
+    SidrPrayerSummaryStatus.VerifiedCurrent -> sidrString(R.string.ui_prayer_status_verified)
+    SidrPrayerSummaryStatus.CachedFresh -> sidrString(R.string.ui_prayer_status_cached)
+    SidrPrayerSummaryStatus.CachedStale -> sidrString(R.string.ui_prayer_status_stale)
+    SidrPrayerSummaryStatus.ManualLocation -> sidrString(R.string.ui_prayer_status_manual_location)
+    SidrPrayerSummaryStatus.LocationUnavailable -> sidrString(R.string.ui_prayer_status_location_unavailable)
+    SidrPrayerSummaryStatus.MethodRequired -> sidrString(R.string.ui_prayer_status_method_required)
+    SidrPrayerSummaryStatus.AuthorityUnavailable -> sidrString(R.string.ui_prayer_status_authority_unavailable)
+    SidrPrayerSummaryStatus.TimezoneConflict -> sidrString(R.string.ui_prayer_status_timezone_conflict)
+    SidrPrayerSummaryStatus.CalculationFailed -> sidrString(R.string.ui_prayer_status_calculation_failed)
+    SidrPrayerSummaryStatus.NoData -> sidrString(R.string.ui_prayer_status_no_data)
+    SidrPrayerSummaryStatus.Updating -> sidrString(R.string.ui_prayer_status_updating)
 }
 
 internal fun SidrPrayerSummaryStatus.statusToken(): SidrStatus = when (this) {
@@ -139,10 +145,14 @@ fun SidrPrayerSummary(
     val colors = SidrTheme.colors
     val statusLabel = status.label()
     val nextPrayer = prayers.firstOrNull { it.isNext }
+    val summaryLabel = sidrString(R.string.ui_prayer_summary_content_description)
+    val nextPrayerLabel = nextPrayer?.let {
+        sidrString(R.string.ui_prayer_summary_next_prayer, it.name, it.time)
+    }
     val description = buildList {
-        add("prayer times")
+        add(summaryLabel)
         add(statusLabel)
-        nextPrayer?.let { add("next ${it.name} ${it.time}") }
+        nextPrayerLabel?.let { add(it) }
         if (provenance.isNotBlank()) add(provenance)
         locationLabel?.let { add(it) }
     }.joinToString(", ")
@@ -151,7 +161,11 @@ fun SidrPrayerSummary(
 
     var strip: Modifier = modifier.fillMaxWidth()
     if (onOpenDetails != null) {
-        strip = strip.clickable(onClickLabel = "Prayer details", role = Role.Button, onClick = onOpenDetails)
+        strip = strip.clickable(
+            onClickLabel = sidrString(R.string.ui_prayer_details_action_label),
+            role = Role.Button,
+            onClick = onOpenDetails,
+        )
     }
     strip = strip.semantics { contentDescription = description }.padding(Spacing.md)
 
@@ -193,7 +207,11 @@ fun SidrPrayerSummary(
 private fun PrayerCell(prayer: SidrPrayerTimeUi, colors: SidrColors, modifier: Modifier = Modifier) {
     // Times only on the strip (owner request). The prayer name is dropped from the visible text but kept
     // in each cell's contentDescription so TalkBack still announces which prayer each time belongs to.
-    val spoken = "${prayer.name.uppercase()} ${prayer.time}"
+    // DISPLAY (spoken): the prayer name is caller-supplied human copy, so it folds under the user's
+    // locale like every other displayed string.
+    val spoken = "${prayer.name.uppercase(Locale.getDefault())} ${prayer.time}"
+    // Hoisted out of `semantics { }` below: that lambda is not inline, so it cannot read a string.
+    val nextSpoken = sidrString(R.string.ui_prayer_next_cell_content_description, spoken)
     if (prayer.isNext) {
         // The next prayer stays distinguishable by a marker glyph + inverted chip, never colour alone.
         SidrText(
@@ -203,7 +221,7 @@ private fun PrayerCell(prayer: SidrPrayerTimeUi, colors: SidrColors, modifier: M
             modifier = modifier
                 .background(colors.text, SidrShapes.small)
                 .padding(horizontal = Spacing.sm, vertical = Spacing.xs)
-                .semantics { contentDescription = "Next $spoken" },
+                .semantics { contentDescription = nextSpoken },
         )
     } else {
         SidrText(

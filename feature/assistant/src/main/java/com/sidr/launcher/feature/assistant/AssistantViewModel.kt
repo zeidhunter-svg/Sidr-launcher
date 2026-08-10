@@ -138,6 +138,9 @@ class AssistantViewModel @Inject constructor(
      *
      * A blank [apiKey] skips the Keystore write (existing key is preserved). [apiKey] is never
      * logged, placed in state, or returned after this call.
+     *
+     * **Write order: key, then config.** The config write is the observable event, so it must come
+     * last — see the inline note below.
      */
     fun saveProvider(baseUrl: String, model: String, apiKey: String) {
         val trimmedUrl = baseUrl.trim()
@@ -152,6 +155,19 @@ class AssistantViewModel @Inject constructor(
         }
         val providerId = AiProviderId(host)
         viewModelScope.launch {
+            // Key BEFORE config (2026-08-10). The config write is what makes `activeConfig()` emit, and
+            // every observer — including the *other* screen's ViewModel instance — recomputes `keySet`
+            // from the secret store on that emit. Writing the config first left a window where an
+            // observer read the store before the key landed and then cached "no key set" until the next
+            // config change (found on-device during DS-10). It also means a provider is never announced
+            // as configured while its key is still missing.
+            if (apiKey.isNotBlank()) {
+                val keyResult = secretStore.put(SecretKeys.apiKey(providerId), apiKey.trim())
+                if (keyResult is OperationResult.Failure) {
+                    _uiState.update { it.copy(form = it.form.copy(saveError = "Failed to save API key")) }
+                    return@launch
+                }
+            }
             val config = AiProviderConfig(
                 providerId = providerId,
                 baseUrl = trimmedUrl,
@@ -162,13 +178,6 @@ class AssistantViewModel @Inject constructor(
             if (configResult is OperationResult.Failure) {
                 _uiState.update { it.copy(form = it.form.copy(saveError = "Failed to save provider settings")) }
                 return@launch
-            }
-            if (apiKey.isNotBlank()) {
-                val keyResult = secretStore.put(SecretKeys.apiKey(providerId), apiKey.trim())
-                if (keyResult is OperationResult.Failure) {
-                    _uiState.update { it.copy(form = it.form.copy(saveError = "Failed to save API key")) }
-                    return@launch
-                }
             }
             _uiState.update {
                 it.copy(

@@ -4916,3 +4916,123 @@ testDebugUnitTest assembleDebug` → BUILD SUCCESSFUL. Because the tree was unch
 **DS-7 and S2-2 are both CLOSED.** Remaining DS-track work: DS-10 Assistant Migration (the last
 production surface still in the pre-v1.1 look), then the DS v1.1 release gate; DS-8/DS-9 stay
 contract-only until A4/A5 exist. Next architectural slice remains A1 Tool & Capability.
+
+## 2026-08-10 — DS-10 Assistant Migration complete (device-accepted)
+
+**DS-10 closes the design track's last production surface.** The Assistant now speaks SIDR v1.1: DS-3
+controls, DS-5 privacy/error surfaces, sans prose vs mono provenance, and an explicit accessibility
+contract. Spec `docs/superpowers/specs/2026-07-11-ds10-assistant-migration-design.md`; plan
+`docs/superpowers/plans/2026-07-11-ds10-assistant-migration.md` (STATUS COMPLETE).
+
+**Baseline correction (Task 1).** The spec's premise — "raw Material Assistant presentation",
+`OutlinedTextField`/`Button`, an inline key-bearing provider form with an "Edit provider" control — was
+already stale: the Vision MVP pass had moved `AssistantScreen` onto `SidrScaffold`/`SidrTopBar`/
+`SidrText`/`SidrSurface` and split the provider form onto its own `AssistantProviderScreen`. DS-10's real
+delta was therefore **not** a re-skin but: the DS-5 layer (privacy notice + error surface), the a11y
+contract, the layout split, and the missing screenshot/semantics coverage. Baseline gate before any edit:
+`:feature:assistant:testDebugUnitTest --rerun-tasks` → 24/0.
+
+**What landed.**
+- **`core/ui/component/SidrAssistant.kt` (new, presentation-only).** `SidrAssistantComposer` — mono field
+  + send affordance in one `SidrSurface` (the `DrawerSearchField` idiom, no card-in-card); IME `Send` and
+  the button share **one** `canSend = value.isNotBlank() && !sending` guard so the two dispatch paths can
+  never disagree; the composable never clears the text (the feature owns that). `SidrStreamingIndicator` —
+  `SidrProgress` + a mono label inside the surface's **only** `liveRegion`, so TalkBack announces
+  "Replying…" once per state change instead of re-reading on every streamed token. Send's
+  `contentDescription` names *why* it is unavailable (`SEND_EMPTY_DESCRIPTION`/`SEND_BUSY_DESCRIPTION`/
+  `SEND_READY_DESCRIPTION`) rather than leaving TalkBack with a bare "disabled".
+- **`feature/assistant/AssistantPresentation.kt` (new, pure, no Compose).** The DS-7
+  `LearnedChoiceMemoryUiModel` precedent: all Assistant *wording* decided in testable Kotlin —
+  `AssistantStatus.Error.toPresentation()` → DS-5 `title/whatFailed/why/next` + **at most one** action
+  label (`Retry` when `retryable`, `Fix provider settings` when `showProviderCta`, **none** for
+  `InvalidRequest`, which is neither); the cloud-disclosure copy; and `providerProvenanceDetails()` =
+  host + model + key-presence. `providerHost()` moved here unchanged (host-only, neutral
+  `(unknown host)` sentinel — a malformed `baseUrl` can still never leak the scheme).
+- **`AssistantScreen.kt` recomposed** into `AssistantShell` / `AssistantContent` / `AssistantMessage` /
+  `AssistantStatusLine` / `AssistantComposer` / `AssistantNoProviderPanel` / `AssistantProviderPanel`.
+  Idle-with-no-reply now renders the **cloud disclosure itself** as the calm empty state (the user reads
+  where their words will go *before* the first Send); the provenance line is pinned directly above the
+  composer so cloud use is legible at the moment of sending; errors render through `SidrErrorSurface`;
+  refusal stays calm supporting text, never an error surface; the API-key field gained Compose
+  `password()` semantics on top of its visual mask.
+- **Coverage.** `core/ui`: `AssistantGallery` + 4 goldens (`assistant_dark/light/fontscale2/rtl`) + 5
+  `SidrAssistantSemanticsTest` behaviour/a11y proofs (blank → disabled + why; streaming → disabled + why;
+  button send; IME send dispatches once typed and never while streaming; indicator labelled).
+  `feature/assistant`: 10 `AssistantPresentationTest` cases built from the **real** `AiError` →
+  `toUiError()`/`isButtonRetryable()`/`needsProviderSetup()` helpers.
+
+**Parity — nothing behavioural changed by the migration itself.** `AssistantUiState` and the domain/data
+path were **not edited**, and `AssistantViewModel` was touched only by the write-order fix recorded below
+(no change to its state shape or streaming semantics): streaming, latest-wins cancellation, retry, BYOK/Keystore handling, the
+prefill-only `initialPrompt`, and the deliberate absence of a prompt/reply `SavedStateHandle` are all
+untouched. `AssistantViewModelTest` 21/0, byte-for-byte. No chat history, no memory/context injection, no
+tool execution, no API-key display or logging were added.
+
+**Verification gate (JDK-17, force-rerun, exit 0).** `:domain:test` 332/0, `:core:ui` 117/0 (was 108) +
+`verifyRoborazziDebug`, `:core:android` 12/0, `:data:ai-cloud` 36/0, `:data:ai-local` 54/0, `:data:prayer`
+37/0, `:data:repository` 167/0, `:feature:assistant` 34/0 (was 24), `:feature:launcher` 130/0,
+`:feature:settings` 33/0, `:feature:permission_education` 15/0, `:feature:prayer` 11/0, `:app` 8/0; root
+`testDebugUnitTest` + `assembleDebug` BUILD SUCCESSFUL. No pre-existing golden changed — the four
+`assistant_*` PNGs are additive.
+
+**Device acceptance — SM-A325F / Android 13, 2026-08-10 (owner entered the provider + key on-device;
+the agent never typed or read a key). PASSED:**
+- Fresh no-provider state: `No AI provider configured` privacy notice + `LOCAL ONLY · NO PROVIDER
+  CONFIGURED` + the setup CTA; no composer (nothing to send to).
+- Provider screen: DS-5 disclosure, mono labels, key masked to dots, `Key set — stored in this device's
+  Keystore. Enter a new one to replace it.`, Save disabled until URL+model are non-blank, and after save
+  `CLOUD · OPENROUTER.AI · OPENAI/GPT-4O-MINI · KEY IN KEYSTORE`.
+- ASK-route `initialPrompt` **prefilled and never auto-sent** — observed three times across separate
+  navigations.
+- **Real streaming** through the owner's BYOK OpenRouter key: quiet `Replying…` + progress line, composer
+  cleared, Send disabled mid-stream, reply rendered as sans prose.
+- **Unactionable error path**, hit for real: the first model id returned HTTP 404 → `SidrErrorSurface`
+  with the `FAILED` chip and WHAT/WHY/NEXT and **no** button, exactly as `toPresentation()` specifies for
+  `InvalidRequest`.
+- **Force-stop → relaunch:** no prompt, no reply, no error survived — nothing is persisted.
+- **0 key leaks:** `logcat` grep for `sk-…`/`Bearer` = 0.
+
+**Fixed during the pass:** the provider form claimed `CLOUD · (UNKNOWN HOST) · NO KEY SET` while the form
+was empty. It now renders `LOCAL ONLY · NO PROVIDER CONFIGURED` until a base URL exists — never claim
+cloud before a provider exists. Re-verified on device and re-gated.
+
+**Found on device and FIXED — `AssistantViewModel` write-order race (pre-existing, surfaced by DS-10).**
+Immediately after the key was saved from `AssistantProviderScreen`, the **chat** screen's separate VM
+instance still showed `NO KEY SET` in its provenance although the key was stored — the 404 (not 401)
+proved the key had actually been sent. Cause: `keySet` is recomputed only when `activeConfig()` emits,
+and `saveProvider` wrote the config to DataStore **before** the Keystore `put`, so an observing instance
+could read the secret store in that gap and cache "no key set" until the next config change. **Fix:
+`saveProvider` now writes the key first and the config last** — the config write is the observable event,
+so it must come after the thing it announces; as a bonus a provider is never announced as configured
+while its key is still missing. Nothing else in the ViewModel changed: streaming, latest-wins
+cancellation, retry, the derived `providerId`, the blank-key skip, and the "key never enters state" rule
+are untouched, and the pre-existing 21 tests still pass. Guard: `AssistantViewModelTest`
+"saveProvider writes the key before it announces the config" (22 tests now) records the two writes
+through recording decorators and asserts the order — **verified to fail on the old ordering and pass on
+the new one**. The device-observed interleaving itself is not reproducible against in-memory fakes
+(whether the collector resumes inside or after the gap is a scheduling detail), so the test pins the
+invariant that removes the window rather than the race.
+
+**Not covered on device (honest gaps, none blocking):**
+- **Retryable network error + the Retry button.** Cutting the phone's mobile data killed the owner's
+  tethered laptop connection; the agent restored it and did not retry the experiment. The owner confirmed
+  manually that the assistant does not work without network. The `retryable → Retry` mapping is covered by
+  `AssistantPresentationTest`.
+- **Credential CTA error** (`401 → Fix provider settings`) — would require deliberately storing a wrong key.
+- **Refusal note** — cannot be provoked on demand.
+- **fontScale 2.0 / RTL / light theme on the live screen** — covered by the four `assistant_*` goldens only.
+- **Live TalkBack** — semantics asserted by `SidrAssistantSemanticsTest` instead.
+
+**Deviation, recorded.** Task 6's screenshot list is delivered as a `core/ui` **component gallery** of the
+Assistant's states (no-provider, idle disclosure, streaming, completed, refusal, retryable error, provider
+CTA error, unactionable error, composer empty/typed/streaming), not as whole-screen goldens: Roborazzi is
+wired only in `:core:ui`, and standing a screenshot harness up in `:feature:assistant` was judged a larger
+build change than DS-10 warrants. Screen-level composition is covered by the device pass instead.
+
+**Also observed (unchanged, not DS-10 scope):** when a provider *is* configured, the chat offers no route
+back to provider settings except through Settings or a credential error's CTA.
+
+**DS-10 is CLOSED. The DS v1.1 release gate is now open**; the next architectural slice remains A1 Tool &
+Capability. Untouched follow-ups from DS-7/S2-2 still stand: `AliasesViewModel` discards save/delete
+`OperationResult`s, the Aliases list renders after the whole app picker, and the bottom tab bar clips its
+labels at fontScale 2.0.

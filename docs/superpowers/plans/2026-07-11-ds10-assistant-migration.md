@@ -1,7 +1,14 @@
 # DS-10 - Assistant Migration Implementation Plan
 
-> **STATUS: PROPOSED (2026-07-11).** DS-10 migrates the existing Assistant UI to SIDR v1.1 components while
-> preserving streaming, cancellation, retry, and provider/BYOK behaviour.
+> **STATUS: COMPLETE (2026-08-10).** Tasks 1-6 delivered on `launcher--7`; Task 7 device acceptance run on
+> SM-A325F. DS-10 migrated the Assistant UI to SIDR v1.1 components with streaming, latest-wins
+> cancellation, retry, and provider/BYOK behaviour untouched (`AssistantViewModelTest` 21/0, byte-for-byte).
+> ADR: `ai-context/decisions.md` "2026-08-10 - DS-10 Assistant Migration complete".
+>
+> **Baseline correction:** the spec's "raw Material Assistant" premise was already stale - the Vision MVP
+> pass had moved the screen onto `SidrScaffold`/`SidrTopBar`/`SidrText`/`SidrSurface`. DS-10's real delta was
+> therefore the DS-5 layer (privacy notice, error surface), the a11y contract, the layout split, and the
+> screenshot/semantics coverage - not a re-skin.
 
 **Goal:** Replace raw Material Assistant presentation with SIDR controls, typography, privacy, and error
 patterns.
@@ -26,15 +33,15 @@ patterns.
 
 ## Task 1: Baseline Inventory
 
-- [ ] Use CodeGraph to inspect:
+- [x] Use CodeGraph to inspect:
       - `AssistantScreen`;
       - `AssistantViewModel`;
       - `AssistantUiState`;
       - provider config repository;
       - `SecureSecretStore` usage;
       - tests.
-- [ ] Record current callbacks and status states.
-- [ ] Run baseline:
+- [x] Record current callbacks and status states.
+- [x] Run baseline:
 
 ```text
 ./gradlew :feature:assistant:testDebugUnitTest
@@ -47,15 +54,15 @@ Acceptance:
 
 ## Task 2: Assistant Presentation Model and Layout
 
-- [ ] Keep ViewModel state shape unless a presentation mapper is clearly needed.
-- [ ] Split screen composition into smaller feature-local composables:
+- [x] Keep ViewModel state shape unless a presentation mapper is clearly needed.
+- [x] Split screen composition into smaller feature-local composables:
       - header;
       - reply/prose area;
       - status/provenance line;
       - composer;
       - provider panel.
-- [ ] Use DS-3 rows/buttons/inputs where available.
-- [ ] Keep initial prompt local `remember(initialPrompt)` behaviour.
+- [x] Use DS-3 rows/buttons/inputs where available.
+- [x] Keep initial prompt local `remember(initialPrompt)` behaviour.
 
 Acceptance:
 
@@ -64,11 +71,11 @@ Acceptance:
 
 ## Task 3: Provider Privacy Panel
 
-- [ ] Add `SidrPrivacyNotice` or equivalent DS-5 surface near provider/send context.
-- [ ] Show provider base URL and model ID as provenance.
-- [ ] State that prompts are sent to configured provider when Send is tapped.
-- [ ] Keep API key masked and never echoed.
-- [ ] Preserve provider setup/fix CTA.
+- [x] Add `SidrPrivacyNotice` or equivalent DS-5 surface near provider/send context.
+- [x] Show provider base URL and model ID as provenance.
+- [x] State that prompts are sent to configured provider when Send is tapped.
+- [x] Keep API key masked and never echoed.
+- [x] Preserve provider setup/fix CTA.
 
 Acceptance:
 
@@ -77,11 +84,11 @@ Acceptance:
 
 ## Task 4: Composer Migration
 
-- [ ] Replace raw `OutlinedTextField`/`Button` styling with SIDR controls.
-- [ ] Preserve IME Send.
-- [ ] Preserve disabled send while streaming.
-- [ ] Preserve latest-wins cancellation in ViewModel.
-- [ ] Add clear content descriptions.
+- [x] Replace raw `OutlinedTextField`/`Button` styling with SIDR controls.
+- [x] Preserve IME Send.
+- [x] Preserve disabled send while streaming.
+- [x] Preserve latest-wins cancellation in ViewModel.
+- [x] Add clear content descriptions.
 
 Acceptance:
 
@@ -91,13 +98,13 @@ Acceptance:
 
 ## Task 5: Reply, Streaming, Error, and Refusal States
 
-- [ ] Render reply prose in sans.
-- [ ] Render provider/status metadata in mono.
-- [ ] Replace raw error text with `SidrErrorSurface`.
-- [ ] Retryable errors keep Retry.
-- [ ] Missing credentials/unauthorized keep provider setup CTA.
-- [ ] Refusal remains calm supporting text, not an error.
-- [ ] Streaming indicator is quiet and accessible.
+- [x] Render reply prose in sans.
+- [x] Render provider/status metadata in mono.
+- [x] Replace raw error text with `SidrErrorSurface`.
+- [x] Retryable errors keep Retry.
+- [x] Missing credentials/unauthorized keep provider setup CTA.
+- [x] Refusal remains calm supporting text, not an error.
+- [x] Streaming indicator is quiet and accessible.
 
 Acceptance:
 
@@ -131,13 +138,13 @@ Acceptance:
 
 Manual/device smoke:
 
-- [ ] first-run provider setup;
-- [ ] owner enters key on-device only;
-- [ ] real streaming response;
-- [ ] retry/error path if feasible;
-- [ ] edit provider;
-- [ ] initial prompt from ASK route prefilled but not sent;
-- [ ] force-stop proves prompt/reply not persisted.
+- [x] first-run provider setup;
+- [x] owner enters key on-device only;
+- [x] real streaming response;
+- [x] retry/error path if feasible;
+- [x] edit provider;
+- [x] initial prompt from ASK route prefilled but not sent;
+- [x] force-stop proves prompt/reply not persisted.
 
 ## Full Verification Gate
 

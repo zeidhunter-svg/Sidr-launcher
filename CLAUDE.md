@@ -2,7 +2,48 @@
 
 **Design track (DS) — DS-1…DS-4 + Vision MVP (Preview) DONE (2026-07-11); DS-5 CODE-CLOSED
 (2026-07-13, device-pending); DS-6B Prayer Correctness COMPLETE — device-accepted by owner (2026-08-08);
-DS-7 Memory Surfaces + Stage-2 S2-2 Explicit Aliases CLOSED — device-accepted (2026-08-10).**
+DS-7 Memory Surfaces + Stage-2 S2-2 Explicit Aliases CLOSED — device-accepted (2026-08-10);
+DS-10 Assistant Migration CLOSED — device-accepted (2026-08-10). The DS v1.1 release gate is now open.**
+
+**DS-10 Assistant Migration CLOSED — device-accepted on SM-A325F 2026-08-10; the design track's last
+production surface.** **Baseline correction:** the spec's "raw Material Assistant" premise was stale —
+the Vision MVP pass had already moved the screen onto `SidrScaffold`/`SidrTopBar`/`SidrText`/`SidrSurface`
+and split the key-bearing form onto `AssistantProviderScreen`. DS-10's real delta was the **DS-5 layer**,
+the a11y contract, the layout split, and the missing coverage — not a re-skin. New presentation-only
+`core/ui/component/SidrAssistant.kt` (`SidrAssistantComposer` — IME Send and the button share **one**
+`canSend = notBlank && !sending` guard, send's `contentDescription` names *why* it is unavailable;
+`SidrStreamingIndicator` — one `liveRegion` so TalkBack says "Replying…" once per state change, not once
+per token) + new pure `feature/assistant/AssistantPresentation.kt` (DS-7 mapper precedent: DS-5
+what/why/next copy, **at most one** action — `Retry` / `Fix provider settings` / none for
+`InvalidRequest` — the cloud-disclosure text, and host+model+key-presence provenance; `providerHost`
+moved here unchanged). `AssistantScreen` recomposed into shell/content/message/status-line/composer/
+provider panels; idle-with-no-reply now *is* the cloud disclosure; provenance pinned above the composer;
+errors → `SidrErrorSurface`; refusal stays calm text; API-key field gained Compose `password()` semantics.
+**Parity: `AssistantUiState`/domain/data untouched, `AssistantViewModel` touched only by the
+write-order fix below** — streaming, latest-wins
+cancellation, retry, BYOK/Keystore, prefill-only `initialPrompt`, no prompt/reply `SavedStateHandle`
+(`AssistantViewModelTest` 21/0 byte-for-byte); no chat history, memory injection, tool execution, or key
+display added. Gate (JDK-17, force-rerun, exit 0): `:domain` 332/0, `:core:ui` **117/0** (was 108) +
+`verifyRoborazziDebug`, `:feature:assistant` **35/0** (was 24), `:feature:launcher` 130/0,
+`:feature:settings` 33/0, all data modules green, root `testDebugUnitTest` + `assembleDebug` SUCCESSFUL;
+4 additive `assistant_*` goldens, no pre-existing golden changed. **Device (owner typed the provider+key
+on-device; the agent never typed or read a key):** no-provider disclosure → provider form (key masked,
+"Key set" copy, Save gated) → `CLOUD · OPENROUTER.AI · OPENAI/GPT-4O-MINI · KEY IN KEYSTORE`; ASK-route
+prompt **prefilled, never auto-sent** (3×); **real BYOK streaming** (quiet `Replying…`, composer cleared,
+Send disabled mid-stream, sans-prose reply); a real HTTP-404 hit the **unactionable** `SidrErrorSurface`
+(FAILED + WHAT/WHY/NEXT + no button) exactly per the mapper; force-stop → nothing persisted; 0 key leaks
+in logcat. **Fixed mid-pass:** the empty provider form claimed `CLOUD · (UNKNOWN HOST)` → now
+`LOCAL ONLY · NO PROVIDER CONFIGURED`. **Also fixed (pre-existing VM race, surfaced on device):** right after a key
+save the *chat* VM instance showed `NO KEY SET` — `keySet` is recomputed only on `activeConfig()` emits
+and `saveProvider` wrote the config *before* the Keystore put. `saveProvider` now writes **key first,
+config last** (the config write is the observable event); guarded by a new ordering test proven to fail
+on the old order. No other VM change — `AssistantViewModelTest` 21 → 22, the original 21 unchanged. **Not device-covered:**
+retryable-network error + Retry (cutting the phone's data killed the owner's tethered laptop — stopped;
+mapping covered by `AssistantPresentationTest`), credential-CTA 401, refusal, fontScale-2.0/RTL/light on
+the live screen (goldens only), live TalkBack. **Deviation:** Task 6 ships as a `core/ui` component
+gallery of the Assistant's states, not whole-screen goldens — Roborazzi is wired only in `:core:ui`.
+ADR "2026-08-10 — DS-10 Assistant Migration complete (device-accepted)" in
+decisions.md. **Next: the DS v1.1 release gate; next architectural slice: A1 Tool & Capability.**
 
 **DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED — device-accepted on SM-A325F 2026-08-10.** Both
 had been implemented on `launcher--7` since 2026-07-13 (`8e3f317` = `core/ui` `SidrMemoryItem`/
@@ -24,8 +65,8 @@ TalkBack (accessibility tree read instead). **Deviation:** `SidrMemoryDisclosure
 honest "preference formed" event; plan permits). **Follow-ups:** Aliases list renders after the whole app
 picker; `AliasesViewModel` discards save/delete `OperationResult`s; tab-bar labels clip at fontScale 2.0.
 ADR "2026-08-10 — DS-7 Memory Surfaces + S2-2 Explicit Aliases complete (device-accepted)" in
-decisions.md. **Next design block: DS-10 Assistant Migration, then the DS v1.1 release gate; next
-architectural slice: A1 Tool & Capability.**
+decisions.md. **(Superseded by DS-10 above: DS-10 is now closed too, so the next design milestone is the
+DS v1.1 release gate; next architectural slice: A1 Tool & Capability.)**
 
 **DS-6B Prayer Correctness COMPLETE — device-accepted by the owner on SM-A325F 2026-08-08; the Home strip
 was reduced to times-only during acceptance (calm status chip + provenance line hidden, names in TalkBack
@@ -189,8 +230,9 @@ The offline launcher core (home, app grid, app launch) must work fully without A
 ## Current goal (active work)
 
 **NOW (2026-08-10): Stage 2 — AI Framework; blocks S2-1 "Learned Resolutions" and S2-2 "Explicit
-Aliases" are both CLOSED and device-accepted. Next: DS-10 Assistant Migration (design track) and/or
-A1 Tool & Capability (architecture).** The Stage-1
+Aliases" are both CLOSED and device-accepted. The design track is finished too — DS-10 Assistant
+Migration closed and device-accepted the same day, so the whole shipped surface is on SIDR v1.1. Next:
+the DS v1.1 release gate (design) and/or A1 Tool & Capability (architecture).** The Stage-1
 AI-Launcher MVP (blocks AIL-0…6) is CLOSED and
 device-accepted on SM-A325F. Stage 2 generalizes the router/registry/context/memory into a reusable
 on-device AI framework (Action Registry v2, Context Engine v2, User Memory) per the three-stage reframe,
@@ -756,6 +798,8 @@ Phase 3 result, Blocks A → D:
 | `RouterProvidesModule` (`CommandPlanner` + `RouteCommandUseCase` wiring) *(AIL-4 ✅)* | `app` |
 | `PendingRoutedAction` state + confirm/cancel VM wiring + confirmation UI dispatch *(AIL-5 ✅)* | `feature/launcher` |
 | `ConfirmActionCard` (DF-4 terminal confirm block, presentation-only) *(AIL-5 ✅)* | `core/ui` |
+| `SidrAssistantComposer` + `SidrStreamingIndicator` (DS-10 assistant controls, presentation-only) *(DS-10 ✅)* | `core/ui` |
+| `AssistantPresentation` (DS-5 error copy + action choice + cloud-disclosure text + provider provenance, pure) *(DS-10 ✅)* | `feature/assistant` |
 | `provideExecuteActionUseCase` (`IntentProvidesModule`) *(AIL-5 ✅)* | `app` |
 | ONNX NLU / embeddings | `data/ai-local` |
 | `ModelDownloader` port + `ModelFilePresence` port *(Block Q ✅, rework)* | `domain` |

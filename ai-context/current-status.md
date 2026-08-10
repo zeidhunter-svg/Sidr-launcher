@@ -2,11 +2,44 @@
 
 > **Authoritative status lives in `CLAUDE.md` (session digest), `ai-context/decisions.md` (ADR log),
 > and the per-phase plans.** This file is a short pointer/snapshot only — if it disagrees with those,
-> they win. Last re-based: 2026-08-10 (DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED —
-> device-accepted; prior re-base 2026-08-08 DS-6B Prayer Correctness COMPLETE).
+> they win. Last re-based: 2026-08-10 (DS-10 Assistant Migration CLOSED — device-accepted; same-day
+> DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer
+> Correctness COMPLETE).
 
 ## Design track (DS) — DS-1…DS-4 + Vision MVP DONE; DS-5 CODE-CLOSED (2026-07-13, device-pending);
-DS-6B COMPLETE (2026-08-08); DS-7 + S2-2 CLOSED — device-accepted (2026-08-10)
+DS-6B COMPLETE (2026-08-08); DS-7 + S2-2 CLOSED (2026-08-10); DS-10 CLOSED — device-accepted
+(2026-08-10). **The DS v1.1 release gate is now open.**
+
+**DS-10 Assistant Migration is CLOSED — device-accepted on SM-A325F (2026-08-10).** The Assistant was the
+last production surface not yet speaking SIDR v1.1. Note the spec's baseline was stale: the Vision MVP
+pass had already moved the screen off raw Material, so DS-10's real delta was the DS-5 layer, the
+accessibility contract, the layout split, and the missing coverage. Landed: presentation-only
+`core/ui/component/SidrAssistant.kt` (`SidrAssistantComposer`, one shared send guard for IME + button,
+send's `contentDescription` names why it is unavailable; `SidrStreamingIndicator`, a single polite live
+region so "Replying…" is announced once per state change rather than per token) and pure
+`feature/assistant/AssistantPresentation.kt` (DS-5 what/why/next copy, at most one action —
+`Retry` / `Fix provider settings` / none for `InvalidRequest` — cloud-disclosure text, host+model+key
+provenance). `AssistantScreen` split into shell/content/message/status-line/composer/provider panels;
+idle-with-no-reply *is* the cloud disclosure; provenance pinned above the composer; errors render through
+`SidrErrorSurface`; refusal stays calm text; the API-key field gained `password()` semantics.
+**Nothing behavioural changed by the migration** — `AssistantUiState` and the domain/data path were not
+edited, `AssistantViewModel` was touched only by the write-order fix below, and its original 21 tests
+pass unchanged. Gate (JDK-17, force-rerun, exit 0):
+`:core:ui` 117/0 + `verifyRoborazziDebug`, `:feature:assistant` 35/0, `:domain` 332/0, every other module
+green, root `testDebugUnitTest` + `assembleDebug` SUCCESSFUL; four additive `assistant_*` goldens.
+Device: no-provider disclosure → provider form (masked key, "Key set" copy, gated Save) → real BYOK
+streaming through OpenRouter/`openai/gpt-4o-mini`; ASK-route prompt prefilled and never auto-sent; a real
+404 rendered the unactionable `SidrErrorSurface`; force-stop proved nothing is persisted; 0 key leaks.
+**Fixed mid-pass:** an empty provider form no longer claims `CLOUD`. **Also fixed (pre-existing race, surfaced on
+device):** right after a key save the chat VM instance showed `NO KEY SET`, because `keySet` is
+recomputed only on `activeConfig()` emits while `saveProvider` wrote the config before the Keystore put.
+`saveProvider` now writes the key first and the config last, guarded by an ordering test proven to fail
+on the old order; no other ViewModel change.
+**Not device-covered:** retryable-network error + Retry (cutting mobile data killed the owner's tethered
+laptop, so the experiment was stopped — the mapping is unit-covered), credential-CTA 401, refusal,
+fontScale 2.0 / RTL / light on the live screen, live TalkBack. **Deviation:** Task 6 ships as a `core/ui`
+gallery of the Assistant's states rather than whole-screen goldens, since Roborazzi is wired only in
+`:core:ui`. ADR: decisions.md "2026-08-10 — DS-10 Assistant Migration complete (device-accepted)".
 
 **DS-7 Memory Surfaces and Stage-2 S2-2 Explicit Aliases are CLOSED — device-accepted on SM-A325F
 (2026-08-10).** Both were implemented on `launcher--7` back on 2026-07-13 (`8e3f317` `core/ui`

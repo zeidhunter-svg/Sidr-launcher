@@ -2,7 +2,17 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **STATUS (2026-07-13): PAUSED pending DS-7 grey UI — and the last mile lives on `launcher-4` only.**
+> **STATUS (2026-08-10): CLOSED — device-accepted on SM-A325F.** The last mile was recovered from
+> `launcher-4` by hand (not cherry-picked) and landed on `launcher--7` as `7c20b63` (decorator wired into
+> `LauncherViewModel`) + `0198abc` (privacy/scope + Room-inventory guards); the docs commit `cef4111` was
+> deliberately **not** carried over — its ADR text is superseded by "2026-08-10 — DS-7 Memory Surfaces +
+> S2-2 Explicit Aliases complete (device-accepted)" in `ai-context/decisions.md`. Task 13 device pass:
+> add → row renders → phrase launches the declared app directly → parity (`open opera` still wins, an
+> unknown phrase still falls back) → Forget gate (Cancel does not delete, Forget deletes once) → phrase
+> no longer launches. **Not run on device:** the uninstalled/unavailable-target prune (it would require
+> disabling one of the owner's real apps); unit-covered by `PruneUnavailableAliasesUseCase` tests.
+>
+> <details><summary>Historical pause note (2026-07-13, superseded)</summary>
 > Phases A–C (domain `memory/alias/` + Room data layer + `MemoryBindsModule` DI) are merged into the
 > main line (`launcher--7`), but the code is INERT there: `LauncherViewModel` has zero alias references.
 > Three finishing commits exist **only on branch `launcher-4`** (pushed to origin) and were never carried
@@ -17,6 +27,7 @@
 >   salvage the ADR text when S2-2 resumes, do not cherry-pick.
 > When DS-7 Memory Surfaces starts, fold "recover launcher-4 last mile" into its conditional Aliases
 > task: re-apply the two code commits by hand, re-derive the docs, then close S2-2 properly.
+> </details>
 
 **Goal:** Let the user declare, entirely on-device, an explicit nickname → app mapping ("рабочий чат" → Telegram) that launches the app when the rule matcher would otherwise return `Unknown`.
 

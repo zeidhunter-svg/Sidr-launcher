@@ -1,7 +1,31 @@
 # CLAUDE.md — Sidr Launcher
 
 **Design track (DS) — DS-1…DS-4 + Vision MVP (Preview) DONE (2026-07-11); DS-5 CODE-CLOSED
-(2026-07-13, device-pending); DS-6B Prayer Correctness COMPLETE — device-accepted by owner (2026-08-08).**
+(2026-07-13, device-pending); DS-6B Prayer Correctness COMPLETE — device-accepted by owner (2026-08-08);
+DS-7 Memory Surfaces + Stage-2 S2-2 Explicit Aliases CLOSED — device-accepted (2026-08-10).**
+
+**DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED — device-accepted on SM-A325F 2026-08-10.** Both
+had been implemented on `launcher--7` since 2026-07-13 (`8e3f317` = `core/ui` `SidrMemoryItem`/
+`SidrMemoryDisclosure`/`SidrForgetGate` + 4 `memory_*` goldens; `b2affdd` = Learned Choices migrated
+behind a feature-local `LearnedChoiceMemoryUiModel` mapper + new `AliasesScreen`/`AliasesViewModel` +
+`Routes.Aliases` + Settings **MEMORY** section) and shipped in every build since — only the docs lagged.
+S2-2's stranded `launcher-4` last mile was re-applied **by hand** (`7c20b63` decorator into
+`LauncherViewModel`, `0198abc` `AliasPrivacyScopeGuardTest` + `RoomColumnNames` entry); `cef4111` (docs)
+intentionally dropped. Invariants held: aliases fire **only** on `CommandOutcome.Unknown` (rule path and
+`open <app>` parity untouched), outbound allow-list widened by **zero**, `core/ui` imports no
+domain/data, Room stays at v3 + `Migration2To3` + golden `3.json`. Gate (JDK-17, force-rerun): `:domain`
+332/0, `:core:ui` 108/0 + `verifyRoborazziDebug`, `:feature:settings` 33/0, `:feature:launcher` 130/0,
+root `testDebugUnitTest` + `assembleDebug` green. Device: alias add → row (`EXPLICIT ALIAS · ACTIVE ·
+LOCAL ONLY`) → phrase launches the declared app directly; `open opera` still wins; unknown phrase →
+unchanged fallback; `SidrForgetGate` on both surfaces (Cancel never deletes, Forget deletes once);
+`open python` ambiguity → `LEARNING (1/3)` → Forget → asks again; fontScale 2.0 wraps clean.
+**Not device-covered:** unavailable-target prune (needs disabling one of the owner's apps) + live
+TalkBack (accessibility tree read instead). **Deviation:** `SidrMemoryDisclosure` ships preview-only (no
+honest "preference formed" event; plan permits). **Follow-ups:** Aliases list renders after the whole app
+picker; `AliasesViewModel` discards save/delete `OperationResult`s; tab-bar labels clip at fontScale 2.0.
+ADR "2026-08-10 — DS-7 Memory Surfaces + S2-2 Explicit Aliases complete (device-accepted)" in
+decisions.md. **Next design block: DS-10 Assistant Migration, then the DS v1.1 release gate; next
+architectural slice: A1 Tool & Capability.**
 
 **DS-6B Prayer Correctness COMPLETE — device-accepted by the owner on SM-A325F 2026-08-08; the Home strip
 was reduced to times-only during acceptance (calm status chip + provenance line hidden, names in TalkBack
@@ -48,8 +72,9 @@ Owner features: **auto-hide bottom nav** (5 s idle → `SidrChromeHandle`; pin =
 pinned; default now `"grey"`). Stabilization pass 2026-07-13: `alwaysShowNavBar` round-trip test, 4
 green/amber goldens (+accent/status proof lines), stale-comment fix, brittle
 `AppNavHostReentryGuardTest` literal relaxed (re-entry behaviour verified intact), **full gate green**
-(JDK-17). **Device acceptance PENDING on SM-A325F** (checklist in the ADR). **Next design block: DS-7
-Memory Surfaces** (recommended; unblocks paused S2-2 Explicit Aliases UI) after DS-5 device acceptance.
+(JDK-17). **Device acceptance PENDING on SM-A325F** (checklist in the ADR; the DS-7/S2-2 pass of
+2026-08-10 exercised `SidrForgetGate` and the auto-hide nav incidentally but did not run DS-5's own
+checklist). **DS-7 Memory Surfaces closed 2026-08-10 — see the top of this file.**
 A parallel, presentation-only design-system
 migration to the approved **soft-classic-grey** identity, governed by `docs/design/SIDR Design System
 Master Plan v1.2` (the principles rulebook was folded into it: §5.1 precedence, §5.2 verify-vocab, §20.1
@@ -76,8 +101,8 @@ rule as DS-1..4: **no production nav/VM/persistence/domain change**; every ViewM
 byte-for-byte. **Device-accepted on SM-A325F.** ADRs:
 decisions.md "2026-07-11 — DS-1/DS-2/DS-3/DS-4 complete", "2026-07-11 — Vision MVP preview + all
 screens to artifact", and "2026-07-13 — DS-5 + auto-hide nav + accent reactivation closed"; specs+plans under
-`docs/superpowers/`. Stage-2 S2-2 "Explicit Aliases" (domain/data/DI Phase A–C already on `launcher-4`) is
-paused pending its grey UI in DS-7. The AI-launcher stage digest below is unchanged.
+`docs/superpowers/`. Stage-2 S2-2 "Explicit Aliases" is **CLOSED** (device-accepted 2026-08-10, together
+with DS-7 which shipped its grey UI). The AI-launcher stage digest below is unchanged.
 
 Session digest. Read this first. **Last synced: 2026-07-11 — Stage-2 block S2-1 "Learned Resolutions" is
 CLOSED. Tasks 1–16 are done on `launcher-4`; build gate `:domain:test` + `testDebugUnitTest` +
@@ -163,7 +188,9 @@ The offline launcher core (home, app grid, app launch) must work fully without A
 
 ## Current goal (active work)
 
-**NOW (2026-07-11): Stage 2 — AI Framework, block S2-1 "Learned Resolutions" is CLOSED.** The Stage-1
+**NOW (2026-08-10): Stage 2 — AI Framework; blocks S2-1 "Learned Resolutions" and S2-2 "Explicit
+Aliases" are both CLOSED and device-accepted. Next: DS-10 Assistant Migration (design track) and/or
+A1 Tool & Capability (architecture).** The Stage-1
 AI-Launcher MVP (blocks AIL-0…6) is CLOSED and
 device-accepted on SM-A325F. Stage 2 generalizes the router/registry/context/memory into a reusable
 on-device AI framework (Action Registry v2, Context Engine v2, User Memory) per the three-stage reframe,
@@ -185,8 +212,9 @@ auto-resolve, and router-off `open Salatuk` parity. Spec:
 [docs/superpowers/specs/2026-07-06-learned-resolutions-design.md](docs/superpowers/specs/2026-07-06-learned-resolutions-design.md);
 plan: [docs/superpowers/plans/2026-07-06-learned-resolutions.md](docs/superpowers/plans/2026-07-06-learned-resolutions.md);
 ADRs: decisions.md "2026-07-06 — Stage 2 kickoff" (design), "2026-07-10 — S2-1 complete
-(code-closed; device-pending)", and "2026-07-11 — S2-1 device accepted + closed". **Next Stage-2 slice
-(S2-2) is not yet scoped — brainstorm before planning.**
+(code-closed; device-pending)", and "2026-07-11 — S2-1 device accepted + closed". **S2-2 "Explicit
+Aliases" is CLOSED (device-accepted 2026-08-10, see the DS-7/S2-2 entry at the top); the next Stage-2
+architectural slice is A1 Tool & Capability.**
 
 The launcher ships AI-first today: AIL-3 unified the home input over the
 unchanged pipeline, **AIL-4 made routing AI-first** (the BYOK cloud `CommandPlanner` — a sanctioned third

@@ -2,11 +2,35 @@
 
 > **Authoritative status lives in `CLAUDE.md` (session digest), `ai-context/decisions.md` (ADR log),
 > and the per-phase plans.** This file is a short pointer/snapshot only — if it disagrees with those,
-> they win. Last re-based: 2026-08-08 (DS-6B Prayer Correctness COMPLETE — device-accepted by owner; prior
-> re-base 2026-07-13 DS-5 + auto-hide nav + accent reactivation code-closed).
+> they win. Last re-based: 2026-08-10 (DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED —
+> device-accepted; prior re-base 2026-08-08 DS-6B Prayer Correctness COMPLETE).
 
 ## Design track (DS) — DS-1…DS-4 + Vision MVP DONE; DS-5 CODE-CLOSED (2026-07-13, device-pending);
-DS-6B COMPLETE — device-accepted by owner (2026-08-08)
+DS-6B COMPLETE (2026-08-08); DS-7 + S2-2 CLOSED — device-accepted (2026-08-10)
+
+**DS-7 Memory Surfaces and Stage-2 S2-2 Explicit Aliases are CLOSED — device-accepted on SM-A325F
+(2026-08-10).** Both were implemented on `launcher--7` back on 2026-07-13 (`8e3f317` `core/ui`
+`SidrMemoryItem`/`SidrMemoryDisclosure`/`SidrForgetGate` + 4 `memory_*` goldens; `b2affdd` Learned
+Choices migrated behind a feature-local `LearnedChoiceMemoryUiModel` mapper + new
+`AliasesScreen`/`AliasesViewModel` + `Routes.Aliases` + Settings **MEMORY** section) and shipped in every
+build since — the docs simply never recorded it, which is why this file used to say "next block: DS-7".
+S2-2's stranded `launcher-4` last mile was re-applied **by hand** as `7c20b63` (alias decorator into
+`LauncherViewModel`) + `0198abc` (`AliasPrivacyScopeGuardTest` + `RoomColumnNames` entry); the third
+stranded commit (`cef4111`, docs) was intentionally dropped. Alias resolution still fires **only** on
+`CommandOutcome.Unknown`, the outbound allow-list is widened by **zero**, and `core/ui` still imports no
+domain/data type. Gate (JDK-17, 2026-08-10, force-rerun): `:domain` 332/0, `:core:ui` 108/0 +
+`verifyRoborazziDebug`, `:feature:settings` 33/0, `:feature:launcher` 130/0, root `testDebugUnitTest` +
+`assembleDebug` green. Device pass: alias add → row → phrase launches the declared app directly; `open
+opera` parity; unknown phrase → unchanged fallback; Forget gate (Cancel never deletes, Forget deletes
+once) on **both** memory surfaces; `open python` ambiguity → learned choice `LEARNING (1/3)` → Forget →
+asks again; fontScale 2.0 wraps cleanly. **Not covered on device:** unavailable-target prune (would
+require disabling one of the owner's apps) and a live TalkBack session (accessibility tree read
+instead). **Deviation:** `SidrMemoryDisclosure` is preview-only — no production screen shows it, since
+no honest "a stable preference just formed" event exists (the plan permits this). **Follow-ups
+(non-blocking):** the Aliases list renders *after* the whole app picker (long scroll); `AliasesViewModel`
+discards save/delete `OperationResult`s (silent on genuine I/O failure); the bottom tab bar clips its
+labels at fontScale 2.0 (DS-5/Vision-MVP territory). ADR: decisions.md "2026-08-10 — DS-7 Memory Surfaces
++ S2-2 Explicit Aliases complete (device-accepted)".
 
 **DS-6B Prayer Correctness is COMPLETE — device-accepted by the owner on SM-A325F (2026-08-08); the
 shipped Home strip is times-only (calm status chip + provenance line hidden, degraded-state warnings kept,
@@ -105,20 +129,19 @@ discoverability, no crash). Spec:
 `docs/superpowers/plans/2026-07-11-ds4-home-universal-input.md`; ADR: decisions.md "2026-07-11 — DS-4
 complete". **DS-5 Action & Safety is CODE-CLOSED (2026-07-13, see the section above; device-pending)**:
 `docs/superpowers/specs/2026-07-11-ds5-action-safety-design.md` +
-`docs/superpowers/plans/2026-07-11-ds5-action-safety.md`. **Next design block: DS-7 Memory Surfaces
-(recommended — its DS-5 dependency is now met and it unblocks the paused S2-2 Explicit Aliases UI),
-after DS-5 device acceptance.** **DS-6A Sacred Header is drafted but gated after
+`docs/superpowers/plans/2026-07-11-ds5-action-safety.md`. **Next design block: DS-10 Assistant Migration
+— the last production surface still in the pre-v1.1 look — then the DS v1.1 release gate** (DS-7 closed
+2026-08-10; DS-8/DS-9 stay contract-only until A4/A5 exist). **DS-6A Sacred Header is drafted but gated after
 DS-5, DS-4 Home integration, and Arabic rendering approval**:
 `docs/superpowers/specs/2026-07-11-ds6a-sacred-header-design.md` +
 `docs/superpowers/plans/2026-07-11-ds6a-sacred-header.md`. **DS-6B Prayer Correctness is now drafted as
 the separate religious-correctness capability track**:
 `docs/superpowers/specs/2026-07-11-ds6b-prayer-correctness-design.md` +
 `docs/superpowers/plans/2026-07-11-ds6b-prayer-correctness.md`; it requires authority/method/privacy
-requirements before code and forbids fake prayer times or precise-location leakage into AI/cloud. **DS-7 Memory Surfaces is drafted as the
-Learned Choices migration + conditional Aliases path**:
+requirements before code and forbids fake prayer times or precise-location leakage into AI/cloud. **DS-7 Memory Surfaces is CLOSED
+(device-accepted 2026-08-10) — Learned Choices migrated + the Aliases surface shipped with S2-2**:
 `docs/superpowers/specs/2026-07-11-ds7-memory-surfaces-design.md` +
-`docs/superpowers/plans/2026-07-11-ds7-memory-surfaces.md`; production work should wait for DS-3/DS-5
-controls/safety to land and for S2-2 scope before shipping Aliases UI. **DS-8 Activity Foundations, DS-9
+`docs/superpowers/plans/2026-07-11-ds7-memory-surfaces.md` (STATUS DONE). **DS-8 Activity Foundations, DS-9
 Execution Foundations, and DS-10 Assistant Migration are also drafted as next design-track specs/plans**:
 `docs/superpowers/specs/2026-07-11-ds8-activity-foundations-design.md` +
 `docs/superpowers/plans/2026-07-11-ds8-activity-foundations.md`,
@@ -161,7 +184,9 @@ choice, `learning 1/3`, threshold auto-launch, delete/relearn, correction before
 uninstall invalidation, no stale auto-resolve, and router-off non-ambiguous parity (`open Salatuk`).
 Plan: `docs/superpowers/plans/2026-07-06-learned-resolutions.md`; ADR: decisions.md "2026-07-11 — S2-1
 Learned Resolutions device accepted + closed".
-**Next Stage-2 slice (S2-2) not yet scoped — brainstorm before planning.**
+**S2-2 "Explicit Aliases" is CLOSED (device-accepted 2026-08-10)** — see the DS-7 + S2-2 section at the
+top of this file and decisions.md "2026-08-10 — DS-7 Memory Surfaces + S2-2 Explicit Aliases complete".
+**Next Stage-2 architectural slice = A1 Tool & Capability** (`docs/superpowers/plans/2026-07-11-a1-tool-capability.md`).
 
 ## Project reframed (2026-07-05) — three stages
 

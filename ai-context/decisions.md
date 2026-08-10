@@ -4822,3 +4822,97 @@ Kazan (`MWL`) goldens are **cross-implementation-verified only** — reproduced 
 independent solar-formula recomputation — because MWL (Muslim World League) has no official authority
 portal to anchor against. This is a real, disclosed limitation of the MWL golden values, not a defect in
 the other two methods.
+
+## ADR 2026-08-10 — DS-7 Memory Surfaces + S2-2 Explicit Aliases complete (device-accepted)
+
+**Status: COMPLETE — device-accepted on SM-A325F (RF8R705H38F), 2026-08-10.** This ADR closes a
+documentation gap rather than describing new code: both blocks were **implemented on `launcher--7` on
+2026-07-13** and shipped inside every build since (including the DS-6B device pass), but no ADR was ever
+written, so `CLAUDE.md`/`current-status.md` kept listing DS-7 as "next" and S2-2 as "paused". The code
+was verified, driven on-device, and closed on 2026-08-10.
+
+**What was already on the branch (commits, 2026-07-13):**
+- `8e3f317` `feat(ds7): add memory surface components` — `core/ui/component/SidrMemoryItem.kt`
+  (`SidrMemoryType {LearnedPreference, ExplicitAlias, UserProvidedFact, TemporaryContext, SystemPolicy,
+  AutomationState}` × `SidrMemoryStatus {Active, Learning, NeedsConfirmation, NeedsReconfirmation,
+  Inactive, Expired, Unavailable, Deleted}`, merged `contentDescription` summary, optional
+  `leadingContent`/`onOpen`/`onEdit`/`onForget`), `SidrMemoryDisclosure.kt`, `SidrForgetGate.kt`, plus a
+  `MemoryGallery` + screenshot/semantics tests and 4 goldens (`memory_dark`, `memory_light`,
+  `memory_fontscale2`, `memory_rtl`).
+- `b2affdd` `feat(ds7): wire settings memory and aliases` — `LearnedChoicesScreen` migrated to
+  `SidrMemoryItem` + `SidrForgetGate` behind a feature-local `LearnedChoiceMemoryUiModel` mapper; new
+  `AliasesScreen`/`AliasesViewModel`/`AliasMemoryUiModel`; `Routes.Aliases` + `AppNavHost` destination +
+  a Settings **MEMORY** section (`Learned choices`, `Aliases`).
+- `7c20b63` + `0198abc` — the S2-2 "last mile" that had been stranded on branch `launcher-4`,
+  **re-applied by hand** (not cherry-picked, per that plan's own instruction): the alias decorator wired
+  into `LauncherViewModel`, plus `AliasPrivacyScopeGuardTest` and the `RoomColumnNames` inventory entry
+  for the `aliases` table. The third stranded commit (`cef4111`, docs) was **not** carried over — its ADR
+  text is superseded by this entry.
+
+**Architecture held:** `core/ui` takes strings/lambdas only (no domain/data import); presentation mapping
+lives in `:feature:settings`; no new Room schema in this pass (S2-2's `aliases` table is `SidrDatabase`
+v3 + `Migration2To3` + golden `schemas/3.json`, all landed in the earlier Phase-B work); the alias path
+fires **only** on `CommandOutcome.Unknown`, so `HandleUserCommandUseCase`/`RouteCommandUseCase`/the rule
+matcher stay untouched and no-alias input is byte-for-byte pre-S2-2. Outbound allow-list widened by
+**zero** (`AliasPrivacyScopeGuardTest`).
+
+**Verification gate (JDK-17, 2026-08-10).** `:domain:test :core:ui:testDebugUnitTest
+:core:ui:verifyRoborazziDebug :feature:settings:testDebugUnitTest :feature:launcher:testDebugUnitTest
+testDebugUnitTest assembleDebug` → BUILD SUCCESSFUL. Because the tree was unchanged since the DS-6B gate
+(2026-08-08), the first run was entirely `UP-TO-DATE`; the four relevant test tasks were therefore
+**force-re-executed** (`--rerun-tasks`, exit 0): `:domain` 332/0, `:core:ui` 108/0 +
+`verifyRoborazziDebug` green, `:feature:settings` 33/0, `:feature:launcher` 130/0.
+
+**Device acceptance — SM-A325F / Android 13, agent-driven adb, 2026-08-10. PASSED:**
+- **S2-2:** Settings → Aliases → typed phrase + picked target → `Add alias`; the row rendered as
+  `EXPLICIT ALIAS · "work chat" -> <app> · ACTIVE` with provenance `MEMORY · USER-DECLARED ALIAS ·
+  SETTINGS · LOCAL ONLY`; typing the phrase on Home launched the declared app **directly** (no candidate
+  list, no confirm card); the alias survived an app restart (Room).
+- **Parity:** `open opera` still launched Opera (an alias never shadows a real app); a genuinely unknown
+  phrase (`qwerty nonsense phrase`) still produced the unchanged `Unknown command. Try: open <app>,
+  search <query>` fallback and launched nothing.
+- **Forget gate (both surfaces):** `Forget` opens `SidrForgetGate` (title + `DESTRUCTIVE` status chip —
+  dot **and** word, never colour-only + consequence copy + "Stored only on this device."). **Cancel did
+  not delete**; **Forget deleted exactly once**; after deletion the phrase no longer launched anything
+  and the DS-7 empty copy rendered verbatim ("No aliases yet…" / "No learned choices yet / Preferences
+  appear only after confirmed choices. / Stored only on this device.").
+- **DS-7 through the real S2-1 flow:** the ambiguous command `open python` (two same-labelled installed
+  apps) produced `Did you mean:` → picking a candidate launched it and recorded the preference; Settings
+  → Learned choices showed `LEARNED PREFERENCE · "python" -> Python · LEARNING` with evidence
+  `MEMORY · LEARNING FROM CONFIRMED CHOICES (1/3) · LEARNED FROM CONFIRMED CHOICES · LOCAL ONLY`;
+  after Forget, repeating `open python` **asked again** (delete-to-relearn intact).
+- **fontScale 2.0** on Learned Choices: type label, `"phrase" -> target`, provenance and status all wrap
+  cleanly — no overlap, no clipping, Forget still reachable.
+- Test data created during the pass (one alias, one learned choice) was deleted afterwards; the device
+  was left in its pre-pass state.
+
+**Not covered on device (honest gaps, none blocking):**
+- **Unavailable/pruned alias target.** Proving it on this device would mean temporarily disabling or
+  uninstalling one of the owner's real apps; the harness permission gate blocked `pm disable-user` and
+  the workaround was not forced. Covered by `PruneUnavailableAliasesUseCase` unit tests + the
+  display-time best-effort prune in `AliasesViewModel`, and by the S2-1 precedent (its uninstall
+  invalidation was device-proven with throwaway fixture APKs).
+- **Live TalkBack session.** The accessibility tree was read directly instead (`uiautomator dump`): the
+  merged `contentDescription` summaries are exactly the strings TalkBack would speak, and they were
+  confirmed complete on both surfaces.
+- Long-phrase / long-label layout and RTL were checked only through the (green) `memory_*` goldens.
+
+**Deviations, recorded:**
+- **DS-7 Task 6 (memory disclosure) is preview-only.** `SidrMemoryDisclosure` exists and is
+  gallery/golden-covered but is used by **no** production screen — the plan explicitly allows this when
+  no honest "a new stable preference just formed" event exists to hang it on. Adding it after every
+  launch or every evidence increment was forbidden and was not done.
+- **Aliases screen ordering (UX follow-up, non-blocking):** the `ALIASES` list is rendered *after* the
+  full target-app picker, so on a device with ~200 launchable apps the user must scroll past all of them
+  to see their own aliases. Correct, but worth reordering.
+- **`AliasesViewModel.onSave`/`onDelete` discard the `OperationResult`.** The screen pre-validates
+  (non-blank, `MAX_ALIAS_PHRASE_LENGTH`, normalizer collision hint), so no user-visible gap was found,
+  but a genuine persistence failure is currently silent. Follow-up.
+- **Unrelated observation from the fontScale-2.0 pass:** the bottom tab bar clips its labels at 2.0
+  ("Hom e", "Task s", "Agen ts", "Activi ty"). That is DS-5/Vision-MVP nav-bar territory, not DS-7.
+- The device's default launcher is currently Samsung One UI, so the pass was driven by explicit
+  `am start -n com.sidr.launcher/.LauncherActivity` rather than the HOME key.
+
+**DS-7 and S2-2 are both CLOSED.** Remaining DS-track work: DS-10 Assistant Migration (the last
+production surface still in the pre-v1.1 look), then the DS v1.1 release gate; DS-8/DS-9 stay
+contract-only until A4/A5 exist. Next architectural slice remains A1 Tool & Capability.

@@ -1,8 +1,13 @@
 # DS-7 - Memory Surfaces Implementation Plan
 
-> **STATUS: PROPOSED (2026-07-11).** This plan migrates real memory management surfaces to SIDR's
-> soft-classic-grey language. It is docs-ready now, but production work should start only after DS-3
-> controls and DS-5 action/safety are green, unless the owner explicitly reorders the track.
+> **STATUS: DONE — device-accepted on SM-A325F 2026-08-10.** Implemented on `launcher--7` on 2026-07-13
+> (`8e3f317` components + `b2affdd` Settings/Aliases wiring); verification gate re-run green and the
+> device pass driven on 2026-08-10. Task 6 (memory disclosure) shipped **preview-only** — no honest
+> "stable preference formed" event exists to hang it on, which this plan explicitly permits. Task 7
+> (Aliases surface) shipped together with the S2-2 last mile. Not covered on device: unavailable-target
+> prune (would require disabling one of the owner's apps) and a live TalkBack session (the accessibility
+> tree was read instead). ADR: `ai-context/decisions.md` "2026-08-10 — DS-7 Memory Surfaces + S2-2
+> Explicit Aliases complete (device-accepted)".
 
 **Goal:** Make Learned Choices the first honest SIDR memory surface, prepare the Aliases surface for S2-2,
 and keep all memory presentation local, inspectable, and deletable.

@@ -174,6 +174,12 @@ Rules for this expansion:
   in `InstalledAppsRepositoryImpl`. These change data-layer behaviour, which this block forbids. Deferred
   to I18N-2 and named as a known defect (Cyrillic currently sorts by code point).
 - **The command grammar itself.** See §4.
+- **Voice recognition language.** `LauncherViewModel.startVoiceInput(languageTag = null)` never passes a
+  tag, so `AndroidSpeechInputSource` omits `RecognizerIntent.EXTRA_LANGUAGE` and the recognizer follows
+  the **device** language, not the app language. I18N-1 does not change this: wiring the app locale into
+  the recognizer only pays off once the matcher accepts non-English verbs (§4), and doing one without
+  the other would transcribe Russian speech into a matcher that cannot parse it. Recorded here as a
+  known gap rather than left to be discovered on device.
 
 ## 4. What multilingual does *not* mean here
 
@@ -447,7 +453,10 @@ means re-running the test tasks with `--rerun-tasks`.
 - nothing clipped or truncated at default font scale;
 - relaunch preserves the chosen language; force-stop preserves it;
 - no white flash at cold start; cold-start time recorded and compared to ~766 ms;
-- Turkish `İ` renders in `SidrTextRole.SYSTEM` labels; Cyrillic renders (already device-verified in DS-11).
+- Turkish `İ` renders in `SidrTextRole.SYSTEM` labels; Cyrillic renders (already device-verified in DS-11);
+- the Home date line (`HomeDateLine`, Hijri · Gregorian) follows the **app** language when the app and
+  system languages differ - it formats through `Locale.getDefault()` and is the one surface that was
+  already localized before this block.
 
 Device constraints that bound the pass: the owner's laptop is tethered through this phone, so mobile
 data, Wi-Fi, and airplane mode are never touched - offline paths are not agent-verified. Any change to

@@ -1977,7 +1977,14 @@ Cover, screenshotting each (`uiautomator dump` misses parts of the tree - verify
 3. every migrated screen in `ru` and in `tr`: no English left, nothing clipped;
 4. relaunch and force-stop → the chosen language survives;
 5. cold start: no white flash; record `am start -W` TotalTime and compare with the ~766 ms baseline;
-6. Turkish `İ` renders in `SidrTextRole.SYSTEM` labels.
+6. Turkish `İ` renders in `SidrTextRole.SYSTEM` labels;
+7. **the Home date line follows the app language, not the device language.** `HomeDateLine`
+   (`LauncherScreen.kt:315`) formats both dates with `Locale.getDefault()`
+   (`LauncherScreen.kt:416,426`) - the one piece of UI that was already localized before this block.
+   Test with app and system languages **deliberately different** (system `ru`, app `tr`): if the date
+   stays on the system language, `Locale.getDefault()` is not picking up the per-app locale and the
+   formatters must read the locale from the configuration instead. Note the line hides while the input
+   is active, so check it on idle Home.
 
 Remember: the bottom chrome auto-hides after 5 s - tap the handle (≈540,2264) and the target in one
 command; press `keyevent 4` before any swipe if the keyboard is open. **Never touch mobile data, Wi-Fi,

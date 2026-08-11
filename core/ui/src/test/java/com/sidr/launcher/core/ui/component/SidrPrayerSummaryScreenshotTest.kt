@@ -25,20 +25,8 @@ import org.robolectric.annotation.GraphicsMode
  * (w360dp-h800dp-xhdpi, ~720x1488px) after ~5 states. The height qualifier is overridden here so every
  * state is captured un-clipped in all four goldens (review finding, DS-6B Task 7 fix round 1).
  *
- * **No `prayer_summary_pseudolocale` capture — scope limit, NOT a statement that one is worthless
- * (I18N-1 Task 4, spec §10.4).** Task 4 was budgeted exactly two new goldens, `controls_` and
- * `assistant_`, and adding a third was outside its authority.
- *
- * Be clear about what that leaves on the table: the prayer names and times here are caller-supplied
- * Kotlin literals, but the **status chip is not** — [SidrPrayerSummary] resolves all eleven
- * [SidrPrayerSummaryStatus] values through `sidrString`, so `TZ CONFLICT`, `LOCATION UNAVAILABLE`
- * and `AUTHORITY UNAVAILABLE` are `core/ui` resources rendered as uppercase, letter-spaced,
- * fixed-width chips. That is the tightest layout in the module and the likeliest place for `ru`/`tr`
- * to overflow (`КОНФЛИКТ ЧАСОВОГО ПОЯСА` is 25 characters against `TZ CONFLICT`'s 11). This class
- * also already renders at `h3200dp`, so nothing would be clipped out of such a capture.
- *
- * So a `prayer_summary_pseudolocale` capture is arguably the single most valuable barrier available
- * in this module. It is deferred, not rejected — see the Task 4 report.
+ * This class also carries the I18N-1 pseudolocale barrier for the module's tightest layout — see
+ * [prayer_summary_pseudolocale].
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -66,6 +54,38 @@ class SidrPrayerSummaryScreenshotTest {
             }
         }
         compose.onRoot().captureRoboImage("src/test/screenshots/prayer_summary_rtl.png")
+    }
+
+    /**
+     * I18N-1 barrier 3 (spec §10.4): the same gallery as [prayer_summary_dark], rendered in the
+     * platform `en-XA` pseudolocale, which accents ASCII and pads every string to ~1.4x, so layout
+     * that only fits English fails visibly.
+     *
+     * This is the module's highest-value pseudolocale target. The prayer names and times here are
+     * caller-supplied Kotlin literals, but the **status chip is not** — [SidrPrayerSummary] resolves
+     * all eleven [SidrPrayerSummaryStatus] values through `sidrString`, so `TZ CONFLICT`,
+     * `LOCATION UNAVAILABLE` and `AUTHORITY UNAVAILABLE` are `core/ui` resources rendered as
+     * uppercase, letter-spaced chips. That is the tightest layout in the module and the likeliest
+     * place for `ru`/`tr` to overflow.
+     *
+     * Depends on `isPseudoLocalesEnabled = true` in `core/ui/build.gradle.kts`; without it this
+     * qualifier silently resolves to plain English, which is what [PseudolocaleBarrierGuardTest]
+     * exists to catch.
+     *
+     * The qualifier carries a **leading `+`** so it merges onto this class's `w360dp-h3200dp-xhdpi`
+     * override instead of replacing it. Without the `+` the capture would render at the default
+     * viewport, clip after ~5 states, and stop being comparable to [prayer_summary_dark].
+     *
+     * Limitation: pseudolocale expansion is ASCII accenting and padding. It does **not** exercise
+     * Turkish dotted-`İ`, and it does not reproduce real Cyrillic lengths — `КОНФЛИКТ ЧАСОВОГО
+     * ПОЯСА` is 25 characters against `TZ CONFLICT`'s 11. A clean capture here is **not** evidence
+     * that `ru`/`tr` fit; that is the device pass.
+     */
+    @Test
+    @Config(qualifiers = "+b+en+XA")
+    fun prayer_summary_pseudolocale() {
+        compose.setContent { SidrTheme(darkTheme = true) { PrayerSummaryGallery() } }
+        compose.onRoot().captureRoboImage("src/test/screenshots/prayer_summary_pseudolocale.png")
     }
 
     private fun capture(dark: Boolean, name: String) {

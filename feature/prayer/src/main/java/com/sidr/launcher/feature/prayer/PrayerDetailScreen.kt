@@ -27,7 +27,6 @@ import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrText
 import com.sidr.launcher.core.ui.primitive.SidrTextRole
 import com.sidr.launcher.core.ui.theme.SidrTheme
-import com.sidr.launcher.domain.prayer.CalculationMethodId
 import com.sidr.launcher.domain.prayer.Freshness
 import com.sidr.launcher.domain.prayer.Madhab
 import com.sidr.launcher.domain.prayer.PrayerContext
@@ -201,21 +200,9 @@ private fun unavailableMessage(reason: UnavailableReason): String = when (reason
     UnavailableReason.CALCULATION_FAILED -> sidrString(R.string.prayer_detail_unavailable_calculation_failed)
 }
 
-@Composable
-private fun methodLabel(methodId: CalculationMethodId): String = when (methodId.key) {
-    "MWL" -> sidrString(R.string.prayer_method_mwl)
-    "EGYPTIAN" -> sidrString(R.string.prayer_method_egyptian)
-    "KARACHI" -> sidrString(R.string.prayer_method_karachi)
-    "UMM_AL_QURA" -> sidrString(R.string.prayer_method_umm_al_qura)
-    "DUBAI" -> sidrString(R.string.prayer_method_dubai)
-    "MOON_SIGHTING_COMMITTEE" -> sidrString(R.string.prayer_method_moon_sighting_committee)
-    "NORTH_AMERICA" -> sidrString(R.string.prayer_method_north_america)
-    "KUWAIT" -> sidrString(R.string.prayer_method_kuwait)
-    "QATAR" -> sidrString(R.string.prayer_method_qatar)
-    "SINGAPORE" -> sidrString(R.string.prayer_method_singapore)
-    "TURKEY" -> sidrString(R.string.prayer_method_turkey)
-    else -> methodId.key
-}
+// methodLabel()/methodLabelResId() moved to PrayerLabels.kt (Task 7 fix-round) — shared with
+// PrayerSettingsScreen so there is one place to keep in sync and one place for
+// MethodLabelCoverageTest to pin against domain.prayer.SupportedPrayerMethods.ALL.
 
 @Composable
 private fun madhabLabel(madhab: Madhab): String = when (madhab) {

@@ -1,5 +1,6 @@
 package com.sidr.launcher.feature.permission_education
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -49,7 +50,7 @@ class PermissionEducationViewModel @Inject constructor(
         PermissionEducationUiState(
             feature = feature,
             status = permissionChecker.status(feature),
-            rationale = rationaleFor(feature),
+            rationaleRes = rationaleFor(feature),
             requestable = feature.requestable,
             dismissed = false,
         )
@@ -141,7 +142,10 @@ class PermissionEducationViewModel @Inject constructor(
 data class PermissionEducationUiState(
     val feature: PermissionFeature,
     val status: PermissionStatus,
-    val rationale: PermissionRationale,
+    // I18N-1 Task 6: the resolved-per-feature consent-copy resource id (see rationaleFor in
+    // PermissionRationale.kt). Title/CTA are resolved separately, from ordinary string resources,
+    // directly in PermissionEducationScreen - only this sentence is Class-B locked.
+    @StringRes val rationaleRes: Int,
     val requestable: Boolean,
     val dismissed: Boolean,
 )

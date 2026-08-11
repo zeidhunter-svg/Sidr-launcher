@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- I18N-1 Class B locked consent copy - see values/strings_locked.xml for the owner-review contract. -->
+<resources>
+    <string name="perm_rationale_wallpaper">Sidr, ana ekranınızı kişiselleştirebilmeniz için duvar kağıdı seçiciyi açabilir. Bu isteğe bağlıdır — başlatıcı onsuz da tamamen çalışır ve istediğiniz zaman fikrinizi değiştirebilirsiniz.</string>
+    <string name="perm_rationale_voice_input">Sesli giriş, komutları yazmak yerine söylemenizi sağlar. Başlatıcı yalnızca mikrofona dokunduğunuzda dinler, hiçbir zaman arka planda kayıt yapmaz ve cihaz üzerinde tanımayı tercih eder. İsteğe bağlıdır — yazmak onsuz da her zaman çalışır.</string>
+    <string name="perm_rationale_calendar">Takviminizi okumak, Sidr\'in yaklaşan bir etkinliği hatırlatmak gibi doğru zamanda doğru şeyi önermesini sağlar. Sidr yalnızca yakında bir şey olup olmadığını kontrol eder — etkinlik başlıklarını, saatlerini veya ayrıntılarını asla saklamaz. İsteğe bağlıdır — öneriler onsuz da sorunsuz çalışır ve istediğiniz zaman fikrinizi değiştirebilirsiniz.</string>
+    <string name="perm_rationale_location">Konumunuzun kullanılması, dışarıdayken bir harita uygulaması önermek gibi yakınla ilgili eylemleri Sidr\'in göstermesini sağlar. Sidr yalnızca yakın zamanda alınmış bir konum bilgisi olup olmadığını kontrol eder — koordinatlarınızı asla saklamaz veya göndermez. İsteğe bağlıdır — öneriler onsuz da sorunsuz çalışır ve istediğiniz zaman fikrinizi değiştirebilirsiniz.</string>
+    <string name="perm_rationale_prayer_location">Cihaz konumunuzun kullanılması, Sidr\'in bulunduğunuz yer için doğru namaz vakitlerini hesaplamasını sağlar; bu konum kaydedilmeden önce yaklaşık bir kilometreye yuvarlanır. Koordinatlarınız bu cihazda kalır — hiçbir yere gönderilmez veya kaydedilmez. Bu tamamen isteğe bağlıdır: listeden bir şehir seçmek bu izin olmadan da çalışır ve istediğiniz zaman fikrinizi değiştirebilirsiniz.</string>
+</resources>

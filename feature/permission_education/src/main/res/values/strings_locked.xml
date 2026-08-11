@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 locked vocabulary (spec §7.2) — Class B: consent copy, NOT translatable="false". These ARE
+  translated (values-ru / values-tr carry the same keys) like any other string; they live here only so
+  that a change lands in owner review before it ships (Task 15's sign-off package). Do not add
+  translatable="false" to any key in this file - that would make it Class A and break the barrier
+  (LocaleCompletenessGuardTest rejects a translatable="false" key that appears in a translated folder).
+
+  Each string is the full permission-rationale sentence for one PermissionFeature
+  (PermissionRationale.kt's rationaleFor()) - the "why" a permission is being asked for. Extracted
+  verbatim from the pre-I18N-1 Kotlin source; no copy change.
+-->
+<resources>
+    <string name="perm_rationale_wallpaper">Sidr can open the wallpaper picker so you can personalise your home screen. This is optional — the launcher works fully without it, and you can change your mind any time.</string>
+    <string name="perm_rationale_voice_input">Voice input lets you speak commands instead of typing. The launcher only listens while you tap the mic, never records in the background, and prefers on-device recognition. It\'s optional — typing always works without it.</string>
+    <string name="perm_rationale_calendar">Reading your calendar lets Sidr suggest the right thing at the right time, like nudging you toward an upcoming event. Sidr only checks whether something is coming up soon — it never stores event titles, times, or details. It\'s optional — suggestions work fine without it, and you can change your mind any time.</string>
+    <string name="perm_rationale_location">Using your location lets Sidr surface nearby-relevant actions, like suggesting a maps app when you\'re out and about. Sidr only checks whether a recent location fix exists — it never stores or sends your coordinates. It\'s optional — suggestions work fine without it, and you can change your mind any time.</string>
+    <string name="perm_rationale_prayer_location">Using your device location lets Sidr compute accurate prayer times for where you are, rounded to about a kilometre before it\'s ever stored. Your coordinates stay on this device — they are never sent anywhere or logged. It\'s entirely optional: picking a city from the list works without this permission, and you can change your mind any time.</string>
+</resources>

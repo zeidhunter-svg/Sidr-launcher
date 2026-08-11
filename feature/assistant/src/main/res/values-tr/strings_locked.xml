@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 10 locked vocabulary (spec §7.2) - Class B only, same set as the Class B half of
+  values/strings_locked.xml. See that file for the per-key rationale. NOT translatable="false" - these
+  ARE translated and ship in this folder like any other string; they are locked only so a change lands
+  in owner review (docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md, Section 5) before it ships.
+
+  The Class A keys (unknown-host sentinel, provenance tokens, field placeholders) are deliberately
+  absent from this folder - LocaleCompletenessGuardTest fails the build if they appear here.
+
+  The Turkish values below are agent-drafted and NOT owner-reviewed.
+-->
+<resources>
+    <string name="assistant_cloud_disclosure_title">Yanıtlar sağlayıcınızdan gelir</string>
+    <string name="assistant_cloud_disclosure_body">Mesaj gönder\'e dokunduğunuzda, yazdığınız mesaj yapılandırdığınız yapay zeka sağlayıcısına gönderilir. Bununla birlikte başka hiçbir şey gönderilmez — uygulamalar, geçmiş, konum ve bellek gönderilmez. API anahtarınız bu cihazın Keystore\'unda kalır; asla gösterilmez veya başka bir yere gönderilmez.</string>
+    <string name="assistant_no_provider_title">Yapay zeka sağlayıcısı yapılandırılmadı</string>
+    <string name="assistant_no_provider_body">Asistanın, sizin yapılandırdığınız ve ücretini ödediğiniz bir sağlayıcıya ihtiyacı var. O zamana kadar hiçbir yere hiçbir şey gönderilmez ve başlatıcının geri kalanı çevrimdışı çalışmaya devam eder.</string>
+    <string name="assistant_error_next_retry">Hiçbir şey kaydedilmedi. Hazır olduğunuzda aynı mesajı tekrar gönderin.</string>
+    <string name="assistant_error_next_reword">Hiçbir şey kaydedilmedi. Mesajı yeniden ifade etmek genellikle yardımcı olur.</string>
+    <string name="assistant_key_set_note">Anahtar ayarlandı — bu cihazın Keystore\'unda saklanıyor. Değiştirmek için yenisini girin.</string>
+</resources>

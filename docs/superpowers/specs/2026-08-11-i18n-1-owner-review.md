@@ -168,10 +168,60 @@ stale.
 
 ---
 
+## Section 5 — `feature/assistant` consent & data-handling copy (Task 10)
+
+The Assistant is the **only** surface in this app that sends anything off the device, so its disclosure
+copy is the most load-bearing consent text in the product. Seven Class B keys live in
+`feature/assistant/src/main/res/values{,-ru,-tr}/strings_locked.xml`; nine Class A keys (the neutral
+host sentinel, the provenance vocabulary, and the three field placeholders) ship English-only and are
+listed first for context. Extracted verbatim from the pre-I18N-1 Kotlin literals in
+`AssistantPresentation.kt` / `AssistantScreen.kt` — no copy change. Russian and Turkish are **drafts,
+unreviewed**.
+
+### 5a. Class A — locked, never translated
+
+Spec §7.1 machine vocabulary and data. `translatable="false"`, absent from `values-ru`/`values-tr`.
+
+| Key | English | Why locked |
+|---|---|---|
+| `assistant_provider_unknown_host` | (unknown host) | Neutral sentinel rendered when a stored `baseUrl` has no parseable host. `saveProvider` validates only the `https://` prefix, so this is the guard that keeps a malformed URL's scheme off the screen and out of TalkBack — a sentinel, not copy. The pure `providerHost()` returns `null` and this resource *is* the fallback, so no second copy can drift from it. |
+| `assistant_provenance_cloud` | cloud | Provenance token rendered through `SidrProvenanceLine`, which upper-cases with `Locale.ROOT` precisely because these are locked vocabulary, not copy (a Turkish default locale would otherwise render `KEY İN KEYSTORE`). |
+| `assistant_provenance_local_only` | local only | Provenance token — the honest source for every not-yet-configured state. |
+| `assistant_provenance_no_provider` | no provider configured | Provenance token. |
+| `assistant_provenance_key_in_keystore` | key in keystore | Provenance token — states key *presence* only; the key itself never reaches the UI. |
+| `assistant_provenance_no_key_set` | no key set | Provenance token. |
+| `assistant_placeholder_base_url` | https://openrouter.ai/api/v1 | Provider-form field placeholder — example data (a URL), not copy. |
+| `assistant_placeholder_model` | mistralai/mistral-7b-instruct | Provider-form field placeholder — example data (a model id), not copy. Same species as the two placeholders above. |
+| `assistant_placeholder_api_key` | sk-… | Provider-form field placeholder — example data (a key prefix), not copy. |
+
+### 5b. Class B — the cloud disclosure and the data-handling claims
+
+| Key | English | Russian (draft) | Turkish (draft) | Why locked |
+|---|---|---|---|---|
+| `assistant_cloud_disclosure_title` | Replies come from your provider | Ответы приходят от вашего провайдера | Yanıtlar sağlayıcınızdan gelir | Heading of spec §7.2's named cloud disclosure — shown as the resting state before the first Send, and above the provider form. |
+| `assistant_cloud_disclosure_body` | When you tap Send, the message you typed is sent to the AI provider you configured. Nothing else goes with it — no apps, no history, no location, no memory. Your API key stays in this device's Keystore and is never shown or sent anywhere else. | Когда вы нажимаете «Отправить сообщение», введённое вами сообщение отправляется настроенному вами ИИ-провайдеру. Вместе с ним не отправляется ничего другого — ни приложения, ни история, ни местоположение, ни память. Ваш ключ API остаётся в хранилище ключей (Keystore) этого устройства и никогда не показывается и не отправляется куда-либо ещё. | Mesaj gönder'e dokunduğunuzda, yazdığınız mesaj yapılandırdığınız yapay zeka sağlayıcısına gönderilir. Bununla birlikte başka hiçbir şey gönderilmez — uygulamalar, geçmiş, konum ve bellek gönderilmez. API anahtarınız bu cihazın Keystore'unda kalır; asla gösterilmez veya başka bir yere gönderilmez. | **The** sentence that tells the user their typed message leaves the device, what does *not* go with it, and where the key stays. Spec §7.2 names the cloud disclosure verbatim. The ru/tr drafts say exactly what the English says and claim nothing more; "Send"/"Mesaj gönder"/«Отправить сообщение» name the composer's own button label as it ships in each locale (`ui_assistant_send_ready`). |
+| `assistant_no_provider_title` | No AI provider configured | ИИ-провайдер не настроен | Yapay zeka sağlayıcısı yapılandırılmadı | Heading of the same disclosure in its not-yet-configured state. |
+| `assistant_no_provider_body` | The assistant needs a provider you configure and pay for. Until then nothing is sent anywhere, and the rest of the launcher keeps working offline. | Ассистенту нужен провайдер, которого вы настраиваете и оплачиваете сами. До этого никуда ничего не отправляется, а остальная часть лаунчера продолжает работать офлайн. | Asistanın, sizin yapılandırdığınız ve ücretini ödediğiniz bir sağlayıcıya ihtiyacı var. O zamana kadar hiçbir yere hiçbir şey gönderilmez ve başlatıcının geri kalanı çevrimdışı çalışmaya devam eder. | Carries the "nothing is sent anywhere" promise for the unconfigured state — a data-handling claim of the same species as the disclosure itself. |
+| `assistant_error_next_retry` | Nothing was saved. Send the same message again when you are ready. | Ничего не было сохранено. Отправьте то же сообщение снова, когда будете готовы. | Hiçbir şey kaydedilmedi. Hazır olduğunuzda aynı mesajı tekrar gönderin. | Begins with "Nothing was saved." — the phrase spec §7.2 names verbatim. |
+| `assistant_error_next_reword` | Nothing was saved. Rewording the message usually helps. | Ничего не было сохранено. Обычно помогает переформулировать сообщение. | Hiçbir şey kaydedilmedi. Mesajı yeniden ifade etmek genellikle yardımcı olur. | The second "Nothing was saved." sentence — same claim, different next step. |
+| `assistant_key_set_note` | Key set — stored in this device's Keystore. Enter a new one to replace it. | Ключ задан — хранится в хранилище ключей (Keystore) этого устройства. Введите новый, чтобы заменить его. | Anahtar ayarlandı — bu cihazın Keystore'unda saklanıyor. Değiştirmek için yenisini girin. | A data-handling claim about where the user's secret lives — the same species as Task 8's `settings_stored_locally` (Section 4). |
+
+**Note — the "Nothing was saved." sentence, two keys:** exactly as with Section 4's "Stored only on this
+device.", this phrase appears in **two** keys (`assistant_error_next_retry`, `assistant_error_next_reword`).
+Whatever wording is signed off must be applied identically to both; do not approve one and leave the other
+stale.
+
+**Note — third `next` sentence, deliberately not locked:** the credential-error next step
+("Open provider settings and check the base URL, model, and API key.", `assistant_error_next_provider`)
+makes no data-handling claim and does not carry the "Nothing was saved." phrase, so it ships as ordinary
+translatable copy in `strings.xml`.
+
+---
+
 ## Outstanding for Task 15
 
 - Any additional consent copy from later tasks (Task 15 scope).
-- Owner sign-off on every row marked **draft** above (Sections 1c, 1d, 3, 4) — none of that text has been
+- Owner sign-off on every row marked **draft** above (Sections 1c, 1d, 3, 4, 5b) — none of that text has been
   reviewed by anyone; only the prayer-name rows in Section 1b are verbatim from an approved brief.
 - `feature/prayer`'s `prayer_settings_privacy_body` (in `feature/prayer/src/main/res/values/strings.xml`,
   "Prayer times are computed on this device… never sent anywhere and never logged") is the same species of

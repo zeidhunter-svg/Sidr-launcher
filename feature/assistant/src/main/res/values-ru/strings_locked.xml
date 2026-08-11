@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 10 locked vocabulary (spec §7.2) - Class B only, same set as the Class B half of
+  values/strings_locked.xml. See that file for the per-key rationale. NOT translatable="false" - these
+  ARE translated and ship in this folder like any other string; they are locked only so a change lands
+  in owner review (docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md, Section 5) before it ships.
+
+  The Class A keys (unknown-host sentinel, provenance tokens, field placeholders) are deliberately
+  absent from this folder - LocaleCompletenessGuardTest fails the build if they appear here.
+
+  The Russian values below are agent-drafted and NOT owner-reviewed.
+-->
+<resources>
+    <string name="assistant_cloud_disclosure_title">Ответы приходят от вашего провайдера</string>
+    <string name="assistant_cloud_disclosure_body">Когда вы нажимаете «Отправить сообщение», введённое вами сообщение отправляется настроенному вами ИИ-провайдеру. Вместе с ним не отправляется ничего другого — ни приложения, ни история, ни местоположение, ни память. Ваш ключ API остаётся в хранилище ключей (Keystore) этого устройства и никогда не показывается и не отправляется куда-либо ещё.</string>
+    <string name="assistant_no_provider_title">ИИ-провайдер не настроен</string>
+    <string name="assistant_no_provider_body">Ассистенту нужен провайдер, которого вы настраиваете и оплачиваете сами. До этого никуда ничего не отправляется, а остальная часть лаунчера продолжает работать офлайн.</string>
+    <string name="assistant_error_next_retry">Ничего не было сохранено. Отправьте то же сообщение снова, когда будете готовы.</string>
+    <string name="assistant_error_next_reword">Ничего не было сохранено. Обычно помогает переформулировать сообщение.</string>
+    <string name="assistant_key_set_note">Ключ задан — хранится в хранилище ключей (Keystore) этого устройства. Введите новый, чтобы заменить его.</string>
+</resources>

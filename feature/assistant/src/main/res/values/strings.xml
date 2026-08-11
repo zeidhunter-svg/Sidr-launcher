@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 10: English source for feature/assistant (Assistant chat + AI provider setup screens).
+
+  Class A (locked machine vocabulary/data: the unknown-host sentinel, the SidrProvenanceLine tokens,
+  and the three field placeholders) and Class B (consent/data-handling copy: the cloud disclosure, the
+  no-provider disclosure, both "Nothing was saved." sentences, and the Keystore note) live in
+  strings_locked.xml - see that file's header. Everything remaining here is ordinary/translatable.
+
+  Field labels (assistant_field_*) render through SidrSectionHeader -> SidrSystemLabel, which applies
+  text.uppercase(Locale.getDefault()) at render time, and are ALSO used verbatim as the text field's
+  contentDescription (not uppercased). The English values are kept byte-identical to the Kotlin
+  literals they replace (already upper-case); the Russian/Turkish values are written in natural case so
+  the locale-aware fold produces correct upper-case on screen and TalkBack reads natural-case text.
+
+  Error copy: AssistantPresentation.toPresentation() picks between the two `server` keys and the two
+  `invalid_request` keys instead of nesting one resource inside another's argument, so no sentence is
+  ever assembled by concatenation (spec §5).
+-->
+<resources>
+    <!-- Shell (both screens) -->
+    <string name="assistant_title">Assistant</string>
+    <string name="assistant_provider_title">AI provider</string>
+    <string name="assistant_back">Back</string>
+
+    <!-- Chat -->
+    <string name="assistant_refusal_note">The assistant declined to answer this one. Nothing went wrong; you can reword the message and send it again.</string>
+    <string name="assistant_open_provider_settings">Open provider settings</string>
+
+    <!-- Error surface (DS-5 what / why / next + at most one action) -->
+    <string name="assistant_error_title">Assistant could not reply</string>
+    <string name="assistant_error_what_failed">The reply did not finish.</string>
+    <string name="assistant_error_why_network">No network connection.</string>
+    <string name="assistant_error_why_unknown">Something went wrong.</string>
+    <string name="assistant_error_why_missing_credentials">No API key configured. Set up a provider.</string>
+    <string name="assistant_error_why_unauthorized">API key rejected by provider. Update your settings.</string>
+    <string name="assistant_error_why_rate_limited">Rate limited. Please wait and retry.</string>
+    <string name="assistant_error_why_timeout">Request timed out.</string>
+    <string name="assistant_error_why_server">Server error (%1$s). Please retry.</string>
+    <string name="assistant_error_why_server_no_code">Server error (unknown). Please retry.</string>
+    <string name="assistant_error_why_invalid_request">Invalid request: %1$s.</string>
+    <string name="assistant_error_why_invalid_request_no_detail">Invalid request: check model / settings.</string>
+    <string name="assistant_error_next_provider">Open provider settings and check the base URL, model, and API key.</string>
+    <string name="assistant_action_retry">Retry</string>
+    <string name="assistant_action_fix_provider">Fix provider settings</string>
+
+    <!-- Provider form -->
+    <string name="assistant_field_base_url">BASE URL</string>
+    <string name="assistant_field_model">MODEL</string>
+    <string name="assistant_field_api_key">API KEY</string>
+    <string name="assistant_save">Save</string>
+    <string name="assistant_save_error_base_url_not_https">Base URL must start with https://</string>
+    <string name="assistant_save_error_key_failed">Failed to save API key</string>
+    <string name="assistant_save_error_config_failed">Failed to save provider settings</string>
+</resources>

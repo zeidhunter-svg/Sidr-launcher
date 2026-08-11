@@ -3,7 +3,6 @@ package com.sidr.launcher.feature.assistant
 import com.sidr.launcher.core.testing.FakeAiProviderConfigRepository
 import com.sidr.launcher.core.testing.FakeGenerativeAiEngine
 import com.sidr.launcher.core.testing.FakeSecureSecretStore
-import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.domain.ai.AiChunk
 import com.sidr.launcher.domain.ai.AiError
 import com.sidr.launcher.domain.ai.AiModelId
@@ -167,10 +166,14 @@ class AssistantViewModelTest {
 
     @Test
     fun `RateLimited message says retry`() {
-        val error = AiError.RateLimited(retryAfterMs = 1_000L).toUiError() as UiError.Message
+        // I18N-1 Task 10: the ViewModel now carries the reason as a value and the sentence lives in
+        // resources, so this pins both halves — the mapping, and the English copy that ships.
+        assertEquals(AssistantError.RateLimited, AiError.RateLimited(retryAfterMs = 1_000L).toAssistantError())
 
-        assertEquals("Rate limited. Please wait and retry.", error.text)
-        assertFalse("RateLimited message must not contain old typo", error.text.contains("retray"))
+        val message = AssistantStrings.en("assistant_error_why_rate_limited")
+
+        assertEquals("Rate limited. Please wait and retry.", message)
+        assertFalse("RateLimited message must not contain old typo", message.contains("retray"))
     }
 
     // ── retry latest-wins ─────────────────────────────────────────────────────────────────────────
@@ -253,7 +256,11 @@ class AssistantViewModelTest {
         assertEquals(0, secretStore.putCalls.size)
         val saveError = vm.uiState.value.form.saveError
         assertNotNull(saveError)
-        assertTrue("error must mention https", saveError!!.contains("https", ignoreCase = true))
+        assertEquals(ProviderSaveError.BASE_URL_NOT_HTTPS, saveError)
+        assertTrue(
+            "error must mention https",
+            AssistantStrings.en("assistant_save_error_base_url_not_https").contains("https", ignoreCase = true),
+        )
     }
 
     @Test

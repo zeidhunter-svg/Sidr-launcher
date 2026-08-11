@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 10 locked vocabulary (spec §7) - see
+  docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md, Section 5, for the owner-review table.
+  This file holds TWO classes:
+
+  Class A - locked, NEVER translated: carries translatable="false". Must not appear in values-ru or
+  values-tr (LocaleCompletenessGuardTest rejects a translatable="false" key that shows up in a
+  translated folder). Spec §7.1 machine vocabulary and data:
+
+  - assistant_provider_unknown_host: the neutral sentinel rendered when a persisted baseUrl has no
+    parseable host. `AssistantViewModel.saveProvider` only validates the "https://" prefix before
+    persisting, so this is the load-bearing guard that keeps a malformed URL's scheme (or the raw
+    string) off the screen and out of TalkBack - it is a sentinel, not copy, and its shape must not
+    vary by locale. The pure `providerHost()` returns null and this resource IS the fallback: there is
+    no second (Kotlin-constant) copy that could drift from it.
+  - assistant_provenance_*: every token rendered through SidrProvenanceLine, which upper-cases with
+    Locale.ROOT precisely because these are §7.1-locked machine vocabulary rather than human copy
+    (a Turkish default locale would otherwise render KEY İN KEYSTORE / NO PROVİDER CONFİGURED).
+  - assistant_placeholder_*: the three provider-form field placeholders. These are example data - a
+    URL, a model id, and a key prefix - not copy. (The task brief enumerated two of the three; the
+    model-id placeholder is the same species and is classed with them, flagged in the task report.)
+
+  Class B - locked, but IS translated (values-ru / values-tr carry the same keys, like any other
+  string). They live here only so a change lands in owner review before it ships. Do NOT add
+  translatable="false" to any key below the Class B marker - that would break the barrier.
+
+  - assistant_cloud_disclosure_title / _body: spec §7.2's named cloud disclosure - the sentence that
+    tells the user their typed message leaves the device, and that the API key does not.
+  - assistant_no_provider_title / _body: the same disclosure in its not-yet-configured state
+    ("nothing is sent anywhere").
+  - assistant_error_next_retry / assistant_error_next_reword: both begin with "Nothing was saved.",
+    the phrase spec §7.2 names verbatim.
+  - assistant_key_set_note: a data-handling claim about where the user's secret lives (this device's
+    Keystore) - the same species as Task 8's settings_stored_locally.
+
+  Every value below is extracted verbatim (byte-for-byte, not retyped) from the pre-I18N-1 Kotlin
+  literals in AssistantPresentation.kt / AssistantScreen.kt; no copy change. The Russian and Turkish
+  values in the corresponding values-ru / values-tr strings_locked.xml are agent-drafted and NOT
+  owner-reviewed.
+-->
+<resources>
+    <!-- ── Class A: locked, never translated (spec §7.1) ─────────────────────────────────────── -->
+    <string name="assistant_provider_unknown_host" translatable="false">(unknown host)</string>
+
+    <string name="assistant_provenance_cloud" translatable="false">cloud</string>
+    <string name="assistant_provenance_local_only" translatable="false">local only</string>
+    <string name="assistant_provenance_no_provider" translatable="false">no provider configured</string>
+    <string name="assistant_provenance_key_in_keystore" translatable="false">key in keystore</string>
+    <string name="assistant_provenance_no_key_set" translatable="false">no key set</string>
+
+    <string name="assistant_placeholder_base_url" translatable="false">https://openrouter.ai/api/v1</string>
+    <string name="assistant_placeholder_model" translatable="false">mistralai/mistral-7b-instruct</string>
+    <string name="assistant_placeholder_api_key" translatable="false">sk-…</string>
+
+    <!-- ── Class B: locked, translated, owner sign-off required (spec §7.2) ──────────────────── -->
+    <string name="assistant_cloud_disclosure_title">Replies come from your provider</string>
+    <string name="assistant_cloud_disclosure_body">When you tap Send, the message you typed is sent to the AI provider you configured. Nothing else goes with it — no apps, no history, no location, no memory. Your API key stays in this device\'s Keystore and is never shown or sent anywhere else.</string>
+    <string name="assistant_no_provider_title">No AI provider configured</string>
+    <string name="assistant_no_provider_body">The assistant needs a provider you configure and pay for. Until then nothing is sent anywhere, and the rest of the launcher keeps working offline.</string>
+    <string name="assistant_error_next_retry">Nothing was saved. Send the same message again when you are ready.</string>
+    <string name="assistant_error_next_reword">Nothing was saved. Rewording the message usually helps.</string>
+    <string name="assistant_key_set_note">Key set — stored in this device\'s Keystore. Enter a new one to replace it.</string>
+</resources>

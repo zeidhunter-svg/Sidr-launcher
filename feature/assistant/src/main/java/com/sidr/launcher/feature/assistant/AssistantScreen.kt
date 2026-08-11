@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +43,7 @@ import com.sidr.launcher.core.ui.component.SidrSectionHeader
 import com.sidr.launcher.core.ui.component.SidrStreamingIndicator
 import com.sidr.launcher.core.ui.component.SidrSurfaceAction
 import com.sidr.launcher.core.ui.component.SidrTopBar
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrDivider
 import com.sidr.launcher.core.ui.primitive.SidrProvenanceLine
 import com.sidr.launcher.core.ui.primitive.SidrSurface
@@ -72,7 +74,7 @@ fun AssistantScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     AssistantShell(
-        title = "Assistant",
+        title = sidrString(R.string.assistant_title),
         onBack = viewModel::navigateBack,
         modifier = modifier,
     ) { contentModifier ->
@@ -100,7 +102,7 @@ fun AssistantProviderScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     AssistantShell(
-        title = "AI provider",
+        title = sidrString(R.string.assistant_provider_title),
         onBack = viewModel::navigateBack,
         modifier = modifier,
     ) { contentModifier ->
@@ -139,7 +141,7 @@ private fun AssistantShell(
                 navigationIcon = {
                     SidrIconButton(
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
+                        contentDescription = sidrString(R.string.assistant_back),
                         onClick = onBack,
                     )
                 },
@@ -247,8 +249,8 @@ private fun AssistantMessage(
                     // Nothing said yet: the calm state is the cloud disclosure itself, so the user
                     // reads where their words will go *before* the first Send (spec §6).
                     SidrPrivacyNotice(
-                        title = CLOUD_DISCLOSURE_TITLE,
-                        body = CLOUD_DISCLOSURE_BODY,
+                        title = sidrString(R.string.assistant_cloud_disclosure_title),
+                        body = sidrString(R.string.assistant_cloud_disclosure_body),
                     )
                 }
             }
@@ -266,8 +268,7 @@ private fun AssistantMessage(
                     // Refusal is a *successful* terminal state — calm supporting text, never an
                     // error surface (spec §7).
                     SidrText(
-                        text = "The assistant declined to answer this one. Nothing went wrong; " +
-                            "you can reword the message and send it again.",
+                        text = sidrString(R.string.assistant_refusal_note),
                         role = SidrTextRole.PROVENANCE,
                     )
                 }
@@ -275,13 +276,16 @@ private fun AssistantMessage(
 
             is AssistantStatus.Error -> {
                 val presentation = status.toPresentation()
+                val whyArg = presentation.whyArg
                 SidrErrorSurface(
-                    title = presentation.title,
-                    whatFailed = presentation.whatFailed,
-                    why = presentation.why,
-                    next = presentation.next,
+                    title = sidrString(presentation.title),
+                    whatFailed = sidrString(presentation.whatFailed),
+                    // The mapper already picked the value-present / value-absent key, so this passes
+                    // at most one runtime argument and never nests one resource inside another.
+                    why = if (whyArg != null) sidrString(presentation.why, whyArg) else sidrString(presentation.why),
+                    next = sidrString(presentation.next),
                     primaryAction = presentation.primaryLabel?.let { label ->
-                        SidrSurfaceAction(label) {
+                        SidrSurfaceAction(sidrString(label)) {
                             if (status.retryable) onRetry() else onOpenProvider()
                         }
                     },
@@ -302,13 +306,49 @@ private fun AssistantStatusLine(
     modifier: Modifier = Modifier,
 ) {
     SidrProvenanceLine(
-        source = "cloud",
+        source = sidrString(R.string.assistant_provenance_cloud),
         details = providerProvenanceDetails(
-            baseUrl = form.baseUrl,
-            modelId = form.modelId,
-            keySet = form.keySet,
+            providerProvenance(
+                baseUrl = form.baseUrl,
+                modelId = form.modelId,
+                keySet = form.keySet,
+            ),
         ),
         modifier = modifier.padding(vertical = Spacing.sm),
+    )
+}
+
+/**
+ * Renders the pure [ProviderProvenance] value as `SidrProvenanceLine` details.
+ *
+ * The host slot falls back to the locked `assistant_provider_unknown_host` sentinel — never the raw
+ * `baseUrl` — so a malformed URL cannot put its scheme on screen or into TalkBack. These tokens are
+ * spec §7.1 machine vocabulary (`translatable="false"`); `SidrProvenanceLine` upper-cases them with
+ * `Locale.ROOT`, so nothing here folds case itself.
+ */
+@Composable
+@ReadOnlyComposable
+private fun providerProvenanceDetails(provenance: ProviderProvenance): List<String> {
+    val host = provenance.host ?: sidrString(R.string.assistant_provider_unknown_host)
+    val keyPresence = if (provenance.keySet) {
+        sidrString(R.string.assistant_provenance_key_in_keystore)
+    } else {
+        sidrString(R.string.assistant_provenance_no_key_set)
+    }
+    return listOfNotNull(host, provenance.modelId, keyPresence)
+}
+
+/**
+ * The honest provenance for every not-yet-configured state: nothing has left the device, so the line
+ * must not say `CLOUD`. Shared by the no-provider panel and the empty provider form (fixed on-device
+ * during DS-10, when the empty form claimed `CLOUD · (UNKNOWN HOST)`).
+ */
+@Composable
+private fun LocalOnlyProvenanceLine(modifier: Modifier = Modifier) {
+    SidrProvenanceLine(
+        source = sidrString(R.string.assistant_provenance_local_only),
+        details = listOf(sidrString(R.string.assistant_provenance_no_provider)),
+        modifier = modifier,
     )
 }
 
@@ -343,14 +383,12 @@ private fun AssistantNoProviderPanel(
         verticalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
         SidrPrivacyNotice(
-            title = NO_PROVIDER_TITLE,
-            body = NO_PROVIDER_BODY,
-            provenance = {
-                SidrProvenanceLine(source = "local only", details = listOf("no provider configured"))
-            },
+            title = sidrString(R.string.assistant_no_provider_title),
+            body = sidrString(R.string.assistant_no_provider_body),
+            provenance = { LocalOnlyProvenanceLine() },
         )
         SidrPrimaryButton(
-            text = "Open provider settings",
+            text = sidrString(R.string.assistant_open_provider_settings),
             onClick = onOpenProvider,
         )
     }
@@ -383,55 +421,57 @@ internal fun AssistantProviderPanel(
         verticalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
         SidrPrivacyNotice(
-            title = CLOUD_DISCLOSURE_TITLE,
-            body = CLOUD_DISCLOSURE_BODY,
+            title = sidrString(R.string.assistant_cloud_disclosure_title),
+            body = sidrString(R.string.assistant_cloud_disclosure_body),
             provenance = {
                 // Never claim "CLOUD" before a provider exists — an empty form is still local-only.
                 if (form.baseUrl.isNotBlank()) {
                     SidrProvenanceLine(
-                        source = "cloud",
+                        source = sidrString(R.string.assistant_provenance_cloud),
                         details = providerProvenanceDetails(
-                            baseUrl = form.baseUrl,
-                            modelId = form.modelId,
-                            keySet = form.keySet,
+                            providerProvenance(
+                                baseUrl = form.baseUrl,
+                                modelId = form.modelId,
+                                keySet = form.keySet,
+                            ),
                         ),
                     )
                 } else {
-                    SidrProvenanceLine(source = "local only", details = listOf("no provider configured"))
+                    LocalOnlyProvenanceLine()
                 }
             },
         )
 
         ProviderField(
-            label = "BASE URL",
+            label = sidrString(R.string.assistant_field_base_url),
             value = baseUrl,
             onValueChange = { baseUrl = it },
-            placeholder = "https://openrouter.ai/api/v1",
+            placeholder = sidrString(R.string.assistant_placeholder_base_url),
         )
         ProviderField(
-            label = "MODEL",
+            label = sidrString(R.string.assistant_field_model),
             value = model,
             onValueChange = { model = it },
-            placeholder = "mistralai/mistral-7b-instruct",
+            placeholder = sidrString(R.string.assistant_placeholder_model),
         )
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
             ProviderField(
-                label = "API KEY",
+                label = sidrString(R.string.assistant_field_api_key),
                 value = apiKey,
                 onValueChange = { apiKey = it },
-                placeholder = "sk-…",
+                placeholder = sidrString(R.string.assistant_placeholder_api_key),
                 visualTransformation = PasswordVisualTransformation(),
                 isPassword = true,
             )
             if (form.keySet) {
                 SidrText(
-                    text = "Key set — stored in this device's Keystore. Enter a new one to replace it.",
+                    text = sidrString(R.string.assistant_key_set_note),
                     role = SidrTextRole.PROVENANCE,
                 )
             }
-            if (form.saveError != null) {
+            form.saveError?.let { saveError ->
                 SidrText(
-                    text = form.saveError,
+                    text = sidrString(saveError.messageRes()),
                     role = SidrTextRole.PROVENANCE,
                     color = colors.danger,
                 )
@@ -439,7 +479,7 @@ internal fun AssistantProviderPanel(
         }
 
         SidrPrimaryButton(
-            text = "Save",
+            text = sidrString(R.string.assistant_save),
             onClick = { onSave(baseUrl, model, apiKey) },
             modifier = Modifier.fillMaxWidth(),
             enabled = baseUrl.isNotBlank() && model.isNotBlank(),

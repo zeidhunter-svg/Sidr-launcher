@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 10: Turkish for feature/assistant. Agent-drafted, NOT owner-reviewed.
+
+  Field labels (assistant_field_*) are written in natural case on purpose: SidrSystemLabel applies
+  text.uppercase(Locale.getDefault()) at render time - which is exactly the fold Turkish needs
+  (i -> İ) - and the same value is read by TalkBack as the field's contentDescription without it.
+-->
+<resources>
+    <string name="assistant_title">Asistan</string>
+    <string name="assistant_provider_title">Yapay zeka sağlayıcısı</string>
+    <string name="assistant_back">Geri</string>
+
+    <string name="assistant_refusal_note">Asistan bu isteği yanıtlamayı reddetti. Bir sorun oluşmadı; mesajı yeniden ifade edip tekrar gönderebilirsiniz.</string>
+    <string name="assistant_open_provider_settings">Sağlayıcı ayarlarını aç</string>
+
+    <string name="assistant_error_title">Asistan yanıt veremedi</string>
+    <string name="assistant_error_what_failed">Yanıt tamamlanmadı.</string>
+    <string name="assistant_error_why_network">Ağ bağlantısı yok.</string>
+    <string name="assistant_error_why_unknown">Bir şeyler ters gitti.</string>
+    <string name="assistant_error_why_missing_credentials">API anahtarı yapılandırılmamış. Bir sağlayıcı ayarlayın.</string>
+    <string name="assistant_error_why_unauthorized">API anahtarı sağlayıcı tarafından reddedildi. Ayarlarınızı güncelleyin.</string>
+    <string name="assistant_error_why_rate_limited">İstek sınırına ulaşıldı. Lütfen bekleyip tekrar deneyin.</string>
+    <string name="assistant_error_why_timeout">İstek zaman aşımına uğradı.</string>
+    <string name="assistant_error_why_server">Sunucu hatası (%1$s). Lütfen tekrar deneyin.</string>
+    <string name="assistant_error_why_server_no_code">Sunucu hatası (bilinmiyor). Lütfen tekrar deneyin.</string>
+    <string name="assistant_error_why_invalid_request">Geçersiz istek: %1$s.</string>
+    <string name="assistant_error_why_invalid_request_no_detail">Geçersiz istek: modeli / ayarları kontrol edin.</string>
+    <string name="assistant_error_next_provider">Sağlayıcı ayarlarını açın ve temel URL\'yi, modeli ve API anahtarını kontrol edin.</string>
+    <string name="assistant_action_retry">Yeniden dene</string>
+    <string name="assistant_action_fix_provider">Sağlayıcı ayarlarını düzelt</string>
+
+    <string name="assistant_field_base_url">Temel URL</string>
+    <string name="assistant_field_model">Model</string>
+    <string name="assistant_field_api_key">API anahtarı</string>
+    <string name="assistant_save">Kaydet</string>
+    <string name="assistant_save_error_base_url_not_https">Temel URL https:// ile başlamalıdır</string>
+    <string name="assistant_save_error_key_failed">API anahtarı kaydedilemedi</string>
+    <string name="assistant_save_error_config_failed">Sağlayıcı ayarları kaydedilemedi</string>
+</resources>

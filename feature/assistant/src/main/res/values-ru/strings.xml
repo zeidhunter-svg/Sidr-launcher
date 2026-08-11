@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 10: Russian for feature/assistant. Agent-drafted, NOT owner-reviewed.
+
+  Field labels (assistant_field_*) are written in natural case on purpose: SidrSystemLabel applies
+  text.uppercase(Locale.getDefault()) at render time, and the same value is read by TalkBack as the
+  field's contentDescription without that fold.
+-->
+<resources>
+    <string name="assistant_title">Ассистент</string>
+    <string name="assistant_provider_title">ИИ-провайдер</string>
+    <string name="assistant_back">Назад</string>
+
+    <string name="assistant_refusal_note">Ассистент отказался отвечать на это. Ничего не сломалось; вы можете переформулировать сообщение и отправить его снова.</string>
+    <string name="assistant_open_provider_settings">Открыть настройки провайдера</string>
+
+    <string name="assistant_error_title">Ассистент не смог ответить</string>
+    <string name="assistant_error_what_failed">Ответ не был завершён.</string>
+    <string name="assistant_error_why_network">Нет подключения к сети.</string>
+    <string name="assistant_error_why_unknown">Что-то пошло не так.</string>
+    <string name="assistant_error_why_missing_credentials">Ключ API не настроен. Настройте провайдера.</string>
+    <string name="assistant_error_why_unauthorized">Провайдер отклонил ключ API. Обновите настройки.</string>
+    <string name="assistant_error_why_rate_limited">Превышен лимит запросов. Подождите и повторите попытку.</string>
+    <string name="assistant_error_why_timeout">Истекло время ожидания запроса.</string>
+    <string name="assistant_error_why_server">Ошибка сервера (%1$s). Повторите попытку.</string>
+    <string name="assistant_error_why_server_no_code">Ошибка сервера (неизвестно). Повторите попытку.</string>
+    <string name="assistant_error_why_invalid_request">Неверный запрос: %1$s.</string>
+    <string name="assistant_error_why_invalid_request_no_detail">Неверный запрос: проверьте модель и настройки.</string>
+    <string name="assistant_error_next_provider">Откройте настройки провайдера и проверьте базовый URL, модель и ключ API.</string>
+    <string name="assistant_action_retry">Повторить</string>
+    <string name="assistant_action_fix_provider">Исправить настройки провайдера</string>
+
+    <string name="assistant_field_base_url">Базовый URL</string>
+    <string name="assistant_field_model">Модель</string>
+    <string name="assistant_field_api_key">Ключ API</string>
+    <string name="assistant_save">Сохранить</string>
+    <string name="assistant_save_error_base_url_not_https">Базовый URL должен начинаться с https://</string>
+    <string name="assistant_save_error_key_failed">Не удалось сохранить ключ API</string>
+    <string name="assistant_save_error_config_failed">Не удалось сохранить настройки провайдера</string>
+</resources>

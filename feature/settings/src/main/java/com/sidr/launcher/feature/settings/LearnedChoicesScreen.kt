@@ -43,6 +43,7 @@ import com.sidr.launcher.core.ui.component.SidrMemoryType
 import com.sidr.launcher.core.ui.component.SidrScaffold
 import com.sidr.launcher.core.ui.component.SidrSectionHeader
 import com.sidr.launcher.core.ui.component.SidrTopBar
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrProgress
 import com.sidr.launcher.core.ui.theme.Sizes
 import com.sidr.launcher.core.ui.theme.Spacing
@@ -79,11 +80,11 @@ private fun LearnedChoicesContent(
         modifier = modifier,
         topBar = {
             SidrTopBar(
-                title = "Memory",
+                title = sidrString(R.string.settings_memory_top_bar_title),
                 navigationIcon = {
                     SidrIconButton(
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
+                        contentDescription = sidrString(R.string.settings_back),
                         onClick = onBack,
                     )
                 },
@@ -95,7 +96,7 @@ private fun LearnedChoicesContent(
                 .fillMaxSize()
                 .padding(inner),
         ) {
-            SidrSectionHeader(text = "LEARNED CHOICES")
+            SidrSectionHeader(text = sidrString(R.string.settings_learned_choices_header))
             when {
                 uiState.isLoading -> LoadingState(modifier = Modifier.weight(1f))
                 uiState.errorMessage != null -> ErrorState(
@@ -104,7 +105,7 @@ private fun LearnedChoicesContent(
                     modifier = Modifier.weight(1f),
                 )
                 uiState.choices.isEmpty() -> EmptyState(
-                    message = "No learned choices yet\nPreferences appear only after confirmed choices.\nStored only on this device.",
+                    message = sidrString(R.string.settings_learned_choices_empty_message),
                     modifier = Modifier.weight(1f),
                 )
                 else -> LearnedChoicesList(
@@ -116,10 +117,13 @@ private fun LearnedChoicesContent(
 
             pendingForget?.let { choice ->
                 SidrForgetGate(
-                    title = "Forget learned choice?",
-                    consequence = "\"${choice.phrase}\" will no longer prefer ${choice.targetLabel}.\n" +
-                        "The next ambiguous request will ask you to choose again.",
-                    evidence = "Stored only on this device.",
+                    title = sidrString(R.string.settings_forget_learned_choice_title),
+                    consequence = sidrString(
+                        R.string.settings_forget_learned_choice_consequence,
+                        choice.phrase,
+                        choice.targetLabel,
+                    ),
+                    evidence = sidrString(R.string.settings_stored_locally),
                     onCancel = { pendingForget = null },
                     onForget = {
                         onDelete(choice.stableId)

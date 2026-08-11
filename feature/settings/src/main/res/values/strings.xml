@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 8: English source for feature/settings (Settings, Aliases, Learned Choices screens).
+  All ordinary/translatable - no locked (Class A/B) content in this module; see the task-8 report for
+  why (no religious terminology, no permission-consent copy - this module's disclosures were judged the
+  same class as feature/prayer's already-ordinary "Local only" privacy body, not owner-review copy).
+
+  Section headers (settings_section_*, plus settings_add_alias_header/settings_target_app_header/
+  settings_aliases_section_header/settings_learned_choices_header) render through SidrSectionHeader ->
+  SidrSystemLabel, which applies text.uppercase(Locale.getDefault()) at render time - the English source
+  values below are kept verbatim (already upper-case in the original Kotlin literals), which is a no-op
+  under that transform either way.
+-->
+<resources>
+    <!-- Shared across all three screens -->
+    <string name="settings_back">Back</string>
+    <string name="settings_stored_locally">Stored only on this device.</string>
+    <!-- Shared between the Settings nav row and the Aliases screen's own top-bar title (identical text) -->
+    <string name="settings_aliases_title">Aliases</string>
+
+    <!-- SettingsScreen.kt -->
+    <string name="settings_top_bar_title">Settings</string>
+    <string name="settings_section_appearance">APPEARANCE</string>
+    <string name="settings_section_accent">ACCENT</string>
+    <string name="settings_auto_hide_nav_title">Auto-hide navigation bar</string>
+    <string name="settings_auto_hide_nav_description">Let the bottom bar slide away after a few seconds of inactivity. Tap the handle at the bottom to bring it back. Off by default — the bar stays visible.</string>
+    <string name="settings_section_suggestions">SUGGESTIONS</string>
+    <string name="settings_ai_suggestions_title">AI suggestions</string>
+    <string name="settings_ai_suggestions_description">Show launcher suggestions and allow background precompute scheduling.</string>
+    <string name="settings_section_home">HOME</string>
+    <string name="settings_personalize_usage_title">Personalize from usage</string>
+    <string name="settings_personalize_usage_description">Remember which apps you open to fill Favorites and improve suggestions.</string>
+    <string name="settings_voice_input_title">Voice input</string>
+    <string name="settings_voice_input_description">Show the microphone on the search field for spoken commands.</string>
+    <string name="settings_section_prayer">PRAYER</string>
+    <string name="settings_prayer_times_title">Prayer times</string>
+    <string name="settings_section_memory">MEMORY</string>
+    <string name="settings_learned_choices_title">Learned choices</string>
+    <string name="settings_section_assistant">ASSISTANT</string>
+    <string name="settings_ai_provider_title">AI provider settings</string>
+    <string name="settings_smart_routing_title">Smart command routing</string>
+    <string name="settings_smart_routing_description">Use your AI provider to understand natural-language commands. Suggested actions always ask before running.</string>
+    <string name="settings_section_system">SYSTEM</string>
+    <string name="settings_set_default_launcher_title">Set as default launcher</string>
+
+    <!-- ThemeOption/AccentOption display labels (SettingsUiState.kt values, resolved via SettingsLabels.kt) -->
+    <string name="settings_theme_system">System default</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_accent_grey">Grey</string>
+    <string name="settings_accent_green">Green</string>
+    <string name="settings_accent_amber">Amber</string>
+
+    <!-- AliasesScreen.kt -->
+    <string name="settings_add_alias_header">ADD ALIAS</string>
+    <string name="settings_target_app_header">TARGET APP</string>
+    <string name="settings_no_apps_available">No launchable apps available.</string>
+    <string name="settings_aliases_section_header">ALIASES</string>
+    <string name="settings_forget_alias_title">Forget alias?</string>
+    <string name="settings_forget_alias_consequence">"\"%1$s\" will no longer open %2$s.\nYou can add it again from Settings."</string>
+    <string name="settings_aliases_empty_message">No aliases yet\nAliases appear after you add them here.\nStored only on this device.</string>
+    <string name="settings_alias_target_prefix">Target: %1$s</string>
+    <string name="settings_alias_phrase_collision_warning">An app already matches this phrase. The app will win; aliases only fill gaps.</string>
+    <string name="settings_alias_phrase_too_long">Alias phrase is too long.</string>
+    <string name="settings_add_alias_button">Add alias</string>
+    <string name="settings_alias_phrase_placeholder">Alias phrase</string>
+
+    <!-- LearnedChoicesScreen.kt -->
+    <string name="settings_memory_top_bar_title">Memory</string>
+    <string name="settings_learned_choices_header">LEARNED CHOICES</string>
+    <string name="settings_learned_choices_empty_message">No learned choices yet\nPreferences appear only after confirmed choices.\nStored only on this device.</string>
+    <string name="settings_forget_learned_choice_title">Forget learned choice?</string>
+    <string name="settings_forget_learned_choice_consequence">"\"%1$s\" will no longer prefer %2$s.\nThe next ambiguous request will ask you to choose again."</string>
+</resources>

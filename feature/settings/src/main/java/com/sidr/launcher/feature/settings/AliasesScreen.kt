@@ -54,6 +54,7 @@ import com.sidr.launcher.core.ui.component.SidrPrimaryButton
 import com.sidr.launcher.core.ui.component.SidrScaffold
 import com.sidr.launcher.core.ui.component.SidrSectionHeader
 import com.sidr.launcher.core.ui.component.SidrTopBar
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrProgress
 import com.sidr.launcher.core.ui.primitive.SidrSurface
 import com.sidr.launcher.core.ui.primitive.SidrSurfaceTone
@@ -109,11 +110,11 @@ private fun AliasesContent(
         modifier = modifier,
         topBar = {
             SidrTopBar(
-                title = "Aliases",
+                title = sidrString(R.string.settings_aliases_title),
                 navigationIcon = {
                     SidrIconButton(
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
+                        contentDescription = sidrString(R.string.settings_back),
                         onClick = onBack,
                     )
                 },
@@ -140,7 +141,7 @@ private fun AliasesContent(
                     )
                 }
                 else -> {
-                    item { SidrSectionHeader(text = "ADD ALIAS") }
+                    item { SidrSectionHeader(text = sidrString(R.string.settings_add_alias_header)) }
                     item {
                         AliasPhraseForm(
                             phrase = phrase,
@@ -155,10 +156,13 @@ private fun AliasesContent(
                         )
                     }
 
-                    item { SidrSectionHeader(text = "TARGET APP") }
+                    item { SidrSectionHeader(text = sidrString(R.string.settings_target_app_header)) }
                     if (uiState.pickerApps.isEmpty()) {
                         item {
-                            EmptyState(message = "No launchable apps available.", modifier = Modifier.fillMaxWidth())
+                            EmptyState(
+                                message = sidrString(R.string.settings_no_apps_available),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
                         }
                     } else {
                         items(uiState.pickerApps, key = { "picker:${it.packageName}" }) { app ->
@@ -170,14 +174,17 @@ private fun AliasesContent(
                         }
                     }
 
-                    item { SidrSectionHeader(text = "ALIASES") }
+                    item { SidrSectionHeader(text = sidrString(R.string.settings_aliases_section_header)) }
                     pendingForget?.let { alias ->
                         item(key = "forget:${alias.stableId}") {
                             SidrForgetGate(
-                                title = "Forget alias?",
-                                consequence = "\"${alias.phrase}\" will no longer open ${alias.targetLabel}.\n" +
-                                    "You can add it again from Settings.",
-                                evidence = "Stored only on this device.",
+                                title = sidrString(R.string.settings_forget_alias_title),
+                                consequence = sidrString(
+                                    R.string.settings_forget_alias_consequence,
+                                    alias.phrase,
+                                    alias.targetLabel,
+                                ),
+                                evidence = sidrString(R.string.settings_stored_locally),
                                 onCancel = { pendingForget = null },
                                 onForget = {
                                     onDelete(alias.stableId)
@@ -190,7 +197,7 @@ private fun AliasesContent(
                     if (uiState.aliases.isEmpty()) {
                         item {
                             EmptyState(
-                                message = "No aliases yet\nAliases appear after you add them here.\nStored only on this device.",
+                                message = sidrString(R.string.settings_aliases_empty_message),
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
@@ -225,26 +232,26 @@ private fun AliasPhraseForm(
         AliasPhraseField(value = phrase, onValueChange = onPhraseChange)
         selectedApp?.let {
             SidrText(
-                text = "Target: ${it.label}",
+                text = sidrString(R.string.settings_alias_target_prefix, it.label),
                 role = SidrTextRole.PROVENANCE,
             )
         }
         if (normalizedPhrase.isNotBlank() && normalizedPhrase == normalizedApp) {
             SidrText(
-                text = "An app already matches this phrase. The app will win; aliases only fill gaps.",
+                text = sidrString(R.string.settings_alias_phrase_collision_warning),
                 role = SidrTextRole.PROVENANCE,
                 color = SidrTheme.colors.caution,
             )
         }
         if (phraseTooLong) {
             SidrText(
-                text = "Alias phrase is too long.",
+                text = sidrString(R.string.settings_alias_phrase_too_long),
                 role = SidrTextRole.PROVENANCE,
                 color = SidrTheme.colors.danger,
             )
         }
         SidrPrimaryButton(
-            text = "Add alias",
+            text = sidrString(R.string.settings_add_alias_button),
             onClick = onSave,
             enabled = canSave,
             modifier = Modifier.fillMaxWidth(),
@@ -283,7 +290,7 @@ private fun AliasPhraseField(
         ) {
             if (value.isEmpty()) {
                 SidrText(
-                    text = "Alias phrase",
+                    text = sidrString(R.string.settings_alias_phrase_placeholder),
                     role = SidrTextRole.HUMAN_BODY,
                     color = colors.faint,
                 )

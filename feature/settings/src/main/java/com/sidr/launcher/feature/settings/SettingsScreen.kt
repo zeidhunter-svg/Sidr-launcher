@@ -32,6 +32,7 @@ import com.sidr.launcher.core.ui.component.SidrScaffold
 import com.sidr.launcher.core.ui.component.SidrSectionHeader
 import com.sidr.launcher.core.ui.component.SidrToggleRow
 import com.sidr.launcher.core.ui.component.SidrTopBar
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.theme.SidrTheme
 
 /**
@@ -106,11 +107,11 @@ private fun SettingsContent(
         modifier = modifier,
         topBar = {
             SidrTopBar(
-                title = "Settings",
+                title = sidrString(R.string.settings_top_bar_title),
                 navigationIcon = {
                     SidrIconButton(
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
+                        contentDescription = sidrString(R.string.settings_back),
                         onClick = onBack,
                     )
                 },
@@ -129,10 +130,10 @@ private fun SettingsContent(
                 .padding(vertical = 8.dp),
         ) {
             // ── Appearance ──────────────────────────────────────────────────────
-            SidrSectionHeader(text = "APPEARANCE")
-            ThemeOption.ALL.forEach { (value, label) ->
+            SidrSectionHeader(text = sidrString(R.string.settings_section_appearance))
+            ThemeOption.ALL.forEach { (value, _) ->
                 SidrChoiceRow(
-                    title = label,
+                    title = themeLabel(value),
                     selected = uiState.themeName == value,
                     onClick = { onThemeSelected(value) },
                 )
@@ -140,16 +141,16 @@ private fun SettingsContent(
 
             // Accent (brand phosphor) — AIL-6 / DF-7. Applies immediately + persists.
             // DS-1/ADR: accent is inert (grey identity), but the stored preference key is preserved.
-            SidrSectionHeader(text = "ACCENT")
+            SidrSectionHeader(text = sidrString(R.string.settings_section_accent))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
-                AccentOption.ALL.forEach { (value, label) ->
+                AccentOption.ALL.forEach { (value, _) ->
                     SidrFilterChip(
-                        label = label,
+                        label = accentLabel(value),
                         selected = uiState.accentColor == value,
                         onClick = { onAccentSelected(value) },
                     )
@@ -161,24 +162,23 @@ private fun SettingsContent(
             // toggle is now named for the opt-in behaviour rather than for keeping the default on.
             // Presentation-only shell behaviour.
             SidrToggleRow(
-                title = "Auto-hide navigation bar",
+                title = sidrString(R.string.settings_auto_hide_nav_title),
                 checked = uiState.autoHideNavBar,
                 onCheckedChange = onAutoHideNavBarChanged,
-                description = "Let the bottom bar slide away after a few seconds of inactivity. Tap the " +
-                    "handle at the bottom to bring it back. Off by default — the bar stays visible.",
+                description = sidrString(R.string.settings_auto_hide_nav_description),
             )
 
             // ── Suggestions ─────────────────────────────────────────────────────
-            SidrSectionHeader(text = "SUGGESTIONS")
+            SidrSectionHeader(text = sidrString(R.string.settings_section_suggestions))
             SidrToggleRow(
-                title = "AI suggestions",
+                title = sidrString(R.string.settings_ai_suggestions_title),
                 checked = uiState.aiSuggestionsEnabled,
                 onCheckedChange = onAiSuggestionsChanged,
-                description = "Show launcher suggestions and allow background precompute scheduling.",
+                description = sidrString(R.string.settings_ai_suggestions_description),
             )
 
             // ── Home ────────────────────────────────────────────────────────────
-            SidrSectionHeader(text = "HOME")
+            SidrSectionHeader(text = sidrString(R.string.settings_section_home))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
@@ -196,44 +196,43 @@ private fun SettingsContent(
             // Usage-history opt-in — without it no launches are recorded, so the Favorites row above
             // (and usage-based suggestion ranking) stay empty. Off by default (privacy-first).
             SidrToggleRow(
-                title = "Personalize from usage",
+                title = sidrString(R.string.settings_personalize_usage_title),
                 checked = uiState.usageHistoryEnabled,
                 onCheckedChange = onUsageHistoryChanged,
-                description = "Remember which apps you open to fill Favorites and improve suggestions.",
+                description = sidrString(R.string.settings_personalize_usage_description),
             )
             SidrToggleRow(
-                title = "Voice input",
+                title = sidrString(R.string.settings_voice_input_title),
                 checked = uiState.micInputEnabled,
                 onCheckedChange = onMicInputChanged,
-                description = "Show the microphone on the search field for spoken commands.",
+                description = sidrString(R.string.settings_voice_input_description),
             )
 
             // ── Prayer ──────────────────────────────────────────────────────────
-            SidrSectionHeader(text = "PRAYER")
-            SidrNavigationRow(title = "Prayer times", onClick = onPrayerSettings)
+            SidrSectionHeader(text = sidrString(R.string.settings_section_prayer))
+            SidrNavigationRow(title = sidrString(R.string.settings_prayer_times_title), onClick = onPrayerSettings)
 
             // ── Memory ──────────────────────────────────────────────────────────
-            SidrSectionHeader(text = "MEMORY")
-            SidrNavigationRow(title = "Learned choices", onClick = onLearnedChoices)
-            SidrNavigationRow(title = "Aliases", onClick = onAliases)
+            SidrSectionHeader(text = sidrString(R.string.settings_section_memory))
+            SidrNavigationRow(title = sidrString(R.string.settings_learned_choices_title), onClick = onLearnedChoices)
+            SidrNavigationRow(title = sidrString(R.string.settings_aliases_title), onClick = onAliases)
 
             // ── Assistant ───────────────────────────────────────────────────────
-            SidrSectionHeader(text = "ASSISTANT")
-            SidrNavigationRow(title = "AI provider settings", onClick = onAssistantProvider)
+            SidrSectionHeader(text = sidrString(R.string.settings_section_assistant))
+            SidrNavigationRow(title = sidrString(R.string.settings_ai_provider_title), onClick = onAssistantProvider)
             // AIL-4 — LLM Action Router opt-in. Off by default; needs a provider configured above.
             // When on, natural-language commands the rules can't handle are routed by the cloud LLM to
             // a registered action (proposals always confirm, never auto-execute).
             SidrToggleRow(
-                title = "Smart command routing",
+                title = sidrString(R.string.settings_smart_routing_title),
                 checked = uiState.llmRouterEnabled,
                 onCheckedChange = onLlmRouterChanged,
-                description = "Use your AI provider to understand natural-language commands. " +
-                    "Suggested actions always ask before running.",
+                description = sidrString(R.string.settings_smart_routing_description),
             )
 
             // ── Default launcher ────────────────────────────────────────────────
-            SidrSectionHeader(text = "SYSTEM")
-            SidrNavigationRow(title = "Set as default launcher", onClick = onSetDefaultLauncher)
+            SidrSectionHeader(text = sidrString(R.string.settings_section_system))
+            SidrNavigationRow(title = sidrString(R.string.settings_set_default_launcher_title), onClick = onSetDefaultLauncher)
 
             uiState.errorMessage?.let { message ->
                 com.sidr.launcher.core.ui.primitive.SidrText(

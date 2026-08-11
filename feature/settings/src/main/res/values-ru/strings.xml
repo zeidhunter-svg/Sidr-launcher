@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 8: Russian translation of feature/settings screen chrome - agent-drafted, NOT reviewed by
+  the owner or a native speaker. See values/strings.xml for the source and the task-8 report for notes.
+
+  Section headers (settings_section_*, settings_add_alias_header, settings_target_app_header,
+  settings_aliases_section_header, settings_learned_choices_header) are written in natural case, NOT
+  pre-uppercased: SidrSectionHeader -> SidrSystemLabel applies text.uppercase(Locale.getDefault()) at
+  render time, so the visible result is correctly upper-cased Russian without this file duplicating that
+  transform.
+-->
+<resources>
+    <string name="settings_back">Назад</string>
+    <string name="settings_stored_locally">Хранится только на этом устройстве.</string>
+    <string name="settings_aliases_title">Псевдонимы</string>
+
+    <string name="settings_top_bar_title">Настройки</string>
+    <string name="settings_section_appearance">Внешний вид</string>
+    <string name="settings_section_accent">Акцент</string>
+    <string name="settings_auto_hide_nav_title">Автоскрытие панели навигации</string>
+    <string name="settings_auto_hide_nav_description">Позвольте нижней панели исчезать через несколько секунд бездействия. Нажмите на ручку внизу, чтобы вернуть её обратно. По умолчанию выключено — панель остаётся видимой.</string>
+    <string name="settings_section_suggestions">Подсказки</string>
+    <string name="settings_ai_suggestions_title">ИИ-подсказки</string>
+    <string name="settings_ai_suggestions_description">Показывать подсказки лаунчера и разрешить фоновое предварительное вычисление.</string>
+    <string name="settings_section_home">Главный экран</string>
+    <string name="settings_personalize_usage_title">Персонализация по использованию</string>
+    <string name="settings_personalize_usage_description">Запоминать, какие приложения вы открываете, чтобы заполнить раздел «Избранное» и улучшить подсказки.</string>
+    <string name="settings_voice_input_title">Голосовой ввод</string>
+    <string name="settings_voice_input_description">Показывать микрофон в поле поиска для голосовых команд.</string>
+    <string name="settings_section_prayer">Намаз</string>
+    <string name="settings_prayer_times_title">Время намаза</string>
+    <string name="settings_section_memory">Память</string>
+    <string name="settings_learned_choices_title">Изученные выборы</string>
+    <string name="settings_section_assistant">Ассистент</string>
+    <string name="settings_ai_provider_title">Настройки провайдера ИИ</string>
+    <string name="settings_smart_routing_title">Умная маршрутизация команд</string>
+    <string name="settings_smart_routing_description">Использовать вашего ИИ-провайдера для понимания команд на естественном языке. Предложенные действия всегда запрашивают подтверждение перед выполнением.</string>
+    <string name="settings_section_system">Система</string>
+    <string name="settings_set_default_launcher_title">Сделать лаунчером по умолчанию</string>
+
+    <string name="settings_theme_system">Системная тема</string>
+    <string name="settings_theme_light">Светлая</string>
+    <string name="settings_theme_dark">Тёмная</string>
+    <string name="settings_accent_grey">Серый</string>
+    <string name="settings_accent_green">Зелёный</string>
+    <string name="settings_accent_amber">Янтарный</string>
+
+    <string name="settings_add_alias_header">Добавить псевдоним</string>
+    <string name="settings_target_app_header">Целевое приложение</string>
+    <string name="settings_no_apps_available">Нет доступных для запуска приложений.</string>
+    <string name="settings_aliases_section_header">Псевдонимы</string>
+    <string name="settings_forget_alias_title">Забыть псевдоним?</string>
+    <string name="settings_forget_alias_consequence">"\"%1$s\" больше не будет открывать %2$s.\nВы можете добавить его снова в настройках."</string>
+    <string name="settings_aliases_empty_message">Пока нет псевдонимов\nПсевдонимы появятся здесь после того, как вы их добавите.\nХранится только на этом устройстве.</string>
+    <string name="settings_alias_target_prefix">Цель: %1$s</string>
+    <string name="settings_alias_phrase_collision_warning">Приложение уже соответствует этой фразе. Приложение победит; псевдонимы заполняют только пробелы.</string>
+    <string name="settings_alias_phrase_too_long">Фраза псевдонима слишком длинная.</string>
+    <string name="settings_add_alias_button">Добавить псевдоним</string>
+    <string name="settings_alias_phrase_placeholder">Фраза псевдонима</string>
+
+    <string name="settings_memory_top_bar_title">Память</string>
+    <string name="settings_learned_choices_header">Изученные выборы</string>
+    <string name="settings_learned_choices_empty_message">Изученных выборов пока нет\nПредпочтения появляются только после подтверждённых выборов.\nХранится только на этом устройстве.</string>
+    <string name="settings_forget_learned_choice_title">Забыть изученный выбор?</string>
+    <string name="settings_forget_learned_choice_consequence">"\"%1$s\" больше не будет предпочитать %2$s.\nСледующий неоднозначный запрос снова спросит ваш выбор."</string>
+</resources>

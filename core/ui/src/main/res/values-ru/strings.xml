@@ -28,8 +28,6 @@
 
     <!-- Memory surfaces -->
     <string name="ui_memory_forget_content_description">Забыть %1$s %2$s</string>
-    <string name="ui_memory_provenance_source">память</string>
-    <string name="ui_memory_provenance_local_only">только локально</string>
     <string name="ui_learned_choice_delete_action_label">Удалить запомненный выбор</string>
 
     <!-- Terminal confirm card (DF-4) -->

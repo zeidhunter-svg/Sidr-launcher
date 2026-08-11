@@ -29,6 +29,14 @@
     <string name="ui_gate_type_destructive" translatable="false">DESTRUCTIVE</string>
 
     <string name="ui_scope_local" translatable="false">LOCAL</string>
+    <!--
+      Provenance tokens rendered through SidrProvenanceLine, which uppercases them to `MEMORY` and
+      `LOCAL ONLY` - the locked provenance vocabulary spec §7.1 enumerates. Owner ruling (fix round):
+      §7.1 governs over the brief's Step 4, which had told Task 2 to translate these. Tasks 10 and 13
+      follow this precedent for the assistant's and launcher's own provenance tokens.
+    -->
+    <string name="ui_memory_provenance_source" translatable="false">memory</string>
+    <string name="ui_memory_provenance_local_only" translatable="false">local only</string>
     <string name="ui_status_failed" translatable="false">FAILED</string>
     <!--
       Task-2 addition (reported): SidrOfflineState/SidrBlockedState render these through the same

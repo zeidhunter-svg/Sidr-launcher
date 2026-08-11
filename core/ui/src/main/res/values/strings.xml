@@ -28,8 +28,6 @@
 
     <!-- Memory surfaces -->
     <string name="ui_memory_forget_content_description">Forget %1$s %2$s</string>
-    <string name="ui_memory_provenance_source">memory</string>
-    <string name="ui_memory_provenance_local_only">local only</string>
     <string name="ui_learned_choice_delete_action_label">Delete learned choice</string>
 
     <!-- Terminal confirm card (DF-4) -->

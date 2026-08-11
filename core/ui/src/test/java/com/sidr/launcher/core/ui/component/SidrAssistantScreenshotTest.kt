@@ -44,6 +44,29 @@ class SidrAssistantScreenshotTest {
         compose.onRoot().captureRoboImage("src/test/screenshots/assistant_rtl.png")
     }
 
+    /**
+     * I18N-1 barrier 3 (spec §10.4): the same gallery as [assistant_dark], rendered in the platform
+     * `en-XA` pseudolocale, which accents ASCII and pads every string to ~1.4x. What moves here are
+     * the resource-backed strings `SidrAssistantComposer`/`SidrStreamingIndicator`/`SidrErrorSurface`
+     * read through `sidrString` — the composer placeholder, the streaming label, the FAILED chip and
+     * the WHAT/WHY/NEXT labels. The gallery's own prose is caller-supplied Kotlin literal and stays
+     * English, exactly as a feature's runtime copy would come from its own module's resources.
+     *
+     * Depends on `isPseudoLocalesEnabled = true` in `core/ui/build.gradle.kts`.
+     *
+     * Limitation: pseudolocale expansion is ASCII accenting and padding — it does not exercise
+     * Turkish dotted-`İ` and does not reproduce real Cyrillic string lengths. A clean capture here
+     * is not evidence that `ru`/`tr` fit.
+     */
+    @Test
+    @Config(qualifiers = "+b+en+XA")
+    fun assistant_pseudolocale() {
+        compose.setContent {
+            SidrTheme(darkTheme = true) { AssistantGallery() }
+        }
+        compose.onRoot().captureRoboImage("src/test/screenshots/assistant_pseudolocale.png")
+    }
+
     private fun capture(dark: Boolean, name: String) {
         compose.setContent { SidrTheme(darkTheme = dark) { AssistantGallery() } }
         compose.onRoot().captureRoboImage("src/test/screenshots/$name.png")

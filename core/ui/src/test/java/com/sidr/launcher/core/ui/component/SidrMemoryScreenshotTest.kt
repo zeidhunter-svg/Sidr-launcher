@@ -16,6 +16,20 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
+/**
+ * **No `memory_pseudolocale` capture — scope limit, NOT a statement that one is worthless
+ * (I18N-1 Task 4, spec §10.4).** Task 4 was budgeted exactly two new goldens, `controls_` and
+ * `assistant_`, and adding a third was outside its authority.
+ *
+ * Be clear about what that leaves on the table: the aliases and app labels here are caller-supplied
+ * Kotlin literals, but the surrounding chrome is not — [SidrMemoryItem], [SidrMemoryDisclosure] and
+ * [SidrForgetGate] read roughly two dozen `core/ui` strings through `sidrString` (the provenance
+ * vocabulary, the learning-progress copy, the gate's confirm/cancel labels), all of which `en-XA`
+ * would expand.
+ *
+ * So this gallery is a genuine pseudolocale target. It is deferred, not rejected — see the Task 4
+ * report.
+ */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])

@@ -92,6 +92,42 @@ class ControlsScreenshotTest {
         compose.onRoot().captureRoboImage("src/test/screenshots/controls_rtl.png")
     }
 
+    /**
+     * I18N-1 barrier 3 (spec §10.4): the same gallery as [controls_dark], rendered in the platform
+     * `en-XA` pseudolocale, which accents ASCII and pads every string to ~1.4x, so layout that only
+     * fits English fails visibly. Depends on `isPseudoLocalesEnabled = true` in
+     * `core/ui/build.gradle.kts` — without it this qualifier silently resolves to plain English.
+     *
+     * The qualifier carries a **leading `+`** so it merges onto the module's `robolectric.properties`
+     * viewport (`w360dp-h800dp-xhdpi`) instead of replacing it; without the `+` the capture would
+     * render at a different screen size and stop being comparable to [controls_dark].
+     *
+     * **Known-vacuous as recorded (I18N-1 Task 4 finding).** `controls_pseudolocale.png` is currently
+     * *byte-identical* to `controls_dark.png`. [ControlGallery]'s only resource-backed strings live in
+     * its `SidrUniversalInput`, `SidrPreview` and `SidrActionGate` sections, and all three sit below
+     * the 800dp fold — the capture ends in the CHIPS row, and everything above it is a Kotlin literal
+     * passed in by the gallery. So this golden pins a real rendering path but presently proves
+     * nothing about expansion. Raising the viewport would fix it, but that would move the four
+     * existing `controls_*` goldens, which this block forbids. Resolve it by capturing the gallery's
+     * lower half, or by pointing the barrier at a gallery whose resource strings are on screen (see
+     * the notes on [SidrMemoryScreenshotTest] and [SidrPrayerSummaryScreenshotTest]).
+     *
+     * The live barrier today is `assistant_pseudolocale`, which does move.
+     *
+     * Limitation: pseudolocale expansion is ASCII accenting and padding. It does **not** exercise
+     * Turkish dotted-`İ`, and it does not reproduce real Cyrillic lengths (`КОНФЛИКТ ЧАСОВОГО ПОЯСА`
+     * is 25 chars against `TZ CONFLICT`'s 11 on an uppercase status chip). A clean capture here is
+     * not evidence that `ru`/`tr` fit; that is the device pass.
+     */
+    @Test
+    @Config(qualifiers = "+b+en+XA")
+    fun controls_pseudolocale() {
+        compose.setContent {
+            SidrTheme(darkTheme = true) { ControlGallery() }
+        }
+        compose.onRoot().captureRoboImage("src/test/screenshots/controls_pseudolocale.png")
+    }
+
     @Composable
     private fun PreviewControlsContent() {
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {

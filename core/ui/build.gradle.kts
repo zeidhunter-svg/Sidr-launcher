@@ -18,6 +18,16 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    // I18N-1 Task 4 (spec §10.4): generates the `en-XA` / `ar-XB` pseudolocales into the debug
+    // resource table. Load-bearing — proven by spike: with the flag off, a Robolectric
+    // `b+en+XA` qualifier resolves `ui_action_cancel` to plain "Cancel"; with it on, to
+    // "[Çåñçéļ one two]". The pseudolocale screenshot barrier depends on it.
+    buildTypes {
+        debug {
+            isPseudoLocalesEnabled = true
+        }
+    }
+
     buildFeatures {
         compose = true
     }

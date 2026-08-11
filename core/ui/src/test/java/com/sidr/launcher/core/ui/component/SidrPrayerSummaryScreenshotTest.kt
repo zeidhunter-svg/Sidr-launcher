@@ -24,6 +24,21 @@ import org.robolectric.annotation.GraphicsMode
  * unscrolled column, which overflows the module-default `robolectric.properties` viewport
  * (w360dp-h800dp-xhdpi, ~720x1488px) after ~5 states. The height qualifier is overridden here so every
  * state is captured un-clipped in all four goldens (review finding, DS-6B Task 7 fix round 1).
+ *
+ * **No `prayer_summary_pseudolocale` capture — scope limit, NOT a statement that one is worthless
+ * (I18N-1 Task 4, spec §10.4).** Task 4 was budgeted exactly two new goldens, `controls_` and
+ * `assistant_`, and adding a third was outside its authority.
+ *
+ * Be clear about what that leaves on the table: the prayer names and times here are caller-supplied
+ * Kotlin literals, but the **status chip is not** — [SidrPrayerSummary] resolves all eleven
+ * [SidrPrayerSummaryStatus] values through `sidrString`, so `TZ CONFLICT`, `LOCATION UNAVAILABLE`
+ * and `AUTHORITY UNAVAILABLE` are `core/ui` resources rendered as uppercase, letter-spaced,
+ * fixed-width chips. That is the tightest layout in the module and the likeliest place for `ru`/`tr`
+ * to overflow (`КОНФЛИКТ ЧАСОВОГО ПОЯСА` is 25 characters against `TZ CONFLICT`'s 11). This class
+ * also already renders at `h3200dp`, so nothing would be clipped out of such a capture.
+ *
+ * So a `prayer_summary_pseudolocale` capture is arguably the single most valuable barrier available
+ * in this module. It is deferred, not rejected — see the Task 4 report.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 7 Class B locked, translated vocabulary - see values/strings_locked.xml for the full
+  contract and docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md for the owner-review table.
+  NO Class A entry here: prayer_provenance_frame is translatable="false" and must never appear in a
+  translated folder.
+
+  Prayer names below are the EXACT Russian terms given by the task brief (verbatim, not a draft).
+  Calculation-method names and madhab labels are a DRAFT translation awaiting owner sign-off.
+-->
+<resources>
+    <string name="prayer_name_fajr">Фаджр</string>
+    <string name="prayer_name_sunrise">Восход</string>
+    <string name="prayer_name_dhuhr">Зухр</string>
+    <string name="prayer_name_asr">Аср</string>
+    <string name="prayer_name_maghrib">Магриб</string>
+    <string name="prayer_name_isha">Иша</string>
+
+    <string name="prayer_method_mwl">Всемирная исламская лига</string>
+    <string name="prayer_method_egyptian">Египетское главное управление геодезии</string>
+    <string name="prayer_method_karachi">Университет исламских наук, Карачи</string>
+    <string name="prayer_method_umm_al_qura">Университет Умм аль-Кура, Мекка</string>
+    <string name="prayer_method_dubai">Дубай (ОАЭ)</string>
+    <string name="prayer_method_moon_sighting_committee">Всемирный комитет по наблюдению за луной</string>
+    <string name="prayer_method_north_america">Исламское общество Северной Америки (ISNA)</string>
+    <string name="prayer_method_kuwait">Кувейт</string>
+    <string name="prayer_method_qatar">Катар</string>
+    <string name="prayer_method_singapore">Majlis Ugama Islam Singapura</string>
+    <string name="prayer_method_turkey">Diyanet İşleri Başkanlığı, Турция</string>
+
+    <string name="prayer_madhab_standard">Стандартный (шафиитский / маликитский / ханбалитский)</string>
+    <string name="prayer_madhab_hanafi">Ханафитский</string>
+</resources>

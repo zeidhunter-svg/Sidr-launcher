@@ -33,6 +33,7 @@ import com.sidr.launcher.core.ui.component.SidrScaffold
 import com.sidr.launcher.core.ui.component.SidrSearchField
 import com.sidr.launcher.core.ui.component.SidrSectionHeader
 import com.sidr.launcher.core.ui.component.SidrTopBar
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrText
 import com.sidr.launcher.core.ui.primitive.SidrTextRole
 import com.sidr.launcher.core.ui.theme.SidrTheme
@@ -40,6 +41,7 @@ import com.sidr.launcher.domain.prayer.CalculationMethodId
 import com.sidr.launcher.domain.prayer.Madhab
 import com.sidr.launcher.domain.prayer.PrayerLocation
 import com.sidr.launcher.domain.prayer.PrayerLocationSource
+import com.sidr.launcher.feature.prayer.R
 
 /**
  * Prayer setup screen (DS-6B Task 8, spec §0.1/§0.2/§0.4/§0.5). Stateless render over
@@ -97,11 +99,11 @@ private fun PrayerSettingsContent(
         modifier = modifier,
         topBar = {
             SidrTopBar(
-                title = "Prayer times",
+                title = sidrString(R.string.prayer_top_bar_title),
                 navigationIcon = {
                     SidrIconButton(
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
+                        contentDescription = sidrString(R.string.prayer_back),
                         onClick = onBack,
                     )
                 },
@@ -117,17 +119,17 @@ private fun PrayerSettingsContent(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             // ── Method (mandatory, no default) ─────────────────────────────────
-            SidrSectionHeader(text = "CALCULATION METHOD")
+            SidrSectionHeader(text = sidrString(R.string.prayer_settings_method_section_header))
             uiState.methodOptions.forEach { method ->
                 SidrChoiceRow(
-                    title = method.displayLabel,
+                    title = methodLabel(method.id),
                     selected = uiState.selectedMethod == method.id,
                     onClick = { onMethodSelected(method.id) },
                 )
             }
 
             // ── Madhab (mandatory, no default) ─────────────────────────────────
-            SidrSectionHeader(text = "MADHAB (ASR)")
+            SidrSectionHeader(text = sidrString(R.string.prayer_settings_madhab_section_header))
             uiState.madhabOptions.forEach { madhab ->
                 SidrChoiceRow(
                     title = madhabLabel(madhab),
@@ -137,12 +139,12 @@ private fun PrayerSettingsContent(
             }
 
             // ── Location (optional; manual city path needs zero permission) ────
-            SidrSectionHeader(text = "LOCATION")
+            SidrSectionHeader(text = sidrString(R.string.prayer_settings_location_section_header))
             SidrSearchField(
                 value = uiState.citySearchQuery,
                 onValueChange = onCityQueryChanged,
                 onSubmit = {},
-                placeholder = "Search for a city…",
+                placeholder = sidrString(R.string.prayer_settings_city_search_placeholder),
             )
             uiState.citySearchResults.forEach { city ->
                 SidrNavigationRow(
@@ -153,13 +155,21 @@ private fun PrayerSettingsContent(
             }
             uiState.location?.let { location ->
                 SidrText(
-                    text = "Current: ${location.label} (${locationSourceLabel(location.source)})",
+                    text = sidrString(
+                        R.string.prayer_settings_current_location,
+                        location.label,
+                        locationSourceLabel(location.source),
+                    ),
                     role = SidrTextRole.PROVENANCE,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
             }
             SidrPrimaryButton(
-                text = if (uiState.isResolvingDeviceLocation) "Locating…" else "Use device location",
+                text = if (uiState.isResolvingDeviceLocation) {
+                    sidrString(R.string.prayer_settings_locating_button)
+                } else {
+                    sidrString(R.string.prayer_settings_use_device_location_button)
+                },
                 onClick = onUseDeviceLocation,
                 enabled = !uiState.isResolvingDeviceLocation,
                 loading = uiState.isResolvingDeviceLocation,
@@ -170,10 +180,8 @@ private fun PrayerSettingsContent(
 
             // Local-only, never-sent privacy notice (spec §0.5 / DS-5 SidrPrivacyNotice).
             SidrPrivacyNotice(
-                title = "Local only",
-                body = "Prayer times are computed on this device. If you set a location, it stays " +
-                    "on-device only — it is never sent anywhere and never logged. Picking a city " +
-                    "needs no permission at all.",
+                title = sidrString(R.string.prayer_settings_privacy_title),
+                body = sidrString(R.string.prayer_settings_privacy_body),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
 
@@ -188,25 +196,23 @@ private fun PrayerSettingsContent(
 
             // ── Destructive actions, gated by SidrActionGate ────────────────────
             if (uiState.location != null || uiState.isConfigured) {
-                SidrSectionHeader(text = "RESET")
+                SidrSectionHeader(text = sidrString(R.string.prayer_settings_reset_section_header))
             }
             if (uiState.location != null) {
                 DestructiveRow(
-                    rowTitle = "Clear location",
-                    gateTitle = "Clear location",
-                    consequence = "Your saved prayer location will be removed. Method and madhab " +
-                        "are kept — you can pick a city or use device location again any time.",
-                    confirmLabel = "Clear location",
+                    rowTitle = sidrString(R.string.prayer_settings_clear_location_action),
+                    gateTitle = sidrString(R.string.prayer_settings_clear_location_action),
+                    consequence = sidrString(R.string.prayer_settings_clear_location_consequence),
+                    confirmLabel = sidrString(R.string.prayer_settings_clear_location_action),
                     onConfirmed = onClearLocation,
                 )
             }
             if (uiState.isConfigured) {
                 DestructiveRow(
-                    rowTitle = "Clear prayer setup",
-                    gateTitle = "Clear prayer setup",
-                    consequence = "Method, madhab, and location will all be removed. Prayer times " +
-                        "will stop showing until you set up again.",
-                    confirmLabel = "Clear setup",
+                    rowTitle = sidrString(R.string.prayer_settings_clear_setup_action),
+                    gateTitle = sidrString(R.string.prayer_settings_clear_setup_action),
+                    consequence = sidrString(R.string.prayer_settings_clear_setup_consequence),
+                    confirmLabel = sidrString(R.string.prayer_settings_clear_setup_confirm_label),
                     onConfirmed = onClearSetup,
                 )
             }
@@ -241,12 +247,30 @@ private fun DestructiveRow(
     }
 }
 
-private fun madhabLabel(madhab: Madhab): String = when (madhab) {
-    Madhab.STANDARD -> "Standard (Shafi'i / Maliki / Hanbali)"
-    Madhab.HANAFI -> "Hanafi"
+@Composable
+private fun methodLabel(methodId: CalculationMethodId): String = when (methodId.key) {
+    "MWL" -> sidrString(R.string.prayer_method_mwl)
+    "EGYPTIAN" -> sidrString(R.string.prayer_method_egyptian)
+    "KARACHI" -> sidrString(R.string.prayer_method_karachi)
+    "UMM_AL_QURA" -> sidrString(R.string.prayer_method_umm_al_qura)
+    "DUBAI" -> sidrString(R.string.prayer_method_dubai)
+    "MOON_SIGHTING_COMMITTEE" -> sidrString(R.string.prayer_method_moon_sighting_committee)
+    "NORTH_AMERICA" -> sidrString(R.string.prayer_method_north_america)
+    "KUWAIT" -> sidrString(R.string.prayer_method_kuwait)
+    "QATAR" -> sidrString(R.string.prayer_method_qatar)
+    "SINGAPORE" -> sidrString(R.string.prayer_method_singapore)
+    "TURKEY" -> sidrString(R.string.prayer_method_turkey)
+    else -> methodId.key
 }
 
+@Composable
+private fun madhabLabel(madhab: Madhab): String = when (madhab) {
+    Madhab.STANDARD -> sidrString(R.string.prayer_madhab_standard)
+    Madhab.HANAFI -> sidrString(R.string.prayer_madhab_hanafi)
+}
+
+@Composable
 private fun locationSourceLabel(source: PrayerLocationSource): String = when (source) {
-    PrayerLocationSource.CITY -> "city"
-    PrayerLocationSource.DEVICE -> "device location"
+    PrayerLocationSource.CITY -> sidrString(R.string.prayer_location_source_city)
+    PrayerLocationSource.DEVICE -> sidrString(R.string.prayer_location_source_device)
 }

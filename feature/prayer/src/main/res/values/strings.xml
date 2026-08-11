@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 7: feature/prayer screen chrome (titles, section headers, buttons, privacy notice,
+  destructive-action copy). Extracted verbatim from PrayerSettingsScreen.kt / PrayerDetailScreen.kt.
+  Religious terminology (prayer names, calculation-method names, Asr madhab labels) and the provenance
+  frame live in strings_locked.xml instead - see that file's header and
+  docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md for the owner-review contract.
+-->
+<resources>
+    <!-- Shared screen chrome (both PrayerSettingsScreen and PrayerDetailScreen) -->
+    <string name="prayer_top_bar_title">Prayer times</string>
+    <string name="prayer_back">Back</string>
+
+    <!-- PrayerSettingsScreen.kt -->
+    <string name="prayer_settings_method_section_header">CALCULATION METHOD</string>
+    <string name="prayer_settings_madhab_section_header">MADHAB (ASR)</string>
+    <string name="prayer_settings_location_section_header">LOCATION</string>
+    <string name="prayer_settings_city_search_placeholder">Search for a city…</string>
+    <string name="prayer_settings_current_location">Current: %1$s (%2$s)</string>
+    <string name="prayer_settings_locating_button">Locating…</string>
+    <string name="prayer_settings_use_device_location_button">Use device location</string>
+    <string name="prayer_settings_privacy_title">Local only</string>
+    <string name="prayer_settings_privacy_body">Prayer times are computed on this device. If you set a location, it stays on-device only — it is never sent anywhere and never logged. Picking a city needs no permission at all.</string>
+    <string name="prayer_settings_reset_section_header">RESET</string>
+    <string name="prayer_settings_clear_location_action">Clear location</string>
+    <string name="prayer_settings_clear_location_consequence">Your saved prayer location will be removed. Method and madhab are kept — you can pick a city or use device location again any time.</string>
+    <string name="prayer_settings_clear_setup_action">Clear prayer setup</string>
+    <string name="prayer_settings_clear_setup_confirm_label">Clear setup</string>
+    <string name="prayer_settings_clear_setup_consequence">Method, madhab, and location will all be removed. Prayer times will stop showing until you set up again.</string>
+    <string name="prayer_location_source_city">city</string>
+    <string name="prayer_location_source_device">device location</string>
+
+    <!-- PrayerDetailScreen.kt -->
+    <string name="prayer_detail_unavailable_title">No prayer times yet</string>
+    <string name="prayer_detail_unavailable_not_configured">Choose a calculation method and madhab to start seeing prayer times.</string>
+    <string name="prayer_detail_unavailable_location_missing">Method and madhab are set — pick a city or use device location to see prayer times.</string>
+    <string name="prayer_detail_unavailable_calculation_failed">Prayer times couldn\'t be calculated for your current setup. Try again, or check your location and method.</string>
+    <string name="prayer_detail_settings_row_title">Prayer settings</string>
+    <string name="prayer_detail_sunrise_row">%1$s · NOT A PRAYER  %2$s</string>
+    <string name="prayer_detail_timezone_conflict_warning">Your device\'s timezone differs from the prayer location\'s timezone — times below use the LOCATION\'s timezone.</string>
+    <string name="prayer_detail_setup_section_header">SETUP</string>
+    <string name="prayer_detail_method_row_title">Method</string>
+    <string name="prayer_detail_madhab_row_title">Madhab</string>
+    <string name="prayer_detail_location_row_title">Location</string>
+</resources>

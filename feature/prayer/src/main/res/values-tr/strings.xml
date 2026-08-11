@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- I18N-1 Task 7: Turkish translation of feature/prayer screen chrome - see values/strings.xml. -->
+<resources>
+    <string name="prayer_top_bar_title">Namaz vakitleri</string>
+    <string name="prayer_back">Geri</string>
+
+    <string name="prayer_settings_method_section_header">HESAPLAMA YÖNTEMİ</string>
+    <string name="prayer_settings_madhab_section_header">MEZHEP (İKİNDİ)</string>
+    <string name="prayer_settings_location_section_header">KONUM</string>
+    <string name="prayer_settings_city_search_placeholder">Şehir ara…</string>
+    <string name="prayer_settings_current_location">Mevcut: %1$s (%2$s)</string>
+    <string name="prayer_settings_locating_button">Konum belirleniyor…</string>
+    <string name="prayer_settings_use_device_location_button">Cihaz konumunu kullan</string>
+    <string name="prayer_settings_privacy_title">Sadece yerel</string>
+    <string name="prayer_settings_privacy_body">Namaz vakitleri bu cihazda hesaplanır. Bir konum ayarlarsanız, yalnızca cihazda kalır — hiçbir yere gönderilmez ve kaydedilmez. Bir şehir seçmek hiçbir izin gerektirmez.</string>
+    <string name="prayer_settings_reset_section_header">SIFIRLA</string>
+    <string name="prayer_settings_clear_location_action">Konumu temizle</string>
+    <string name="prayer_settings_clear_location_consequence">Kaydedilen namaz konumunuz kaldırılacak. Yöntem ve mezhep korunur — istediğiniz zaman tekrar bir şehir seçebilir veya cihaz konumunu kullanabilirsiniz.</string>
+    <string name="prayer_settings_clear_setup_action">Namaz kurulumunu temizle</string>
+    <string name="prayer_settings_clear_setup_confirm_label">Kurulumu temizle</string>
+    <string name="prayer_settings_clear_setup_consequence">Yöntem, mezhep ve konum tamamen kaldırılacak. Yeniden kurulum yapana kadar namaz vakitleri gösterilmeyecek.</string>
+    <string name="prayer_location_source_city">şehir</string>
+    <string name="prayer_location_source_device">cihaz konumu</string>
+
+    <string name="prayer_detail_unavailable_title">Henüz namaz vakti yok</string>
+    <string name="prayer_detail_unavailable_not_configured">Namaz vakitlerini görmeye başlamak için bir hesaplama yöntemi ve mezhep seçin.</string>
+    <string name="prayer_detail_unavailable_location_missing">Yöntem ve mezhep ayarlandı — namaz vakitlerini görmek için bir şehir seçin veya cihaz konumunu kullanın.</string>
+    <string name="prayer_detail_unavailable_calculation_failed">Mevcut kurulumunuz için namaz vakitleri hesaplanamadı. Tekrar deneyin veya konumunuzu ve yönteminizi kontrol edin.</string>
+    <string name="prayer_detail_settings_row_title">Namaz ayarları</string>
+    <string name="prayer_detail_sunrise_row">%1$s · NAMAZ DEĞİLDİR  %2$s</string>
+    <string name="prayer_detail_timezone_conflict_warning">Cihazınızın saat dilimi, namaz konumunun saat diliminden farklı — aşağıdaki vakitler KONUM\'un saat dilimini kullanır.</string>
+    <string name="prayer_detail_setup_section_header">KURULUM</string>
+    <string name="prayer_detail_method_row_title">Yöntem</string>
+    <string name="prayer_detail_madhab_row_title">Mezhep</string>
+    <string name="prayer_detail_location_row_title">Konum</string>
+</resources>

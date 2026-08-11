@@ -23,6 +23,7 @@ import com.sidr.launcher.core.ui.component.SidrScaffold
 import com.sidr.launcher.core.ui.component.SidrSectionHeader
 import com.sidr.launcher.core.ui.component.SidrPrayerTimeUi
 import com.sidr.launcher.core.ui.component.SidrTopBar
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrText
 import com.sidr.launcher.core.ui.primitive.SidrTextRole
 import com.sidr.launcher.core.ui.theme.SidrTheme
@@ -31,9 +32,9 @@ import com.sidr.launcher.domain.prayer.Freshness
 import com.sidr.launcher.domain.prayer.Madhab
 import com.sidr.launcher.domain.prayer.PrayerContext
 import com.sidr.launcher.domain.prayer.PrayerName
-import com.sidr.launcher.domain.prayer.SupportedPrayerMethods
 import com.sidr.launcher.domain.prayer.TimeZoneState
 import com.sidr.launcher.domain.prayer.UnavailableReason
+import com.sidr.launcher.feature.prayer.R
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -70,11 +71,11 @@ private fun PrayerDetailContent(
         modifier = modifier,
         topBar = {
             SidrTopBar(
-                title = "Prayer times",
+                title = sidrString(R.string.prayer_top_bar_title),
                 navigationIcon = {
                     SidrIconButton(
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
+                        contentDescription = sidrString(R.string.prayer_back),
                         onClick = onBack,
                     )
                 },
@@ -92,10 +93,13 @@ private fun PrayerDetailContent(
             when (val context = uiState.context) {
                 is PrayerContext.Unavailable -> {
                     SidrPrivacyNotice(
-                        title = "No prayer times yet",
+                        title = sidrString(R.string.prayer_detail_unavailable_title),
                         body = unavailableMessage(context.reason),
                     )
-                    SidrNavigationRow(title = "Prayer settings", onClick = onOpenSettings)
+                    SidrNavigationRow(
+                        title = sidrString(R.string.prayer_detail_settings_row_title),
+                        onClick = onOpenSettings,
+                    )
                 }
 
                 is PrayerContext.Available -> {
@@ -110,33 +114,36 @@ private fun PrayerDetailContent(
                     // clearly-labelled row, never a member of the SidrPrayerSummary strip above.
                     context.schedule.sunrise?.let { sunrise ->
                         SidrText(
-                            text = "SUNRISE · NOT A PRAYER  ${formatTime(sunrise.epochMillis, uiState.tzId)}",
+                            text = sidrString(
+                                R.string.prayer_detail_sunrise_row,
+                                sidrString(R.string.prayer_name_sunrise),
+                                formatTime(sunrise.epochMillis, uiState.tzId),
+                            ),
                             role = SidrTextRole.PROVENANCE,
                         )
                     }
 
                     if (context.timeZoneState == TimeZoneState.CONFLICT) {
                         SidrText(
-                            text = "Your device's timezone differs from the prayer location's " +
-                                "timezone — times below use the LOCATION's timezone.",
+                            text = sidrString(R.string.prayer_detail_timezone_conflict_warning),
                             role = SidrTextRole.PROVENANCE,
                             color = SidrTheme.colors.danger,
                         )
                     }
 
-                    SidrSectionHeader(text = "SETUP")
+                    SidrSectionHeader(text = sidrString(R.string.prayer_detail_setup_section_header))
                     SidrNavigationRow(
-                        title = "Method",
+                        title = sidrString(R.string.prayer_detail_method_row_title),
                         value = methodLabel(context.provenance.methodId),
                         onClick = onOpenSettings,
                     )
                     SidrNavigationRow(
-                        title = "Madhab",
+                        title = sidrString(R.string.prayer_detail_madhab_row_title),
                         value = madhabLabel(context.provenance.madhab),
                         onClick = onOpenSettings,
                     )
                     SidrNavigationRow(
-                        title = "Location",
+                        title = sidrString(R.string.prayer_detail_location_row_title),
                         value = context.provenance.locationLabel,
                         onClick = onOpenSettings,
                     )
@@ -150,15 +157,26 @@ private fun PrayerDetailContent(
 private val FIVE_PRAYERS_ORDER =
     listOf(PrayerName.FAJR, PrayerName.DHUHR, PrayerName.ASR, PrayerName.MAGHRIB, PrayerName.ISHA)
 
+@Composable
 private fun PrayerContext.Available.toPrayerTimeUiList(tzId: String?): List<SidrPrayerTimeUi> =
     FIVE_PRAYERS_ORDER.map { name ->
         val instant = schedule.instants.first { it.name == name }
         SidrPrayerTimeUi(
-            name = name.name,
+            name = prayerNameLabel(name),
             time = formatTime(instant.epochMillis, tzId),
             isNext = nextPrayer == name,
         )
     }
+
+@Composable
+private fun prayerNameLabel(name: PrayerName): String = when (name) {
+    PrayerName.FAJR -> sidrString(R.string.prayer_name_fajr)
+    PrayerName.SUNRISE -> sidrString(R.string.prayer_name_sunrise)
+    PrayerName.DHUHR -> sidrString(R.string.prayer_name_dhuhr)
+    PrayerName.ASR -> sidrString(R.string.prayer_name_asr)
+    PrayerName.MAGHRIB -> sidrString(R.string.prayer_name_maghrib)
+    PrayerName.ISHA -> sidrString(R.string.prayer_name_isha)
+}
 
 private fun PrayerContext.Available.toSummaryStatus(): SidrPrayerSummaryStatus = when {
     timeZoneState == TimeZoneState.CONFLICT -> SidrPrayerSummaryStatus.TimezoneConflict
@@ -168,25 +186,41 @@ private fun PrayerContext.Available.toSummaryStatus(): SidrPrayerSummaryStatus =
     else -> SidrPrayerSummaryStatus.NoData
 }
 
+@Composable
 private fun PrayerContext.Available.toProvenanceText(): String =
-    "local calculation · ${methodLabel(provenance.methodId)} · ${madhabLabel(provenance.madhab)}"
+    sidrString(
+        R.string.prayer_provenance_frame,
+        methodLabel(provenance.methodId),
+        madhabLabel(provenance.madhab),
+    )
 
+@Composable
 private fun unavailableMessage(reason: UnavailableReason): String = when (reason) {
-    UnavailableReason.NOT_CONFIGURED ->
-        "Choose a calculation method and madhab to start seeing prayer times."
-    UnavailableReason.LOCATION_MISSING ->
-        "Method and madhab are set — pick a city or use device location to see prayer times."
-    UnavailableReason.CALCULATION_FAILED ->
-        "Prayer times couldn't be calculated for your current setup. Try again, or check your " +
-            "location and method."
+    UnavailableReason.NOT_CONFIGURED -> sidrString(R.string.prayer_detail_unavailable_not_configured)
+    UnavailableReason.LOCATION_MISSING -> sidrString(R.string.prayer_detail_unavailable_location_missing)
+    UnavailableReason.CALCULATION_FAILED -> sidrString(R.string.prayer_detail_unavailable_calculation_failed)
 }
 
-private fun methodLabel(methodId: CalculationMethodId): String =
-    SupportedPrayerMethods.ALL.firstOrNull { it.id == methodId }?.displayLabel ?: methodId.key
+@Composable
+private fun methodLabel(methodId: CalculationMethodId): String = when (methodId.key) {
+    "MWL" -> sidrString(R.string.prayer_method_mwl)
+    "EGYPTIAN" -> sidrString(R.string.prayer_method_egyptian)
+    "KARACHI" -> sidrString(R.string.prayer_method_karachi)
+    "UMM_AL_QURA" -> sidrString(R.string.prayer_method_umm_al_qura)
+    "DUBAI" -> sidrString(R.string.prayer_method_dubai)
+    "MOON_SIGHTING_COMMITTEE" -> sidrString(R.string.prayer_method_moon_sighting_committee)
+    "NORTH_AMERICA" -> sidrString(R.string.prayer_method_north_america)
+    "KUWAIT" -> sidrString(R.string.prayer_method_kuwait)
+    "QATAR" -> sidrString(R.string.prayer_method_qatar)
+    "SINGAPORE" -> sidrString(R.string.prayer_method_singapore)
+    "TURKEY" -> sidrString(R.string.prayer_method_turkey)
+    else -> methodId.key
+}
 
+@Composable
 private fun madhabLabel(madhab: Madhab): String = when (madhab) {
-    Madhab.STANDARD -> "Standard (Shafi'i / Maliki / Hanbali)"
-    Madhab.HANAFI -> "Hanafi"
+    Madhab.STANDARD -> sidrString(R.string.prayer_madhab_standard)
+    Madhab.HANAFI -> sidrString(R.string.prayer_madhab_hanafi)
 }
 
 /** Formats an epoch millis instant as `HH:mm` in [tzId] (falling back to the device zone when the

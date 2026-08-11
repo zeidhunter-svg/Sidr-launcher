@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- I18N-1 Task 7: Russian translation of feature/prayer screen chrome - see values/strings.xml. -->
+<resources>
+    <string name="prayer_top_bar_title">Время намаза</string>
+    <string name="prayer_back">Назад</string>
+
+    <string name="prayer_settings_method_section_header">МЕТОД РАСЧЁТА</string>
+    <string name="prayer_settings_madhab_section_header">МАЗХАБ (АСР)</string>
+    <string name="prayer_settings_location_section_header">МЕСТОПОЛОЖЕНИЕ</string>
+    <string name="prayer_settings_city_search_placeholder">Поиск города…</string>
+    <string name="prayer_settings_current_location">Текущее: %1$s (%2$s)</string>
+    <string name="prayer_settings_locating_button">Определение местоположения…</string>
+    <string name="prayer_settings_use_device_location_button">Использовать геолокацию устройства</string>
+    <string name="prayer_settings_privacy_title">Только локально</string>
+    <string name="prayer_settings_privacy_body">Время намаза рассчитывается на этом устройстве. Если вы укажете местоположение, оно останется только на устройстве — оно никогда никуда не отправляется и не записывается в журнал. Выбор города вообще не требует разрешений.</string>
+    <string name="prayer_settings_reset_section_header">СБРОС</string>
+    <string name="prayer_settings_clear_location_action">Очистить местоположение</string>
+    <string name="prayer_settings_clear_location_consequence">Ваше сохранённое местоположение для намаза будет удалено. Метод и мазхаб сохранятся — вы можете снова выбрать город или использовать геолокацию устройства в любое время.</string>
+    <string name="prayer_settings_clear_setup_action">Сбросить настройку намаза</string>
+    <string name="prayer_settings_clear_setup_confirm_label">Сбросить настройку</string>
+    <string name="prayer_settings_clear_setup_consequence">Метод, мазхаб и местоположение будут полностью удалены. Время намаза перестанет отображаться, пока вы не настроите всё заново.</string>
+    <string name="prayer_location_source_city">город</string>
+    <string name="prayer_location_source_device">геолокация устройства</string>
+
+    <string name="prayer_detail_unavailable_title">Время намаза пока недоступно</string>
+    <string name="prayer_detail_unavailable_not_configured">Выберите метод расчёта и мазхаб, чтобы увидеть время намаза.</string>
+    <string name="prayer_detail_unavailable_location_missing">Метод и мазхаб указаны — выберите город или используйте геолокацию устройства, чтобы увидеть время намаза.</string>
+    <string name="prayer_detail_unavailable_calculation_failed">Не удалось рассчитать время намаза для текущей настройки. Попробуйте снова или проверьте местоположение и метод.</string>
+    <string name="prayer_detail_settings_row_title">Настройки намаза</string>
+    <string name="prayer_detail_sunrise_row">%1$s · НЕ ЯВЛЯЕТСЯ НАМАЗОМ  %2$s</string>
+    <string name="prayer_detail_timezone_conflict_warning">Часовой пояс вашего устройства отличается от часового пояса местоположения намаза — время ниже указано по часовому поясу МЕСТОПОЛОЖЕНИЯ.</string>
+    <string name="prayer_detail_setup_section_header">НАСТРОЙКА</string>
+    <string name="prayer_detail_method_row_title">Метод</string>
+    <string name="prayer_detail_madhab_row_title">Мазхаб</string>
+    <string name="prayer_detail_location_row_title">Местоположение</string>
+</resources>

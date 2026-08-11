@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 7 Class B locked, translated vocabulary - see values/strings_locked.xml for the full
+  contract and docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md for the owner-review table.
+  NO Class A entry here: prayer_provenance_frame is translatable="false" and must never appear in a
+  translated folder.
+
+  Prayer names below are the EXACT Diyanet terms given by the task brief (verbatim, not a draft).
+  Calculation-method names and madhab labels are a DRAFT translation awaiting owner sign-off.
+-->
+<resources>
+    <string name="prayer_name_fajr">İmsak</string>
+    <string name="prayer_name_sunrise">Güneş</string>
+    <string name="prayer_name_dhuhr">Öğle</string>
+    <string name="prayer_name_asr">İkindi</string>
+    <string name="prayer_name_maghrib">Akşam</string>
+    <string name="prayer_name_isha">Yatsı</string>
+
+    <string name="prayer_method_mwl">Dünya İslam Birliği</string>
+    <string name="prayer_method_egyptian">Mısır Genel Anket Otoritesi</string>
+    <string name="prayer_method_karachi">İslami İlimler Üniversitesi, Karaçi</string>
+    <string name="prayer_method_umm_al_qura">Ümmü\'l-Kurâ Üniversitesi, Mekke</string>
+    <string name="prayer_method_dubai">Dubai (BAE)</string>
+    <string name="prayer_method_moon_sighting_committee">Dünya Hilal Gözlem Komitesi</string>
+    <string name="prayer_method_north_america">Kuzey Amerika İslam Cemiyeti (ISNA)</string>
+    <string name="prayer_method_kuwait">Kuveyt</string>
+    <string name="prayer_method_qatar">Katar</string>
+    <string name="prayer_method_singapore">Majlis Ugama Islam Singapura</string>
+    <string name="prayer_method_turkey">Diyanet İşleri Başkanlığı, Türkiye</string>
+
+    <string name="prayer_madhab_standard">Standart (Şafii / Maliki / Hanbeli)</string>
+    <string name="prayer_madhab_hanafi">Hanefi</string>
+</resources>

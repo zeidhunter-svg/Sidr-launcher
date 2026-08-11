@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 7 locked vocabulary (spec §7.2) - see docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md
+  for the full owner-review table. This file holds TWO classes:
+
+  Class A - locked, NEVER translated: carries translatable="false". Must not appear in values-ru or
+  values-tr (LocaleCompletenessGuardTest rejects a translatable="false" key that shows up in a
+  translated folder). Exactly one entry: the provenance frame (DS-6B invariant - a prayer surface
+  always states where its times came from). Extracted verbatim from
+  PrayerDetailScreen.kt's toProvenanceText() ("local calculation · <method> · <madhab>", lowercase as
+  originally authored - NOT the "LOCAL CALC" abbreviation used elsewhere in the app).
+
+  Class B - locked, but IS translated (values-ru / values-tr carry the same keys, same as any other
+  string): prayer names, calculation-method names, and Asr madhab labels. These live here (not in
+  strings.xml) only so a change lands in the owner-review package before it ships - Turkish uses
+  Diyanet terminology, Russian uses the transliteration already in use in Russian-language Islamic
+  sources, and this is religious terminology the owner reviews specifically.
+
+  - Prayer names (6, matching domain.prayer.PrayerName - SUNRISE is not one of the five daily prayers
+    but is still a named row on the detail screen, spec §3): the Turkish and Russian values are the
+    EXACT terms given by the task brief, copied verbatim (not retyped) - not a draft.
+  - Calculation-method names (11, matching domain.prayer.SupportedPrayerMethods.ALL - domain stays
+    Android-resource-free per CLAUDE.md, so these are re-hosted here as the presentation-layer source
+    of truth; domain's displayLabel field is untouched and still used by feature/launcher, which this
+    task does not touch): English copied verbatim from SupportedPrayerMethods.kt. The Turkish/Russian
+    values are a DRAFT translation - not given by the brief - awaiting owner sign-off.
+  - Asr madhab labels (2, matching domain.prayer.Madhab): English copied verbatim from the existing
+    madhabLabel() functions. The Turkish/Russian values are a DRAFT translation awaiting owner sign-off.
+-->
+<resources>
+    <!-- Class A: locked, never translated (DS-6B provenance invariant) -->
+    <string name="prayer_provenance_frame" translatable="false">local calculation · %1$s · %2$s</string>
+
+    <!-- Class B: prayer names (PrayerName) - Turkish/Russian verbatim from the task brief -->
+    <string name="prayer_name_fajr">FAJR</string>
+    <string name="prayer_name_sunrise">SUNRISE</string>
+    <string name="prayer_name_dhuhr">DHUHR</string>
+    <string name="prayer_name_asr">ASR</string>
+    <string name="prayer_name_maghrib">MAGHRIB</string>
+    <string name="prayer_name_isha">ISHA</string>
+
+    <!-- Class B: calculation-method names (SupportedPrayerMethods.ALL, display order) -->
+    <string name="prayer_method_mwl">Muslim World League</string>
+    <string name="prayer_method_egyptian">Egyptian General Authority of Survey</string>
+    <string name="prayer_method_karachi">University of Islamic Sciences, Karachi</string>
+    <string name="prayer_method_umm_al_qura">Umm al-Qura University, Makkah</string>
+    <string name="prayer_method_dubai">Dubai (UAE)</string>
+    <string name="prayer_method_moon_sighting_committee">Moonsighting Committee Worldwide</string>
+    <string name="prayer_method_north_america">Islamic Society of North America (ISNA)</string>
+    <string name="prayer_method_kuwait">Kuwait</string>
+    <string name="prayer_method_qatar">Qatar</string>
+    <string name="prayer_method_singapore">Majlis Ugama Islam Singapura</string>
+    <string name="prayer_method_turkey">Diyanet İşleri Başkanlığı, Turkey</string>
+
+    <!-- Class B: Asr madhab labels (Madhab) -->
+    <string name="prayer_madhab_standard">Standard (Shafi\'i / Maliki / Hanbali)</string>
+    <string name="prayer_madhab_hanafi">Hanafi</string>
+</resources>

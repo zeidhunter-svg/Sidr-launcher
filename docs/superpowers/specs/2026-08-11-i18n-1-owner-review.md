@@ -223,6 +223,13 @@ translatable copy in `strings.xml`.
 - Any additional consent copy from later tasks (Task 15 scope).
 - Owner sign-off on every row marked **draft** above (Sections 1c, 1d, 3, 4, 5b) — none of that text has been
   reviewed by anyone; only the prayer-name rows in Section 1b are verbatim from an approved brief.
+- `feature/assistant`'s `assistant_save_error_key_failed` ("Failed to save API key", in
+  `feature/assistant/src/main/res/values/strings.xml`) ships as **ordinary translatable copy, not
+  locked** — ruled at Task 10 review: it is an error message about a failed write, not a disclosure or a
+  data-handling claim, so it does not meet the spec §7.2 bar. Recorded here anyway because it is a
+  statement about whether the user's *secret* was persisted, and the owner may prefer it locked; if so
+  it moves to `strings_locked.xml` as Class B with no wording change. (The Keystore *disclosure* copy —
+  `assistant_key_set_note`, "stored in this device's Keystore" — is already locked, Section 5b.)
 - `feature/prayer`'s `prayer_settings_privacy_body` (in `feature/prayer/src/main/res/values/strings.xml`,
   "Prayer times are computed on this device… never sent anywhere and never logged") is the same species of
   data-handling claim as `settings_stored_locally` (Section 4) but shipped in Task 7 as ordinary,

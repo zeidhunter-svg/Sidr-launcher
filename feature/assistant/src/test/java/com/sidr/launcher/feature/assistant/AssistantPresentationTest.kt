@@ -31,6 +31,7 @@ class AssistantPresentationTest {
         val presentation = errorStatus(AiError.Network()).toPresentation()
 
         assertEquals(R.string.assistant_action_retry, presentation.primaryLabel)
+        assertEquals("Retry", AssistantStrings.en("assistant_action_retry"))
         assertEquals(R.string.assistant_error_why_network, presentation.why)
         assertNull("this sentence carries no runtime value", presentation.whyArg)
         assertEquals("No network connection.", AssistantStrings.en("assistant_error_why_network"))
@@ -41,6 +42,7 @@ class AssistantPresentationTest {
         val presentation = errorStatus(AiError.MissingCredentials).toPresentation()
 
         assertEquals(R.string.assistant_action_fix_provider, presentation.primaryLabel)
+        assertEquals("Fix provider settings", AssistantStrings.en("assistant_action_fix_provider"))
     }
 
     @Test fun `unauthorized keeps the provider CTA, never retry`() {
@@ -84,11 +86,20 @@ class AssistantPresentationTest {
         val whyIds = errors.map { errorStatus(it).toPresentation().why }
         assertEquals("Offline and Network share one why; the other seven are distinct", 8, whyIds.toSet().size)
 
-        // An id is only as good as the copy behind it: every error sentence must exist and be non-blank
-        // in the resources that ship.
-        AssistantStrings.englishKeys()
-            .filter { it.startsWith("assistant_error_") }
-            .forEach { key -> assertTrue("blank English copy for $key", AssistantStrings.en(key).isNotBlank()) }
+        // An id is only as good as the copy behind it: every string this module ships must be non-blank.
+        // Deliberately the whole `assistant_` namespace, not just `assistant_error_`: the action-button
+        // labels, save errors and field labels are equally unreadable when empty, and
+        // LocaleCompletenessGuardTest checks presence and placeholder sets but never blankness — so a
+        // key emptied while merging a translation would otherwise ship a blank consent button
+        // (spec §7.3: a consent button the user cannot read is not consent).
+        val keys = AssistantStrings.englishKeys().filter { it.startsWith("assistant_") }
+
+        assertTrue("the copy sweep must not pass by iterating nothing", keys.isNotEmpty())
+        assertTrue(
+            "the sweep must cover the action-button labels",
+            keys.containsAll(listOf("assistant_action_retry", "assistant_action_fix_provider")),
+        )
+        keys.forEach { key -> assertTrue("blank English copy for $key", AssistantStrings.en(key).isNotBlank()) }
     }
 
     @Test fun `server error carries its status code as the sentence's only argument`() {

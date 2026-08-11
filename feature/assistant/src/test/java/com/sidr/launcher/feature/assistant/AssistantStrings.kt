@@ -23,14 +23,25 @@ internal object AssistantStrings {
 
     private val english: Map<String, String> by lazy {
         val dir = valuesDir()
-        listOf("strings.xml", "strings_locked.xml")
+        val declarations = listOf("strings.xml", "strings_locked.xml")
             .map { name ->
                 File(dir, name).also {
                     check(it.isFile) { "missing string resource file: ${it.absolutePath}" }
                 }
             }
-            .flatMap { parse(it).entries }
-            .associate { it.key to it.value }
+            .flatMap { file -> parse(file) }
+
+        // A key declared in both strings.xml and strings_locked.xml would otherwise resolve to
+        // whichever file is read last — a silent Class-B-vs-ordinary mix-up. Fail loudly instead.
+        val duplicates = declarations.groupBy { it.name }.filterValues { it.size > 1 }
+        check(duplicates.isEmpty()) {
+            "duplicate string keys in feature/assistant/src/main/res/values: " +
+                duplicates.entries.joinToString("; ") { (key, decls) ->
+                    "'$key' declared in ${decls.map { it.file }}"
+                }
+        }
+
+        declarations.associate { it.name to it.value }
     }
 
     /** The shipped English value for [name]; fails loudly rather than returning a placeholder. */
@@ -52,15 +63,58 @@ internal object AssistantStrings {
             )
     }
 
-    private fun parse(file: File): Map<String, String> {
+    private data class Declaration(val name: String, val value: String, val file: String)
+
+    private fun parse(file: File): List<Declaration> {
         val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file)
         val nodes = doc.getElementsByTagName("string")
-        return (0 until nodes.length).associate { i ->
+        return (0 until nodes.length).map { i ->
             val el = nodes.item(i) as Element
-            el.getAttribute("name") to el.textContent.unescapeAndroidResource()
+            val name = el.getAttribute("name")
+            Declaration(name, el.textContent.unescapeAndroidResource(name), file.name)
         }
     }
 
-    /** Android's resource escaping (`\'`, `\"`) is not XML escaping, so the parser leaves it in place. */
-    private fun String.unescapeAndroidResource(): String = replace("\\'", "'").replace("\\\"", "\"")
+    /**
+     * Undoes Android's resource escaping, which is **not** XML escaping and therefore survives the XML
+     * parser untouched.
+     *
+     * Single-pass on purpose: a chain of `replace` calls mangles `\\n` (a literal backslash followed by
+     * `n`) into a newline. Any escape this helper does not model — and `%%`, whose resolution depends on
+     * whether format arguments are supplied at the call site — fails loudly, because a mangled value
+     * that a later test then writes an expectation against is worse than a red build.
+     */
+    private fun String.unescapeAndroidResource(name: String): String {
+        check(!contains("%%")) {
+            "resource '$name' contains '%%', a format-time escape this helper does not model " +
+                "(getString(id) keeps it, getString(id, args) resolves it) — model it deliberately " +
+                "before asserting on such a value"
+        }
+        val out = StringBuilder(length)
+        var i = 0
+        while (i < length) {
+            val c = this[i]
+            if (c != '\\') {
+                out.append(c)
+                i++
+                continue
+            }
+            check(i + 1 < length) { "resource '$name' ends with a dangling backslash" }
+            when (val escaped = this[i + 1]) {
+                'n' -> out.append('\n')
+                't' -> out.append('\t')
+                '\\' -> out.append('\\')
+                '\'' -> out.append('\'')
+                '"' -> out.append('"')
+                '@' -> out.append('@')
+                '?' -> out.append('?')
+                else -> error(
+                    "resource '$name' uses the escape '\\$escaped', which this helper does not model — " +
+                        "handle it here rather than asserting against a mangled value",
+                )
+            }
+            i += 2
+        }
+        return out.toString()
+    }
 }

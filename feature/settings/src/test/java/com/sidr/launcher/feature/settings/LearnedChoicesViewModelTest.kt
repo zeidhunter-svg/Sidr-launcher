@@ -106,7 +106,7 @@ class LearnedChoicesViewModelTest {
         assertEquals(1, choices.size)
         assertEquals("bank", choices[0].phrase)
         assertEquals(SidrMemoryStatus.Learning, choices[0].status)
-        assertEquals("Learning from confirmed choices (1/3)", choices[0].evidence)
+        assertEquals(LearnedChoiceEvidence.Learning(streak = 1, threshold = 3), choices[0].evidence)
     }
 
     @Test
@@ -118,14 +118,14 @@ class LearnedChoicesViewModelTest {
         val unavailable = view(LearnedChoiceDisplayState.Unavailable).toMemoryUiModel()
 
         assertEquals(SidrMemoryStatus.Learning, learning.status)
-        assertEquals("Learning from confirmed choices (1/3)", learning.evidence)
+        assertEquals(LearnedChoiceEvidence.Learning(streak = 1, threshold = 3), learning.evidence)
         assertEquals(SidrMemoryStatus.Active, active.status)
-        assertEquals("Based on confirmed choices", active.evidence)
+        assertEquals(LearnedChoiceEvidence.Confirmed, active.evidence)
         assertEquals(SidrMemoryStatus.Active, ready.status)
         assertEquals(SidrMemoryStatus.NeedsReconfirmation, reconfirm.status)
-        assertEquals("Needs reconfirmation before auto-open", reconfirm.evidence)
+        assertEquals(LearnedChoiceEvidence.NeedsReconfirm, reconfirm.evidence)
         assertEquals(SidrMemoryStatus.Unavailable, unavailable.status)
-        assertEquals("Target unavailable", unavailable.evidence)
+        assertEquals(LearnedChoiceEvidence.Unavailable, unavailable.evidence)
     }
 
     private fun buildViewModel(

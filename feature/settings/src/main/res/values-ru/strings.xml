@@ -59,4 +59,13 @@
     <string name="settings_memory_top_bar_title">Память</string>
     <string name="settings_learned_choices_header">Изученные выборы</string>
     <string name="settings_forget_learned_choice_title">Забыть изученный выбор?</string>
+
+    <string name="settings_learned_evidence_unavailable">Цель недоступна</string>
+    <string name="settings_learned_evidence_learning">Изучение на основе подтверждённых выборов (%1$d/%2$d)</string>
+    <string name="settings_learned_evidence_reconfirm">Требуется повторное подтверждение перед автозапуском</string>
+    <string name="settings_learned_evidence_confirmed">На основе подтверждённых выборов</string>
+    <string name="settings_learned_provenance">Изучено на основе подтверждённых выборов</string>
+
+    <string name="settings_alias_evidence">Псевдоним, заданный пользователем</string>
+    <string name="settings_alias_provenance">Настройки</string>
 </resources>

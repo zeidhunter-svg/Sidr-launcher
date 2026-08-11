@@ -67,4 +67,15 @@
     <string name="settings_memory_top_bar_title">Memory</string>
     <string name="settings_learned_choices_header">LEARNED CHOICES</string>
     <string name="settings_forget_learned_choice_title">Forget learned choice?</string>
+
+    <!-- Task 9: typed LearnedChoiceMemoryUiModel evidence/provenance (LearnedChoicesScreen.kt) -->
+    <string name="settings_learned_evidence_unavailable">Target unavailable</string>
+    <string name="settings_learned_evidence_learning">Learning from confirmed choices (%1$d/%2$d)</string>
+    <string name="settings_learned_evidence_reconfirm">Needs reconfirmation before auto-open</string>
+    <string name="settings_learned_evidence_confirmed">Based on confirmed choices</string>
+    <string name="settings_learned_provenance">Learned from confirmed choices</string>
+
+    <!-- Task 9: typed AliasMemoryUiModel evidence/provenance (AliasesScreen.kt) -->
+    <string name="settings_alias_evidence">User-declared alias</string>
+    <string name="settings_alias_provenance">Settings</string>
 </resources>

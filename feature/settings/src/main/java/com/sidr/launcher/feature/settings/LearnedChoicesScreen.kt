@@ -178,8 +178,8 @@ private fun LearnedChoiceItem(
         value = choice.targetLabel,
         type = SidrMemoryType.LearnedPreference,
         status = choice.status,
-        evidence = choice.evidence,
-        provenance = choice.provenance,
+        evidence = evidenceText(choice.evidence),
+        provenance = provenanceText(choice.provenance),
         lastUsed = choice.lastUsed,
         localOnly = choice.localOnly,
         leadingContent = {
@@ -190,6 +190,20 @@ private fun LearnedChoiceItem(
         },
         onForget = onForget,
     )
+}
+
+@Composable
+private fun evidenceText(evidence: LearnedChoiceEvidence): String = when (evidence) {
+    LearnedChoiceEvidence.Unavailable -> sidrString(R.string.settings_learned_evidence_unavailable)
+    is LearnedChoiceEvidence.Learning ->
+        sidrString(R.string.settings_learned_evidence_learning, evidence.streak, evidence.threshold)
+    LearnedChoiceEvidence.NeedsReconfirm -> sidrString(R.string.settings_learned_evidence_reconfirm)
+    LearnedChoiceEvidence.Confirmed -> sidrString(R.string.settings_learned_evidence_confirmed)
+}
+
+@Composable
+private fun provenanceText(provenance: LearnedChoiceProvenance): String = when (provenance) {
+    LearnedChoiceProvenance.ConfirmedChoices -> sidrString(R.string.settings_learned_provenance)
 }
 
 @Composable

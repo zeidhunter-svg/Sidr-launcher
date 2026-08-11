@@ -318,8 +318,8 @@ private fun AliasItem(alias: AliasMemoryUiModel, onForget: () -> Unit) {
         value = alias.targetLabel,
         type = SidrMemoryType.ExplicitAlias,
         status = alias.status,
-        evidence = alias.evidence,
-        provenance = alias.provenance,
+        evidence = evidenceText(alias.evidence),
+        provenance = provenanceText(alias.provenance),
         localOnly = alias.localOnly,
         leadingContent = {
             AliasIcon(packageName = alias.targetPackageName, label = alias.targetLabel)
@@ -327,6 +327,16 @@ private fun AliasItem(alias: AliasMemoryUiModel, onForget: () -> Unit) {
         onForget = onForget,
         modifier = Modifier.padding(horizontal = Spacing.sm),
     )
+}
+
+@Composable
+private fun evidenceText(evidence: AliasEvidence): String = when (evidence) {
+    AliasEvidence.UserDeclared -> sidrString(R.string.settings_alias_evidence)
+}
+
+@Composable
+private fun provenanceText(provenance: AliasProvenance): String = when (provenance) {
+    AliasProvenance.Settings -> sidrString(R.string.settings_alias_provenance)
 }
 
 @Composable

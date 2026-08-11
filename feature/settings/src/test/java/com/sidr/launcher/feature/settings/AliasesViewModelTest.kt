@@ -57,7 +57,7 @@ class AliasesViewModelTest {
         assertEquals("Telegram", alias.targetLabel)
         assertEquals("com.telegram", alias.targetPackageName)
         assertEquals(SidrMemoryStatus.Active, alias.status)
-        assertEquals("User-declared alias", alias.evidence)
+        assertEquals(AliasEvidence.UserDeclared, alias.evidence)
         assertTrue(alias.localOnly)
     }
 

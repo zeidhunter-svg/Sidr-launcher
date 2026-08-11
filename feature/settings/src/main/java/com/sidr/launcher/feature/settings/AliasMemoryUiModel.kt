@@ -4,14 +4,22 @@ import com.sidr.launcher.core.ui.component.SidrMemoryStatus
 import com.sidr.launcher.domain.memory.alias.AliasView
 import com.sidr.launcher.domain.model.InstalledApp
 
+sealed interface AliasEvidence {
+    data object UserDeclared : AliasEvidence
+}
+
+sealed interface AliasProvenance {
+    data object Settings : AliasProvenance
+}
+
 data class AliasMemoryUiModel(
     val stableId: String,
     val phrase: String,
     val targetLabel: String,
     val targetPackageName: String,
     val status: SidrMemoryStatus,
-    val evidence: String,
-    val provenance: String,
+    val evidence: AliasEvidence,
+    val provenance: AliasProvenance,
     val localOnly: Boolean = true,
 )
 
@@ -26,8 +34,8 @@ internal fun AliasView.toMemoryUiModel(): AliasMemoryUiModel = AliasMemoryUiMode
     targetLabel = targetLabel,
     targetPackageName = targetPackageName,
     status = SidrMemoryStatus.Active,
-    evidence = "User-declared alias",
-    provenance = "Settings",
+    evidence = AliasEvidence.UserDeclared,
+    provenance = AliasProvenance.Settings,
     localOnly = true,
 )
 

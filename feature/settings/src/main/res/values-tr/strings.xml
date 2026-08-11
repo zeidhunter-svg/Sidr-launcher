@@ -59,4 +59,13 @@
     <string name="settings_memory_top_bar_title">Bellek</string>
     <string name="settings_learned_choices_header">Öğrenilmiş seçimler</string>
     <string name="settings_forget_learned_choice_title">Öğrenilmiş seçim unutulsun mu?</string>
+
+    <string name="settings_learned_evidence_unavailable">Hedef kullanılamıyor</string>
+    <string name="settings_learned_evidence_learning">Onaylanmış seçimlerden öğreniliyor (%1$d/%2$d)</string>
+    <string name="settings_learned_evidence_reconfirm">Otomatik açılmadan önce yeniden onay gerekiyor</string>
+    <string name="settings_learned_evidence_confirmed">Onaylanmış seçimlere dayanıyor</string>
+    <string name="settings_learned_provenance">Onaylanmış seçimlerden öğrenildi</string>
+
+    <string name="settings_alias_evidence">Kullanıcı tarafından tanımlanan takma ad</string>
+    <string name="settings_alias_provenance">Ayarlar</string>
 </resources>

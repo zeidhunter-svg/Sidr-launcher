@@ -142,8 +142,40 @@ Turkish are **drafts, unreviewed** (no brief gave exact wording for these).
 
 ---
 
+## Section 4 — `feature/settings` consent & data-handling copy (Class B, Task 8)
+
+Six Class B keys — the cloud-disclosure toggle description, both destructive-gate consequence sentences,
+the standalone "stored locally" evidence line, and the two empty-state messages that each embed that same
+sentence — found missing from the locked-file barrier during Task 8 review and moved into
+`feature/settings/src/main/res/values{,-ru,-tr}/strings_locked.xml` in the fix round. Extracted verbatim
+from the pre-fix-round `strings.xml` (no copy change); Russian and Turkish are **drafts, unreviewed** (the
+same drafts already shipped in Task 8's `strings.xml`, just relocated — no wording changed by the move).
+
+| Key | English | Russian (draft) | Turkish (draft) | Why locked |
+|---|---|---|---|---|
+| `settings_smart_routing_description` | Use your AI provider to understand natural-language commands. Suggested actions always ask before running. | Использовать вашего ИИ-провайдера для понимания команд на естественном языке. Предложенные действия всегда запрашивают подтверждение перед выполнением. | Doğal dil komutlarını anlamak için yapay zeka sağlayıcınızı kullanın. Önerilen eylemler çalıştırılmadan önce her zaman onay ister. | Cloud-disclosure copy (spec §7.2) — the consent point for routing typed commands to a cloud LLM; second sentence states the project's R4 safety invariant. |
+| `settings_forget_alias_consequence` | "%1$s" will no longer open %2$s.\nYou can add it again from Settings. | "%1$s" больше не будет открывать %2$s.\nВы можете добавить его снова в настройках. | "%1$s" artık %2$s uygulamasını açmayacak.\nAyarlardan tekrar ekleyebilirsiniz. | Destructive-gate consequence sentence (spec §7.2) — the `consequence` param of `SidrForgetGate` → `SidrActionGate(type = Destructive)` for an alias. |
+| `settings_forget_learned_choice_consequence` | "%1$s" will no longer prefer %2$s.\nThe next ambiguous request will ask you to choose again. | "%1$s" больше не будет предпочитать %2$s.\nСледующий неоднозначный запрос снова спросит ваш выбор. | "%1$s" artık %2$s uygulamasını tercih etmeyecek.\nBir sonraki belirsiz istek tekrar seçim yapmanızı isteyecek. | Destructive-gate consequence sentence (spec §7.2) — the `consequence` param of `SidrForgetGate` → `SidrActionGate(type = Destructive)` for a learned choice. |
+| `settings_stored_locally` | Stored only on this device. | Хранится только на этом устройстве. | Yalnızca bu cihazda saklanır. | Same species as spec §7.2's named "Nothing was saved" — a data-handling claim — and also the `evidence` line shown on both destructive gates above. |
+| `settings_aliases_empty_message` | No aliases yet\nAliases appear after you add them here.\nStored only on this device. | Пока нет псевдонимов\nПсевдонимы появятся здесь после того, как вы их добавите.\nХранится только на этом устройстве. | Henüz takma ad yok\nTakma adlar burada eklendikten sonra görünür.\nYalnızca bu cihazda saklanır. | Embeds "Stored only on this device." verbatim as its last line — a second, otherwise-unreviewed copy of the same privacy claim as `settings_stored_locally`. |
+| `settings_learned_choices_empty_message` | No learned choices yet\nPreferences appear only after confirmed choices.\nStored only on this device. | Изученных выборов пока нет\nПредпочтения появляются только после подтверждённых выборов.\nХранится только на этом устройстве. | Henüz öğrenilmiş seçim yok\nTercihler yalnızca onaylanan seçimlerden sonra görünür.\nYalnızca bu cihazda saklanır. | Embeds "Stored only on this device." verbatim as its last line — a third, otherwise-unreviewed copy of the same privacy claim as `settings_stored_locally`. |
+
+**Note — one sentence, three keys:** "Stored only on this device." appears in **three** places:
+`settings_stored_locally` (standalone) and, embedded as the final line, both `settings_aliases_empty_message`
+and `settings_learned_choices_empty_message`. Whatever wording the owner signs off on for this sentence
+must be applied identically in all three keys/locations — do not approve one copy and leave the other two
+stale.
+
+---
+
 ## Outstanding for Task 15
 
 - Any additional consent copy from later tasks (Task 15 scope).
-- Owner sign-off on every row marked **draft** above (Sections 1c, 1d, 3) — none of that text has been
+- Owner sign-off on every row marked **draft** above (Sections 1c, 1d, 3, 4) — none of that text has been
   reviewed by anyone; only the prayer-name rows in Section 1b are verbatim from an approved brief.
+- `feature/prayer`'s `prayer_settings_privacy_body` (in `feature/prayer/src/main/res/values/strings.xml`,
+  "Prayer times are computed on this device… never sent anywhere and never logged") is the same species of
+  data-handling claim as `settings_stored_locally` (Section 4) but shipped in Task 7 as ordinary,
+  unlocked copy rather than through a `strings_locked.xml` barrier. The owner should review that sentence
+  alongside Section 4; Task 15 reconciles its file placement (this note does not move or edit any
+  `feature/prayer` file).

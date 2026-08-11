@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 8 fix round: locked vocabulary (spec §7.2) - Class B, same set as values/strings_locked.xml.
+  See that file for the full rationale per key group. NOT translatable="false" - these ARE translated and
+  ship in this folder like any other string; they are locked only so a change lands in owner review
+  (docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md, Section 4) before it ships.
+
+  The Russian values below are agent-drafted and NOT owner-reviewed. Moved verbatim (byte-for-byte, not
+  retyped) out of this module's ordinary values-ru/strings.xml - no copy change.
+-->
+<resources>
+    <string name="settings_stored_locally">Хранится только на этом устройстве.</string>
+    <string name="settings_smart_routing_description">Использовать вашего ИИ-провайдера для понимания команд на естественном языке. Предложенные действия всегда запрашивают подтверждение перед выполнением.</string>
+    <string name="settings_forget_alias_consequence">"\"%1$s\" больше не будет открывать %2$s.\nВы можете добавить его снова в настройках."</string>
+    <string name="settings_aliases_empty_message">Пока нет псевдонимов\nПсевдонимы появятся здесь после того, как вы их добавите.\nХранится только на этом устройстве.</string>
+    <string name="settings_learned_choices_empty_message">Изученных выборов пока нет\nПредпочтения появляются только после подтверждённых выборов.\nХранится только на этом устройстве.</string>
+    <string name="settings_forget_learned_choice_consequence">"\"%1$s\" больше не будет предпочитать %2$s.\nСледующий неоднозначный запрос снова спросит ваш выбор."</string>
+</resources>

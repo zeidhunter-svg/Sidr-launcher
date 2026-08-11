@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 8 fix round: locked vocabulary (spec §7.2) - Class B: consent/safety copy and
+  destructive-gate consequence sentences, NOT translatable="false". These ARE translated (values-ru /
+  values-tr carry the same keys) like any other string; they live here only so that a change lands in
+  owner review before it ships (docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md, Section 4). Do
+  not add translatable="false" to any key in this file - that would make it Class A and break the
+  barrier (LocaleCompletenessGuardTest rejects a translatable="false" key that appears in a translated
+  folder).
+
+  Moved verbatim (byte-for-byte, not retyped) out of this module's ordinary strings.xml - no copy change.
+
+  - settings_forget_alias_consequence / settings_forget_learned_choice_consequence: these are the
+    `consequence` parameter passed into SidrForgetGate -> SidrActionGate(type = Destructive) - i.e.
+    spec §7.2's "destructive-gate consequence sentences" verbatim.
+  - settings_stored_locally: the same species as spec §7.2's named "Nothing was saved" - a
+    data-handling claim - and is also the `evidence` line shown on those same destructive gates.
+  - settings_aliases_empty_message / settings_learned_choices_empty_message: each embeds the
+    "Stored only on this device." sentence verbatim as its last line. Locking only the standalone
+    settings_stored_locally key would send the owner one copy of this privacy claim while shipping the
+    other two copies unreviewed, so all three are locked together.
+  - settings_smart_routing_description: spec §7.2's "cloud-disclosure copy" - this toggle is the
+    consent point for routing typed commands to a cloud LLM, and its second sentence states the
+    project's R4 safety invariant ("Suggested actions always ask before running").
+
+  Russian and Turkish values in the corresponding values-ru/values-tr strings_locked.xml are
+  agent-drafted and NOT owner-reviewed.
+-->
+<resources>
+    <string name="settings_stored_locally">Stored only on this device.</string>
+    <string name="settings_smart_routing_description">Use your AI provider to understand natural-language commands. Suggested actions always ask before running.</string>
+    <string name="settings_forget_alias_consequence">"\"%1$s\" will no longer open %2$s.\nYou can add it again from Settings."</string>
+    <string name="settings_aliases_empty_message">No aliases yet\nAliases appear after you add them here.\nStored only on this device.</string>
+    <string name="settings_learned_choices_empty_message">No learned choices yet\nPreferences appear only after confirmed choices.\nStored only on this device.</string>
+    <string name="settings_forget_learned_choice_consequence">"\"%1$s\" will no longer prefer %2$s.\nThe next ambiguous request will ask you to choose again."</string>
+</resources>

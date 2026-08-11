@@ -2,6 +2,8 @@
 <!--
   I18N-1 Task 8: Russian translation of feature/settings screen chrome - agent-drafted, NOT reviewed by
   the owner or a native speaker. See values/strings.xml for the source and the task-8 report for notes.
+  Class B consent/destructive-gate copy was moved to strings_locked.xml in the Task 8 fix round - see
+  that file's header for which keys and why.
 
   Section headers (settings_section_*, settings_add_alias_header, settings_target_app_header,
   settings_aliases_section_header, settings_learned_choices_header) are written in natural case, NOT
@@ -11,7 +13,6 @@
 -->
 <resources>
     <string name="settings_back">Назад</string>
-    <string name="settings_stored_locally">Хранится только на этом устройстве.</string>
     <string name="settings_aliases_title">Псевдонимы</string>
 
     <string name="settings_top_bar_title">Настройки</string>
@@ -34,7 +35,6 @@
     <string name="settings_section_assistant">Ассистент</string>
     <string name="settings_ai_provider_title">Настройки провайдера ИИ</string>
     <string name="settings_smart_routing_title">Умная маршрутизация команд</string>
-    <string name="settings_smart_routing_description">Использовать вашего ИИ-провайдера для понимания команд на естественном языке. Предложенные действия всегда запрашивают подтверждение перед выполнением.</string>
     <string name="settings_section_system">Система</string>
     <string name="settings_set_default_launcher_title">Сделать лаунчером по умолчанию</string>
 
@@ -50,8 +50,6 @@
     <string name="settings_no_apps_available">Нет доступных для запуска приложений.</string>
     <string name="settings_aliases_section_header">Псевдонимы</string>
     <string name="settings_forget_alias_title">Забыть псевдоним?</string>
-    <string name="settings_forget_alias_consequence">"\"%1$s\" больше не будет открывать %2$s.\nВы можете добавить его снова в настройках."</string>
-    <string name="settings_aliases_empty_message">Пока нет псевдонимов\nПсевдонимы появятся здесь после того, как вы их добавите.\nХранится только на этом устройстве.</string>
     <string name="settings_alias_target_prefix">Цель: %1$s</string>
     <string name="settings_alias_phrase_collision_warning">Приложение уже соответствует этой фразе. Приложение победит; псевдонимы заполняют только пробелы.</string>
     <string name="settings_alias_phrase_too_long">Фраза псевдонима слишком длинная.</string>
@@ -60,7 +58,5 @@
 
     <string name="settings_memory_top_bar_title">Память</string>
     <string name="settings_learned_choices_header">Изученные выборы</string>
-    <string name="settings_learned_choices_empty_message">Изученных выборов пока нет\nПредпочтения появляются только после подтверждённых выборов.\nХранится только на этом устройстве.</string>
     <string name="settings_forget_learned_choice_title">Забыть изученный выбор?</string>
-    <string name="settings_forget_learned_choice_consequence">"\"%1$s\" больше не будет предпочитать %2$s.\nСледующий неоднозначный запрос снова спросит ваш выбор."</string>
 </resources>

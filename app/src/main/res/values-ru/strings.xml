@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Bottom tab bar (DS-11 A2: lowercase, icon-free) -->
+    <string name="app_tab_home">дом</string>
+    <string name="app_tab_apps">программы</string>
+    <string name="app_tab_tasks">задачи</string>
+    <string name="app_tab_agents">агенты</string>
+    <string name="app_tab_activity">активность</string>
+</resources>

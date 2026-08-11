@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Bottom tab bar (DS-11 A2: lowercase, icon-free) -->
+    <string name="app_tab_home">home</string>
+    <string name="app_tab_apps">apps</string>
+    <string name="app_tab_tasks">tasks</string>
+    <string name="app_tab_agents">agents</string>
+    <string name="app_tab_activity">activity</string>
+</resources>

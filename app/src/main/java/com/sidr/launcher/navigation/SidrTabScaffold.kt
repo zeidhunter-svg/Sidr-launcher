@@ -1,5 +1,6 @@
 package com.sidr.launcher.navigation
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -32,8 +33,10 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.sidr.launcher.R as AppR
 import com.sidr.launcher.core.ui.R
 import com.sidr.launcher.core.ui.component.SidrIconButton
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrText
 import com.sidr.launcher.core.ui.primitive.SidrTextRole
 import com.sidr.launcher.core.ui.theme.SidrShapes
@@ -55,7 +58,7 @@ enum class SidrTab { HOME, APPS, TASKS, AGENTS, ACTIVITY }
 
 private data class SidrTabSpec(
     val tab: SidrTab,
-    val label: String,
+    @StringRes val labelRes: Int,
     /** Preview (not-yet-live) tabs carry a tiny marker in their label (spec: status/preview
      *  is never colour-only) — see [com.sidr.launcher.core.ui.component.SidrPreviewBadge]. A full
      *  badge does not fit the compact tab label slot, so a [PREVIEW_MARKER] stands in. */
@@ -77,13 +80,13 @@ private const val PREVIEW_MARKER = "•"
 // direction ("ничего лишнего") — a launcher's five tab roots are learned by position and word, and
 // the glyph row was the loudest thing on an otherwise calm Home.
 private val SIDR_TAB_SPECS = listOf(
-    SidrTabSpec(SidrTab.HOME, "home", isPreview = false),
+    SidrTabSpec(SidrTab.HOME, AppR.string.app_tab_home, isPreview = false),
     // "Apps" (2026-07-12): the App Drawer, promoted from a Home-body row into a real tab peer of
     // Home — real, functional, not a preview.
-    SidrTabSpec(SidrTab.APPS, "apps", isPreview = false),
-    SidrTabSpec(SidrTab.TASKS, "tasks", isPreview = true),
-    SidrTabSpec(SidrTab.AGENTS, "agents", isPreview = true),
-    SidrTabSpec(SidrTab.ACTIVITY, "activity", isPreview = true),
+    SidrTabSpec(SidrTab.APPS, AppR.string.app_tab_apps, isPreview = false),
+    SidrTabSpec(SidrTab.TASKS, AppR.string.app_tab_tasks, isPreview = true),
+    SidrTabSpec(SidrTab.AGENTS, AppR.string.app_tab_agents, isPreview = true),
+    SidrTabSpec(SidrTab.ACTIVITY, AppR.string.app_tab_activity, isPreview = true),
     // Terminal (2026-07-12) is no longer a tab — it moved to an icon-only button in
     // [SidrAppFooter], next to the Settings gear, so it doesn't crowd the 5-tab label row.
 )
@@ -118,7 +121,7 @@ fun SidrTabBar(
     ) {
         SIDR_TAB_SPECS.forEach { spec ->
             SidrTabLabel(
-                label = spec.label,
+                label = sidrString(spec.labelRes),
                 isPreview = spec.isPreview,
                 selected = selected == spec.tab,
                 onClick = { onSelect(spec.tab) },

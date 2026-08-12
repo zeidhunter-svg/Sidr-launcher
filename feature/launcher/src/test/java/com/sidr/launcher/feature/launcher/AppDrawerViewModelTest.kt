@@ -110,32 +110,49 @@ class AppDrawerViewModelTest {
         assertFalse((state as UiState.Error).retryable)
     }
 
-    // I18N-1 Task 12: PermissionDenied/DeviceNotCapable now route through the feature-local typed
-    // AppDrawerError (LauncherPresentation.kt) before falling back to a UiError.Message that is still
-    // byte-identical to the old inline sentence (core.common.UiError has no typed-argument slot; see
-    // that file's kdoc). These two tests pin the on-device text is unchanged by the type substitution.
+    // I18N-1 Fix round 1: PermissionDenied/DeviceNotCapable now ALSO expose their typed AppDrawerError
+    // (WITH its argument) on loadErrorDetail — a channel parallel to uiState, the live production seam
+    // Task 13's AppDrawerScreen.kt resolves via appDrawerErrorText(e) + sidrString(...). uiState's own
+    // UiError.Message is deliberately left as the byte-identical English fallback it always was
+    // (core.common.UiState.Error is fixed to UiError, no typed-argument slot — see
+    // AppDrawerViewModel.toUiError()'s comment); these tests pin both the new typed channel (the real
+    // fix) and that uiState's pre-existing text/retryability are unchanged.
     @Test
-    fun `PermissionDenied's UiError text is unchanged by the typed substitution`() = runTest(testDispatcher) {
+    fun `PermissionDenied exposes the typed AppDrawerError with its argument`() = runTest(testDispatcher) {
         fakeRepo.errorToReturn = OperationError.PermissionDenied("QUERY_ALL_PACKAGES")
         val vm = buildViewModel()
 
         advanceUntilIdle()
 
-        val error = (vm.uiState.value as UiState.Error).error
-        assertEquals(UiError.Message("Permission denied: QUERY_ALL_PACKAGES"), error)
+        assertEquals(AppDrawerError.PermissionDenied("QUERY_ALL_PACKAGES"), vm.loadErrorDetail.value)
+        val state = vm.uiState.value
+        assertTrue("Expected Error, got $state", state is UiState.Error)
+        assertFalse((state as UiState.Error).retryable)
+        assertEquals(UiError.Message("Permission denied: QUERY_ALL_PACKAGES"), state.error)
     }
 
     @Test
-    fun `DeviceNotCapable maps to non-retryable Error with unchanged text`() = runTest(testDispatcher) {
+    fun `DeviceNotCapable exposes the typed AppDrawerError with its argument`() = runTest(testDispatcher) {
         fakeRepo.errorToReturn = OperationError.DeviceNotCapable("multi_window")
         val vm = buildViewModel()
 
         advanceUntilIdle()
 
+        assertEquals(AppDrawerError.DeviceNotCapable("multi_window"), vm.loadErrorDetail.value)
         val state = vm.uiState.value
         assertTrue("Expected Error, got $state", state is UiState.Error)
         assertFalse((state as UiState.Error).retryable)
         assertEquals(UiError.Message("Not supported: multi_window"), state.error)
+    }
+
+    @Test
+    fun `loadErrorDetail is null for a NetworkError failure`() = runTest(testDispatcher) {
+        fakeRepo.errorToReturn = OperationError.NetworkError(retryable = true)
+        val vm = buildViewModel()
+
+        advanceUntilIdle()
+
+        assertEquals(null, vm.loadErrorDetail.value)
     }
 
     @Test

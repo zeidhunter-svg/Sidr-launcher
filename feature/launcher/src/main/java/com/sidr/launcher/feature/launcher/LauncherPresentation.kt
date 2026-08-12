@@ -91,18 +91,31 @@ internal fun feedbackText(feedback: CommandFeedback): FeedbackText? = when (feed
 }
 
 /**
- * I18N-1 (spec §3.5): named, not worded — mirrors domain's `CommandMessage`/`CommandFailure` split
- * for the two [com.sidr.launcher.domain.result.OperationError] branches `AppDrawerViewModel` maps into
- * `UiState.Error`. `core.common.UiError` has no typed-argument slot (a cross-feature type this task
- * must not modify) and `sidrString` only resolves inside a `@Composable` (spec §6), so this typed
- * value cannot yet reach the render side through `UiState.Error` -
- * `AppDrawerScreen.toDisplayMessage()` is untouched by I18N-1 Task 12/13. `AppDrawerViewModel` still
- * assembles the (byte-identical) English sentence locally until then; [appDrawerErrorText] is
- * exercised directly by `LauncherPresentationTest` and is ready for a follow-up once `UiState`/
- * `UiError` gain a typed slot, or this surface migrates off `core.common.UiState` (mirrors DS-10's
- * `AssistantError` replacing `UiError` for the Assistant screen).
+ * I18N-1 (spec §3.5): named, not worded — mirrors domain's `CommandMessage`/`CommandFailure` split for
+ * the two [com.sidr.launcher.domain.result.OperationError] branches that both `LauncherViewModel` and
+ * `AppDrawerViewModel` map into `UiState.Error` (both load the same [InstalledAppsRepository], so both
+ * can surface the identical `PermissionDenied("QUERY_ALL_PACKAGES")` / `DeviceNotCapable` failure —
+ * hence one shared type/mapper instead of two near-identical ones). `core.common.UiError` has no
+ * typed-argument slot (a cross-feature type this task must not modify), so this value cannot reach the
+ * render side through `UiState.Error` itself.
+ *
+ * I18N-1 Fix round 1: each ViewModel now exposes this typed value **alongside** its own `uiState`
+ * (`AppDrawerViewModel.loadErrorDetail` / `LauncherViewModel.appListErrorDetail`) — a live production
+ * seam, not a dead one — mirroring how `LauncherViewModel` already exposes `commandFeedback` alongside
+ * `uiState`. [appDrawerErrorText] is exercised directly by `LauncherPresentationTest` AND is the
+ * function Task 13 is expected to call from `AppDrawerScreen.kt`/`LauncherScreen.kt` via
+ * `sidrString(appDrawerErrorText(e).id, *appDrawerErrorText(e).args.toTypedArray())`. Each `uiState`'s
+ * own `UiState.Error(UiError.Message(...), retryable)` is deliberately left as the byte-identical
+ * English fallback it always was — `core/common` stays untouched, and a future task can retire that
+ * fallback once `UiState`/`UiError` gain a typed slot, or this surface migrates off `core.common.UiState`
+ * entirely (mirrors DS-10's `AssistantError` replacing `UiError` for the Assistant screen).
  */
-internal sealed interface AppDrawerError {
+// Public (unlike FeedbackText/CommandExamples above): AppDrawerError is now exposed on
+// AppDrawerViewModel.loadErrorDetail / LauncherViewModel.appListErrorDetail — both public
+// StateFlow<AppDrawerError?> properties (I18N-1 Fix round 1) — so it can't stay internal without a
+// "public property exposes internal type" compile error. Mirrors CommandFeedback/SuggestedIntent above,
+// which are public for the identical reason (LauncherViewModel.commandFeedback is public).
+sealed interface AppDrawerError {
     data class PermissionDenied(val permission: String) : AppDrawerError
     data class DeviceNotCapable(val feature: String) : AppDrawerError
 }

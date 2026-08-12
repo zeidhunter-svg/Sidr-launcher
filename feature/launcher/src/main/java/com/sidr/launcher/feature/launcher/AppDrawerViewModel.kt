@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -103,6 +104,33 @@ class AppDrawerViewModel @Inject constructor(
             initialValue = UiState.Loading,
         )
 
+    /**
+     * I18N-1 Fix round 1: the typed detail behind a [OperationError.PermissionDenied]/
+     * [OperationError.DeviceNotCapable] load failure, exposed **alongside** [uiState] rather than
+     * through it — `core.common.UiState.Error` is fixed to `UiError` (no typed-argument slot) and
+     * `core/common` is out of scope for this task, so [uiState]'s own `UiError.Message` text below
+     * stays the byte-identical English fallback it always was. This is the live seam Task 13's
+     * `AppDrawerScreen.kt` resolves via `appDrawerErrorText(e)` + `sidrString(...)` — mirrors how
+     * [LauncherViewModel] exposes `commandFeedback` alongside its own `uiState`. Null whenever the
+     * last result isn't one of these two argument-carrying failures (no failure yet, `Success`, or a
+     * `NetworkError`/`AiUnavailable`/`UnknownError` failure, none of which `appDrawerErrorText` needs).
+     */
+    val loadErrorDetail: StateFlow<AppDrawerError?> = _rawAppsResult
+        .map { result ->
+            (result as? OperationResult.Failure)?.error?.let { error ->
+                when (error) {
+                    is OperationError.PermissionDenied -> AppDrawerError.PermissionDenied(error.permission)
+                    is OperationError.DeviceNotCapable -> AppDrawerError.DeviceNotCapable(error.feature)
+                    else -> null
+                }
+            }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = null,
+        )
+
     private var loadJob: Job? = null
 
     init {
@@ -167,29 +195,15 @@ class AppDrawerViewModel @Inject constructor(
     }
 
     // ── OperationError → UiError — exhaustive, mirrors LauncherViewModel ─────
-    // I18N-1 (spec §3.5): PermissionDenied/DeviceNotCapable are now routed through the feature-local,
-    // typed AppDrawerError (see its kdoc in LauncherPresentation.kt) instead of hand-assembling the
-    // sentence inline. core.common.UiError has no typed-argument slot and sidrString only resolves
-    // inside a @Composable, so toEnglishFallback() below still produces the final UiError.Message text
-    // here — byte-identical to the English resource values, so on-device behaviour is unchanged.
+    // I18N-1 Fix round 1: left byte-identical to its pre-Task-12 shape on purpose (per the coordinator's
+    // "leave UiState.Error exactly as it is") — the real typed, live seam is [loadErrorDetail] above,
+    // not a construct-then-discard AppDrawerError built only to be flattened back into English here.
     private fun OperationError.toUiError(): UiError = when (this) {
         is OperationError.NetworkError     -> UiError.Network
         is OperationError.AiUnavailable    -> UiError.Unknown
-        is OperationError.PermissionDenied ->
-            UiError.Message(AppDrawerError.PermissionDenied(permission).toEnglishFallback())
-        is OperationError.DeviceNotCapable ->
-            UiError.Message(AppDrawerError.DeviceNotCapable(feature).toEnglishFallback())
+        is OperationError.PermissionDenied -> UiError.Message("Permission denied: $permission")
+        is OperationError.DeviceNotCapable -> UiError.Message("Not supported: $feature")
         is OperationError.UnknownError     -> UiError.Unknown
-    }
-
-    /**
-     * English-only fallback for [AppDrawerError], byte-identical to `launcher_drawer_permission_denied`
-     * / `launcher_drawer_not_supported` (see [appDrawerErrorText]'s kdoc for why this can't yet route
-     * through the resource system at this layer).
-     */
-    private fun AppDrawerError.toEnglishFallback(): String = when (this) {
-        is AppDrawerError.PermissionDenied -> "Permission denied: $permission"
-        is AppDrawerError.DeviceNotCapable -> "Not supported: $feature"
     }
 
     private fun OperationError.isRetryable(): Boolean = when (this) {

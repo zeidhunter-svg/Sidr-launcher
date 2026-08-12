@@ -508,6 +508,37 @@ class LauncherViewModelTest {
         )
     }
 
+    // I18N-1 Fix round 1: structurally analogous to AppDrawerViewModel's twin — same
+    // InstalledAppsRepository failure taxonomy, same UiState<T>-fixed-to-UiError constraint, same
+    // ErrorState render path in LauncherScreen.kt. appListErrorDetail is the parallel typed channel;
+    // uiState's own UiError.Message text/retryability above is left byte-identical on purpose.
+    @Test
+    fun `PermissionDenied exposes the typed AppDrawerError on appListErrorDetail`() = runTest(testDispatcher) {
+        fakeRepo.errorToReturn = OperationError.PermissionDenied("QUERY_ALL_PACKAGES")
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        assertEquals(AppDrawerError.PermissionDenied("QUERY_ALL_PACKAGES"), vm.appListErrorDetail.value)
+    }
+
+    @Test
+    fun `DeviceNotCapable exposes the typed AppDrawerError on appListErrorDetail`() = runTest(testDispatcher) {
+        fakeRepo.errorToReturn = OperationError.DeviceNotCapable("nlu")
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        assertEquals(AppDrawerError.DeviceNotCapable("nlu"), vm.appListErrorDetail.value)
+    }
+
+    @Test
+    fun `appListErrorDetail is null for a NetworkError failure`() = runTest(testDispatcher) {
+        fakeRepo.errorToReturn = OperationError.NetworkError(retryable = true)
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        assertEquals(null, vm.appListErrorDetail.value)
+    }
+
     // ── Recoverable errors + retry (Block H, H2) ───────────────────────────
 
     @Test

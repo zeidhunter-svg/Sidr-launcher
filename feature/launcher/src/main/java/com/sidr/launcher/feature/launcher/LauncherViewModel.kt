@@ -216,6 +216,32 @@ class LauncherViewModel @Inject constructor(
             initialValue = UiState.Success(LauncherUiState()),
         )
 
+    /**
+     * I18N-1 Fix round 1: the typed detail behind a [OperationError.PermissionDenied]/
+     * [OperationError.DeviceNotCapable] app-list load failure, exposed **alongside** [uiState] — same
+     * pattern, same reason, and the same shared [AppDrawerError] type as `AppDrawerViewModel`'s
+     * `loadErrorDetail` (see that property's kdoc, and [AppDrawerError]'s kdoc in
+     * `LauncherPresentation.kt`): `core.common.UiState.Error` is fixed to `UiError` (no
+     * typed-argument slot), so [uiState]'s own `UiError.Message` text stays the byte-identical English
+     * fallback it always was. Null whenever the last result isn't one of these two argument-carrying
+     * failures.
+     */
+    val appListErrorDetail: StateFlow<AppDrawerError?> = _rawAppsResult
+        .map { result ->
+            (result as? OperationResult.Failure)?.error?.let { error ->
+                when (error) {
+                    is OperationError.PermissionDenied -> AppDrawerError.PermissionDenied(error.permission)
+                    is OperationError.DeviceNotCapable -> AppDrawerError.DeviceNotCapable(error.feature)
+                    else -> null
+                }
+            }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = null,
+        )
+
     // ── Command input — independent of app-list loading ────────────────────
     // Backed by SavedStateHandle so the typed text survives process death (H3). Every writer
     // goes through setCommandInput(...) so the handle stays the single source of truth.
@@ -819,6 +845,10 @@ class LauncherViewModel @Inject constructor(
 
     // ── OperationError → UiError — exhaustive when, no else branch ─────────
     // Add a new branch here whenever OperationError gains a new subtype.
+    // I18N-1 Fix round 1: left byte-identical to its pre-Task-12 shape on purpose (structurally
+    // analogous to AppDrawerViewModel's twin — see that file's toUiError() comment) — the real typed,
+    // live seam is [appListErrorDetail] above, not a construct-then-discard AppDrawerError built only
+    // to be flattened back into English here.
     private fun OperationError.toUiError(): UiError = when (this) {
         is OperationError.NetworkError     -> UiError.Network
         is OperationError.AiUnavailable    -> UiError.Unknown

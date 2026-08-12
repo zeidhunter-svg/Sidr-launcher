@@ -37,4 +37,33 @@
 
     <string name="launcher_drawer_permission_denied">İzin reddedildi: %1$s</string>
     <string name="launcher_drawer_not_supported">Desteklenmiyor: %1$s</string>
+
+    <string name="launcher_home_no_apps_found">Uygulama bulunamadı</string>
+    <string name="launcher_home_favorites_header">Favoriler</string>
+
+    <string name="launcher_route_app">UYGULAMA</string>
+    <string name="launcher_route_web">WEB</string>
+    <string name="launcher_route_site">SİTE</string>
+    <string name="launcher_route_ask">SOR</string>
+
+    <string name="launcher_setup_nudge_title">Sidr\'ı ana ekranınız yapın</string>
+    <string name="launcher_setup_nudge_dismiss">Kapat</string>
+    <string name="launcher_setup_nudge_body">Sidr\'ı varsayılan başlatıcınız yapın, ardından uygulamaları açmak için yukarıdaki alana yazın veya arama yapın.</string>
+    <string name="launcher_setup_nudge_action">Varsayılan yap</string>
+
+    <string name="launcher_confirm_execute_title">Çalıştırılsın mı?</string>
+    <string name="launcher_confirm_will_run">Şu çalıştırılacak: %1$s</string>
+    <string name="launcher_confirm_confirm">Onayla</string>
+    <string name="launcher_safe_proposal_description">Güvenli öneri. Yine de dokunmanızı bekliyor.</string>
+    <string name="launcher_safe_proposal_run">Çalıştır</string>
+
+    <string name="launcher_drawer_title">Tüm uygulamalar</string>
+    <string name="launcher_drawer_back">Geri</string>
+    <string name="launcher_drawer_ask_assistant">Asistana sor: «%1$s»</string>
+    <string name="launcher_drawer_empty_no_query">Uygulama bulunamadı.</string>
+    <string name="launcher_drawer_empty_with_query">Hiçbir şey bulunamadı.</string>
+    <string name="launcher_drawer_mode_groups">Gruplar</string>
+    <string name="launcher_drawer_mode_az">A-Z</string>
+    <string name="launcher_drawer_search_placeholder">Uygulama ara</string>
+    <string name="launcher_drawer_clear_search">Aramayı temizle</string>
 </resources>

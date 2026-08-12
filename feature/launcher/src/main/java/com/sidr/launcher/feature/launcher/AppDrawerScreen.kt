@@ -49,6 +49,7 @@ import com.sidr.launcher.core.ui.component.SidrPreviewBanner
 import com.sidr.launcher.core.ui.component.SidrScaffold
 import com.sidr.launcher.core.ui.component.SidrTerminalAction
 import com.sidr.launcher.core.ui.component.SidrTopBar
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrProgress
 import com.sidr.launcher.core.ui.primitive.SidrSurface
 import com.sidr.launcher.core.ui.primitive.SidrSurfaceTone
@@ -59,6 +60,7 @@ import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Sizes
 import com.sidr.launcher.core.ui.theme.Spacing
 import com.sidr.launcher.domain.model.InstalledApp
+import java.util.Locale
 
 /**
  * App Drawer (Block X3, restyled to the Vision-MVP artifact look — Task 2; promoted to the "Apps"
@@ -83,6 +85,11 @@ fun AppDrawerScreen(
     viewModel: AppDrawerViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // I18N-1 Task 13: the typed detail behind a PermissionDenied/DeviceNotCapable load failure,
+    // exposed alongside uiState (see AppDrawerViewModel.loadErrorDetail's kdoc). Resolved via
+    // appDrawerErrorText(...) + sidrString(...) below; uiState's own UiError.Message English fallback
+    // is used only when this is null (core/common's untyped Network/Unknown, out of scope).
+    val errorDetail by viewModel.loadErrorDetail.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
     var mode by remember { mutableStateOf(DrawerMode.AZ) }
 
@@ -90,12 +97,12 @@ fun AppDrawerScreen(
         modifier = modifier,
         topBar = {
             SidrTopBar(
-                title = "All apps",
+                title = sidrString(R.string.launcher_drawer_title),
                 navigationIcon = onBack?.let { back ->
                     {
                         SidrIconButton(
                             icon = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = sidrString(R.string.launcher_drawer_back),
                             onClick = back,
                         )
                     }
@@ -125,7 +132,7 @@ fun AppDrawerScreen(
             // the URL-encoded query; the assistant consumes it once and never persists it.
             if (query.isNotBlank()) {
                 SidrTerminalAction(
-                    text = "Ask assistant: \"$query\"",
+                    text = sidrString(R.string.launcher_drawer_ask_assistant, query),
                     onClick = {
                         viewModel.navigateTo(Routes.Assistant.routeFor(Uri.encode(query)))
                     },
@@ -143,12 +150,25 @@ fun AppDrawerScreen(
                             .fillMaxWidth(0.5f),
                     )
                     is UiState.Empty -> EmptyState(
-                        message = if (query.isBlank()) "No apps found." else "Nothing found.",
+                        message = if (query.isBlank()) {
+                            sidrString(R.string.launcher_drawer_empty_no_query)
+                        } else {
+                            sidrString(R.string.launcher_drawer_empty_with_query)
+                        },
                     )
-                    is UiState.Error -> ErrorState(
-                        message = state.error.toDisplayMessage(),
-                        onRetry = if (state.retryable) viewModel::retry else null,
-                    )
+                    is UiState.Error -> {
+                        val detail = errorDetail
+                        val message = if (detail != null) {
+                            val resolved = appDrawerErrorText(detail)
+                            sidrString(resolved.id, *resolved.args.toTypedArray())
+                        } else {
+                            state.error.toDisplayMessage()
+                        }
+                        ErrorState(
+                            message = message,
+                            onRetry = if (state.retryable) viewModel::retry else null,
+                        )
+                    }
                     is UiState.Success -> when (mode) {
                         DrawerMode.AZ -> DrawerGrid(
                             sections = state.data.sections,
@@ -184,13 +204,13 @@ private fun GroupsAzToggle(
         horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
     ) {
         SidrFilterChip(
-            label = "Groups",
+            label = sidrString(R.string.launcher_drawer_mode_groups),
             selected = mode == DrawerMode.GROUPS,
             onClick = { onModeChange(DrawerMode.GROUPS) },
         )
         SidrPreviewBadge()
         SidrFilterChip(
-            label = "A-Z",
+            label = sidrString(R.string.launcher_drawer_mode_az),
             selected = mode == DrawerMode.AZ,
             onClick = { onModeChange(DrawerMode.AZ) },
         )
@@ -227,7 +247,7 @@ private fun DrawerSearchField(
             Box(modifier = Modifier.weight(1f)) {
                 if (value.isEmpty()) {
                     SidrText(
-                        text = "Search applications",
+                        text = sidrString(R.string.launcher_drawer_search_placeholder),
                         role = SidrTextRole.HUMAN_BODY,
                         color = colors.faint,
                     )
@@ -250,7 +270,7 @@ private fun DrawerSearchField(
             if (value.isNotEmpty()) {
                 SidrIconButton(
                     icon = Icons.Filled.Close,
-                    contentDescription = "Clear search",
+                    contentDescription = sidrString(R.string.launcher_drawer_clear_search),
                     onClick = { onValueChange("") },
                     tint = colors.dim,
                 )
@@ -318,7 +338,9 @@ private fun GroupsPreviewGrid(
         buckets.forEach { (category, categoryApps) ->
             stickyHeader(key = "group_header_$category") {
                 SidrAlphabetHeader(
-                    text = category.uppercase(),
+                    // DISPLAY: category is caller-supplied human copy (SAMPLE_CATEGORIES), so it
+                    // folds under the user's locale (I18N-1 spec §3.4/brief Step 4).
+                    text = category.uppercase(Locale.getDefault()),
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(MaterialTheme.colorScheme.background),
@@ -332,7 +354,9 @@ private fun GroupsPreviewGrid(
         }
         item(key = "groups_preview_provenance") {
             SidrText(
-                text = "ON-DEVICE · OFFLINE",
+                // Class A locked (spec §7.1 provenance/status vocabulary) - terminal state tokens,
+                // not human prose; translatable="false", never in a values-ru/values-tr folder.
+                text = sidrString(R.string.launcher_drawer_groups_provenance),
                 role = SidrTextRole.PROVENANCE,
                 modifier = Modifier
                     .fillMaxWidth()

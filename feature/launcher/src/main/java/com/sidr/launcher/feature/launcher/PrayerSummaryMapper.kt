@@ -1,13 +1,15 @@
 package com.sidr.launcher.feature.launcher
 
+import androidx.annotation.StringRes
+import androidx.compose.runtime.Composable
 import com.sidr.launcher.core.ui.component.SidrPrayerSummaryStatus
 import com.sidr.launcher.core.ui.component.SidrPrayerTimeUi
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.domain.prayer.CalculationMethodId
 import com.sidr.launcher.domain.prayer.Freshness
 import com.sidr.launcher.domain.prayer.Madhab
 import com.sidr.launcher.domain.prayer.PrayerContext
 import com.sidr.launcher.domain.prayer.PrayerName
-import com.sidr.launcher.domain.prayer.SupportedPrayerMethods
 import com.sidr.launcher.domain.prayer.TimeZoneState
 import java.time.Instant
 import java.time.ZoneId
@@ -24,12 +26,25 @@ private val FIVE_PRAYERS_ORDER =
 /**
  * What Home's [com.sidr.launcher.core.ui.component.SidrPrayerSummary] strip may truthfully render
  * (DS-6B Task 9). Kept feature-local so `core/ui` stays domain-free.
+ *
+ * I18N-1 Task 13: [provenance] carries the typed method/madhab identifiers rather than a baked
+ * English sentence (the `feedbackText`/`FeedbackText` pattern from `LauncherPresentation.kt`) —
+ * [sidrString] needs `@Composable` context, which this mapper's plain (non-Composable) functions
+ * deliberately do not have, so they stay unit-testable from a plain JVM test
+ * ([PrayerSummaryMapperTest]) with no Robolectric/Compose host. Resolution to a localized string
+ * happens only at render time, in [prayerProvenanceText].
  */
 internal data class HomePrayerSummaryUi(
     val prayers: List<SidrPrayerTimeUi>,
     val status: SidrPrayerSummaryStatus,
-    val provenance: String,
+    val provenance: PrayerProvenanceUi,
     val locationLabel: String?,
+)
+
+/** Untranslated identifiers behind the Home provenance line — see [HomePrayerSummaryUi.provenance]. */
+internal data class PrayerProvenanceUi(
+    val methodId: CalculationMethodId,
+    val madhab: Madhab,
 )
 
 /**
@@ -54,7 +69,10 @@ internal fun PrayerContext.toHomePrayerSummaryUi(): HomePrayerSummaryUi? {
     return HomePrayerSummaryUi(
         prayers = prayers,
         status = available.toSummaryStatus(),
-        provenance = available.toProvenanceText(),
+        provenance = PrayerProvenanceUi(
+            methodId = available.provenance.methodId,
+            madhab = available.provenance.madhab,
+        ),
         locationLabel = available.provenance.locationLabel,
     )
 }
@@ -71,18 +89,56 @@ private fun PrayerContext.Available.toSummaryStatus(): SidrPrayerSummaryStatus =
     else -> SidrPrayerSummaryStatus.NoData // unreachable: Freshness has exactly the 3 cases above.
 }
 
-/** `"LOCAL CALC · <METHOD LABEL> · <MADHAB>"` (spec §0.7). */
-private fun PrayerContext.Available.toProvenanceText(): String =
-    "LOCAL CALC · ${methodLabel(provenance.methodId)} · ${madhabLabel(provenance.madhab)}"
+/**
+ * `"LOCAL CALC · <METHOD LABEL> · <MADHAB>"` (spec §0.7). I18N-1 Task 13: the frame is Class A locked
+ * (`launcher_prayer_provenance_frame`, `translatable="false"` — spec §7.1, byte-identical to the
+ * pre-I18N-1 literal) while the method/madhab labels are Class B locked (spec §7.2 religious
+ * terminology, owner sign-off) — see `strings_locked.xml`.
+ */
+@Composable
+internal fun prayerProvenanceText(provenance: PrayerProvenanceUi): String =
+    sidrString(
+        R.string.launcher_prayer_provenance_frame,
+        methodLabel(provenance.methodId),
+        madhabLabel(provenance.madhab),
+    )
 
-/** [SupportedPrayerMethods] is the only place a method key is turned into display copy; falls back
- *  to the raw key if the catalog is ever out of sync (never blank, never a crash). */
+/**
+ * Single source of truth for calculation-method key -> locked label resource (mirrors
+ * `feature/prayer`'s `PrayerLabels.kt`). [CalculationMethodId] wraps a plain `String` key (a
+ * non-sealed value class), so this `when` can never be made compiler-exhaustive - a 12th
+ * [com.sidr.launcher.domain.prayer.SupportedPrayerMethods.ALL] entry shipping without a matching
+ * branch here would silently fall through to [methodLabel]'s `?:` fallback and render its raw,
+ * untranslated key. [MethodLabelCoverageTest] is the anti-drift guard: it drives this function
+ * directly off the real catalog from a plain JVM test (no Robolectric/Compose host needed, since this
+ * function is deliberately not `@Composable`).
+ */
+@StringRes
+internal fun methodLabelResId(methodId: CalculationMethodId): Int? = when (methodId.key) {
+    "MWL" -> R.string.launcher_prayer_method_mwl
+    "EGYPTIAN" -> R.string.launcher_prayer_method_egyptian
+    "KARACHI" -> R.string.launcher_prayer_method_karachi
+    "UMM_AL_QURA" -> R.string.launcher_prayer_method_umm_al_qura
+    "DUBAI" -> R.string.launcher_prayer_method_dubai
+    "MOON_SIGHTING_COMMITTEE" -> R.string.launcher_prayer_method_moon_sighting_committee
+    "NORTH_AMERICA" -> R.string.launcher_prayer_method_north_america
+    "KUWAIT" -> R.string.launcher_prayer_method_kuwait
+    "QATAR" -> R.string.launcher_prayer_method_qatar
+    "SINGAPORE" -> R.string.launcher_prayer_method_singapore
+    "TURKEY" -> R.string.launcher_prayer_method_turkey
+    else -> null
+}
+
+/** Never blank, never a crash: falls back to the raw key if the catalog is ever out of sync with
+ *  [methodLabelResId] (same defensive shape `feature/prayer`'s `methodLabel()` has). */
+@Composable
 private fun methodLabel(methodId: CalculationMethodId): String =
-    SupportedPrayerMethods.ALL.firstOrNull { it.id == methodId }?.displayLabel ?: methodId.key
+    methodLabelResId(methodId)?.let { sidrString(it) } ?: methodId.key
 
+@Composable
 private fun madhabLabel(madhab: Madhab): String = when (madhab) {
-    Madhab.STANDARD -> "Standard"
-    Madhab.HANAFI -> "Hanafi"
+    Madhab.STANDARD -> sidrString(R.string.launcher_prayer_madhab_standard)
+    Madhab.HANAFI -> sidrString(R.string.launcher_prayer_madhab_hanafi)
 }
 
 /** `HH:mm` (24h) in [zone] — always the LOCATION zone (spec §6), never the device zone. */

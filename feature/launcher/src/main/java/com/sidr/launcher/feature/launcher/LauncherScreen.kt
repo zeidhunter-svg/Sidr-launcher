@@ -80,6 +80,7 @@ import com.sidr.launcher.core.ui.theme.Spacing
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.permission.PermissionFeature
 import com.sidr.launcher.domain.suggestions.Suggestion
+import java.util.Locale
 
 /**
  * The redesigned, decluttered home surface (Phase UX, Block X2).
@@ -98,6 +99,11 @@ fun LauncherScreen(
     suggestionsContent: @Composable (suggestions: List<Suggestion>, onSuggestionTap: (Suggestion) -> Unit) -> Unit = { _, _ -> },
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // I18N-1 Task 13: the typed detail behind a PermissionDenied/DeviceNotCapable app-list load
+    // failure, exposed alongside uiState (see LauncherViewModel.appListErrorDetail's kdoc). Resolved
+    // via appDrawerErrorText(...) + sidrString(...) below; uiState's own UiError.Message English
+    // fallback is used only when this is null (core/common's untyped Network/Unknown, out of scope).
+    val appListErrorDetail by viewModel.appListErrorDetail.collectAsStateWithLifecycle()
     val commandInput by viewModel.commandInput.collectAsStateWithLifecycle()
     val feedback by viewModel.commandFeedback.collectAsStateWithLifecycle()
     val showMic by viewModel.showMic.collectAsStateWithLifecycle()
@@ -254,11 +260,18 @@ fun LauncherScreen(
                 else -> when (val state = uiState) {
                     is UiState.Loading -> Box(modifier = Modifier.weight(1f)) { LoadingContent() }
                     is UiState.Empty -> Box(modifier = Modifier.weight(1f)) {
-                        EmptyState(message = "No apps found")
+                        EmptyState(message = sidrString(R.string.launcher_home_no_apps_found))
                     }
                     is UiState.Error -> Box(modifier = Modifier.weight(1f)) {
+                        val detail = appListErrorDetail
+                        val message = if (detail != null) {
+                            val resolved = appDrawerErrorText(detail)
+                            sidrString(resolved.id, *resolved.args.toTypedArray())
+                        } else {
+                            errorMessage(state.error)
+                        }
                         ErrorState(
-                            message = errorMessage(state.error),
+                            message = message,
                             onRetry = if (state.retryable) viewModel::retry else null,
                         )
                     }
@@ -338,8 +351,10 @@ private fun HomeAnchorSlot(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        SidrText(text = "There is no deity except Allah", role = SidrTextRole.SACRED)
-        SidrText(text = "Muhammad is the messenger of Allah", role = SidrTextRole.SACRED)
+        // I18N-1 Task 13: religious terminology (spec §7.2), Class B locked - present in all three
+        // locales but flagged in the owner-review package (strings_locked.xml).
+        SidrText(text = sidrString(R.string.launcher_shahada_line1), role = SidrTextRole.SACRED)
+        SidrText(text = sidrString(R.string.launcher_shahada_line2), role = SidrTextRole.SACRED)
     }
 }
 
@@ -360,7 +375,7 @@ private fun HomePrayerStrip(
     SidrPrayerSummary(
         prayers = summary.prayers,
         status = summary.status,
-        provenance = summary.provenance,
+        provenance = prayerProvenanceText(summary.provenance),
         modifier = modifier,
         locationLabel = summary.locationLabel,
         onOpenDetails = onOpenDetails,
@@ -397,12 +412,12 @@ private fun HomeRouteChips(
             .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
         horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
     ) {
-        SidrRouteChip("APP", selected = false, onClick = {})
-        SidrRouteChip("WEB", selected = false, onClick = onWeb)
+        SidrRouteChip(sidrString(R.string.launcher_route_app), selected = false, onClick = {})
+        SidrRouteChip(sidrString(R.string.launcher_route_web), selected = false, onClick = onWeb)
         if (hasSiteRoute) {
-            SidrRouteChip("SITE", selected = false, onClick = onSite)
+            SidrRouteChip(sidrString(R.string.launcher_route_site), selected = false, onClick = onSite)
         }
-        SidrRouteChip("ASK", selected = false, onClick = onAsk)
+        SidrRouteChip(sidrString(R.string.launcher_route_ask), selected = false, onClick = onAsk)
     }
 }
 
@@ -452,7 +467,7 @@ private fun HomeContent(
             suggestionsContent(state.suggestions, onSuggestionTap)
         }
         if (state.favorites.isNotEmpty()) {
-            SidrSectionHeader(text = "Favorites")
+            SidrSectionHeader(text = sidrString(R.string.launcher_home_favorites_header))
             FavoritesGrid(favorites = state.favorites, onAppClick = onAppClick)
         }
     }
@@ -477,7 +492,7 @@ private fun SetupNudge(
         Column(modifier = Modifier.padding(Spacing.lg)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "Make Sidr your home screen",
+                    text = sidrString(R.string.launcher_setup_nudge_title),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier
                         .weight(1f)
@@ -485,12 +500,12 @@ private fun SetupNudge(
                 )
                 TopBarIcon(
                     icon = Icons.Filled.Close,
-                    contentDescription = "Dismiss",
+                    contentDescription = sidrString(R.string.launcher_setup_nudge_dismiss),
                     onClick = onDismiss,
                 )
             }
             Text(
-                text = "Set Sidr as your default launcher, then type or search from the field above to open apps.",
+                text = sidrString(R.string.launcher_setup_nudge_body),
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = Spacing.xs),
             )
@@ -498,7 +513,7 @@ private fun SetupNudge(
                 onClick = onSetDefault,
                 modifier = Modifier.padding(top = Spacing.sm),
             ) {
-                Text(text = "Set as default")
+                Text(text = sidrString(R.string.launcher_setup_nudge_action))
             }
         }
     }
@@ -570,7 +585,9 @@ private fun AppTileIcon(app: InstalledApp) {
                 ),
         ) {
             Text(
-                text = app.label.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                // DISPLAY: the monogram initial is a fold of caller-supplied app label copy, so it
+                // follows the user's locale (I18N-1 spec §3.4/§4-brief Step 4).
+                text = app.label.firstOrNull()?.toString()?.uppercase(Locale.getDefault()) ?: "?",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
@@ -655,10 +672,12 @@ private fun PendingActionArea(
     if (pending.requiresConfirmation) {
         SidrActionGate(
             type = SidrActionGateType.ExternalHandoff,
-            title = "Execute?",
-            consequence = "This will run: ${pending.commandLine}",
+            title = sidrString(R.string.launcher_confirm_execute_title),
+            // I18N-1 (spec §4/brief Step 2): the commandLine argument itself stays English - it's the
+            // command grammar echo, not translatable prose.
+            consequence = sidrString(R.string.launcher_confirm_will_run, pending.commandLine),
             target = pending.commandLine,
-            confirmLabel = "Confirm",
+            confirmLabel = sidrString(R.string.launcher_confirm_confirm),
             onConfirm = onConfirm,
             onCancel = onCancel,
             modifier = modifier,
@@ -668,11 +687,11 @@ private fun PendingActionArea(
         // Still requires a deliberate tap (R4: nothing auto-executes).
         SidrActionProposal(
             title = pending.commandLine,
-            description = "Safe proposal. It still waits for your tap.",
+            description = sidrString(R.string.launcher_safe_proposal_description),
             tone = SidrActionProposalTone.Safe,
             onExecute = onConfirm,
             onCancel = onCancel,
-            executeLabel = "Run",
+            executeLabel = sidrString(R.string.launcher_safe_proposal_run),
             modifier = modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
         )
     }

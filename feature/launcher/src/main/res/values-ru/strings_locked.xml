@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 13 Class B locked, translated vocabulary - see values/strings_locked.xml for the full
+  contract. NO Class A entries here: launcher_prayer_provenance_frame and
+  launcher_drawer_groups_provenance are translatable="false" and must never appear in a translated
+  folder.
+
+  Calculation-method names reuse feature/prayer's existing Russian draft translation verbatim (Task 7)
+  for terminology consistency across both screens - both awaiting the same owner sign-off. Madhab
+  labels and the Shahada are a DRAFT translation awaiting owner sign-off.
+-->
+<resources>
+    <string name="launcher_prayer_method_mwl">Всемирная исламская лига</string>
+    <string name="launcher_prayer_method_egyptian">Египетское главное управление геодезии</string>
+    <string name="launcher_prayer_method_karachi">Университет исламских наук, Карачи</string>
+    <string name="launcher_prayer_method_umm_al_qura">Университет Умм аль-Кура, Мекка</string>
+    <string name="launcher_prayer_method_dubai">Дубай (ОАЭ)</string>
+    <string name="launcher_prayer_method_moon_sighting_committee">Всемирный комитет по наблюдению за луной</string>
+    <string name="launcher_prayer_method_north_america">Исламское общество Северной Америки (ISNA)</string>
+    <string name="launcher_prayer_method_kuwait">Кувейт</string>
+    <string name="launcher_prayer_method_qatar">Катар</string>
+    <string name="launcher_prayer_method_singapore">Majlis Ugama Islam Singapura</string>
+    <string name="launcher_prayer_method_turkey">Diyanet İşleri Başkanlığı, Турция</string>
+
+    <string name="launcher_prayer_madhab_standard">Стандартный</string>
+    <string name="launcher_prayer_madhab_hanafi">Ханафитский</string>
+
+    <string name="launcher_shahada_line1">Нет бога, кроме Аллаха</string>
+    <string name="launcher_shahada_line2">Мухаммад — посланник Аллаха</string>
+</resources>

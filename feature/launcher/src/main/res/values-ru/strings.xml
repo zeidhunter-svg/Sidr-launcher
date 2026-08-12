@@ -37,4 +37,33 @@
 
     <string name="launcher_drawer_permission_denied">Доступ запрещён: %1$s</string>
     <string name="launcher_drawer_not_supported">Не поддерживается: %1$s</string>
+
+    <string name="launcher_home_no_apps_found">Приложения не найдены</string>
+    <string name="launcher_home_favorites_header">Избранное</string>
+
+    <string name="launcher_route_app">ПРИЛОЖЕНИЕ</string>
+    <string name="launcher_route_web">ВЕБ</string>
+    <string name="launcher_route_site">САЙТ</string>
+    <string name="launcher_route_ask">СПРОСИТЬ</string>
+
+    <string name="launcher_setup_nudge_title">Сделайте Sidr своим главным экраном</string>
+    <string name="launcher_setup_nudge_dismiss">Закрыть</string>
+    <string name="launcher_setup_nudge_body">Установите Sidr в качестве launcher\'а по умолчанию, затем вводите текст или ищите в поле выше, чтобы открывать приложения.</string>
+    <string name="launcher_setup_nudge_action">Сделать по умолчанию</string>
+
+    <string name="launcher_confirm_execute_title">Выполнить?</string>
+    <string name="launcher_confirm_will_run">Будет выполнено: %1$s</string>
+    <string name="launcher_confirm_confirm">Подтвердить</string>
+    <string name="launcher_safe_proposal_description">Безопасное предложение. Всё равно ожидает вашего подтверждения.</string>
+    <string name="launcher_safe_proposal_run">Выполнить</string>
+
+    <string name="launcher_drawer_title">Все приложения</string>
+    <string name="launcher_drawer_back">Назад</string>
+    <string name="launcher_drawer_ask_assistant">Спросить ассистента: «%1$s»</string>
+    <string name="launcher_drawer_empty_no_query">Приложения не найдены.</string>
+    <string name="launcher_drawer_empty_with_query">Ничего не найдено.</string>
+    <string name="launcher_drawer_mode_groups">Группы</string>
+    <string name="launcher_drawer_mode_az">А-Я</string>
+    <string name="launcher_drawer_search_placeholder">Поиск приложений</string>
+    <string name="launcher_drawer_clear_search">Очистить поиск</string>
 </resources>

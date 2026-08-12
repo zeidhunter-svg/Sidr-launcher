@@ -53,4 +53,42 @@
     <!-- AppDrawerViewModel's typed load-error detail (AppDrawerError) -->
     <string name="launcher_drawer_permission_denied">Permission denied: %1$s</string>
     <string name="launcher_drawer_not_supported">Not supported: %1$s</string>
+
+    <!-- I18N-1 Task 13: LauncherScreen.kt home shell -->
+    <string name="launcher_home_no_apps_found">No apps found</string>
+    <string name="launcher_home_favorites_header">Favorites</string>
+
+    <!-- DS-4 route lane chips (SidrRouteChip). Not in spec Sec7.1's enumerated locked-vocabulary
+         list (that list names specific tokens, e.g. "LOCAL CALC"/"LOCAL ONLY", not this one) - these
+         are plain English words meant to be read/understood, not opaque state codes, so they are
+         extracted as ordinary translatable strings. Judgment call, flagged in the task report. -->
+    <string name="launcher_route_app">APP</string>
+    <string name="launcher_route_web">WEB</string>
+    <string name="launcher_route_site">SITE</string>
+    <string name="launcher_route_ask">ASK</string>
+
+    <!-- First-run "set as default launcher" nudge -->
+    <string name="launcher_setup_nudge_title">Make Sidr your home screen</string>
+    <string name="launcher_setup_nudge_dismiss">Dismiss</string>
+    <string name="launcher_setup_nudge_body">Set Sidr as your default launcher, then type or search from the field above to open apps.</string>
+    <string name="launcher_setup_nudge_action">Set as default</string>
+
+    <!-- AIL-5 router-proposal confirmation (PendingActionArea) -->
+    <string name="launcher_confirm_execute_title">Execute?</string>
+    <!-- The %1$s argument (commandLine) stays English - command grammar echo (spec Sec4), not prose. -->
+    <string name="launcher_confirm_will_run">This will run: %1$s</string>
+    <string name="launcher_confirm_confirm">Confirm</string>
+    <string name="launcher_safe_proposal_description">Safe proposal. It still waits for your tap.</string>
+    <string name="launcher_safe_proposal_run">Run</string>
+
+    <!-- I18N-1 Task 13: AppDrawerScreen.kt -->
+    <string name="launcher_drawer_title">All apps</string>
+    <string name="launcher_drawer_back">Back</string>
+    <string name="launcher_drawer_ask_assistant">Ask assistant: \"%1$s\"</string>
+    <string name="launcher_drawer_empty_no_query">No apps found.</string>
+    <string name="launcher_drawer_empty_with_query">Nothing found.</string>
+    <string name="launcher_drawer_mode_groups">Groups</string>
+    <string name="launcher_drawer_mode_az">A-Z</string>
+    <string name="launcher_drawer_search_placeholder">Search applications</string>
+    <string name="launcher_drawer_clear_search">Clear search</string>
 </resources>

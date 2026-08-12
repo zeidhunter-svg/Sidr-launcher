@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 13 locked vocabulary (spec §7) - see docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md
+  for the full owner-review table. This file holds TWO classes, mirroring feature/prayer's
+  strings_locked.xml (Task 7):
+
+  Class A - locked, NEVER translated: carries translatable="false". Must not appear in values-ru or
+  values-tr (LocaleCompletenessGuardTest rejects a translatable="false" key that shows up in a
+  translated folder).
+  - launcher_prayer_provenance_frame: extracted verbatim from PrayerSummaryMapper.kt's
+    toProvenanceText() ("LOCAL CALC · <method> · <madhab>" - the ALL-CAPS "LOCAL CALC" abbreviation
+    used on Home, distinct from feature/prayer's lowercase "local calculation · ..." frame on the
+    detail screen; both are correct, they are different screens' existing copy).
+  - launcher_drawer_groups_provenance: "ON-DEVICE · OFFLINE" from AppDrawerScreen.kt's Groups preview
+    grid - a terminal state/provenance token in the same family as the spec §7.1 examples
+    (LOCAL ONLY, LOCAL CALC, etc.), not enumerated verbatim there. Judgment call: flagged in the task
+    13 report.
+
+  Class B - locked, but IS translated (values-ru / values-tr carry the same keys, same as any other
+  string): calculation-method names, Asr madhab labels, and the Shahada, because this screen renders
+  it (LauncherScreen.kt's HomeAnchorSlot). These live here (not in strings.xml) only so a change lands
+  in the owner-review package before it ships - Turkish uses Diyanet terminology, and the Shahada is
+  Islamic creed text; both are religious terminology the owner reviews specifically (spec §7.2).
+
+  - Calculation-method names (11, matching domain.prayer.SupportedPrayerMethods.ALL - domain stays
+    Android-resource-free per CLAUDE.md, so these are re-hosted here as the presentation-layer source
+    of truth, mirroring feature/prayer's identical duplication - there is no feature -> feature edge):
+    English copied verbatim from SupportedPrayerMethods.kt (byte-identical to feature/prayer's English,
+    since both source from the same domain displayLabel). The Turkish/Russian values are the SAME
+    DRAFT translation feature/prayer already carries (Task 7), reused for terminology consistency
+    across the two screens that render prayer method names - both awaiting the same owner sign-off.
+  - Asr madhab labels (2, matching domain.prayer.Madhab): English copied verbatim from
+    PrayerSummaryMapper.kt's pre-Task-13 madhabLabel() - "Standard" (NOT feature/prayer's longer
+    "Standard (Shafi'i / Maliki / Hanbali)"). This divergence is pre-existing and intentional to
+    preserve (byte-identity rule, spec §12) - flagged in the task 13 report as the owner's call, not
+    "fixed" here. The Turkish/Russian values are a DRAFT translation awaiting owner sign-off.
+  - The Shahada (2 lines, LauncherScreen.kt's HomeAnchorSlot, DS-4 sacred anchor): English copied
+    verbatim from the pre-Task-13 literal. The Turkish/Russian values are a DRAFT translation (standard
+    renderings used in Russian/Turkish Islamic sources) awaiting owner sign-off - mistranslating the
+    Shahada is a real risk this task will not take silently.
+-->
+<resources>
+    <!-- Class A: locked, never translated -->
+    <string name="launcher_prayer_provenance_frame" translatable="false">LOCAL CALC · %1$s · %2$s</string>
+    <string name="launcher_drawer_groups_provenance" translatable="false">ON-DEVICE · OFFLINE</string>
+
+    <!-- Class B: calculation-method names (SupportedPrayerMethods.ALL, display order) -->
+    <string name="launcher_prayer_method_mwl">Muslim World League</string>
+    <string name="launcher_prayer_method_egyptian">Egyptian General Authority of Survey</string>
+    <string name="launcher_prayer_method_karachi">University of Islamic Sciences, Karachi</string>
+    <string name="launcher_prayer_method_umm_al_qura">Umm al-Qura University, Makkah</string>
+    <string name="launcher_prayer_method_dubai">Dubai (UAE)</string>
+    <string name="launcher_prayer_method_moon_sighting_committee">Moonsighting Committee Worldwide</string>
+    <string name="launcher_prayer_method_north_america">Islamic Society of North America (ISNA)</string>
+    <string name="launcher_prayer_method_kuwait">Kuwait</string>
+    <string name="launcher_prayer_method_qatar">Qatar</string>
+    <string name="launcher_prayer_method_singapore">Majlis Ugama Islam Singapura</string>
+    <string name="launcher_prayer_method_turkey">Diyanet İşleri Başkanlığı, Turkey</string>
+
+    <!-- Class B: Asr madhab labels (Madhab) - "Standard" here, NOT feature/prayer's longer form -->
+    <string name="launcher_prayer_madhab_standard">Standard</string>
+    <string name="launcher_prayer_madhab_hanafi">Hanafi</string>
+
+    <!-- Class B: the Shahada (LauncherScreen.kt HomeAnchorSlot, DS-4 sacred anchor) -->
+    <string name="launcher_shahada_line1">There is no deity except Allah</string>
+    <string name="launcher_shahada_line2">Muhammad is the messenger of Allah</string>
+</resources>

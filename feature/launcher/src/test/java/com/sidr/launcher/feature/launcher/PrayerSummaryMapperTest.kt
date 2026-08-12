@@ -151,14 +151,20 @@ class PrayerSummaryMapperTest {
     }
 
     @Test
-    fun `provenance string is LOCAL CALC dot method label dot madhab`() {
+    fun `provenance carries the method and madhab identifiers, not a baked sentence`() {
+        // I18N-1 Task 13: HomePrayerSummaryUi.provenance is now the typed PrayerProvenanceUi
+        // (methodId/madhab) rather than a resolved English string - resolving to a localized
+        // sentence needs @Composable context (sidrString), which this plain-JVM mapper test has no
+        // host for. See PrayerSummaryMapper.kt's prayerProvenanceText() for the render-time text and
+        // MethodLabelCoverageTest for the anti-drift guard over the full method catalog.
         val ui = available(
             methodId = CalculationMethodId("UMM_AL_QURA"),
             madhab = Madhab.HANAFI,
         ).toHomePrayerSummaryUi()
 
         checkNotNull(ui)
-        assertEquals("LOCAL CALC · Umm al-Qura University, Makkah · Hanafi", ui.provenance)
+        assertEquals(CalculationMethodId("UMM_AL_QURA"), ui.provenance.methodId)
+        assertEquals(Madhab.HANAFI, ui.provenance.madhab)
     }
 
     @Test

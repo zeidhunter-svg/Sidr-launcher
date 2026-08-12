@@ -218,6 +218,77 @@ translatable copy in `strings.xml`.
 
 ---
 
+## Section 6 — `feature/launcher` locked vocabulary (Task 13)
+
+Two review concerns land in the same file (`feature/launcher/src/main/res/values{,-ru,-tr}/strings_locked.xml`):
+the Home strip's copy of the prayer method/madhab vocabulary (a **second copy** of Section 1's terminology —
+see the divergence note below) and the Shahada, the Islamic creed text rendered on Home
+(`LauncherScreen.kt`'s `HomeAnchorSlot`, the DS-4 "sacred anchor"). Extracted verbatim from the pre-I18N-1
+Kotlin literals; Russian and Turkish are **drafts, unreviewed**, except the method-name rows, which reuse
+Section 1c's existing Russian/Turkish draft verbatim (same terminology, same review needed once).
+
+### 6a. Class A — locked, never translated
+
+| Key | English | Why locked |
+|---|---|---|
+| `launcher_prayer_provenance_frame` | `LOCAL CALC · %1$s · %2$s` | Provenance frame (DS-6B invariant), Home strip's own copy — note the **ALL-CAPS "LOCAL CALC"** abbreviation, distinct from Section 1a's lowercase `local calculation · %1$s · %2$s` on the prayer detail screen. Both are pre-existing, correct copy for their own screen; this task did not reconcile them (see the "Outstanding" note below). |
+| `launcher_drawer_groups_provenance` | `ON-DEVICE · OFFLINE` | Terminal state/provenance token on the App Drawer's "Groups" design-preview grid, same species as spec §7.1's enumerated examples (`LOCAL ONLY`, `LOCAL CALC`) but not itself one of the enumerated strings. **Judgment call, not directed by the task brief** — locked here on the same reasoning as the enumerated tokens; owner may choose to unlock it instead. |
+
+### 6b. Class B — calculation-method names (second copy of Section 1c)
+
+Re-hosted here for the same reason as Section 1c: `domain` stays Android-resource-free, so
+`feature/launcher`'s `PrayerSummaryMapper.kt` (Home strip) needs its own presentation-layer copy of
+`SupportedPrayerMethods.ALL`'s English `displayLabel`s — byte-identical to Section 1c's English, since both
+source from the same domain field. **Russian/Turkish here are the exact same draft text as Section 1c**,
+reused verbatim for terminology consistency across the two screens — sign off once, both screens match.
+
+| Key | English (verbatim from domain) | Russian (draft, = Section 1c) | Turkish (draft, = Section 1c) |
+|---|---|---|---|
+| `launcher_prayer_method_mwl` | Muslim World League | Всемирная исламская лига | Dünya İslam Birliği |
+| `launcher_prayer_method_egyptian` | Egyptian General Authority of Survey | Египетское главное управление геодезии | Mısır Genel Anket Otoritesi |
+| `launcher_prayer_method_karachi` | University of Islamic Sciences, Karachi | Университет исламских наук, Карачи | İslami İlimler Üniversitesi, Karaçi |
+| `launcher_prayer_method_umm_al_qura` | Umm al-Qura University, Makkah | Университет Умм аль-Кура, Мекка | Ümmü'l-Kurâ Üniversitesi, Mekke |
+| `launcher_prayer_method_dubai` | Dubai (UAE) | Дубай (ОАЭ) | Dubai (BAE) |
+| `launcher_prayer_method_moon_sighting_committee` | Moonsighting Committee Worldwide | Всемирный комитет по наблюдению за луной | Dünya Hilal Gözlem Komitesi |
+| `launcher_prayer_method_north_america` | Islamic Society of North America (ISNA) | Исламское общество Северной Америки (ISNA) | Kuzey Amerika İslam Cemiyeti (ISNA) |
+| `launcher_prayer_method_kuwait` | Kuwait | Кувейт | Kuveyt |
+| `launcher_prayer_method_qatar` | Qatar | Катар | Katar |
+| `launcher_prayer_method_singapore` | Majlis Ugama Islam Singapura | Majlis Ugama Islam Singapura *(kept)* | Majlis Ugama Islam Singapura *(kept)* |
+| `launcher_prayer_method_turkey` | Diyanet İşleri Başkanlığı, Turkey | Diyanet İşleri Başkanlığı, Турция | Diyanet İşleri Başkanlığı, Türkiye |
+
+### 6c. Class B — Asr madhab labels (diverges from Section 1d — see note)
+
+| Key | English (verbatim) | Russian (draft) | Turkish (draft) |
+|---|---|---|---|
+| `launcher_prayer_madhab_standard` | Standard | Стандартный | Standart |
+| `launcher_prayer_madhab_hanafi` | Hanafi | Ханафитский | Hanefi |
+
+**Divergence, not fixed here (owner's call):** Section 1d's `prayer_madhab_standard` (the prayer *detail*
+screen, `feature/prayer`) reads **"Standard (Shafi'i / Maliki / Hanbali)"** — the qualified form. This
+task's `launcher_prayer_madhab_standard` (the Home *strip*, `feature/launcher`) reads plain **"Standard"** —
+the pre-existing English literal in `PrayerSummaryMapper.kt`, kept byte-identical per this block's "no
+copy change while extracting" rule (spec §12). The two screens have shipped different English for the same
+concept since before this i18n block existed; this task preserves that fact rather than silently
+reconciling it. If the owner wants them to match, that is a copy decision for a follow-up, not an I18N-1
+extraction detail.
+
+### 6d. Class B — the Shahada (new religious content, not previously reviewed)
+
+| Key | English (verbatim) | Russian (draft) | Turkish (draft) |
+|---|---|---|---|
+| `launcher_shahada_line1` | There is no deity except Allah | Нет бога, кроме Аллаха | Allah'tan başka ilah yoktur |
+| `launcher_shahada_line2` | Muhammad is the messenger of Allah | Мухаммад — посланник Аллаха | Muhammed Allah'ın elçisidir |
+
+Rendered on Home (`LauncherScreen.kt`'s `HomeAnchorSlot`, DS-4's "sacred anchor" — `SidrTextRole.SACRED`).
+**Not named by the task brief at all** — found by inspection while enumerating every literal in
+`LauncherScreen.kt` (spec §7.2's religious-terminology bar clearly applies to Islamic creed text, arguably
+more sensitively than prayer-method names). Locked as Class B on the same reasoning as Sections 1b/6b/6c.
+The Russian/Turkish drafts are standard renderings already in wide use in Russian-/Turkish-language
+Islamic sources, not an original translation — but they are still unreviewed by the owner and must not
+ship translated (only English) until signed off.
+
+---
+
 ## Outstanding for Task 15
 
 - Any additional consent copy from later tasks (Task 15 scope).
@@ -236,3 +307,13 @@ translatable copy in `strings.xml`.
   unlocked copy rather than through a `strings_locked.xml` barrier. The owner should review that sentence
   alongside Section 4; Task 15 reconciles its file placement (this note does not move or edit any
   `feature/prayer` file).
+- **Task 13 judgment calls, not directed by the brief** (see Section 6): (1) `launcher_route_app` /
+  `_web` / `_site` / `_ask` (`SidrRouteChip` labels `APP`/`WEB`/`SITE`/`ASK` on Home's route lane) were
+  extracted as **ordinary translatable** strings, not locked — they are plain English words meant to be
+  read/understood rather than opaque state codes, and spec §7.1's enumerated list does not name them.
+  The owner may prefer them locked (English-only) instead, matching the design system's other short
+  chip vocabulary. (2) `launcher_drawer_groups_provenance` ("ON-DEVICE · OFFLINE") was locked as Class A
+  even though not itself enumerated in spec §7.1 — see Section 6a. (3) The two prayer-provenance frames
+  (Section 1a `local calculation · …` vs Section 6a `LOCAL CALC · …`) and the two madhab-standard labels
+  (Section 1d vs Section 6c) remain **unreconciled duplicate English copy** across `feature/prayer` and
+  `feature/launcher` — flagged, not fixed, per instruction.

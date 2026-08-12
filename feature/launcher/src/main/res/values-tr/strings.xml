@@ -66,4 +66,10 @@
     <string name="launcher_drawer_mode_az">A-Z</string>
     <string name="launcher_drawer_search_placeholder">Uygulama ara</string>
     <string name="launcher_drawer_clear_search">Aramayı temizle</string>
+
+    <string name="launcher_drawer_sample_category_finance">Finans</string>
+    <string name="launcher_drawer_sample_category_messaging">Mesajlaşma</string>
+    <string name="launcher_drawer_sample_category_media">Medya</string>
+    <string name="launcher_drawer_sample_category_productivity">Verimlilik</string>
+    <string name="launcher_drawer_sample_category_other">Diğer</string>
 </resources>

@@ -91,4 +91,13 @@
     <string name="launcher_drawer_mode_az">A-Z</string>
     <string name="launcher_drawer_search_placeholder">Search applications</string>
     <string name="launcher_drawer_clear_search">Clear search</string>
+
+    <!-- I18N-1 Task 13 fix round 1 (reviewer finding 1): Groups-preview sample category headers -
+         GroupsPreviewGrid renders these as real sticky-header text in the shipped Groups mode, so
+         they are not exempt (they are not inside preview/*.kt). -->
+    <string name="launcher_drawer_sample_category_finance">Finance</string>
+    <string name="launcher_drawer_sample_category_messaging">Messaging</string>
+    <string name="launcher_drawer_sample_category_media">Media</string>
+    <string name="launcher_drawer_sample_category_productivity">Productivity</string>
+    <string name="launcher_drawer_sample_category_other">Other</string>
 </resources>

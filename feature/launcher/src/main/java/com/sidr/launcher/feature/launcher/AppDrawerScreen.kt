@@ -322,11 +322,17 @@ private fun GroupsPreviewGrid(
     onAppClick: (InstalledApp) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val buckets = remember(apps) {
+    // I18N-1 Task 13 fix round 1 (reviewer finding 1): resolved here, not as a top-level constant,
+    // because sidrString needs @Composable context. These render as real sticky-header text in the
+    // shipped App Drawer "Groups" mode - they are NOT exempt preview/*.kt sample data (spec §3.2/§3.3
+    // exempt only the five named PREVIEW-badged screens); this file is production code guarded only by
+    // a UI badge (SidrPreviewBanner/SidrPreviewBadge), not a build-time exclusion.
+    val sampleCategories = SAMPLE_CATEGORY_RES_IDS.map { sidrString(it) }
+    val buckets = remember(apps, sampleCategories) {
         val byCategory = LinkedHashMap<String, MutableList<InstalledApp>>()
-        SAMPLE_CATEGORIES.forEach { byCategory[it] = mutableListOf() }
+        sampleCategories.forEach { byCategory[it] = mutableListOf() }
         apps.forEachIndexed { index, app ->
-            byCategory.getValue(SAMPLE_CATEGORIES[index % SAMPLE_CATEGORIES.size]).add(app)
+            byCategory.getValue(sampleCategories[index % sampleCategories.size]).add(app)
         }
         byCategory.filterValues { it.isNotEmpty() }
     }
@@ -338,8 +344,8 @@ private fun GroupsPreviewGrid(
         buckets.forEach { (category, categoryApps) ->
             stickyHeader(key = "group_header_$category") {
                 SidrAlphabetHeader(
-                    // DISPLAY: category is caller-supplied human copy (SAMPLE_CATEGORIES), so it
-                    // folds under the user's locale (I18N-1 spec §3.4/brief Step 4).
+                    // DISPLAY: category is caller-supplied human copy (resolved sampleCategories), so
+                    // it folds under the user's locale (I18N-1 spec §3.4/brief Step 4).
                     text = category.uppercase(Locale.getDefault()),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -366,8 +372,19 @@ private fun GroupsPreviewGrid(
     }
 }
 
-/** Fixed, clearly-illustrative sample category labels for the Groups preview — not real categories. */
-private val SAMPLE_CATEGORIES = listOf("Finance", "Messaging", "Media", "Productivity", "Other")
+/**
+ * Fixed, clearly-illustrative sample category labels for the Groups preview — not real categories.
+ * I18N-1 Task 13 fix round 1: extracted as ordinary translatable strings (`launcher_drawer_sample_category_*`)
+ * — these are sample category names, not locked vocabulary or consent copy — resolved via [sidrString]
+ * inside [GroupsPreviewGrid] (a `@Composable`), not here.
+ */
+private val SAMPLE_CATEGORY_RES_IDS = listOf(
+    R.string.launcher_drawer_sample_category_finance,
+    R.string.launcher_drawer_sample_category_messaging,
+    R.string.launcher_drawer_sample_category_media,
+    R.string.launcher_drawer_sample_category_productivity,
+    R.string.launcher_drawer_sample_category_other,
+)
 
 /** Apps per grid row, shared by the real A-Z grid and the Groups preview grid. */
 private const val APPS_PER_ROW = 4

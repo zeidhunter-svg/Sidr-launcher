@@ -66,4 +66,10 @@
     <string name="launcher_drawer_mode_az">А-Я</string>
     <string name="launcher_drawer_search_placeholder">Поиск приложений</string>
     <string name="launcher_drawer_clear_search">Очистить поиск</string>
+
+    <string name="launcher_drawer_sample_category_finance">Финансы</string>
+    <string name="launcher_drawer_sample_category_messaging">Сообщения</string>
+    <string name="launcher_drawer_sample_category_media">Медиа</string>
+    <string name="launcher_drawer_sample_category_productivity">Продуктивность</string>
+    <string name="launcher_drawer_sample_category_other">Другое</string>
 </resources>

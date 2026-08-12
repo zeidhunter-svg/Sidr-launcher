@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- I18N-1 Task 12: Turkish. Agent-drafted, not owner-reviewed (accepted norm for this block). -->
+<resources>
+    <string name="launcher_feedback_empty_input">Bir komut girin, örn. «%1$s»</string>
+    <string name="launcher_feedback_low_confidence">Anlaşılamadı — daha net belirtin</string>
+    <string name="launcher_feedback_unknown_command">Bilinmeyen komut. Deneyin: %1$s, %2$s</string>
+    <string name="launcher_feedback_ambiguous">Şunu mu demek istediniz:</string>
+
+    <string name="launcher_message_help">Deneyin: %1$s, %2$s, %3$s, %4$s</string>
+    <string name="launcher_message_help_brief">Deneyin: %1$s, %2$s</string>
+    <string name="launcher_feedback_no_app_found">«%1$s» için uygulama bulunamadı</string>
+    <string name="launcher_message_showing_all_apps">Tüm uygulamalar gösteriliyor</string>
+    <string name="launcher_message_assistant_soon">Asistan yakında geliyor</string>
+    <string name="launcher_message_verbatim">%1$s</string>
+
+    <string name="launcher_failure_generic">Bir şeyler ters gitti. Lütfen tekrar deneyin.</string>
+    <string name="launcher_failure_cant_open_app">Bu uygulama açılamadı.</string>
+    <string name="launcher_failure_no_search_app">Bu aramayı gerçekleştirecek uygulama yok.</string>
+    <string name="launcher_failure_cant_open_url">Bu bağlantıyı açacak uygulama yok.</string>
+    <string name="launcher_failure_no_store_app">Play Store açılamadı.</string>
+
+    <string name="launcher_voice_permission_denied">Sesli giriş için mikrofon izni gerekiyor.</string>
+    <string name="launcher_voice_unavailable">Sesli giriş bu cihazda kullanılamıyor.</string>
+    <string name="launcher_voice_no_match">Anlaşılamadı — tekrar deneyin.</string>
+    <string name="launcher_voice_busy">Sesli giriş meşgul — birazdan tekrar deneyin.</string>
+    <string name="launcher_voice_network">Sesli giriş şu anda ağ bağlantısı gerektiriyor.</string>
+    <string name="launcher_voice_timeout">Konuşma algılanamadı — tekrar deneyin.</string>
+    <string name="launcher_voice_unknown">Sesli giriş başarısız oldu — tekrar deneyin.</string>
+
+    <string name="launcher_suggest_launch_app">«%1$s» uygulamasını mı açmak istediniz?</string>
+    <string name="launcher_suggest_search">Web\'de «%1$s» aransın mı?</string>
+    <string name="launcher_suggest_open_settings">Ayarlar açılsın mı?</string>
+    <string name="launcher_suggest_simple_command">Bu komut çalıştırılsın mı?</string>
+    <string name="launcher_suggest_open_url">«%1$s» açılsın mı?</string>
+    <string name="launcher_suggest_play_store">Play Store\'da «%1$s» aransın mı?</string>
+    <string name="launcher_suggest_unknown">Farklı bir komut deneyin</string>
+
+    <string name="launcher_drawer_permission_denied">İzin reddedildi: %1$s</string>
+    <string name="launcher_drawer_not_supported">Desteklenmiyor: %1$s</string>
+</resources>

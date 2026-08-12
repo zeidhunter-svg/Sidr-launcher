@@ -30,6 +30,7 @@ import com.sidr.launcher.domain.prayer.PrayerContext
 import com.sidr.launcher.domain.prayer.UnavailableReason
 import com.sidr.launcher.domain.intent.ActionExecutionResult
 import com.sidr.launcher.domain.intent.ActionExecutor
+import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.ExecutableAction
 import com.sidr.launcher.domain.intent.ExecuteActionUseCase
@@ -384,17 +385,23 @@ class LauncherViewModel @Inject constructor(
         }
     }
 
-    /** One-line console summary of a [CommandOutcome] (dev console only; display-safe). */
+    /**
+     * One-line console summary of a [CommandOutcome] (dev console only; display-safe, session-only,
+     * developer-facing — exempt from I18N-1 per spec §3.2). [CommandOutcome.Message]/[CommandOutcome.Failed]
+     * render their typed payload's own `toString()` (a `data object`/`data class` gives a readable
+     * name like `Help` or `NoAppFound(query=telegram)`) rather than resurrecting a user-facing English
+     * constant that I18N-1 deleted.
+     */
     private fun outcomeSummary(outcome: CommandOutcome): String = when (outcome) {
         CommandOutcome.Empty -> "empty"
         CommandOutcome.Executed -> "✓ executed"
         CommandOutcome.NoOp -> "no-op"
-        is CommandOutcome.Message -> outcome.text
+        is CommandOutcome.Message -> outcome.message.toString()
         is CommandOutcome.NeedsConfirmation -> "? ${outcome.candidates.size} candidates"
         is CommandOutcome.Suggest -> "? suggest"
         CommandOutcome.LowConfidence -> "low confidence"
         is CommandOutcome.Unknown -> "unknown"
-        is CommandOutcome.Failed -> "✗ ${outcome.message}"
+        is CommandOutcome.Failed -> "✗ ${outcome.failure}"
         CommandOutcome.OpenAssistant -> "→ assistant"
         CommandOutcome.OpenSettings -> "→ settings"
         CommandOutcome.ShowApps -> "→ apps"
@@ -492,7 +499,7 @@ class LauncherViewModel @Inject constructor(
         // bypasses the showMic gate) becomes a no-op rather than starting the recognizer.
         if (!userPreferences.value.micInputEnabled) return
         if (!speechInputSource.isAvailable()) {
-            _commandFeedback.value = CommandFeedback.Message(VOICE_UNAVAILABLE)
+            _commandFeedback.value = CommandFeedback.VoiceError(SpeechRecognitionError.UNAVAILABLE)
             return
         }
         voiceJob?.cancel()
@@ -507,21 +514,11 @@ class LauncherViewModel @Inject constructor(
                         onCommandSubmitted(state.text)
                     }
                     is SpeechRecognitionState.Error ->
-                        _commandFeedback.value = CommandFeedback.Message(voiceErrorMessage(state.error))
+                        _commandFeedback.value = CommandFeedback.VoiceError(state.error)
                     SpeechRecognitionState.Ended -> Unit
                 }
             }
         }
-    }
-
-    private fun voiceErrorMessage(error: SpeechRecognitionError): String = when (error) {
-        SpeechRecognitionError.PERMISSION_DENIED -> "Microphone permission is needed for voice input."
-        SpeechRecognitionError.UNAVAILABLE -> VOICE_UNAVAILABLE
-        SpeechRecognitionError.NO_MATCH -> "Didn't catch that — try again."
-        SpeechRecognitionError.BUSY -> "Voice input is busy — try again in a moment."
-        SpeechRecognitionError.NETWORK -> "Voice input needs a network connection right now."
-        SpeechRecognitionError.TIMEOUT -> "No speech detected — try again."
-        SpeechRecognitionError.UNKNOWN -> "Voice input failed — try again."
     }
 
     // ── CommandOutcome → UI — exhaustive when, no else branch ──────────────
@@ -531,7 +528,7 @@ class LauncherViewModel @Inject constructor(
         _pendingRoutedAction.value = null
         when (outcome) {
             CommandOutcome.Empty ->
-                _commandFeedback.value = CommandFeedback.Message("Type a command, e.g. \"open telegram\"")
+                _commandFeedback.value = CommandFeedback.EmptyInput
 
             CommandOutcome.Executed -> {
                 setCommandInput("")
@@ -542,24 +539,22 @@ class LauncherViewModel @Inject constructor(
                 _commandFeedback.value = CommandFeedback.None
 
             is CommandOutcome.Message ->
-                _commandFeedback.value = CommandFeedback.Message(outcome.text)
+                _commandFeedback.value = CommandFeedback.Domain(outcome.message)
 
             is CommandOutcome.NeedsConfirmation ->
                 _commandFeedback.value = CommandFeedback.Ambiguous(outcome.candidates)
 
             is CommandOutcome.Suggest ->
-                _commandFeedback.value = CommandFeedback.Suggestion(describe(outcome.intent))
+                _commandFeedback.value = CommandFeedback.Suggestion(suggestedIntentFor(outcome.intent))
 
             CommandOutcome.LowConfidence ->
-                _commandFeedback.value =
-                    CommandFeedback.Message("Didn't catch that — try being more specific")
+                _commandFeedback.value = CommandFeedback.LowConfidence
 
             is CommandOutcome.Unknown ->
-                _commandFeedback.value =
-                    CommandFeedback.Message("Unknown command. Try: open <app>, search <query>")
+                _commandFeedback.value = CommandFeedback.UnknownCommand
 
             is CommandOutcome.Failed ->
-                _commandFeedback.value = CommandFeedback.Message(outcome.message)
+                _commandFeedback.value = CommandFeedback.Failure(outcome.failure)
 
             CommandOutcome.OpenAssistant -> {
                 setCommandInput("")
@@ -782,8 +777,8 @@ class LauncherViewModel @Inject constructor(
             val result = actionExecutor.execute(action)
             _commandFeedback.value = when (result) {
                 is ActionExecutionResult.Success -> CommandFeedback.None
-                is ActionExecutionResult.Failure -> CommandFeedback.Message(result.safeMessage)
-                is ActionExecutionResult.Unsupported -> CommandFeedback.Message(GENERIC_ERROR)
+                is ActionExecutionResult.Failure -> CommandFeedback.Failure(result.failure)
+                is ActionExecutionResult.Unsupported -> CommandFeedback.Failure(CommandFailure.Generic)
             }
             // Record usage only on a successful launch — soft-wrapped, never blocks the launch.
             // Command-executed launches (CommandOutcome.Executed) are not tracked here because
@@ -808,14 +803,18 @@ class LauncherViewModel @Inject constructor(
         }
     }
 
-    private fun describe(intent: LauncherIntent): String = when (intent) {
-        is LauncherIntent.LaunchAppIntent -> "Did you mean to open \"${intent.displayNameQuery}\"?"
-        is LauncherIntent.SearchIntent -> "Search the web for \"${intent.query}\"?"
-        is LauncherIntent.OpenSettingsIntent -> "Open settings?"
-        is LauncherIntent.SimpleCommandIntent -> "Run that command?"
-        is LauncherIntent.OpenUrlIntent -> "Open \"${intent.url}\"?"
-        is LauncherIntent.PlayStoreSearchIntent -> "Find \"${intent.query}\" in the Play Store?"
-        is LauncherIntent.UnknownIntent -> "Try a different command"
+    /**
+     * What `describe()` used to word, named instead (I18N-1 spec §3.5) — one [SuggestedIntent]
+     * variant per [LauncherIntent] branch; `LauncherPresentation.feedbackText` picks the sentence.
+     */
+    private fun suggestedIntentFor(intent: LauncherIntent): SuggestedIntent = when (intent) {
+        is LauncherIntent.LaunchAppIntent -> SuggestedIntent.LaunchApp(intent.displayNameQuery)
+        is LauncherIntent.SearchIntent -> SuggestedIntent.Search(intent.query)
+        is LauncherIntent.OpenSettingsIntent -> SuggestedIntent.OpenSettings
+        is LauncherIntent.SimpleCommandIntent -> SuggestedIntent.SimpleCommand
+        is LauncherIntent.OpenUrlIntent -> SuggestedIntent.OpenUrl(intent.url)
+        is LauncherIntent.PlayStoreSearchIntent -> SuggestedIntent.PlayStoreSearch(intent.query)
+        is LauncherIntent.UnknownIntent -> SuggestedIntent.Unknown
     }
 
     // ── OperationError → UiError — exhaustive when, no else branch ─────────
@@ -848,12 +847,10 @@ class LauncherViewModel @Inject constructor(
             this.startsWith("${Routes.PermissionEducation.ROUTE}?")
 
     private companion object {
-        const val GENERIC_ERROR = "Something went wrong. Please try again."
         // AIL-5: the bracketed risk tag on the confirm card. MVP produces a card only for CONFIRM-risk
         // (or unregistered) proposals; DANGEROUS is reserved for Stage 3.
         const val RISK_CONFIRM_LABEL = "CONFIRM"
         // SavedStateHandle key for the typed command text (H3 process-death restoration).
         const val KEY_COMMAND_INPUT = "command_input"
-        const val VOICE_UNAVAILABLE = "Voice input isn't available on this device."
     }
 }

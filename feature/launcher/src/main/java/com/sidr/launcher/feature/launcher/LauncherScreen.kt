@@ -71,6 +71,7 @@ import com.sidr.launcher.core.ui.component.SidrScaffold
 import com.sidr.launcher.core.ui.component.SidrUniversalInput
 import com.sidr.launcher.core.ui.component.SidrUniversalInputState
 import com.sidr.launcher.core.ui.component.TopBarIcon
+import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrText
 import com.sidr.launcher.core.ui.primitive.SidrTextRole
 import com.sidr.launcher.core.ui.theme.SidrTheme
@@ -686,29 +687,25 @@ private fun CommandFeedbackArea(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    when (feedback) {
-        CommandFeedback.None -> Unit
-
-        is CommandFeedback.Message -> FeedbackText(
-            text = feedback.text,
-            onDismiss = onDismiss,
-            modifier = modifier,
-        )
-
-        is CommandFeedback.Suggestion -> FeedbackText(
-            text = feedback.text,
-            onDismiss = onDismiss,
-            modifier = modifier,
-        )
-
+    // I18N-1 Task 12 note: CommandFeedback gained typed variants (EmptyInput/LowConfidence/
+    // UnknownCommand/Domain/Failure/VoiceError) so LauncherPresentation.feedbackText's resolution is
+    // reused here rather than duplicating the CommandOutcome -> sentence decision. The dev-console
+    // Message branch stays a verbatim passthrough (spec §3.2). Task 13 owns the rest of this screen's
+    // string extraction; this is the minimal wiring needed to keep :feature:launcher compiling once
+    // CommandFeedback's shape changed.
+    val resolved = feedbackText(feedback)
+    when {
         // Ambiguity reads as a clarification prompt, not an error (spec §8): a quiet "Did you mean:"
         // header over the candidate list. A candidate launches only on an explicit tap.
-        is CommandFeedback.Ambiguous -> Column(
+        feedback is CommandFeedback.Ambiguous -> Column(
             modifier = modifier
                 .fillMaxWidth()
                 .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
         ) {
-            SidrText(text = "Did you mean:", role = SidrTextRole.PROVENANCE)
+            SidrText(
+                text = sidrString(requireNotNull(resolved).id, *resolved.args.toTypedArray()),
+                role = SidrTextRole.PROVENANCE,
+            )
             Spacer(modifier = Modifier.height(Spacing.xs))
             feedback.candidates.forEach { app ->
                 SidrText(
@@ -723,11 +720,26 @@ private fun CommandFeedbackArea(
                 )
             }
         }
+
+        resolved != null -> CommandFeedbackText(
+            text = sidrString(resolved.id, *resolved.args.toTypedArray()),
+            onDismiss = onDismiss,
+            modifier = modifier,
+        )
+
+        // Dev-console output only — exempt from I18N-1 (spec §3.2), rendered verbatim.
+        feedback is CommandFeedback.Message -> CommandFeedbackText(
+            text = feedback.text,
+            onDismiss = onDismiss,
+            modifier = modifier,
+        )
+
+        else -> Unit // CommandFeedback.None
     }
 }
 
 @Composable
-private fun FeedbackText(
+private fun CommandFeedbackText(
     text: String,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,

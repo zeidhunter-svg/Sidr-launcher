@@ -64,6 +64,7 @@ import com.sidr.launcher.domain.action.LauncherAction
 import com.sidr.launcher.domain.ai.router.PlanResult
 import com.sidr.launcher.domain.history.AppUsageRecord
 import com.sidr.launcher.domain.intent.ActionExecutionResult
+import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
 import com.sidr.launcher.domain.intent.ExecutableAction
 import com.sidr.launcher.domain.intent.ExecuteActionUseCase
@@ -656,11 +657,11 @@ class LauncherViewModelTest {
     fun `command feedback is NOT restored after process death`() = runTest(testDispatcher) {
         val handle = SavedStateHandle()
         val vm1 = buildViewModel(savedStateHandle = handle)
-        vm1.onCommandSubmitted("") // Empty outcome → sets a transient feedback Message
+        vm1.onCommandSubmitted("") // Empty outcome → sets a transient feedback EmptyInput hint
         advanceUntilIdle()
         assertTrue(
             "Sanity: feedback should be set on vm1",
-            vm1.commandFeedback.value is CommandFeedback.Message,
+            vm1.commandFeedback.value is CommandFeedback.EmptyInput,
         )
 
         // A relaunched VM restores input but must NOT resurrect the ephemeral last-command result.
@@ -750,7 +751,7 @@ class LauncherViewModelTest {
             advanceUntilIdle()
 
             assertEquals(0, fakeExecutor.callCount)
-            assertTrue(vm.commandFeedback.value is CommandFeedback.Message)
+            assertTrue(vm.commandFeedback.value is CommandFeedback.UnknownCommand)
             // unknown input is preserved so the user can edit it
             assertEquals("zzz", vm.commandInput.value)
         }
@@ -1083,15 +1084,15 @@ class LauncherViewModelTest {
 
     @Test
     fun `onAppClicked surfaces a message when the launch fails`() = runTest(testDispatcher) {
-        fakeExecutor.resultToReturn = ActionExecutionResult.Failure("Couldn't open that app.")
+        fakeExecutor.resultToReturn = ActionExecutionResult.Failure(CommandFailure.CantOpenApp)
         val vm = buildViewModel()
 
         vm.onAppClicked(InstalledApp("com.missing", "Missing"))
         advanceUntilIdle()
 
         val feedback = vm.commandFeedback.value
-        assertTrue(feedback is CommandFeedback.Message)
-        assertEquals("Couldn't open that app.", (feedback as CommandFeedback.Message).text)
+        assertTrue(feedback is CommandFeedback.Failure)
+        assertEquals(CommandFailure.CantOpenApp, (feedback as CommandFeedback.Failure).failure)
     }
 
     @Test
@@ -1153,11 +1154,11 @@ class LauncherViewModelTest {
 
     @Test
     fun `route suggestion tap clears stale feedback without launching`() = runTest(testDispatcher) {
-        fakeExecutor.resultToReturn = ActionExecutionResult.Failure("Couldn't open that app.")
+        fakeExecutor.resultToReturn = ActionExecutionResult.Failure(CommandFailure.CantOpenApp)
         val vm = buildViewModel()
         vm.onAppClicked(InstalledApp("com.missing", "Missing"))
         advanceUntilIdle()
-        assertTrue(vm.commandFeedback.value is CommandFeedback.Message)
+        assertTrue(vm.commandFeedback.value is CommandFeedback.Failure)
         fakeExecutor.reset()
         val eventDeferred = async { vm.navigationEvents.first() }
 
@@ -1337,7 +1338,7 @@ class LauncherViewModelTest {
 
     @Test
     fun `failed tap-to-launch does not record usage`() = runTest(testDispatcher) {
-        fakeExecutor.resultToReturn = ActionExecutionResult.Failure("Couldn't open.")
+        fakeExecutor.resultToReturn = ActionExecutionResult.Failure(CommandFailure.CantOpenApp)
         val vm = buildViewModel()
 
         vm.onAppClicked(InstalledApp("com.missing", "Missing"))
@@ -1641,7 +1642,7 @@ class LauncherViewModelTest {
         advanceUntilIdle()
 
         assertEquals(0, fakeExecutor.callCount)
-        assertTrue(vm.commandFeedback.value is CommandFeedback.Message)
+        assertTrue(vm.commandFeedback.value is CommandFeedback.VoiceError)
         // The keyboard path is unaffected — a normal type-then-submit launch still executes.
         fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
         fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent("telegram")
@@ -1661,7 +1662,9 @@ class LauncherViewModelTest {
         advanceUntilIdle()
 
         assertEquals(0, fakeExecutor.callCount)
-        assertTrue(vm.commandFeedback.value is CommandFeedback.Message)
+        val feedback = vm.commandFeedback.value
+        assertTrue(feedback is CommandFeedback.VoiceError)
+        assertEquals(SpeechRecognitionError.PERMISSION_DENIED, (feedback as CommandFeedback.VoiceError).error)
     }
 
     // ── Voice/mic user toggle (Block X6) ───────────────────────────────────

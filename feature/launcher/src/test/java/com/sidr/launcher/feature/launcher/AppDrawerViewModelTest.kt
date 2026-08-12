@@ -1,5 +1,6 @@
 package com.sidr.launcher.feature.launcher
 
+import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.testing.FakeActionExecutor
@@ -7,6 +8,7 @@ import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeUsageHistoryRepository
 import com.sidr.launcher.domain.intent.ActionExecutionResult
+import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.ExecutableAction
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
@@ -108,6 +110,34 @@ class AppDrawerViewModelTest {
         assertFalse((state as UiState.Error).retryable)
     }
 
+    // I18N-1 Task 12: PermissionDenied/DeviceNotCapable now route through the feature-local typed
+    // AppDrawerError (LauncherPresentation.kt) before falling back to a UiError.Message that is still
+    // byte-identical to the old inline sentence (core.common.UiError has no typed-argument slot; see
+    // that file's kdoc). These two tests pin the on-device text is unchanged by the type substitution.
+    @Test
+    fun `PermissionDenied's UiError text is unchanged by the typed substitution`() = runTest(testDispatcher) {
+        fakeRepo.errorToReturn = OperationError.PermissionDenied("QUERY_ALL_PACKAGES")
+        val vm = buildViewModel()
+
+        advanceUntilIdle()
+
+        val error = (vm.uiState.value as UiState.Error).error
+        assertEquals(UiError.Message("Permission denied: QUERY_ALL_PACKAGES"), error)
+    }
+
+    @Test
+    fun `DeviceNotCapable maps to non-retryable Error with unchanged text`() = runTest(testDispatcher) {
+        fakeRepo.errorToReturn = OperationError.DeviceNotCapable("multi_window")
+        val vm = buildViewModel()
+
+        advanceUntilIdle()
+
+        val state = vm.uiState.value
+        assertTrue("Expected Error, got $state", state is UiState.Error)
+        assertFalse((state as UiState.Error).retryable)
+        assertEquals(UiError.Message("Not supported: multi_window"), state.error)
+    }
+
     @Test
     fun `retry reloads apps`() = runTest(testDispatcher) {
         fakeRepo.errorToReturn = OperationError.NetworkError(retryable = true)
@@ -153,7 +183,7 @@ class AppDrawerViewModelTest {
 
     @Test
     fun `usage is not recorded when the launch fails`() = runTest(testDispatcher) {
-        fakeExecutor.resultToReturn = ActionExecutionResult.Failure("boom")
+        fakeExecutor.resultToReturn = ActionExecutionResult.Failure(CommandFailure.Generic)
         val vm = buildViewModel()
         advanceUntilIdle()
 

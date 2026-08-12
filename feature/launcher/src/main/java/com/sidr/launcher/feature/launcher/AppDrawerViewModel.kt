@@ -167,12 +167,29 @@ class AppDrawerViewModel @Inject constructor(
     }
 
     // ── OperationError → UiError — exhaustive, mirrors LauncherViewModel ─────
+    // I18N-1 (spec §3.5): PermissionDenied/DeviceNotCapable are now routed through the feature-local,
+    // typed AppDrawerError (see its kdoc in LauncherPresentation.kt) instead of hand-assembling the
+    // sentence inline. core.common.UiError has no typed-argument slot and sidrString only resolves
+    // inside a @Composable, so toEnglishFallback() below still produces the final UiError.Message text
+    // here — byte-identical to the English resource values, so on-device behaviour is unchanged.
     private fun OperationError.toUiError(): UiError = when (this) {
         is OperationError.NetworkError     -> UiError.Network
         is OperationError.AiUnavailable    -> UiError.Unknown
-        is OperationError.PermissionDenied -> UiError.Message("Permission denied: $permission")
-        is OperationError.DeviceNotCapable -> UiError.Message("Not supported: $feature")
+        is OperationError.PermissionDenied ->
+            UiError.Message(AppDrawerError.PermissionDenied(permission).toEnglishFallback())
+        is OperationError.DeviceNotCapable ->
+            UiError.Message(AppDrawerError.DeviceNotCapable(feature).toEnglishFallback())
         is OperationError.UnknownError     -> UiError.Unknown
+    }
+
+    /**
+     * English-only fallback for [AppDrawerError], byte-identical to `launcher_drawer_permission_denied`
+     * / `launcher_drawer_not_supported` (see [appDrawerErrorText]'s kdoc for why this can't yet route
+     * through the resource system at this layer).
+     */
+    private fun AppDrawerError.toEnglishFallback(): String = when (this) {
+        is AppDrawerError.PermissionDenied -> "Permission denied: $permission"
+        is AppDrawerError.DeviceNotCapable -> "Not supported: $feature"
     }
 
     private fun OperationError.isRetryable(): Boolean = when (this) {

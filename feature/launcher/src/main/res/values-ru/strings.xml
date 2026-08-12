@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- I18N-1 Task 12: Russian. Agent-drafted, not owner-reviewed (accepted norm for this block). -->
+<resources>
+    <string name="launcher_feedback_empty_input">Введите команду, например «%1$s»</string>
+    <string name="launcher_feedback_low_confidence">Не удалось распознать — уточните команду</string>
+    <string name="launcher_feedback_unknown_command">Неизвестная команда. Попробуйте: %1$s, %2$s</string>
+    <string name="launcher_feedback_ambiguous">Вы имели в виду:</string>
+
+    <string name="launcher_message_help">Попробуйте: %1$s, %2$s, %3$s, %4$s</string>
+    <string name="launcher_message_help_brief">Попробуйте: %1$s, %2$s</string>
+    <string name="launcher_feedback_no_app_found">Приложение для «%1$s» не найдено</string>
+    <string name="launcher_message_showing_all_apps">Показаны все приложения</string>
+    <string name="launcher_message_assistant_soon">Ассистент скоро появится</string>
+    <string name="launcher_message_verbatim">%1$s</string>
+
+    <string name="launcher_failure_generic">Что-то пошло не так. Попробуйте снова.</string>
+    <string name="launcher_failure_cant_open_app">Не удалось открыть приложение.</string>
+    <string name="launcher_failure_no_search_app">Нет приложения для выполнения этого поиска.</string>
+    <string name="launcher_failure_cant_open_url">Нет приложения для перехода по ссылке.</string>
+    <string name="launcher_failure_no_store_app">Не удалось открыть Play Store.</string>
+
+    <string name="launcher_voice_permission_denied">Для голосового ввода нужен доступ к микрофону.</string>
+    <string name="launcher_voice_unavailable">Голосовой ввод недоступен на этом устройстве.</string>
+    <string name="launcher_voice_no_match">Не удалось распознать — попробуйте снова.</string>
+    <string name="launcher_voice_busy">Голосовой ввод занят — попробуйте через момент.</string>
+    <string name="launcher_voice_network">Для голосового ввода сейчас нужно подключение к сети.</string>
+    <string name="launcher_voice_timeout">Речь не обнаружена — попробуйте снова.</string>
+    <string name="launcher_voice_unknown">Сбой голосового ввода — попробуйте снова.</string>
+
+    <string name="launcher_suggest_launch_app">Вы хотели открыть «%1$s»?</string>
+    <string name="launcher_suggest_search">Искать в интернете «%1$s»?</string>
+    <string name="launcher_suggest_open_settings">Открыть настройки?</string>
+    <string name="launcher_suggest_simple_command">Выполнить эту команду?</string>
+    <string name="launcher_suggest_open_url">Открыть «%1$s»?</string>
+    <string name="launcher_suggest_play_store">Найти «%1$s» в Play Store?</string>
+    <string name="launcher_suggest_unknown">Попробуйте другую команду</string>
+
+    <string name="launcher_drawer_permission_denied">Доступ запрещён: %1$s</string>
+    <string name="launcher_drawer_not_supported">Не поддерживается: %1$s</string>
+</resources>

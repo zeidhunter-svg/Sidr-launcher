@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 12: English source for feature/launcher's typed command feedback
+  (CommandFeedback -> LauncherPresentation.feedbackText) and AppDrawerViewModel's typed load-error
+  detail (AppDrawerError -> appDrawerErrorText). Every value below is byte-identical to the English
+  literal it replaces (recovered from git history where Task 11 already deleted the constant) - no
+  rewording. Task 13 extends this file with the screen-level strings (drawer/confirm-card copy etc.).
+
+  The command grammar itself ("open <app>", "search <query>", "show apps", "clear") is passed as
+  arguments (CommandExamples in LauncherPresentation.kt), never baked into a translatable sentence -
+  RuleBasedIntentMatcher parses English verbs, so a translated "open" would not parse (spec Sec4).
+-->
+<resources>
+    <!-- Command feedback: hints / errors shown under the universal input -->
+    <string name="launcher_feedback_empty_input">Type a command, e.g. \"%1$s\"</string>
+    <string name="launcher_feedback_low_confidence">Didn\'t catch that — try being more specific</string>
+    <string name="launcher_feedback_unknown_command">Unknown command. Try: %1$s, %2$s</string>
+    <string name="launcher_feedback_ambiguous">Did you mean:</string>
+
+    <!-- Domain-named messages (CommandMessage) -->
+    <string name="launcher_message_help">Try: %1$s, %2$s, %3$s, %4$s</string>
+    <string name="launcher_message_help_brief">Try: %1$s, %2$s</string>
+    <string name="launcher_feedback_no_app_found">No app found for \"%1$s\"</string>
+    <string name="launcher_message_showing_all_apps">Showing all apps</string>
+    <string name="launcher_message_assistant_soon">Assistant coming soon</string>
+    <string name="launcher_message_verbatim">%1$s</string>
+
+    <!-- Domain-named failures (CommandFailure) -->
+    <string name="launcher_failure_generic">Something went wrong. Please try again.</string>
+    <string name="launcher_failure_cant_open_app">Couldn\'t open that app.</string>
+    <string name="launcher_failure_no_search_app">No app available to handle that search.</string>
+    <string name="launcher_failure_cant_open_url">No app available to open that link.</string>
+    <string name="launcher_failure_no_store_app">Couldn\'t open the Play Store.</string>
+
+    <!-- Voice recognition errors (SpeechRecognitionError) -->
+    <string name="launcher_voice_permission_denied">Microphone permission is needed for voice input.</string>
+    <string name="launcher_voice_unavailable">Voice input isn\'t available on this device.</string>
+    <string name="launcher_voice_no_match">Didn\'t catch that — try again.</string>
+    <string name="launcher_voice_busy">Voice input is busy — try again in a moment.</string>
+    <string name="launcher_voice_network">Voice input needs a network connection right now.</string>
+    <string name="launcher_voice_timeout">No speech detected — try again.</string>
+    <string name="launcher_voice_unknown">Voice input failed — try again.</string>
+
+    <!-- Medium-confidence suggestions (SuggestedIntent) -->
+    <string name="launcher_suggest_launch_app">Did you mean to open \"%1$s\"?</string>
+    <string name="launcher_suggest_search">Search the web for \"%1$s\"?</string>
+    <string name="launcher_suggest_open_settings">Open settings?</string>
+    <string name="launcher_suggest_simple_command">Run that command?</string>
+    <string name="launcher_suggest_open_url">Open \"%1$s\"?</string>
+    <string name="launcher_suggest_play_store">Find \"%1$s\" in the Play Store?</string>
+    <string name="launcher_suggest_unknown">Try a different command</string>
+
+    <!-- AppDrawerViewModel's typed load-error detail (AppDrawerError) -->
+    <string name="launcher_drawer_permission_denied">Permission denied: %1$s</string>
+    <string name="launcher_drawer_not_supported">Not supported: %1$s</string>
+</resources>

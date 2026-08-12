@@ -121,11 +121,11 @@ class ExecuteActionUseCaseTest {
 
     @Test
     fun `an execution failure maps to Failed with the executor's safe message`() = runTest {
-        executor.resultToReturn = ActionExecutionResult.Failure("no browser")
+        executor.resultToReturn = ActionExecutionResult.Failure(CommandFailure.CantOpenUrl)
 
         val outcome = useCase.execute(LauncherAction.OpenUrl("https://example.com"))
 
-        assertEquals(CommandOutcome.Failed("no browser"), outcome)
+        assertEquals(CommandOutcome.Failed(CommandFailure.CantOpenUrl), outcome)
     }
 
     @Test

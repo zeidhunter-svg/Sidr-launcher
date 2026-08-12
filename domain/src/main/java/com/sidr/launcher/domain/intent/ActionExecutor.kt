@@ -27,10 +27,10 @@ sealed interface ActionExecutionResult {
     data object Success : ActionExecutionResult
 
     /**
-     * A technical failure was caught while executing. [safeMessage] is safe to show the user —
+     * A technical failure was caught while executing. [failure] is safe to show the user —
      * no stack traces, no PII; the implementation must not leak system exception details.
      */
-    data class Failure(val safeMessage: String) : ActionExecutionResult
+    data class Failure(val failure: CommandFailure) : ActionExecutionResult
 
     /**
      * The executor was handed an action it does not perform. Defensive branch — the use case

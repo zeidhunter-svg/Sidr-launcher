@@ -3,6 +3,7 @@ package com.sidr.launcher.domain.ai.router
 import com.sidr.launcher.domain.action.ActionCatalog
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.connectivity.ConnectivityChecker
+import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
@@ -58,7 +59,7 @@ class RouteCommandUseCase(
                 confidence = plan.confidence,
                 needsConfirmation = needsConfirmation(plan),
             )
-            is PlanResult.Clarify -> CommandOutcome.Message(plan.question)
+            is PlanResult.Clarify -> CommandOutcome.Message(CommandMessage.Verbatim(plan.question))
             PlanResult.NoPlan -> ruleOutcome
         }
     }

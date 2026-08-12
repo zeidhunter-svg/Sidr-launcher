@@ -75,6 +75,14 @@ class IntentActionResolverTest {
         assertTrue(action is ExecutableAction.ShowMessageAction)
     }
 
+    @Test fun no_app_found_carries_the_query_not_a_sentence() = runTest {
+        val action = resolver.resolve(LauncherIntent.LaunchAppIntent(displayNameQuery = "telegram"))
+        assertEquals(
+            OperationResult.Success(ExecutableAction.ShowMessageAction(CommandMessage.NoAppFound("telegram"))),
+            action,
+        )
+    }
+
     // --- LaunchAppIntent: repository failure propagates ---
 
     @Test fun `repository failure is returned as Failure not Success`() = runTest {

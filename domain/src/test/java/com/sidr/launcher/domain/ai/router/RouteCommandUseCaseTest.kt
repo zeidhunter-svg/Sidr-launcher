@@ -14,6 +14,7 @@ import com.sidr.launcher.domain.action.ActionId
 import com.sidr.launcher.domain.action.ActionIds
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.action.LauncherAction
+import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
@@ -165,7 +166,7 @@ class RouteCommandUseCaseTest {
 
         val outcome = useCase(routerEnabled = true).route("open the thing")
 
-        assertEquals(CommandOutcome.Message("Which app did you mean?"), outcome)
+        assertEquals(CommandOutcome.Message(CommandMessage.Verbatim("Which app did you mean?")), outcome)
     }
 
     @Test

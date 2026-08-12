@@ -7,6 +7,7 @@ import android.net.Uri
 import com.sidr.launcher.core.common.di.IoDispatcher
 import com.sidr.launcher.domain.intent.ActionExecutionResult
 import com.sidr.launcher.domain.intent.ActionExecutor
+import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.ExecutableAction
 import com.sidr.launcher.domain.intent.SearchTarget
 import com.sidr.launcher.domain.preferences.UserPreferencesRepository
@@ -51,16 +52,16 @@ class AndroidActionExecutor @Inject constructor(
         // activityName is intentionally unused here: the system launch intent resolves the
         // correct launcher activity. Explicit-component launch can be added in a later phase.
         val launchIntent = context.packageManager.getLaunchIntentForPackage(action.packageName)
-            ?: return ActionExecutionResult.Failure(CANT_OPEN_APP)
+            ?: return ActionExecutionResult.Failure(CommandFailure.CantOpenApp)
 
         return try {
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(launchIntent)
             ActionExecutionResult.Success
         } catch (e: ActivityNotFoundException) {
-            ActionExecutionResult.Failure(CANT_OPEN_APP)
+            ActionExecutionResult.Failure(CommandFailure.CantOpenApp)
         } catch (e: SecurityException) {
-            ActionExecutionResult.Failure(CANT_OPEN_APP)
+            ActionExecutionResult.Failure(CommandFailure.CantOpenApp)
         }
     }
 
@@ -75,13 +76,13 @@ class AndroidActionExecutor @Inject constructor(
         val urlString =
             if (template.contains(QUERY_PLACEHOLDER)) template.replace(QUERY_PLACEHOLDER, encoded)
             else template + encoded
-        return viewUrl(urlString, NO_SEARCH_APP)
+        return viewUrl(urlString, CommandFailure.NoSearchApp)
     }
 
     private fun openUrl(action: ExecutableAction.OpenUrlAction): ActionExecutionResult {
         // The URL is already scheme-checked + normalized upstream (UrlDetector); ACTION_VIEW on an
         // http(s) URI hands off to a browser. Never fired for non-http(s) schemes.
-        return viewUrl(action.url, CANT_OPEN_URL)
+        return viewUrl(action.url, CommandFailure.CantOpenUrl)
     }
 
     private fun openPlayStore(action: ExecutableAction.PlayStoreSearchAction): ActionExecutionResult {
@@ -93,29 +94,25 @@ class AndroidActionExecutor @Inject constructor(
             context.startActivity(marketIntent)
             ActionExecutionResult.Success
         } catch (e: ActivityNotFoundException) {
-            viewUrl("https://play.google.com/store/search?q=$encoded&c=apps", NO_STORE_APP)
+            viewUrl("https://play.google.com/store/search?q=$encoded&c=apps", CommandFailure.NoStoreApp)
         } catch (e: SecurityException) {
-            ActionExecutionResult.Failure(NO_STORE_APP)
+            ActionExecutionResult.Failure(CommandFailure.NoStoreApp)
         }
     }
 
-    private fun viewUrl(url: String, failureMessage: String): ActionExecutionResult {
+    private fun viewUrl(url: String, failure: CommandFailure): ActionExecutionResult {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return try {
             context.startActivity(intent)
             ActionExecutionResult.Success
         } catch (e: ActivityNotFoundException) {
-            ActionExecutionResult.Failure(failureMessage)
+            ActionExecutionResult.Failure(failure)
         } catch (e: SecurityException) {
-            ActionExecutionResult.Failure(failureMessage)
+            ActionExecutionResult.Failure(failure)
         }
     }
 
     private companion object {
         const val QUERY_PLACEHOLDER = "{q}"
-        const val CANT_OPEN_APP = "Couldn't open that app."
-        const val NO_SEARCH_APP = "No app available to handle that search."
-        const val CANT_OPEN_URL = "No app available to open that link."
-        const val NO_STORE_APP = "Couldn't open the Play Store."
     }
 }

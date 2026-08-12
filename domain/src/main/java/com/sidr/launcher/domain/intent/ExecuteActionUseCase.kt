@@ -42,7 +42,7 @@ class ExecuteActionUseCase(
 
     private suspend fun resolveAndRoute(intent: LauncherIntent): CommandOutcome =
         when (val resolved = resolver.resolve(intent)) {
-            is OperationResult.Failure -> CommandOutcome.Failed(SAFE_FAILURE_MESSAGE)
+            is OperationResult.Failure -> CommandOutcome.Failed(CommandFailure.Generic)
             is OperationResult.Success -> routeAction(resolved.value)
         }
 
@@ -63,11 +63,7 @@ class ExecuteActionUseCase(
 
     private fun mapExecution(result: ActionExecutionResult): CommandOutcome = when (result) {
         is ActionExecutionResult.Success -> CommandOutcome.Executed
-        is ActionExecutionResult.Failure -> CommandOutcome.Failed(result.safeMessage)
-        is ActionExecutionResult.Unsupported -> CommandOutcome.Failed(SAFE_FAILURE_MESSAGE)
-    }
-
-    private companion object {
-        const val SAFE_FAILURE_MESSAGE = "Something went wrong. Please try again."
+        is ActionExecutionResult.Failure -> CommandOutcome.Failed(result.failure)
+        is ActionExecutionResult.Unsupported -> CommandOutcome.Failed(CommandFailure.Generic)
     }
 }

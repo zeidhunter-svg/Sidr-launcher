@@ -26,7 +26,7 @@ sealed interface CommandOutcome {
     data object NoOp : CommandOutcome
 
     /** A user-facing message: HELP examples, "not found", or [ExecutableAction.ShowMessageAction]. */
-    data class Message(val text: String) : CommandOutcome
+    data class Message(val message: CommandMessage) : CommandOutcome
 
     /** Query matched 2+ apps — render [candidates] as tappable suggestions; nothing executed. */
     data class NeedsConfirmation(val candidates: List<InstalledApp>) : CommandOutcome
@@ -40,8 +40,8 @@ sealed interface CommandOutcome {
     /** Unrecognized input — show usage examples. [input] is the original raw text. */
     data class Unknown(val input: String) : CommandOutcome
 
-    /** A technical failure occurred; [message] is safe to display (no PII/stack). */
-    data class Failed(val message: String) : CommandOutcome
+    /** A technical failure occurred; [failure] is safe to display (no PII/stack). */
+    data class Failed(val failure: CommandFailure) : CommandOutcome
 
     /** Navigate to the assistant — the ViewModel maps this to its navigation Channel. */
     data object OpenAssistant : CommandOutcome

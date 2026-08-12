@@ -58,15 +58,15 @@ class IntentActionResolver(
                 )
             )
             else -> OperationResult.Success(
-                ExecutableAction.ShowMessageAction("No app found for \"${intent.displayNameQuery}\"")
+                ExecutableAction.ShowMessageAction(CommandMessage.NoAppFound(intent.displayNameQuery))
             )
         }
     }
 
     private fun resolveSimpleCommand(command: SimpleCommand): ExecutableAction = when (command) {
-        SimpleCommand.SHOW_APPS -> ExecutableAction.ShowMessageAction("Showing all apps")
+        SimpleCommand.SHOW_APPS -> ExecutableAction.ShowMessageAction(CommandMessage.ShowingAllApps)
         SimpleCommand.CLEAR -> ExecutableAction.NoOpAction
-        SimpleCommand.HELP -> ExecutableAction.ShowMessageAction("Try: open <app>, search <query>")
-        SimpleCommand.OPEN_ASSISTANT -> ExecutableAction.ShowMessageAction("Assistant coming soon")
+        SimpleCommand.HELP -> ExecutableAction.ShowMessageAction(CommandMessage.HelpBrief)
+        SimpleCommand.OPEN_ASSISTANT -> ExecutableAction.ShowMessageAction(CommandMessage.AssistantComingSoon)
     }
 }

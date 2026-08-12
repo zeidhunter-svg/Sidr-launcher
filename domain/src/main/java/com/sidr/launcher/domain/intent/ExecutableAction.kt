@@ -22,7 +22,7 @@ sealed interface ExecutableAction {
     /** Search the Play Store for [query] (AIL-2); the executor tries market:// then a web fallback. */
     data class PlayStoreSearchAction(val query: String) : ExecutableAction
 
-    data class ShowMessageAction(val message: String) : ExecutableAction
+    data class ShowMessageAction(val message: CommandMessage) : ExecutableAction
 
     data object NoOpAction : ExecutableAction
 

@@ -78,7 +78,7 @@ class HandleUserCommandUseCase(
         }
 
         return when (val resolved = resolver.resolve(intent)) {
-            is OperationResult.Failure -> CommandOutcome.Failed(SAFE_FAILURE_MESSAGE)
+            is OperationResult.Failure -> CommandOutcome.Failed(CommandFailure.Generic)
             is OperationResult.Success -> routeAction(resolved.value)
         }
     }
@@ -87,7 +87,7 @@ class HandleUserCommandUseCase(
         SimpleCommand.OPEN_ASSISTANT -> CommandOutcome.OpenAssistant
         SimpleCommand.SHOW_APPS -> CommandOutcome.ShowApps
         SimpleCommand.CLEAR -> CommandOutcome.ClearInput
-        SimpleCommand.HELP -> CommandOutcome.Message(HELP_MESSAGE)
+        SimpleCommand.HELP -> CommandOutcome.Message(CommandMessage.Help)
     }
 
     private suspend fun routeAction(action: ExecutableAction): CommandOutcome = when (action) {
@@ -107,8 +107,8 @@ class HandleUserCommandUseCase(
 
     private fun mapExecution(result: ActionExecutionResult): CommandOutcome = when (result) {
         is ActionExecutionResult.Success -> CommandOutcome.Executed
-        is ActionExecutionResult.Failure -> CommandOutcome.Failed(result.safeMessage)
-        is ActionExecutionResult.Unsupported -> CommandOutcome.Failed(SAFE_FAILURE_MESSAGE)
+        is ActionExecutionResult.Failure -> CommandOutcome.Failed(result.failure)
+        is ActionExecutionResult.Unsupported -> CommandOutcome.Failed(CommandFailure.Generic)
     }
 
     /**
@@ -155,8 +155,4 @@ class HandleUserCommandUseCase(
         is LauncherIntent.UnknownIntent       -> IntentMatchType.UNKNOWN
     }
 
-    private companion object {
-        const val SAFE_FAILURE_MESSAGE = "Something went wrong. Please try again."
-        const val HELP_MESSAGE = "Try: open <app>, search <query>, show apps, clear"
-    }
 }

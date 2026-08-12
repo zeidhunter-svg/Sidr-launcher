@@ -22,7 +22,6 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -113,12 +112,12 @@ class HandleUserCommandUseCaseTest {
     @Test fun `executor failure maps to Failed with its safe message`() = runTest(testDispatcher) {
         fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
         matcherReturns(LauncherIntent.LaunchAppIntent("telegram"), 0.90f)
-        fakeExecutor.resultToReturn = ActionExecutionResult.Failure("Couldn't open Telegram")
+        fakeExecutor.resultToReturn = ActionExecutionResult.Failure(CommandFailure.CantOpenApp)
 
         val outcome = useCase.handle("open telegram")
 
         assertTrue(outcome is CommandOutcome.Failed)
-        assertEquals("Couldn't open Telegram", (outcome as CommandOutcome.Failed).message)
+        assertEquals(CommandFailure.CantOpenApp, (outcome as CommandOutcome.Failed).failure)
     }
 
     // ── Confidence gate: medium / low ────────────────────────────────────────
@@ -198,8 +197,8 @@ class HandleUserCommandUseCaseTest {
         val outcome = useCase.handle("open telegram")
 
         assertTrue(outcome is CommandOutcome.Failed)
-        // Safe message must not leak internal error detail.
-        assertFalse((outcome as CommandOutcome.Failed).message.contains("db crash"))
+        // CommandFailure carries no message field at all - internal error detail cannot leak by construction.
+        assertEquals(CommandFailure.Generic, (outcome as CommandOutcome.Failed).failure)
         assertEquals(0, fakeExecutor.callCount)
     }
 

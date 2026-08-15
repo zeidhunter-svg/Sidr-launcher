@@ -2,8 +2,8 @@ package com.sidr.launcher
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,7 +28,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class LauncherActivity : ComponentActivity() {
+class LauncherActivity : AppCompatActivity() {
 
     // Block X5, Fork X5-D: the composition root observes the persisted theme preference and maps it
     // to SidrTheme's darkTheme flag; only the light/dark scheme follows the user's system|light|dark

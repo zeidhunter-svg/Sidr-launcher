@@ -8,6 +8,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.os.LocaleListCompat
 import com.sidr.launcher.core.ui.component.SidrChoiceRow
 import com.sidr.launcher.core.ui.component.SidrFilterChip
 import com.sidr.launcher.core.ui.component.SidrIconButton
@@ -58,6 +60,15 @@ fun SettingsScreen(
         ActivityResultContracts.StartActivityForResult(),
     ) { /* no-op */ }
 
+    // I18N-1 Task 14: AppCompatDelegate is the single reader AND writer of the per-app language - no
+    // DataStore key, no ViewModel field, no mutableStateOf mirror. A locale change recreates this
+    // Activity, which rebuilds this composition, so a plain read on every composition never goes stale.
+    val currentLanguageTag = AppCompatDelegate.getApplicationLocales()
+        .toLanguageTags()
+        .takeIf { it.isNotBlank() }
+        ?.substringBefore('-')
+        ?: ""
+
     SettingsContent(
         uiState = uiState,
         onBack = viewModel::navigateBack,
@@ -68,6 +79,10 @@ fun SettingsScreen(
         onFavoritesCountSelected = viewModel::setFavoritesCount,
         onMicInputChanged = viewModel::setMicInputEnabled,
         onAutoHideNavBarChanged = viewModel::setAutoHideNavBar,
+        currentLanguageTag = currentLanguageTag,
+        onLanguageSelected = { tag ->
+            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
+        },
         onLlmRouterChanged = viewModel::setLlmRouterEnabled,
         onAssistantProvider = viewModel::openAssistantProvider,
         onLearnedChoices = viewModel::openLearnedChoices,
@@ -95,6 +110,8 @@ private fun SettingsContent(
     onFavoritesCountSelected: (Int) -> Unit,
     onMicInputChanged: (Boolean) -> Unit,
     onAutoHideNavBarChanged: (Boolean) -> Unit,
+    currentLanguageTag: String,
+    onLanguageSelected: (String) -> Unit,
     onLlmRouterChanged: (Boolean) -> Unit,
     onAssistantProvider: () -> Unit,
     onLearnedChoices: () -> Unit,
@@ -167,6 +184,24 @@ private fun SettingsContent(
                 onCheckedChange = onAutoHideNavBarChanged,
                 description = sidrString(R.string.settings_auto_hide_nav_description),
             )
+
+            // ── Language ────────────────────────────────────────────────────────
+            // I18N-1 Task 14: AppCompatDelegate is the only writer (Step in SettingsScreen above) - no
+            // persisted preference key, so this section can never disagree with the system's own
+            // per-app language picker (Settings > Apps > Sidr > Language).
+            SidrSectionHeader(text = sidrString(R.string.settings_section_language))
+            listOf(
+                "" to R.string.settings_language_system,
+                "en" to R.string.settings_language_en,
+                "ru" to R.string.settings_language_ru,
+                "tr" to R.string.settings_language_tr,
+            ).forEach { (tag, labelRes) ->
+                SidrChoiceRow(
+                    title = sidrString(labelRes),
+                    selected = currentLanguageTag == tag,
+                    onClick = { onLanguageSelected(tag) },
+                )
+            }
 
             // ── Suggestions ─────────────────────────────────────────────────────
             SidrSectionHeader(text = sidrString(R.string.settings_section_suggestions))

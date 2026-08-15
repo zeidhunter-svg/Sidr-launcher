@@ -2,7 +2,7 @@
 <resources>
     <!-- AIL-0: dark terminal identity. Window background is the brand ground so there is no white
          flash before Compose paints; the Compose `SidrTheme` owns all in-app colour thereafter. -->
-    <style name="Theme.SidrLauncher" parent="android:style/Theme.Material.NoActionBar">
+    <style name="Theme.SidrLauncher" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowBackground">@color/sidr_ground</item>
     </style>
 </resources>

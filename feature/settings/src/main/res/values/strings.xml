@@ -25,6 +25,15 @@
     <string name="settings_section_accent">ACCENT</string>
     <string name="settings_auto_hide_nav_title">Auto-hide navigation bar</string>
     <string name="settings_auto_hide_nav_description">Let the bottom bar slide away after a few seconds of inactivity. Tap the handle at the bottom to bring it back. Off by default — the bar stays visible.</string>
+    <string name="settings_section_language">LANGUAGE</string>
+    <string name="settings_language_system">System default</string>
+    <!-- I18N-1 Task 14: these three are autonyms and are deliberately byte-identical across en/ru/tr -
+         a user who has switched the app into a language they cannot read must still be able to find
+         their own language, exactly like the system per-app language picker. Do not "fix" them into
+         translated forms (e.g. Russian/Turkish). -->
+    <string name="settings_language_en">English</string>
+    <string name="settings_language_ru">Русский</string>
+    <string name="settings_language_tr">Türkçe</string>
     <string name="settings_section_suggestions">SUGGESTIONS</string>
     <string name="settings_ai_suggestions_title">AI suggestions</string>
     <string name="settings_ai_suggestions_description">Show launcher suggestions and allow background precompute scheduling.</string>

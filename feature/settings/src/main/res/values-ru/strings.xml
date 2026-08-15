@@ -20,6 +20,15 @@
     <string name="settings_section_accent">Акцент</string>
     <string name="settings_auto_hide_nav_title">Автоскрытие панели навигации</string>
     <string name="settings_auto_hide_nav_description">Позвольте нижней панели исчезать через несколько секунд бездействия. Нажмите на ручку внизу, чтобы вернуть её обратно. По умолчанию выключено — панель остаётся видимой.</string>
+    <string name="settings_section_language">Язык</string>
+    <string name="settings_language_system">Системный язык</string>
+    <!-- I18N-1 Task 14: these three are autonyms and are deliberately byte-identical across en/ru/tr -
+         a user who has switched the app into a language they cannot read must still be able to find
+         their own language, exactly like the system per-app language picker. Do not "fix" them into
+         translated forms (e.g. Английский/İngilizce). -->
+    <string name="settings_language_en">English</string>
+    <string name="settings_language_ru">Русский</string>
+    <string name="settings_language_tr">Türkçe</string>
     <string name="settings_section_suggestions">Подсказки</string>
     <string name="settings_ai_suggestions_title">ИИ-подсказки</string>
     <string name="settings_ai_suggestions_description">Показывать подсказки лаунчера и разрешить фоновое предварительное вычисление.</string>

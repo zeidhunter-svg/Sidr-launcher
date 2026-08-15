@@ -20,6 +20,15 @@
     <string name="settings_section_accent">Vurgu</string>
     <string name="settings_auto_hide_nav_title">Gezinme çubuğunu otomatik gizle</string>
     <string name="settings_auto_hide_nav_description">Alt çubuğun birkaç saniyelik hareketsizlikten sonra kaybolmasına izin verin. Geri getirmek için alttaki tutamağa dokunun. Varsayılan olarak kapalıdır — çubuk görünür kalır.</string>
+    <string name="settings_section_language">Dil</string>
+    <string name="settings_language_system">Sistem dili</string>
+    <!-- I18N-1 Task 14: these three are autonyms and are deliberately byte-identical across en/ru/tr -
+         a user who has switched the app into a language they cannot read must still be able to find
+         their own language, exactly like the system per-app language picker. Do not "fix" them into
+         translated forms (e.g. İngilizce/Rusça). -->
+    <string name="settings_language_en">English</string>
+    <string name="settings_language_ru">Русский</string>
+    <string name="settings_language_tr">Türkçe</string>
     <string name="settings_section_suggestions">Öneriler</string>
     <string name="settings_ai_suggestions_title">Yapay zeka önerileri</string>
     <string name="settings_ai_suggestions_description">Başlatıcı önerilerini göster ve arka planda ön hesaplama planlamasına izin ver.</string>

@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">Sidr Launcher</string>
+
+    <!-- SidrTabScaffold.kt SidrAppFooter (Task 15). Class A - spec §7.1 locks the SIDR/SIDR OS
+         wordmarks as data, not copy. Never translated; must not appear in values-ru/values-tr. -->
+    <string name="app_wordmark_sidr_os" translatable="false">SIDR OS</string>
 </resources>

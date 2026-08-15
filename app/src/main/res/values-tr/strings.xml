@@ -6,4 +6,10 @@
     <string name="app_tab_tasks">görevler</string>
     <string name="app_tab_agents">ajanlar</string>
     <string name="app_tab_activity">etkinlik</string>
+
+    <!-- SidrTabScaffold.kt (Task 15). Draft, unreviewed - see docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md. -->
+    <string name="app_tab_preview_content_description">%1$s, önizleme</string>
+    <string name="app_footer_terminal_content_description">Terminal önizlemesi</string>
+    <string name="app_footer_settings_content_description">Ayarlar</string>
+    <string name="app_chrome_handle_content_description">Gezinme çubuğunu göster</string>
 </resources>

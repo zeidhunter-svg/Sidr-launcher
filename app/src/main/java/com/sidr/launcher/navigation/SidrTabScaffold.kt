@@ -157,6 +157,7 @@ private fun SidrTabLabel(
     val pressed by interaction.collectIsPressedAsState()
     val active = selected || pressed
     val shape = SidrShapes.small
+    val previewContentDescription = sidrString(AppR.string.app_tab_preview_content_description, label)
     Box(
         modifier = modifier
             .heightIn(min = Sizes.minTouchTarget)
@@ -165,7 +166,7 @@ private fun SidrTabLabel(
             .semantics(mergeDescendants = true) {
                 role = Role.Tab
                 this.selected = selected
-                contentDescription = if (isPreview) "$label, preview" else label
+                contentDescription = if (isPreview) previewContentDescription else label
             }
             .clickable(
                 interactionSource = interaction,
@@ -221,16 +222,16 @@ fun SidrAppFooter(
             // material-icons-extended — several MB of dependency for one glyph — so this follows the
             // module's existing bundled-vector precedent (ic_mic_24 / ic_assistant_24).
             painter = painterResource(R.drawable.ic_terminal_24),
-            contentDescription = "Terminal preview",
+            contentDescription = sidrString(AppR.string.app_footer_terminal_content_description),
             onClick = onTerminal,
         )
         SidrIconButton(
             icon = Icons.Filled.Settings,
-            contentDescription = "Settings",
+            contentDescription = sidrString(AppR.string.app_footer_settings_content_description),
             onClick = onSettings,
         )
         SidrText(
-            text = "SIDR OS",
+            text = sidrString(AppR.string.app_wordmark_sidr_os),
             role = SidrTextRole.PROVENANCE,
             color = SidrTheme.colors.dim,
             modifier = Modifier.clickable {
@@ -260,13 +261,16 @@ fun SidrChromeHandle(
     onReveal: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Resolved here, not inside the `.semantics { }` lambda below: that lambda is not a
+    // @Composable scope, so sidrString(...) cannot be called from within it (Task 15).
+    val revealLabel = sidrString(AppR.string.app_chrome_handle_content_description)
     // Sized by padding (wrap-content), not a fixed height: the caller anchors this as a bottom
     // overlay and applies system-nav clearance, while this composable owns the tap target itself.
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .semantics { contentDescription = "Show navigation bar" }
-            .clickable(onClickLabel = "Show navigation bar", onClick = onReveal)
+            .semantics { contentDescription = revealLabel }
+            .clickable(onClickLabel = revealLabel, onClick = onReveal)
             .padding(vertical = 14.dp),
         contentAlignment = Alignment.Center,
     ) {

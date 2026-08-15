@@ -6,4 +6,10 @@
     <string name="app_tab_tasks">tasks</string>
     <string name="app_tab_agents">agents</string>
     <string name="app_tab_activity">activity</string>
+
+    <!-- SidrTabScaffold.kt: tab preview a11y suffix, footer icon labels, chrome-handle reveal (Task 15) -->
+    <string name="app_tab_preview_content_description">%1$s, preview</string>
+    <string name="app_footer_terminal_content_description">Terminal preview</string>
+    <string name="app_footer_settings_content_description">Settings</string>
+    <string name="app_chrome_handle_content_description">Show navigation bar</string>
 </resources>

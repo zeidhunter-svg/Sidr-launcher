@@ -289,9 +289,31 @@ ship translated (only English) until signed off.
 
 ---
 
+## Section 7 — `app` locked vocabulary (Task 15)
+
+One entry, found while closing the barrier-1 heuristic gap in `SidrTabScaffold.kt`
+(`app/src/main/res/values/strings_locked.xml`).
+
+### 7a. Class A — locked, never translated
+
+| Key | English | Why locked |
+|---|---|---|
+| `app_wordmark_sidr_os` | SIDR OS | The `SIDR`/`SIDR OS` brand wordmarks are locked as **data, not copy** by spec §7.1 — the same reasoning as `app_name` (already in this file, pre-dating I18N-1). Rendered in `SidrAppFooter`'s bottom-right corner; also the hidden 7-tap dev-mode arm target. `translatable="false"`; absent from `values-ru`/`values-tr` by construction, and `LocaleCompletenessGuardTest` fails the build if it ever appears in either. |
+
+(The other four literals barrier 1 found in the same file — the tab preview accessibility suffix,
+the terminal/settings footer icon descriptions, and the chrome-handle reveal label — are ordinary UI
+copy, extracted as translatable `app_*` strings with ru/tr drafts. They carry no data-handling claim or
+religious/consent content, so they do not meet the Class A/B bar and are not listed in this review
+package.)
+
+---
+
 ## Outstanding for Task 15
 
-- Any additional consent copy from later tasks (Task 15 scope).
+- Any additional consent copy from later tasks (Task 15 scope). **Resolved:** Task 14 (per-app language
+  via `AppCompatDelegate` + `locales_config`) added no user-facing copy at all — it is a settings-list
+  entry point wired to the OS language picker, with no new string of its own. Task 15's own find is
+  Section 7 above (one Class A key, `app_wordmark_sidr_os`); no other later task added locked copy.
 - Owner sign-off on every row marked **draft** above (Sections 1c, 1d, 3, 4, 5b) — none of that text has been
   reviewed by anyone; only the prayer-name rows in Section 1b are verbatim from an approved brief.
 - `feature/assistant`'s `assistant_save_error_key_failed` ("Failed to save API key", in
@@ -317,3 +339,29 @@ ship translated (only English) until signed off.
   (Section 1a `local calculation · …` vs Section 6a `LOCAL CALC · …`) and the two madhab-standard labels
   (Section 1d vs Section 6c) remain **unreconciled duplicate English copy** across `feature/prayer` and
   `feature/launcher` — flagged, not fixed, per instruction.
+
+---
+
+## The release gate now exists — clearing it IS your sign-off
+
+Task 15 added a real build-time gate, `:app:checkOwnerReviewedLocaleStrings` (`app/build.gradle.kts`),
+that `assembleRelease` depends on. **It fails a release build today**, by name, for all 10 translated
+`strings_locked.xml` files in the repo (`feature/assistant`, `feature/launcher`, `feature/prayer`,
+`feature/permission_education`, `feature/settings`, each `values-ru` + `values-tr`) — every one of them,
+because every one of them holds ru/tr text nobody but the extracting agent has read.
+
+**What clears it, per file:** once you have personally read and approved that file's Russian and Turkish
+text against this document, add the token `OWNER-REVIEWED` to that file's header XML comment (any form,
+e.g. `<!-- OWNER-REVIEWED 2026-08-16 -->`). There is no separate "sign-off" step or form — **adding that
+token to a file's header is the act of signing off on it**, and it is the only thing that lets a `ru`/`tr`
+release build ship that file's translated copy. Nothing ships translated until you do this; there is no
+default-open path.
+
+**Read the Shahada draft yourself before anything else.** Section 6d above — the Russian/Turkish
+rendering of the Shahada, the Islamic creed ("There is no deity except Allah" / "Muhammad is the
+messenger of Allah") — is **the single most sensitive item in this entire block**. It is rendered on Home
+as the DS-4 "sacred anchor," it was found by inspection rather than named in any brief, and its ru/tr text
+is an unreviewed agent draft like everything else here, even though it draws on standard renderings
+already in wide use in Russian-/Turkish-language Islamic sources. Please read Section 6d personally,
+carefully, and first — before signing off on any other file — and only then decide whether
+`feature/launcher/src/main/res/values-{ru,tr}/strings_locked.xml` earns the `OWNER-REVIEWED` token.

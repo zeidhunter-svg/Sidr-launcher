@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -108,4 +110,50 @@ dependencies {
 
 baselineProfile {
     mergeIntoMain = true
+}
+
+// I18N-1 barrier 2 / release gate (spec §7.2, §10.4). Every `strings_locked.xml` shipped in a
+// `values-<locale>` folder holds copy that needed owner sign-off before it was extracted (religious
+// terminology, cloud disclosures, destructive-gate consequences...) - but every ru/tr translation in
+// this block is an unreviewed agent draft (see docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md).
+// This task fails a release build until each such file's header comment carries the token
+// OWNER-REVIEWED, added by hand once the owner has actually read and approved that file's text.
+//
+// Deliberately fail-closed on a POSITIVE marker, not fail-open on the word "DRAFT": only 4 of the 10
+// locked-translated files in this repo happen to say "DRAFT" in their header today, even though all 10
+// are equally unreviewed - gating on that word's absence would let 6 of them ship unchecked.
+val checkOwnerReviewedLocaleStrings by tasks.registering {
+    group = "verification"
+    description = "I18N-1 release gate (spec §7.2): fails until every translated strings_locked.xml " +
+        "carries OWNER-REVIEWED in its header, i.e. until the owner has signed off on it."
+
+    val repoRoot = rootProject.projectDir
+    inputs.property("repoRootPath", repoRoot.path)
+
+    doLast {
+        val offenders = repoRoot.walkTopDown()
+            .onEnter { dir -> dir.name != "build" && dir.name != ".git" && dir.name != ".gradle" }
+            .filter { it.isFile && it.name == "strings_locked.xml" }
+            .filter { it.parentFile.name.startsWith("values-") }
+            .filter { !it.readText().contains("OWNER-REVIEWED") }
+            .map { it.relativeTo(repoRoot).path }
+            .sorted()
+            .toList()
+
+        if (offenders.isNotEmpty()) {
+            error(
+                "Release build blocked - the following translated strings_locked.xml files have not " +
+                    "been signed off by the owner (spec §7.2 owner-review gate):\n" +
+                    offenders.joinToString("\n") { "  - $it" } +
+                    "\n\nTo clear a file: once the owner has personally read and approved its " +
+                    "Russian/Turkish text, add the token OWNER-REVIEWED to that file's header XML " +
+                    "comment (e.g. \"<!-- OWNER-REVIEWED 2026-08-16 -->\"). Clearing this gate IS the " +
+                    "act of signing off - see docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md.",
+            )
+        }
+    }
+}
+
+tasks.matching { it.name == "assembleRelease" }.configureEach {
+    dependsOn(checkOwnerReviewedLocaleStrings)
 }

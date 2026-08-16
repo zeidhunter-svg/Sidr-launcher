@@ -3,6 +3,11 @@
 Started by Task 7 (`feature/prayer` extraction + Diyanet terminology). Task 15 will complete this
 package with the remaining consent copy. The owner reviews this document once, not once per task.
 
+**Read Section 6d first, before anything else below.** It is the Russian/Turkish rendering of the
+Shahada, the Islamic creed — the single most sensitive item in this entire document — and it is worth
+reading personally and carefully before working through the rest top-to-bottom. See "The release gate
+now exists" at the end of this document for what reading it unlocks.
+
 **How to read this**: every string below is either
 
 - **Class A (locked, never translated)** — `translatable="false"` in the XML. Ships in English only,
@@ -345,10 +350,14 @@ package.)
 ## The release gate now exists — clearing it IS your sign-off
 
 Task 15 added a real build-time gate, `:app:checkOwnerReviewedLocaleStrings` (`app/build.gradle.kts`),
-that `assembleRelease` depends on. **It fails a release build today**, by name, for all 10 translated
-`strings_locked.xml` files in the repo (`feature/assistant`, `feature/launcher`, `feature/prayer`,
-`feature/permission_education`, `feature/settings`, each `values-ru` + `values-tr`) — every one of them,
-because every one of them holds ru/tr text nobody but the extracting agent has read.
+that both `assembleRelease` **and** `bundleRelease` depend on (the fix round closed a hole where the AAB
+— the actual Play / "Generate Signed Bundle" path — bypassed it entirely). **It fails a release build
+today**, by name, for every file that actually holds a translated locked-vocabulary key without the
+marker — currently all 10 translated `strings_locked.xml` files in the repo (`feature/assistant`,
+`feature/launcher`, `feature/prayer`, `feature/permission_education`, `feature/settings`, each
+`values-ru` + `values-tr`) — every one of them, because every one of them holds ru/tr text nobody but the
+extracting agent has read. The check follows the *key*, not the filename: if a key's translation ever
+moves to a different file in the same locale folder, the gate follows it there.
 
 **What clears it, per file:** once you have personally read and approved that file's Russian and Turkish
 text against this document, add the token `OWNER-REVIEWED` to that file's header XML comment (any form,
@@ -356,6 +365,11 @@ e.g. `<!-- OWNER-REVIEWED 2026-08-16 -->`). There is no separate "sign-off" step
 token to a file's header is the act of signing off on it**, and it is the only thing that lets a `ru`/`tr`
 release build ship that file's translated copy. Nothing ships translated until you do this; there is no
 default-open path.
+
+**This token is added by the owner, not by an agent.** The gate checks for a positive marker and is
+otherwise entirely self-servable — nothing stops an agent from typing `OWNER-REVIEWED` into a header
+without anyone having read the text, which would defeat the whole point. The marker only means what it
+says if it is only ever added by you, by hand, after you have actually read the file.
 
 **Read the Shahada draft yourself before anything else.** Section 6d above — the Russian/Turkish
 rendering of the Shahada, the Islamic creed ("There is no deity except Allah" / "Muhammad is the

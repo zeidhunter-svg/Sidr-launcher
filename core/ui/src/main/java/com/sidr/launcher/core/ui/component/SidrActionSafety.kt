@@ -47,15 +47,17 @@ private fun SidrResultTone.status(): SidrStatus = when (this) {
     SidrResultTone.Failed -> SidrStatus.DANGER
 }
 
-// MATCHING, not display: the compared tokens are fixed ASCII machine states, so the case fold must
-// be locale-independent. Under a Turkish default locale `uppercase(Locale.getDefault())` maps "i" to
-// "İ", so "Denied" would stop matching "DENIED". Locale.ROOT keeps matching locale-proof.
-private fun permissionNoticeStatus(label: String): SidrStatus = when (label.uppercase(Locale.ROOT)) {
-    "ENABLED", "GRANTED" -> SidrStatus.SUCCESS
-    "BLOCKED", "DENIED" -> SidrStatus.DANGER
-    "OPTIONAL" -> SidrStatus.INFO
-    else -> SidrStatus.INFO
-}
+/**
+ * Whole-branch review fix (2026-08-17, item 1, CRITICAL): a permission notice's status chip carries
+ * **semantic** meaning (danger/success/info) that must survive translation. The status used to be
+ * derived by matching the *display label text* against English literals ("BLOCKED", "DENIED", ...) -
+ * once Task 6 made those labels translatable, every `ru`/`tr` label fell through to the `else -> INFO`
+ * branch (`ЗАБЛОКИРОВАНО`/`ENGELLENDİ` match nothing), so a permanently-denied permission rendered in
+ * the neutral info tone instead of red DANGER in two of the three shipped languages. Fixed by making
+ * the tone travel as typed data alongside the label, never re-derived from it - see
+ * [SidrPermissionNotice]'s `status: SidrLabeledStatus?` parameter.
+ */
+data class SidrLabeledStatus(val label: String, val tone: SidrStatus)
 
 @Composable
 fun SidrActionProposal(
@@ -120,7 +122,7 @@ fun SidrPermissionNotice(
     withoutPermission: String? = null,
     secondaryLabel: String = sidrString(R.string.ui_action_not_now),
     onSecondary: (() -> Unit)? = null,
-    status: String? = null,
+    status: SidrLabeledStatus? = null,
     primaryLoading: Boolean = false,
 ) {
     SidrSurface(tone = SidrSurfaceTone.SURFACE, modifier = modifier.fillMaxWidth(), shape = SidrShapes.medium) {
@@ -133,7 +135,7 @@ fun SidrPermissionNotice(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 SidrText(text = title, role = SidrTextRole.HUMAN_TITLE, modifier = Modifier.weight(1f))
-                status?.let { SidrStatusChip(label = it, status = permissionNoticeStatus(it)) }
+                status?.let { SidrStatusChip(label = it.label, status = it.tone) }
             }
             SidrText(text = body, role = SidrTextRole.HUMAN_BODY)
             withoutPermission?.let {

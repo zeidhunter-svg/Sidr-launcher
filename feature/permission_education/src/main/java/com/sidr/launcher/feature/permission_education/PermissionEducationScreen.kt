@@ -31,12 +31,14 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sidr.launcher.core.ui.component.SidrIconButton
+import com.sidr.launcher.core.ui.component.SidrLabeledStatus
 import com.sidr.launcher.core.ui.component.SidrPermissionNotice
 import com.sidr.launcher.core.ui.component.SidrPrivacyNotice
 import com.sidr.launcher.core.ui.component.SidrScaffold
 import com.sidr.launcher.core.ui.component.SidrTertiaryButton
 import com.sidr.launcher.core.ui.component.SidrTopBar
 import com.sidr.launcher.core.ui.i18n.sidrString
+import com.sidr.launcher.core.ui.primitive.SidrStatus
 import com.sidr.launcher.core.ui.primitive.SidrText
 import com.sidr.launcher.core.ui.primitive.SidrTextRole
 import com.sidr.launcher.domain.permission.PermissionFeature
@@ -149,7 +151,7 @@ fun PermissionEducationScreen(
                             }
                         },
                         withoutPermission = withoutPermission,
-                        status = sidrString(R.string.perm_status_enabled),
+                        status = SidrLabeledStatus(sidrString(R.string.perm_status_enabled), SidrStatus.SUCCESS),
                     )
                 }
 
@@ -162,7 +164,7 @@ fun PermissionEducationScreen(
                         withoutPermission = withoutPermission,
                         secondaryLabel = sidrString(R.string.perm_not_now),
                         onSecondary = onBack,
-                        status = sidrString(R.string.perm_status_blocked),
+                        status = SidrLabeledStatus(sidrString(R.string.perm_status_blocked), SidrStatus.DANGER),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -177,7 +179,7 @@ fun PermissionEducationScreen(
                         withoutPermission = withoutPermission,
                         secondaryLabel = sidrString(R.string.perm_not_now),
                         onSecondary = onBack,
-                        status = sidrString(R.string.perm_status_optional),
+                        status = SidrLabeledStatus(sidrString(R.string.perm_status_optional), SidrStatus.INFO),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }

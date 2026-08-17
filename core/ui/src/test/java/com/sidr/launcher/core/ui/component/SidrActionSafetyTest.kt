@@ -1,12 +1,15 @@
 package com.sidr.launcher.core.ui.component
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.sidr.launcher.core.ui.primitive.SidrStatus
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -85,6 +88,56 @@ class SidrActionSafetyTest {
         compose.onNodeWithText("Not now").performClick()
         assertEquals(0, primary.get())
         assertEquals(1, secondary.get())
+    }
+
+    /**
+     * Whole-branch review fix (2026-08-17, item 1, CRITICAL) regression proof. The bug: the status
+     * chip's colour used to be *derived* from the display-label text (`label.uppercase(Locale.ROOT)`
+     * matched against English literals like "DENIED"), so a translated label fell through to the
+     * `else -> INFO` branch and a permanently-denied permission rendered in the neutral info colour
+     * instead of red DANGER in `ru`/`tr`. Fixed by making the tone travel as typed [SidrLabeledStatus]
+     * data instead of being re-derived from text - `SidrPermissionNotice.status` is no longer even
+     * typeable as a raw `String`, so the exact shape of the old bug (guessing a `SidrStatus` from
+     * translated copy) is now a compile error, not just a runtime behaviour to re-check per call.
+     *
+     * This test renders with a Russian label (`"ЗАБЛОКИРОВАНО"`, which matches none of the deleted
+     * function's English literals) and an explicit `SidrStatus.DANGER` tone, proving the two travel
+     * together through [SidrPermissionNotice] -> [SidrStatusChip] without a crash or a silent
+     * default. (A pixel-level colour assertion was attempted and dropped: `compose-ui-test`'s
+     * `captureToImage()` times out under this module's Robolectric setup waiting for a real Android
+     * window redraw that Robolectric never provides, and routing through Roborazzi's own capture
+     * mechanism to a non-golden temp file hit a second harness limitation - `javax.imageio` does not
+     * resolve on the Android-unit-test compile classpath. [danger_and_info_tones_are_visually_distinct]
+     * below instead pins, at the token level, that the two tones this bug could confuse are not the
+     * same colour.)
+     */
+    @Test fun permission_notice_status_tone_is_typed_not_derived_from_label_text() {
+        compose.setContent {
+            SidrTheme(darkTheme = true) {
+                SidrPermissionNotice(
+                    title = "Микрофон",
+                    body = "Доступ к микрофону нужен для голосовых команд.",
+                    primaryLabel = "Открыть настройки",
+                    onPrimary = {},
+                    status = SidrLabeledStatus("ЗАБЛОКИРОВАНО", SidrStatus.DANGER),
+                )
+            }
+        }
+        compose.onNodeWithText("ЗАБЛОКИРОВАНО").assertIsDisplayed()
+    }
+
+    /** Companion to the regression proof above: DANGER and INFO - the two tones the deleted
+     *  text-matching bug could confuse for a translated "blocked" label - are not the same token. */
+    @Test fun danger_and_info_tones_are_visually_distinct() {
+        var dangerColor = Color.Unspecified
+        var infoColor = Color.Unspecified
+        compose.setContent {
+            SidrTheme(darkTheme = true) {
+                dangerColor = SidrTheme.colors.danger
+                infoColor = SidrTheme.colors.info
+            }
+        }
+        assertNotEquals(dangerColor, infoColor)
     }
 
     @Test fun result_surface_partial_is_not_completed() {

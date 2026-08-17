@@ -35,7 +35,9 @@ without leaving the screen, Turkish dotted-İ renders correctly in multiple uppe
 force-stop→relaunch preserves the chosen language, and — the specific regression this block's own brief
 flagged as the one to watch — the Home date line read in **Turkish** while the device stayed on `ru-RU`,
 confirming it now follows the app locale rather than `Locale.getDefault()`'s system default. Status/nav
-bar tint unchanged on every screen captured. **Not device-covered:** the system per-app-language picker
+bar tint showed no anomaly on every screen captured (no pre-block reference screenshot exists on this
+device state, so this is "no anomaly observed," not a diff-proven "unchanged"). **Not device-covered:**
+the system per-app-language picker
 (owner-gated), any offline path (tethering), live TalkBack, fontScale 2.0 clipping, a release-build
 cold-start comparison (blocked by the new release gate itself pending owner sign-off). **Known gaps
 routed to I18N-2:** `CalendarSuggestionProvider`/`LocationSuggestionProvider` labels and

@@ -5240,7 +5240,7 @@ touches ViewModel-adjacent code:
 - Two assertions got **stronger**, worth recording rather than glossing: `HandleUserCommandUseCaseTest`'s
   leak check went from `assertFalse(message.contains("db crash"))` to
   `assertEquals(CommandFailure.Generic, …)` (`Generic` has no field a stack trace could leak through at
-  all); `LauncherViewModelTest:1665` went from a bare `is CommandFeedback.Message` to also pinning
+  all); `LauncherViewModelTest:1698` went from a bare `is CommandFeedback.Message` to also pinning
   `SpeechRecognitionError.PERMISSION_DENIED`.
 
 **`<plurals>`: ZERO.** The extraction needed no `<plurals>` at all. Barrier 2's quantity check therefore
@@ -5270,12 +5270,13 @@ so a user switched into a language they cannot read can still find their own.
 Device evidence (SM-A325F, system locale `ru-RU` throughout): switching Settings → LANGUAGE → `Türkçe`
 recomposed the entire Settings screen in place with **no visible navigation** — title
 `Настройки`→`Ayarlar`, the selection dot filled immediately, confirming the delegate-driven Activity
-recreation is fast enough not to read as a hang. `am start -W` TotalTime measured across 4 fresh cold
-starts on the installed **debug** APK: 3146 / 2487 / 2668 / 2295 / 2634 ms (post-force-stop). This is
+recreation is fast enough not to read as a hang. `am start -W` TotalTime measured across 5 fresh cold
+starts on the installed **debug** APK (4 from the cold-start check plus 1 more during the force-stop
+persistence check): 3146 / 2487 / 2668 / 2295 / 2634 ms (post-force-stop). This is
 **not directly comparable** to the ~766 ms cold-median baseline in `CLAUDE.md`'s release-performance
 record — that figure was measured on a release build (R8-shrunk + Baseline Profile) after a drop-first
 protocol, and the Task 16 brief mandates `:app:installDebug`, an unoptimized debug APK with neither
-optimization. No white flash was observed on any of the four cold starts. A true like-for-like regression
+optimization. No white flash was observed on any of the five cold starts. A true like-for-like regression
 check needs a release build, which is exactly the artifact the release gate below now blocks until the
 owner signs off — so it is not claimed here.
 
@@ -5367,8 +5368,10 @@ across a cold start; the Home date line read `3 Rebiülevvel · Pzr, 16 Ağu` (T
 `getprop persist.sys.locale` read `ru-RU` throughout — direct confirmation the date line now follows the
 app locale via configuration, not `Locale.getDefault()` reading the system default (the regression the
 brief named as the thing to watch for); the `PREVIEW`/`ÖNİZLEME` exemption boundary held exactly as
-designed (badge translated, mock-up content not); status bar and navigation bar tint showed no visible
-change across every screen captured. **Not covered, with reason:** the system per-app language picker
+designed (badge translated, mock-up content not); status bar and navigation bar tint showed no anomaly
+across every screen captured — not provable by diff, since no pre-block reference screenshot exists on
+this exact device state, so the honest claim is "no anomaly observed," not "verified unchanged."
+**Not covered, with reason:** the system per-app language picker
 (owner-gated, no system setting was touched); any offline path (touching connectivity risks the owner's
 tethering); live TalkBack (evidence gathered via the `uiautomator` accessibility tree instead, which
 surfaced finding 7 above); fontScale 2.0 clipping (a later block); a release-build cold-start comparison

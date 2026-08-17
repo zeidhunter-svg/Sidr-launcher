@@ -4,7 +4,9 @@
 > or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax
 > for tracking.
 
-**STATUS: PROPOSED (2026-08-11).**
+**STATUS: CLOSED (2026-08-16) — gate green, device-verified on SM-A325F. See ADR "2026-08-16 — I18N-1
+Multilingual UI complete" in `ai-context/decisions.md` for the full account, including two real residue
+items found during Task 16's own device smoke and routed to I18N-2, and the honest §8 parity statement.**
 
 **Goal:** Extract every in-scope user-facing string into Android string resources behind an
 overlay-capable wrapper, ship `en`/`ru`/`tr`, add per-app language selection, and install three

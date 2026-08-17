@@ -1,5 +1,53 @@
 # CLAUDE.md — Sidr Launcher
 
+**I18N-1 Multilingual UI — CLOSED 2026-08-16, gate green, device-verified.** Ships `en`/`ru`/`tr` across
+every migrated production screen (Home, App Drawer, Settings + Memory/Learned-Choices/Aliases/AI-provider
+sub-screens, Assistant + its provider screen, Prayer setup/detail, Permission education) behind one
+`core/ui` seam — `sidrString(R.string.…)` is the **only** call site for `stringResource`
+(`StringSeamGuardTest`), keyed by resource entry name so a future runtime overlay (`translate_ui`) needs no
+call-site changes. Two owner-decided exemptions stay English on purpose: the five `PREVIEW` mock-up tabs
+(§3.2, replaced wholesale by the A-stage) and the hidden dev console. 11 strings born below the UI
+(domain/data/ViewModel) got a new typed contract — `CommandMessage`/`CommandFailure` in `domain`, resolved
+to copy by a feature-layer `LauncherPresentation` mapper (the DS-10 precedent reused) — a scope expansion
+found while planning, not assumed at brief time. Three regression barriers ship: `StringSeamGuardTest`
+(no bypassing `sidrString`), `LocaleCompletenessGuardTest` (a block is not gate-green until `en`/`ru`/`tr`
+are complete), `HardcodedUiTextGuardTest`; a fourth gate, `checkOwnerReviewedLocaleStrings`, makes
+`:app:assembleRelease`/`:app:assemble`/`:app:bundleRelease`/root `./gradlew build` **RED BY DESIGN** until
+the owner adds an `OWNER-REVIEWED` marker to all 10 locale `strings_locked.xml` files — this is a
+deliberate build-behaviour change, not a regression, and every debug graph stays clean. Per-app language
+switch is `AppCompatDelegate`-backed (`LauncherActivity` → `AppCompatActivity`, theme re-parented to
+`Theme.AppCompat.NoActionBar`, `windowBackground` byte-identical, so no white-flash regression); no new
+DataStore key. **Honest parity note:** unlike every prior DS block, I18N-1 cannot claim byte-for-byte
+ViewModel-suite parity — typing domain/data messages touched `:feature:launcher`/`:feature:settings`
+mapper tests in place (see the ADR for the itemized before/after). Zero `<plurals>` were needed by the
+extraction; barrier 2's quantity check ships dormant by design rather than invented-plural theater. The
+pseudolocale barrier resolved to real platform `en-XA` (no overlay fallback needed); golden budget stayed
+at exactly 2 new captures (`assistant_pseudolocale`, `prayer_summary_pseudolocale` — a spec §10.4
+correction from `controls`/`memory`, since `controls` renders byte-identical to English and would not have
+loaded the barrier at all). **Gate (JDK-17, exit 0):** `:domain` 333/0 (was 332), `:core:ui` **126/0**
+(was 119) + `verifyRoborazziDebug`, `:feature:launcher` **156/0** (was 130), `:feature:settings` 33/0,
+`:feature:assistant` **38/0** (was 35), `:feature:prayer` 12/0, `:feature:permission_education` 15/0
+(byte-parity), `:data:repository` 167/0, `:app` **13/0** (was 8), root `testDebugUnitTest` +
+`assembleDebug` SUCCESSFUL; goldens **untouched** — `git status --porcelain` on the screenshots dir is
+empty (36 PNGs, 0 new, 0 modified). **Device (SM-A325F, system locale `ru-RU` throughout, agent-driven
+adb):** in-app `en↔ru↔tr` switch instant and correct on every migrated screen, selection dot updates
+without leaving the screen, Turkish dotted-İ renders correctly in multiple uppercase SYSTEM headers,
+force-stop→relaunch preserves the chosen language, and — the specific regression this block's own brief
+flagged as the one to watch — the Home date line read in **Turkish** while the device stayed on `ru-RU`,
+confirming it now follows the app locale rather than `Locale.getDefault()`'s system default. Status/nav
+bar tint unchanged on every screen captured. **Not device-covered:** the system per-app-language picker
+(owner-gated), any offline path (tethering), live TalkBack, fontScale 2.0 clipping, a release-build
+cold-start comparison (blocked by the new release gate itself pending owner sign-off). **Known gaps
+routed to I18N-2:** `CalendarSuggestionProvider`/`LocationSuggestionProvider` labels and
+`RISK_CONFIRM_LABEL` stay English (data-layer/locked-vocabulary, out of §3.1 scope); voice recognition
+still follows the device language, not the app language (spec §3.6, deliberate); **two new items found
+during this pass's own device smoke** — `AndroidPrayerLocationProvider`'s hardcoded `"Current location"`
+label (`core/android`, outside §3.1's scope list) and a real correctness bug where Home's per-cell prayer
+`contentDescription` announces the untranslated enum name (`PrayerSummaryMapper.kt:64` passes
+`name.name` where `PrayerDetailScreen.kt` correctly resolves through `sidrString`) — both documented, not
+fixed, since Task 16 is verification-and-docs only. ADR "2026-08-16 — I18N-1 Multilingual UI complete" in
+decisions.md.
+
 **DS-11 pre-gate UI refinement — CODE-COMPLETE 2026-08-10, gate green, DEVICE-VERIFIED IN PART.**
 Owner-directed polish immediately before the DS v1.1 release gate; five proposals triaged into
 **Block A** (ship now), **Block B** (ship now), and two deferrals. **Block A (presentation-only + one
@@ -286,10 +334,15 @@ The offline launcher core (home, app grid, app launch) must work fully without A
 
 ## Current goal (active work)
 
-**NOW (2026-08-10): Stage 2 — AI Framework; blocks S2-1 "Learned Resolutions" and S2-2 "Explicit
+**NOW (2026-08-16): I18N-1 Multilingual UI is CLOSED (see the digest entry above). The DS v1.1 release
+gate is no longer simply "open" — `checkOwnerReviewedLocaleStrings` (Task 15) now blocks
+`:app:assembleRelease`/`:app:assemble`/`:app:bundleRelease`/root `./gradlew build` until the owner marks
+all 10 locale `strings_locked.xml` files `OWNER-REVIEWED`. Next: that owner sign-off, and/or I18N-2
+(routed known gaps), and/or A1 Tool & Capability (architecture).**
+
+**Prior sync (2026-08-10): Stage 2 — AI Framework; blocks S2-1 "Learned Resolutions" and S2-2 "Explicit
 Aliases" are both CLOSED and device-accepted. The design track is finished too — DS-10 Assistant
-Migration closed and device-accepted the same day, so the whole shipped surface is on SIDR v1.1. Next:
-the DS v1.1 release gate (design) and/or A1 Tool & Capability (architecture).** The Stage-1
+Migration closed and device-accepted the same day, so the whole shipped surface is on SIDR v1.1.** The Stage-1
 AI-Launcher MVP (blocks AIL-0…6) is CLOSED and
 device-accepted on SM-A325F. Stage 2 generalizes the router/registry/context/memory into a reusable
 on-device AI framework (Action Registry v2, Context Engine v2, User Memory) per the three-stage reframe,
@@ -823,6 +876,12 @@ Phase 3 result, Blocks A → D:
   any LLM call" holds. LLM-proposed actions **never auto-execute a risky action** (confirmation-gated),
   and router-off must be byte-for-byte rule-only parity. (See the AIL-4 ADR.)
 - Launcher core works fully offline; optional permissions never block startup.
+- **User-facing text never originates in `domain` — and not in a ViewModel either.** Domain and
+  ViewModels emit typed results (`CommandMessage`, `CommandFailure`, `CommandFeedback`); the feature
+  layer chooses the string via `sidrString(R.string.…)`. Enforced by `HardcodedUiTextGuardTest` and
+  `StringSeamGuardTest`.
+- **Strings and all main-locale translations ship in the same commit as the feature.** A block is not
+  gate-green until `en`/`ru`/`tr` are complete — enforced by `LocaleCompletenessGuardTest`.
 
 ## Contract → Owner module
 
@@ -858,6 +917,8 @@ Phase 3 result, Blocks A → D:
 | `SidrAssistantComposer` + `SidrStreamingIndicator` (DS-10 assistant controls, presentation-only) *(DS-10 ✅)* | `core/ui` |
 | `AssistantPresentation` (DS-5 error copy + action choice + cloud-disclosure text + provider provenance, pure) *(DS-10 ✅)* | `feature/assistant` |
 | `provideExecuteActionUseCase` (`IntentProvidesModule`) *(AIL-5 ✅)* | `app` |
+| `sidrString`/`sidrPluralString` + `SidrStringOverlay` (I18N-1 string seam, entry-name-keyed overlay) *(I18N-1 ✅)* | `core/ui` |
+| `locales_config.xml` + in-app language switcher (`AppCompatDelegate` per-app language) + i18n guard tests (`StringSeamGuardTest`/`LocaleCompletenessGuardTest`/`HardcodedUiTextGuardTest`) *(I18N-1 ✅)* | `app` |
 | ONNX NLU / embeddings | `data/ai-local` |
 | `ModelDownloader` port + `ModelFilePresence` port *(Block Q ✅, rework)* | `domain` |
 | `ModelStore`/`Sha256Verifier`/`ModelProvisioner`/`ModelManager` + `ModelDownloadScheduler` port + `ModelDownloadConfig` *(Block Q ✅)* | `data/ai-local` |

@@ -2,13 +2,44 @@
 
 > **Authoritative status lives in `CLAUDE.md` (session digest), `ai-context/decisions.md` (ADR log),
 > and the per-phase plans.** This file is a short pointer/snapshot only — if it disagrees with those,
-> they win. Last re-based: 2026-08-10 (DS-10 Assistant Migration CLOSED — device-accepted; same-day
-> DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer
-> Correctness COMPLETE).
+> they win. Last re-based: 2026-08-16 (I18N-1 Multilingual UI CLOSED — device-verified; prior re-base
+> 2026-08-10 DS-10 Assistant Migration CLOSED — device-accepted; same-day DS-7 Memory Surfaces + S2-2
+> Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer Correctness COMPLETE).
+
+## I18N-1 Multilingual UI — CLOSED (2026-08-16), device-verified
+
+`en`/`ru`/`tr` shipped across every migrated production screen behind a single `core/ui` seam
+(`sidrString`, entry-name-keyed overlay for a future `translate_ui`). Two owner exemptions stay English
+(the five `PREVIEW` mock-up tabs, the hidden dev console). 11 sub-UI strings got a new typed
+`domain` contract (`CommandMessage`/`CommandFailure`) resolved by a feature-layer mapper — a scope
+expansion found while planning. Three regression barriers (`StringSeamGuardTest`,
+`LocaleCompletenessGuardTest`, `HardcodedUiTextGuardTest`) plus a new release gate,
+`checkOwnerReviewedLocaleStrings`, that makes `:app:assembleRelease`/`:app:assemble`/`:app:bundleRelease`/
+root `./gradlew build` **RED BY DESIGN** until the owner marks all 10 locale `strings_locked.xml` files
+`OWNER-REVIEWED`. Per-app language switch via `AppCompatDelegate` (`LauncherActivity` →
+`AppCompatActivity`, theme re-parented, `windowBackground` unchanged — no white-flash regression); no new
+DataStore key. Cannot claim byte-for-byte VM-suite parity (a first for a DS-adjacent block) — see the ADR
+for the itemized before/after. Zero `<plurals>` needed; the pseudolocale barrier resolved to real
+`en-XA` (no overlay fallback needed). Gate green (JDK-17): `:domain` 333/0, `:core:ui` 126/0 +
+`verifyRoborazziDebug`, `:feature:launcher` 156/0, `:feature:settings` 33/0, `:feature:assistant` 38/0,
+`:feature:prayer` 12/0, `:feature:permission_education` 15/0, `:data:repository` 167/0, `:app` 13/0, root
+`testDebugUnitTest` + `assembleDebug` SUCCESSFUL; goldens untouched (36 PNGs, 0 new/modified). Device
+(SM-A325F, system locale `ru-RU` throughout): in-app language switch instant/correct on every migrated
+screen, Turkish dotted-İ correct, force-stop persistence confirmed, Home date line proven to follow the
+app locale (read Turkish while the device stayed on `ru-RU`) — the exact regression the block's own brief
+flagged. Not device-covered: system per-app-language picker (owner-gated), offline path (tethering), live
+TalkBack, fontScale 2.0, release-build cold-start comparison (blocked by the new gate itself). Two new
+residue items found during this pass's own smoke, routed to I18N-2 rather than fixed here: a hardcoded
+`"Current location"` label in `core/android` (out of spec scope, same class as the already-known
+suggestion-label gaps), and a real bug where Home's per-cell prayer `contentDescription` announces the
+untranslated enum name instead of the localized prayer name (`PrayerSummaryMapper.kt:64`). ADR
+"2026-08-16 — I18N-1 Multilingual UI complete" in `decisions.md`; plan
+`docs/superpowers/plans/2026-08-11-i18n-1-multilingual.md` (STATUS CLOSED).
 
 ## Design track (DS) — DS-1…DS-4 + Vision MVP DONE; DS-5 CODE-CLOSED (2026-07-13, device-pending);
 DS-6B COMPLETE (2026-08-08); DS-7 + S2-2 CLOSED (2026-08-10); DS-10 CLOSED — device-accepted
-(2026-08-10). **The DS v1.1 release gate is now open.**
+(2026-08-10). **The DS v1.1 release gate is now open, but blocked from producing a release artifact
+until the owner completes I18N-1's `OWNER-REVIEWED` sign-off (see above).**
 
 **DS-10 Assistant Migration is CLOSED — device-accepted on SM-A325F (2026-08-10).** The Assistant was the
 last production surface not yet speaking SIDR v1.1. Note the spec's baseline was stale: the Vision MVP

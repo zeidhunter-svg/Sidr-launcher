@@ -66,8 +66,18 @@ Confirmed by inspection, not assumed:
 ### 3.1 In scope
 
 All user-facing text in `core/ui`, `feature/settings`, `feature/prayer`, `feature/permission_education`,
-`feature/assistant`, `app`, and the non-preview part of `feature/launcher`, plus the ~25 literals living
-in ViewModels and mappers. Roughly 166 sites, expected to collapse to ~150 keys after de-duplication.
+`feature/assistant`, `feature/suggestions`, `app`, and the non-preview part of `feature/launcher`, plus
+the ~25 literals living in ViewModels and mappers. Roughly 166 sites, expected to collapse to ~150 keys
+after de-duplication.
+
+**Correction, added at Task 16 close (2026-08-16):** this enumeration originally omitted
+`feature/suggestions` — a real Compose module (`SuggestionsRow`) that barrier 1 does scan and that was
+in fact migrated. The enumeration text was under-inclusive; the guard's actual scope was correct all
+along. Also note what this list still does **not** include, by design, not oversight:
+`core/android` and other data-layer modules stay out of scope entirely — see the ADR "2026-08-16 — I18N-1
+Multilingual UI complete" for two real residue items (a hardcoded label in
+`AndroidPrayerLocationProvider` and a prayer-name `contentDescription` bug) that fall in that gap and are
+routed to I18N-2.
 
 ### 3.2 Explicit exemptions (owner decision 2026-08-10)
 
@@ -388,11 +398,20 @@ silent swap.
 
 **Where the variant is added, and why not everywhere.** Gallery sample text stays a Kotlin literal
 (§3.3), so it cannot expand. A pseudolocale capture is only meaningful for galleries that render
-resource-backed copy: `controls` (button/gate/action defaults) and `assistant` (composer placeholder,
-`Replying…`). For `memory` and `prayer_summary`, whose visible text is caller-supplied sample data, the
-capture would be a byte-identical copy of `*_dark`; those are skipped with that reason written down.
-Long-string risk on feature screens is covered by the `ru`/`tr` device smoke, not by this golden.
-Owner-confirmed 2026-08-11.
+resource-backed copy.
+
+**Correction, added at Task 16 close (2026-08-16): the paragraph above (as originally written) had this
+backwards, and shipped the wrong two galleries as a result before Task 4 caught it.** It named `controls`
+and `assistant` as the resource-backed galleries and excluded `memory`/`prayer_summary` as "caller-supplied
+sample data." In fact `controls` renders **byte-identical to `controls_dark`** — its visible text does not
+route through `sidrString` in a way the pseudolocale can expand, so a pseudolocale capture of it would
+prove nothing. `SidrPrayerSummary`, by contrast, routes all 11 status chips through `sidrString` (including
+`TZ CONFLICT`, the tightest chip in the project), and the memory components read 27 strings — these are
+exactly the galleries that would load the barrier. Owner-confirmed 2026-08-11; owner ruled
+replace-not-add. The final, correct pair is **`assistant_pseudolocale` + `prayer_summary_pseudolocale`**;
+`memory` was considered but `prayer_summary` was judged the tighter test and `controls` was dropped
+entirely. Golden budget stayed at exactly two. Long-string risk on feature screens is covered by the
+`ru`/`tr` device smoke, not by this golden.
 
 ## 11. Pixel neutrality - the block's acceptance criterion
 

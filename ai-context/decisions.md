@@ -5182,3 +5182,201 @@ back to provider settings except through Settings or a credential error's CTA.
 Capability. Untouched follow-ups from DS-7/S2-2 still stand: `AliasesViewModel` discards save/delete
 `OperationResult`s, the Aliases list renders after the whole app picker, and the bottom tab bar clips its
 labels at fontScale 2.0.
+
+## 2026-08-16 — I18N-1 Multilingual UI complete
+
+**I18N-1 ships `en`/`ru`/`tr` across every migrated production surface and installs three regression
+barriers.** Zero i18n infrastructure existed before this block — no `strings.xml`, `stringResource` had 0
+occurrences, ~250–350 UI strings sat across 8 modules as Kotlin literals. Spec
+`docs/superpowers/specs/2026-08-11-i18n-1-multilingual-design.md`; plan
+`docs/superpowers/plans/2026-08-11-i18n-1-multilingual.md`.
+
+**The seam.** `core/ui/i18n/SidrStrings.kt`'s `sidrString(@StringRes id)` is the **only** place
+`stringResource` is called (`StringSeamGuardTest` enforces this). It checks a composition-local
+`SidrStringOverlay` before falling back to the resource; the shipped app always runs
+`SidrStringOverlay.None`, whose identity check short-circuits before any lookup, so the shipped path costs
+exactly one `stringResource` call. The overlay is **keyed by the resource entry name**
+(`getResourceEntryName(id)`, e.g. `ui_action_cancel`), not the numeric id, because numeric ids are not
+stable across builds — a future runtime overlay (the `translate_ui` A-stage feature) can then serve
+strings on top of compiled resources with zero call-site changes. `sidrPluralString` deliberately
+**bypasses** the overlay: quantity selection is locale grammar (`ru` one/few/many/other, `tr`'s own
+rules), not copy, and an overlay supplying one form would silently break it.
+
+**Two owner-decided exemptions (spec §3.2), and their cost.** (1) The five `PREVIEW`-badged mock-up
+screens (`TasksPreviewScreen.kt`/`AgentsPreviewScreen.kt`/`ActivityPreviewScreen.kt`/
+`TerminalPreviewScreen.kt`/`MomentsPreviewScreen.kt`, ~58 literals) stay English — they are non-functional
+stand-ins the A-stage replaces wholesale, and translating ~174 strings scheduled for deletion buys
+nothing. Device-verified: the `PREVIEW` badge itself (a `core/ui` component, in scope) renders
+`ÖNİZLEME`/`ПРЕДПРОСМОТР` correctly, while the mock-up's own sample content (`SAMPLE COMMAND`, the
+quarterly-report walkthrough, etc.) stays English exactly as designed — the exemption boundary holds in
+practice, not just in the guard's named list. (2) The hidden dev console (7-tap arm, `//dev-mode` toggle,
+`outcomeSummary` labels, ~12 literals in `LauncherViewModel`) stays English — a debug surface, and
+`outcomeSummary` values are pipeline state names more useful stable than translated. Both exemptions are
+named individually inside the barrier-1 guard with their reason, not a silent regex hole.
+
+**Typed domain/data message contract — a scope expansion discovered while planning (spec §3.5), not
+assumed at brief time.** 11 user-facing strings were born below the UI, where no resource lookup exists.
+Two pure `domain` types, `CommandMessage` and `CommandFailure`, now name *what happened* without wording
+it, carried through `CommandOutcome`/`ExecutableAction`/`ActionExecutionResult`; the feature-layer
+`LauncherPresentation` mapper turns them into resources (the DS-10 `AssistantPresentation` precedent
+reused, not reinvented). All five `CommandFailure` cases are `data object` with zero fields, so the
+privacy-by-construction property (no user text, no stack trace reaches a string) holds structurally, not
+by convention. `domain` gained no new dependency and stays stdlib + coroutines. Both HELP variants were
+deliberately kept as distinct types even though one branch may be unreachable — collapsing them would have
+changed what a user sees.
+
+**The honest §8 parity statement.** Spec §8 states plainly that I18N-1 cannot claim the byte-for-byte
+ViewModel-suite parity every DS block before it claimed, because typing domain/data messages genuinely
+touches ViewModel-adjacent code:
+- `:feature:settings` mapper tests — exactly 6 assertions converted in place (Task 9); zero tests
+  added/deleted/renamed/merged; no ViewModel logic touched. 33 → 33.
+- `:feature:assistant` 35 → 38 — `AssistantViewModelTest` stayed 22 unchanged; the +3 is additive
+  `AssistantPresentationTest` coverage (10 → 13). The plan predicted "35 still green"; the honest number
+  is 38.
+- `:feature:launcher` 130 → 156 — `LauncherViewModelTest` edits were in place only (85 → 88 across Task 12
+  + its fix round); the rest is new `LauncherPresentationTest` / `AppDrawerViewModelTest` /
+  `PrayerProvenanceTextTest` coverage.
+- `:domain` 332 → 333 — exactly the one test Task 11's brief specified.
+- Two assertions got **stronger**, worth recording rather than glossing: `HandleUserCommandUseCaseTest`'s
+  leak check went from `assertFalse(message.contains("db crash"))` to
+  `assertEquals(CommandFailure.Generic, …)` (`Generic` has no field a stack trace could leak through at
+  all); `LauncherViewModelTest:1665` went from a bare `is CommandFeedback.Message` to also pinning
+  `SpeechRecognitionError.PERMISSION_DENIED`.
+
+**`<plurals>`: ZERO.** The extraction needed no `<plurals>` at all. Barrier 2's quantity check therefore
+ships **dormant by design** — no plural was invented to justify it (spec §5.1).
+
+**The pseudolocale outcome (Task 4, barrier 3).** The spike resolved to the real platform `en-XA` path:
+`isPseudoLocalesEnabled` on `:core:ui`'s debug build type + `@Config(qualifiers = "+b+en+XA")` — Robolectric
+resolves it. **No overlay fallback was needed**; spec §17 risk 2 did not materialise, so there is no
+overlay-pseudolocale deviation to record. The one real deviation: the qualifier carries a leading `+`
+(`+b+en+XA`, not the bare form) because the bare form replaces the module's `robolectric.properties`
+viewport (`w360dp-h800dp-xhdpi`) and would make the captures non-comparable to their `*_dark` pairs.
+Golden budget: exactly two pseudolocale captures, `assistant_pseudolocale` + `prayer_summary_pseudolocale`
+— see the §10.4 correction below for why those two and not `controls`.
+
+**appcompat / per-app language (Task 14) — the startup-path change, with device evidence.**
+`LauncherActivity` became `AppCompatActivity`; `Theme.SidrLauncher` re-parented from
+`android:style/Theme.Material.NoActionBar` to `Theme.AppCompat.NoActionBar`, keeping
+`android:windowBackground=@color/sidr_ground` byte-for-byte (the no-white-flash property).
+`AppCompatDelegate` is the single store for the chosen language — no `user_language` DataStore key,
+`PrivacyInventoryGuardTest`/`ALL_KEY_NAMES` untouched. **Honesty item:** on API 28–32, appcompat's
+`autoStoreLocales` persists the choice into its own SharedPreferences record file
+(`androidx.appcompat.app.AppCompatDelegate.application_locales_record_file`) — not a new DataStore key and
+outside the privacy inventory, but a real persisted artifact the guard does not see. On this project's
+device (API 33) that path is inert; the framework `LocaleManager` owns the value there. Language labels
+are **autonyms** (`English`/`Русский`/`Türkçe`), byte-identical across all three locale files by design,
+so a user switched into a language they cannot read can still find their own.
+Device evidence (SM-A325F, system locale `ru-RU` throughout): switching Settings → LANGUAGE → `Türkçe`
+recomposed the entire Settings screen in place with **no visible navigation** — title
+`Настройки`→`Ayarlar`, the selection dot filled immediately, confirming the delegate-driven Activity
+recreation is fast enough not to read as a hang. `am start -W` TotalTime measured across 4 fresh cold
+starts on the installed **debug** APK: 3146 / 2487 / 2668 / 2295 / 2634 ms (post-force-stop). This is
+**not directly comparable** to the ~766 ms cold-median baseline in `CLAUDE.md`'s release-performance
+record — that figure was measured on a release build (R8-shrunk + Baseline Profile) after a drop-first
+protocol, and the Task 16 brief mandates `:app:installDebug`, an unoptimized debug APK with neither
+optimization. No white flash was observed on any of the four cold starts. A true like-for-like regression
+check needs a release build, which is exactly the artifact the release gate below now blocks until the
+owner signs off — so it is not claimed here.
+
+**Per-module test counts, measured at gate time (JDK-17, `--rerun-tasks`, exit 0), against the plan's
+stale baselines:**
+
+| module | plan baseline | measured | note |
+|---|---|---|---|
+| `:domain` | 332 | 333 | Task 11 added exactly one test |
+| `:core:ui` | 119 | 126 | Task 4 added 3 |
+| `:data:repository` | 167 | 167 | unchanged all block |
+| `:feature:launcher` | 130 | 156 | see §8 parity statement above |
+| `:feature:settings` | 33 | 33 | unchanged all block |
+| `:feature:assistant` | 35 | 38 | see §8 parity statement above |
+| `:feature:prayer` | — | 12 | not in the plan's baseline table |
+| `:feature:permission_education` | — | 15 | byte-parity: 15 before and after |
+| `:app` | 8 | 13 | +1 seam guard, +1 locale guard, +3 barrier-1 |
+| goldens | 34 + 2 | 36 | `git status --porcelain` on the screenshots dir: empty |
+
+All measured numbers match the controller-supplied table exactly; nothing needed correcting at gate time.
+
+**The release gate is a behaviour change to the build — stated loudly, not left to surprise someone.**
+Task 15 added `checkOwnerReviewedLocaleStrings` (`app/build.gradle.kts`). Consequence, verified:
+**`:app:assembleRelease`, `:app:assemble`, `:app:bundleRelease`, and root `./gradlew build` are RED BY
+DESIGN** until the owner adds an `OWNER-REVIEWED` marker to each of the 10 locale `strings_locked.xml`
+files. `:app:assembleRelease` is the historical AIL-6 RC gate command this file has recorded as green
+since 2026-07-06; it is not green right now, on purpose, and that must never read as a mysterious build
+break. Every debug graph stays clean, which is why the block's own `testDebugUnitTest`/`assembleDebug` gate
+still passes. The gate is fail-closed on a **positive** marker rather than keyed off the word `DRAFT`,
+because only `feature/launcher` and `feature/prayer`'s locked files carry `DRAFT` at all while all 10 are
+equally unreviewed — a `DRAFT`-keyed gate would have silently passed 6 of them.
+
+**Two spec corrections landed in this pass, both owner-relevant:**
+- **§10.4 had the pseudolocale gallery selection backwards.** It excluded `memory` and `prayer_summary` as
+  "caller-supplied sample data" and kept `controls`. That is the wrong way round: `SidrPrayerSummary`
+  routes all 11 status chips through `sidrString` (including `TZ CONFLICT`, the tightest chip in the
+  project) and the memory components read 27 strings, while `controls` came out **byte-identical to
+  `controls_dark`** — the spec excluded the two galleries that would actually load the barrier and kept
+  the one that could not. Owner-confirmed 2026-08-11, owner ruled replace-not-add; the final captures are
+  `assistant_pseudolocale` + `prayer_summary_pseudolocale`, golden budget held at exactly two.
+- **§3.1's in-scope enumeration omits `feature/suggestions`**, a real Compose module (`SuggestionsRow`).
+  Barrier 1 scans it; the enumeration text was under-inclusive, not the guard.
+
+**Known English residue — five items named ahead of time by the plan, plus two found during this pass's
+own device smoke that were not previously catalogued.**
+1. `CalendarSuggestionProvider`'s "Upcoming event" and `LocationSuggestionProvider`'s "Nearby places"
+   render on Home via `Suggestion.label` and stay English in `ru`/`tr`. Data-layer strings, out of scope by
+   spec §3.1/§3.6; fixing them needs the §8 typed-value treatment plus a change to the persisted
+   `CachedSuggestion(label, actionId)` shape. Routed to I18N-2.
+2. The five `PREVIEW` tabs stay English (spec §3.2, owner decision) — device-verified, see above.
+3. The hidden dev console stays English (spec §3.2).
+4. `RISK_CONFIRM_LABEL = "CONFIRM"` remains a Kotlin constant in `LauncherViewModel` — spec §7.1
+   enumerated locked English vocabulary, deliberately identical in every locale. Typing it needs the full
+   §8 refactor through `PendingRoutedAction` + `ConfirmActionCard`; routed to I18N-2.
+5. Voice recognition still follows the **device** language, not the app language
+   (`startVoiceInput(languageTag = null)`) — spec §3.6 records this as deliberately not fixed here.
+6. **New, found during Task 16's device smoke:** `core/android/prayer/AndroidPrayerLocationProvider.kt:113`
+   hardcodes `private const val DEVICE_LOCATION_LABEL = "Current location"`, rendered verbatim on the
+   Prayer detail screen's "Konum"/"Локация" row in every locale. `core/android` sits outside spec §3.1's
+   in-scope module list — the same class of gap as item 1 above (a data-layer label, not UI copy) — so
+   barrier 1 does not (and by its current scope, cannot) catch it. Routed to I18N-2 alongside item 1.
+7. **New, found during Task 16's device smoke, and a real correctness gap rather than a scope
+   boundary:** Home's per-cell prayer-time `contentDescription` announces the raw Kotlin enum name
+   (`PrayerName.FAJR.name` = `"FAJR"`) instead of the localized prayer name. `PrayerSummaryMapper.kt:64`
+   sets `name = name.name` (the enum constant), and `SidrPrayerSummary.kt:212`'s comment states the
+   caller-supplied value is already "human copy" that "folds under the user's locale" — that assumption is
+   false for the Home strip's mapper, though true for `PrayerDetailScreen.kt:172`, which correctly resolves
+   through `sidrString(R.string.prayer_name_fajr)`. Net effect: the **visible** Home chip text is correctly
+   translated (`İMSAK`/`Фаджр`), confirmed via screenshot, but a TalkBack user on `ru`/`tr` would hear the
+   English/canonical prayer name for the Home strip specifically. Found via the `uiautomator` accessibility
+   tree, not a live TalkBack session (which this pass does not claim to cover); traced to source and
+   confirmed as a real defect, not a hypothesis. Not fixed in this pass — Task 16 is verification and docs
+   only — flagged here so it is not rediscovered cold in I18N-2 or a live TalkBack pass.
+
+**Gate (JDK-17, `--rerun-tasks`, exit 0):** `eval $GRADLE :core:ui:testDebugUnitTest
+:core:ui:verifyRoborazziDebug :domain:test testDebugUnitTest assembleDebug --rerun-tasks` → `BUILD
+SUCCESSFUL`. Goldens: `git status --porcelain core/ui/src/test/screenshots/` → empty (36 PNGs on disk, none
+new, none modified — the plan's own Step 2 expectation was wrong twice, see the plan-defect note in the
+Task 16 report).
+
+**Device (SM-A325F, agent-driven adb, system locale `ru-RU` throughout — an incidental app≠system
+condition already present rather than one requiring a system-setting change):** in-app `en`→`ru`→`tr`
+switch instant and correct on every migrated screen exercised — Home, App Drawer (Groups/A-Z, search),
+Settings (+ Learned Choices/Aliases/AI-provider/Prayer-setup sub-screens), Assistant (cloud disclosure +
+composer), Prayer detail; Turkish dotted-İ confirmed rendering correctly in multiple `SidrTextRole.SYSTEM`
+uppercase headers (`DİL`, `MEZHEP (İKİNDİ)`, `HESAPLAMA YÖNTEMİ`); the LANGUAGE selection dot updated
+immediately on tap, no navigation away/back required; force-stop → relaunch preserved the chosen language
+across a cold start; the Home date line read `3 Rebiülevvel · Pzr, 16 Ağu` (Turkish) while
+`getprop persist.sys.locale` read `ru-RU` throughout — direct confirmation the date line now follows the
+app locale via configuration, not `Locale.getDefault()` reading the system default (the regression the
+brief named as the thing to watch for); the `PREVIEW`/`ÖNİZLEME` exemption boundary held exactly as
+designed (badge translated, mock-up content not); status bar and navigation bar tint showed no visible
+change across every screen captured. **Not covered, with reason:** the system per-app language picker
+(owner-gated, no system setting was touched); any offline path (touching connectivity risks the owner's
+tethering); live TalkBack (evidence gathered via the `uiautomator` accessibility tree instead, which
+surfaced finding 7 above); fontScale 2.0 clipping (a later block); a release-build cold-start comparison
+against the ~766 ms baseline (blocked by the new release gate itself, see above).
+
+**I18N-1 is CLOSED — code-complete, gate green, device-verified for the in-app language switch and every
+migrated screen exercised.** Two real, previously-uncatalogued residue items (6 and 7 above) were found
+during this pass's own verification and are routed to I18N-2 rather than fixed here, consistent with
+Task 16's scope as verification-and-docs, not further extraction. Next: I18N-2 (data-layer suggestion
+labels + `RISK_CONFIRM_LABEL` + the Home prayer-strip contentDescription bug) and/or the DS v1.1 release
+gate, now blocked on the owner's `OWNER-REVIEWED` sign-off across 10 locale files.

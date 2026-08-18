@@ -1,5 +1,6 @@
 package com.sidr.launcher.i18n
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.w3c.dom.Element
@@ -165,6 +166,101 @@ class LocaleCompletenessGuardTest {
         assertTrue(
             "Locale completeness failures (spec §10.3):\n${failures.joinToString("\n")}",
             failures.isEmpty(),
+        )
+    }
+
+    /**
+     * Guard-the-guard (whole-branch review fix wave, item 2a — mirrors
+     * `HardcodedUiTextGuardTest.scoped_roots_cover_every_ui_module`). [modulePrefixes] is a
+     * hand-written 7-entry map with no check against reality: a new module that ships
+     * `res/values/strings*.xml` but is never added here is silently skipped by
+     * [main_locales_are_complete_and_consistent] entirely - it could ship English-only in `ru`/`tr`
+     * with every barrier reporting green. This test parses `settings.gradle.kts` for every included
+     * module and fails if any module has a base `res/values/strings*.xml` file but no entry in
+     * [modulePrefixes].
+     */
+    @Test fun module_prefixes_cover_every_module_that_ships_strings() {
+        val repoRoot = File("..")
+        val settingsFile = File(repoRoot, "settings.gradle.kts")
+        val includePattern = Regex("""include\(":([^"]+)"\)""")
+        val includedModules = includePattern.findAll(settingsFile.readText())
+            .map { it.groupValues[1].replace(':', '/') }
+            .toList()
+
+        val uncovered = includedModules.filter { modulePath ->
+            modulePath !in modulePrefixes && resFiles(File(repoRoot, modulePath), null).isNotEmpty()
+        }
+
+        assertTrue(
+            "Module(s) ship res/values/strings*.xml but are not in `modulePrefixes` - " +
+                "LocaleCompletenessGuardTest would silently skip them entirely, allowing English-only " +
+                "translations to ship gate-green (spec §10.3): $uncovered",
+            uncovered.isEmpty(),
+        )
+    }
+
+    /**
+     * Whole-branch review fix wave, item 2c. Four independent locale lists exist with nothing
+     * cross-checking them: `app/src/main/res/xml/locales_config.xml` (the OS locale-config manifest),
+     * `SettingsScreen.kt`'s in-app language switcher, this class's own [mainLocales], and
+     * `app/build.gradle.kts`'s `checkOwnerReviewedLocaleStrings` `locales` list. Adding a locale needs
+     * four coordinated edits today and fails silently in a different way each time one is missed. This
+     * does not unify them into one shared constant (that needs a Gradle-file/XML-resource/Kotlin-source
+     * bridge disproportionate to a fix wave) - it only proves they currently agree, so drift is caught
+     * the moment any one of the four changes without the others.
+     *
+     * [mainLocales]/the gate's `locales` are deliberately the "translated, non-base" set (`ru`, `tr`) -
+     * `en` is the base `values/` locale and needs no translation completeness check - while
+     * `locales_config.xml`/the switcher are the "every locale the app can render" set (`en`, `ru`,
+     * `tr`). The third assertion below ties those two shapes together: translated == supported - base.
+     */
+    @Test fun locale_lists_agree_across_the_four_sources() {
+        val repoRoot = File("..")
+
+        val localesConfigFile = File(repoRoot, "app/src/main/res/xml/locales_config.xml")
+        val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(localesConfigFile)
+        val localeNodes = doc.getElementsByTagName("locale")
+        val configuredLocales = (0 until localeNodes.length)
+            .map { (localeNodes.item(it) as Element).getAttribute("android:name") }
+            .toSet()
+
+        val settingsScreenFile = File(
+            repoRoot,
+            "feature/settings/src/main/java/com/sidr/launcher/feature/settings/SettingsScreen.kt",
+        )
+        val tagPattern = Regex(""""([a-z]*)"\s+to\s+R\.string\.settings_language_""")
+        val switcherTags = tagPattern.findAll(settingsScreenFile.readText())
+            .map { it.groupValues[1] }
+            .filter { it.isNotEmpty() } // "" = follow-system, not a locale
+            .toSet()
+
+        val translatedLocales = mainLocales.toSet()
+
+        val buildFile = File(repoRoot, "app/build.gradle.kts")
+        val gateLocalesMatch = Regex("""val locales = listOf\(([^)]*)\)""").find(buildFile.readText())
+            ?: error(
+                "Could not find `val locales = listOf(...)` in app/build.gradle.kts - has " +
+                    "checkOwnerReviewedLocaleStrings moved or been renamed?",
+            )
+        val gateLocales = gateLocalesMatch.groupValues[1]
+            .split(",")
+            .map { it.trim().trim('"') }
+            .filter { it.isNotEmpty() }
+            .toSet()
+
+        assertEquals(
+            "locales_config.xml's supported locales must equal the settings switcher's offered tags " +
+                "(excluding the follow-system \"\" option)",
+            configuredLocales, switcherTags,
+        )
+        assertEquals(
+            "LocaleCompletenessGuardTest.mainLocales must equal checkOwnerReviewedLocaleStrings's " +
+                "`locales` in app/build.gradle.kts",
+            translatedLocales, gateLocales,
+        )
+        assertEquals(
+            "the translated (non-base) locales must equal the supported locales minus the base 'en'",
+            translatedLocales, configuredLocales - "en",
         )
     }
 }

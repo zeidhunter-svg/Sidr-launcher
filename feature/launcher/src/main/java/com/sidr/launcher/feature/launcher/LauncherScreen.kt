@@ -380,7 +380,7 @@ private fun HomePrayerStrip(
         status = summary.status,
         provenance = prayerProvenanceText(summary.provenance),
         modifier = modifier,
-        locationLabel = summary.locationLabel,
+        locationLabel = homeLocationLabelText(summary.locationLabel, summary.locationSource),
         onOpenDetails = onOpenDetails,
     )
 }

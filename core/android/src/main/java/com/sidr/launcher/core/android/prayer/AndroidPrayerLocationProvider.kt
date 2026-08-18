@@ -110,6 +110,12 @@ class AndroidPrayerLocationProvider(
     }
 
     private companion object {
+        // I18N-2: this is an IDENTITY, not display copy - GetPrayerContextUseCase's matchesSetup
+        // compares PrayerScheduleProvenance.locationLabel to decide cache validity, so changing this
+        // value invalidates every DEVICE-sourced user's cache on next launch. The user-visible
+        // Home/detail text is localized separately, at render time, from PrayerLocationSource.DEVICE
+        // (feature/launcher's homeLocationLabelText / feature/prayer's locationLabelText) - this
+        // constant's value must stay exactly "Current location".
         const val DEVICE_LOCATION_LABEL = "Current location"
 
         fun roundTo2dp(value: Double): Double = round(value * 100.0) / 100.0

@@ -22,6 +22,8 @@
     <string name="prayer_location_source_city">город</string>
     <string name="prayer_location_source_device">геолокация устройства</string>
 
+    <string name="prayer_location_current_device">Текущее местоположение</string>
+
     <string name="prayer_detail_unavailable_title">Время намаза пока недоступно</string>
     <string name="prayer_detail_unavailable_not_configured">Выберите метод расчёта и мазхаб, чтобы увидеть время намаза.</string>
     <string name="prayer_detail_unavailable_location_missing">Метод и мазхаб указаны — выберите город или используйте геолокацию устройства, чтобы увидеть время намаза.</string>

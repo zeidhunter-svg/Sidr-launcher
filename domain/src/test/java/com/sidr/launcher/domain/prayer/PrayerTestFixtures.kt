@@ -60,5 +60,6 @@ internal object PrayerTestFixtures {
         madhab = setup.madhab,
         locationLabel = setup.location!!.label,
         computedAtMillis = computedAtMillis,
+        locationSource = setup.location!!.source,
     )
 }

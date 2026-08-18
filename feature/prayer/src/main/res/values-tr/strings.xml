@@ -22,6 +22,8 @@
     <string name="prayer_location_source_city">şehir</string>
     <string name="prayer_location_source_device">cihaz konumu</string>
 
+    <string name="prayer_location_current_device">Mevcut konum</string>
+
     <string name="prayer_detail_unavailable_title">Henüz namaz vakti yok</string>
     <string name="prayer_detail_unavailable_not_configured">Namaz vakitlerini görmeye başlamak için bir hesaplama yöntemi ve mezhep seçin.</string>
     <string name="prayer_detail_unavailable_location_missing">Yöntem ve mezhep ayarlandı — namaz vakitlerini görmek için bir şehir seçin veya cihaz konumunu kullanın.</string>

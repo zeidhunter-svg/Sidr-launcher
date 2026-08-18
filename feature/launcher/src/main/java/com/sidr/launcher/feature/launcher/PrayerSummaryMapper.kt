@@ -8,6 +8,7 @@ import com.sidr.launcher.domain.prayer.CalculationMethodId
 import com.sidr.launcher.domain.prayer.Freshness
 import com.sidr.launcher.domain.prayer.Madhab
 import com.sidr.launcher.domain.prayer.PrayerContext
+import com.sidr.launcher.domain.prayer.PrayerLocationSource
 import com.sidr.launcher.domain.prayer.PrayerName
 import com.sidr.launcher.domain.prayer.TimeZoneState
 import java.time.Instant
@@ -38,6 +39,7 @@ internal data class HomePrayerSummaryUi(
     val status: SidrPrayerSummaryStatus,
     val provenance: PrayerProvenanceUi,
     val locationLabel: String?,
+    val locationSource: PrayerLocationSource?,
 )
 
 /**
@@ -87,6 +89,7 @@ internal fun PrayerContext.toHomePrayerSummaryUi(): HomePrayerSummaryUi? {
             madhab = available.provenance.madhab,
         ),
         locationLabel = available.provenance.locationLabel,
+        locationSource = available.provenance.locationSource,
     )
 }
 
@@ -170,6 +173,25 @@ internal fun prayerNameLabel(name: PrayerName): String = when (name) {
     PrayerName.MAGHRIB -> sidrString(R.string.launcher_prayer_name_maghrib)
     PrayerName.ISHA -> sidrString(R.string.launcher_prayer_name_isha)
     PrayerName.SUNRISE -> error("SUNRISE is never a member of FIVE_PRAYERS_ORDER; Home has no sunrise row")
+}
+
+/**
+ * Resolves [HomePrayerSummaryUi.locationLabel] for display (I18N-2). The STORED value of a
+ * [PrayerLocationSource.DEVICE] label never changes — `AndroidPrayerLocationProvider`'s
+ * `"Current location"` identity doubles as `GetPrayerContextUseCase`'s cache-validity key — but the
+ * DISPLAYED text now folds under the user's locale here, at the same render-time seam as
+ * [prayerNameLabel] / [prayerProvenanceText]. [PrayerLocationSource.CITY]'s label is a proper name
+ * from the offline GeoNames index and is shown verbatim in every locale — there is nothing to
+ * translate.
+ */
+@Composable
+internal fun homeLocationLabelText(locationLabel: String?, locationSource: PrayerLocationSource?): String? {
+    if (locationLabel == null) return null
+    return if (locationSource == PrayerLocationSource.DEVICE) {
+        sidrString(R.string.launcher_prayer_location_current_device)
+    } else {
+        locationLabel
+    }
 }
 
 /** `HH:mm` (24h) in [zone] — always the LOCATION zone (spec §6), never the device zone. */

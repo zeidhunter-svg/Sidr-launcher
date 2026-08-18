@@ -156,6 +156,7 @@ class PrayerModelsTest {
                 madhab = Madhab.STANDARD,
                 locationLabel = "",
                 computedAtMillis = 1L,
+                locationSource = PrayerLocationSource.CITY,
             )
         }
     }

@@ -12,6 +12,7 @@ import com.sidr.launcher.domain.prayer.Madhab
 import com.sidr.launcher.domain.prayer.PrayerAuthority
 import com.sidr.launcher.domain.prayer.PrayerDaySchedule
 import com.sidr.launcher.domain.prayer.PrayerInstant
+import com.sidr.launcher.domain.prayer.PrayerLocationSource
 import com.sidr.launcher.domain.prayer.PrayerName
 import com.sidr.launcher.domain.prayer.PrayerScheduleCache
 import com.sidr.launcher.domain.prayer.PrayerScheduleProvenance
@@ -108,6 +109,7 @@ class PrayerScheduleCacheImpl @Inject constructor(
             madhab = provenance.madhab.name,
             locationLabel = provenance.locationLabel,
             computedAtMillis = provenance.computedAtMillis,
+            locationSource = provenance.locationSource.name,
         )
         prefs[PrayerPreferencesKeys.PRAYER_SCHED_PROVENANCE] =
             json.encodeToString(ProvenanceDto.serializer(), provenanceDto)
@@ -139,6 +141,7 @@ class PrayerScheduleCacheImpl @Inject constructor(
             madhab = Madhab.valueOf(provenanceDto.madhab),
             locationLabel = provenanceDto.locationLabel,
             computedAtMillis = provenanceDto.computedAtMillis,
+            locationSource = PrayerLocationSource.valueOf(provenanceDto.locationSource),
         )
 
         CachedPrayerSchedule(schedule, provenance)
@@ -156,6 +159,16 @@ class PrayerScheduleCacheImpl @Inject constructor(
         val sunrise: PrayerInstantDto? = null,
     )
 
+    /**
+     * [locationSource] (I18N-2) defaults to `CITY` so a cache entry written before this field
+     * existed still decodes (`ignoreUnknownKeys` handles the forward direction; the default handles
+     * this one). A pre-I18N-2 `DEVICE`-sourced cache entry decoded this way renders its location
+     * label untranslated for exactly one read — harmless and self-healing, since `write()` always
+     * persists the correct source going forward and the very next `VERIFIED_CURRENT` recompute
+     * overwrites the entry. Never affects cache validity: `matchesSetup` in
+     * [com.sidr.launcher.domain.prayer.GetPrayerContextUseCase] compares `locationLabel`, not this
+     * field.
+     */
     @Serializable
     private data class ProvenanceDto(
         val authority: String,
@@ -163,5 +176,6 @@ class PrayerScheduleCacheImpl @Inject constructor(
         val madhab: String,
         val locationLabel: String,
         val computedAtMillis: Long,
+        val locationSource: String = PrayerLocationSource.CITY.name,
     )
 }

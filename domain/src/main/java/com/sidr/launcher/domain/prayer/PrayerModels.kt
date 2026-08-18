@@ -124,6 +124,13 @@ data class PrayerDaySchedule(
 /**
  * Where, how, and when a schedule was computed. Every visible schedule carries one — "no schedule
  * without provenance" (spec §2) is enforced by [PrayerContext.Available] requiring this by type.
+ *
+ * [locationSource] (I18N-2) is the discriminator a renderer needs to localize [locationLabel]:
+ * [PrayerLocationSource.DEVICE]'s label is the fixed English identity
+ * `AndroidPrayerLocationProvider.DEVICE_LOCATION_LABEL` (never translated — it doubles as
+ * [com.sidr.launcher.domain.prayer.GetPrayerContextUseCase]'s cache-validity key via
+ * `matchesSetup`, so its stored VALUE must never change), while [PrayerLocationSource.CITY]'s label
+ * is a proper name from the offline GeoNames index and is shown verbatim in every locale.
  */
 data class PrayerScheduleProvenance(
     val authority: PrayerAuthority,
@@ -131,6 +138,7 @@ data class PrayerScheduleProvenance(
     val madhab: Madhab,
     val locationLabel: String,
     val computedAtMillis: Long,
+    val locationSource: PrayerLocationSource,
 ) {
     init {
         require(locationLabel.isNotBlank()) { "Provenance must name the location it was computed for." }

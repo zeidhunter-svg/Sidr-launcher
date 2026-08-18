@@ -100,4 +100,11 @@
     <string name="launcher_drawer_sample_category_media">Media</string>
     <string name="launcher_drawer_sample_category_productivity">Productivity</string>
     <string name="launcher_drawer_sample_category_other">Other</string>
+
+    <!-- I18N-2: Home/detail prayer-strip device-location label (PrayerLocationSource.DEVICE). Not
+         Class B locked - unlike calculation-method/madhab/Shahada copy, this is a plain UI label
+         with no religious content. Byte-identical to AndroidPrayerLocationProvider's
+         DEVICE_LOCATION_LABEL identity string (core/android), which stays fixed English - it also
+         serves as GetPrayerContextUseCase's cache-validity key and must never change. -->
+    <string name="launcher_prayer_location_current_device">Current location</string>
 </resources>

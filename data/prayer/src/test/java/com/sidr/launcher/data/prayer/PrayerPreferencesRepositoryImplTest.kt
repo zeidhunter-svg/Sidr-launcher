@@ -72,6 +72,7 @@ class PrayerPreferencesRepositoryImplTest {
         madhab = setup.madhab,
         locationLabel = setup.location!!.label,
         computedAtMillis = 100L,
+        locationSource = setup.location!!.source,
     )
 
     @Test

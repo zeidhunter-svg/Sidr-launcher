@@ -30,7 +30,9 @@ import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.domain.prayer.Freshness
 import com.sidr.launcher.domain.prayer.Madhab
 import com.sidr.launcher.domain.prayer.PrayerContext
+import com.sidr.launcher.domain.prayer.PrayerLocationSource
 import com.sidr.launcher.domain.prayer.PrayerName
+import com.sidr.launcher.domain.prayer.PrayerScheduleProvenance
 import com.sidr.launcher.domain.prayer.TimeZoneState
 import com.sidr.launcher.domain.prayer.UnavailableReason
 import com.sidr.launcher.feature.prayer.R
@@ -107,7 +109,7 @@ private fun PrayerDetailContent(
                         prayers = context.toPrayerTimeUiList(uiState.tzId),
                         status = context.toSummaryStatus(),
                         provenance = context.toProvenanceText(),
-                        locationLabel = context.provenance.locationLabel,
+                        locationLabel = locationLabelText(context.provenance),
                     )
 
                     // Sunrise is explicitly NOT one of the five prayers (spec §3) — a separate,
@@ -147,7 +149,7 @@ private fun PrayerDetailContent(
                     )
                     SidrNavigationRow(
                         title = sidrString(R.string.prayer_detail_location_row_title),
-                        value = context.provenance.locationLabel,
+                        value = locationLabelText(context.provenance),
                         onClick = { onOpenSettings(PrayerSettingsSection.LOCATION) },
                     )
                 }
@@ -213,6 +215,22 @@ private fun madhabLabel(madhab: Madhab): String = when (madhab) {
     Madhab.STANDARD -> sidrString(R.string.prayer_madhab_standard)
     Madhab.HANAFI -> sidrString(R.string.prayer_madhab_hanafi)
 }
+
+/**
+ * Resolves [PrayerScheduleProvenance.locationLabel] for display (I18N-2) - same render-time seam as
+ * [prayerNameLabel] / [madhabLabel]. `AndroidPrayerLocationProvider.DEVICE_LOCATION_LABEL`'s stored
+ * identity never changes (it doubles as [com.sidr.launcher.domain.prayer.GetPrayerContextUseCase]'s
+ * cache-validity key); only the text shown here folds under the user's locale.
+ * [PrayerLocationSource.CITY]'s label is a proper name from the offline GeoNames index and is shown
+ * verbatim in every locale.
+ */
+@Composable
+private fun locationLabelText(provenance: PrayerScheduleProvenance): String =
+    if (provenance.locationSource == PrayerLocationSource.DEVICE) {
+        sidrString(R.string.prayer_location_current_device)
+    } else {
+        provenance.locationLabel
+    }
 
 /** Formats an epoch millis instant as `HH:mm` in [tzId] (falling back to the device zone when the
  *  id is absent/unparseable — display-only; day-boundary math itself stays in the domain layer). */

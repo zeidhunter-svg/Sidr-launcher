@@ -72,4 +72,6 @@
     <string name="launcher_drawer_sample_category_media">Медиа</string>
     <string name="launcher_drawer_sample_category_productivity">Продуктивность</string>
     <string name="launcher_drawer_sample_category_other">Другое</string>
+
+    <string name="launcher_prayer_location_current_device">Текущее местоположение</string>
 </resources>

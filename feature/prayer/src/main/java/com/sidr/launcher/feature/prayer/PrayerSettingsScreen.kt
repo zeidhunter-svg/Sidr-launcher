@@ -243,7 +243,7 @@ private fun LocationSection(
         SidrText(
             text = sidrString(
                 R.string.prayer_settings_current_location,
-                location.label,
+                locationLabelText(location),
                 locationSourceLabel(location.source),
             ),
             role = SidrTextRole.PROVENANCE,
@@ -314,3 +314,19 @@ private fun locationSourceLabel(source: PrayerLocationSource): String = when (so
     PrayerLocationSource.CITY -> sidrString(R.string.prayer_location_source_city)
     PrayerLocationSource.DEVICE -> sidrString(R.string.prayer_location_source_device)
 }
+
+/**
+ * Resolves [PrayerLocation.label] for display (I18N-2). A THIRD leak site alongside
+ * `PrayerDetailScreen.kt`'s: this "Current: %1$s (%2$s)" line already translated the parenthetical
+ * source via [locationSourceLabel], but was still splicing the raw `location.label` in front of
+ * it — "Текущее: Current location (местоположение устройства)" in `ru`. Same render-time seam as
+ * [locationSourceLabel] / [madhabLabel]; the stored identity value is untouched (see
+ * `AndroidPrayerLocationProvider.DEVICE_LOCATION_LABEL`'s kdoc).
+ */
+@Composable
+private fun locationLabelText(location: PrayerLocation): String =
+    if (location.source == PrayerLocationSource.DEVICE) {
+        sidrString(R.string.prayer_location_current_device)
+    } else {
+        location.label
+    }

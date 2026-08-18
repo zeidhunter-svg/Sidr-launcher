@@ -30,6 +30,13 @@
     <string name="prayer_location_source_city">city</string>
     <string name="prayer_location_source_device">device location</string>
 
+    <!-- I18N-2: PrayerLocationSource.DEVICE display label (PrayerDetailScreen.kt, PrayerSettingsScreen.kt).
+         Byte-identical to AndroidPrayerLocationProvider's DEVICE_LOCATION_LABEL identity string
+         (core/android), which stays fixed English - it also serves as GetPrayerContextUseCase's
+         cache-validity key and must never change. Distinct from prayer_location_source_device above
+         (that's the parenthetical "(device location)" source annotation; this is the label itself). -->
+    <string name="prayer_location_current_device">Current location</string>
+
     <!-- PrayerDetailScreen.kt -->
     <string name="prayer_detail_unavailable_title">No prayer times yet</string>
     <string name="prayer_detail_unavailable_not_configured">Choose a calculation method and madhab to start seeing prayer times.</string>

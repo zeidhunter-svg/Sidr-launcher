@@ -123,6 +123,7 @@ class GetPrayerContextUseCaseTest {
                 madhab = setup.madhab,
                 locationLabel = "Istanbul",
                 computedAtMillis = NOW.toEpochMilli(),
+                locationSource = PrayerLocationSource.CITY,
             ),
             available.provenance,
         )

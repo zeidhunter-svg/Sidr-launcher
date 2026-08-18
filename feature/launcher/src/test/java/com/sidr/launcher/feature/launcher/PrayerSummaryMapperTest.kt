@@ -8,6 +8,7 @@ import com.sidr.launcher.domain.prayer.PrayerAuthority
 import com.sidr.launcher.domain.prayer.PrayerContext
 import com.sidr.launcher.domain.prayer.PrayerDaySchedule
 import com.sidr.launcher.domain.prayer.PrayerInstant
+import com.sidr.launcher.domain.prayer.PrayerLocationSource
 import com.sidr.launcher.domain.prayer.PrayerName
 import com.sidr.launcher.domain.prayer.PrayerScheduleProvenance
 import com.sidr.launcher.domain.prayer.TimeZoneState
@@ -85,6 +86,7 @@ class PrayerSummaryMapperTest {
                 madhab = madhab,
                 locationLabel = locationLabel,
                 computedAtMillis = tokyoEpochMillis(0, 0),
+                locationSource = PrayerLocationSource.CITY,
             ),
             freshness = freshness,
             timeZoneState = timeZoneState,

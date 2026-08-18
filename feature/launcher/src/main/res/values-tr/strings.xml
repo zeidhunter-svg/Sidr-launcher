@@ -72,4 +72,6 @@
     <string name="launcher_drawer_sample_category_media">Medya</string>
     <string name="launcher_drawer_sample_category_productivity">Verimlilik</string>
     <string name="launcher_drawer_sample_category_other">Diğer</string>
+
+    <string name="launcher_prayer_location_current_device">Mevcut konum</string>
 </resources>

@@ -7,6 +7,7 @@ import com.sidr.launcher.domain.prayer.Madhab
 import com.sidr.launcher.domain.prayer.PrayerAuthority
 import com.sidr.launcher.domain.prayer.PrayerDaySchedule
 import com.sidr.launcher.domain.prayer.PrayerInstant
+import com.sidr.launcher.domain.prayer.PrayerLocationSource
 import com.sidr.launcher.domain.prayer.PrayerName
 import com.sidr.launcher.domain.prayer.PrayerScheduleProvenance
 import com.sidr.launcher.domain.result.OperationResult
@@ -51,13 +52,15 @@ class PrayerScheduleCacheImplTest {
         sunrise = if (includeSunrise) PrayerInstant(PrayerName.SUNRISE, 1_500L) else null,
     )
 
-    private fun provenanceWith(label: String) = PrayerScheduleProvenance(
-        authority = PrayerAuthority.LOCAL_CALC,
-        methodId = turkeySetupMethod,
-        madhab = Madhab.STANDARD,
-        locationLabel = label,
-        computedAtMillis = 42_000L,
-    )
+    private fun provenanceWith(label: String, source: PrayerLocationSource = PrayerLocationSource.CITY) =
+        PrayerScheduleProvenance(
+            authority = PrayerAuthority.LOCAL_CALC,
+            methodId = turkeySetupMethod,
+            madhab = Madhab.STANDARD,
+            locationLabel = label,
+            computedAtMillis = 42_000L,
+            locationSource = source,
+        )
 
     @Test
     fun `read returns Success null when no cache exists`() = runTest {
@@ -170,6 +173,37 @@ class PrayerScheduleCacheImplTest {
         assertTrue(result is OperationResult.Success)
         assertNull((result as OperationResult.Success).value)
         scope.cancel()
+    }
+
+    @Test
+    fun `provenance JSON written before I18N-2 - no locationSource key - decodes with a CITY default`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher + Job())
+        val store = createTestDataStore(file(), scope)
+        val cache = PrayerScheduleCacheImpl(store, dispatcher)
+
+        cache.write(
+            CachedPrayerSchedule(
+                schedule = scheduleFor(LocalDate.of(2026, 8, 8)),
+                provenance = provenanceWith("Amman"),
+            ),
+        )
+        // Overwrite with a hand-crafted pre-I18N-2 provenance payload: no locationSource key at
+        // all, simulating a real cache entry persisted before this field existed. `write()` above
+        // is only there to get a valid schedule/date pair on disk; this line replaces just the
+        // provenance the way the "missing key" test above replaces just the schedule.
+        store.updateData {
+            it.toMutablePreferences().apply {
+                this[stringPreferencesKey("prayer_sched_provenance")] =
+                    """{"authority":"LOCAL_CALC","methodId":"TURKEY","madhab":"STANDARD",""" +
+                    """"locationLabel":"Amman","computedAtMillis":42000}"""
+            }
+        }
+
+        val result = cache.read()
+        assertTrue(result is OperationResult.Success)
+        val cached = (result as OperationResult.Success).value
+        assertEquals(PrayerLocationSource.CITY, cached?.provenance?.locationSource)
     }
 
     @Test

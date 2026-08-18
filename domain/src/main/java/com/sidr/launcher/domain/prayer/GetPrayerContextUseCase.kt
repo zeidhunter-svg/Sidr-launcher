@@ -81,6 +81,7 @@ class GetPrayerContextUseCase(
                     madhab = setup.madhab,
                     locationLabel = location.label,
                     computedAtMillis = now.toEpochMilli(),
+                    locationSource = location.source,
                 )
                 // Best-effort persist for the next first frame; a write failure never taints the
                 // freshly verified context.

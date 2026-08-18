@@ -5383,3 +5383,111 @@ during this pass's own verification and are routed to I18N-2 rather than fixed h
 Task 16's scope as verification-and-docs, not further extraction. Next: I18N-2 (data-layer suggestion
 labels + `RISK_CONFIRM_LABEL` + the Home prayer-strip contentDescription bug) and/or the DS v1.1 release
 gate, now blocked on the owner's `OWNER-REVIEWED` sign-off across 10 locale files.
+
+## 2026-08-19 — I18N-2 residual localization + barrier 4
+
+**Closes two of I18N-1's own device-smoke residue items (the Home prayer-strip `contentDescription` bug
+and the hardcoded `"Current location"` label) and installs a fourth regression barrier the first three
+structurally could not have caught.** Scope decided at plan time: the two remaining I18N-1 residue items
+— `CalendarSuggestionProvider`/`LocationSuggestionProvider`'s fixed labels and `RISK_CONFIRM_LABEL` —
+stayed out (near-zero real reach: permission-AND-flag-gated for the first, an already-recorded
+owner-approved locked-vocabulary exemption for the second) and remain routed to a future I18N pass.
+
+**Fix 1 — Home prayer names now resolve through the string seam.**
+`PrayerSummaryMapper.kt` built each cell's `SidrPrayerTimeUi` with `name = name.name` — the raw Kotlin
+enum literal (`"FAJR"`) — which rode verbatim into `SidrPrayerSummary`'s per-cell TalkBack
+`contentDescription` regardless of app locale. Invisible in English (the locked resource value happens
+to equal the enum name, which is exactly why it slipped past every I18N-1 barrier and a human reading
+the English build); a `ru`/`tr` TalkBack user heard literal English. The mapper now carries a typed
+`HomePrayerTimeUi(name: PrayerName, …)` and stays non-`@Composable` (`PrayerSummaryMapperTest` needs no
+Robolectric host); a new `prayerNameLabel()` resolves it at render time in `HomePrayerStrip`, mirroring
+`feature/prayer`'s already-correct `PrayerDetailScreen.toPrayerTimeUiList` pattern. Five new Class B
+locked keys (`launcher_prayer_name_*`) copied verbatim from `feature/prayer`'s existing translations —
+same duplication rationale (no `feature → feature` edge) already established for the calculation-method
+names in the same file. Confirmed regression-proven, not just written: the new/changed assertions in
+`PrayerSummaryMapperTest` and `LauncherScreenPrayerStripTest` were run red against the reverted
+pre-fix mapper, then green after restoring it.
+
+**Fix 2 — the device-location label translates without touching cache validity.**
+`PrayerLocation.label` is dual-purpose: display text AND (via `PrayerScheduleProvenance.locationLabel`)
+`GetPrayerContextUseCase.matchesSetup`'s cache-validity key. `AndroidPrayerLocationProvider`'s
+`DEVICE_LOCATION_LABEL = "Current location"` therefore could not simply be swapped for a resource
+lookup at the source — that would have silently invalidated every existing device-location user's cache
+on upgrade. Instead `PrayerScheduleProvenance` gained a required `locationSource: PrayerLocationSource`
+discriminator (the `CITY`/`DEVICE` enum already existed); the stored `"Current location"` string is
+untouched and still doubles as the cache key exactly as before (`matchesSetup` was not touched); only
+the *displayed* text now resolves through `sidrString` at render time, in three sites that all shared
+the same latent leak — Home (`homeLocationLabelText`), the prayer detail screen
+(`PrayerDetailScreen.locationLabelText`), and a third, previously unnoticed instance in
+`PrayerSettingsScreen.kt`'s "Current: %1$s (%2$s)" line, which had already translated the parenthetical
+source annotation via the pre-existing `locationSourceLabel()` but was still splicing the raw English
+label in front of it. The DTO (`data/prayer`'s `ProvenanceDto`) defaults the new field to `CITY` so a
+schedule cached before this field existed still decodes — proven by a new round-trip test seeding a
+hand-crafted pre-migration JSON payload — rather than treating an entire pre-upgrade cache generation as
+corrupt; the worst case for an existing `DEVICE`-sourced cache entry is one cosmetic English render that
+self-heals on the very next `VERIFIED_CURRENT` recompute, since cache *validity* was never gated on this
+field.
+
+**Barrier 4 — `DomainIdentifierLeakGuardTest` (`app/src/test/…/i18n/`).** I18N-1's three barriers
+(`HardcodedUiTextGuardTest`, `StringSeamGuardTest`, `LocaleCompletenessGuardTest`) all assume the
+offending value is a missing/hardcoded string literal; none of them could structurally have caught Fix
+1's bug, where a real, translated resource existed and was simply never called. The new barrier scans
+the same spec §3.1 module roots (its own independent `scopedRoots` copy + guard-the-guard, same
+convention as `LocaleCompletenessGuardTest`'s independent `modulePrefixes`) for a display-sink
+assignment (`label =`, `contentDescription =`, `name =`, …) whose right-hand side is a **bare**
+`.name` / `.toString()` / `.key` / `<Id>.value` property chain, anchored to start immediately after the
+sink's `=` — not a broader "any occurrence anywhere on the line" scan, which was calibrated against the
+real codebase and found to false-positive heavily on ordinary code (`count.toString()` for plain
+Int-to-text formatting, `it.name == name` equality comparisons). Two exemptions recorded, both
+pre-existing and spec-sanctioned: `SidrActionSafety.kt`'s `SidrRiskChip`/`SidrStatusChip` rendering
+`tone.name.uppercase()` (spec §7.1 locked risk/status vocabulary, the same precedent already recorded
+for `RISK_CONFIRM_LABEL`) and `SettingsScreen.kt`'s `count.toString()` (a plain `Int`, not a domain
+identifier). Proven to fail against the pre-Fix-1 `PrayerSummaryMapper.kt`, pass against the current
+one. Its real target is not Fix 1 (already closed) but the *next* occurrence of the same bug class — the
+KDoc names A1's planned `ToolId`/`ToolTier`/`ToolEffect`/`ActionCategory` vocabulary explicitly, since
+those are exactly this shape of risk if any of them ever reach a UI sink directly.
+
+**Housekeeping folded into this session before the block proper started (Task 0):** a temporary
+`"fr"` probe deliberately left in `LocaleCompletenessGuardTest.mainLocales` to prove a prior fix
+round's guard-the-guard tests actually bite was removed, and an already-implemented-but-uncommitted
+wave (deep-link `Routes.PrayerSettings` section scoping for the detail screen's Method/Madhab/Location
+rows, `PrayerSettingsSection.kt`, plus the two guard-the-guard tests themselves) was committed. Neither
+is I18N-2 substance; recorded here only because it landed in the same session.
+
+**Test deltas (exact, only modules this block actually touched):** `:data:prayer` 37 → 38 (the cache
+round-trip default test); `:feature:launcher` 156 → 161 (+4 `HomeLocationLabelTextTest`, +1
+`LauncherScreenPrayerStripTest`); `:app` 15 → 18 (+3 `DomainIdentifierLeakGuardTest`, on top of Task
+0's +2 guard-the-guard tests already folded into the 15). `:domain` stays at 333 (existing
+`PrayerScheduleProvenance` construction sites updated in place, no test added/removed) — the Kotlin
+compiler enforces every call site via the new required constructor param, so nothing could be missed.
+`:core:android`/`:feature:prayer` untouched (0 new tests; `feature/prayer`'s `locationLabelText` follows
+that module's own established convention of not unit-testing private `@Composable` label resolvers —
+`madhabLabel`/`prayerNameLabel`/`locationSourceLabel` are not tested there either, and that module has
+no Robolectric/Compose-test harness at all, unlike `feature/launcher`). Gate (JDK-17):
+`:domain:test :core:android:testDebugUnitTest :data:prayer:testDebugUnitTest
+:feature:launcher:testDebugUnitTest :feature:prayer:testDebugUnitTest :feature:settings:testDebugUnitTest
+:core:ui:testDebugUnitTest :core:ui:verifyRoborazziDebug :app:testDebugUnitTest testDebugUnitTest
+assembleDebug` BUILD SUCCESSFUL; `core/ui/src/test/screenshots/` untouched (no core/ui edits in this
+block). Root `./gradlew build` remains **red by design** post-I18N-1 (`checkOwnerReviewedLocaleStrings`,
+still zero of 17 `strings_locked.xml` files owner-signed) — not a regression, not this block's to fix;
+new Class B keys landed in that same unreviewed queue at zero incremental owner cost.
+
+**A known, unclosed gap surfaced while writing this block, deliberately not fixed here:**
+`checkOwnerReviewedLocaleStrings` (`app/build.gradle.kts`) checks for the `OWNER-REVIEWED` token's
+*presence* in a locale file, not *coverage* of that file's actual Class B keys. Once the owner signs a
+file, a later commit can add a new Class B key to it without the gate re-triggering — the file already
+carries the marker, so an unreviewed addition ships gate-green. Harmless today (zero files are signed
+yet), but will bite the first time a signed file gains a new locked key. Left as a named risk for
+whoever closes the owner sign-off, not addressed in this block (out of I18N-2's stated scope, and
+fixing it properly needs a content-hash-keyed marker, not a fix-round-sized change).
+
+**Not in scope, deliberately:** `CalendarSuggestionProvider`/`LocationSuggestionProvider`'s fixed
+`Suggestion.label`s stay English (near-zero real reach — permission-gated AND `aiSuggestionsEnabled`-gated
+— and typing them touches `domain.suggestions.Suggestion`/`CachedSuggestion`/the DataStore cache/
+`LauncherViewModel`, disproportionate to their reach); `RISK_CONFIRM_LABEL` stays the already-recorded
+owner-approved exemption (spec §7.1, needs the full `PendingRoutedAction`/`ConfirmActionCard` typed-value
+refactor to extract, out of scope for this block); voice recognition still follows the device language,
+not the app language (spec §3.6, deliberate, unrelated to this block). Commits:
+`fix(i18n-2): Home prayer names go through the string seam, not the raw enum`,
+`fix(i18n-2): device-location label translates without invalidating the prayer cache`,
+`test(i18n-2): fourth barrier - raw domain identifier assigned to a display sink`.

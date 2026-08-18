@@ -2,9 +2,36 @@
 
 > **Authoritative status lives in `CLAUDE.md` (session digest), `ai-context/decisions.md` (ADR log),
 > and the per-phase plans.** This file is a short pointer/snapshot only — if it disagrees with those,
-> they win. Last re-based: 2026-08-16 (I18N-1 Multilingual UI CLOSED — device-verified; prior re-base
-> 2026-08-10 DS-10 Assistant Migration CLOSED — device-accepted; same-day DS-7 Memory Surfaces + S2-2
-> Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer Correctness COMPLETE).
+> they win. Last re-based: 2026-08-19 (I18N-2 residual localization + barrier 4 CLOSED; prior re-base
+> 2026-08-16 I18N-1 Multilingual UI CLOSED — device-verified; prior re-base 2026-08-10 DS-10 Assistant
+> Migration CLOSED — device-accepted; same-day DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED;
+> prior re-base 2026-08-08 DS-6B Prayer Correctness COMPLETE).
+
+## I18N-2 residual localization + barrier 4 — CLOSED (2026-08-19)
+
+Closes two of I18N-1's own device-smoke residue items and installs a fourth regression barrier the
+first three could not have caught. Fix 1: Home's per-cell prayer `contentDescription` was reading the
+raw `PrayerName` enum literal (`name = name.name`) instead of resolving through `sidrString` — invisible
+in English (the locked resource happens to equal the enum name), audible as literal English in `ru`/`tr`
+TalkBack. Fix 2: `AndroidPrayerLocationProvider`'s `"Current location"` label rendered untranslated on
+Home, the prayer detail screen, and (a third, previously unnoticed instance) the prayer settings screen
+— fixed by adding a `PrayerLocationSource` discriminator to `PrayerScheduleProvenance` and resolving the
+display text at render time, while the **stored** value (which doubles as
+`GetPrayerContextUseCase.matchesSetup`'s cache-validity key) stays byte-identical, so no cache
+invalidation. Barrier 4, `DomainIdentifierLeakGuardTest`, catches a raw `.name`/`.toString()`/`.key`/
+`<Id>.value` property chain assigned directly to a display sink — the class of bug I18N-1's three
+barriers structurally could not detect (a real, translated resource existed and was simply never
+called). Proven regression-catching both ways: the fixed tests were run red against the reverted code,
+and the new barrier was run red against the reverted `PrayerSummaryMapper.kt`, before both were restored
+green. Test deltas: `:data:prayer` 37→38, `:feature:launcher` 156→161, `:app` 15→18 (on top of Task 0's
++2 guard-the-guard tests already folded in); `:domain`/`:core:android`/`:feature:prayer` untouched by
+count (existing call sites updated in place, compiler-enforced). Gate green (JDK-17), goldens untouched.
+Deliberately out of scope: `CalendarSuggestionProvider`/`LocationSuggestionProvider`'s fixed labels
+(near-zero real reach) and `RISK_CONFIRM_LABEL` (already-recorded owner-approved locked-vocabulary
+exemption) — both remain routed to a future I18N pass. A named, unclosed gap surfaced but not fixed
+here: `checkOwnerReviewedLocaleStrings` checks the `OWNER-REVIEWED` marker's *presence*, not *coverage*
+— a signed file can silently gain an unreviewed key later. ADR "2026-08-19 — I18N-2 residual
+localization + barrier 4" in `decisions.md`.
 
 ## I18N-1 Multilingual UI — CLOSED (2026-08-16), device-verified
 

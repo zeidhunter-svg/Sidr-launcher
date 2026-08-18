@@ -1,5 +1,40 @@
 # CLAUDE.md — Sidr Launcher
 
+**I18N-2 residual localization + barrier 4 — CLOSED 2026-08-19, gate green.** Closes two of I18N-1's
+own device-smoke residue items and installs a fourth regression barrier the first three structurally
+could not have caught. **Fix 1:** `PrayerSummaryMapper.kt` built each Home prayer cell with
+`name = name.name` — the raw `PrayerName` enum literal — which rode verbatim into
+`SidrPrayerSummary`'s per-cell TalkBack `contentDescription`; invisible in English (the locked resource
+happens to equal the enum name, which is exactly why every I18N-1 barrier missed it), audible as literal
+English in `ru`/`tr`. Now a typed `HomePrayerTimeUi(name: PrayerName, …)` resolved at render time via a
+new `prayerNameLabel()`, mirroring `feature/prayer`'s already-correct pattern; 5 new Class B locked keys
+copied verbatim from `feature/prayer`. **Fix 2:** `AndroidPrayerLocationProvider`'s
+`DEVICE_LOCATION_LABEL = "Current location"` rendered untranslated on Home, the prayer detail screen,
+and (a third, previously unnoticed site) the prayer settings screen. `PrayerLocation.label` doubles as
+display text AND `GetPrayerContextUseCase.matchesSetup`'s cache-validity key, so the fix could not just
+swap the source string — `PrayerScheduleProvenance` gained a required `locationSource:
+PrayerLocationSource` discriminator instead; the **stored** identity stays byte-identical (no cache
+invalidation, `matchesSetup` untouched), only the *displayed* text now resolves through `sidrString`.
+The DTO layer (`data/prayer`'s `ProvenanceDto`) defaults the new field to `CITY` so schedules cached
+before this field existed still decode (proven by a round-trip test seeding hand-crafted pre-migration
+JSON) rather than treating a whole cache generation as corrupt. **Barrier 4:**
+`DomainIdentifierLeakGuardTest` (`app/src/test/…/i18n/`) scans the same spec §3.1 module roots for a
+display-sink assignment whose right-hand side is a **bare** `.name`/`.toString()`/`.key`/`<Id>.value`
+property chain, anchored immediately after the sink's `=` (calibrated against the real codebase to
+avoid false-positiving on `count.toString()` number formatting or `it.name == name` comparisons); two
+exemptions recorded (`SidrActionSafety.kt`'s spec §7.1 locked risk/status vocabulary, same precedent as
+`RISK_CONFIRM_LABEL`; `SettingsScreen.kt`'s `count.toString()`, a plain `Int`). Both fixes and the new
+barrier were proven regression-catching by reverting the code and confirming red, then restoring green.
+**Gate (JDK-17):** `:data:prayer` 37→38, `:feature:launcher` 156→161, `:app` 15→18 (`:domain`/
+`:core:android`/`:feature:prayer` untouched by count — existing call sites updated in place,
+compiler-enforced via the new required constructor param); full module set + root `testDebugUnitTest` +
+`assembleDebug` SUCCESSFUL; goldens untouched (no `core/ui` edits). **Deliberately out of scope:**
+`CalendarSuggestionProvider`/`LocationSuggestionProvider` labels (near-zero real reach) and
+`RISK_CONFIRM_LABEL` (already-recorded owner-approved exemption) stay routed to a future I18N pass.
+**Known gap, not fixed here:** `checkOwnerReviewedLocaleStrings` checks the `OWNER-REVIEWED` marker's
+*presence*, not *coverage* — a signed file can silently gain an unreviewed key later. ADR
+"2026-08-19 — I18N-2 residual localization + barrier 4" in decisions.md.
+
 **I18N-1 Multilingual UI — CLOSED 2026-08-16, gate green, device-verified.** Ships `en`/`ru`/`tr` across
 every migrated production screen (Home, App Drawer, Settings + Memory/Learned-Choices/Aliases/AI-provider
 sub-screens, Assistant + its provider screen, Prayer setup/detail, Permission education) behind one
@@ -42,12 +77,10 @@ the system per-app-language picker
 cold-start comparison (blocked by the new release gate itself pending owner sign-off). **Known gaps
 routed to I18N-2:** `CalendarSuggestionProvider`/`LocationSuggestionProvider` labels and
 `RISK_CONFIRM_LABEL` stay English (data-layer/locked-vocabulary, out of §3.1 scope); voice recognition
-still follows the device language, not the app language (spec §3.6, deliberate); **two new items found
-during this pass's own device smoke** — `AndroidPrayerLocationProvider`'s hardcoded `"Current location"`
-label (`core/android`, outside §3.1's scope list) and a real correctness bug where Home's per-cell prayer
-`contentDescription` announces the untranslated enum name (`PrayerSummaryMapper.kt:64` passes
-`name.name` where `PrayerDetailScreen.kt` correctly resolves through `sidrString`) — both documented, not
-fixed, since Task 16 is verification-and-docs only. ADR "2026-08-16 — I18N-1 Multilingual UI complete" in
+still follows the device language, not the app language (spec §3.6, deliberate). *(The other two items
+originally listed here — `AndroidPrayerLocationProvider`'s hardcoded `"Current location"` label and
+Home's per-cell prayer `contentDescription` reading the untranslated enum name — were closed by I18N-2,
+2026-08-19; see the entry above.)* ADR "2026-08-16 — I18N-1 Multilingual UI complete" in
 decisions.md.
 
 **DS-11 pre-gate UI refinement — CODE-COMPLETE 2026-08-10, gate green, DEVICE-VERIFIED IN PART.**
@@ -336,11 +369,15 @@ The offline launcher core (home, app grid, app launch) must work fully without A
 
 ## Current goal (active work)
 
-**NOW (2026-08-16): I18N-1 Multilingual UI is CLOSED (see the digest entry above). The DS v1.1 release
-gate is no longer simply "open" — `checkOwnerReviewedLocaleStrings` (Task 15) now blocks
-`:app:assembleRelease`/`:app:assemble`/`:app:bundleRelease`/root `./gradlew build` until the owner marks
-all 10 locale `strings_locked.xml` files `OWNER-REVIEWED`. Next: that owner sign-off, and/or I18N-2
-(routed known gaps), and/or A1 Tool & Capability (architecture).**
+**NOW (2026-08-19): I18N-2 residual localization + barrier 4 is CLOSED (see the digest entry above).**
+The DS v1.1 release gate is still not simply "open" — `checkOwnerReviewedLocaleStrings` (Task 15) still
+blocks `:app:assembleRelease`/`:app:assemble`/`:app:bundleRelease`/root `./gradlew build` until the
+owner marks all 10 locale `strings_locked.xml` files `OWNER-REVIEWED`; I18N-2 added new Class B keys to
+that same unreviewed queue at zero incremental owner cost. Next: that owner sign-off, and/or A1 Tool &
+Capability (architecture) — a pre-implementation review of its spec/plan flagged an evolve-in-place vs.
+parallel-vocabulary fork the owner still needs to decide before that block starts.
+
+**Prior sync (2026-08-16): I18N-1 Multilingual UI CLOSED (see the digest entry below).**
 
 **Prior sync (2026-08-10): Stage 2 — AI Framework; blocks S2-1 "Learned Resolutions" and S2-2 "Explicit
 Aliases" are both CLOSED and device-accepted. The design track is finished too — DS-10 Assistant
@@ -920,7 +957,7 @@ Phase 3 result, Blocks A → D:
 | `AssistantPresentation` (DS-5 error copy + action choice + cloud-disclosure text + provider provenance, pure) *(DS-10 ✅)* | `feature/assistant` |
 | `provideExecuteActionUseCase` (`IntentProvidesModule`) *(AIL-5 ✅)* | `app` |
 | `sidrString`/`sidrPluralString` + `SidrStringOverlay` (I18N-1 string seam, entry-name-keyed overlay) *(I18N-1 ✅)* | `core/ui` |
-| `locales_config.xml` + in-app language switcher (`AppCompatDelegate` per-app language) + i18n guard tests (`StringSeamGuardTest`/`LocaleCompletenessGuardTest`/`HardcodedUiTextGuardTest`) *(I18N-1 ✅)* | `app` |
+| `locales_config.xml` + in-app language switcher (`AppCompatDelegate` per-app language) + i18n guard tests (`StringSeamGuardTest`/`LocaleCompletenessGuardTest`/`HardcodedUiTextGuardTest`/`DomainIdentifierLeakGuardTest`) *(I18N-1 ✅, `DomainIdentifierLeakGuardTest` I18N-2 ✅)* | `app` |
 | ONNX NLU / embeddings | `data/ai-local` |
 | `ModelDownloader` port + `ModelFilePresence` port *(Block Q ✅, rework)* | `domain` |
 | `ModelStore`/`Sha256Verifier`/`ModelProvisioner`/`ModelManager` + `ModelDownloadScheduler` port + `ModelDownloadConfig` *(Block Q ✅)* | `data/ai-local` |

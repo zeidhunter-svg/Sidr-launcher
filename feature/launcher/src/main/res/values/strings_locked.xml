@@ -38,6 +38,16 @@
     verbatim from the pre-Task-13 literal. The Turkish/Russian values are a DRAFT translation (standard
     renderings used in Russian/Turkish Islamic sources) awaiting owner sign-off - mistranslating the
     Shahada is a real risk this task will not take silently.
+
+  I18N-2 addition (2026-08-19): prayer-name labels (5, matching PrayerSummaryMapper.kt's
+  FIVE_PRAYERS_ORDER). Closes a real TalkBack bug: the Home strip's cell contentDescription used to
+  read the raw Kotlin enum name (name.name -> "FAJR"/"DHUHR"/...) instead of resolving through
+  sidrString, which was invisible in English (this file's own English value happens to equal the enum
+  name) but announced literal English inside ru/tr. Values copied verbatim from feature/prayer's
+  identical prayer_name_* keys (Task 7) for terminology consistency across both screens - same
+  duplication rationale as the calculation-method names above (no feature -> feature edge). No
+  prayer_name_sunrise here: FIVE_PRAYERS_ORDER never includes SUNRISE and Home has no sunrise row
+  (PrayerSummaryMapper.kt's prayerNameLabel() documents the same exclusion).
 -->
 <resources>
     <!-- Class A: locked, never translated -->
@@ -64,4 +74,11 @@
     <!-- Class B: the Shahada (LauncherScreen.kt HomeAnchorSlot, DS-4 sacred anchor) -->
     <string name="launcher_shahada_line1">There is no deity except Allah</string>
     <string name="launcher_shahada_line2">Muhammad is the messenger of Allah</string>
+
+    <!-- Class B: prayer-name labels (I18N-2, PrayerSummaryMapper.kt's FIVE_PRAYERS_ORDER) -->
+    <string name="launcher_prayer_name_fajr">FAJR</string>
+    <string name="launcher_prayer_name_dhuhr">DHUHR</string>
+    <string name="launcher_prayer_name_asr">ASR</string>
+    <string name="launcher_prayer_name_maghrib">MAGHRIB</string>
+    <string name="launcher_prayer_name_isha">ISHA</string>
 </resources>

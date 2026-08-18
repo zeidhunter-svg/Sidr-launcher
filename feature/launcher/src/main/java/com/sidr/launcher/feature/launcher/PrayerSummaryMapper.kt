@@ -3,7 +3,6 @@ package com.sidr.launcher.feature.launcher
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import com.sidr.launcher.core.ui.component.SidrPrayerSummaryStatus
-import com.sidr.launcher.core.ui.component.SidrPrayerTimeUi
 import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.domain.prayer.CalculationMethodId
 import com.sidr.launcher.domain.prayer.Freshness
@@ -27,18 +26,32 @@ private val FIVE_PRAYERS_ORDER =
  * What Home's [com.sidr.launcher.core.ui.component.SidrPrayerSummary] strip may truthfully render
  * (DS-6B Task 9). Kept feature-local so `core/ui` stays domain-free.
  *
- * I18N-1 Task 13: [provenance] carries the typed method/madhab identifiers rather than a baked
- * English sentence (the `feedbackText`/`FeedbackText` pattern from `LauncherPresentation.kt`) —
- * [sidrString] needs `@Composable` context, which this mapper's plain (non-Composable) functions
- * deliberately do not have, so they stay unit-testable from a plain JVM test
- * ([PrayerSummaryMapperTest]) with no Robolectric/Compose host. Resolution to a localized string
- * happens only at render time, in [prayerProvenanceText].
+ * I18N-1 Task 13 / I18N-2: [provenance] and each [prayers] entry's name carry typed identifiers
+ * rather than a baked English sentence (the `feedbackText`/`FeedbackText` pattern from
+ * `LauncherPresentation.kt`) — [sidrString] needs `@Composable` context, which this mapper's plain
+ * (non-Composable) functions deliberately do not have, so they stay unit-testable from a plain JVM
+ * test ([PrayerSummaryMapperTest]) with no Robolectric/Compose host. Resolution to a localized
+ * string happens only at render time, in [prayerProvenanceText] / [prayerNameLabel].
  */
 internal data class HomePrayerSummaryUi(
-    val prayers: List<SidrPrayerTimeUi>,
+    val prayers: List<HomePrayerTimeUi>,
     val status: SidrPrayerSummaryStatus,
     val provenance: PrayerProvenanceUi,
     val locationLabel: String?,
+)
+
+/**
+ * One Home prayer cell, pre-render. [name] is the untranslated domain identifier — I18N-2: this used
+ * to be `SidrPrayerTimeUi(name = name.name, ...)` built directly here, which put the raw enum name
+ * (`"FAJR"`) into every cell's TalkBack `contentDescription`. Invisible in English (the locked
+ * resource value happens to equal the enum name) but audible as literal English in `ru`/`tr`. Kept
+ * typed here for the same JVM-testability reason as [PrayerProvenanceUi]; [prayerNameLabel] resolves
+ * it at render time, mirroring `feature/prayer`'s `PrayerDetailScreen.toPrayerTimeUiList`.
+ */
+internal data class HomePrayerTimeUi(
+    val name: PrayerName,
+    val time: String,
+    val isNext: Boolean,
 )
 
 /** Untranslated identifiers behind the Home provenance line — see [HomePrayerSummaryUi.provenance]. */
@@ -60,8 +73,8 @@ internal fun PrayerContext.toHomePrayerSummaryUi(): HomePrayerSummaryUi? {
     val zone = ZoneId.of(available.locationTzId)
     val prayers = FIVE_PRAYERS_ORDER.map { name ->
         val instant = available.schedule.instants.first { it.name == name }
-        SidrPrayerTimeUi(
-            name = name.name,
+        HomePrayerTimeUi(
+            name = name,
             time = formatTime(instant.epochMillis, zone),
             isNext = available.nextPrayer == name,
         )
@@ -139,6 +152,24 @@ private fun methodLabel(methodId: CalculationMethodId): String =
 private fun madhabLabel(madhab: Madhab): String = when (madhab) {
     Madhab.STANDARD -> sidrString(R.string.launcher_prayer_madhab_standard)
     Madhab.HANAFI -> sidrString(R.string.launcher_prayer_madhab_hanafi)
+}
+
+/**
+ * Resolves [HomePrayerTimeUi.name] to the localized label spoken/shown for a prayer cell (I18N-2).
+ * Exhaustive by construction — a real `when` over [PrayerName], not a lookup table keyed by a raw
+ * string like [methodLabelResId] needs, so a future addition to the enum fails the build here rather
+ * than silently falling through. [PrayerName.SUNRISE] is deliberately unreachable: Home's
+ * [FIVE_PRAYERS_ORDER] never includes it (sunrise is a detail-screen-only row, spec §3), so it has no
+ * locked resource in this module — mirrors that list's own comment, not an omission.
+ */
+@Composable
+internal fun prayerNameLabel(name: PrayerName): String = when (name) {
+    PrayerName.FAJR -> sidrString(R.string.launcher_prayer_name_fajr)
+    PrayerName.DHUHR -> sidrString(R.string.launcher_prayer_name_dhuhr)
+    PrayerName.ASR -> sidrString(R.string.launcher_prayer_name_asr)
+    PrayerName.MAGHRIB -> sidrString(R.string.launcher_prayer_name_maghrib)
+    PrayerName.ISHA -> sidrString(R.string.launcher_prayer_name_isha)
+    PrayerName.SUNRISE -> error("SUNRISE is never a member of FIVE_PRAYERS_ORDER; Home has no sunrise row")
 }
 
 /** `HH:mm` (24h) in [zone] — always the LOCATION zone (spec §6), never the device zone. */

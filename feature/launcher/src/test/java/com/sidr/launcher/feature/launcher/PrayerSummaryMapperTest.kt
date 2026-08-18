@@ -100,11 +100,11 @@ class PrayerSummaryMapperTest {
         val timesByName = ui.prayers.associate { it.name to it.time }
         assertEquals(
             mapOf(
-                "FAJR" to "03:30",
-                "DHUHR" to "11:40",
-                "ASR" to "15:10",
-                "MAGHRIB" to "18:20",
-                "ISHA" to "19:45",
+                PrayerName.FAJR to "03:30",
+                PrayerName.DHUHR to "11:40",
+                PrayerName.ASR to "15:10",
+                PrayerName.MAGHRIB to "18:20",
+                PrayerName.ISHA to "19:45",
             ),
             timesByName,
         )
@@ -117,7 +117,7 @@ class PrayerSummaryMapperTest {
         checkNotNull(ui)
         val nextCells = ui.prayers.filter { it.isNext }
         assertEquals(1, nextCells.size)
-        assertEquals("MAGHRIB", nextCells.single().name)
+        assertEquals(PrayerName.MAGHRIB, nextCells.single().name)
     }
 
     @Test

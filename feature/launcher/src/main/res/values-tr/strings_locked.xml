@@ -8,6 +8,10 @@
   Calculation-method names reuse feature/prayer's existing Turkish Diyanet-terminology draft
   translation verbatim (Task 7) for terminology consistency across both screens - both awaiting the
   same owner sign-off. Madhab labels and the Shahada are a DRAFT translation awaiting owner sign-off.
+
+  I18N-2 addition (2026-08-19): prayer-name labels reuse feature/prayer's existing Turkish
+  Diyanet-terminology prayer_name_* values verbatim (Task 7) for terminology consistency across both
+  screens - awaiting the same owner sign-off.
 -->
 <resources>
     <string name="launcher_prayer_method_mwl">Dünya İslam Birliği</string>
@@ -27,4 +31,10 @@
 
     <string name="launcher_shahada_line1">Allah\'tan başka ilah yoktur</string>
     <string name="launcher_shahada_line2">Muhammed Allah\'ın elçisidir</string>
+
+    <string name="launcher_prayer_name_fajr">İmsak</string>
+    <string name="launcher_prayer_name_dhuhr">Öğle</string>
+    <string name="launcher_prayer_name_asr">İkindi</string>
+    <string name="launcher_prayer_name_maghrib">Akşam</string>
+    <string name="launcher_prayer_name_isha">Yatsı</string>
 </resources>

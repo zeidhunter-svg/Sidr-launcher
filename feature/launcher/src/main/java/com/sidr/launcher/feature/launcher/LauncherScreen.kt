@@ -66,6 +66,7 @@ import com.sidr.launcher.core.ui.component.EmptyState
 import com.sidr.launcher.core.ui.component.ErrorState
 import com.sidr.launcher.core.ui.component.SidrSectionHeader
 import com.sidr.launcher.core.ui.component.SidrPrayerSummary
+import com.sidr.launcher.core.ui.component.SidrPrayerTimeUi
 import com.sidr.launcher.core.ui.component.SidrRouteChip
 import com.sidr.launcher.core.ui.component.SidrScaffold
 import com.sidr.launcher.core.ui.component.SidrUniversalInput
@@ -373,7 +374,9 @@ private fun HomePrayerStrip(
 ) {
     if (!visible || summary == null) return
     SidrPrayerSummary(
-        prayers = summary.prayers,
+        prayers = summary.prayers.map {
+            SidrPrayerTimeUi(name = prayerNameLabel(it.name), time = it.time, isNext = it.isNext)
+        },
         status = summary.status,
         provenance = prayerProvenanceText(summary.provenance),
         modifier = modifier,

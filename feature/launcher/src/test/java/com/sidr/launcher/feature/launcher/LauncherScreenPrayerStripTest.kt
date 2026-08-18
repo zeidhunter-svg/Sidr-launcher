@@ -199,6 +199,45 @@ class LauncherScreenPrayerStripTest {
         compose.onNodeWithContentDescription("prayer times", substring = true).assertIsDisplayed()
     }
 
+    /**
+     * I18N-2 regression test. `PrayerSummaryMapper.kt` used to build each cell's `SidrPrayerTimeUi`
+     * with `name.name` — the raw Kotlin enum literal (`"FAJR"`) — which then rides verbatim into
+     * `PrayerCell`'s TalkBack `contentDescription` regardless of app locale. Invisible in English
+     * (the locked resource value happens to equal the enum name); under `ru` the correct label is
+     * "Фаджр" ("ФАДЖР" once `PrayerCell` uppercases it for the spoken form). This test would have
+     * failed against the old `name.name` mapping.
+     */
+    @Test
+    @Config(qualifiers = "ru")
+    fun `prayer cell content description speaks the localized name, not the raw enum`() {
+        val prefs = FakePrayerPreferencesRepository(
+            initial = PrayerSetup(CalculationMethodId("MWL"), Madhab.STANDARD, istanbulPrayerLocation()),
+        )
+        val calculator = FakePrayerCalculator().apply {
+            resultToReturn = OperationResult.Success(istanbulPrayerSchedule())
+        }
+        val vm = buildViewModel(
+            getPrayerContext = GetPrayerContextUseCase(
+                prefs,
+                FakePrayerScheduleCache(),
+                calculator,
+                Clock.fixed(Instant.parse("2026-07-13T10:00:00Z"), ZoneId.of("Europe/Istanbul")),
+            ),
+        )
+
+        compose.setContent {
+            SidrTheme(darkTheme = true) {
+                LauncherScreen(viewModel = vm)
+            }
+        }
+        compose.waitForIdle()
+
+        // Fajr (04:30) is not the "next" cell at the fixed clock (13:00 local, Dhuhr 13:10 is next),
+        // so it renders through PrayerCell's plain (non-marker) branch.
+        compose.onNodeWithContentDescription("ФАДЖР 04:30").assertIsDisplayed()
+        compose.onNodeWithContentDescription("FAJR", substring = true).assertDoesNotExist()
+    }
+
     private fun istanbulPrayerLocation() = PrayerLocation(
         label = "Istanbul",
         lat2dp = 41.01,

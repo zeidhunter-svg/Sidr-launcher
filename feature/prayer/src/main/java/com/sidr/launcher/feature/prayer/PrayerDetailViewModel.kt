@@ -57,8 +57,18 @@ class PrayerDetailViewModel @Inject constructor(
             initialValue = PrayerDetailUiState(),
         )
 
-    fun openSettings() {
-        _navigationEvents.trySend(NavigationEvent.NavigateTo(Routes.PrayerSettings.ROUTE))
+    /**
+     * Opens prayer setup. [section] scopes the destination to the one setting the user tapped;
+     * `null` (the unconfigured-state row) opens the whole setup page.
+     *
+     * All three setup rows used to call this with no argument, so Method, Madhab and Location every
+     * time pushed the same `prayer_settings` route and landed at the top of the page — under the
+     * 11-row calculation-method list, which fills the viewport. Two of the three rows therefore
+     * looked like they opened the method picker.
+     */
+    fun openSettings(section: PrayerSettingsSection?) {
+        val route = section?.route() ?: Routes.PrayerSettings.ROUTE
+        _navigationEvents.trySend(NavigationEvent.NavigateTo(route))
     }
 
     fun navigateBack() {

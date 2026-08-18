@@ -1,5 +1,7 @@
 package com.sidr.launcher.feature.prayer
 
+import androidx.lifecycle.SavedStateHandle
+import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.core.testing.FakeCityIndex
 import com.sidr.launcher.core.testing.FakePrayerCalculator
 import com.sidr.launcher.core.testing.FakePrayerLocationProvider
@@ -65,7 +67,10 @@ class PrayerSettingsViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun buildViewModel(): PrayerSettingsViewModel = PrayerSettingsViewModel(
+    private fun buildViewModel(section: String? = null): PrayerSettingsViewModel = PrayerSettingsViewModel(
+        savedStateHandle = SavedStateHandle(
+            section?.let { mapOf(Routes.PrayerSettings.ARG_SECTION to it) } ?: emptyMap(),
+        ),
         preferences = preferences,
         cityIndex = cityIndex,
         getPrayerContext = GetPrayerContextUseCase(
@@ -264,5 +269,40 @@ class PrayerSettingsViewModelTest {
 
         assertEquals(listOf("istan"), cityIndex.receivedQueries)
         assertEquals(listOf(istanbul()), vm.uiState.value.citySearchResults)
+    }
+
+    // ── section targeting (deep link from the detail screen's Method/Madhab/Location rows) ─────
+
+    @Test
+    fun `an absent section arg keeps the whole setup page`() = runTest(dispatcher) {
+        val vm = buildViewModel(section = null)
+
+        assertNull(vm.uiState.value.section)
+    }
+
+    @Test
+    fun `each section arg is exposed verbatim so the screen renders only that section`() =
+        runTest(dispatcher) {
+            PrayerSettingsSection.entries.forEach { expected ->
+                assertEquals(expected, buildViewModel(section = expected.name).uiState.value.section)
+            }
+        }
+
+    @Test
+    fun `an unknown section arg degrades to the whole setup page`() = runTest(dispatcher) {
+        val vm = buildViewModel(section = "NOT_A_SECTION")
+
+        assertNull(vm.uiState.value.section)
+    }
+
+    @Test
+    fun `section targeting does not change what a selection persists`() = runTest(dispatcher) {
+        val vm = buildViewModel(section = PrayerSettingsSection.MADHAB.name)
+
+        vm.onMethodSelected(CalculationMethodId("MWL"))
+        vm.onMadhabSelected(Madhab.HANAFI)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(PrayerSetup(CalculationMethodId("MWL"), Madhab.HANAFI, null), currentSetup())
     }
 }

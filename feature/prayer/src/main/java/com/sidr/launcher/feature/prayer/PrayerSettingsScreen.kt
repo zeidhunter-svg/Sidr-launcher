@@ -118,72 +118,33 @@ private fun PrayerSettingsContent(
                 .padding(vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // ── Method (mandatory, no default) ─────────────────────────────────
-            SidrSectionHeader(text = sidrString(R.string.prayer_settings_method_section_header))
-            uiState.methodOptions.forEach { method ->
-                SidrChoiceRow(
-                    title = methodLabel(method.id),
-                    selected = uiState.selectedMethod == method.id,
-                    onClick = { onMethodSelected(method.id) },
+            // `section == null` is the whole setup page (Settings entry point + first run); a
+            // non-null section is a deep link from the detail screen's Method/Madhab/Location rows
+            // and renders ONLY that section, so each of those rows lands somewhere visibly its own.
+            val section = uiState.section
+
+            if (section == null || section == PrayerSettingsSection.METHOD) {
+                MethodSection(
+                    uiState = uiState,
+                    onMethodSelected = onMethodSelected,
                 )
             }
 
-            // ── Madhab (mandatory, no default) ─────────────────────────────────
-            SidrSectionHeader(text = sidrString(R.string.prayer_settings_madhab_section_header))
-            uiState.madhabOptions.forEach { madhab ->
-                SidrChoiceRow(
-                    title = madhabLabel(madhab),
-                    selected = uiState.selectedMadhab == madhab,
-                    onClick = { onMadhabSelected(madhab) },
+            if (section == null || section == PrayerSettingsSection.MADHAB) {
+                MadhabSection(
+                    uiState = uiState,
+                    onMadhabSelected = onMadhabSelected,
                 )
             }
 
-            // ── Location (optional; manual city path needs zero permission) ────
-            SidrSectionHeader(text = sidrString(R.string.prayer_settings_location_section_header))
-            SidrSearchField(
-                value = uiState.citySearchQuery,
-                onValueChange = onCityQueryChanged,
-                onSubmit = {},
-                placeholder = sidrString(R.string.prayer_settings_city_search_placeholder),
-            )
-            uiState.citySearchResults.forEach { city ->
-                SidrNavigationRow(
-                    title = city.label,
-                    description = city.tzId,
-                    onClick = { onCitySelected(city) },
+            if (section == null || section == PrayerSettingsSection.LOCATION) {
+                LocationSection(
+                    uiState = uiState,
+                    onCityQueryChanged = onCityQueryChanged,
+                    onCitySelected = onCitySelected,
+                    onUseDeviceLocation = onUseDeviceLocation,
                 )
             }
-            uiState.location?.let { location ->
-                SidrText(
-                    text = sidrString(
-                        R.string.prayer_settings_current_location,
-                        location.label,
-                        locationSourceLabel(location.source),
-                    ),
-                    role = SidrTextRole.PROVENANCE,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                )
-            }
-            SidrPrimaryButton(
-                text = if (uiState.isResolvingDeviceLocation) {
-                    sidrString(R.string.prayer_settings_locating_button)
-                } else {
-                    sidrString(R.string.prayer_settings_use_device_location_button)
-                },
-                onClick = onUseDeviceLocation,
-                enabled = !uiState.isResolvingDeviceLocation,
-                loading = uiState.isResolvingDeviceLocation,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-
-            // Local-only, never-sent privacy notice (spec §0.5 / DS-5 SidrPrivacyNotice).
-            SidrPrivacyNotice(
-                title = sidrString(R.string.prayer_settings_privacy_title),
-                body = sidrString(R.string.prayer_settings_privacy_body),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
 
             uiState.statusMessage?.let { message ->
                 SidrText(
@@ -195,29 +156,120 @@ private fun PrayerSettingsContent(
             }
 
             // ── Destructive actions, gated by SidrActionGate ────────────────────
-            if (uiState.location != null || uiState.isConfigured) {
-                SidrSectionHeader(text = sidrString(R.string.prayer_settings_reset_section_header))
-            }
-            if (uiState.location != null) {
-                DestructiveRow(
-                    rowTitle = sidrString(R.string.prayer_settings_clear_location_action),
-                    gateTitle = sidrString(R.string.prayer_settings_clear_location_action),
-                    consequence = sidrString(R.string.prayer_settings_clear_location_consequence),
-                    confirmLabel = sidrString(R.string.prayer_settings_clear_location_action),
-                    onConfirmed = onClearLocation,
-                )
-            }
-            if (uiState.isConfigured) {
-                DestructiveRow(
-                    rowTitle = sidrString(R.string.prayer_settings_clear_setup_action),
-                    gateTitle = sidrString(R.string.prayer_settings_clear_setup_action),
-                    consequence = sidrString(R.string.prayer_settings_clear_setup_consequence),
-                    confirmLabel = sidrString(R.string.prayer_settings_clear_setup_confirm_label),
-                    onConfirmed = onClearSetup,
-                )
+            // Whole-page only: "clear setup" wipes method AND madhab AND location, so it must not
+            // sit inside a view that shows just one of them.
+            if (section == null) {
+                if (uiState.location != null || uiState.isConfigured) {
+                    SidrSectionHeader(text = sidrString(R.string.prayer_settings_reset_section_header))
+                }
+                if (uiState.location != null) {
+                    DestructiveRow(
+                        rowTitle = sidrString(R.string.prayer_settings_clear_location_action),
+                        gateTitle = sidrString(R.string.prayer_settings_clear_location_action),
+                        consequence = sidrString(R.string.prayer_settings_clear_location_consequence),
+                        confirmLabel = sidrString(R.string.prayer_settings_clear_location_action),
+                        onConfirmed = onClearLocation,
+                    )
+                }
+                if (uiState.isConfigured) {
+                    DestructiveRow(
+                        rowTitle = sidrString(R.string.prayer_settings_clear_setup_action),
+                        gateTitle = sidrString(R.string.prayer_settings_clear_setup_action),
+                        consequence = sidrString(R.string.prayer_settings_clear_setup_consequence),
+                        confirmLabel = sidrString(R.string.prayer_settings_clear_setup_confirm_label),
+                        onConfirmed = onClearSetup,
+                    )
+                }
             }
         }
     }
+}
+
+/** Method (mandatory, no default) — spec §0.1. */
+@Composable
+private fun MethodSection(
+    uiState: PrayerSettingsUiState,
+    onMethodSelected: (CalculationMethodId) -> Unit,
+) {
+    SidrSectionHeader(text = sidrString(R.string.prayer_settings_method_section_header))
+    uiState.methodOptions.forEach { method ->
+        SidrChoiceRow(
+            title = methodLabel(method.id),
+            selected = uiState.selectedMethod == method.id,
+            onClick = { onMethodSelected(method.id) },
+        )
+    }
+}
+
+/** Madhab (mandatory, no default) — spec §0.2. */
+@Composable
+private fun MadhabSection(
+    uiState: PrayerSettingsUiState,
+    onMadhabSelected: (Madhab) -> Unit,
+) {
+    SidrSectionHeader(text = sidrString(R.string.prayer_settings_madhab_section_header))
+    uiState.madhabOptions.forEach { madhab ->
+        SidrChoiceRow(
+            title = madhabLabel(madhab),
+            selected = uiState.selectedMadhab == madhab,
+            onClick = { onMadhabSelected(madhab) },
+        )
+    }
+}
+
+/** Location (optional; the manual city path needs zero permission) — spec §0.4/§0.5. */
+@Composable
+private fun LocationSection(
+    uiState: PrayerSettingsUiState,
+    onCityQueryChanged: (String) -> Unit,
+    onCitySelected: (PrayerLocation) -> Unit,
+    onUseDeviceLocation: () -> Unit,
+) {
+    SidrSectionHeader(text = sidrString(R.string.prayer_settings_location_section_header))
+    SidrSearchField(
+        value = uiState.citySearchQuery,
+        onValueChange = onCityQueryChanged,
+        onSubmit = {},
+        placeholder = sidrString(R.string.prayer_settings_city_search_placeholder),
+    )
+    uiState.citySearchResults.forEach { city ->
+        SidrNavigationRow(
+            title = city.label,
+            description = city.tzId,
+            onClick = { onCitySelected(city) },
+        )
+    }
+    uiState.location?.let { location ->
+        SidrText(
+            text = sidrString(
+                R.string.prayer_settings_current_location,
+                location.label,
+                locationSourceLabel(location.source),
+            ),
+            role = SidrTextRole.PROVENANCE,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
+    }
+    SidrPrimaryButton(
+        text = if (uiState.isResolvingDeviceLocation) {
+            sidrString(R.string.prayer_settings_locating_button)
+        } else {
+            sidrString(R.string.prayer_settings_use_device_location_button)
+        },
+        onClick = onUseDeviceLocation,
+        enabled = !uiState.isResolvingDeviceLocation,
+        loading = uiState.isResolvingDeviceLocation,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+
+    // Local-only, never-sent privacy notice (spec §0.5 / DS-5 SidrPrivacyNotice).
+    SidrPrivacyNotice(
+        title = sidrString(R.string.prayer_settings_privacy_title),
+        body = sidrString(R.string.prayer_settings_privacy_body),
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
 }
 
 @Composable

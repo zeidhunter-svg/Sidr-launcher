@@ -52,6 +52,23 @@ sealed class Routes {
      */
     object PrayerSettings : Routes() {
         const val ROUTE = "prayer_settings"
+
+        /**
+         * Optional nav arg naming the ONE setup section to show
+         * (`com.sidr.launcher.feature.prayer.PrayerSettingsSection`). Absent ⇒ the whole setup page,
+         * which is what the Settings entry point ("Prayer times" row) and first-run still use.
+         *
+         * Added because [PrayerDetail]'s Method/Madhab/Location rows all pushed the bare route: they
+         * landed at the top of one long scrolling page whose 11-row calculation-method list fills the
+         * viewport, so every row looked like it opened the method picker.
+         */
+        const val ARG_SECTION = "section"
+
+        /** Full pattern registered in the NavHost; the arg is optional (bare `prayer_settings` matches). */
+        const val ROUTE_WITH_ARG = "$ROUTE?$ARG_SECTION={$ARG_SECTION}"
+
+        /** Build a concrete route for one section, e.g. `routeFor("MADHAB")`. */
+        fun routeFor(section: String): String = "$ROUTE?$ARG_SECTION=$section"
     }
 
     /**

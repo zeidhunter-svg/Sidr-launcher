@@ -359,7 +359,19 @@ fun AppNavHost(
         // Prayer setup + detail (DS-6B Task 8): two pushed, unwrapped destinations (bottom tab bar
         // hides on push, like every other node in this section) reached from Settings ("Prayer
         // times" row) and from the (Task 9) Home strip respectively.
-        composable(Routes.PrayerSettings.ROUTE) {
+        // The optional `section` arg scopes setup to one setting (Method/Madhab/Location) when the
+        // detail screen deep-links into it; the bare `prayer_settings` route still matches and still
+        // opens the whole page, which is what Settings' "Prayer times" row and first run use.
+        composable(
+            route = Routes.PrayerSettings.ROUTE_WITH_ARG,
+            arguments = listOf(
+                navArgument(Routes.PrayerSettings.ARG_SECTION) {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) {
             val vm: PrayerSettingsViewModel = hiltViewModel()
             LaunchedEffect(vm.navigationEvents) {
                 vm.navigationEvents.collect { handleNavigationEvent(navController, it) }

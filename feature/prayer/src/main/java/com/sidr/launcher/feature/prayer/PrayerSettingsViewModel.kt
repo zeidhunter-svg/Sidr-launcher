@@ -1,5 +1,6 @@
 package com.sidr.launcher.feature.prayer
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sidr.launcher.core.common.navigation.NavigationEvent
@@ -33,6 +34,12 @@ import kotlinx.coroutines.launch
  * unconfigured setup is a real, honest state (spec §0.1/§0.2), never guessed.
  */
 data class PrayerSettingsUiState(
+    /**
+     * Which single section to render, or `null` for the whole setup page. Routed in from
+     * [com.sidr.launcher.core.common.navigation.Routes.PrayerSettings.ARG_SECTION] — presentation
+     * scope only; it changes nothing about what a selection validates or persists.
+     */
+    val section: PrayerSettingsSection? = null,
     val methodOptions: List<SupportedPrayerMethod> = SupportedPrayerMethods.ALL,
     val madhabOptions: List<Madhab> = Madhab.values().toList(),
     val selectedMethod: CalculationMethodId? = null,
@@ -73,13 +80,20 @@ data class PrayerSettingsUiState(
  */
 @HiltViewModel
 class PrayerSettingsViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
     private val preferences: PrayerPreferencesRepository,
     private val cityIndex: CityIndex,
     private val getPrayerContext: GetPrayerContextUseCase,
     private val locationProvider: PrayerLocationProvider,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(PrayerSettingsUiState())
+    private val _uiState = MutableStateFlow(
+        PrayerSettingsUiState(
+            section = PrayerSettingsSection.fromNavArg(
+                savedStateHandle.get<String>(Routes.PrayerSettings.ARG_SECTION),
+            ),
+        ),
+    )
     val uiState: StateFlow<PrayerSettingsUiState> = _uiState.asStateFlow()
 
     private val _navigationEvents = Channel<NavigationEvent>(Channel.BUFFERED)
@@ -169,7 +183,10 @@ class PrayerSettingsViewModel @Inject constructor(
     fun clearSetup() {
         viewModelScope.launch {
             preferences.clearSetup()
-            _uiState.value = PrayerSettingsUiState()
+            // Reset every user-owned field, but keep `section`: it is the route's own presentation
+            // scope, not part of the setup being cleared, and dropping it would silently expand a
+            // one-section view into the whole page under the user.
+            _uiState.value = PrayerSettingsUiState(section = _uiState.value.section)
         }
     }
 

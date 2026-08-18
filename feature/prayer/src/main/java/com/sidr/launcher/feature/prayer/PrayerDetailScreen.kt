@@ -63,7 +63,7 @@ fun PrayerDetailScreen(
 private fun PrayerDetailContent(
     uiState: PrayerDetailUiState,
     onBack: () -> Unit,
-    onOpenSettings: () -> Unit,
+    onOpenSettings: (PrayerSettingsSection?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     SidrScaffold(
@@ -95,9 +95,10 @@ private fun PrayerDetailContent(
                         title = sidrString(R.string.prayer_detail_unavailable_title),
                         body = unavailableMessage(context.reason),
                     )
+                    // Nothing is configured yet — the whole setup page is the honest destination.
                     SidrNavigationRow(
                         title = sidrString(R.string.prayer_detail_settings_row_title),
-                        onClick = onOpenSettings,
+                        onClick = { onOpenSettings(null) },
                     )
                 }
 
@@ -131,20 +132,23 @@ private fun PrayerDetailContent(
                     }
 
                     SidrSectionHeader(text = sidrString(R.string.prayer_detail_setup_section_header))
+                    // Each row opens setup scoped to ITS OWN section. They used to share one
+                    // argument-less route, which always landed on the method list at the top of the
+                    // page, so madhab/location were below the fold and every row looked identical.
                     SidrNavigationRow(
                         title = sidrString(R.string.prayer_detail_method_row_title),
                         value = methodLabel(context.provenance.methodId),
-                        onClick = onOpenSettings,
+                        onClick = { onOpenSettings(PrayerSettingsSection.METHOD) },
                     )
                     SidrNavigationRow(
                         title = sidrString(R.string.prayer_detail_madhab_row_title),
                         value = madhabLabel(context.provenance.madhab),
-                        onClick = onOpenSettings,
+                        onClick = { onOpenSettings(PrayerSettingsSection.MADHAB) },
                     )
                     SidrNavigationRow(
                         title = sidrString(R.string.prayer_detail_location_row_title),
                         value = context.provenance.locationLabel,
-                        onClick = onOpenSettings,
+                        onClick = { onOpenSettings(PrayerSettingsSection.LOCATION) },
                     )
                 }
             }

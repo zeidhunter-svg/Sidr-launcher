@@ -7,6 +7,33 @@
 > Migration CLOSED — device-accepted; same-day DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED;
 > prior re-base 2026-08-08 DS-6B Prayer Correctness COMPLETE).
 
+## Agentic track — Этап 1 (strategic ADR package) DONE (2026-08-19)
+
+Docs only, zero code. Governing document:
+[docs/superpowers/plans/2026-08-18-agentic-track-restart.md](../docs/superpowers/plans/2026-08-18-agentic-track-restart.md)
+(owner-approved 2026-08-18). Four ADRs accepted 2026-08-19 in `decisions.md`, plus the edits they
+mandate in `CLAUDE.md`, `docs/architecture.md`, `docs/roadmap.md`, `docs/agentic-os-architecture.md` and
+`docs/adr/ADR-001-hybrid-ai.md`:
+
+1. **Deterministic-first redefined** — understanding belongs to the model, execution to the
+   deterministic layer. FastPath is a latency optimization, not a filter; a FastPath miss no longer
+   answers "Unknown command". Owner fork resolved: `llmRouterEnabled` is **inverted onto a new key**
+   (`localOnlyMode` / `flag_local_only`, default `false`) — a default flip in place would be inert on
+   any install that ever saved a setting (DS-11 precedent). Sequencing consequence recorded: Этап 0.2
+   (FastPath `ru`/`tr`) is a prerequisite of shipping that flag.
+2. **Platform re-baseline 2026** — ONNX NLU closed and OQ#1/#2/#3 closed; **LiteRT / LiteRT-LM**
+   designated as the local-inference runtime (ExecuTorch recorded as the alternative with a switch
+   condition; AICore a separate path); `AppFunctions`/`MCP` named as first-class tool sources;
+   performance budgets rewritten as three tiers (invariant / measured-baseline-with-gate / per-profile).
+3. **Portable core boundary** — "Framework" = a portable agent core with two consumers (Android + PC);
+   Stage 2 abolished as a schedule stage; `:domain` → KMP in Этап 2.2; **`ActionIds` frozen
+   byte-for-byte**, with both of its contracts spelled out (`launch_app` = Room PK; all seven = the
+   outbound wire contract).
+4. **Assistant ⊕ Agent** — one conversational loop, two surfaces (owner fork resolved).
+
+**Next:** Этап 0 (cleanup) → Этап 2 (toolchain + KMP) → Этап 3 (agentic Master Plan + doctrinal matrix)
+→ Этап 4 (A0 thin spike). Этап 0.1 (`OWNER-REVIEWED` in the 10 locale files) is an owner action.
+
 ## I18N-2 residual localization + barrier 4 — CLOSED (2026-08-19)
 
 Closes two of I18N-1's own device-smoke residue items and installs a fourth regression barrier the

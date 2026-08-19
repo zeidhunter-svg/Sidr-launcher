@@ -15,9 +15,22 @@ Sidr Launcher is an AI-first Android launcher for Android 9+ (API 28+) that lets
 - AI-first UX, but Android launcher behavior must remain reliable without AI.
 - Launcher core features, including home screen, app grid, and app launch, must work fully offline.
 - No AI feature should block launcher startup.
-- Fast local intent matching runs before any LLM call.
+- **Understanding belongs to the model; execution belongs to the deterministic layer.**
+  *(ADR "2026-08-19 — ADR 1/4 (agentic restart)"; replaces "fast local intent matching runs before any
+  LLM call".)* FastPath — the deterministic, localized matcher — answers frequent exact commands without
+  a model as a **latency optimization, not a filter on understanding**; the learned-plan cache replays
+  already-understood goal shapes offline; everything else reaches the model planner, and a FastPath miss
+  is no longer grounds to answer "Unknown command". Nothing the model proposes executes, gains rights or
+  leaves the device except through the deterministic gates (`ToolRegistry` → argument validation →
+  preconditions → risk gate / consent → loop bounds → egress allow-list → trace). Router-off / offline /
+  no-key ⇒ FastPath + plan cache + an honest "this needs network", with byte-for-byte parity kept as a
+  test.
 - Cloud AI is the default generative path; local AI is optional and capability-gated.
-- Local ONNX Runtime Mobile is used for NLU, intent classification, and embeddings, not full LLM generation.
+- **Local inference runtime, when a local tier is built, is LiteRT / LiteRT-LM** (ADR "2026-08-19 — ADR
+  2/4"), with `AICore` / Gemini Nano as a separate path on devices that have it. **ONNX Runtime Mobile is
+  closed** — the NLU/classification/embedding stack (`:data:ai-local`, `LayeredIntentMatcher`,
+  `NluConfidenceCalibrator`, `TextEmbedder`) is removed in Этап 0.3 of the agentic restart plan; until
+  that lands the code is present but inert (no model has ever been provisioned).
 - AI features degrade gracefully without connectivity.
 - Streaming responses use one unified contract: `Flow<AiChunk>`.
 - Accessibility features are optional and require explicit user consent.
@@ -40,7 +53,7 @@ Sidr Launcher is an AI-first Android launcher for Android 9+ (API 28+) that lets
 - Coroutines and Flow
 - Ktor client for cloud AI and streaming
 - Kotlin Serialization
-- ONNX Runtime Mobile with NNAPI where available
+- ~~ONNX Runtime Mobile with NNAPI where available~~ — closed 2026-08-19 (ADR 2/4); removed in Этап 0.3
 - Navigation Compose
 - DataStore
 - Room
@@ -48,20 +61,47 @@ Sidr Launcher is an AI-first Android launcher for Android 9+ (API 28+) that lets
 
 ## Performance budgets
 
-These are hard targets. Any feature that cannot meet them must degrade or be disabled on that device profile.
+> **Reworked 2026-08-19** (ADR "2026-08-19 — ADR 2/4 (agentic restart)"). These were previously written
+> as one kind of number — "hard targets". They are now **three kinds**, because the single-kind version
+> had already stopped constraining anything: cold start drifted 504 ms (best ever measured, release
+> pre-R8) → 527 (R8) → 750 (Baseline Profile) → **766 ms** (final release), each step with a good local
+> reason and no decision to point at; and the heap ceilings had **never been measured at all** (the
+> "~98MB → ~75MB" figure recorded in Y1/Y2 is post-R8 APK size, not heap). An unreachable number stops
+> being a constraint.
 
-- Cold start, launcher visible: `< 400ms`
-- First frame rendered from `Activity.onCreate`: `< 200ms`
+### 1. Invariants — do not float. A violation is a broken product.
+
+- First home frame renders without a loading spinner. *(achieved)*
+- FastPath feels instant: rule-based intent match `< 10ms`. *(achieved)*
+- No AI feature blocks launcher startup; the offline core is never gated on the agent stack.
+- The process survives backgrounding and trim without losing user-visible state.
+
+### 2. Measured baseline + regression gate — floats only deliberately.
+
+A block that worsens one of these requires a **recorded decision** (ADR line), not a silent regression.
+
+| Metric | Baseline | How measured |
+|---|---|---|
+| Cold start, launcher visible | **766 ms** (SM-A325F, final release, 2026-07-04) | `am start -W`, drop-first protocol |
+| Warm start | ~102 ms (same device/build) | `am start -W` |
+| Heap, steady-state Home | **not yet measured** — first measurement is Этап 0.6 | `dumpsys meminfo` |
+
+`< 400 ms` cold start is retained as an **aspiration, not a ship gate** (already downgraded in
+`CLAUDE.md`). Optional hardening: `MacrobenchmarkRule` + `StartupTimingMetric` / `MemoryUsageMetric` in
+the existing `baselineprofile/` module, which today contains only `BaselineProfileGenerator.kt`.
+
+### 3. Per device profile — genuinely floating. Mechanism kept unchanged.
+
+Any feature that cannot meet its cost on a given profile **must degrade or be disabled on that profile**
+(`DeviceProfile` `LOW_END` / `MID_RANGE` / `HIGH_END`). Remaining per-profile targets:
+
 - App grid visible and interactive from cold start: `< 600ms`
-- Rule-based intent match: `< 10ms`
-- ONNX inference on `MID_RANGE`: `< 150ms`
 - Cloud AI first streaming token on good network: `< 2000ms`
-
-Memory ceilings:
-
-- `LOW_END`: `< 80MB` heap
-- `MID_RANGE`: `< 150MB` heap
-- `HIGH_END`: `< 250MB` heap
+- ~~ONNX inference on `MID_RANGE`: `< 150ms`~~ — void, the ONNX tier is closed (ADR 2/4).
+- ~~Heap ceilings 80 / 150 / 250 MB~~ — never measured, so never a gate; superseded by tier 2 above.
+  These numbers also do **not** settle local inference: a 1B model at int4 is 700 MB–1 GB resident (a
+  different order entirely), while a small function-calling model on NPU is ~200–500 MB and may be
+  memory-mapped — see ADR 2/4.
 
 ## Module layout
 
@@ -152,25 +192,46 @@ Deep link support must cover:
 
 ## AI execution pipeline
 
-**Intent matching** (Phase 3, built) and **generative AI** (Phase 5, built) are two separate
-pipelines that share no code. Matching ≠ generation; `HandleUserCommandUseCase` is untouched by the
-generative path.
+> **Target shape, decided 2026-08-19** (ADRs 1/4 and 4/4 of the agentic restart). The axis is
+> **understanding vs. execution**, not "matching vs. generation":
+>
+> ```
+> input ─▶ FastPath (deterministic, localized)  ──hit──▶ execute
+>            │ miss                                        ▲
+>            ▼                                             │
+>          learned-plan cache  ──hit──▶ deterministic replay┤
+>            │ miss                                        │
+>            ▼                                             │
+>          Planner (model)  ──▶ plan of 0..N steps ──▶ deterministic gates:
+>                                 ToolRegistry → arg validation → preconditions →
+>                                 risk gate / consent → loop bounds → egress allow-list → trace
+> ```
+>
+> A **0-step plan is a spoken reply** (rendered by the Assistant screen); an N-step plan is a task
+> (rendered by Tasks/Agents) — one `AgentSession` contract underneath, two surfaces above (ADR 4/4).
+> A FastPath miss is **not** an "Unknown command". The sections below describe what is **built today**;
+> they are superseded progressively by Этапы 0/4/6 of
+> [the agentic restart plan](superpowers/plans/2026-08-18-agentic-track-restart.md).
 
-### Intent matching (offline, fast)
+**As built today:** intent matching (Phase 3) and generative AI (Phase 5) are two separate pipelines
+that share no code; `HandleUserCommandUseCase` is untouched by the generative path.
+
+### Intent matching (offline, fast) — as built today
 
 1. User enters text command in the launcher.
 2. Input is normalized and passed to the unqualified `IntentMatcher`, which is the **rule-first
    `LayeredIntentMatcher`** (Phase 6, Block R). It runs `RuleBasedIntentMatcher` first (offline,
    `< 10ms`); if the rule result is **not** low-confidence it is returned **verbatim** and the NLU
    secondary is **never consulted** — the fast path and every Phase-3 outcome are preserved exactly.
+   *(`RuleBasedIntentMatcher` is FastPath under the new rule. It is English-only today — Этап 0.2
+   localizes its verb sets to `ru`/`tr`.)*
 3. Only on a low-confidence rule does it consult the local NLU secondary (`OnnxIntentClassifier`,
    `MatcherSource.NLU`), which **self-gates** per inference (LOW_END / no verified model /
-   thermal/battery → escape without loading ONNX). An NLU escape leaves the weak rule standing; a
-   real NLU answer wins only if it clears `suggestThreshold`, with its over-confident softmax
-   **calibrated** into the `[suggestThreshold, autoExecuteThreshold)` band (`NluConfidenceCalibrator`)
-   so a model-driven intent always **Suggests** and never silently auto-executes. With no model
-   present (today's shipping state) the secondary always escapes, so behaviour is identical to
-   rule-only. `HandleUserCommandUseCase` sees a single unqualified `IntentMatcher` and is untouched.
+   thermal/battery → escape without loading ONNX). With no model present — the shipping state for
+   14 months — the secondary always escapes, so behaviour is identical to rule-only.
+   **This whole tier is closed** (ADR 2/4) and removed in Этап 0.3, together with
+   `NluConfidenceCalibrator`, `LayeredIntentMatcher` and `MatcherSource.NLU`; the unqualified
+   `IntentMatcher` then binds directly to `RuleBasedIntentMatcher`.
 4. If confidence is sufficient, the mapped intent is executed via `HandleUserCommandUseCase`.
 5. `SimpleCommand.OPEN_ASSISTANT` routes to the assistant screen; the generative pipeline starts there.
 

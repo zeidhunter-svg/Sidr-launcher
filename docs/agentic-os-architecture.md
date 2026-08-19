@@ -9,6 +9,20 @@
 >
 > Visual identity for these surfaces is governed separately by
 > [docs/superpowers/specs/2026-07-10-visual-identity-soft-grey-design.md](superpowers/specs/2026-07-10-visual-identity-soft-grey-design.md).
+>
+> **Amended 2026-08-19 by the four strategic ADRs of Этап 1 of**
+> [docs/superpowers/plans/2026-08-18-agentic-track-restart.md](superpowers/plans/2026-08-18-agentic-track-restart.md)
+> — the layers A1–A6 stand; four things around them changed:
+> 1. **Deterministic-first is redefined** (ADR 1/4) — §2.2 and §4.2 below are rewritten in place.
+> 2. **Tools come from the OS as well as from us** (ADR 2/4) — `AppFunctions` and `MCP` are first-class
+>    tool sources, so A1 becomes **A1′, a federation of adapters over one vocabulary** (Этап 5 rewrites
+>    the A1 spec). ONNX is closed; the designated local-inference runtime is LiteRT / LiteRT-LM.
+> 3. **The "Framework" is a portable core with two consumers** — Android and PC (ADR 3/4). The layers
+>    below are its contents; `ActionIds`' seven values are frozen byte-for-byte.
+> 4. **Assistant and Agent share one loop, with two surfaces** (ADR 4/4) — a 0-step plan is a spoken
+>    reply; an N-step plan is a task.
+>
+> **Build order is superseded** by §5 below.
 
 ## 0. Framing — what "agentic" requires that SIDR does not yet have
 
@@ -143,8 +157,14 @@ categories** — not the static coarse Play class. Same rule-first / local-first
 
 1. **Clean architecture** — pure domain, ports in `domain`, impls in `data/*`; no `feature→feature`; single
    `NavHost`; ops return `OperationResult`, never throw to UI.
-2. **Rule-first / deterministic-first** — templates and local matching run before any model; the offline
-   launcher core is never blocked by the agent stack.
+2. **Understanding vs. execution** *(rewritten 2026-08-19, ADR 1/4 — replaces "rule-first /
+   deterministic-first: templates and local matching run before any model")* — **understanding belongs
+   to the model, execution to the deterministic layer**. FastPath and the learned-plan cache are a
+   latency optimization, not a filter: a FastPath miss reaches the planner instead of answering
+   "Unknown command". What stays absolute is the execution path — nothing proposed executes, gains
+   rights or leaves the device except through `ToolRegistry` → argument validation → preconditions →
+   risk gate / consent → loop bounds → egress allow-list → trace. The offline launcher core is still
+   never blocked by the agent stack.
 3. **Fail-closed** — any failure (no config, offline, bad plan, tool error, unparsable model output)
    degrades to the safe / rule-only path.
 4. **Privacy is the egress boundary** — the `OutboundContextPolicy` allow-list is the *only* way anything
@@ -170,7 +190,10 @@ categories** — not the static coarse Play class. Same rule-first / local-first
 ## 4. What makes it *original* (positioning, enforced by architecture)
 
 1. **Local-first agency** — deterministic tasks run offline; cloud only when needed and always disclosed.
-2. **Deterministic-first planning** — templates before LLM: predictable, cheap, private.
+2. **Deterministic execution with a learned local memory** *(restated 2026-08-19, ADR 1/4 + 2/4)* — the
+   model understands; FastPath and the **learned-plan cache** make already-understood goals replay
+   deterministically, offline, on any hardware. Locality is bought by the cache, not by a model in the
+   launcher process.
 3. **Consent-woven loop** — the human owns the loop, not the model.
 4. **Provenance-as-trust** — you always see source / why / local-cloud / tool / model.
 5. **An ethical spine as product constraints** — Amanah (data as a trust), Adl (consistent risk), Haya (no
@@ -179,15 +202,37 @@ categories** — not the static coarse Play class. Same rule-first / local-first
 
 ## 5. Build order & the golden rule
 
+**Superseded 2026-08-19.** The original order was `A1 tools → A2 context → A3 memory → A4 runtime →
+A5 activity → A6 grants/automation` — layer by layer, bottom-up. It produced zero agentic blocks in
+5.5 weeks while the design track produced six, and it has the failure mode `:data:ai-local` already
+demonstrated: a layer built in full against a consumer that never arrives. The order is now
+**vertical-slice first**:
+
 ```
-A1 tools → A2 context → A3 memory → A4 runtime → A5 activity → A6 grants/automation
+Этап 4  A0 thin agentic spike — ONE real 2-step goal through
+        goal → plan → gate → tool → observe → tool → result → trace, device-accepted.
+        Minimal pieces of A1/A2/A4; no A3/A5/A6, no DAG, no re-planning.
+Этап 5  A1′ federated ToolRegistry (InApp · SystemIntent · AppFunctions · MCP · Accessibility)
+Этап 6  A4′ runtime in full — session persistence across process death, rollback/compensation,
+        the clarification protocol, the learned-plan cache
+Этап 7  A2 / A3 built by consumer (contracts whole, implementation only what the first planner
+        reads — the AIL-1 pattern), then A5 / A6
 ```
 
-**Golden rule: a surface's UI is built only once its engine is real.** Drawing Agents/Execution/Activity
-screens ahead of A1–A5 produces the "agent dashboard without agents" the design docs themselves forbid.
+**Golden rule stands, unchanged: a surface's UI is built only once its engine is real.** The five
+existing `PREVIEW` tabs stay (owner decision, 2026-08-18) — the badge *is* the measure the audit
+prescribed — but they are excluded by policy from cross-cutting work (i18n, a11y, goldens, themes), and
+each carries an expiry: `tasks`/`agents` → real in A4, `activity` → A5.
 
-Current state: Stage 1 closed; **S2-1 done, S2-2 (aliases) planned** → **A1 (Tool/Capability layer) is the
-natural next architectural slice** (it also turns `alias → tool-call` and unblocks everything downstream).
+**The boundaries do not wait for a later slice.** Consent, argument validation, loop bounds, trace,
+egress allow-list and rollback are laid down on the **first** slice, for two tools — not "when needed".
+If the runtime first learns to call 20 tools and consent is added afterwards, that is 20 places to
+forget it; if consent lives inside `ToolExecutor` from day one, tool #21 gets it for free. Same logic by
+which this project's privacy guard-tests were written before there was anything to leak.
+
+Current state (2026-08-19): Stage 1 closed; the design track closed (DS-1…DS-11 + I18N-1/2); the four
+strategic ADRs of Этап 1 accepted → **Этап 0 (cleanup) and Этап 2 (toolchain + KMP) next**, then the A0
+spike.
 
 ## 6. Non-goals / explicitly out of scope
 

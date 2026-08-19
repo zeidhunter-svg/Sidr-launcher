@@ -7,9 +7,12 @@
 >    *understands* natural language and *routes* it to safe actions (open app, web, site, Play Store,
 >    settings, assistant), with a fast offline rule path underneath. **This is what we ship first and
 >    are refining now.**
-> 2. **Stage 2 — AI Framework.** Generalize the launcher's routing/action/context/memory machinery into
->    a reusable, testable on-device AI framework (Action Registry, Context Engine, User Memory) that any
->    surface can consume.
+> 2. **Stage 2 — AI Framework.** ~~A stage of the schedule.~~ **Redefined 2026-08-19** (ADR
+>    "2026-08-19 — ADR 3/4 (agentic restart)"): "Framework" is a **portable agent core with two
+>    consumers** — the Android shell (shipping) and a PC shell (target) — *not* a stage. Its layers
+>    (`domain/tool`, `domain/agent`, `domain/context`, `domain/memory`, `domain/trace`) are built
+>    **inside vertical slices**, per the project's feature-first rule. As a schedule stage, Stage 2 is
+>    **abolished**; the sections below are kept as the record of what the layers must contain.
 > 3. **Stage 3 — Agentic OS.** An AI operating layer over Android: multi-step planning, user-consented
 >    safe automation, and one coherent intent-driven shell.
 >
@@ -25,8 +28,13 @@
 ## Guiding principles (invariant across all three stages)
 
 - Launcher core stays fully usable without AI, network, microphone, or optional permissions.
-- **Local deterministic routing runs before any cloud/LLM call.** The LLM is consulted only on low
-  rule-confidence or natural-language input; its failure/offline degrades to the rule outcome.
+- **Understanding belongs to the model; execution belongs to the deterministic layer.**
+  *(ADR "2026-08-19 — ADR 1/4"; replaces "local deterministic routing runs before any cloud/LLM call".)*
+  FastPath and the learned-plan cache answer deterministically and offline as a **latency optimization**,
+  not as a filter on understanding; a FastPath miss reaches the planner instead of returning "Unknown
+  command". Nothing proposed by a model executes, gains rights or leaves the device except through the
+  deterministic gates. Router-off / offline / no-key ⇒ FastPath + plan cache + an honest "needs network",
+  with byte-for-byte parity kept as a test.
 - Every AI-proposed action is **confidence-gated, permission-gated, and confirmation-gated** for risk.
   The AI never silently executes a risky or destructive action.
 - No `feature → feature` dependency edges; single `NavHost` in `:app`; ViewModels emit
@@ -108,8 +116,13 @@ first; typed commands are unchanged; offline behavior is identical to rule-only;
 
 Not blockers for Stage 1. Resolve or explicitly de-scope; stop carrying inert code as "done".
 
-- **OQ#1 / OQ#2** — real NLU model (`intent.onnx`, pruned multilingual `vocab.txt`) + host + SHA-256.
-- **OQ#3** — embedding model + tokenizer + host/hash (gates Block V semantic re-rank).
+- ~~**OQ#1 / OQ#2** — real NLU model (`intent.onnx`, pruned multilingual `vocab.txt`) + host + SHA-256.~~
+  **CLOSED 2026-08-19 (ADR 2/4): answered "not this way".** The ONNX NLU stack is removed in Этап 0.3.
+- ~~**OQ#3** — embedding model + tokenizer + host/hash (gates Block V semantic re-rank).~~
+  **CLOSED 2026-08-19 (ADR 2/4)**, together with the `TextEmbedder` port and the never-started Block V.
+- **Local inference, when it returns**, targets **LiteRT / LiteRT-LM** (function calling + constrained
+  decoding; one runtime for Android and the PC target), with `AICore` / Gemini Nano as a separate path.
+  Recorded alternative: ExecuTorch, with an explicit switch condition — see ADR 2/4.
 - **OQ#4** — on-device STT availability across the target device matrix (gates voice acceptance).
 - Android 9/11/14 + real LOW_END hardware validation; boot-warmup after reboot.
 
@@ -130,7 +143,11 @@ Not blockers for Stage 1. Resolve or explicitly de-scope; stop carrying inert co
 > exists. DS blocks: DS-0 (provenance) → **DS-1 tokens + Roborazzi harness (DONE)** → DS-2/3 primitives →
 > DS-4 Home → DS-6A sacred header → DS-6B prayer data → DS-7 memory-migration.
 
-**Status: FUTURE (starts after Stage 1 ships).** Generalize the launcher's routing machinery into a
+**Status: REDEFINED 2026-08-19 — no longer a schedule stage (ADR 3/4).** The content below stays valid
+as *what the portable core's layers must contain*; the **order** it is built in is now the vertical-slice
+queue of [the agentic restart plan](superpowers/plans/2026-08-18-agentic-track-restart.md) (Этап 4 = A0
+thin spike, Этап 5 = A1′ federated `ToolRegistry`, Этап 6 = A4′ runtime, Этап 7 = A2/A3 then A5/A6).
+Generalize the launcher's routing machinery into a
 reusable on-device AI framework. Every layer must keep the Stage-1 principles (offline core, local
 routing before LLM, confidence/permission/confirmation gating, no feature→feature edges, domain purity,
 privacy allow-list).
@@ -218,8 +235,19 @@ The user interacts primarily through intent:
 ## Sequencing summary
 
 ```
-Stage 1 (MVP, NOW):  Foundation ✅  →  AIL-0 → AIL-1 → AIL-2 → AIL-3 → AIL-4 → AIL-5 → AIL-6  →  SHIP
-Stage 2 (Framework): Framework-1 → Framework-2 → Framework-3
-Stage 3 (Agentic):   Agentic-1 (safe automation / accessibility) → Agentic-2 (AI OS shell)
-Model track (parallel, off the ship gate): OQ#1–#4, device matrix, boot warmup
+Stage 1 (MVP): Foundation ✅ → AIL-0…AIL-6 ✅ → design track DS-1…DS-11 ✅ → I18N-1/I18N-2 ✅
+
+Agentic track (NOW, docs/superpowers/plans/2026-08-18-agentic-track-restart.md):
+  Этап 1  strategic ADRs ✅ (2026-08-19)
+  Этап 0  cleanup: release unblock · FastPath ru/tr · remove ONNX · honest statuses · budgets
+  Этап 2  toolchain refresh + :domain → KMP (android + jvm)
+  Этап 3  agentic Master Plan + doctrinal matrix extraction
+  Этап 4  A0 thin agentic spike (one real 2-step goal, end to end, device-accepted)
+  Этап 5  A1′ federated ToolRegistry (InApp · SystemIntent · AppFunctions · MCP · Accessibility)
+  Этап 6  A4′ runtime in full (session persistence, rollback, clarification, learned-plan cache)
+  Этап 7  A2 / A3 by consumer, then A5 / A6
+
+"Stage 2 (Framework)" is no longer a schedule stage — it is the portable core built inside the slices
+above (ADR 3/4). "Stage 3 (Agentic OS)" is what Этапы 4–7 deliver.
+Model track: OQ#1/#2/#3 CLOSED 2026-08-19 (ADR 2/4); OQ#4 (STT), device matrix and boot warmup remain.
 ```

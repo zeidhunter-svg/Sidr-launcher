@@ -5491,3 +5491,299 @@ not the app language (spec §3.6, deliberate, unrelated to this block). Commits:
 `fix(i18n-2): Home prayer names go through the string seam, not the raw enum`,
 `fix(i18n-2): device-location label translates without invalidating the prayer cache`,
 `test(i18n-2): fourth barrier - raw domain identifier assigned to a display sink`.
+
+## 2026-08-19 — ADR 1/4 (agentic restart) — deterministic-first redefined: understanding belongs to the model, execution to the deterministic layer
+
+**Status: ACCEPTED (owner, 2026-08-19).** First of the four strategic ADRs of Этап 1 of
+[docs/superpowers/plans/2026-08-18-agentic-track-restart.md](../docs/superpowers/plans/2026-08-18-agentic-track-restart.md)
+(owner decision #4 in that plan's «Решения владельца» table). Records a **deliberate change to a hard
+rule**, not a clarification of it. No code ships with this ADR; the code that executes it is Этап 0.2
+(FastPath localization) and Этап 0.3 (ONNX removal), and the flag change named below.
+
+**What is replaced.** The rule as written since Phase 3 and restated in AIL-4 — *"fast local intent
+matching runs before any LLM call"* (`CLAUDE.md` Hard rules; `docs/architecture.md` Principles;
+`docs/roadmap.md` Guiding principles; `docs/agentic-os-architecture.md` §2.2) — was implemented as a
+**filter on understanding**: `RouteCommandUseCase` consults the planner only when the rule matcher
+returns `Unknown`/`LowConfidence`, and only when `llmRouterEnabled` is on. That was correct for a
+router demo and is structurally fatal for an agent, because `RuleBasedIntentMatcher` is 7 English verbs
+plus a 7-row command table: a multi-step goal never reaches the model at all, and on the owner's own
+device (`ru-RU`) a Russian command does not work offline at all.
+
+**The rule that replaces it** (verbatim, now the governing text in all four documents):
+
+```
+Understanding belongs to the model. Execution belongs to the deterministic layer.
+
+1. FastPath (deterministic, localized) answers frequent exact commands without a model.
+   It is a latency optimization, NOT a filter on understanding.
+2. The learned-plan cache replays already-understood goal shapes deterministically and offline.
+3. Everything else goes to the model planner. A FastPath miss is NO LONGER grounds to
+   answer "Unknown command".
+4. Nothing the model proposes executes, gains rights, or leaves the device except through
+   deterministic gates: ToolRegistry → argument validation → preconditions → risk gate /
+   consent → loop bounds → egress allow-list → trace.
+5. Router-off / offline / no-key ⇒ FastPath + plan cache + an honest "this needs network".
+   Byte-for-byte rule-only parity remains a test-checkable property.
+```
+
+**What did NOT change, and this is the point of the redefinition.** Every safety property previously
+carried by "rules run first" is carried by clause 4 instead, and clause 4 is *stronger*: it is a
+property of the execution path, not of the order in which two matchers are consulted. Risky actions
+still never auto-run (Fork R4, AIL-5); the egress allow-list is still the only way anything leaves the
+device (`OutboundContextPolicy`, Block L); the offline launcher core is still never blocked. What was
+given up is only the claim that a deterministic matcher gets to *decide what the model is allowed to
+see*.
+
+**Fork resolved by the owner (2026-08-19) — `FeatureFlags.llmRouterEnabled`: inverted, on a NEW key.**
+The flag stops being the gate on understanding. Understanding is available whenever a provider is
+configured; the explicit opt-out survives for users who want it:
+
+- `FeatureFlags.llmRouterEnabled` (key `flag_llm_router_enabled`, default `false`) is **removed** from
+  the domain model.
+- A new `FeatureFlags.localOnlyMode` on a **new** key `flag_local_only` (default `false`) takes its
+  place, and the Settings toggle is relabelled accordingly (currently "Smart command routing").
+- **Why a new key rather than a default flip** — the exact DS-11 `alwaysShowNavBar` → `autoHideNavBar`
+  precedent, and it was caught on device there, not in review: `PreferencesMapper.toPreferences` writes
+  the **whole** object on every update, so any install where any setting was ever changed already has
+  `flag_llm_router_enabled = false` persisted, and a stored value beats a changed default. A flip in
+  place would be inert for exactly the users who have used the app. The old key is orphaned, inert, and
+  dropped from `ALL_KEY_NAMES`; there is no migration.
+- **Parity stays testable.** The existing rule-only parity test does not disappear, it re-anchors:
+  `localOnlyMode = true` (or no provider configured, or offline) ⇒ the planner is never consulted ⇒
+  byte-for-byte FastPath outcome. `RouteCommandUseCaseTest` keeps proving it, against the new flag.
+
+**Ordering consequence, deliberate.** With the flag inverted, an un-localized FastPath becomes
+user-visible in a new way: a `ru`/`tr` command that misses FastPath now reaches the planner (good) but
+costs a network round-trip for what should have been instant (bad, and offline it degrades to the
+honest "needs network" instead of silently launching Telegram). This is why Этап 0.2 (localize
+FastPath) is a **prerequisite** of shipping the flag change, not an independent cleanup — recorded
+here so the sequencing is not rediscovered later.
+
+**Consequences for the docs, applied in this same commit:** `CLAUDE.md` Hard rules, `docs/architecture.md`
+Principles + AI-execution-pipeline, `docs/roadmap.md` Guiding principles, and
+`docs/agentic-os-architecture.md` §2.2 / §4.2 now carry the new rule. The AIL-4 blocking ADR
+("2026-07-05 — AIL-4") is **not** rewritten — it recorded a decision that was correct at the time;
+this ADR supersedes it and says so.
+
+## 2026-08-19 — ADR 2/4 (agentic restart) — platform re-baseline 2026: ONNX NLU closed, LiteRT/LiteRT-LM designated, tools come from the OS
+
+**Status: ACCEPTED (owner, 2026-08-19).** Second of the four Этап-1 ADRs (owner decision #2). Closes a
+14-month-old open question, retires ~1400 lines of inert code, and names the local-inference runtime
+that a future local planner targets. Executes as Этап 0.3 (removal) and Этап 2.1 (toolchain).
+
+**1. ONNX NLU is closed, not paused.** `:data:ai-local` was built in full against
+`ModelDownloadConfig.INTENT_NLU_PENDING` — a blank URL and a blank hash — in Blocks P/Q (2026-06-28).
+`ModelStore`, `Sha256Verifier`, `ModelProvisioner`, `KtorModelDownloader`, `ModelDownloadWorker`, the
+scheduler, `OnnxIntentClassifier`, `OnnxSessionFactory`, `WordPieceTokenizer`, `LayeredIntentMatcher`,
+`NluConfidenceCalibrator`: complete, tested, and shipped in every APK since, consumed by nobody. No
+consumer arrived in 14 months. Beyond the dead weight, the design itself no longer fits the target: a
+7-label classifier does not extract arguments (a regex `SlotExtractor` does), and by construction it
+can only ever *suggest* — `NluConfidenceCalibrator` maps its softmax into `[0.50, 0.85)` precisely so a
+model-driven intent never auto-executes. That is the opposite shape from what an agent needs, which is
+a planner emitting structured multi-step calls.
+
+**Closed with it: OQ#1** (`intent.onnx` + pruned multilingual `vocab.txt`), **OQ#2** (model hosting URL
++ SHA-256), **OQ#3** (embedding model/host/hash, closed together with the `TextEmbedder` port and the
+never-started Block V semantic re-rank). These stop being open questions; they are answered "not this
+way".
+
+**Kept deliberately:** `DeviceProfile` / `DeviceCapability` / `DeviceProfileProvider` /
+`AndroidDeviceProfiler` — they gate suggestion precompute and are unrelated to ONNX.
+`LocalInferenceGate` is a judgment call left to Этап 0.3: it is the natural gate for a future
+local-inference tier, but today it is wired to ONNX alone; if 0.3 does not re-use it, delete it and
+reintroduce it when the tier is real. Deleting and reintroducing is cheaper than carrying a second
+`INTENT_NLU_PENDING`.
+
+**2. The designated local-inference runtime is LiteRT / LiteRT-LM.** Not ONNX, not raw llama.cpp. The
+previous wording ("MediaPipe LLM or llama.cpp", `docs/adr/ADR-001-hybrid-ai.md` §4) named a wrapper
+instead of its base — MediaPipe LLM Inference is built on LiteRT. Three reasons:
+
+- **One path to NPU across major chipsets** via the `CompiledModel` API (LiteRT 2.x): a JIT approach —
+  one model, accelerator chosen at runtime. This matters specifically because SIDR is `minSdk 28`,
+  sideloaded, and runs on an arbitrary device fleet.
+- **Function calling with constrained decoding, plus `FunctionGemma` and the Tool Use APIs** — the
+  agentic workload out of the box, rather than classification that then needs a hand-written planner
+  layer above it.
+- **Android + iOS + Windows + Linux from one runtime** — the same runtime serves both consumers of the
+  portable core (ADR 3/4), instead of a second inference stack for the PC target.
+
+**Recorded alternative — ExecuTorch, with an explicit switch condition.** Rejected *now* for three
+reasons: its AOT compilation per backend produces a `.pte` matrix across an arbitrary device fleet,
+which is exactly the problem LiteRT solves with JIT; function calling / constrained decoding are not
+part of it (it is a runtime — you bring that layer yourself); and its principal advantage, an existing
+PyTorch pipeline, does not exist here (PyTorch usage in this repo is zero). **Switch condition, stated
+so it is recognizable when it arrives:** the moment SIDR fine-tunes its own planner model on its own
+data — and the learned-plan cache is a natural source of `goal → plan` pairs — PyTorch → fine-tune →
+ExecuTorch becomes more coherent than converting to LiteRT.
+
+**The choice stays replaceable as long as the `Planner` port is runtime-agnostic** (spec A4 already
+requires this). This ADR fixes a direction, not a dependency.
+
+**`AICore` / Gemini Nano is a separate path**, for devices that have it: the model lives in a system
+process, so the app's heap is not spent at all. Its limitation is hardware availability, not design.
+
+**3. Why locality is achieved by a plan cache and not by a model in-process.** The binding constraint
+is not a budget number, it is an order of magnitude combined with the role of the process. A 1B model
+at int4 is 700 MB–1 GB resident; a launcher must resurrect instantly, and the heaviest process is the
+first one LMK kills. **Correction to the earlier, too-broad claim** ("relaxing the memory budget
+changes nothing"): that is true for 1B. For a small function-calling model (`FunctionGemma`, small
+Gemma 4) on NPU the order is different — roughly 200–500 MB, with weights potentially memory-mapped.
+Combined with the budget rework below, local planning moves from "impossible" to **"real on capable
+hardware, as an opt-in"**. The plan cache is the mechanism that makes locality real *today*, on all
+hardware, without any model in-process.
+
+**4. Tools come from the OS, not only from our own catalog.** `AppFunctions` (Android 15+) and `MCP`
+(PC + network) are the same shape — a self-describing function with a schema, discoverable in a
+registry — and both are named here as first-class tool sources. This is what makes the PC target one
+more adapter rather than a rewrite (ADR 3), and it is the reason Этап 5 rewrites the A1 spec rather
+than implementing it: the 2026-07-11 A1 spec was written against a **closed** vocabulary of seven
+identifiers, and both options in its unresolved fork ("parallel vocabulary" vs "evolve in place") rest
+on that assumption. **The A1 fork itself is deliberately NOT decided here** — it belongs to Этап 5, on
+the rewritten spec. What *is* decided here is the premise that invalidates the old framing.
+
+**5. Performance budgets move from "hard targets" to a three-tier scheme** (`docs/architecture.md`,
+edited in this commit). The problem was never that the numbers were missed; it is that they were
+already drifting with no gate. Cold start went 2021 ms (debug) → **504 ms** (release pre-R8, the best
+ever measured) → 527 (R8) → 750 (Baseline Profile) → **766 ms** (final release), each step with a good
+local reason and no single decision to blame. The heap ceilings (80/150/250 MB) have **never been
+measured** — the "~98MB → ~75MB" figure recorded in Y1/Y2 is post-R8 APK size, not heap. An
+unreachable number stops functioning as a constraint. The three tiers:
+
+1. **Invariant (does not float)** — properties, not milliseconds: first frame without a spinner
+   (achieved), FastPath feels instant, the process survives backgrounding. A violation is a broken
+   product.
+2. **Measured baseline + regression gate (floats only deliberately)** — cold start and heap. Instead of
+   `< 400 ms`: *"766 ms today; a block that worsens this requires a recorded decision."*
+3. **Per device profile (genuinely floating)** — the existing mechanism ("any feature that cannot meet
+   them must degrade or be disabled on that device profile") is kept as-is.
+
+Measuring heap on device (`dumpsys meminfo`) for the first time is Этап 0.6, not this ADR.
+
+**6. `docs/adr/ADR-001-hybrid-ai.md` is superseded in part** (edited in this commit): §2 (ONNX for
+local NLU/classification/embeddings) and §4 ("future MediaPipe LLM or llama.cpp integration") no longer
+hold; §1 is restated by ADR 1/4 above; §3, §5, §6 stand.
+
+## 2026-08-19 — ADR 3/4 (agentic restart) — portable core boundary: what "Framework" is, and the `ActionIds` byte-for-byte constraint
+
+**Status: ACCEPTED (owner, 2026-08-19).** Third of the four Этап-1 ADRs (owner decision #1). Answers a
+question that has been ambiguous since the 2026-07-05 three-stage reframe: *what, concretely, is the
+"AI Framework"?*
+
+**1. "Framework" = a portable agent core with two consumers, not a schedule stage.** Stage 2 as a
+**stage of the schedule is abolished**; its content is built inside vertical slices, per the project's
+existing feature-first rule. The core is the pure-Kotlin agent engine; the two consumers are the
+Android shell (shipping) and a PC shell (target). Two consumers of one core — **not two codebases**,
+and explicitly **not a public SDK for third-party developers** (that remains a non-goal).
+
+**What is inside the boundary** (all pure, stdlib + coroutines, no Android / Compose / Ktor / Hilt /
+Room / DataStore / `core/*` — the existing `:domain` purity invariant extends unchanged):
+
+```
+:domain (existing)  +  domain/tool     ToolId, ToolDescriptor, ToolInvocation, ToolResult,
+                                       ToolRegistry, ToolExecutor
+                    +  domain/agent    AgentGoal, ExecutionPlan, PlanStep, Planner,
+                                       AgentExecutor, AgentSession, ExecutionState,
+                                       RuntimeBudget, ConsentCheckpoint
+                    +  domain/context  ContextEngine, ContextSnapshot + its two projections
+                    +  domain/memory   generalizes ResolutionPreferenceStore (S2-1) + AliasStore (S2-2)
+                    +  domain/trace    ExecutionTrace, step events
+```
+
+**What is outside:** everything platform-shaped — the tool *adapters* (`SYSTEM_INTENT` on Android,
+`AppFunctions`, `MCP`, accessibility), the inference transports, persistence, and every surface. The
+line is the existing ports/impls line, applied to the agent.
+
+**2. KMP decision: `:domain` moves to `kotlin.multiplatform` with `android` + `jvm` targets, in Этап 2.2.**
+Rationale is timing, not preference: `domain/build.gradle.kts` is today `kotlin.jvm` + `jvmToolchain(17)`
+with exactly one dependency (`coroutines.core`), so the conversion is near-mechanical **right now**, and
+every subsequent agentic block is written as pure domain and raises the price. Verification for that
+step is already fixed: `./gradlew build` green, `:domain` compileClasspath still stdlib + coroutines,
+and all 333 domain tests pass **without test-source changes**.
+
+**3. Mandatory constraint recorded here because it holds under every variant of A1′, under federation,
+and under KMP — `ActionIds` values are frozen byte-for-byte.** Found while working the A1 fork on
+2026-08-19 and verified against the code. The seven values have **two different contracts, not one**,
+and both must be stated because the reason differs:
+
+```
+launch_app   → a Room PRIMARY KEY. Table `resolution_preferences`
+               (primaryKeys = ["action_id", "query", "context_key"], Migration1To2).
+               The single production write site is
+               ResolveCommandWithPreferenceUseCase.kt:34 — CapabilityKey(LAUNCH_APP, slot).
+               Changing the value does NOT "just reset preferences": it leaves orphaned rows
+               that keep occupying the 200-record retention quota, invisibly.
+
+all seven    → an outbound WIRE contract. CatalogSchemaRenderer renders them into the LLM
+               prompt; ProposalValidator validates the model's answer against them
+               (fail-closed: unknown id ⇒ NoPlan). Covered by RouterOutboundGuardTest and
+               DefaultActionCatalogRouterSchemaGuardTest.
+```
+
+`ActionIds.kt:12` already carries the "MUST stay stable — persisted/wire contract" comment. The
+requirement on A1′ (Этап 5) is that the seven current values survive **byte-for-byte** into whatever
+federated vocabulary replaces the catalog; new namespaced identifiers arriving from outside
+(`AppFunctions`: `<pkg>/<fn>`, `MCP`: `<server>/<tool>`, per ADR 2/4 §4) are additive and must not
+force a rename of the existing seven.
+
+**4. Not decided here, deliberately:** the A1 fork "parallel vocabulary vs. evolve in place". It was
+argued against the 2026-07-11 spec, i.e. before ADR 2/4 established that identifiers arrive from
+outside the app; both of its options are built on a premise ("the vocabulary is closed") that no longer
+holds. It is decided in Этап 5, on the rewritten spec.
+
+## 2026-08-19 — ADR 4/4 (agentic restart) — Assistant ⊕ Agent: one conversational loop, two surfaces
+
+**Status: ACCEPTED (owner, 2026-08-19).** Fourth of the four Этап-1 ADRs. Resolves the last open fork
+of the restart plan. Design decision only; the contracts it describes are built in Этап 4 (A0 spike)
+and Этап 6 (A4′ runtime).
+
+**The question.** Today `GenerateReplyUseCase` (speaks, streams `Flow<AiChunk>`) and `CommandPlanner` /
+`RouteCommandUseCase` (routes, never executes) are separated by a hard rule — *"matching ≠ generation"*.
+An agent needs a contour that speaks **and** acts **and** asks follow-up questions across several turns.
+Is that one loop or two?
+
+**Decision (owner, 2026-08-19): one loop in the domain, two surfaces in the UI.**
+
+```
+domain/agent
+  AgentSession        one persisted state machine
+  Planner (port)      plan(goal, context, tools, memory) → ExecutionPlan of 0..N steps
+
+  0 steps  → a spoken answer      → rendered by the Assistant screen (streaming text)
+  N steps  → a plan with gates    → rendered by the Tasks / Agents surfaces (plan + consent + trace)
+```
+
+**Why one loop.** A reply with no tool calls is not a different kind of thing from a plan — it is a plan
+of zero steps. Making that the *degenerate case* of one contract buys three things that two contours
+would each have to build twice:
+
+- **Clarification becomes multi-turn for free.** `PlanResult.Clarify(question)` is today a terminal
+  leaf: the model asks, and the exchange ends. No contract anywhere expresses *"agent asked → human
+  answered → plan refined → continue"*. With one session state machine, a clarification is a state, not
+  a terminus. This gap is one of the three specs the restart plan names as missing from every existing
+  document.
+- **One place where consent, loop bounds, trace, and egress live.** This is the "Правило роста"
+  exception applied: the functionality scales, the boundaries do not get added later. Two contours
+  means two places to forget the gate.
+- **One thing to persist.** The Android process-death problem (Этап 6: the agent's own action sends the
+  user into another app, and the launcher process may be killed) needs exactly one persisted session
+  type, not one for chat and one for plans.
+
+**Why two surfaces, not one.** Collapsing the Assistant screen into the agent surface would make an
+ordinary question ("what is X") arrive dressed as a task with a plan and a trace — a direct violation
+of the existing design rule *"the more ordinary the action, the less UI it generates"*
+(`agentic-os-architecture.md` §3.6) and of Sukun/calm. The surface is a **function of session state**,
+not of a layout: a 0-step session renders as streaming prose on the Assistant screen; an N-step session
+renders as plan + gate + trace on Tasks/Agents. The two `PREVIEW` tabs already reserve the place
+(they become real in A4 — Этап 4/6).
+
+**Consequence for the hard rule.** *"Matching ≠ generation"* stated the separation of two **ports**.
+Under ADR 1/4 the correct axis is different, and the rule is restated as **understanding vs.
+execution**: one contour may both speak and act; what may never merge is *proposing* and *executing*.
+`GenerativeAiEngine` (transport, `Flow<AiChunk>`) stays a distinct port from `Planner` (structured
+decision) — those are two different shapes of answer from a model, and that separation is unaffected.
+
+**What is explicitly NOT decided here** and belongs to the A4′ spec (Этап 6): the session state
+vocabulary, the persistence schema, the resume/idempotence protocol, the shape of the clarification
+turn on the wire, and whether the Assistant screen keeps its own ViewModel or renders an
+`AgentSession` projection. This ADR fixes that there is **one** contract underneath, and two renderings
+above it.

@@ -369,13 +369,36 @@ The offline launcher core (home, app grid, app launch) must work fully without A
 
 ## Current goal (active work)
 
-**NOW (2026-08-19): I18N-2 residual localization + barrier 4 is CLOSED (see the digest entry above).**
-The DS v1.1 release gate is still not simply "open" — `checkOwnerReviewedLocaleStrings` (Task 15) still
-blocks `:app:assembleRelease`/`:app:assemble`/`:app:bundleRelease`/root `./gradlew build` until the
-owner marks all 10 locale `strings_locked.xml` files `OWNER-REVIEWED`; I18N-2 added new Class B keys to
-that same unreviewed queue at zero incremental owner cost. Next: that owner sign-off, and/or A1 Tool &
-Capability (architecture) — a pre-implementation review of its spec/plan flagged an evolve-in-place vs.
-parallel-vocabulary fork the owner still needs to decide before that block starts.
+**NOW (2026-08-19): the AGENTIC TRACK is the active track. Этап 1 (strategic ADR package) is DONE —
+docs only, no code.** Governing document:
+[docs/superpowers/plans/2026-08-18-agentic-track-restart.md](docs/superpowers/plans/2026-08-18-agentic-track-restart.md)
+(owner-approved 2026-08-18). Four ADRs accepted 2026-08-19, all in `ai-context/decisions.md`:
+
+1. **Deterministic-first redefined** — *understanding belongs to the model, execution to the
+   deterministic layer* (see Hard rules below). `FeatureFlags.llmRouterEnabled` is **inverted onto a new
+   key**: `localOnlyMode` / `flag_local_only`, default `false` (a plain default flip would be inert —
+   the DS-11 `autoHideNavBar` precedent). Prerequisite for shipping that flag: Этап 0.2 (localize
+   FastPath to `ru`/`tr`).
+2. **Platform re-baseline 2026** — ONNX NLU **closed**, OQ#1/#2/#3 closed; designated local-inference
+   runtime is **LiteRT / LiteRT-LM** (alternative on record: ExecuTorch, with a switch condition;
+   separate path: AICore); `AppFunctions` / `MCP` become first-class tool sources; performance budgets
+   move from "hard targets" to a three-tier scheme in `docs/architecture.md`.
+3. **Portable core boundary** — "Framework" = a portable agent core with **two consumers** (Android +
+   PC), *not* a schedule stage; Stage 2 as a stage is abolished; `:domain` → KMP in Этап 2.2;
+   **`ActionIds`' seven values are frozen byte-for-byte** (two different contracts: `launch_app` is a
+   Room PK in `resolution_preferences`, all seven are the outbound wire contract to the LLM).
+4. **Assistant ⊕ Agent** — **one conversational loop, two surfaces**: one `AgentSession` / `Planner`
+   contract; a 0-step plan *is* a spoken reply (Assistant screen), an N-step plan is a task
+   (Tasks/Agents).
+
+**Next: Этап 0 (cleanup — release unblock, FastPath `ru`/`tr`, remove the ONNX stack, honest statuses,
+measured budgets), then Этап 2 (toolchain + `:domain` → KMP), Этап 3 (agentic Master Plan + doctrinal
+matrix), then the A0 vertical spike.** The A1 fork (parallel vocabulary vs. evolve in place) is
+**deliberately not decided** — it belongs to Этап 5, on a spec rewritten after ADR 2.
+
+**Still open, owner action, unchanged:** `checkOwnerReviewedLocaleStrings` blocks
+`:app:assembleRelease`/`:app:assemble`/`:app:bundleRelease`/root `./gradlew build` until the owner marks
+all 10 locale `strings_locked.xml` files `OWNER-REVIEWED` (Этап 0.1). Debug graphs stay green.
 
 **Prior sync (2026-08-16): I18N-1 Multilingual UI CLOSED (see the digest entry below).**
 
@@ -907,13 +930,25 @@ Phase 3 result, Blocks A → D:
 - No `feature -> feature` deps. Single `NavHost` in `app`. ViewModels emit
   `NavigationEvent`; they never touch `NavHostController`.
 - Repository/use-case ops return `OperationResult<T>`; never throw to UI.
-- `IntentMatcher` (→ `IntentMatchResult`) is a **different port** from `GenerativeAiEngine`
-  (→ `Flow<AiChunk>`). Matching ≠ generation.
-- **`CommandPlanner` (Stage 1B) is a sanctioned *third* pipeline: structured routing-via-LLM.** It is
-  NOT folded into `IntentMatcher` and is NOT the assistant's conversational path. It is consulted **only**
-  when the rule matcher is low-confidence / the input is natural language — so "local matching runs before
-  any LLM call" holds. LLM-proposed actions **never auto-execute a risky action** (confirmation-gated),
-  and router-off must be byte-for-byte rule-only parity. (See the AIL-4 ADR.)
+- **Understanding belongs to the model. Execution belongs to the deterministic layer.**
+  *(ADR "2026-08-19 — ADR 1/4 (agentic restart)"; replaces the former "fast local intent matching runs
+  before any LLM call".)*
+  1. **FastPath** (deterministic, localized) answers frequent exact commands without a model. It is a
+     **latency optimization, NOT a filter on understanding**.
+  2. The **learned-plan cache** replays already-understood goal shapes deterministically and offline.
+  3. Everything else goes to the **model planner**. A FastPath miss is **no longer** grounds to answer
+     "Unknown command".
+  4. Nothing the model proposes executes, gains rights, or leaves the device except through
+     deterministic gates: `ToolRegistry` → argument validation → preconditions → risk gate / consent
+     → loop bounds → egress allow-list → trace.
+  5. Router-off / offline / no-key ⇒ FastPath + plan cache + an honest "this needs network".
+     Byte-for-byte rule-only parity stays a test-checkable property.
+- **Understanding vs. execution, not matching vs. generation.** One contour may both speak and act
+  (ADR 4/4 — one `AgentSession`, a 0-step plan *is* a spoken reply); what may never merge is
+  **proposing** and **executing**. `GenerativeAiEngine` (→ `Flow<AiChunk>`, transport) stays a
+  different port from `IntentMatcher` (→ `IntentMatchResult`) and from the structured `Planner` /
+  `CommandPlanner` — those are different *shapes of answer*, and that separation is unaffected.
+  LLM-proposed actions **never auto-execute a risky action** (confirmation-gated, Fork R4).
 - Launcher core works fully offline; optional permissions never block startup.
 - **User-facing text never originates in `domain` — and not in a ViewModel either.** Domain and
   ViewModels emit typed results (`CommandMessage`, `CommandFailure`, `CommandFeedback`); the feature

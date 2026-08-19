@@ -43,7 +43,7 @@
     <string name="settings_learned_choices_title">Изученные выборы</string>
     <string name="settings_section_assistant">Ассистент</string>
     <string name="settings_ai_provider_title">Настройки провайдера ИИ</string>
-    <string name="settings_smart_routing_title">Умная маршрутизация команд</string>
+    <string name="settings_local_only_title">Только локально</string>
     <string name="settings_section_system">Система</string>
     <string name="settings_set_default_launcher_title">Сделать лаунчером по умолчанию</string>
 

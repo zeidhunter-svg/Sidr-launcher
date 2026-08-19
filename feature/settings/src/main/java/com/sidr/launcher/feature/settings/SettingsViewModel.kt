@@ -63,7 +63,7 @@ class SettingsViewModel @Inject constructor(
             favoritesCount = preferences.favoritesCount,
             micInputEnabled = preferences.micInputEnabled,
             autoHideNavBar = preferences.autoHideNavBar,
-            llmRouterEnabled = flags.llmRouterEnabled,
+            localOnlyMode = flags.localOnlyMode,
             errorMessage = errorMessage,
         )
     }.stateIn(
@@ -183,17 +183,18 @@ class SettingsViewModel @Inject constructor(
     }
 
     /**
-     * Persist the AIL-4 LLM Action Router opt-in. Off by default (privacy-first + BYOK cost); when on,
-     * low-confidence natural-language commands may be routed by the configured cloud LLM. No-op when
-     * unchanged; a write failure surfaces a transient, display-safe message.
+     * Persist the local-only opt-out (Этап 4.0, ADR 1/4). Off by default: understanding is available
+     * whenever a provider is configured, and this is the explicit "never leave the device" switch for
+     * users who want it. No-op when unchanged; a write failure surfaces a transient, display-safe
+     * message.
      */
-    fun setLlmRouterEnabled(enabled: Boolean) {
+    fun setLocalOnlyMode(enabled: Boolean) {
         viewModelScope.launch(ioDispatcher) {
             saveError.value = null
             try {
                 val current = featureFlagRepository.getFlags().first()
-                if (current.llmRouterEnabled != enabled) {
-                    when (featureFlagRepository.updateFlags(current.copy(llmRouterEnabled = enabled))) {
+                if (current.localOnlyMode != enabled) {
+                    when (featureFlagRepository.updateFlags(current.copy(localOnlyMode = enabled))) {
                         is OperationResult.Success -> Unit
                         is OperationResult.Failure -> saveError.value = SAVE_ERROR
                     }

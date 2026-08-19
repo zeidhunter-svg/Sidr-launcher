@@ -6442,3 +6442,143 @@ never piped through `tail`):**
 **`git diff --stat` radius:** 1 rename (design Master Plan), 3 new documents (`docs/governing/`),
 1 new test, 1 build-script edit, 4 edited documents (`CLAUDE.md`, `current-status.md`,
 `docs/design/README.md`, the moved Master Plan). No production source file changed.
+
+## 2026-08-20 — Этап 4.0 (agentic track) — the understanding flag is inverted: `llmRouterEnabled` → `localOnlyMode`
+
+**Status: CODE-GREEN (not DEVICE-ACCEPTED).** Executes the fork ADR 1/4 resolved on 2026-08-19 and
+left deliberately unimplemented; the section that gave that decision an address is «Этап 4.0» of
+[docs/superpowers/plans/2026-08-18-agentic-track-restart.md](../docs/superpowers/plans/2026-08-18-agentic-track-restart.md).
+**This is the first behavioural change of the agentic track** — everything before it (Этапы 0–3) was
+cleanup, toolchain and documents. Precondition of Этап 4 (A0 spike); Master Plan milestone M-A1.
+
+### What changed for a person holding the phone
+
+Before: a command FastPath could not match ended at `launcher_feedback_unknown_command` —
+"Unknown command. Try: open <app>, search <query>" — and the LLM router was an opt-in nobody had
+turned on. After: the same command reaches the configured provider's planner, and when it cannot,
+the launcher says **which** of three things is actually true instead of blaming the command.
+
+The old answer was not merely unhelpful, it was **false**: it made a claim about the *command* when
+the truth was about the *system*. `открой телеграм` was never an unknown command; it was a command
+this launcher had no configured way to understand.
+
+### Forks, all resolved by the owner before any code (plan §«Развилки — спросить владельца ДО кода»)
+
+- **F1 — one honest message or two, and does it navigate.** Owner: **two, and the provider one
+  navigates.** Implemented as three (see F5), of which only `UnderstandingNeedsProvider` carries a
+  tap-through to `Routes.AssistantProvider` — it is the only one the user can fix in one step now.
+- **F2 — the signed Class B string vs. a gate that checks presence, not coverage.** Owner: **fix the
+  gate in this block.** See "The gate that was decorative" below.
+- **F3 — the toggle's name in `en`/`ru`/`tr`.** Owner: **inversion** — "Local-only mode" /
+  «Только локально» / "Yalnızca yerel".
+- **F4 — where "a provider is configured" is checked.** Owner: **lift it into the gate.** The plan
+  warned this would cost `:domain` a new dependency that must be a port because `:domain` is now KMP
+  (ADR 3/4). It did not: `AiProviderConfigRepository` has been a `commonMain` port since Block K, so
+  the check is a constructor parameter and no new module edge. The API key deliberately stays the
+  planner's business — the gate decides *whether to ask*, and never touches secrets.
+- **F5 — raised during the session, not in the plan's four.** Plan point 3 (honest message instead
+  of `Unknown command`) and `DOC-ADL-3` as then worded ("Router-off / offline / no-key ⇒ байт-в-байт
+  паритет rule-only") contradict each other: the honest message *is* a departure from byte-for-byte
+  parity in precisely the miss case. Asked rather than guessed. Owner: **a third message, neutral,
+  with no call to action and no navigation** — nagging someone to undo a deliberate local-only choice
+  on every miss is what `DOC-HYA-1` forbids. `DOC-ADL-3` amended accordingly (below).
+
+### The flag
+
+`FeatureFlags.llmRouterEnabled` (key `flag_llm_router_enabled`) is **removed**;
+`FeatureFlags.localOnlyMode` on the **new** key `flag_local_only` takes its place, default `false`.
+The old key is orphaned, inert, dropped from `ALL_KEY_NAMES`, and **not migrated** — ADR 1/4 decided
+that. The new key is not ceremony: `PreferencesMapper.writeFeatureFlags` persists the whole object on
+every settings change, so every install that ever touched any setting already has
+`flag_llm_router_enabled = false` stored, and a stored value beats a changed default. Flipping the
+default in place would have been inert for exactly the users who use the app — the DS-11
+`alwaysShowNavBar` → `autoHideNavBar` precedent, which was caught on device, not in review.
+
+### The gate
+
+`RouteCommandUseCase` is now an ordered chain of early returns, which is what makes the three states
+**mutually exclusive by construction** rather than by three independent conditions that could both
+fire: FastPath → `localOnlyMode` → FastPath-decided → provider configured → online → planner. At most
+one message is reachable per command, and it is the outermost cause — telling a local-only user to go
+configure a provider would be advice for a problem they do not have.
+
+`CommandMessage` gains `UnderstandingLocalOnly` / `UnderstandingNeedsProvider` /
+`UnderstandingNeedsNetwork` — named, not worded, per the standing rule that user-facing text never
+originates in `domain`. Strings ship in `en`/`ru`/`tr` in this same commit.
+
+**Deliberately NOT locked as Class B**, and this is a judgment call worth naming: the three launcher
+lines live in ordinary `strings.xml`. The consent point for cloud routing is the Settings toggle,
+whose description *is* Class B and was re-signed here; these three are status lines about the current
+mode. A future block may reasonably decide `UnderstandingLocalOnly` ("Cloud understanding is off")
+reads as a data-handling claim and lock it. It was not done here because the stage section scoped
+Class B to the toggle description, and radius discipline is the point of that section.
+
+### The gate that was decorative (fork F2)
+
+`checkOwnerReviewedLocaleStrings` did `readText().contains("OWNER-REVIEWED")`. Two holes, dormant
+only because no signed string had ever been edited:
+
+1. **Coverage** — a signed file could have a sentence rewritten, or gain a key, and keep shipping
+   green under a signature given for different text. This block is the first in the project's history
+   to change an already-signed Class B string, so the hole stopped being theoretical here. It was
+   already named in `CLAUDE.md` § Known debt; it is now closed.
+2. **Prose** — four locked files contain the literal token inside an ordinary sentence ("see the
+   OWNER-REVIEWED block below"). A file carrying only that sentence and no signature at all passed.
+   This one was **not** on the debt list; it was found while fixing the first.
+
+The marker is now a signature over content: `OWNER-REVIEWED <yyyy-mm-dd> sha256:<16 hex>`, the digest
+covering exactly that file's Class B keys, canonicalised as sorted `key\u0000value` lines. It does
+not verify *who* typed the token — nothing in a repository can — it verifies that what ships is what
+was read. Provenance stays a written claim in each file's header, as since 2026-08-19.
+
+All ten locked locale files were re-stamped. Eight hold text this block did not touch: their
+2026-08-19 signature stands and the digest merely pins what it covered. Two (`feature/settings`
+`values-ru`/`values-tr`) hold rewritten text and were **re-read and re-approved by the owner in this
+session** before the token was typed.
+
+### `DOC-ADL-3` amended (Master Plan §5 change-control)
+
+Was: «Router-off / offline / no-key ⇒ байт-в-байт паритет rule-only». Two words of it stopped
+existing (`router-off`), and the substance became false in the miss case. Now: «Local-only / нет
+провайдера / offline ⇒ планировщик не вызван, наружу не уходит ничего, и всякий исход, который
+FastPath **решил**, возвращается байт-в-байт». That is what parity always meant operationally —
+no outbound call, no changed decision — as opposed to a promise to keep printing one particular
+false sentence. The matrix gained §6, an amendment log, so a future reader sees that the wording
+moved and why; the rule ID is unchanged because ADRs and test KDoc cite IDs. Same test, re-anchored.
+
+### Verification (JDK-17 Temurin via `org.gradle.java.installations.paths`, exit code checked, output never piped through `tail`)
+
+- `./gradlew --no-daemon testDebugUnitTest assembleDebug --rerun-tasks` — BUILD SUCCESSFUL,
+  **551/551 tasks genuinely executed**, **653 tests / 0 failures**.
+- `./gradlew --no-daemon :domain:jvmTest --rerun-tasks` — BUILD SUCCESSFUL, **315 tests / 0 failures**
+  (`testDebugUnitTest` does not reach `:domain`'s `jvmTest` source set post-KMP).
+- `:app:assembleRelease` — BUILD SUCCESSFUL, i.e. the rewritten owner-review gate passes on real text.
+- `:core:ui:verifyRoborazziDebug` **not** run — `core/ui` was not touched.
+
+**Three mutations, per the §HANDOFF rule that a new guard is proven by mutation and not by a green
+run** — each red on exactly the intended assertion, then reverted:
+- F4 provider check deleted from the gate (the pre-4.0 state, where privacy rested on
+  `LlmCommandPlanner` returning `NoPlan`) → `no provider configured - honest needs-provider, planner
+  never consulted (F4)` failed, and only it.
+- offline check hoisted above `localOnlyMode` → `all three causes at once - only the outermost is
+  reported` failed, and only it. Ordering is the exclusivity property; it is now pinned.
+- one character appended to a signed Russian sentence → the release gate went red naming the file,
+  the stale digest and the new one. The old `contains` check would have shipped it.
+
+The prose hole is proven by the rewritten gate's own first run: all ten files were reported as
+unsigned even though several contain the literal token in prose.
+
+### Radius
+
+`:domain` (flag, message vocabulary, gate + its test), `:data:repository` (key, mapper),
+`:core:testing` (one shared `configuredProvider()` fixture), `:feature:launcher` (presentation, one
+render branch, strings ×3), `:feature:settings` (state, ViewModel, screen, strings ×3 + Class B ×3),
+`:app` (DI, build-script gate), plus the doctrine matrix. `ActionIds` untouched (frozen, ADR 3/4).
+`OutboundContextPolicy.ALLOWED` **not widened by a single field**. Fork A1 not pre-empted — it
+belongs to Этап 5. PREVIEW surfaces untouched.
+
+**Known limitation, stated rather than implied absent:** this is `CODE-GREEN`. Nothing here has run
+on the SM-A325F. The stage section's device check — `ru-RU`, no provider configured, expect the honest
+message and not `Unknown command` — has not been performed, and until the owner performs it this is
+not `DEVICE-ACCEPTED`.
+

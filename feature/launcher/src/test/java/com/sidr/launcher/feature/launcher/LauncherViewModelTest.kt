@@ -6,6 +6,7 @@ import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.core.testing.FakeActionCatalog
 import com.sidr.launcher.core.testing.FakeActionExecutor
+import com.sidr.launcher.core.testing.configuredProvider
 import com.sidr.launcher.core.testing.FakeAliasStore
 import com.sidr.launcher.core.testing.FakeCommandPlanner
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
@@ -148,14 +149,19 @@ class LauncherViewModelTest {
         recordingScope = CoroutineScope(testDispatcher + SupervisorJob()),
     )
 
-    // AIL-4: the VM now routes through RouteCommandUseCase. With the router flag OFF (fakeFlagRepo's
-    // default), route() returns the unchanged HandleUserCommandUseCase outcome byte-for-byte, so every
-    // existing VM test holds. Router-on behavior is covered in the domain RouteCommandUseCaseTest.
+    // AIL-4: the VM routes through RouteCommandUseCase. Этап 4.0 re-pointed this fixture at the new
+    // default posture — local-only OFF, a provider configured, online — with a planner that returns
+    // NoPlan (FakeCommandPlanner's default). That combination still yields the FastPath outcome
+    // byte-for-byte, so every existing VM test keeps testing what it was written to test: the VM's
+    // CommandOutcome -> CommandFeedback mapping, not the gate. Leaving the provider unconfigured
+    // would instead make every unknown command surface UnderstandingNeedsProvider and quietly turn
+    // this whole suite into a test of the gate. The gate itself is proven in RouteCommandUseCaseTest.
     private val routeUseCase = RouteCommandUseCase(
         handleUserCommand = useCase,
         planner = FakeCommandPlanner(),
         catalog = FakeActionCatalog(),
         featureFlagRepository = fakeFlagRepo,
+        providerConfigRepository = configuredProvider(),
         connectivityChecker = FakeConnectivityChecker(),
     )
 
@@ -262,7 +268,10 @@ class LauncherViewModelTest {
             handleUserCommand = useCase,
             planner = FakeCommandPlanner(resultToReturn = plannerResult),
             catalog = catalog,
-            featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(llmRouterEnabled = true)),
+            featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = false)),
+            // Этап 4.0: the gate refuses to consult the planner unless a provider is configured
+            // (fork F4), so the router fixture has to configure one to exercise the routed path.
+            providerConfigRepository = configuredProvider(),
             connectivityChecker = FakeConnectivityChecker(initiallyOnline = online),
         )
         return LauncherViewModel(

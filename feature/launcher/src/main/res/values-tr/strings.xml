@@ -74,4 +74,10 @@
     <string name="launcher_drawer_sample_category_other">Diğer</string>
 
     <string name="launcher_prayer_location_current_device">Mevcut konum</string>
+
+    <!-- Этап 4.0 (ADR 1/4) — anlamanın neden kullanılamadığına dair üç birbirini dışlayan durum. -->
+    <string name="launcher_understanding_local_only">Yerel olarak tanınmadı. Bulut anlama kapalı.</string>
+    <string name="launcher_understanding_needs_provider">Henüz bir yapay zeka sağlayıcısı ayarlanmadı.</string>
+    <string name="launcher_understanding_provider_action">Sağlayıcıyı ayarla</string>
+    <string name="launcher_understanding_needs_network">Bu komutu anlamak için ağ bağlantısı gerekiyor.</string>
 </resources>

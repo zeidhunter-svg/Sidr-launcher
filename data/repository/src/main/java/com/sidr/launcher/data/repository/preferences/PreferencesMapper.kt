@@ -65,8 +65,8 @@ internal object PreferencesMapper {
                 ?: defaults.usageHistoryEnabled,
             permissionEducationDismissed = prefs[PreferencesKeys.FLAG_PERMISSION_EDU_DISMISSED]
                 ?: defaults.permissionEducationDismissed,
-            llmRouterEnabled = prefs[PreferencesKeys.FLAG_LLM_ROUTER_ENABLED]
-                ?: defaults.llmRouterEnabled,
+            localOnlyMode = prefs[PreferencesKeys.FLAG_LOCAL_ONLY]
+                ?: defaults.localOnlyMode,
         )
     }
 
@@ -74,7 +74,7 @@ internal object PreferencesMapper {
         prefs[PreferencesKeys.FLAG_AI_SUGGESTIONS_ENABLED] = value.aiSuggestionsEnabled
         prefs[PreferencesKeys.FLAG_USAGE_HISTORY_ENABLED] = value.usageHistoryEnabled
         prefs[PreferencesKeys.FLAG_PERMISSION_EDU_DISMISSED] = value.permissionEducationDismissed
-        prefs[PreferencesKeys.FLAG_LLM_ROUTER_ENABLED] = value.llmRouterEnabled
+        prefs[PreferencesKeys.FLAG_LOCAL_ONLY] = value.localOnlyMode
     }
 
     // ── Device-profile cache (nullable: absent until first write) ──────────────

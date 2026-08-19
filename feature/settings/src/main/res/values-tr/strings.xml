@@ -43,7 +43,7 @@
     <string name="settings_learned_choices_title">Öğrenilmiş seçimler</string>
     <string name="settings_section_assistant">Asistan</string>
     <string name="settings_ai_provider_title">Yapay zeka sağlayıcı ayarları</string>
-    <string name="settings_smart_routing_title">Akıllı komut yönlendirme</string>
+    <string name="settings_local_only_title">Yalnızca yerel</string>
     <string name="settings_section_system">Sistem</string>
     <string name="settings_set_default_launcher_title">Varsayılan başlatıcı olarak ayarla</string>
 

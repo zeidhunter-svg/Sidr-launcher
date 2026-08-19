@@ -24,11 +24,14 @@ data class SettingsUiState(
      *  is the resting state and auto-hide is the opt-in. */
     val autoHideNavBar: Boolean = false,
     /**
-     * Mirrors `FeatureFlags.llmRouterEnabled` — the AIL-4 BYOK LLM Action Router. Off by default; when
-     * on, natural-language commands the rules can't handle are routed by the configured cloud LLM
-     * (proposals always confirm, never auto-execute). Needs a provider configured in Assistant setup.
+     * Mirrors `FeatureFlags.localOnlyMode` (Этап 4.0, ADR 1/4). **Off by default** — understanding
+     * belongs to the model, so a command FastPath can't handle is routed to the configured provider
+     * (proposals always confirm, never auto-execute). On, nothing understanding-related leaves the
+     * device and routing is byte-for-byte the FastPath-only launcher.
+     *
+     * Replaces the inverted `llmRouterEnabled`, which made understanding itself opt-in.
      */
-    val llmRouterEnabled: Boolean = false,
+    val localOnlyMode: Boolean = false,
     val errorMessage: String? = null,
 )
 

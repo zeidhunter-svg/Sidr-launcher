@@ -10,15 +10,24 @@
   retyped) out of this module's ordinary values-tr/strings.xml - no copy change.
 -->
 <!--
-  OWNER-REVIEWED 2026-08-19 - the owner has read and approved this file's Russian/Turkish text
-  against docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md (Class B, spec §7.2).
-  Provenance, recorded deliberately: the review was performed by the owner; this token was typed
-  by the agent on the owner's explicit instruction in the 2026-08-19 session. The gate cannot tell
-  the two apart, so the file says which it was.
+  OWNER-REVIEWED 2026-08-20 sha256:6bf351b25cbe329a - the owner has read and approved this file's
+  Russian/Turkish text against docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md (Class B,
+  spec §7.2). Provenance, recorded deliberately: the review was performed by the owner; this token
+  was typed by the agent on the owner's explicit instruction. The gate cannot tell the two apart,
+  so the file says which it was.
+
+  Re-signed by Этап 4.0 (agentic track). The 2026-08-19 signature covered
+  settings_smart_routing_description; ADR 1/4 inverted the flag that toggle describes, so the key was
+  renamed to settings_local_only_description and its sentence rewritten to state BOTH switch
+  positions - the previous copy described an opt-IN to cloud understanding that no longer exists.
+  This is the first time a signed Class B string has changed in this project, and it is the reason
+  checkOwnerReviewedLocaleStrings became content-bound in the same block: the digest above covers
+  this file's Class B keys, so the next edit to any of them invalidates this signature instead of
+  riding it.
 -->
 <resources>
     <string name="settings_stored_locally">Yalnızca bu cihazda saklanır.</string>
-    <string name="settings_smart_routing_description">Doğal dil komutlarını anlamak için yapay zeka sağlayıcınızı kullanın. Önerilen eylemler çalıştırılmadan önce her zaman onay ister.</string>
+    <string name="settings_local_only_description">Kapalı: bu başlatıcının yerel olarak eşleştiremediği komutlar anlaşılmak üzere yapay zeka sağlayıcınıza gönderilir ve önerilen eylemler çalıştırılmadan önce her zaman onay ister. Açık: hiçbir şey bu cihazdan ayrılmaz.</string>
     <string name="settings_forget_alias_consequence">"\"%1$s\" artık %2$s uygulamasını açmayacak.\nAyarlardan tekrar ekleyebilirsiniz."</string>
     <string name="settings_aliases_empty_message">Henüz takma ad yok\nTakma adlar burada eklendikten sonra görünür.\nYalnızca bu cihazda saklanır.</string>
     <string name="settings_learned_choices_empty_message">Henüz öğrenilmiş seçim yok\nTercihler yalnızca onaylanan seçimlerden sonra görünür.\nYalnızca bu cihazda saklanır.</string>

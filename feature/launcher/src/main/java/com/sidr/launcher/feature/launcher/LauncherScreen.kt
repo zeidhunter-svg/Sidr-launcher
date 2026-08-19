@@ -78,6 +78,7 @@ import com.sidr.launcher.core.ui.primitive.SidrTextRole
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Sizes
 import com.sidr.launcher.core.ui.theme.Spacing
+import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.permission.PermissionFeature
 import com.sidr.launcher.domain.suggestions.Suggestion
@@ -222,6 +223,7 @@ fun LauncherScreen(
             CommandFeedbackArea(
                 feedback = feedback,
                 onCandidateClick = viewModel::onAppClicked,
+                onConfigureProvider = { viewModel.navigateTo(Routes.AssistantProvider.ROUTE) },
                 onDismiss = viewModel::dismissFeedback,
             )
 
@@ -706,6 +708,7 @@ private fun PendingActionArea(
 private fun CommandFeedbackArea(
     feedback: CommandFeedback,
     onCandidateClick: (InstalledApp) -> Unit,
+    onConfigureProvider: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -741,6 +744,33 @@ private fun CommandFeedbackArea(
                         .padding(vertical = Spacing.sm),
                 )
             }
+        }
+
+        // Этап 4.0 (fork F1) — of the three "understanding unavailable" states this is the only one
+        // the user can fix right now, in one step, so it is the only one that carries an affordance.
+        // The other two are neutral statements on purpose: nagging someone to undo a deliberate
+        // local-only choice, or to conjure a network, is the manipulation DOC-HYA-1 forbids.
+        feedback is CommandFeedback.Domain &&
+            feedback.message == CommandMessage.UnderstandingNeedsProvider -> Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+        ) {
+            SidrText(
+                text = sidrString(requireNotNull(resolved).id, *resolved.args.toTypedArray()),
+                role = SidrTextRole.PROVENANCE,
+            )
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            SidrText(
+                text = sidrString(R.string.launcher_understanding_provider_action),
+                role = SidrTextRole.HUMAN_BODY,
+                color = SidrTheme.colors.accent,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = Sizes.minTouchTarget)
+                    .clickable(onClick = onConfigureProvider)
+                    .padding(vertical = Spacing.sm),
+            )
         }
 
         resolved != null -> CommandFeedbackText(

@@ -156,4 +156,37 @@ class LauncherPresentationTest {
         )
         assertEquals(2, ids.size)
     }
+
+    /**
+     * Этап 4.0 — the three understanding-unavailable states must resolve to three DIFFERENT strings.
+     * Asserting each id individually would pass even if two branches were copy-pasted onto the same
+     * resource, which is the mistake worth catching: three states that read identically are one state
+     * wearing three names, and the user learns nothing about which fix applies to them.
+     */
+    @Test
+    fun `the three understanding-unavailable states resolve to three distinct strings`() {
+        val ids = listOf(
+            CommandMessage.UnderstandingLocalOnly,
+            CommandMessage.UnderstandingNeedsProvider,
+            CommandMessage.UnderstandingNeedsNetwork,
+        ).map { requireNotNull(feedbackText(CommandFeedback.Domain(it))).id }
+
+        assertEquals(
+            "each unavailable-state needs its own sentence naming its own fix",
+            3,
+            ids.toSet().size,
+        )
+        assertEquals(
+            R.string.launcher_understanding_local_only,
+            requireNotNull(feedbackText(CommandFeedback.Domain(CommandMessage.UnderstandingLocalOnly))).id,
+        )
+        assertEquals(
+            R.string.launcher_understanding_needs_provider,
+            requireNotNull(feedbackText(CommandFeedback.Domain(CommandMessage.UnderstandingNeedsProvider))).id,
+        )
+        assertEquals(
+            R.string.launcher_understanding_needs_network,
+            requireNotNull(feedbackText(CommandFeedback.Domain(CommandMessage.UnderstandingNeedsNetwork))).id,
+        )
+    }
 }

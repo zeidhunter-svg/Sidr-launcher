@@ -8,6 +8,7 @@ import com.sidr.launcher.core.testing.FakeActionCatalog
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeAliasStore
 import com.sidr.launcher.core.testing.FakeCommandPlanner
+import com.sidr.launcher.core.testing.configuredProvider
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
@@ -108,6 +109,9 @@ class LauncherScreenPrayerStripTest {
             planner = FakeCommandPlanner(),
             catalog = FakeActionCatalog(),
             featureFlagRepository = FakeFeatureFlagRepository(),
+            // Этап 4.0: same reasoning as LauncherViewModelTest's baseline fixture — a configured
+            // provider keeps this screen test testing the prayer strip, not the routing gate.
+            providerConfigRepository = configuredProvider(),
             connectivityChecker = FakeConnectivityChecker(),
         )
         val resolutionStore = FakeResolutionPreferenceStore()

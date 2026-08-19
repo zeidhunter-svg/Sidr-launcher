@@ -5,7 +5,8 @@
 > digest); per-phase plans carry their own checklists.** This file is the status snapshot — if it
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
-> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-08-19
+> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-08-20
+> (Этап 4.0 — understanding-flag inversion, first behavioural change of the agentic track); prior 2026-08-19
 > (Этап 0.5 — corrected I18N-1's and DS-5's headline labels from an unqualified `CLOSED`/`CODE-CLOSED`
 > to `CODE-GREEN`, see below; DS-6B checked and confirmed `CLOSED`); same-day Этап 0.4 — `CLAUDE.md`
 > compressed 101 KB → 15 KB; same-day I18N-2 residual localization + barrier 4 CLOSED; same-day Этап 2
@@ -14,6 +15,46 @@
 > acceptance; prior re-base 2026-08-10 DS-10 Assistant Migration CLOSED — device-accepted; same-day
 > DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer
 > Correctness CLOSED — device-accepted by the owner).
+
+## Agentic track — Этап 4.0 (understanding-flag inversion) CODE-GREEN (2026-08-20)
+
+**The first behavioural change of the agentic track.** Executes ADR 1/4, which had been decided on
+2026-08-19 and deliberately left unimplemented. Full record: ADR «2026-08-20 — Этап 4.0» in
+[decisions.md](decisions.md).
+
+- **The flag.** `FeatureFlags.llmRouterEnabled` (key `flag_llm_router_enabled`) removed;
+  `localOnlyMode` on the **new** key `flag_local_only`, default `false`. No migration — a default flip
+  in place would have been inert for anyone who ever changed a setting (`PreferencesMapper` writes the
+  whole object; DS-11 `autoHideNavBar` precedent, caught on device there).
+- **The gate.** `RouteCommandUseCase` is an ordered chain of early returns — FastPath → `localOnlyMode`
+  → FastPath-decided → provider configured → online → planner — so the three "understanding
+  unavailable" states are mutually exclusive **by construction**. A FastPath miss no longer answers
+  `Unknown command`: that was a claim about the *command* when the truth was about the *system*. The
+  "is a provider configured" check moved **into the gate** (fork F4) — with the flag inverted, "no
+  provider ⇒ no outbound call" is a privacy property of the execution path, not of how one adapter
+  happens to be written. It cost no new module edge: `AiProviderConfigRepository` was already a
+  `commonMain` port.
+- **The toggle** is now "Local-only mode" / «Только локально» / "Yalnızca yerel", default off; its
+  Class B description was rewritten to state *both* switch positions and **re-read and re-signed by
+  the owner** — the first time an already-signed Class B string has changed in this project.
+- **The owner-review gate is no longer decorative** (fork F2, closing a `CLAUDE.md` § Known debt item).
+  `checkOwnerReviewedLocaleStrings` checked marker *presence*; it now checks a signature *over
+  content* — `OWNER-REVIEWED <date> sha256:<16 hex>`, the digest covering that file's Class B keys.
+  A second hole turned up while fixing the first and was **not** on the debt list: four locked files
+  mention the literal token in ordinary prose, and a file carrying only that sentence passed. All ten
+  locale files now carry a digest.
+- **`DOC-ADL-3` amended** under Master Plan §5 change-control; the doctrine matrix gained §6, an
+  amendment log. Parity is now stated as what it always meant operationally — planner not consulted,
+  nothing leaves the device, every outcome FastPath *decided* returned byte-for-byte — rather than a
+  promise to keep printing one false sentence.
+- **Forks:** F1–F4 answered by the owner before any code. **F5 was not in the plan's four** — plan
+  point 3 and `DOC-ADL-3` as worded contradicted each other, so it was asked rather than guessed; the
+  owner chose a third, neutral message with no call to action.
+- **Verification:** `testDebugUnitTest assembleDebug --rerun-tasks` — 551/551 tasks executed, 653
+  tests / 0 failures; `:domain:jvmTest --rerun-tasks` — 315 / 0; `:app:assembleRelease` green. Three
+  mutations, each red on exactly its own test. `core/ui` untouched, so no Roborazzi run.
+- **`CODE-GREEN`, not `DEVICE-ACCEPTED`.** The stage's device check — `ru-RU`, no provider configured,
+  expect the honest message and the "Set up provider" tap, not `Unknown command` — has not been run.
 
 ## Agentic track — Этап 3 (agentic Master Plan + doctrine matrix) CODE-GREEN (2026-08-19)
 

@@ -68,9 +68,17 @@ internal object PreferencesKeys {
     // is the only history carrier. Domain field stays FeatureFlags.usageHistoryEnabled.
     val FLAG_USAGE_HISTORY_ENABLED     = booleanPreferencesKey("flag_usage_tracking_enabled")
     val FLAG_PERMISSION_EDU_DISMISSED  = booleanPreferencesKey("flag_permission_edu_dismissed")
-    // AIL-4 — BYOK LLM Action Router toggle (off by default). Denylist-clean: "llm"/"router"/"enabled"
-    // are not forbidden terms. Domain field: FeatureFlags.llmRouterEnabled.
-    val FLAG_LLM_ROUTER_ENABLED        = booleanPreferencesKey("flag_llm_router_enabled")
+    // 2026-08-19 (Этап 4.0, ADR 1/4) — "understanding never leaves this device" opt-out, off by
+    // default. Denylist-clean ("local"/"only"). Domain field: FeatureFlags.localOnlyMode.
+    // Deliberately a NEW key, replacing the abandoned `flag_llm_router_enabled` (which gated
+    // understanding itself, inverted): writeFeatureFlags persists the whole object on every settings
+    // change, so every install that ever touched a setting already has `flag_llm_router_enabled =
+    // false` stored, and a stored value beats a changed default — inverting in place would have been
+    // inert for exactly the users who use the app. Same failure and same fix as
+    // USER_AUTO_HIDE_NAV_BAR above (DS-11), which was caught on device, not in review. The orphaned
+    // boolean left behind in DataStore is inert (Preferences has no schema, it holds no user
+    // content) and there is no migration — ADR 1/4 decided that deliberately.
+    val FLAG_LOCAL_ONLY                = booleanPreferencesKey("flag_local_only")
 
     // Device-profile cache — prefix: device_
     // Flattened primitives; no Android types. When DeviceProfile is formalised in
@@ -148,7 +156,7 @@ internal object PreferencesKeys {
         FLAG_AI_SUGGESTIONS_ENABLED.name,
         FLAG_USAGE_HISTORY_ENABLED.name,
         FLAG_PERMISSION_EDU_DISMISSED.name,
-        FLAG_LLM_ROUTER_ENABLED.name,
+        FLAG_LOCAL_ONLY.name,
         DEVICE_IS_LOW_END.name,
         DEVICE_CACHED_AT_EPOCH_MS.name,
         DEVICE_HAS_CACHE.name,

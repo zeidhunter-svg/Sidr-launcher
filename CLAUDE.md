@@ -40,17 +40,16 @@ an honest `<нет>`, and `DoctrineMatrixGuardTest` fails the build on a false c
 | **0.1** owner sign-off (release gate cleared — `:app:assembleRelease` green for the first time) · **0.2** FastPath `ru`/`tr` · **0.3** delete ONNX (APK 78 MB → 6.8 MB) · **0.4** compress this file · **0.5** honest statuses (`CODE-GREEN`/`DEVICE-ACCEPTED`/`CLOSED`) · **0.6** budgets rewritten on measured numbers (heap 55 MB PSS) · **0.7** I18N residue | ✅ 2026-08-19 |
 | **2** toolchain (AGP 9.3.1/Kotlin 2.4.10/Gradle 9.5.0/compileSdk 37) + `:domain` → KMP | ✅ 2026-08-19 |
 | **3** agentic Master Plan + doctrinal matrix (`docs/governing/`) | ✅ 2026-08-19 — docs + one guard test |
-| **4.0** — invert the understanding flag (`llmRouterEnabled` → `localOnlyMode`, ADR 1/4) | queued — runs immediately before Этап 4; first behavioural change of the track |
+| **4.0** — invert the understanding flag (`llmRouterEnabled` → `localOnlyMode`, ADR 1/4) | ✅ 2026-08-20 — `CODE-GREEN`; first behavioural change of the track |
 | **4–7** — A0 spike, A1′ ToolRegistry, A4′ runtime, A2/A3/A5/A6 | each needs its own spec + plan (`brainstorm → spec → plan → build`) |
 
 The four strategic ADRs (all 2026-08-19, in `decisions.md`):
 
 1. **Deterministic-first redefined** — understanding belongs to the model, execution to the
-   deterministic layer (see Hard rules). `FeatureFlags.llmRouterEnabled` is to be **inverted onto a
-   new key** `localOnlyMode` / `flag_local_only`, default `false` (a plain default flip would be
-   inert — DS-11 `autoHideNavBar` precedent). **Not yet implemented in code** — it is now Этап 4.0 of
-   the track plan, immediately before the A0 spike, with four owner forks to resolve first. Do not do
-   it earlier on your own initiative.
+   deterministic layer (see Hard rules). `FeatureFlags.llmRouterEnabled` was **inverted onto the new
+   key** `localOnlyMode` / `flag_local_only`, default `false` (a plain default flip would have been
+   inert — DS-11 `autoHideNavBar` precedent). **Implemented 2026-08-20 by Этап 4.0**, `CODE-GREEN`;
+   the old key is orphaned and there is no migration.
 2. **Platform re-baseline 2026** — ONNX NLU closed, OQ#1/#2/#3 closed; local-inference runtime is
    **LiteRT / LiteRT-LM** (alternative on record: ExecuTorch; separate path: AICore); `AppFunctions` /
    `MCP` are first-class tool sources; performance budgets become three tiers.
@@ -63,21 +62,23 @@ The four strategic ADRs (all 2026-08-19, in `decisions.md`):
 **Deliberately undecided:** the A1 fork (parallel tool vocabulary vs. evolve `ActionCatalog` in
 place) belongs to Этап 5, on a spec rewritten after ADR 2/4. Do not pre-empt it.
 
-## Shipped surface (2026-08-19)
+## Shipped surface (2026-08-20)
 
 Everything below is on `launcher--7` and `CODE-GREEN` (gate green: `testDebugUnitTest assembleDebug`,
 plus `verifyRoborazziDebug` where `core/ui` is touched). Most of it is also `DEVICE-ACCEPTED` on
 SM-A325F / Android 13 — the owner personally ran on-device verification and signed off — **except**
-FastPath's `ru`/`tr` locale forms (0.2), Action & Safety (DS-5), and the i18n surface (I18N-1), which are
-`CODE-GREEN` only; see Known debt. `CLOSED` = both, with any residual limitation named rather than
-implied absent (Этап 0.5 — status vocabulary).
+FastPath's `ru`/`tr` locale forms (0.2), Action & Safety (DS-5), the i18n surface (I18N-1), and the
+flag inversion (Этап 4.0), which are `CODE-GREEN` only; see Known debt. `CLOSED` = both, with any
+residual limitation named rather than implied absent (Этап 0.5 — status vocabulary).
 
 - **Launcher core** — home, app drawer, settings, app launch; fully offline.
 - **FastPath routing** — `RuleBasedIntentMatcher`, verb/keyword vocabulary in `en`/`ru`/`tr`
   (`FastPathLocaleGuardTest`). Since Этап 0.3 the unqualified `IntentMatcher` binds it **directly**.
 - **BYOK cloud AI** — Assistant (SSE streaming, OpenAI-compatible, key in Keystore) + the LLM action
-  router (`CommandPlanner` → risk-gated confirm card → `ExecuteActionUseCase`), behind
-  `FeatureFlags.llmRouterEnabled`, default off. Router-off / offline ⇒ rule-only parity.
+  router (`CommandPlanner` → risk-gated confirm card → `ExecuteActionUseCase`). Since Этап 4.0 a
+  FastPath miss reaches the planner **by default**, gated only by `FeatureFlags.localOnlyMode`
+  (default off), a configured provider and connectivity; each blocked state says which one it is
+  instead of answering "Unknown command".
 - **Memory** — learned resolutions (auto-resolve at streak ≥ 3) + explicit aliases; on-device,
   correctable from Settings.
 - **Suggestions** — time-of-day / usage (offline) + calendar / location (permission-gated),
@@ -97,8 +98,10 @@ Not `CLOSED`. Status vocabulary (Этап 0.5): `CODE-GREEN` (gate green, no dev
 pass does not count) / `CLOSED` (both, plus any residual limitation named, not implied absent). Each item
 below is recorded in its own ADR.
 
-- **`CODE-GREEN`, not `DEVICE-ACCEPTED`:** DS-5's own acceptance checklist has never been run (since
-  2026-07-13); I18N-1 was verified only by agent-driven `adb`/`uiautomator` — its offline path, live
+- **`CODE-GREEN`, not `DEVICE-ACCEPTED`:** Этап 4.0's flag inversion has not run on the SM-A325F —
+  its device check (`ru-RU`, no provider configured ⇒ the honest message, not `Unknown command`) is
+  outstanding, and it is the first change of the track a user would actually *feel*.
+  DS-5's own acceptance checklist has never been run (since 2026-07-13); I18N-1 was verified only by agent-driven `adb`/`uiautomator` — its offline path, live
   TalkBack, fontScale 2.0, and the system per-app-language picker are untested. DS-6B is `CLOSED` (owner
   ran full on-device acceptance 2026-08-08) but carries one named residual: its MWL times are
   cross-implementation-verified only (Istanbul/Makkah are authority-table-anchored) — `CLOSED` is not a
@@ -107,9 +110,9 @@ below is recorded in its own ADR.
   heap 55 MB PSS steady-state Home (SM-A325F, Android 13, release, measured 2026-08-19, Этап 0.6 —
   first-ever measurement, comfortably under the old unverified 80/150/250 MB ceilings); `baselineprofile/`
   still has no `StartupTimingMetric`/`MemoryUsageMetric` — optional hardening, not done.
-- **Release gate:** `checkOwnerReviewedLocaleStrings` checks the `OWNER-REVIEWED` marker's *presence*,
-  not its *coverage* — a signed file can silently gain an unreviewed key. Active now that all 10
-  files are signed.
+- **Release gate:** closed by Этап 4.0 — `checkOwnerReviewedLocaleStrings` now checks a *signature
+  over content* (`OWNER-REVIEWED <date> sha256:<16 hex>` covering that file's Class B keys), so an
+  edited or added key invalidates the signature. All 10 locale files carry a digest.
 - **Turkish morphology:** noun-case suffixes (accusative `-ı`) are not stripped from the extracted
   app name, so `telegramı aç` may not exact-match an installed label (Этап 0.2, documented).
 - **Untested matrices:** Android 9 / 11 / 14, real LOW_END hardware, on-device STT states
@@ -136,8 +139,10 @@ below is recorded in its own ADR.
   4. Nothing the model proposes executes, gains rights, or leaves the device except through
      deterministic gates: `ToolRegistry` → argument validation → preconditions → risk gate / consent
      → loop bounds → egress allow-list → trace.
-  5. Router-off / offline / no-key ⇒ FastPath + plan cache + an honest "this needs network".
-     Byte-for-byte rule-only parity stays a test-checkable property.
+  5. `localOnlyMode` / no provider / offline ⇒ FastPath + plan cache + an honest statement of which
+     of the three it is — never "Unknown command", which blames the command for the system's state.
+     Parity stays test-checkable and means: the planner is not consulted, nothing leaves the device,
+     and every outcome FastPath **decided** is returned byte-for-byte (`DOC-ADL-3`, amended 2026-08-20).
 - **Understanding vs. execution, not matching vs. generation.** One contour may both speak and act
   (ADR 4/4 — one `AgentSession`, a 0-step plan *is* a spoken reply); what may never merge is
   **proposing** and **executing**. `GenerativeAiEngine` (→ `Flow<AiChunk>`, transport) stays a
@@ -235,4 +240,4 @@ below is recorded in its own ADR.
 - UX + hardening: **X1 → X6**, **Y1 → Y7**, device-acceptance rounds 1–3
 - Stage-1 AI Launcher: **AIL-0 → AIL-6** · Stage-2 memory: **S2-1**, **S2-2**
 - Design track: **DS-0 → DS-11** + Vision MVP preview · Localization: **I18N-1**, **I18N-2**
-- Agentic restart (2026-08-19): **ADR 1/4 … 4/4**, **Этап 0.2 / 0.3 / 0.4 / 0.5 / 0.6 / 0.7 / 2 / 3**
+- Agentic restart: **ADR 1/4 … 4/4**, **Этап 0.2 / 0.3 / 0.4 / 0.5 / 0.6 / 0.7 / 2 / 3** (2026-08-19) · **Этап 4.0** (2026-08-20)

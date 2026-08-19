@@ -74,4 +74,10 @@
     <string name="launcher_drawer_sample_category_other">Другое</string>
 
     <string name="launcher_prayer_location_current_device">Текущее местоположение</string>
+
+    <!-- Этап 4.0 (ADR 1/4) — три взаимоисключающие причины, по которым понимание недоступно. -->
+    <string name="launcher_understanding_local_only">Не распознано локально. Понимание облаком выключено.</string>
+    <string name="launcher_understanding_needs_provider">ИИ-провайдер ещё не настроен.</string>
+    <string name="launcher_understanding_provider_action">Настроить провайдера</string>
+    <string name="launcher_understanding_needs_network">Чтобы понять эту команду, нужна сеть.</string>
 </resources>

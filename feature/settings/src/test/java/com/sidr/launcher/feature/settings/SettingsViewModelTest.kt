@@ -138,41 +138,41 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `enabling the llm router updates the flag and reflects in state`() = runTest(testDispatcher) {
-        val flagRepo = FakeFeatureFlagRepository(FeatureFlags(llmRouterEnabled = false))
+    fun `enabling local-only mode updates the flag and reflects in state`() = runTest(testDispatcher) {
+        val flagRepo = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = false))
         val vm = buildViewModel(flagRepo)
 
-        vm.setLlmRouterEnabled(true)
+        vm.setLocalOnlyMode(true)
         advanceUntilIdle()
 
-        assertTrue(flagRepo.getFlags().first().llmRouterEnabled)
-        assertTrue(vm.uiState.value.llmRouterEnabled)
+        assertTrue(flagRepo.getFlags().first().localOnlyMode)
+        assertTrue(vm.uiState.value.localOnlyMode)
         assertEquals(null, vm.uiState.value.errorMessage)
     }
 
     @Test
-    fun `llm router write failure surfaces a safe error`() = runTest(testDispatcher) {
-        val flagRepo = FakeFeatureFlagRepository(FeatureFlags(llmRouterEnabled = false)).apply {
+    fun `local-only write failure surfaces a safe error`() = runTest(testDispatcher) {
+        val flagRepo = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = false)).apply {
             errorToReturn = OperationError.UnknownError("datastore down")
         }
         val vm = buildViewModel(flagRepo)
 
-        vm.setLlmRouterEnabled(true)
+        vm.setLocalOnlyMode(true)
         advanceUntilIdle()
 
-        assertFalse(flagRepo.getFlags().first().llmRouterEnabled)
+        assertFalse(flagRepo.getFlags().first().localOnlyMode)
         assertEquals("Couldn't update launcher settings. Please try again.", vm.uiState.value.errorMessage)
     }
 
     @Test
-    fun `unchanged llm router setting skips flag write`() = runTest(testDispatcher) {
-        val flagRepo = FakeFeatureFlagRepository(FeatureFlags(llmRouterEnabled = true))
+    fun `unchanged local-only setting skips flag write`() = runTest(testDispatcher) {
+        val flagRepo = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = true))
         val vm = buildViewModel(flagRepo)
 
-        vm.setLlmRouterEnabled(true)
+        vm.setLocalOnlyMode(true)
         advanceUntilIdle()
 
-        assertTrue(flagRepo.getFlags().first().llmRouterEnabled)
+        assertTrue(flagRepo.getFlags().first().localOnlyMode)
         assertEquals(0, flagRepo.updateCount)
         assertEquals(null, vm.uiState.value.errorMessage)
     }

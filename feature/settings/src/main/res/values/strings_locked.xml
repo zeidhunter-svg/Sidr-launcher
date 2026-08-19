@@ -19,16 +19,22 @@
     "Stored only on this device." sentence verbatim as its last line. Locking only the standalone
     settings_stored_locally key would send the owner one copy of this privacy claim while shipping the
     other two copies unreviewed, so all three are locked together.
-  - settings_smart_routing_description: spec §7.2's "cloud-disclosure copy" - this toggle is the
-    consent point for routing typed commands to a cloud LLM, and its second sentence states the
-    project's R4 safety invariant ("Suggested actions always ask before running").
+  - settings_local_only_description: spec §7.2's "cloud-disclosure copy" - this toggle is the
+    consent point for routing typed commands to a cloud LLM, and it states the project's R4 safety
+    invariant ("suggested actions always ask before running"). Renamed and rewritten on 2026-08-19
+    by Этап 4.0 (ADR 1/4), which inverted the flag behind it: it was settings_smart_routing_description
+    ("Use your AI provider to understand natural-language commands...") describing an opt-IN to cloud
+    understanding; it now describes an opt-OUT, so both switch positions have to be stated. This is
+    the first time in the project's history a signed Class B string changed - the owner re-signed it,
+    and the gate that guards it was made coverage-aware in the same block (see the OWNER-REVIEWED
+    digest in each values-<locale>/strings_locked.xml header).
 
   Russian and Turkish values in the corresponding values-ru/values-tr strings_locked.xml are
   agent-drafted and NOT owner-reviewed.
 -->
 <resources>
     <string name="settings_stored_locally">Stored only on this device.</string>
-    <string name="settings_smart_routing_description">Use your AI provider to understand natural-language commands. Suggested actions always ask before running.</string>
+    <string name="settings_local_only_description">Off: commands this launcher cannot match locally are sent to your AI provider to be understood, and suggested actions always ask before running. On: nothing leaves this device.</string>
     <string name="settings_forget_alias_consequence">"\"%1$s\" will no longer open %2$s.\nYou can add it again from Settings."</string>
     <string name="settings_aliases_empty_message">No aliases yet\nAliases appear after you add them here.\nStored only on this device.</string>
     <string name="settings_learned_choices_empty_message">No learned choices yet\nPreferences appear only after confirmed choices.\nStored only on this device.</string>

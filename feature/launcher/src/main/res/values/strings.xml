@@ -107,4 +107,14 @@
          DEVICE_LOCATION_LABEL identity string (core/android), which stays fixed English - it also
          serves as GetPrayerContextUseCase's cache-validity key and must never change. -->
     <string name="launcher_prayer_location_current_device">Current location</string>
+
+    <!-- Этап 4.0 (ADR 1/4) — the three mutually exclusive reasons understanding is unavailable.
+         They replace the former blanket "Unknown command", which claimed the *command* was
+         unrecognizable when the truth was about the *system*. Ordinary (not locked) vocabulary: the
+         consent point for cloud routing is the Settings toggle, whose description IS Class B locked;
+         these three are status lines about the current mode, not consent or data-handling claims. -->
+    <string name="launcher_understanding_local_only">Not recognized locally. Cloud understanding is off.</string>
+    <string name="launcher_understanding_needs_provider">No AI provider is set up yet.</string>
+    <string name="launcher_understanding_provider_action">Set up provider</string>
+    <string name="launcher_understanding_needs_network">Understanding this command needs a network connection.</string>
 </resources>

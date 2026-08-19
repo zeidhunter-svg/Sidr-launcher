@@ -59,6 +59,14 @@ internal fun feedbackText(feedback: CommandFeedback): FeedbackText? = when (feed
         CommandMessage.ShowingAllApps -> FeedbackText(R.string.launcher_message_showing_all_apps)
         CommandMessage.AssistantComingSoon -> FeedbackText(R.string.launcher_message_assistant_soon)
         is CommandMessage.Verbatim -> FeedbackText(R.string.launcher_message_verbatim, listOf(m.text))
+        // Этап 4.0 — the three mutually exclusive reasons understanding is unavailable. Each names a
+        // different fix, which is the whole point of not collapsing them back into one line.
+        CommandMessage.UnderstandingLocalOnly ->
+            FeedbackText(R.string.launcher_understanding_local_only)
+        CommandMessage.UnderstandingNeedsProvider ->
+            FeedbackText(R.string.launcher_understanding_needs_provider)
+        CommandMessage.UnderstandingNeedsNetwork ->
+            FeedbackText(R.string.launcher_understanding_needs_network)
     }
     is CommandFeedback.Failure -> when (feedback.failure) {
         CommandFailure.Generic -> FeedbackText(R.string.launcher_failure_generic)

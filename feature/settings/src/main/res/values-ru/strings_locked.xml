@@ -10,15 +10,24 @@
   retyped) out of this module's ordinary values-ru/strings.xml - no copy change.
 -->
 <!--
-  OWNER-REVIEWED 2026-08-19 - the owner has read and approved this file's Russian/Turkish text
-  against docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md (Class B, spec §7.2).
-  Provenance, recorded deliberately: the review was performed by the owner; this token was typed
-  by the agent on the owner's explicit instruction in the 2026-08-19 session. The gate cannot tell
-  the two apart, so the file says which it was.
+  OWNER-REVIEWED 2026-08-20 sha256:c8fa59b1cfe57052 - the owner has read and approved this file's
+  Russian/Turkish text against docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md (Class B,
+  spec §7.2). Provenance, recorded deliberately: the review was performed by the owner; this token
+  was typed by the agent on the owner's explicit instruction. The gate cannot tell the two apart,
+  so the file says which it was.
+
+  Re-signed by Этап 4.0 (agentic track). The 2026-08-19 signature covered
+  settings_smart_routing_description; ADR 1/4 inverted the flag that toggle describes, so the key was
+  renamed to settings_local_only_description and its sentence rewritten to state BOTH switch
+  positions - the previous copy described an opt-IN to cloud understanding that no longer exists.
+  This is the first time a signed Class B string has changed in this project, and it is the reason
+  checkOwnerReviewedLocaleStrings became content-bound in the same block: the digest above covers
+  this file's Class B keys, so the next edit to any of them invalidates this signature instead of
+  riding it.
 -->
 <resources>
     <string name="settings_stored_locally">Хранится только на этом устройстве.</string>
-    <string name="settings_smart_routing_description">Использовать вашего ИИ-провайдера для понимания команд на естественном языке. Предложенные действия всегда запрашивают подтверждение перед выполнением.</string>
+    <string name="settings_local_only_description">Выключено: команды, которые лаунчер не распознал локально, отправляются вашему ИИ-провайдеру для понимания, а предложенные действия всегда запрашивают подтверждение перед выполнением. Включено: ничего не покидает это устройство.</string>
     <string name="settings_forget_alias_consequence">"\"%1$s\" больше не будет открывать %2$s.\nВы можете добавить его снова в настройках."</string>
     <string name="settings_aliases_empty_message">Пока нет псевдонимов\nПсевдонимы появятся здесь после того, как вы их добавите.\nХранится только на этом устройстве.</string>
     <string name="settings_learned_choices_empty_message">Изученных выборов пока нет\nПредпочтения появляются только после подтверждённых выборов.\nХранится только на этом устройстве.</string>

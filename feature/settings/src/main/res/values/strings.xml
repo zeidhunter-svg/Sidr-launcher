@@ -3,9 +3,10 @@
   I18N-1 Task 8: English source for feature/settings (Settings, Aliases, Learned Choices screens).
   Class B consent/destructive-gate copy (settings_forget_alias_consequence,
   settings_forget_learned_choice_consequence, settings_stored_locally, settings_aliases_empty_message,
-  settings_learned_choices_empty_message, settings_smart_routing_description) was moved to
-  strings_locked.xml in the Task 8 fix round (spec §7.2) - see that file's header for why. Everything
-  remaining here is ordinary/translatable.
+  settings_learned_choices_empty_message, settings_local_only_description - the last renamed from
+  settings_smart_routing_description by Этап 4.0) was moved to strings_locked.xml in the Task 8 fix
+  round (spec §7.2) - see that file's header for why. Everything remaining here is
+  ordinary/translatable.
 
   Section headers (settings_section_*, plus settings_add_alias_header/settings_target_app_header/
   settings_aliases_section_header/settings_learned_choices_header) render through SidrSectionHeader ->
@@ -48,7 +49,7 @@
     <string name="settings_learned_choices_title">Learned choices</string>
     <string name="settings_section_assistant">ASSISTANT</string>
     <string name="settings_ai_provider_title">AI provider settings</string>
-    <string name="settings_smart_routing_title">Smart command routing</string>
+    <string name="settings_local_only_title">Local-only mode</string>
     <string name="settings_section_system">SYSTEM</string>
     <string name="settings_set_default_launcher_title">Set as default launcher</string>
 

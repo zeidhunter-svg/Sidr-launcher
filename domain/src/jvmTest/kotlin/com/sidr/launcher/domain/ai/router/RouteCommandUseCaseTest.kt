@@ -6,6 +6,7 @@ import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeIntentMatcher
+import com.sidr.launcher.core.testing.configuredProvider
 import com.sidr.launcher.domain.action.ActionArg
 import com.sidr.launcher.domain.action.ActionCatalog
 import com.sidr.launcher.domain.action.ActionCategory
@@ -28,9 +29,21 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * AIL-4 routing composition (Forks R1/R2/R4). The critical guards: **router-off / confident-rule /
- * offline ⇒ the planner is never consulted and the rule outcome is returned byte-for-byte**, and a
- * planner proposal is surfaced as a non-executing [CommandOutcome.RoutedAction].
+ * The deterministic gate in front of the planner (AIL-4 forks R1/R2/R4, re-anchored by Этап 4.0 /
+ * ADR 1/4 onto `localOnlyMode`).
+ *
+ * Two properties are load-bearing and are what this class exists to hold down.
+ *
+ * **`DOC-ADL-3` - parity.** Local-only / no provider / offline ⇒ the planner is never consulted and
+ * nothing leaves the device, and every outcome FastPath actually *decided* is returned byte-for-byte.
+ * Note what Этап 4.0 changed and what it did not: parity is a property of FastPath's decisions and of
+ * the absence of any outbound call. It was never a promise to keep answering "Unknown command" when
+ * FastPath decided nothing - that answer was a claim about the *command* while the truth was about
+ * the *system*, and the three [CommandMessage] states replace it. A test asserting the old string
+ * would be testing the lie.
+ *
+ * **`DOC-NYH-1` - nothing auto-executes.** A planner proposal still surfaces only as a non-executing
+ * [CommandOutcome.RoutedAction] (Fork R4).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RouteCommandUseCaseTest {
@@ -63,7 +76,14 @@ class RouteCommandUseCaseTest {
         override fun descriptor(id: ActionId): ActionDescriptor? = list.firstOrNull { it.id == id }
     }
 
-    private fun useCase(routerEnabled: Boolean): RouteCommandUseCase = RouteCommandUseCase(
+    private val provider = configuredProvider()
+
+    /**
+     * [localOnly] `false` + a configured provider + online is the **new default posture** (ADR 1/4):
+     * understanding is available unless something concrete prevents it. Each test that exercises a
+     * prevented state turns exactly one of those three off.
+     */
+    private fun useCase(localOnly: Boolean = false): RouteCommandUseCase = RouteCommandUseCase(
         handleUserCommand = HandleUserCommandUseCase(
             matcher = matcher,
             resolver = IntentActionResolver(appsRepo),
@@ -73,7 +93,8 @@ class RouteCommandUseCaseTest {
         ),
         planner = planner,
         catalog = catalog,
-        featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(llmRouterEnabled = routerEnabled)),
+        featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = localOnly)),
+        providerConfigRepository = provider,
         connectivityChecker = connectivity,
     )
 
@@ -88,56 +109,116 @@ class RouteCommandUseCaseTest {
     }
 
     @Test
-    fun `router off - returns rule outcome and never consults planner (parity)`() = runTest {
+    fun `local-only and FastPath missed - says so plainly, planner never consulted (DOC-ADL-3)`() = runTest {
         driveUnknown()
         planner.resultToReturn = PlanResult.RoutedAction(LauncherAction.ShowApps, 0.9f)
 
-        val outcome = useCase(routerEnabled = false).route("do a barrel roll")
+        val outcome = useCase(localOnly = true).route("do a barrel roll")
 
-        assertEquals(CommandOutcome.Unknown("do a barrel roll"), outcome)
+        assertEquals(CommandOutcome.Message(CommandMessage.UnderstandingLocalOnly), outcome)
         assertEquals(0, planner.planCallCount)
     }
 
     @Test
-    fun `router on but rule confident - planner never consulted (R1)`() = runTest {
+    fun `local-only and FastPath decided - outcome is byte-for-byte the FastPath one (DOC-ADL-3)`() = runTest {
         driveConfidentShowApps()
         planner.resultToReturn = PlanResult.RoutedAction(LauncherAction.OpenUrl("https://x.test"), 0.9f)
 
-        val outcome = useCase(routerEnabled = true).route("apps")
+        val outcome = useCase(localOnly = true).route("apps")
 
         assertEquals(CommandOutcome.ShowApps, outcome)
         assertEquals(0, planner.planCallCount)
     }
 
     @Test
-    fun `router on and offline - keeps rule outcome, planner never consulted`() = runTest {
-        driveUnknown()
-        connectivity.online = false
-        planner.resultToReturn = PlanResult.RoutedAction(LauncherAction.ShowApps, 0.9f)
+    fun `FastPath hit - planner never consulted, latency optimization not a filter (R1)`() = runTest {
+        driveConfidentShowApps()
+        planner.resultToReturn = PlanResult.RoutedAction(LauncherAction.OpenUrl("https://x.test"), 0.9f)
 
-        val outcome = useCase(routerEnabled = true).route("do a barrel roll")
+        val outcome = useCase().route("apps")
 
-        assertEquals(CommandOutcome.Unknown("do a barrel roll"), outcome)
+        assertEquals(CommandOutcome.ShowApps, outcome)
         assertEquals(0, planner.planCallCount)
     }
 
     @Test
-    fun `router on, low confidence, planner NoPlan - keeps rule outcome`() = runTest {
+    fun `offline - honest needs-network, planner never consulted (DOC-ADL-3)`() = runTest {
+        driveUnknown()
+        connectivity.online = false
+        planner.resultToReturn = PlanResult.RoutedAction(LauncherAction.ShowApps, 0.9f)
+
+        val outcome = useCase().route("do a barrel roll")
+
+        assertEquals(CommandOutcome.Message(CommandMessage.UnderstandingNeedsNetwork), outcome)
+        assertEquals(0, planner.planCallCount)
+    }
+
+    /**
+     * Fork F4 made this a property of the GATE rather than of [LlmCommandPlanner]'s implementation.
+     * Before Этап 4.0 nothing left the device without a provider only because that one adapter
+     * happened to return `NoPlan` first; a second planner implementation, or a reordering inside this
+     * one, would have silently ended the guarantee. `planCallCount == 0` is the guarantee: the gate
+     * refuses to ask before there is anyone to ask.
+     */
+    @Test
+    fun `no provider configured - honest needs-provider, planner never consulted (F4)`() = runTest {
+        driveUnknown()
+        provider.clearActiveConfig()
+        connectivity.online = true
+        planner.resultToReturn = PlanResult.RoutedAction(LauncherAction.ShowApps, 0.9f)
+
+        val outcome = useCase().route("do a barrel roll")
+
+        assertEquals(CommandOutcome.Message(CommandMessage.UnderstandingNeedsProvider), outcome)
+        assertEquals(0, planner.planCallCount)
+    }
+
+    /**
+     * The three unavailable-states are an ordered chain of early returns, so they can never overlap.
+     * With ALL THREE causes present at once exactly one message is produced, and it is the outermost:
+     * telling a user in local-only mode to go configure a provider would be advice for a problem they
+     * do not have.
+     */
+    @Test
+    fun `all three causes at once - only the outermost is reported`() = runTest {
+        driveUnknown()
+        provider.clearActiveConfig()
+        connectivity.online = false
+
+        val outcome = useCase(localOnly = true).route("do a barrel roll")
+
+        assertEquals(CommandOutcome.Message(CommandMessage.UnderstandingLocalOnly), outcome)
+        assertEquals(0, planner.planCallCount)
+    }
+
+    /** An empty submit is a hint, never a goal: it must not cost a round-trip or an excuse. */
+    @Test
+    fun `empty input - never reaches the planner and is not an unavailable-state`() = runTest {
+        connectivity.online = false
+
+        val outcome = useCase().route("   ")
+
+        assertEquals(CommandOutcome.Empty, outcome)
+        assertEquals(0, planner.planCallCount)
+    }
+
+    @Test
+    fun `planner returns NoPlan - keeps the FastPath outcome`() = runTest {
         driveUnknown()
         planner.resultToReturn = PlanResult.NoPlan
 
-        val outcome = useCase(routerEnabled = true).route("do a barrel roll")
+        val outcome = useCase().route("do a barrel roll")
 
         assertEquals(CommandOutcome.Unknown("do a barrel roll"), outcome)
         assertEquals(1, planner.planCallCount)
     }
 
     @Test
-    fun `router on - CONFIRM-risk proposal surfaces as needsConfirmation RoutedAction`() = runTest {
+    fun `CONFIRM-risk proposal surfaces as needsConfirmation RoutedAction (R4)`() = runTest {
         driveUnknown()
         planner.resultToReturn = PlanResult.RoutedAction(LauncherAction.OpenUrl("https://x.test"), 0.8f)
 
-        val outcome = useCase(routerEnabled = true).route("go to x.test")
+        val outcome = useCase().route("go to x.test")
 
         assertEquals(
             CommandOutcome.RoutedAction(LauncherAction.OpenUrl("https://x.test"), 0.8f, needsConfirmation = true),
@@ -147,11 +228,11 @@ class RouteCommandUseCaseTest {
     }
 
     @Test
-    fun `router on - SAFE proposal surfaces as one-tap RoutedAction (no confirm)`() = runTest {
+    fun `SAFE proposal surfaces as one-tap RoutedAction, still not executed (R4)`() = runTest {
         driveUnknown()
         planner.resultToReturn = PlanResult.RoutedAction(LauncherAction.ShowApps, 0.7f)
 
-        val outcome = useCase(routerEnabled = true).route("show me everything")
+        val outcome = useCase().route("show me everything")
 
         assertEquals(
             CommandOutcome.RoutedAction(LauncherAction.ShowApps, 0.7f, needsConfirmation = false),
@@ -160,11 +241,11 @@ class RouteCommandUseCaseTest {
     }
 
     @Test
-    fun `router on - Clarify becomes a Message`() = runTest {
+    fun `Clarify becomes a Message`() = runTest {
         driveUnknown()
         planner.resultToReturn = PlanResult.Clarify("Which app did you mean?")
 
-        val outcome = useCase(routerEnabled = true).route("open the thing")
+        val outcome = useCase().route("open the thing")
 
         assertEquals(CommandOutcome.Message(CommandMessage.Verbatim("Which app did you mean?")), outcome)
     }
@@ -174,7 +255,7 @@ class RouteCommandUseCaseTest {
         driveUnknown()
         planner.resultToReturn = PlanResult.NoPlan
 
-        useCase(routerEnabled = true).route("do a barrel roll")
+        useCase().route("do a barrel roll")
 
         // handle() → matcher.match() exactly once: the router wraps, never double-runs the rule path.
         assertEquals(1, matcher.callCount)

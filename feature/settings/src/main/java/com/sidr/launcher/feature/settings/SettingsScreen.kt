@@ -83,7 +83,7 @@ fun SettingsScreen(
         onLanguageSelected = { tag ->
             AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
         },
-        onLlmRouterChanged = viewModel::setLlmRouterEnabled,
+        onLocalOnlyModeChanged = viewModel::setLocalOnlyMode,
         onAssistantProvider = viewModel::openAssistantProvider,
         onLearnedChoices = viewModel::openLearnedChoices,
         onAliases = viewModel::openAliases,
@@ -112,7 +112,7 @@ private fun SettingsContent(
     onAutoHideNavBarChanged: (Boolean) -> Unit,
     currentLanguageTag: String,
     onLanguageSelected: (String) -> Unit,
-    onLlmRouterChanged: (Boolean) -> Unit,
+    onLocalOnlyModeChanged: (Boolean) -> Unit,
     onAssistantProvider: () -> Unit,
     onLearnedChoices: () -> Unit,
     onAliases: () -> Unit,
@@ -255,14 +255,15 @@ private fun SettingsContent(
             // ── Assistant ───────────────────────────────────────────────────────
             SidrSectionHeader(text = sidrString(R.string.settings_section_assistant))
             SidrNavigationRow(title = sidrString(R.string.settings_ai_provider_title), onClick = onAssistantProvider)
-            // AIL-4 — LLM Action Router opt-in. Off by default; needs a provider configured above.
-            // When on, natural-language commands the rules can't handle are routed by the cloud LLM to
-            // a registered action (proposals always confirm, never auto-execute).
+            // Этап 4.0 (ADR 1/4) — the local-only opt-OUT that replaced the AIL-4 router opt-in.
+            // Off by default: a command FastPath can't handle is routed to the provider configured
+            // above (proposals always confirm, never auto-execute). On, nothing leaves the device and
+            // an unrecognized command says so instead of pretending it was never understandable.
             SidrToggleRow(
-                title = sidrString(R.string.settings_smart_routing_title),
-                checked = uiState.llmRouterEnabled,
-                onCheckedChange = onLlmRouterChanged,
-                description = sidrString(R.string.settings_smart_routing_description),
+                title = sidrString(R.string.settings_local_only_title),
+                checked = uiState.localOnlyMode,
+                onCheckedChange = onLocalOnlyModeChanged,
+                description = sidrString(R.string.settings_local_only_description),
             )
 
             // ── Default launcher ────────────────────────────────────────────────

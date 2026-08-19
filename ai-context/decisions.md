@@ -5809,3 +5809,74 @@ vocabulary, the persistence schema, the resume/idempotence protocol, the shape o
 turn on the wire, and whether the Assistant screen keeps its own ViewModel or renders an
 `AgentSession` projection. This ADR fixes that there is **one** contract underneath, and two renderings
 above it.
+
+## 2026-08-19 — Этап 0.2 complete — FastPath localized to ru/tr
+
+**Status: CODE-GREEN.** Agentic restart plan (`docs/superpowers/plans/2026-08-18-agentic-track-restart.md`),
+Этап 0.2. Precondition for the ADR 1/4 `llmRouterEnabled` → `localOnlyMode` flag inversion (still
+pending, later in Этап 0/1 follow-through) — with the flag inverted, a FastPath miss on `ru`/`tr` stops
+being "Unknown command" and starts costing a network round-trip for something that should be instant;
+offline degrades honestly only if FastPath itself understands the locale first. Closes the concrete
+device regression: on the owner's SM-A325F (system locale `ru-RU`, `llmRouterEnabled=false`), "открой
+телеграм" classified as `UnknownIntent` at confidence 0.10.
+
+**What changed.** `RuleBasedIntentMatcher.kt` (`:data:repository`) — the sole file named by the plan's
+0.2 section. Every verb/keyword vocabulary (`LAUNCH_VERBS`, `INSTALL_VERBS`, `SEARCH_VERBS`,
+`SETTINGS_KEYWORDS`, `SIMPLE_COMMANDS`) gained `ru` and `tr` forms alongside the existing `en` ones.
+Two structural changes were required beyond "add words to the sets", both driven by the plan's own
+verification example (`telegramı aç` must reach `LaunchAppIntent` at confidence 0.90, parity with
+`open telegram`):
+
+1. **Verb forms became locale-tagged, not a flat `Set<String>`.** A flat set can't be asked "does `tr`
+   have a form?" — [`FastPathLocaleGuardTest`](../data/repository/src/test/java/com/sidr/launcher/data/repository/intent/FastPathLocaleGuardTest.kt)
+   needs that question answerable. New `VerbForms(prefixByLocale, suffixByLocale)` data class per
+   grammatical role, mirroring the `OutboundContextPolicy`/`PreferencesKeys.ALL_KEY_NAMES` precedent of
+   exposing a guard-tested inventory as public constants rather than hiding it behind `private`.
+2. **Turkish is SOV (verb-final), not SVO.** "telegramı aç" is object-then-verb — the existing
+   `input.startsWith("$verb ")` prefix mechanism structurally cannot recognize it; the verb-final case
+   needed a mirrored `input.endsWith(" $verb")` suffix check. This is why `VerbForms` splits
+   `prefixByLocale` (en/ru) from `suffixByLocale` (tr) rather than just adding a `tr` key to one map —
+   position is a property of the language, not just vocabulary.
+
+`ru` forms cover the imperative + infinitive pairs the plan named verbatim: открой/открыть
+(launch), запусти/запустить (launch), найди/найти (search), установи/установить (install). `tr`
+forms use the natural verb-final construction: `aç` (open), `kur` (install), `ara` (search), plus bare
+settings keywords (`ayarlar`, `başlatıcı ayarları`) and a `SIMPLE_COMMANDS` table (`asistan`,
+`uygulamaları göster`, `temizle`, `yardım`, …). `CommandNormalizer.normalize` was **not** touched — it
+already lowercases via `Locale.ROOT`, which the plan confirmed already handles Turkish dotted/dotless
+İ/ı correctly.
+
+**Deliberate non-fix, documented not silently assumed:** Turkish noun-case suffixes (the accusative
+`-ı` in "telegramı") are **not** stripped from the extracted app-name query. `IntentActionResolver`
+does an exact case-insensitive label match, so `displayNameQuery = "telegramı"` will not resolve against
+an installed app labeled "Telegram" unless the user also drops the case ending. Full Turkish
+morphological analysis (four-way vowel harmony, consonant softening, buffer consonants) is out of a
+"days not weeks" cleanup stage and was never named by the plan body — only the dotted-I casing was.
+Documented in the matcher's KDoc as a known limitation, not shipped as a silent partial fix. The
+on-device verification the plan requires ("открой телеграм" launches Telegram) does not depend on this:
+Cyrillic "телеграм" and the launch-verb query extraction were already correct before this change: the
+regression was the verb not being recognized at all, not app-name resolution.
+
+**Guard test.** `FastPathLocaleGuardTest` (`:data:repository`), mirroring
+`LocaleCompletenessGuardTest`'s shape but reading the Kotlin constants directly (no `res/values` —
+`RuleBasedIntentMatcher` stays Android-free and this vocabulary is deliberately not a UI string).
+Three tests assert every one of `LAUNCH_VERBS`/`INSTALL_VERBS`/`SEARCH_VERBS`/`SETTINGS_KEYWORDS_BY_LOCALE`/
+`SIMPLE_COMMANDS_BY_LOCALE` carries a non-empty form for `en`, `ru`, and `tr`.
+
+**Test coverage.** `RuleBasedIntentMatcherTest` gained a table-driven parity test (the plan's own
+example set — "open telegram"/"открой телеграм"/"telegramı aç"/"search weather"/"найди погоду", all
+reaching the right intent type at confidence ≥ 0.85) plus focused tests for the `ru`/`tr` install verb,
+bare settings keyword, simple command, and bare-verb-alone paths. `RuleBasedIntentMatcherTest`: 34 → 43
+tests. `FastPathLocaleGuardTest`: 3 new tests. No existing English-path test changed or was touched.
+
+**Verification (JDK-17, `local.properties`-free Temurin 17 toolchain, exit 0, not piped through
+`tail`):** `:data:repository:testDebugUnitTest` green (63 tasks, 43+3 new tests all passing); root
+`testDebugUnitTest assembleDebug` `BUILD SUCCESSFUL` (543 tasks); `:core:ui:verifyRoborazziDebug`
+`BUILD SUCCESSFUL` — untouched, as expected (no UI/goldens in scope for 0.2). `git diff --stat`: exactly
+`RuleBasedIntentMatcher.kt` + `RuleBasedIntentMatcherTest.kt` modified, `FastPathLocaleGuardTest.kt`
+added — no scope beyond the plan's named file.
+
+**Not done here (out of scope for 0.2, per the plan):** 0.1 (owner action, already closed), 0.3 (ONNX
+removal), 0.4 (CLAUDE.md compression), 0.5 (honest statuses), 0.6 (measured perf budgets), 0.7 (already
+closed). The `llmRouterEnabled` → `localOnlyMode` flag inversion itself (ADR 1/4's decision) is not
+flipped by this stage — 0.2 only removes the precondition blocking it.

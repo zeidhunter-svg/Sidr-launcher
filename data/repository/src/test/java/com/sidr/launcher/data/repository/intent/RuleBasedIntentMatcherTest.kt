@@ -235,4 +235,84 @@ class RuleBasedIntentMatcherTest {
         val input = "open telegram"
         assertEquals(input, matcher.match(input).normalizedInput)
     }
+
+    // --- ru/tr locale forms (agentic restart plan, Этап 0.2) ---
+    // Table-driven parity: ru (SVO prefix, like en) and tr (SOV suffix, e.g. "telegramı aç")
+    // must reach the same intent type at the same 0.90 confidence as their English analogues.
+
+    private data class LocaleCase(
+        val input: String,
+        val expectLaunchApp: Boolean = false,
+        val expectSearch: Boolean = false,
+    )
+
+    @Test fun `ru and tr forms match english confidence parity`() = runTest {
+        val cases = listOf(
+            LocaleCase("open telegram", expectLaunchApp = true),
+            LocaleCase("открой телеграм", expectLaunchApp = true),
+            LocaleCase("открыть телеграм", expectLaunchApp = true),
+            LocaleCase("запусти телеграм", expectLaunchApp = true),
+            LocaleCase("запустить телеграм", expectLaunchApp = true),
+            LocaleCase("telegramı aç", expectLaunchApp = true),
+            LocaleCase("search weather", expectSearch = true),
+            LocaleCase("найди погоду", expectSearch = true),
+            LocaleCase("найти погоду", expectSearch = true),
+            LocaleCase("hava durumu ara", expectSearch = true),
+        )
+        cases.forEach { case ->
+            val best = matcher.match(case.input).best
+            when {
+                case.expectLaunchApp -> assertTrue(
+                    "Expected LaunchAppIntent for '${case.input}', got ${best.intent}",
+                    best.intent is LauncherIntent.LaunchAppIntent,
+                )
+                case.expectSearch -> assertTrue(
+                    "Expected SearchIntent for '${case.input}', got ${best.intent}",
+                    best.intent is LauncherIntent.SearchIntent,
+                )
+            }
+            assertTrue(
+                "Expected confidence >= 0.85 for '${case.input}', got ${best.confidence}",
+                best.confidence >= 0.85f,
+            )
+        }
+    }
+
+    @Test fun `ru install verb returns PlayStoreSearchIntent`() = runTest {
+        val best = matcher.match("установи вотсап").best
+        val intent = best.intent as LauncherIntent.PlayStoreSearchIntent
+        assertEquals("вотсап", intent.query)
+        assertTrue(best.confidence >= 0.85f)
+    }
+
+    @Test fun `tr install verb suffix form returns PlayStoreSearchIntent`() = runTest {
+        val best = matcher.match("whatsapp kur").best
+        val intent = best.intent as LauncherIntent.PlayStoreSearchIntent
+        assertEquals("whatsapp", intent.query)
+        assertTrue(best.confidence >= 0.85f)
+    }
+
+    @Test fun `ru bare settings keyword returns OpenSettingsIntent`() = runTest {
+        assertTrue(matcher.match("настройки").best.intent is LauncherIntent.OpenSettingsIntent)
+    }
+
+    @Test fun `tr bare settings keyword returns OpenSettingsIntent`() = runTest {
+        assertTrue(matcher.match("ayarlar").best.intent is LauncherIntent.OpenSettingsIntent)
+    }
+
+    @Test fun `ru simple commands return matching SimpleCommandIntent`() = runTest {
+        val intent = matcher.match("показать приложения").best.intent as LauncherIntent.SimpleCommandIntent
+        assertEquals(SimpleCommand.SHOW_APPS, intent.command)
+    }
+
+    @Test fun `tr simple commands return matching SimpleCommandIntent`() = runTest {
+        val intent = matcher.match("uygulamaları göster").best.intent as LauncherIntent.SimpleCommandIntent
+        assertEquals(SimpleCommand.SHOW_APPS, intent.command)
+    }
+
+    @Test fun `bare tr launch verb returns UnknownIntent`() = runTest {
+        val best = matcher.match("aç").best
+        assertTrue(best.intent is LauncherIntent.UnknownIntent)
+        assertTrue(best.confidence < 0.50f)
+    }
 }

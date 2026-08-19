@@ -15,16 +15,32 @@ import com.sidr.launcher.domain.intent.UrlDetector
  * Expects already-normalized input (lowercase, trimmed, spaces collapsed via CommandNormalizer).
  *
  * Rule priority:
- *  1. Launch verb prefix (open/launch/start) — produces LaunchAppIntent, even for keywords like
- *     "settings". Exception (AIL-2, Q2): when the verb argument is a high-confidence URL,
- *     "open <url>" opens the site instead of launching an app.
- *  1b. Install verb prefix (install) — Play Store search (AIL-2, Q3).
- *  2. Search verb prefix (search/find/google).
+ *  1. Launch verb (en/ru prefix "<verb> <app>"; tr suffix "<app> <verb>" — Turkish is SOV, e.g.
+ *     "telegramı aç") — produces LaunchAppIntent, even for keywords like "settings". Exception
+ *     (AIL-2, Q2): when the verb argument is a high-confidence URL, "open <url>" opens the site
+ *     instead of launching an app.
+ *  1b. Install verb (en/ru prefix, tr suffix) — Play Store search (AIL-2, Q3).
+ *  2. Search verb (en/ru prefix, tr suffix).
  *  3. Settings bare keywords (no verb).
  *  4. Simple command table.
  *  5. Bare URL / site (AIL-2, R6): high-confidence URL → OpenUrlIntent; domain-shaped but
  *     ambiguous → web SearchIntent; otherwise fall through. Never opens a guessed/malformed URL.
  *  6. Fallback → UnknownIntent.
+ *
+ * Locale forms (agentic restart plan, Этап 0.2): FastPath is a latency optimization, not a filter
+ * on understanding — a locale silently missing a verb form here means a router-off/offline user of
+ * that locale gets "Unknown command" for a phrasing that should just work. The vocabulary stays
+ * Kotlin constants (not `res/values` — this is not UI text and `:data:repository` has no resource
+ * access); [FastPathLocaleGuardTest] enforces every set below carries a non-empty form for every
+ * supported locale.
+ *
+ * Turkish word order is SOV (verb-final), unlike English/Russian SVO, so verb forms are keyed by
+ * position as well as locale — [VerbForms.prefixByLocale] vs [VerbForms.suffixByLocale] — not just
+ * locale. Turkish noun-case suffixes (e.g. the accusative "-ı" in "telegramı") are deliberately
+ * **not** stripped from the extracted app-name query: that is full morphological analysis, out of
+ * this stage's scope. A query still carrying a case suffix may not exact-match an installed app's
+ * label in [com.sidr.launcher.domain.intent.IntentActionResolver] — a known limitation, not a
+ * silently assumed fix.
  */
 class RuleBasedIntentMatcher : IntentMatcher {
 
@@ -43,6 +59,20 @@ class RuleBasedIntentMatcher : IntentMatcher {
         val reason: String,
     )
 
+    /**
+     * Locale-tagged verb forms for one grammatical role (launch/install/search).
+     * [prefixByLocale] matches "<verb> <rest>" (English/Russian, SVO);
+     * [suffixByLocale] matches "<rest> <verb>" (Turkish, SOV).
+     */
+    data class VerbForms(
+        val prefixByLocale: Map<String, Set<String>>,
+        val suffixByLocale: Map<String, Set<String>> = emptyMap(),
+    ) {
+        val allPrefixForms: Set<String> = prefixByLocale.values.flatten().toSet()
+        val allSuffixForms: Set<String> = suffixByLocale.values.flatten().toSet()
+        val allForms: Set<String> = allPrefixForms + allSuffixForms
+    }
+
     private fun classify(input: String): Classification {
         if (input.isEmpty()) {
             return Classification(
@@ -52,15 +82,23 @@ class RuleBasedIntentMatcher : IntentMatcher {
             )
         }
 
-        // 1. Launch verb: open/launch/start <app>
-        val launchVerb = LAUNCH_VERBS.firstOrNull { input.startsWith("$it ") }
-        if (launchVerb != null) {
-            val appQuery = input.removePrefix("$launchVerb ").trim()
+        // 1. Launch verb: "<verb> <app>" (en/ru) or "<app> <verb>" (tr, SOV).
+        val launchPrefix = LAUNCH_VERBS.allPrefixForms.firstOrNull { input.startsWith("$it ") }
+        val launchSuffix = if (launchPrefix == null) {
+            LAUNCH_VERBS.allSuffixForms.firstOrNull { input.endsWith(" $it") }
+        } else null
+        if (launchPrefix != null || launchSuffix != null) {
+            val verb = launchPrefix ?: launchSuffix!!
+            val appQuery = if (launchPrefix != null) {
+                input.removePrefix("$verb ").trim()
+            } else {
+                input.removeSuffix(" $verb").trim()
+            }
             if (appQuery.isEmpty()) {
                 return Classification(
                     LauncherIntent.UnknownIntent(originalInput = input, reason = "launch verb without app name"),
                     0.30f,
-                    "launch verb '$launchVerb' with no query",
+                    "launch verb '$verb' with no query",
                 )
             }
             // Q2: only a high-confidence URL diverts "open <x>" to the browser; anything else
@@ -70,16 +108,16 @@ class RuleBasedIntentMatcher : IntentMatcher {
                 return Classification(
                     LauncherIntent.OpenUrlIntent(url = urlHit.url),
                     0.90f,
-                    "launch verb '$launchVerb' → url '${urlHit.url}'",
+                    "launch verb '$verb' → url '${urlHit.url}'",
                 )
             }
             return Classification(
                 LauncherIntent.LaunchAppIntent(displayNameQuery = appQuery),
                 0.90f,
-                "launch verb '$launchVerb' → query '$appQuery'",
+                "launch verb '$verb' → query '$appQuery'",
             )
         }
-        if (input in LAUNCH_VERBS) {
+        if (input in LAUNCH_VERBS.allForms) {
             return Classification(
                 LauncherIntent.UnknownIntent(originalInput = input, reason = "bare launch verb"),
                 0.30f,
@@ -87,25 +125,34 @@ class RuleBasedIntentMatcher : IntentMatcher {
             )
         }
 
-        // 1b. Install verb: install <app> → Play Store search (Q3 — "install" only).
-        val installVerb = INSTALL_VERBS.firstOrNull { input.startsWith("$it ") }
-        if (installVerb != null) {
-            val appName = input.removePrefix("$installVerb ").trim()
+        // 1b. Install verb: "<verb> <app>" (en/ru) or "<app> <verb>" (tr) → Play Store search
+        //     (AIL-2, Q3 — "install" only).
+        val installPrefix = INSTALL_VERBS.allPrefixForms.firstOrNull { input.startsWith("$it ") }
+        val installSuffix = if (installPrefix == null) {
+            INSTALL_VERBS.allSuffixForms.firstOrNull { input.endsWith(" $it") }
+        } else null
+        if (installPrefix != null || installSuffix != null) {
+            val verb = installPrefix ?: installSuffix!!
+            val appName = if (installPrefix != null) {
+                input.removePrefix("$verb ").trim()
+            } else {
+                input.removeSuffix(" $verb").trim()
+            }
             return if (appName.isNotEmpty()) {
                 Classification(
                     LauncherIntent.PlayStoreSearchIntent(query = appName),
                     0.90f,
-                    "install verb '$installVerb' → play-store query '$appName'",
+                    "install verb '$verb' → play-store query '$appName'",
                 )
             } else {
                 Classification(
                     LauncherIntent.UnknownIntent(originalInput = input, reason = "install verb without app name"),
                     0.30f,
-                    "install verb '$installVerb' with no query",
+                    "install verb '$verb' with no query",
                 )
             }
         }
-        if (input in INSTALL_VERBS) {
+        if (input in INSTALL_VERBS.allForms) {
             return Classification(
                 LauncherIntent.UnknownIntent(originalInput = input, reason = "bare install verb"),
                 0.30f,
@@ -113,26 +160,34 @@ class RuleBasedIntentMatcher : IntentMatcher {
             )
         }
 
-        // 2. Search verb: search/find/google <query>
-        val searchVerb = SEARCH_VERBS.firstOrNull { input.startsWith("$it ") }
-        if (searchVerb != null) {
-            val query = input.removePrefix("$searchVerb ").trim()
+        // 2. Search verb: "<verb> <query>" (en/ru) or "<query> <verb>" (tr).
+        val searchPrefix = SEARCH_VERBS.allPrefixForms.firstOrNull { input.startsWith("$it ") }
+        val searchSuffix = if (searchPrefix == null) {
+            SEARCH_VERBS.allSuffixForms.firstOrNull { input.endsWith(" $it") }
+        } else null
+        if (searchPrefix != null || searchSuffix != null) {
+            val verb = searchPrefix ?: searchSuffix!!
+            val query = if (searchPrefix != null) {
+                input.removePrefix("$verb ").trim()
+            } else {
+                input.removeSuffix(" $verb").trim()
+            }
             return if (query.isNotEmpty()) {
                 Classification(
                     LauncherIntent.SearchIntent(query = query, target = SearchTarget.WEB),
                     0.90f,
-                    "search verb '$searchVerb' → query '$query'",
+                    "search verb '$verb' → query '$query'",
                 )
             } else {
                 Classification(
                     LauncherIntent.UnknownIntent(originalInput = input, reason = "search verb without query"),
                     0.30f,
-                    "search verb '$searchVerb' with no query",
+                    "search verb '$verb' with no query",
                 )
             }
         }
 
-        // 3. Settings bare keywords (verb-free)
+        // 3. Settings bare keywords (verb-free; en/ru/tr forms).
         if (input in SETTINGS_KEYWORDS) {
             return Classification(
                 LauncherIntent.OpenSettingsIntent(),
@@ -141,7 +196,7 @@ class RuleBasedIntentMatcher : IntentMatcher {
             )
         }
 
-        // 4. Simple command table
+        // 4. Simple command table (en/ru/tr forms).
         val simpleCommand = SIMPLE_COMMANDS[input]
         if (simpleCommand != null) {
             return Classification(
@@ -176,19 +231,77 @@ class RuleBasedIntentMatcher : IntentMatcher {
         )
     }
 
-    private companion object {
-        val LAUNCH_VERBS = setOf("open", "launch", "start")
-        val INSTALL_VERBS = setOf("install")
-        val SEARCH_VERBS = setOf("search", "find", "google")
-        val SETTINGS_KEYWORDS = setOf("settings", "launcher settings")
-        val SIMPLE_COMMANDS = mapOf(
-            "assistant" to SimpleCommand.OPEN_ASSISTANT,
-            "show assistant" to SimpleCommand.OPEN_ASSISTANT,
-            "show apps" to SimpleCommand.SHOW_APPS,
-            "show all apps" to SimpleCommand.SHOW_APPS,
-            "clear" to SimpleCommand.CLEAR,
-            "clear input" to SimpleCommand.CLEAR,
-            "help" to SimpleCommand.HELP,
+    /**
+     * Public (not `private`) so [FastPathLocaleGuardTest] can read the vocabulary directly —
+     * mirrors the `OutboundContextPolicy` / `PreferencesKeys.ALL_KEY_NAMES` guard-tested-inventory
+     * precedent.
+     */
+    companion object {
+        val LAUNCH_VERBS = VerbForms(
+            prefixByLocale = mapOf(
+                "en" to setOf("open", "launch", "start"),
+                "ru" to setOf("открой", "открыть", "запусти", "запустить"),
+            ),
+            suffixByLocale = mapOf(
+                "tr" to setOf("aç"),
+            ),
         )
+        val INSTALL_VERBS = VerbForms(
+            prefixByLocale = mapOf(
+                "en" to setOf("install"),
+                "ru" to setOf("установи", "установить"),
+            ),
+            suffixByLocale = mapOf(
+                "tr" to setOf("kur"),
+            ),
+        )
+        val SEARCH_VERBS = VerbForms(
+            prefixByLocale = mapOf(
+                "en" to setOf("search", "find", "google"),
+                "ru" to setOf("найди", "найти"),
+            ),
+            suffixByLocale = mapOf(
+                "tr" to setOf("ara"),
+            ),
+        )
+        val SETTINGS_KEYWORDS_BY_LOCALE: Map<String, Set<String>> = mapOf(
+            "en" to setOf("settings", "launcher settings"),
+            "ru" to setOf("настройки", "настройки лаунчера"),
+            "tr" to setOf("ayarlar", "başlatıcı ayarları"),
+        )
+        private val SETTINGS_KEYWORDS: Set<String> = SETTINGS_KEYWORDS_BY_LOCALE.values.flatten().toSet()
+
+        val SIMPLE_COMMANDS_BY_LOCALE: Map<String, Map<String, SimpleCommand>> = mapOf(
+            "en" to mapOf(
+                "assistant" to SimpleCommand.OPEN_ASSISTANT,
+                "show assistant" to SimpleCommand.OPEN_ASSISTANT,
+                "show apps" to SimpleCommand.SHOW_APPS,
+                "show all apps" to SimpleCommand.SHOW_APPS,
+                "clear" to SimpleCommand.CLEAR,
+                "clear input" to SimpleCommand.CLEAR,
+                "help" to SimpleCommand.HELP,
+            ),
+            "ru" to mapOf(
+                "ассистент" to SimpleCommand.OPEN_ASSISTANT,
+                "показать ассистента" to SimpleCommand.OPEN_ASSISTANT,
+                "показать приложения" to SimpleCommand.SHOW_APPS,
+                "показать все приложения" to SimpleCommand.SHOW_APPS,
+                "очистить" to SimpleCommand.CLEAR,
+                "очистить поле" to SimpleCommand.CLEAR,
+                "помощь" to SimpleCommand.HELP,
+            ),
+            "tr" to mapOf(
+                "asistan" to SimpleCommand.OPEN_ASSISTANT,
+                "asistanı göster" to SimpleCommand.OPEN_ASSISTANT,
+                "uygulamaları göster" to SimpleCommand.SHOW_APPS,
+                "tüm uygulamaları göster" to SimpleCommand.SHOW_APPS,
+                "temizle" to SimpleCommand.CLEAR,
+                "girişi temizle" to SimpleCommand.CLEAR,
+                "yardım" to SimpleCommand.HELP,
+            ),
+        )
+        private val SIMPLE_COMMANDS: Map<String, SimpleCommand> = SIMPLE_COMMANDS_BY_LOCALE.values
+            .flatMap { it.entries }
+            .associate { it.key to it.value }
     }
 }

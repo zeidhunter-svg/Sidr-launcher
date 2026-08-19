@@ -391,10 +391,30 @@ docs only, no code.** Governing document:
    contract; a 0-step plan *is* a spoken reply (Assistant screen), an N-step plan is a task
    (Tasks/Agents).
 
-**Next: Этап 0 (cleanup — release unblock, FastPath `ru`/`tr`, remove the ONNX stack, honest statuses,
-measured budgets), then Этап 2 (toolchain + `:domain` → KMP), Этап 3 (agentic Master Plan + doctrinal
-matrix), then the A0 vertical spike.** The A1 fork (parallel vocabulary vs. evolve in place) is
-**deliberately not decided** — it belongs to Этап 5, on a spec rewritten after ADR 2.
+**Next: the rest of Этап 0 (remove the ONNX stack, honest statuses, measured budgets), then Этап 2
+(toolchain + `:domain` → KMP), Этап 3 (agentic Master Plan + doctrinal matrix), then the A0 vertical
+spike.** The A1 fork (parallel vocabulary vs. evolve in place) is **deliberately not decided** — it
+belongs to Этап 5, on a spec rewritten after ADR 2.
+
+**Этап 0.2 CLOSED 2026-08-19 — FastPath localized to `ru`/`tr`, the `llmRouterEnabled` →
+`localOnlyMode` precondition (ADR 1/4) is cleared.** `RuleBasedIntentMatcher` (`:data:repository`)
+gained `ru`/`tr` forms for every verb/keyword vocabulary (`LAUNCH_VERBS`/`INSTALL_VERBS`/
+`SEARCH_VERBS`/`SETTINGS_KEYWORDS`/`SIMPLE_COMMANDS`). Two structural changes, both forced by the
+plan's own verification example (`telegramı aç` must reach the same intent as `open telegram`, not
+just added words): verb forms became a locale-tagged `VerbForms(prefixByLocale, suffixByLocale)`
+instead of a flat `Set<String>` (so a guard test can ask "does `tr` have a form?"), and Turkish's
+verb-final (SOV) word order needed a mirrored suffix-match (`input.endsWith(" $verb")`) alongside the
+existing prefix-match — a flat English/Russian-shaped set structurally cannot recognize "telegramı
+aç". New `FastPathLocaleGuardTest` (mirrors `LocaleCompletenessGuardTest`'s shape, reads the Kotlin
+constants directly — this vocabulary is deliberately not a UI string) fails the build if any set is
+missing a form for `en`/`ru`/`tr`. **Documented, not silently fixed:** Turkish noun-case suffixes
+(the accusative `-ı` in "telegramı") are not stripped from the extracted app-name query — full
+morphological analysis was never named in scope, only the already-solved dotted-I casing was; a
+query still carrying a case suffix may not exact-match an installed app's label. `RuleBasedIntentMatcherTest`
+34→43 tests, 3 new `FastPathLocaleGuardTest` tests, `git diff --stat` touches exactly the plan's named
+file plus its two test files. Gate (JDK-17): root `testDebugUnitTest assembleDebug` + `:core:ui:
+verifyRoborazziDebug` SUCCESSFUL (goldens untouched, as expected — no UI in scope). ADR "2026-08-19 —
+Этап 0.2 complete — FastPath localized to ru/tr" in decisions.md.
 
 **Этап 0.1 CLOSED 2026-08-19 — the release gate is cleared and `:app:assembleRelease` is green for the
 first time in the project's history.** The owner reviewed the locale package and directed the marker;

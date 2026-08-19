@@ -42,9 +42,23 @@ sign (now Section 6e; byte-identical to the brief-verbatim Section 1b). **Measur
 0.3: 78 MB APK, ONNX 70.4 MB of it (~90%; ~18.5 MB per-device via AAB)** — in ADR 2/4. **Still open:**
 the gate checks marker *presence*, not *coverage*.
 
-**Next:** the rest of Этап 0 (0.2 FastPath `ru`/`tr` → 0.3 remove ONNX → 0.4 compress `CLAUDE.md` →
-0.5 honest statuses → 0.6 measured budgets) → Этап 2 (toolchain + KMP) → Этап 3 (agentic Master Plan +
-doctrinal matrix) → Этап 4 (A0 thin spike).
+**Этап 0.2 CLOSED the same day (2026-08-19) — FastPath localized to `ru`/`tr`.**
+`RuleBasedIntentMatcher` (`:data:repository`) gained `ru`/`tr` forms for `LAUNCH_VERBS`/
+`INSTALL_VERBS`/`SEARCH_VERBS`/`SETTINGS_KEYWORDS`/`SIMPLE_COMMANDS`, closing the device regression
+("открой телеграм" → `UnknownIntent` at 0.10 confidence on `ru-RU`) and clearing 0.1's own
+prerequisite for shipping the `llmRouterEnabled` → `localOnlyMode` flag. Verb forms became
+locale-tagged (`VerbForms(prefixByLocale, suffixByLocale)`, not a flat set) and gained a suffix-match
+path alongside the existing prefix-match — both forced by Turkish being verb-final (SOV: "telegramı
+aç", not "aç telegram"), which a flat English/Russian-shaped set cannot recognize. New
+`FastPathLocaleGuardTest` fails the build if any set is missing an `en`/`ru`/`tr` form. Documented
+limitation, not silently fixed: Turkish noun-case suffixes are not stripped from the extracted
+app-name query (out of this stage's morphology scope). Gate (JDK-17): root `testDebugUnitTest
+assembleDebug` + `:core:ui:verifyRoborazziDebug` SUCCESSFUL; `RuleBasedIntentMatcherTest` 34→43 tests.
+ADR "2026-08-19 — Этап 0.2 complete — FastPath localized to ru/tr" in `decisions.md`.
+
+**Next:** the rest of Этап 0 (0.3 remove ONNX → 0.4 compress `CLAUDE.md` → 0.5 honest statuses → 0.6
+measured budgets) → Этап 2 (toolchain + KMP) → Этап 3 (agentic Master Plan + doctrinal matrix) →
+Этап 4 (A0 thin spike).
 
 ## I18N-2 residual localization + barrier 4 — CLOSED (2026-08-19)
 

@@ -84,7 +84,7 @@ A block that worsens one of these requires a **recorded decision** (ADR line), n
 |---|---|---|
 | Cold start, launcher visible | **766 ms** (SM-A325F, final release, 2026-07-04) | `am start -W`, drop-first protocol |
 | Warm start | ~102 ms (same device/build) | `am start -W` |
-| Heap, steady-state Home | **not yet measured** — first measurement is Этап 0.6 | `dumpsys meminfo` |
+| Heap, steady-state Home | **55 MB PSS** (SM-A325F, Android 13, release, 2026-08-19) — Native Heap 33 MB + Dalvik Heap 5 MB + Code/other 18 MB; Heap Alloc (Native+Dalvik malloc) ≈ 25 MB of that | `dumpsys meminfo`, 4 readings 5s apart at steady-state Home, first dropped |
 
 `< 400 ms` cold start is retained as an **aspiration, not a ship gate** (already downgraded in
 `CLAUDE.md`). Optional hardening: `MacrobenchmarkRule` + `StartupTimingMetric` / `MemoryUsageMetric` in
@@ -98,7 +98,8 @@ Any feature that cannot meet its cost on a given profile **must degrade or be di
 - App grid visible and interactive from cold start: `< 600ms`
 - Cloud AI first streaming token on good network: `< 2000ms`
 - ~~ONNX inference on `MID_RANGE`: `< 150ms`~~ — void, the ONNX tier is closed (ADR 2/4).
-- ~~Heap ceilings 80 / 150 / 250 MB~~ — never measured, so never a gate; superseded by tier 2 above.
+- ~~Heap ceilings 80 / 150 / 250 MB~~ — superseded by tier 2 above, whose 55 MB measured baseline
+  (Этап 0.6) sits under all three anyway; the ceilings were never a gate, just unverified numbers.
   These numbers also do **not** settle local inference: a 1B model at int4 is 700 MB–1 GB resident (a
   different order entirely), while a small function-calling model on NPU is ~200–500 MB and may be
   memory-mapped — see ADR 2/4.

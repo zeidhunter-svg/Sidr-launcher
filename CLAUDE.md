@@ -27,8 +27,7 @@ session for the next one — read it.
 | Stage | State |
 |---|---|
 | **1** — strategic ADR package | ✅ 2026-08-19 — four ADRs, docs only |
-| **0.1** owner sign-off (release gate cleared — `:app:assembleRelease` green for the first time) · **0.2** FastPath `ru`/`tr` · **0.3** delete ONNX (APK 78 MB → 6.8 MB) · **0.4** compress this file · **0.5** honest statuses (`CODE-GREEN`/`DEVICE-ACCEPTED`/`CLOSED`) · **0.7** I18N residue | ✅ 2026-08-19 |
-| **0.6** — budgets rewritten on measured numbers | open — needs the project's first heap measurement |
+| **0.1** owner sign-off (release gate cleared — `:app:assembleRelease` green for the first time) · **0.2** FastPath `ru`/`tr` · **0.3** delete ONNX (APK 78 MB → 6.8 MB) · **0.4** compress this file · **0.5** honest statuses (`CODE-GREEN`/`DEVICE-ACCEPTED`/`CLOSED`) · **0.6** budgets rewritten on measured numbers (heap 55 MB PSS) · **0.7** I18N residue | ✅ 2026-08-19 |
 | **2** toolchain + `:domain` → KMP · **3** agentic Master Plan + doctrinal matrix | queued |
 | **4–7** — A0 spike, A1′ ToolRegistry, A4′ runtime, A2/A3/A5/A6 | each needs its own spec + plan (`brainstorm → spec → plan → build`) |
 
@@ -83,7 +82,7 @@ implied absent (Этап 0.5 — status vocabulary).
 Not `CLOSED`. Status vocabulary (Этап 0.5): `CODE-GREEN` (gate green, no device claim) /
 `DEVICE-ACCEPTED` (owner ran on-device verification and signed off — an agent-driven `adb`/`uiautomator`
 pass does not count) / `CLOSED` (both, plus any residual limitation named, not implied absent). Each item
-below is recorded in its own ADR; Этап 0.6 still owes the performance numbers.
+below is recorded in its own ADR.
 
 - **`CODE-GREEN`, not `DEVICE-ACCEPTED`:** DS-5's own acceptance checklist has never been run (since
   2026-07-13); I18N-1 was verified only by agent-driven `adb`/`uiautomator` — its offline path, live
@@ -92,7 +91,9 @@ below is recorded in its own ADR; Этап 0.6 still owes the performance number
   cross-implementation-verified only (Istanbul/Makkah are authority-table-anchored) — `CLOSED` is not a
   zero-debt claim.
 - **Performance:** cold start 766 ms (`< 400 ms` was never met — aspirational, not a ship gate);
-  heap has **never** been measured; `baselineprofile/` has no `StartupTimingMetric`.
+  heap 55 MB PSS steady-state Home (SM-A325F, Android 13, release, measured 2026-08-19, Этап 0.6 —
+  first-ever measurement, comfortably under the old unverified 80/150/250 MB ceilings); `baselineprofile/`
+  still has no `StartupTimingMetric`/`MemoryUsageMetric` — optional hardening, not done.
 - **Release gate:** `checkOwnerReviewedLocaleStrings` checks the `OWNER-REVIEWED` marker's *presence*,
   not its *coverage* — a signed file can silently gain an unreviewed key. Active now that all 10
   files are signed.

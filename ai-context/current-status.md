@@ -104,8 +104,21 @@ limitation is a named residual, not a hidden one; `CLOSED` does not mean zero de
 ADR "2026-08-19 — Этап 0.5 complete — honest statuses (CODE-GREEN / DEVICE-ACCEPTED / CLOSED)" in
 `decisions.md`.
 
-**Next:** 0.6 measured budgets (needs the project's first heap measurement) → Этап 2 (toolchain + KMP) →
-Этап 3 (agentic Master Plan + doctrinal matrix) → Этап 4 (A0 thin spike).
+**Этап 0.6 CLOSED the same day (2026-08-19) — budgets rewritten on measured numbers.** First-ever heap
+measurement for this project: **55 MB PSS steady-state Home** (SM-A325F, Android 13, current release
+build, `dumpsys meminfo`, 4 readings 5 s apart, first dropped, remaining three stable within 0.1 MB —
+Native Heap 33 MB + Dalvik Heap 5 MB + Code/other 18 MB, Heap Alloc ≈ 25 MB of that). Comfortably under
+the old, never-verified 80/150/250 MB ceilings, which the three-tier scheme (already rewritten in Этап 1)
+now supersedes rather than gates on. `docs/architecture.md`'s tier-2 heap row and tier-3 ceiling note
+updated with the measured value; `CLAUDE.md`'s `Known debt` performance line updated to match. Optional
+hardening (`MacrobenchmarkRule` + `StartupTimingMetric`/`MemoryUsageMetric` in `baselineprofile/`) left
+undone — the section marks it "при желании", not required, and `baselineprofile/` still contains only
+`BaselineProfileGenerator.kt`. Docs-only, zero code/test changes: `git diff --stat` is `.md` files.
+ADR "2026-08-19 — Этап 0.6 complete — performance budgets rewritten on measured numbers" in
+`decisions.md`.
+
+**Next:** Этап 2 (toolchain + `:domain` → KMP) → Этап 3 (agentic Master Plan + doctrinal matrix) →
+Этап 4 (A0 thin spike). Этап 0 is now fully closed (0.1–0.7 all ✅).
 
 ## I18N-2 residual localization + barrier 4 — CLOSED (2026-08-19)
 

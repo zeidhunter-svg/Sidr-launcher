@@ -6107,3 +6107,53 @@ confirm the tree 0.4 left is still green (JDK-17, not piped through `tail`):
 relabeled — only the three blocks the plan names (DS-5, I18N-1, DS-6B). Retroactively relabeling every
 past `CLOSED`/`COMPLETE`/`DONE` in this 6,000-line log is a different, much larger task the plan does not
 ask for here. 0.6 (measured performance budgets) is untouched and remains open.
+
+## 2026-08-19 — Этап 0.6 complete — performance budgets rewritten on measured numbers
+
+**Status: CODE-GREEN (docs only — zero production code, zero test changes).** Agentic restart plan,
+Этап 0.6: replace the one unreachable "hard target" number with the three-kind scheme (invariant /
+measured-baseline-with-gate / per-profile) the plan calls for, anchored on a real measurement instead of
+an aspiration. The three-tier structure itself was already written into `docs/architecture.md` by Этап 1
+(ADR 2/4); the one number that section still owed was heap, never measured in this project's history.
+
+**Measurement — first heap reading this project has ever taken.** SM-A325F (Android 13, API 33),
+current `launcher--7` release build (built and signed with the debug keystore for install only — no
+release signing key is committed by design), fresh install, launched cold, allowed 8 s to settle at Home,
+then `dumpsys meminfo com.sidr.launcher` read 4 times 5 s apart (drop-first protocol, matching the cold-
+start measurement precedent). First reading: 56 244 KB PSS. Remaining three: 56 090 / 56 026 / 56 082 KB
+— stable within ~0.1%. Baseline recorded as **55 MB PSS steady-state Home**, breaking down as Native Heap
+33 MB (alloc ≈18.7 MB of that) + Dalvik Heap 5 MB (alloc ≈6 MB) + Code/`.so`/`.oat`/`.art` mmaps and other
+~18 MB; combined Native+Dalvik Heap Alloc ≈ 25 MB. Comfortably under all three of the old, never-verified
+80/150/250 MB ceilings — those ceilings were not wrong, they were simply never checked; the tier-3 note in
+`architecture.md` now says this explicitly instead of leaving the ceilings dangling as unexplained
+strikethrough.
+
+**Docs synced (no code changed):**
+- `docs/architecture.md` tier-2 table — "Heap, steady-state Home" row changed from "not yet measured —
+  first measurement is Этап 0.6" to the measured value and breakdown above, with the measurement method
+  ("4 readings 5s apart at steady-state Home, first dropped").
+- `docs/architecture.md` tier-3 ceiling note — rewritten to state the 55 MB baseline sits under all three
+  legacy ceilings, replacing the "never measured, so never a gate" phrasing that is now stale.
+- `CLAUDE.md` `Known debt` performance bullet — "heap has never been measured" replaced with the measured
+  value and date; the `baselineprofile/` / `StartupTimingMetric` gap is kept as still-open (see below).
+- `CLAUDE.md` stage table — 0.6 row folded into the "✅ 2026-08-19" row alongside 0.1–0.5/0.7, since Этап 0
+  is now fully closed.
+- `ai-context/current-status.md` — new Этап 0.6 CLOSED paragraph in the same style as 0.1–0.5; "Next"
+  line updated to point at Этап 2 directly (0.6 was the last open item in Этап 0).
+
+**Deliberately not done — optional, named as such in the plan section itself ("при желании закрепить"):**
+`MacrobenchmarkRule` + `StartupTimingMetric`/`MemoryUsageMetric` wired into the existing `baselineprofile/`
+module (today only `BaselineProfileGenerator.kt`). The mandatory action was "measure once, record as
+baseline"; automated regression instrumentation is optional hardening the plan does not gate 0.6's closure
+on. Left as open, named debt in both `CLAUDE.md` and `architecture.md`, not silently dropped.
+
+**Does not settle local inference.** Per the plan's own note: the measured 55 MB says nothing about a 1B
+model at int4 (700 MB–1 GB resident, a different order entirely) — that question is closed by ADR 2/4's
+reasoning (AICore / a small function-calling model on NPU), not by this measurement.
+
+**Verification.** Docs-only change — no `.kt`/`.xml`/`.gradle.kts`/golden touched; `git diff --stat`
+contains only `.md` files. `./gradlew --no-daemon testDebugUnitTest assembleDebug` (JDK-17 Temurin
+toolchain, not piped through `tail`) — BUILD SUCCESSFUL.
+
+**Этап 0 is now fully closed:** 0.1 ✅ · 0.2 ✅ · 0.3 ✅ · 0.4 ✅ · 0.5 ✅ · 0.6 ✅ · 0.7 ✅. Next up is
+Этап 2 (toolchain + `:domain` → KMP).

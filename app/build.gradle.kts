@@ -214,3 +214,16 @@ val checkOwnerReviewedLocaleStrings by tasks.registering {
 tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }.configureEach {
     dependsOn(checkOwnerReviewedLocaleStrings)
 }
+
+// Этап 3.2 (agentic track). `DoctrineMatrixGuardTest` reads
+// `docs/governing/sidr-doctrine-matrix-v1.0.md` - a file outside every source set, so Gradle has no
+// way to know it is an input. Without this declaration the test task stays UP-TO-DATE when only the
+// matrix changes, and a rule claiming a nonexistent test would ship unchecked on an incremental
+// build. Verified by mutation: without it, four deliberately broken matrices all "passed"; with it,
+// each one fails. Exactly the vacuous-guard class Этап 2 found in three privacy guards
+// (`walkTopDown()` on a nonexistent directory throws nothing and asserts nothing).
+tasks.withType<Test>().configureEach {
+    inputs.file(rootProject.file("docs/governing/sidr-doctrine-matrix-v1.0.md"))
+        .withPropertyName("doctrineMatrix")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}

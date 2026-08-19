@@ -2,11 +2,19 @@
 
 ## Islamic Order × Computational Precision × Agentic Intelligence
 
-**Статус:** Proposed Governing Master Plan
+**Статус:** Governing Master Plan дизайн-трека
 **Назначение:** единый управляющий план развития интерфейса SIDR
 **Область:** SIDR Launcher → SIDR AI Framework → SIDR Agentic OS
-**Текущая точка:** DS-0 ✅ · DS-1 ✅ · следующий блок DS-2
-**Рекомендуемый путь файла:** `docs/design/sidr-design-system-master-plan-v1.2.md`
+**Текущая точка (2026-08-19):** DS-0…DS-11 + I18N-1 закрыты; дизайн-трек **между блоками** —
+следующий DS-блок не назначен. Активен агентный трек:
+[`sidr-agentic-master-plan-v1.0.md`](sidr-agentic-master-plan-v1.0.md). Точные статусы каждого блока
+(`CODE-GREEN` / `DEVICE-ACCEPTED` / `CLOSED`, словарь Этапа 0.5) — в `CLAUDE.md` и
+`ai-context/current-status.md`, а не здесь.
+**Путь файла:** `docs/governing/sidr-design-system-master-plan-v1.2.md` — живой управляющий документ.
+Переехал сюда 2026-08-19 (Этап 3) из `docs/design/`, объявленной ADR DS-0 архивом входных
+материалов; см. [`README.md`](README.md).
+**Доктрина:** проверяемая часть — §5/§5.1/§5.2 и §20.1 — извлечена в
+[`sidr-doctrine-matrix-v1.0.md`](sidr-doctrine-matrix-v1.0.md). Здесь остались принципы прозой (§4).
 
 ---
 
@@ -123,21 +131,24 @@ Automation
 * Roborazzi screenshot harness;
 * initial dark/light goldens.
 
-### Следующая точка
+### Следующая точка (обновлено 2026-08-19)
+
+Последовательность, которую этот раздел назначал — DS-2 → DS-3 → DS-4 → DS-6A → DS-6B → DS-7 —
+**пройдена целиком**, плюс DS-8…DS-11 и I18N-1.
 
 ```text
-DS-2 — Primitives
+Следующий DS-блок не назначен.
 ```
 
-Затем:
+Дизайн-трек находится между блоками по решению владельца: активен агентный трек
+([`sidr-agentic-master-plan-v1.0.md`](sidr-agentic-master-plan-v1.0.md)). Новый DS-блок заводится по
+потребности — §12 (conditional future blocks) и §10 остаются в силе: **feature surface не может
+заранее изображать несуществующий engine**, поэтому агентные поверхности разблокирует A4′/A5, а не
+этот документ.
 
-```text
-DS-3 — Controls and semantic interaction patterns
-DS-4 — Home shell and Universal Input composition
-DS-6A — Sacred Header
-DS-6B — Prayer correctness capability
-DS-7 — Memory surfaces
-```
+Что осталось незакрытым внутри пройденных блоков (не новый блок, а долг): DS-5 и I18N-1 —
+`CODE-GREEN`, приёмка на устройстве владельцем не проводилась. Список ведётся в `CLAUDE.md`
+§ Known debt.
 
 ---
 
@@ -479,54 +490,37 @@ AI не расширяет полномочия самостоятельно.
 
 # 5. Islamic Principles Traceability Matrix
 
-| Принцип         | Design rule                                              | Основные компоненты                                 | DS/A-layer               | Обязательная проверка                                   |
-| --------------- | -------------------------------------------------------- | --------------------------------------------------- | ------------------------ | ------------------------------------------------------- |
-| Niyyah          | Не скрывать interpretation и ambiguity                   | Universal Input, Clarification, Intent surface      | DS-3, DS-4, A4           | неоднозначное действие не выполняется молча             |
-| Amanah          | Данные минимальны, контролируемы и не уходят скрытно     | Privacy notice, Memory item, Permission notice      | DS-3, DS-6B, DS-7, A2–A4 | privacy guards, delete flow, egress test                |
-| Mizan           | Progressive disclosure; минимум, достаточный для решения | Home, Result, Detail expansion                      | DS-3, DS-4               | idle screen не перегружен; consequence не скрыт         |
-| Ilm             | Всегда показывать origin/why там, где это существенно    | Provenance Line, Prayer provenance, Memory evidence | DS-2, DS-6B, DS-7, A4–A5 | consequential surface без provenance не проходит review |
-| Adl             | Одинаковый риск получает одинаковый gate                 | Risk marker, Action Gate, Consent Gate              | DS-3, A1, A4, A6         | risk mapping test; status не зависит от accent          |
-| Haya            | Нет давления и лишней демонстративности                  | Buttons, permission text, empty states              | DS-3, DS-4               | нет countdown, fake urgency, auto-opt-in                |
-| Sukun           | Покой является default state                             | Home idle, sacred header                            | DS-4, DS-6A              | idle screenshot density gate                            |
-| Human authority | Пользователь управляет consequential loop                | Action Gate, execution controls, undo               | DS-3, A4, A6             | Cancel не вызывает действие; pause/stop честны          |
+> **Извлечено 2026-08-19 (Этап 3.2 агентного трека) →
+> [`sidr-doctrine-matrix-v1.0.md`](sidr-doctrine-matrix-v1.0.md).**
+>
+> Матрица переехала целиком, потому что у неё появился второй потребитель: половина её строк
+> указывает на инженерные слои (Niyyah → A4, Ilm → A4–A5, Adl → A1/A4/A6, Human authority → A4/A6),
+> а агент, работающий над рантаймом, не имеет причин открывать документ дизайн-трека.
+>
+> Что изменилось при переезде, кроме адреса: у каждого правила появился **стабильный ID** (`DOC-*`),
+> тип проверки проставлен **из закрытого словаря** (раньше в этой колонке была проза), и добавлена
+> колонка **«чем обеспечено»** — имя реального теста либо честное `<нет>` с адресатом долга. Это
+> превращает документ из декларации в список долгов и делает его проверяемым: `DoctrineMatrixGuardTest`
+> краснеет, если правило заявляет тест, которого в репозитории нет.
+>
+> **Здесь остались принципы прозой — §4.** Смысл принципа ищется там, проверка — в матрице.
 
 ## 5.1. Приоритет принципов (разрешение конфликтов)
 
-Восемь принципов **не равны на моменте решения** — они конфликтуют (объяснить vs. промолчать;
-раскрыть облако vs. сохранить покой Home). Порядок разрешения:
-
-```text
-Human-authority + Amanah  (безопасность и правда)  — не-негоциируемы, абсолютны
-        ↓
-Adl               (одинаковый риск = одинаковый UI) — применяет безопасность единообразно
-        ↓
-Ilm               (объяснить неочевидное)           — заслуживает место прогрессивно
-        ↓
-Mizan             (минимум для решения)             — дефолтный бюджет раскрытия
-        ↓
-Haya + Sukun      (сдержанность и покой)            — состояние по умолчанию
-```
-
-**Эвристика (одна строка):** правда и безопасность не-негоциируемы; консистентность их защищает;
-информация, **необходимая** для осознанного решения, никогда не подавляется ради покоя — но **не**
-необходимая деталь уступает покою (progressive disclosure). При конфликте правил одного ранга —
-эскалация, не молчаливый выбор.
+> Переехало → [`sidr-doctrine-matrix-v1.0.md`](sidr-doctrine-matrix-v1.0.md) §2. Порядок разрешения
+> (Human-authority + Amanah → Adl → Ilm → Mizan → Haya + Sukun) и эвристика одной строкой не
+> изменились; пересказывать их здесь значило бы завести второй источник правды.
 
 ## 5.2. Verification vocabulary для «Обязательной проверки»
 
-Каждая «Обязательная проверка» в §5 и каждый gate ссылается на один из закрытого набора типов,
-привязанных к реальным механизмам репозитория:
-
-* `screenshot` — Roborazzi golden (`:core:ui:verifyRoborazziDebug`, DS-1 harness);
-* `semantics` — Compose semantics / TalkBack / focus order;
-* `arch-guard` — dependency / privacy guard (`OutboundContextPolicy`, `AiRequestGuardTest`, `PrivacyInventoryGuardTest`, `accent_and_status_are_distinct_tokens`);
-* `unit` — domain / ViewModel behavior (`RouteCommandUseCaseTest`, `ExecuteActionUseCaseTest`, `LauncherViewModelTest`);
-* `device` — SM-A325F device-acceptance;
-* `manual` — ручной visual/content review (§20; честно не-автоматизируемо).
-
-Правило может быть только `manual` — тогда оно так и помечается; аспирационное «should be tested» запрещено.
+> Переехало → [`sidr-doctrine-matrix-v1.0.md`](sidr-doctrine-matrix-v1.0.md) §1. Словарь остался
+> закрытым и по составу прежним (`screenshot` / `semantics` / `arch-guard` / `unit` / `device` /
+> `manual`), но теперь **применён** — тип стоит в самой таблице, а не в прозе, и расширение словаря
+> ловится guard-тестом. Правило может быть только `manual` — тогда оно так и помечается;
+> аспирационное «should be tested» по-прежнему запрещено.
 
 ---
+
 
 # 6. Visual identity contract
 
@@ -1874,17 +1868,17 @@ Automation
 
 ## 20.1. Calm budgets (числовые прокси Sukun/Haya)
 
-«Покой» и «сдержанность» непроверяемы как настроение — поэтому задаются счётчиками, а не вкусом:
-
-```text
-[ ] Idle animation budget = 0        (idle-поверхность без анимированных элементов)
-[ ] Accent budget ≤ 2–3 на экран     (accent «едва присутствует»; остальное — нейтральный grey/text)
-[ ] Нет status-только-цветом         (каждый статус несёт text + marker, не один цвет)
-[ ] Sacred-density: только Shahada (+ опц. одна prayer-строка), ничто не конкурирует за внимание
-[ ] Motion в пределах doctrine-токенов (100–360мс), reduce-motion соблюдён
-```
-
-Точное N для accent-бюджета фиксируется в планах DS-2/DS-3. Проверка: `screenshot` (idle/плотность) + `manual`.
+> **Извлечено 2026-08-19 (Этап 3.2) → [`sidr-doctrine-matrix-v1.0.md`](sidr-doctrine-matrix-v1.0.md).**
+>
+> Пять пунктов бюджета стали строками матрицы, а не переехали блоком: `DOC-SKN-1` (idle animation
+> budget = 0), `DOC-SKN-2` (accent budget ≤ 2–3, точное N по-прежнему в планах DS-2/DS-3),
+> `DOC-SKN-3` (sacred-density), `DOC-SKN-4` (motion 100–360 мс + reduce-motion). Пятый — «нет
+> status-только-цветом» — при разборе оказался не Sukun, а **Adl**: это правило про одинаковость
+> прочтения статуса, а не про покой, и стал частью `DOC-ADL-2`, где у него уже есть тест
+> (`ThemeTokensTest#accent_and_status_are_distinct_tokens`).
+>
+> Причина переезда та же, что у §5: счётчик без имени теста — это декларация. В матрице у каждого
+> из пяти стоит либо тест, либо честное `<нет>` с указанием, чей это долг.
 
 ---
 
@@ -2018,26 +2012,26 @@ Exit:
 
 ---
 
-# 24. Immediate next action
+# 24. Immediate next action (обновлено 2026-08-19)
 
-После принятия этого Master Plan агенту не следует сразу писать DS-2 code.
+Исходный текст этого раздела назначал следующей задачей спеку DS-2. **DS-2 закрыт 2026-07-11**, как и
+всё, что за ним следовало. Раздел был устаревшим ~10 блоков и переписан в Этапе 3 агентного трека.
 
-Правильная следующая задача:
+**Для дизайн-трека следующего действия нет.** Новый DS-блок не назначен и заводится по потребности,
+обычным циклом (audit → design spec → implementation plan → … → ADR). Форма цикла в §0 и §22
+остаётся действующей.
 
-> Подготовить repository-grounded DS-2 Primitives Design Spec и отдельный DS-2 Implementation Plan.
+**Активная работа проекта — агентный трек.** Его следующее действие определяет
+[`sidr-agentic-master-plan-v1.0.md`](sidr-agentic-master-plan-v1.0.md) §8: Этап 4.0 (инверсия флага
+понимания), затем спека A0.
 
-DS-2 plan должен:
+Если DS-блок всё же заводится, он обязан:
 
-* перечитать current `core/ui`;
-* проверить реальные token APIs DS-1;
-* определить точные signatures;
-* определить migration compatibility;
-* зафиксировать `SidrProvenanceLine`;
-* определить Roborazzi matrix;
-* не менять production screens;
+* перечитать актуальный `core/ui` — не полагаться на описания в этом документе;
+* назвать правила доктрины (`DOC-*`), которые обязан закрыть, и получить для них имена тестов
+  в [`sidr-doctrine-matrix-v1.0.md`](sidr-doctrine-matrix-v1.0.md);
+* определить Roborazzi matrix и не менять production screens без отдельного решения;
 * закончиться review и отдельным owner approval.
-
-Только после одобрения DS-2 plan начинается реализация DS-2.
 
 ---
 

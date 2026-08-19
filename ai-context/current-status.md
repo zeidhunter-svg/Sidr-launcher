@@ -15,6 +15,44 @@
 > DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer
 > Correctness CLOSED — device-accepted by the owner).
 
+## Agentic track — Этап 3 (agentic Master Plan + doctrine matrix) CODE-GREEN (2026-08-19)
+
+Docs plus one guard test; no production source file changed. New folder **`docs/governing/`** —
+the *living* governing documents, as opposed to `docs/design/`, which ADR DS-0 declared an archive
+of imported inputs.
+
+- **[`sidr-agentic-master-plan-v1.0.md`](../docs/governing/sidr-agentic-master-plan-v1.0.md)** — the
+  instrument the engine track never had: block sequence (Этап 4.0 → A0 → A1′ → A4′ → A2/A3 → A5/A6,
+  each with goal / inputs / outputs / what is reused / what is out of scope / acceptance), Definition
+  of Done, change-control, five milestones, and `Agentic Shell v1 = DONE` (9 criteria, each mapped to
+  the `DOC-*` rules that make it checkable). It does **not** supersede the restart plan (owner's
+  choice): that document keeps the four owner decisions, the §0 session protocol and `§HANDOFF`.
+  It also does **not** pre-empt the A1 fork — parallel tool vocabulary vs. evolving `ActionCatalog`
+  in place stays open for A1′.
+- **[`sidr-doctrine-matrix-v1.0.md`](../docs/governing/sidr-doctrine-matrix-v1.0.md)** — Master Plan
+  §5/§5.1/§5.2/§20.1 extracted out of a design-track document, because half the matrix pointed at
+  engineering layers. 28 `DOC-*` rules, four columns: stable ID, rule, verification type from the
+  closed vocabulary, and **a real test name or an honest `<нет>` with the debt's address** (12 of 28
+  are empty today: A1′ ×2, A2 ×1, A4′ ×5, manual-by-nature ×3, design-track ×1). The philosophy —
+  the eight principles in prose — deliberately stayed in the design Master Plan §4.
+- **`DoctrineMatrixGuardTest`** (`app/src/test/java/com/sidr/launcher/doctrine/`, 8 tests) fails on a
+  false claim: a named test that exists in no source set, a type outside the vocabulary, a vocabulary
+  the document widened but the test did not, an anonymous `<нет>`, a lost principle, a rule count that
+  drifted. It never fails on an honest `<нет>`. **Proven by six mutations, not assumed** — the first
+  negative pass exposed a real defect: the test task was `UP-TO-DATE` because a `.md` outside every
+  source set is not a Gradle input, so all four broken matrices "passed". Fixed by declaring the
+  matrix as a test-task input in `app/build.gradle.kts`.
+- **Filing fixed:** the *living* design Master Plan had been sitting inside the archive folder and was
+  not one of its seven documents — `git mv`'d to
+  [`docs/governing/sidr-design-system-master-plan-v1.2.md`](../docs/governing/sidr-design-system-master-plan-v1.2.md)
+  with the version now in the filename. Its header, §1.2 "Следующая точка" and §24 "Immediate next
+  action" all still claimed "next block DS-2" (~10 blocks stale) and were rewritten. §5/§5.1/§5.2/§20.1
+  keep their headings as pointer stubs so cited section numbers stay valid.
+
+Gate: `testDebugUnitTest assembleDebug --rerun-tasks` — 551/551 tasks executed, 652 tests / 0
+failures; `:domain:jvmTest --rerun-tasks` — 311 tests / 0 failures. `verifyRoborazziDebug` not run —
+`core/ui` untouched. ADR: decisions.md "2026-08-19 — Этап 3 complete".
+
 ## Agentic track — Этап 1 (strategic ADR package) DONE (2026-08-19)
 
 Docs only, zero code. Governing document:
@@ -347,7 +385,8 @@ Full gate + SM-A325F device acceptance green. ADR: decisions.md "2026-07-11 — 
 screens to artifact".
 
 Parallel presentation-only design-system migration to the approved **soft-classic-grey** identity, governed
-by `docs/design/SIDR Design System Master Plan v1.2` (§5.1 precedence, §5.2 verify-vocab, §20.1 calm budgets
+by `docs/governing/sidr-design-system-master-plan-v1.2.md` (§5.1 precedence, §5.2 verify-vocab, §20.1 calm budgets
+— all three extracted to `docs/governing/sidr-doctrine-matrix-v1.0.md` in Этап 3; the Master Plan keeps pointer stubs at those numbers
 folded in from the principles rulebook). **DS-1** = grey token layer (both themes) + tri-font + softened
 shapes + `SidrTheme.colors`/`textStyles` (accent inert) + global CRT removed + **Roborazzi harness**.
 **DS-2** = eight additive `core/ui/primitive/` primitives + `Strokes` token + preview gallery goldens

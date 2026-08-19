@@ -6327,3 +6327,118 @@ guard-test / dependency-catalog edits, 1 new file (`data/repository/src/test/res
 - `core/testing` was **not** converted to KMP — it stays plain `kotlin.jvm`, consumed only from
   `:domain`'s `jvmTest` source set (a same-platform dependency), so no compatibility issue arises and
   none was created.
+
+---
+
+## 2026-08-19 — Этап 3 complete — agentic Master Plan + doctrine matrix extracted, `docs/governing/` created
+
+**Status: CODE-GREEN.** Agentic restart plan, Этап 3 (3.1 agentic Master Plan + 3.2 doctrine-matrix
+extraction). Documents plus one guard test; no production code touched.
+
+**Four forks resolved by the owner before any file was written** (forks-before-code; the stage
+section fixed the *content* — the readiness definition, what moves, the four-column form, the
+guard-the-guard, three filing fixes — but not these):
+
+| Fork | Owner's choice |
+|---|---|
+| Where the three *living* governing documents live | new `docs/governing/` folder (over flat `docs/` root, over per-track folders) |
+| How broad the matrix is | moderate — §5's 8 rows + §20.1's budgets + the agentic invariants the restart plan already names, with forward debts marked |
+| How deep to de-stale the design Master Plan | header + §1.2 "Следующая точка" + §24 "Immediate next action" (not a full §11 status sweep) |
+| Agentic Master Plan vs. the restart plan | **separate layers** — the restart plan stays authoritative and is not superseded |
+
+**3.1 — `docs/governing/sidr-agentic-master-plan-v1.0.md`** (new). The design track's asymmetry
+named in the restart plan's own Context — "у дизайн-трека есть Master Plan, милстоуны, DoD,
+change-control; у агентного шесть спек и четыре развилки" — is removed by giving the engine track
+the same instrument: §2 readiness definition (`Agentic Shell v1 = DONE`, 9 criteria verbatim from
+the plan, each mapped to the `DOC-*` rules that make it checkable), §3 block sequence
+(Этап 4.0 → A0 → A1′ → A4′ → A2/A3 → A5/A6, each with goal / входы / выходы / what is reused /
+what is not in scope / acceptance), §4 Definition of Done, §5 change-control, §6 five milestones,
+§7 what is deliberately not built, §8 immediate next action.
+
+Block names stay A-shaped (`A1′`, `A4′` = *the spec of that layer is rewritten*, not executed as
+written) rather than inventing a third numbering system alongside DS-N and Этап-N.
+
+Two things it deliberately does **not** do: it does not pre-empt the A1 fork (parallel tool
+vocabulary vs. evolving `ActionCatalog` in place) — recorded in §3.2 as the fork that block resolves
+on a spec rewritten after ADR 2/4; and it does not restate the restart plan. §1.1 fixes the
+anti-drift rule explicitly (link the section, never paraphrase it — the DS-0 precedent where three
+v1↔v1.1 conflicts had to be litigated after the fact), and `§HANDOFF` stays in the restart plan,
+which has exactly one writer and one reader.
+
+**3.2 — `docs/governing/sidr-doctrine-matrix-v1.0.md`** (new). Master Plan §5 (traceability matrix),
+§5.1 (conflict precedence), §5.2 (verification vocabulary) and §20.1 (calm budgets) moved out of a
+**design-track** document, because half the matrix pointed at engineering layers and the agent
+working on the runtime has no reason to open "Design System Master Plan". The philosophy (§4, the
+eight principles in prose) deliberately stayed behind: audit §21 logged Risk 5 ("Islamic aesthetics
+become decorative"), and a manifesto and a table of test names have different fates.
+
+28 rules, `DOC-<PREFIX>-<n>`, four columns. Three things that did not exist before:
+
+1. **Stable IDs** — ADRs and tests cite the rule instead of paraphrasing it.
+2. **Type from the closed vocabulary, applied in the table.** §5.2 defined the vocabulary but never
+   applied it; that column held prose.
+3. **"Чем обеспечено"** — a real test name or an honest `<нет>` naming whose debt it is. This is what
+   turns a declaration into a list of debts: 12 of 28 cells are empty today, each addressed
+   (`долг A1′` ×2, `долг A2` ×1, `долг A4′` ×5, manual-by-nature ×3, design-track ×1).
+
+One substantive reclassification during extraction, recorded rather than done silently: §20.1's
+"нет status-только-цветом" is not Sukun but **Adl** — it is about statuses reading the same way, not
+about calm — and became part of `DOC-ADL-2`, where a test already existed
+(`ThemeTokensTest#accent_and_status_are_distinct_tokens`). Everything else moved verbatim.
+
+**`DoctrineMatrixGuardTest`** (`app/src/test/java/com/sidr/launcher/doctrine/`, 8 tests) — the
+guard-the-guard, same shape as `HardcodedUiTextGuardTest.scoped_roots_cover_every_ui_module`. It
+fails when: an id is malformed, duplicated, or uses a prefix absent from the document's own key
+table; a type is outside the closed vocabulary; **the document's declared vocabulary and the test's
+hardcoded set disagree** (widening the doctrine's vocabulary must be a deliberate edit in two
+places); a rule names a test class that exists in no test source set, or a `#function` absent from
+the file it names; a `<нет>` cell does not name its debt; a principle stops being represented; the
+declared rule count and the table disagree. It does **not** fail on an honest `<нет>` — a document
+that cannot show debt is a document where debt gets hidden.
+
+**A real defect found and fixed by mutation testing, not by the green run.** The first negative pass
+reported all four broken matrices as *passing* — `:app:testDebugUnitTest` was `UP-TO-DATE`, because a
+`.md` outside every source set is not an input Gradle knows about. On an incremental build a rule
+claiming a nonexistent test would have shipped unchecked: the guard would have been decorative in
+exactly the way the document exists to prevent. Fixed by declaring the matrix as a test-task input in
+`app/build.gradle.kts` (`inputs.file(...).withPathSensitivity(RELATIVE)`). This is the same vacuous-guard
+class Этап 2 found in three privacy guards (`walkTopDown()` on a nonexistent directory throws nothing
+and asserts nothing) — found there by grep, here by mutation.
+
+Re-verified after the fix, six mutations, each red on the expected assertion and only that one:
+fake test class → `every_named_test_exists_in_the_repository`; real class + fake function → same;
+type `probably-fine` → `every_type_is_from_the_closed_vocabulary`; anonymous `<нет>` + wrong count →
+`every_empty_cell_names_its_debt` + `declared_rule_count_matches_the_table`; both `DOC-HYA-*` rows
+deleted → `every_principle_still_has_at_least_one_rule`; vocabulary widened in the document only →
+`declared_vocabulary_matches_this_test`. Unmutated matrix green.
+
+**Filing (the "попутно" part of the stage, owner-scoped to header + §1.2 + §24).**
+`docs/design/` was declared by ADR DS-0 an "archive of inputs, not the governing spec" and lists seven
+imported documents — yet the *living* Master Plan sat inside it, was not one of the seven, and by
+`CLAUDE.md` was governing. `git mv` to `docs/governing/sidr-design-system-master-plan-v1.2.md`
+(rename tracked, history preserved), filename now carries the version the document itself recommended.
+`docs/governing/README.md` states what makes a document belong there, so the mirror-image mistake
+(a living document filed as an archive, or vice versa) has a written answer. `docs/design/README.md`
+says what left and where it went. Stale claims fixed: the header ("Текущая точка: DS-0 ✅ · DS-1 ✅ ·
+следующий блок DS-2" — ~10 blocks behind), §1.2 "Следующая точка" and §24 "Immediate next action",
+all three of which asserted the same obsolete thing. §5/§5.1/§5.2/§20.1 kept their **headings** and
+became pointer stubs — deleting them outright would have renumbered sections that the DS-2 plan and
+`current-status.md` cite.
+
+Not done, deliberately: the ~10 references to the old path inside **closed** DS specs and plans were
+left as written (they are history, and `docs/design/README.md` now redirects a reader who lands
+there); §11's per-block statuses were not swept to the Этап 0.5 vocabulary — the owner scoped the
+de-staling to three places, and that sweep is a documentation audit of its own.
+
+**Verification (JDK-17 Temurin via `org.gradle.java.installations.paths`, exit code checked, output
+never piped through `tail`):**
+- `./gradlew --no-daemon testDebugUnitTest assembleDebug --rerun-tasks` — BUILD SUCCESSFUL,
+  **551/551 tasks genuinely executed** (not cached), 652 tests / 0 failures.
+- `./gradlew --no-daemon :domain:jvmTest --rerun-tasks` — BUILD SUCCESSFUL, 311 tests / 0 failures
+  (the portable core; `testDebugUnitTest` does not reach `:domain`'s `jvmTest` source set post-KMP).
+- `:core:ui:verifyRoborazziDebug` **not** run — `core/ui` was not touched by this stage.
+- Six-mutation negative check on the new guard, above.
+
+**`git diff --stat` radius:** 1 rename (design Master Plan), 3 new documents (`docs/governing/`),
+1 new test, 1 build-script edit, 4 edited documents (`CLAUDE.md`, `current-status.md`,
+`docs/design/README.md`, the moved Master Plan). No production source file changed.

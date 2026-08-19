@@ -24,12 +24,22 @@ layers grow inside vertical slices) → **Agentic OS** (consented automation + t
 checklist is binding for every stage. `§HANDOFF` at the end of that file is written by the closing
 session for the next one — read it.
 
+Since Этап 3 the track also has a **Master Plan** — block sequence A0…A6, DoD, change-control,
+milestones, and the `Agentic Shell v1 = DONE` definition:
+[docs/governing/sidr-agentic-master-plan-v1.0.md](docs/governing/sidr-agentic-master-plan-v1.0.md).
+Different layer, not a replacement: the restart plan keeps the owner's four decisions, the §0 session
+protocol and `§HANDOFF`; the Master Plan governs how blocks are run from Этап 4 on. The eight Islamic
+principles' **checkable** part now lives in
+[docs/governing/sidr-doctrine-matrix-v1.0.md](docs/governing/sidr-doctrine-matrix-v1.0.md) as 28
+`DOC-*` rules — cite a rule by ID, never paraphrase it; a rule's third column is a real test name or
+an honest `<нет>`, and `DoctrineMatrixGuardTest` fails the build on a false claim.
+
 | Stage | State |
 |---|---|
 | **1** — strategic ADR package | ✅ 2026-08-19 — four ADRs, docs only |
 | **0.1** owner sign-off (release gate cleared — `:app:assembleRelease` green for the first time) · **0.2** FastPath `ru`/`tr` · **0.3** delete ONNX (APK 78 MB → 6.8 MB) · **0.4** compress this file · **0.5** honest statuses (`CODE-GREEN`/`DEVICE-ACCEPTED`/`CLOSED`) · **0.6** budgets rewritten on measured numbers (heap 55 MB PSS) · **0.7** I18N residue | ✅ 2026-08-19 |
 | **2** toolchain (AGP 9.3.1/Kotlin 2.4.10/Gradle 9.5.0/compileSdk 37) + `:domain` → KMP | ✅ 2026-08-19 |
-| **3** agentic Master Plan + doctrinal matrix | queued |
+| **3** agentic Master Plan + doctrinal matrix (`docs/governing/`) | ✅ 2026-08-19 — docs + one guard test |
 | **4.0** — invert the understanding flag (`llmRouterEnabled` → `localOnlyMode`, ADR 1/4) | queued — runs immediately before Этап 4; first behavioural change of the track |
 | **4–7** — A0 spike, A1′ ToolRegistry, A4′ runtime, A2/A3/A5/A6 | each needs its own spec + plan (`brainstorm → spec → plan → build`) |
 
@@ -213,7 +223,9 @@ below is recorded in its own ADR.
 | Active track plan (stages, §0 protocol, §HANDOFF) | [docs/superpowers/plans/2026-08-18-agentic-track-restart.md](docs/superpowers/plans/2026-08-18-agentic-track-restart.md) |
 | Roadmap | [docs/roadmap.md](docs/roadmap.md) |
 | Agentic target architecture A1–A6 | [docs/agentic-os-architecture.md](docs/agentic-os-architecture.md) |
-| Design system rulebook | `docs/design/SIDR Design System Master Plan v1.2` |
+| Doctrine — rules `DOC-*`, verification types, test per rule | [docs/governing/sidr-doctrine-matrix-v1.0.md](docs/governing/sidr-doctrine-matrix-v1.0.md) |
+| Agentic track Master Plan — blocks A0…A6, DoD, change-control | [docs/governing/sidr-agentic-master-plan-v1.0.md](docs/governing/sidr-agentic-master-plan-v1.0.md) |
+| Design system rulebook | [docs/governing/sidr-design-system-master-plan-v1.2.md](docs/governing/sidr-design-system-master-plan-v1.2.md) |
 | Specs, task plans, closed phase checklists | [docs/superpowers/specs/](docs/superpowers/specs/) · [docs/superpowers/plans/](docs/superpowers/plans/) · `ai-context/phase-{3,4,5,6,7}-*.md` |
 
 ### History map — which ADR to open in `decisions.md`
@@ -223,4 +235,4 @@ below is recorded in its own ADR.
 - UX + hardening: **X1 → X6**, **Y1 → Y7**, device-acceptance rounds 1–3
 - Stage-1 AI Launcher: **AIL-0 → AIL-6** · Stage-2 memory: **S2-1**, **S2-2**
 - Design track: **DS-0 → DS-11** + Vision MVP preview · Localization: **I18N-1**, **I18N-2**
-- Agentic restart (2026-08-19): **ADR 1/4 … 4/4**, **Этап 0.2 / 0.3 / 0.4 / 0.5 / 0.6 / 0.7**
+- Agentic restart (2026-08-19): **ADR 1/4 … 4/4**, **Этап 0.2 / 0.3 / 0.4 / 0.5 / 0.6 / 0.7 / 2 / 3**

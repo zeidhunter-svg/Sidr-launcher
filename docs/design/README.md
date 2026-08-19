@@ -2,7 +2,13 @@
 
 > **What this folder is.** The seven design documents the owner imported for the SIDR redesign, committed
 > verbatim as-received so future work has the primary source material in-repo. This is an **archive of
-> inputs**, not the governing spec. What actually governs the build is recorded in the DS-0 ADR and the two
+> inputs**, not the governing spec.
+>
+> **Moved out 2026-08-19 (Этап 3):** `SIDR Design System Master Plan.md` used to sit here despite being a
+> *living governing* document and not one of the seven imports — a living document inside an archive. It now
+> lives at [`../governing/sidr-design-system-master-plan-v1.2.md`](../governing/sidr-design-system-master-plan-v1.2.md),
+> alongside the doctrine matrix and the agentic Master Plan. Closed DS specs and plans still link to the old
+> path; those are history and were left as written. See [`../governing/README.md`](../governing/README.md). What actually governs the build is recorded in the DS-0 ADR and the two
 > living specs linked below — some of what these PDFs propose was consciously **overridden** (colour → grey,
 > 5-tab IA → 4 surfaces, live agentic surfaces → deferred). Read the ADR before treating any PDF as current.
 

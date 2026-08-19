@@ -6,7 +6,15 @@
   translated folder.
 
   Prayer names below are the EXACT Diyanet terms given by the task brief (verbatim, not a draft).
-  Calculation-method names and madhab labels are a DRAFT translation awaiting owner sign-off.
+  Calculation-method names and madhab labels were drafted here and signed off on 2026-08-19
+  (see the OWNER-REVIEWED block below).
+-->
+<!--
+  OWNER-REVIEWED 2026-08-19 - the owner has read and approved this file's Russian/Turkish text
+  against docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md (Class B, spec §7.2).
+  Provenance, recorded deliberately: the review was performed by the owner; this token was typed
+  by the agent on the owner's explicit instruction in the 2026-08-19 session. The gate cannot tell
+  the two apart, so the file says which it was.
 -->
 <resources>
     <string name="prayer_name_fajr">İmsak</string>

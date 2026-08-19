@@ -7,11 +7,19 @@
 
   Calculation-method names reuse feature/prayer's existing Russian draft translation verbatim (Task 7)
   for terminology consistency across both screens - both awaiting the same owner sign-off. Madhab
-  labels and the Shahada are a DRAFT translation awaiting owner sign-off.
+  labels and the Shahada were drafted here and signed off on 2026-08-19 (see the
+  OWNER-REVIEWED block below).
 
   I18N-2 addition (2026-08-19): prayer-name labels reuse feature/prayer's existing Russian
   prayer_name_* values verbatim (Task 7) for terminology consistency across both screens - awaiting
   the same owner sign-off.
+-->
+<!--
+  OWNER-REVIEWED 2026-08-19 - the owner has read and approved this file's Russian/Turkish text
+  against docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md (Class B, spec §7.2).
+  Provenance, recorded deliberately: the review was performed by the owner; this token was typed
+  by the agent on the owner's explicit instruction in the 2026-08-19 session. The gate cannot tell
+  the two apart, so the file says which it was.
 -->
 <resources>
     <string name="launcher_prayer_method_mwl">Всемирная исламская лига</string>

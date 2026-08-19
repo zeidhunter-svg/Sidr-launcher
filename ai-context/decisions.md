@@ -5587,6 +5587,28 @@ a planner emitting structured multi-step calls.
 never-started Block V semantic re-rank). These stop being open questions; they are answered "not this
 way".
 
+**Measured cost, "before" baseline (2026-08-19).** Taken from the **first release APK this project has
+ever produced** — `:app:assembleRelease` became runnable the same day, when the owner-review locale gate
+was cleared (Этап 0.1). `app-release-unsigned.apk` = **78 MB**, of which ONNX is **70.4 MB across 8
+entries** — i.e. **~90% of the release artifact is a runtime that has never once executed**, because no
+model was ever provisioned:
+
+| Entry | Size |
+|---|---|
+| `lib/x86_64/libonnxruntime.so` | 20.3 MB |
+| `lib/x86/libonnxruntime.so` | 20.3 MB |
+| `lib/arm64-v8a/libonnxruntime.so` | 17.6 MB |
+| `lib/armeabi-v7a/libonnxruntime.so` | 12.3 MB |
+| 4× `libonnxruntime4j_jni.so` | 3.3 MB total |
+| **ONNX total** | **70.4 MB** |
+| everything else (incl. `classes.dex` 5.2 MB, GeoNames city index 1.0 MB) | ~7.6 MB |
+
+**Honest reading of that number.** 70.4 MB is the *universal* APK, carrying all four ABIs. Shipped as an
+AAB, a single device downloads one ABI, so the per-device ONNX cost is ~18.5 MB (arm64-v8a: 17.6 + 0.9
+JNI) — still roughly **70% of what an arm64 device would download**. Both figures are recorded because
+quoting only the 70.4 MB would overstate the per-user cost, and quoting only the 18.5 MB would understate
+what is actually committed to the repository and to every universal build. Этап 0.3 records the "after".
+
 **Kept deliberately:** `DeviceProfile` / `DeviceCapability` / `DeviceProfileProvider` /
 `AndroidDeviceProfiler` — they gate suggestion precompute and are unrelated to ONNX.
 `LocalInferenceGate` is a judgment call left to Этап 0.3: it is the natural gate for a future

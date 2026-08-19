@@ -31,8 +31,20 @@ mandate in `CLAUDE.md`, `docs/architecture.md`, `docs/roadmap.md`, `docs/agentic
    outbound wire contract).
 4. **Assistant ⊕ Agent** — one conversational loop, two surfaces (owner fork resolved).
 
-**Next:** Этап 0 (cleanup) → Этап 2 (toolchain + KMP) → Этап 3 (agentic Master Plan + doctrinal matrix)
-→ Этап 4 (A0 thin spike). Этап 0.1 (`OWNER-REVIEWED` in the 10 locale files) is an owner action.
+**Этап 0.1 CLOSED the same day (2026-08-19) — the release gate is cleared.** The owner reviewed the
+locale package and directed the marker; all 10 `values-{ru,tr}/strings_locked.xml` files carry
+`OWNER-REVIEWED 2026-08-19`, each header recording that the review was the owner's and the token was
+typed by the agent on their instruction (the gate cannot distinguish the two, so the file says which it
+was). `:app:checkOwnerReviewedLocaleStrings` and `:app:assembleRelease` both exit 0 — **the first
+release artifact this project has produced**. Gap found and fixed before signing: the review package did
+not list the five `launcher_prayer_name_*` keys I18N-2 had added to a file it was asking the owner to
+sign (now Section 6e; byte-identical to the brief-verbatim Section 1b). **Measured baseline for Этап
+0.3: 78 MB APK, ONNX 70.4 MB of it (~90%; ~18.5 MB per-device via AAB)** — in ADR 2/4. **Still open:**
+the gate checks marker *presence*, not *coverage*.
+
+**Next:** the rest of Этап 0 (0.2 FastPath `ru`/`tr` → 0.3 remove ONNX → 0.4 compress `CLAUDE.md` →
+0.5 honest statuses → 0.6 measured budgets) → Этап 2 (toolchain + KMP) → Этап 3 (agentic Master Plan +
+doctrinal matrix) → Этап 4 (A0 thin spike).
 
 ## I18N-2 residual localization + barrier 4 — CLOSED (2026-08-19)
 

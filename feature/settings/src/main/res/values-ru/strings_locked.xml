@@ -5,8 +5,16 @@
   ship in this folder like any other string; they are locked only so a change lands in owner review
   (docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md, Section 4) before it ships.
 
-  The Russian values below are agent-drafted and NOT owner-reviewed. Moved verbatim (byte-for-byte, not
+  The Russian values below were agent-drafted and were owner-reviewed on 2026-08-19 (see the
+  OWNER-REVIEWED block below). Moved verbatim (byte-for-byte, not
   retyped) out of this module's ordinary values-ru/strings.xml - no copy change.
+-->
+<!--
+  OWNER-REVIEWED 2026-08-19 - the owner has read and approved this file's Russian/Turkish text
+  against docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md (Class B, spec §7.2).
+  Provenance, recorded deliberately: the review was performed by the owner; this token was typed
+  by the agent on the owner's explicit instruction in the 2026-08-19 session. The gate cannot tell
+  the two apart, so the file says which it was.
 -->
 <resources>
     <string name="settings_stored_locally">Хранится только на этом устройстве.</string>

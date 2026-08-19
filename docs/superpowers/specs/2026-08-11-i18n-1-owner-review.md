@@ -3,6 +3,14 @@
 Started by Task 7 (`feature/prayer` extraction + Diyanet terminology). Task 15 will complete this
 package with the remaining consent copy. The owner reviews this document once, not once per task.
 
+**Amended 2026-08-19 (I18N-2):** that block added five Class B keys to
+`feature/launcher`'s `strings_locked.xml` after this package was written, so the file the gate asks you
+to sign held five rows this document did not list. They are now **Section 6e**. Their text is
+byte-identical to Section 1b's already-listed, brief-verbatim prayer names — verified by direct file
+comparison, not assumed — so the incremental reading cost is genuinely zero; but the rows had to appear
+here, because signing a file whose contents this document does not enumerate is exactly what the gate
+exists to prevent.
+
 **Read Section 6d first, before anything else below.** It is the Russian/Turkish rendering of the
 Shahada, the Islamic creed — the single most sensitive item in this entire document — and it is worth
 reading personally and carefully before working through the rest top-to-bottom. See "The release gate
@@ -225,12 +233,14 @@ translatable copy in `strings.xml`.
 
 ## Section 6 — `feature/launcher` locked vocabulary (Task 13)
 
-Two review concerns land in the same file (`feature/launcher/src/main/res/values{,-ru,-tr}/strings_locked.xml`):
+Three review concerns land in the same file (`feature/launcher/src/main/res/values{,-ru,-tr}/strings_locked.xml`):
 the Home strip's copy of the prayer method/madhab vocabulary (a **second copy** of Section 1's terminology —
-see the divergence note below) and the Shahada, the Islamic creed text rendered on Home
-(`LauncherScreen.kt`'s `HomeAnchorSlot`, the DS-4 "sacred anchor"). Extracted verbatim from the pre-I18N-1
-Kotlin literals; Russian and Turkish are **drafts, unreviewed**, except the method-name rows, which reuse
-Section 1c's existing Russian/Turkish draft verbatim (same terminology, same review needed once).
+see the divergence note below), the Shahada, the Islamic creed text rendered on Home
+(`LauncherScreen.kt`'s `HomeAnchorSlot`, the DS-4 "sacred anchor"), and — added after this package was
+first written — the Home strip's own copy of the five daily prayer names (Section 6e). Extracted verbatim
+from the pre-I18N-1 Kotlin literals; Russian and Turkish are **drafts, unreviewed**, except the
+method-name rows, which reuse Section 1c's existing Russian/Turkish draft verbatim (same terminology, same
+review needed once), and Section 6e, which is brief-verbatim.
 
 ### 6a. Class A — locked, never translated
 
@@ -291,6 +301,39 @@ more sensitively than prayer-method names). Locked as Class B on the same reason
 The Russian/Turkish drafts are standard renderings already in wide use in Russian-/Turkish-language
 Islamic sources, not an original translation — but they are still unreviewed by the owner and must not
 ship translated (only English) until signed off.
+
+### 6e. Class B — prayer names, Home strip's copy (added by I18N-2, 2026-08-19)
+
+**Added after this package was written**, by the I18N-2 block (commit `85b5f0a`). The Home prayer strip
+built each cell's TalkBack `contentDescription` from `name = name.name` — the raw `PrayerName` **enum
+literal** — so a `ru`/`tr` TalkBack user heard literal English ("FAJR") no matter the app locale. It was
+invisible in the English build precisely because the correct English resource happens to equal the enum
+constant name. The fix routes the Home strip through the string seam like every other surface, which
+required `feature/launcher` to carry its own copy of the five names — the same reason Sections 6b/6c
+exist (`domain` stays Android-resource-free, and there is no `feature → feature` edge to borrow
+`feature/prayer`'s copy).
+
+**These are not drafts.** All fifteen values (en/ru/tr) are **byte-identical** to Section 1b's rows,
+which are verbatim from the Task 7 brief. Verified by direct comparison of the two `strings_locked.xml`
+sets on 2026-08-19, character for character — not inferred from the commit message.
+
+| Key | English | Russian | Turkish | Source | Why locked |
+|---|---|---|---|---|---|
+| `launcher_prayer_name_fajr` | FAJR | Фаджр | İmsak | verbatim (brief), = Section 1b | Prayer name — religious terminology. |
+| `launcher_prayer_name_dhuhr` | DHUHR | Зухр | Öğle | verbatim (brief), = Section 1b | Prayer name. |
+| `launcher_prayer_name_asr` | ASR | Аср | İkindi | verbatim (brief), = Section 1b | Prayer name. |
+| `launcher_prayer_name_maghrib` | MAGHRIB | Магриб | Akşam | verbatim (brief), = Section 1b | Prayer name. |
+| `launcher_prayer_name_isha` | ISHA | Иша | Yatsı | verbatim (brief), = Section 1b | Prayer name. |
+
+**No SUNRISE row here, deliberately.** Section 1b carries `prayer_name_sunrise` because the prayer
+*detail* screen renders it as a labelled row; the Home strip shows only the five daily prayers, so
+`feature/launcher` has no such key. The two files are intentionally not symmetric.
+
+**Where these are read:** `PrayerSummaryMapper.kt` → `HomePrayerTimeUi(name: PrayerName, …)` →
+`prayerNameLabel()` at render time in `HomePrayerStrip`. They reach the user through the per-cell
+TalkBack `contentDescription`, not as visible strip text — the Home strip has been times-only since the
+owner's DS-6B acceptance refinement (2026-08-08). Same rendering path as Section 1b's note about
+locale-aware casing.
 
 ---
 

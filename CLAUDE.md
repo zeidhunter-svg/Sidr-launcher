@@ -396,9 +396,16 @@ measured budgets), then Этап 2 (toolchain + `:domain` → KMP), Этап 3 (
 matrix), then the A0 vertical spike.** The A1 fork (parallel vocabulary vs. evolve in place) is
 **deliberately not decided** — it belongs to Этап 5, on a spec rewritten after ADR 2.
 
-**Still open, owner action, unchanged:** `checkOwnerReviewedLocaleStrings` blocks
-`:app:assembleRelease`/`:app:assemble`/`:app:bundleRelease`/root `./gradlew build` until the owner marks
-all 10 locale `strings_locked.xml` files `OWNER-REVIEWED` (Этап 0.1). Debug graphs stay green.
+**Этап 0.1 CLOSED 2026-08-19 — the release gate is cleared and `:app:assembleRelease` is green for the
+first time in the project's history.** The owner reviewed the locale package and directed the marker;
+all 10 `values-{ru,tr}/strings_locked.xml` files now carry `OWNER-REVIEWED 2026-08-19`, each recording
+in its own header that the *review* was the owner's and the *token* was typed by the agent on their
+instruction. Found and fixed before signing: the review package did not enumerate the five
+`launcher_prayer_name_*` keys I18N-2 had added to it (now Section 6e; text byte-identical to the
+brief-verbatim Section 1b, verified by file comparison). **First release APK measured: 78 MB, of which
+ONNX is 70.4 MB (~90%)** — the "before" baseline Этап 0.3 needs; recorded in ADR 2/4. **Still open:**
+the gate checks the marker's *presence*, not its *coverage*, so a later block can add a Class B key to
+an already-signed file and ship it gate-green — dormant until today, active now that files are signed.
 
 **Prior sync (2026-08-16): I18N-1 Multilingual UI CLOSED (see the digest entry below).**
 

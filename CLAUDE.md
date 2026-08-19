@@ -29,6 +29,7 @@ session for the next one — read it.
 | **1** — strategic ADR package | ✅ 2026-08-19 — four ADRs, docs only |
 | **0.1** owner sign-off (release gate cleared — `:app:assembleRelease` green for the first time) · **0.2** FastPath `ru`/`tr` · **0.3** delete ONNX (APK 78 MB → 6.8 MB) · **0.4** compress this file · **0.5** honest statuses (`CODE-GREEN`/`DEVICE-ACCEPTED`/`CLOSED`) · **0.6** budgets rewritten on measured numbers (heap 55 MB PSS) · **0.7** I18N residue | ✅ 2026-08-19 |
 | **2** toolchain + `:domain` → KMP · **3** agentic Master Plan + doctrinal matrix | queued |
+| **4.0** — invert the understanding flag (`llmRouterEnabled` → `localOnlyMode`, ADR 1/4) | queued — runs immediately before Этап 4; first behavioural change of the track |
 | **4–7** — A0 spike, A1′ ToolRegistry, A4′ runtime, A2/A3/A5/A6 | each needs its own spec + plan (`brainstorm → spec → plan → build`) |
 
 The four strategic ADRs (all 2026-08-19, in `decisions.md`):
@@ -36,8 +37,9 @@ The four strategic ADRs (all 2026-08-19, in `decisions.md`):
 1. **Deterministic-first redefined** — understanding belongs to the model, execution to the
    deterministic layer (see Hard rules). `FeatureFlags.llmRouterEnabled` is to be **inverted onto a
    new key** `localOnlyMode` / `flag_local_only`, default `false` (a plain default flip would be
-   inert — DS-11 `autoHideNavBar` precedent). **Not yet implemented in code**; no Этап-0 section
-   claims it — confirm with the owner before doing it.
+   inert — DS-11 `autoHideNavBar` precedent). **Not yet implemented in code** — it is now Этап 4.0 of
+   the track plan, immediately before the A0 spike, with four owner forks to resolve first. Do not do
+   it earlier on your own initiative.
 2. **Platform re-baseline 2026** — ONNX NLU closed, OQ#1/#2/#3 closed; local-inference runtime is
    **LiteRT / LiteRT-LM** (alternative on record: ExecuTorch; separate path: AICore); `AppFunctions` /
    `MCP` are first-class tool sources; performance budgets become three tiers.

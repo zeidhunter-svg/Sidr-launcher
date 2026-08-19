@@ -208,7 +208,7 @@ class PrayerLocationPrivacyGuardTest {
     fun `guard 4b - prayer's own domain, data, and feature modules never import android-location directly`() {
         val root = repoRoot()
         val prayerDirs = listOf(
-            File(root, "domain/src/main/java/com/sidr/launcher/domain/prayer"),
+            File(root, "domain/src/commonMain/kotlin/com/sidr/launcher/domain/prayer"),
             File(root, "data/prayer/src/main/java/com/sidr/launcher/data/prayer"),
             File(root, "feature/prayer/src/main/java/com/sidr/launcher/feature/prayer"),
         )
@@ -277,7 +277,7 @@ class PrayerLocationPrivacyGuardTest {
     fun `guard 5 - prayer has no outbound or generative dependency in domain, data, or feature`() {
         val root = repoRoot()
         val prayerSourceDirs = listOf(
-            File(root, "domain/src/main/java/com/sidr/launcher/domain/prayer"),
+            File(root, "domain/src/commonMain/kotlin/com/sidr/launcher/domain/prayer"),
             File(root, "data/prayer/src/main/java/com/sidr/launcher/data/prayer"),
             File(root, "feature/prayer/src/main/java/com/sidr/launcher/feature/prayer"),
         )

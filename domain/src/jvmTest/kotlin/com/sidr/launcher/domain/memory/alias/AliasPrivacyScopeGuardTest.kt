@@ -29,7 +29,7 @@ class AliasPrivacyScopeGuardTest {
     @Test
     fun `alias memory has no outbound or generative dependency`() {
         val root = repoRoot()
-        val sourceDir = File(root, "domain/src/main/java/com/sidr/launcher/domain/memory/alias")
+        val sourceDir = File(root, "domain/src/commonMain/kotlin/com/sidr/launcher/domain/memory/alias")
         val forbiddenTerms = listOf(
             "AiRequest",
             "GenerativeAiEngine",

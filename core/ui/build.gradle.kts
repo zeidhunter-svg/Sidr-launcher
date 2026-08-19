@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.sidr.launcher.core.ui"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 28
@@ -51,6 +51,7 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons.core)
 
     // Renders @Preview composables in the IDE / preview host (debug-only).
     debugImplementation(libs.compose.ui.tooling)

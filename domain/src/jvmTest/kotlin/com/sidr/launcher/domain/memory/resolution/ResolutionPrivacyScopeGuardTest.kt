@@ -34,7 +34,7 @@ class ResolutionPrivacyScopeGuardTest {
     @Test
     fun `resolution memory has no outbound or generative dependency`() {
         val root = repoRoot()
-        val sourceDir = File(root, "domain/src/main/java/com/sidr/launcher/domain/memory/resolution")
+        val sourceDir = File(root, "domain/src/commonMain/kotlin/com/sidr/launcher/domain/memory/resolution")
         val forbiddenTerms = listOf(
             "AiRequest",
             "GenerativeAiEngine",

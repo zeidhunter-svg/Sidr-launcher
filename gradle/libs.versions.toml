@@ -1,26 +1,26 @@
 [versions]
-agp = "8.7.3"
-kotlin = "2.0.21"
-composeBom = "2024.12.01"
+agp = "9.3.1"
+kotlin = "2.4.10"
+composeBom = "2026.08.00"
 androidxCore = "1.15.0"
 appcompat = "1.7.0"
 activityCompose = "1.9.3"
 lifecycle = "2.8.7"
-hilt = "2.52"
+hilt = "2.60.1"
 hiltNavigationCompose = "1.2.0"
-androidxHilt = "1.2.0"
+androidxHilt = "1.4.0"
 work = "2.10.0"
 navigationCompose = "2.8.5"
 coroutines = "1.9.0"
 datastore = "1.1.1"
 ktor = "3.0.1"
 serializationJson = "1.7.3"
-room = "2.6.1"
-ksp = "2.0.21-1.0.28"
+room = "2.8.4"
+ksp = "2.3.11"
 javaxInject = "1"
 junit4 = "4.13.2"
 coroutinesTest = "1.9.0"
-robolectric = "4.14.1"
+robolectric = "4.16.1"
 androidxTestExtJunit = "1.2.1"
 androidxTestRunner = "1.6.2"
 androidxTestUiAutomator = "2.3.0"
@@ -47,6 +47,9 @@ compose-ui = { module = "androidx.compose.ui:ui" }
 compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
+# Compose BOM 2026.08.00 (Этап 2.1) stopped pulling this transitively through material3 — declare
+# it directly. Core set only (Icons.Filled/AutoMirrored.Filled) — no material-icons-extended usage.
+compose-material-icons-core = { module = "androidx.compose.material:material-icons-core" }
 
 hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt" }
 hilt-compiler = { module = "com.google.dagger:hilt-compiler", version.ref = "hilt" }
@@ -101,6 +104,7 @@ android-library = { id = "com.android.library", version.ref = "agp" }
 android-test = { id = "com.android.test", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }

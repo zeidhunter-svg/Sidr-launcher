@@ -10,7 +10,7 @@ plugins {
 
 android {
     namespace = "com.sidr.launcher.data.repository"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 28

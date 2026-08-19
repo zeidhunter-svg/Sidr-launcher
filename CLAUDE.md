@@ -28,7 +28,8 @@ session for the next one — read it.
 |---|---|
 | **1** — strategic ADR package | ✅ 2026-08-19 — four ADRs, docs only |
 | **0.1** owner sign-off (release gate cleared — `:app:assembleRelease` green for the first time) · **0.2** FastPath `ru`/`tr` · **0.3** delete ONNX (APK 78 MB → 6.8 MB) · **0.4** compress this file · **0.5** honest statuses (`CODE-GREEN`/`DEVICE-ACCEPTED`/`CLOSED`) · **0.6** budgets rewritten on measured numbers (heap 55 MB PSS) · **0.7** I18N residue | ✅ 2026-08-19 |
-| **2** toolchain + `:domain` → KMP · **3** agentic Master Plan + doctrinal matrix | queued |
+| **2** toolchain (AGP 9.3.1/Kotlin 2.4.10/Gradle 9.5.0/compileSdk 37) + `:domain` → KMP | ✅ 2026-08-19 |
+| **3** agentic Master Plan + doctrinal matrix | queued |
 | **4.0** — invert the understanding flag (`llmRouterEnabled` → `localOnlyMode`, ADR 1/4) | queued — runs immediately before Этап 4; first behavioural change of the track |
 | **4–7** — A0 spike, A1′ ToolRegistry, A4′ runtime, A2/A3/A5/A6 | each needs its own spec + plan (`brainstorm → spec → plan → build`) |
 
@@ -106,8 +107,10 @@ below is recorded in its own ADR.
 
 ## Hard rules
 
-- `domain` = pure Kotlin (stdlib + coroutines only). No Android, no `core/*`. Keep it KMP-ready —
-  `:domain` → KMP is decided (ADR 3/4, Этап 2.2), so introduce nothing JVM-specific there.
+- `domain` = pure Kotlin (stdlib + coroutines only). No Android, no `core/*`. It is now
+  `kotlin.multiplatform` (`android` + `jvm` targets, Этап 2.2, ADR 3/4) — production code lives in
+  `commonMain`, so introduce nothing JVM- or Android-specific there; it would fail to compile for the
+  other target. Tests live in `jvmTest` (JUnit4 isn't `commonTest`-portable) — see `core:testing`.
 - Interfaces in `domain`; implementations in `data/*`. UI holds no business logic.
 - No `feature -> feature` deps. Single `NavHost` in `app`. ViewModels emit
   `NavigationEvent`; they never touch `NavHostController`.

@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.sidr.launcher.feature.suggestions"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 28

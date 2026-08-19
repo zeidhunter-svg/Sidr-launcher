@@ -6,11 +6,13 @@ plugins {
 
 android {
     namespace = "com.sidr.launcher.baselineprofile"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 28
-        targetSdk = 35
+        // Этап 2.1 — see app/build.gradle.kts: held one level behind compileSdk pending Robolectric
+        // API 37 support.
+        targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters += "arm64-v8a"

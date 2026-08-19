@@ -8,7 +8,8 @@
 > / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-08-19
 > (Этап 0.5 — corrected I18N-1's and DS-5's headline labels from an unqualified `CLOSED`/`CODE-CLOSED`
 > to `CODE-GREEN`, see below; DS-6B checked and confirmed `CLOSED`); same-day Этап 0.4 — `CLAUDE.md`
-> compressed 101 KB → 15 KB; same-day I18N-2 residual localization + barrier 4 CLOSED; prior re-base
+> compressed 101 KB → 15 KB; same-day I18N-2 residual localization + barrier 4 CLOSED; same-day Этап 2
+> toolchain (AGP 9.3.1/Kotlin 2.4.10/Gradle 9.5.0) + `:domain` → Kotlin Multiplatform CLOSED; prior re-base
 > 2026-08-16 I18N-1 Multilingual UI CODE-GREEN — agent-driven device smoke, owner did not run
 > acceptance; prior re-base 2026-08-10 DS-10 Assistant Migration CLOSED — device-accepted; same-day
 > DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer
@@ -127,8 +128,31 @@ already done by `8ca58ab`. This stage's own ADR entry had not been written until
 `decisions.md` now carries "2026-08-19 — Этап 0.7 complete — I18N-2 residue reviewed, both items
 pre-resolved" to close that gap. Docs-only, zero code changes.
 
-**Next:** Этап 2 (toolchain + `:domain` → KMP) → Этап 3 (agentic Master Plan + doctrinal matrix) →
-Этап 4 (A0 thin spike). Этап 0 is now fully closed (0.1–0.7 all ✅).
+**Этап 2 CLOSED (2026-08-19) — toolchain bumped to Aug-2026-current, `:domain` on Kotlin Multiplatform.**
+2.1: version catalog jumped to the real current versions — Gradle 9.5.0, AGP 9.3.1, Kotlin 2.4.10,
+Compose BOM 2026.08.00, compileSdk 37 (owner chose this "aggressive" set over a conservative
+one-AGP-minor-step alternative after being shown both, per forks-before-code — the plan named the
+direction but not exact versions). Forced follow-ons, each a compiler/framework rejection rather than
+a discretionary choice: Hilt → 2.60.1 (2.52 couldn't classload against the new KSP), Room → 2.8.4
+(2.6.1's KSP processor crashed), `androidx.hilt` → 1.4.0 (1.2.0 couldn't read Kotlin 2.4.10 metadata),
+Robolectric → 4.16.1 (4.14.1 doesn't know API 37 — and 4.16.1, current-latest, still caps at 36, so
+`targetSdk` stays 36 while `compileSdk` is 37); `material-icons-core` now declared explicitly in 7
+modules (Compose 2026.08 stopped pulling it in transitively via material3); AGP 9's built-in-Kotlin +
+new DSL opted out via `gradle.properties` (a separate migration, not folded in here). 34 of `core/ui`'s
+128 Roborazzi goldens drifted from the Compose BOM jump — reviewed visually before re-recording, all
+benign spacing-only reflow, no content/logic change. 2.2: `:domain` converted to `kotlin.multiplatform`
+(`android`+`jvm` targets, ADR 3/4) — 108 production files moved to `commonMain` (`git mv`, history
+preserved), 41 test files to `jvmTest` (JUnit4 isn't `commonTest`-portable). Three privacy/scope guard
+tests hardcoded the old source path; two would have passed **vacuously** post-move (empty directory
+scan, no exception) — found by grep, fixed before it mattered. `:domain:dependencies` confirmed
+stdlib+coroutines only, post-conversion. Full gate green (`testDebugUnitTest assembleDebug
+--rerun-tasks`, 551/551 tasks genuinely executed, 955 tests/0 failures), `:core:ui:verifyRoborazziDebug`
+green, `:app:assembleRelease` green both sides of the `:domain` conversion (APK 7,031,864 bytes, no
+regression from AGP 9's stricter R8 keep-rule semantics). ADR "2026-08-19 — Этап 2 complete —
+toolchain bumped to Aug-2026-current, `:domain` on Kotlin Multiplatform" in `decisions.md`.
+
+**Next:** Этап 3 (agentic Master Plan + doctrinal matrix) → Этап 4.0 (invert the understanding flag) →
+Этап 4 (A0 thin spike). Этап 0 and Этап 2 are now fully closed.
 
 ## I18N-2 residual localization + barrier 4 — CLOSED (2026-08-19)
 

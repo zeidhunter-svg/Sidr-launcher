@@ -13,12 +13,14 @@ plugins {
 
 android {
     namespace = "com.sidr.launcher"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.sidr.launcher"
         minSdk = 28
-        targetSdk = 35
+        // Этап 2.1 — held one level behind compileSdk: Robolectric 4.16.1 (current latest) caps
+        // supported SDK at 36 and rejects targetSdkVersion=37. Revisit once Robolectric catches up.
+        targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
     }
@@ -78,6 +80,7 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons.core)
 
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)

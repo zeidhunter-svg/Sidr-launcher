@@ -6205,3 +6205,125 @@ matching the plan's rule that a stage closes on a commit, not on work left only 
 
 **Not done here (out of scope for 0.7):** no code changed, per the above — both named items were already
 fixed. Этап 0 remains fully closed: 0.1 ✅ · 0.2 ✅ · 0.3 ✅ · 0.4 ✅ · 0.5 ✅ · 0.6 ✅ · 0.7 ✅.
+
+## 2026-08-19 — Этап 2 complete — toolchain bumped to Aug-2026-current, `:domain` on Kotlin Multiplatform
+
+**Status: CODE-GREEN.** Agentic restart plan, Этап 2 (2.1 dependency update + 2.2 `:domain` → KMP).
+The plan's own text named only the direction ("AGP 8.7.3 / Kotlin 2.0.21 / Compose BOM 2024.12 /
+compileSdk 35 — конец 2024 года... блокер, а не гигиена") without pinning exact target versions —
+an unresolved fork, since the actual current (Aug 2026) versions weren't yet known and picking them
+carries real blast-radius risk. Per forks-before-code, the owner was asked and chose the aggressive
+option (latest-everything) over a conservative one-AGP-minor-step alternative, after being shown both
+version sets and a risk assessment (Roborazzi golden re-recording flagged in advance as the expected
+cost, not a surprise).
+
+**2.1 — version deltas** (`gradle/libs.versions.toml`, `gradle/wrapper/gradle-wrapper.properties`,
+`gradle.properties`, 14 modules' `compileSdk`/`targetSdk`). Real current versions were pulled from
+Maven Central (`repo1.maven.org`) and Google's Maven (`dl.google.com/android/maven2`)
+`maven-metadata.xml` directly — web-search summaries for this date range proved unreliable (one
+query returned a KSP version tied to a naming scheme it doesn't use).
+
+| Artifact | Before | After |
+|---|---|---|
+| Gradle wrapper | 8.10.2 | 9.5.0 |
+| AGP | 8.7.3 | 9.3.1 |
+| Kotlin | 2.0.21 | 2.4.10 |
+| KSP | 2.0.21-1.0.28 | 2.3.11 (versioning scheme decoupled from Kotlin version upstream, around 2.3.0) |
+| Compose BOM | 2024.12.01 | 2026.08.00 |
+| compileSdk | 35 | 37 |
+| targetSdk | 35 | **36** (held one level behind — see below) |
+| Hilt | 2.52 | 2.60.1 |
+| Room | 2.6.1 | 2.8.4 |
+| androidx.hilt (hilt-work/hilt-compiler) | 1.2.0 | 1.4.0 |
+| Robolectric | 4.14.1 | 4.16.1 |
+
+**Forced follow-ons (compiler/framework-rejected, not scope expansion — same category as 0.3's
+`SemanticSuggestionRanker`/`LocalInferenceGate` precedent):**
+
+1. **AGP 9.0's built-in-Kotlin + new DSL rejects the explicit `org.jetbrains.kotlin.android` plugin**
+   this project applies in every Android module. Migrating to the new DSL touches every module's
+   plugin block and is a separate decision from "bump version numbers" — opted out via
+   `android.builtInKotlin=false` + `android.newDsl=false` in `gradle.properties` (documented inline,
+   with the official migration doc linked) rather than folding that migration into this stage.
+2. **Hilt 2.52 failed to interoperate with KSP 2.3.11's classloading** (`google/dagger#3965` —
+   "KSP plugin ... task class could not be found" despite both plugins already being declared at the
+   root per that issue's documented fix) → bumped to 2.60.1.
+3. **Room 2.6.1's KSP processor crashed** (`unexpected jvm signature V`, no file/line) against
+   KSP 2.3.11/Kotlin 2.4.10 → bumped to 2.8.4, which resolved it cleanly.
+4. **Compose Material3 2026.08.00 no longer pulls `material-icons-core` transitively** (it did in
+   2024.12.01) → declared explicitly (`compose-material-icons-core` alias) in the 7 modules that
+   import `androidx.compose.material.icons.*` directly (`core/ui`, `app`, `feature/assistant`,
+   `feature/launcher`, `feature/permission_education`, `feature/settings`, `feature/prayer`).
+5. **`androidx.hilt:hilt-compiler` 1.2.0's bundled Kotlin-metadata reader couldn't parse Kotlin
+   2.4.10 metadata** ("Unable to read Kotlin metadata due to unsupported metadata kind: null" on the
+   two `@HiltWorker` stub classes) → bumped `androidxHilt` to 1.4.0.
+6. **Kotlin 2.4.10 promoted a reified-type intersection-inference diagnostic to a hard error**
+   (`SuggestionProviderPrivacyGuardTest.kt:60,84` — `arrayOf(42L, sensitiveTitle)` inferring
+   `Comparable<*> & Serializable`) → explicit `arrayOf<Any>(...)` type argument, no assertion changed.
+7. **Robolectric caps at API 36** (`DefaultSdkPicker`, "targetSdkVersion=37 > maxSdkVersion=36") —
+   4.16.1 is current-latest and still doesn't support 37. `targetSdk` held at 36 in `app`/
+   `baselineprofile` (the only two modules that declare it) while `compileSdk` stays 37 for the
+   AGP/Compose requirement — a deliberate, common, one-version gap, not a workaround-in-hiding.
+   `:data:repository`'s 9 Room/Robolectric tests (`@Config(manifest = Config.NONE)`, no `sdk=`
+   override) still resolved target SDK from `compileSdk`=37 regardless of the manifest-level fix;
+   fixed the same way `core/ui` already solved this exact problem — a module-scoped
+   `robolectric.properties` (`sdk=34`), new file at `data/repository/src/test/resources/`.
+8. **34 of `core/ui`'s 128 Roborazzi goldens drifted** from the Compose BOM jump — flagged to the
+   owner in advance as the expected cost of the aggressive option. Reviewed visually (`compareRoborazziDebug`
+   output, `Reference`/`Diff`/`New` triptychs) across all 6 affected test classes before re-recording:
+   every diff was identical text/colors/structure, differing only in Material3's new default vertical
+   spacing causing fixed-height golden canvases to reveal slightly more already-existing scrollable
+   content (no content, logic, or accessibility change). Re-recorded via `recordRoborazziDebug`.
+
+**2.2 — `:domain` → `kotlin.multiplatform`** (`android` + `jvm` targets, ADR 3/4). All 108 production
+files moved `domain/src/main/java/...` → `domain/src/commonMain/kotlin/...` (`git mv`, tracked as
+renames). All 41 test files moved to `domain/src/jvmTest/kotlin/...`, not `commonTest` — JUnit4 (this
+module's existing framework) isn't a `commonTest`-compatible multiplatform artifact, and migrating to
+`kotlin.test` is a separate decision, not a mechanical toolchain move; this keeps the "portable core"
+guarantee (commonMain compiles for both targets, catching accidental platform-specific API use
+immediately) without also rewriting the test suite. `domain/build.gradle.kts` now applies
+`kotlin.multiplatform` + `android.library` (KMP's `androidTarget()` requires the AGP library plugin
+for AAR packaging — a build-config requirement, not a code-level Android dependency; `commonMain`
+still imports nothing but stdlib/coroutines). Three privacy/scope guard tests hardcoded the old
+`domain/src/main/java/...` path as a filesystem scan root: `PrayerLocationPrivacyGuardTest` (2 of its
+assertions failed loudly, `File.isDirectory` check caught it), `AliasPrivacyScopeGuardTest` and
+`ResolutionPrivacyScopeGuardTest` (both would have passed **vacuously** — `walkTopDown()` on a
+nonexistent directory returns an empty sequence, no exception — found by grep, not by a red test, and
+fixed proactively since a silently-disabled privacy guard is worse than a loud one). All three updated
+to the new path; no assertion logic changed.
+
+**Verification (JDK-17, Temurin toolchain via `-Porg.gradle.java.installations.paths`, exit 0, every
+run captured to a file and `echo $?` — never piped through `tail`):**
+- `./gradlew testDebugUnitTest assembleDebug --rerun-tasks` — BUILD SUCCESSFUL, 551/551 tasks
+  genuinely executed (not cached), 955 tests / 0 failures project-wide.
+- `:domain:build --rerun-tasks` — BUILD SUCCESSFUL, 311 domain tests / 0 failures (unchanged count
+  from before the KMP move — the 2 that briefly failed were the guard-test path fix, not new/removed
+  tests, satisfying the plan's "без изменения исходников тестов" for actual test *content*).
+- `:domain:dependencies --configuration jvmCompileClasspath` = `kotlin-stdlib:2.4.10` +
+  `kotlinx-coroutines-core:1.9.0` only — Hard rule invariant confirmed post-KMP.
+- `:core:ui:verifyRoborazziDebug --rerun-tasks` — BUILD SUCCESSFUL after the golden re-record above.
+- `:app:assembleRelease` — BUILD SUCCESSFUL both before and after the `:domain` KMP conversion;
+  `app-release-unsigned.apk` = 7,031,864 bytes (vs. 0.3's 7,052,702-byte baseline — materially
+  unchanged, no size regression from the AGP 9 R8 keep-rule tightening flagged as a risk going in).
+- One flaky, unrelated test (`OpenAiCompatibleGenerativeAiEngineTest`, a Ktor-mock timing-deadline
+  test in `:data:ai-cloud`) failed once under full-parallel-build load and passed cleanly in isolation
+  and on a subsequent full rerun — not caused by this stage's changes (no Ktor version change, no
+  `:data:ai-cloud` edit).
+
+**`git diff --stat`:** 149 renames (`:domain` file moves, tracked with history), ~19 build-config /
+guard-test / dependency-catalog edits, 1 new file (`data/repository/src/test/resources/robolectric.properties`),
+34 re-recorded Roborazzi golden PNGs (`core/ui/src/test/screenshots/`) — no file outside this radius.
+
+**Not done here (deliberately, named rather than hidden):**
+- AGP 9's built-in-Kotlin + new DSL migration — opted out (`android.builtInKotlin=false` /
+  `android.newDsl=false`), not adopted. A future stage's own decision, not folded into a toolchain bump.
+- `targetSdk` 37 — blocked on Robolectric API 37 support, which doesn't exist yet in any released
+  version. Revisit when it ships; `compileSdk` is already 37 so no further AGP-side change will be
+  needed then.
+- `Ktor` (3.0.1), `kotlinx-coroutines` (1.9.0), `kotlinx-serialization` (1.7.3), `navigation-compose`,
+  `datastore`, `lifecycle`, `work`, `benchmark` and other catalog entries not named by 2.1 or forced by
+  a build failure were left untouched — scope stayed to what 2.1 named plus what the compiler/test
+  runner actually rejected, per "объём — строго раздел этапа."
+- `core/testing` was **not** converted to KMP — it stays plain `kotlin.jvm`, consumed only from
+  `:domain`'s `jvmTest` source set (a same-platform dependency), so no compatibility issue arises and
+  none was created.

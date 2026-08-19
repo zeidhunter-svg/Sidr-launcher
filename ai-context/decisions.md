@@ -6157,3 +6157,51 @@ toolchain, not piped through `tail`) — BUILD SUCCESSFUL.
 
 **Этап 0 is now fully closed:** 0.1 ✅ · 0.2 ✅ · 0.3 ✅ · 0.4 ✅ · 0.5 ✅ · 0.6 ✅ · 0.7 ✅. Next up is
 Этап 2 (toolchain + `:domain` → KMP).
+
+## 2026-08-19 — Этап 0.7 complete — I18N-2 residue reviewed, both items pre-resolved
+
+**Status: CODE-GREEN (zero production code, zero test changes in this stage).** Agentic restart plan,
+Этап 0.7: review the two named I18N-2 device-smoke residue items and close whichever are still open.
+Unlike 0.2–0.6, this stage produced no new commit of its own — both items were found, on inspection, to
+have already been resolved by I18N-2 work that landed *before* this plan existed (`85b5f0a`, `c51459e`,
+`8ca58ab`). This entry formalizes that finding in the ADR log, which the stage's own closing pass in the
+plan document did not do — the "✅ ЗАКРЫТО" text for 0.7 was written into the plan at its very first
+commit (`f02ac3e`, "strategic plan for restarting the agentic track"), as an observation made while
+authoring the plan, not as the output of a dedicated closing session. This gap was found during a
+2026-08-19 audit of Этап 0.7 against the plan's own §0 closing checklist and is fixed by this entry plus
+a docs-only commit, not by re-opening the stage's substance.
+
+**Item 1 — `PrayerSummaryMapper` `contentDescription`.** Confirmed fixed, pre-dating this plan: commit
+`85b5f0a` ("fix(i18n-2): Home prayer names go through the string seam, not the raw enum") routes prayer
+names through `sidrString`, backed by `strings_locked.xml` entries for `en`/`ru`/`tr` and covered by
+`LauncherScreenPrayerStripTest` + `PrayerSummaryMapperTest`. Re-verified by reading the current
+`PrayerSummaryMapper` call sites and both tests — no `.name`/raw-enum literal remains in the
+`contentDescription` path.
+
+**Item 2 — `AndroidPrayerLocationProvider.DEVICE_LOCATION_LABEL = "Current location"`.** Confirmed **not
+a bug**, on direct inspection of `AndroidPrayerLocationProvider.kt:112–119`: the constant is an identity
+key, not display copy — `GetPrayerContextUseCase.matchesSetup` compares it against
+`PrayerScheduleProvenance.locationLabel` to decide prayer-schedule cache validity, so translating the
+stored value would invalidate every device-location user's cache on next launch. The user-visible string
+is localized separately, at render time, from `PrayerLocationSource.DEVICE` (`homeLocationLabelText` in
+`:feature:launcher`, `locationLabelText` in `:feature:prayer`) — both confirmed present. The constant's
+KDoc (added by I18N-2, commit `c51459e`) documents exactly this reasoning; re-read verbatim during this
+audit and found accurate.
+
+**Consequence for Этап 1 — also pre-resolved.** The plan's own 0.7 section flagged a follow-up: remove
+the stale `CLAUDE.md` note calling this constant a "hardcoded Current location label" known gap. Этап 1's
+own ADR already recorded that commit `8ca58ab` (I18N-2, predating the agentic plan) had removed it before
+Этап 1 started. Re-confirmed here: `CLAUDE.md` contains no "current location" / "hardcoded ... location"
+text as of this audit.
+
+**Why no dedicated commit lands with this entry beyond the doc edit itself.** Every fact 0.7 depends on
+was already correct in the working tree before this session began; there is no code delta to gate. The
+docs-only diff this entry is part of (this file only) is proposed to the owner as this stage's commit,
+matching the plan's rule that a stage closes on a commit, not on work left only in the tree.
+
+**Verification (JDK-17, Temurin toolchain, exit 0, not piped through `tail`):**
+`./gradlew --no-daemon testDebugUnitTest assembleDebug` — BUILD SUCCESSFUL. Docs-only change — `git diff
+--stat` contains only this file.
+
+**Not done here (out of scope for 0.7):** no code changed, per the above — both named items were already
+fixed. Этап 0 remains fully closed: 0.1 ✅ · 0.2 ✅ · 0.3 ✅ · 0.4 ✅ · 0.5 ✅ · 0.6 ✅ · 0.7 ✅.

@@ -117,6 +117,16 @@ undone — the section marks it "при желании", not required, and `base
 ADR "2026-08-19 — Этап 0.6 complete — performance budgets rewritten on measured numbers" in
 `decisions.md`.
 
+**Этап 0.7 CLOSED the same day (2026-08-19) — I18N-2 residue, both items pre-resolved.** An audit against
+the two items the plan named found both already fixed by I18N-2 work predating this plan: the
+`PrayerSummaryMapper` `contentDescription` fix (`85b5f0a`) and the `DEVICE_LOCATION_LABEL` KDoc
+(`c51459e`) confirming it is a cache-identity key, not display copy, translated separately at render time.
+The `CLAUDE.md` follow-up (remove the stale "hardcoded Current location label" debt note) was likewise
+already done by `8ca58ab`. This stage's own ADR entry had not been written until this audit — the
+"✅ ЗАКРЫТО" text in the plan document dates to the plan's first commit, not a dedicated closing session;
+`decisions.md` now carries "2026-08-19 — Этап 0.7 complete — I18N-2 residue reviewed, both items
+pre-resolved" to close that gap. Docs-only, zero code changes.
+
 **Next:** Этап 2 (toolchain + `:domain` → KMP) → Этап 3 (agentic Master Plan + doctrinal matrix) →
 Этап 4 (A0 thin spike). Этап 0 is now fully closed (0.1–0.7 all ✅).
 

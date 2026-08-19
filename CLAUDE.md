@@ -218,4 +218,4 @@ below is recorded in its own ADR.
 - UX + hardening: **X1 → X6**, **Y1 → Y7**, device-acceptance rounds 1–3
 - Stage-1 AI Launcher: **AIL-0 → AIL-6** · Stage-2 memory: **S2-1**, **S2-2**
 - Design track: **DS-0 → DS-11** + Vision MVP preview · Localization: **I18N-1**, **I18N-2**
-- Agentic restart (2026-08-19): **ADR 1/4 … 4/4**, **Этап 0.2 / 0.3 / 0.4 / 0.5**
+- Agentic restart (2026-08-19): **ADR 1/4 … 4/4**, **Этап 0.2 / 0.3 / 0.4 / 0.5 / 0.6 / 0.7**

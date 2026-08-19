@@ -60,7 +60,6 @@ dependencies {
     implementation(project(":core:android"))
     implementation(project(":domain"))
     implementation(project(":data:ai-cloud"))
-    implementation(project(":data:ai-local"))
     implementation(project(":data:repository"))
     implementation(project(":data:prayer"))
     implementation(project(":feature:launcher"))
@@ -85,9 +84,8 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
     implementation(libs.navigation.compose)
 
-    // Block Q: WorkManager (one-shot model download) + Hilt @HiltWorker support. The worker shell,
-    // HiltWorkerFactory and Configuration.Provider live here (composition root, already kapt+Hilt);
-    // the correctness-critical provisioning logic stays in :data:ai-local (ModelProvisioner).
+    // WorkManager + Hilt @HiltWorker support for the periodic suggestion precompute/usage cleanup
+    // workers. HiltWorkerFactory and Configuration.Provider live here (composition root).
     implementation(libs.work.runtime.ktx)
     implementation(libs.androidx.hilt.work)
     kapt(libs.androidx.hilt.compiler)

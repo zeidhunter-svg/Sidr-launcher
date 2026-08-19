@@ -5880,3 +5880,82 @@ added — no scope beyond the plan's named file.
 removal), 0.4 (CLAUDE.md compression), 0.5 (honest statuses), 0.6 (measured perf budgets), 0.7 (already
 closed). The `llmRouterEnabled` → `localOnlyMode` flag inversion itself (ADR 1/4's decision) is not
 flipped by this stage — 0.2 only removes the precondition blocking it.
+
+## 2026-08-19 — Этап 0.3 complete — ONNX stack removed
+
+**Status: CODE-GREEN.** Agentic restart plan (`docs/superpowers/plans/2026-08-18-agentic-track-restart.md`),
+Этап 0.3. Executes ADR "2026-08-19 — ADR 2/4 (agentic restart)" (platform re-baseline: ONNX NLU closed,
+OQ#1/#2/#3 closed, designated local-inference runtime is LiteRT/LiteRT-LM, not ONNX). The plan's own
+words: *"без него это было бы оправдание задним числом"* — the ADR had to land first (it did, in Этап 1)
+for this deletion to be a consequence of a decision rather than a justification invented after the fact.
+
+**What changed.** Deleted per the plan's file-by-file radius: the whole `:data:ai-local` module (18 main
+files + tests + assets), `:app` DI (`NluMatcherProvidesModule`, `NluMatcher`, `ModelProvisionProvidesModule`,
+`ModelProvisionBindsModule`), `:app` work (`ModelDownloadWorker`, `WorkManagerModelDownloadScheduler`,
+`SessionLifecycleReleaseTest`), the ONNX branch of `SidrLauncherApp` (`ModelManager.ensureModel()`,
+the `SessionLifecycle` set, `onTrimMemory`/`onLowMemory`'s ONNX teardown — `Configuration.Provider` and
+WorkManager init stay, they're now owned solely by `SuggestionPrecomputeWorker`/`UsageCleanupWorker`),
+`:data:repository`'s `LayeredIntentMatcher`/`NluConfidenceCalibrator` (+ tests) and
+`ModelAvailabilityRepositoryImpl` (+ test, + the `model_available_ids` key dropped from
+`PreferencesKeys.ALL_KEY_NAMES`), `:data:ai-cloud`'s `KtorModelDownloader` (+ test), and `:domain`'s
+`ai/local/` package (`ModelId`/`ModelAvailability`/`ModelAvailabilityRepository`/`TextEmbedder`/
+`ModelDownloader`/`ModelFilePresence`, + `LocalNluContractsTest`) and `MatcherSource.NLU`. The unqualified
+`IntentMatcher` in `IntentProvidesModule` now binds `RuleBasedIntentMatcher()` directly — no composite,
+no qualifiers. `settings.gradle.kts`, `app/build.gradle.kts` and `gradle/libs.versions.toml` (the
+`onnxRuntime` version + `onnxruntime-android` library entry) lost their `:data:ai-local` references.
+
+**Necessary consequences beyond the plan's named list (compiler-forced, not scope expansion).** The
+plan's radius list did not name three things that could not compile once `TextEmbedder`/
+`ModelAvailabilityRepository` left `:domain` — each is a direct, single-purpose consumer of a type the
+plan explicitly deletes, not a discretionary addition:
+
+1. **`SemanticSuggestionRanker`** (`:data:repository/suggestions`, + its test) — a Block V decorator
+   whose entire body is "embed via `TextEmbedder`, gate via `LocalInferenceGate`, else fall back to
+   heuristic". With both gone it has no remaining reason to exist; `SuggestionsProvidesModule
+   .provideSuggestionRanker` now returns `HeuristicSuggestionRanker()` directly (Block V was always
+   inert in production — OQ#3 never pinned an embedding artifact — so this is a no-op for shipped
+   behaviour, matching the DS-11 "no plan, no scope" precedent, not a regression).
+2. **`LocalInferenceGate`** (`domain/device/`, + its test) — the plan's own text names this as a
+   decision to make at execution time ("если не переиспользуется в Этапе 0 — удалить"). Its three
+   callers were `OnnxIntentClassifier`, `OnnxTextEmbedder` (both deleted with `:data:ai-local`) and
+   `SemanticSuggestionRanker` (deleted above) — zero remaining callers, so it is deleted per the plan's
+   own stated condition, not a new decision. `DeviceProfile`/`DeviceCapability`/`DeviceProfileProvider`/
+   `AndroidDeviceProfiler` are untouched, exactly as the plan requires (suggestion-precompute gating
+   still reads `profile()`/`capability()` directly).
+3. **`@RuleMatcher`/`@EmbeddingModelConfig` qualifiers** — dead after (1)/(2) removed their only
+   consumers; deleted rather than left as unused Hilt qualifiers.
+
+**One binding had to move, not just disappear.** `DeviceProfileProvider`'s `@Provides` lived in
+`ModelProvisionProvidesModule`, which the plan deletes wholesale — but `DeviceProfileProvider` itself is
+explicitly retained (used by `SuggestionPrecomputeGate` for LOW_END/battery gating and by
+`LauncherActivity` for motion suppression). Deleting the module without relocating the provider is a
+missing Hilt binding, not a smaller graph — `:app:hiltJavaCompileDebug` failed with exactly this
+`[Dagger/MissingBinding]` on the first build attempt. New `app/di/DeviceProfileProvidesModule.kt` carries
+the one `@Provides` method verbatim from the deleted module; nothing else moved.
+
+**KDoc-only edits (no behavior change), three files:** `AndroidDeviceProfiler.kt`, `DeviceProfileClassifier.kt`,
+`DeviceCapability.kt`, `DeviceProfileCacheMapping.kt` each had a comment naming `OnnxIntentClassifier` or
+`LocalInferenceGate` as the reason a field/gate exists; reworded to the surviving reason
+(suggestion-precompute gating) so no comment points at a deleted class.
+
+**Verification (JDK-17, `local.properties`-free Temurin 17 toolchain, exit 0, not piped through `tail`):**
+root `testDebugUnitTest assembleDebug` `BUILD SUCCESSFUL` (509 tasks); `:core:ui:verifyRoborazziDebug`
+`BUILD SUCCESSFUL`, goldens untouched (no UI in scope); `:app:assembleRelease` `BUILD SUCCESSFUL`;
+`:domain:dependencies --configuration compileClasspath` = `kotlin-stdlib` + `kotlinx-coroutines-core`
+only, confirmed by direct inspection (unchanged — `domain/ai/local` was already pure Kotlin, so this
+was true before too, now it's true with less surface). **APK size: 78 MB → 6.8 MB
+(`app-release-unsigned.apk`, 7,052,702 bytes)** — the ADR 2/4 "before" baseline (78 MB, ONNX 70.4 MB,
+recorded in 0.1) minus the ONNX AAR/model-path code, R8-shrunk. `git diff --stat`: 80 files touched
+(mostly deletions) + one new file (`DeviceProfileProvidesModule.kt`), net -4904/+~70 lines — no file
+outside the plan's radius plus the three necessary-consequence items above.
+
+**Device regression check not re-run here:** the plan's Этап-0 verification list includes an on-device
+"открой телеграм" check on `ru-RU`/`llmRouterEnabled=false`/airplane-mode — that regression belongs to
+0.2 (FastPath localization), which already device-relevant-verified it as a code path; 0.3 does not touch
+`RuleBasedIntentMatcher`'s vocabulary or the FastPath route, so re-running the physical-device pass here
+would not exercise anything this stage changed. No device available in this session either way.
+
+**Not done here (out of scope for 0.3, per the plan):** 0.4 (CLAUDE.md compression), 0.5 (honest
+statuses), 0.6 (measured perf budgets — still pending the first-ever heap measurement). The
+`llmRouterEnabled` → `localOnlyMode` flag inversion (ADR 1/4) is still not flipped by any 0.x stage so
+far — HANDOFF still flags it as needing an explicit owner call on which session does it.

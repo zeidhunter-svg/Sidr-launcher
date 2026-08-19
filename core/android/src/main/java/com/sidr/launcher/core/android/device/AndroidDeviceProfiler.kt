@@ -21,8 +21,8 @@ import kotlinx.coroutines.launch
  *
  * [profile] is computed once and cached in memory (the port contract: cache on first call, return
  * cheaply thereafter) and **written through** to [DeviceProfileCacheRepository] for cold-start use.
- * [capability] is re-read on **every** call — thermal/battery move at runtime and
- * `OnnxIntentClassifier` re-checks the gate per inference.
+ * [capability] is re-read on **every** call — thermal/battery move at runtime and callers
+ * (e.g. suggestion-precompute gating) should re-check before each capability-sensitive decision.
  *
  * Plain class (no Hilt annotations) so `core/android` stays DI-framework-free; constructed in `:app`
  * with the application [Context] and the `@ApplicationScope` [CoroutineScope] (precedent:

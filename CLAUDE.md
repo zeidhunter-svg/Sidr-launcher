@@ -391,10 +391,31 @@ docs only, no code.** Governing document:
    contract; a 0-step plan *is* a spoken reply (Assistant screen), an N-step plan is a task
    (Tasks/Agents).
 
-**Next: the rest of Этап 0 (remove the ONNX stack, honest statuses, measured budgets), then Этап 2
-(toolchain + `:domain` → KMP), Этап 3 (agentic Master Plan + doctrinal matrix), then the A0 vertical
-spike.** The A1 fork (parallel vocabulary vs. evolve in place) is **deliberately not decided** — it
-belongs to Этап 5, on a spec rewritten after ADR 2.
+**Next: the rest of Этап 0 (honest statuses, measured budgets), then Этап 2 (toolchain +
+`:domain` → KMP), Этап 3 (agentic Master Plan + doctrinal matrix), then the A0 vertical spike.** The A1
+fork (parallel vocabulary vs. evolve in place) is **deliberately not decided** — it belongs to Этап 5, on
+a spec rewritten after ADR 2.
+
+**Этап 0.3 CLOSED 2026-08-19 — the ONNX stack is deleted; release APK 78 MB → 6.8 MB.** Executes ADR
+2/4 (platform re-baseline: ONNX NLU closed, OQ#1/#2/#3 closed). Deleted per the plan's radius: the whole
+`:data:ai-local` module, its `:app` DI/work wiring, `SidrLauncherApp`'s ONNX teardown branch (WorkManager
++ `Configuration.Provider` stay — owned by `SuggestionPrecomputeWorker`/`UsageCleanupWorker`),
+`LayeredIntentMatcher`/`NluConfidenceCalibrator` (the unqualified `IntentMatcher` now binds
+`RuleBasedIntentMatcher()` directly, no composite), `ModelAvailabilityRepositoryImpl` (+ the
+`model_available_ids` key), `KtorModelDownloader`, and `domain/ai/local/` + `MatcherSource.NLU`.
+**Compiler-forced beyond the plan's named list, not scope expansion:** `SemanticSuggestionRanker`
+(Block V, always-inert — its whole body was "embed via the now-deleted `TextEmbedder`, else fall back to
+heuristic"; `SuggestionsProvidesModule` now returns `HeuristicSuggestionRanker()` directly) and
+`LocalInferenceGate` (zero remaining callers once `SemanticSuggestionRanker`/`OnnxIntentClassifier`/
+`OnnxTextEmbedder` were gone — deleted per the plan's own stated condition for it). `DeviceProfile`/
+`DeviceCapability`/`DeviceProfileProvider`/`AndroidDeviceProfiler` are untouched, per the plan — but
+`DeviceProfileProvider`'s `@Provides` had to move out of the deleted `ModelProvisionProvidesModule` into
+a new `app/di/DeviceProfileProvidesModule.kt` (`SuggestionPrecomputeGate` and `LauncherActivity` still
+inject it; a missing-binding compile error on the first build attempt is what surfaced this). **Gate
+(JDK-17, exit 0, not piped through `tail`):** root `testDebugUnitTest assembleDebug` BUILD SUCCESSFUL;
+`:core:ui:verifyRoborazziDebug` SUCCESSFUL (goldens untouched); `:app:assembleRelease` SUCCESSFUL;
+`:domain:dependencies` = stdlib + coroutines only. ADR "2026-08-19 — Этап 0.3 complete — ONNX stack
+removed" in decisions.md.
 
 **Этап 0.2 CLOSED 2026-08-19 — FastPath localized to `ru`/`tr`, the `llmRouterEnabled` →
 `localOnlyMode` precondition (ADR 1/4) is cleared.** `RuleBasedIntentMatcher` (`:data:repository`)
@@ -993,12 +1014,9 @@ Phase 3 result, Blocks A → D:
 | `OperationResult` / `OperationError` | `domain` |
 | Ports: `IntentMatcher`, `IntentConfidencePolicy`, `GenerativeAiEngine` | `domain` |
 | `ActionExecutor` contract + `ActionExecutionResult` *(Block D)* | `domain` |
-| `DeviceProfile`/`DeviceCapability` model + `DeviceProfileProvider` port + `LocalInferenceGate` *(Block O ✅)* | `domain` |
-| `ModelId`/`ModelAvailability`/`ModelAvailabilityRepository`/`TextEmbedder` port *(Block O ✅)* | `domain` |
-| Rule-based matcher impl, `InstalledAppsRepository` impl, Android `ActionExecutor` impl | `data/repository` |
-| `LayeredIntentMatcher` (rule-first composite) + `NluConfidenceCalibrator` *(Block R ✅)* | `data/repository` |
-| `OnnxIntentClassifier` (`@NluMatcher` + `SessionLifecycle`) + `OnnxTextEmbedder` *(Block V inert seam)* | `data/ai-local` |
-| `@RuleMatcher`/`@NluMatcher` qualifiers + matcher DI swap + `onTrimMemory`/`ensureModel` wiring *(Block R ✅; lifecycle set updated in V)* | `app` |
+| `DeviceProfile`/`DeviceCapability` model + `DeviceProfileProvider` port *(Block O ✅; `LocalInferenceGate` removed Этап 0.3 — zero callers after the ONNX stack's deletion)* | `domain` |
+| Rule-based matcher impl, `InstalledAppsRepository` impl, Android `ActionExecutor` impl *(unqualified `IntentMatcher` binds `RuleBasedIntentMatcher()` directly since Этап 0.3 — no composite)* | `data/repository` |
+| `DeviceProfileProvidesModule` (`DeviceProfileProvider` wiring, relocated from the deleted `ModelProvisionProvidesModule`) *(Этап 0.3)* | `app` |
 | Pref domain models (`UserPreferences`, `FeatureFlags`, `DeviceProfileCacheEntry`, `CachedSuggestion`) + their repo interfaces *(Block E ✅)* | `domain` |
 | DataStore Preferences impls + `PreferencesMapper` + `PreferencesKeys` *(Block E ✅)* | `data/repository` |
 | History domain models (`AppUsageRecord`, `SuggestionRankingRecord`, `IntentMatchRecord`) + repo interfaces (`UsageHistoryRepository`, `SuggestionRankingRepository`, `IntentMatchHistoryRepository`) *(Block F)* | `domain` |
@@ -1020,13 +1038,8 @@ Phase 3 result, Blocks A → D:
 | `provideExecuteActionUseCase` (`IntentProvidesModule`) *(AIL-5 ✅)* | `app` |
 | `sidrString`/`sidrPluralString` + `SidrStringOverlay` (I18N-1 string seam, entry-name-keyed overlay) *(I18N-1 ✅)* | `core/ui` |
 | `locales_config.xml` + in-app language switcher (`AppCompatDelegate` per-app language) + i18n guard tests (`StringSeamGuardTest`/`LocaleCompletenessGuardTest`/`HardcodedUiTextGuardTest`/`DomainIdentifierLeakGuardTest`) *(I18N-1 ✅, `DomainIdentifierLeakGuardTest` I18N-2 ✅)* | `app` |
-| ONNX NLU / embeddings | `data/ai-local` |
-| `ModelDownloader` port + `ModelFilePresence` port *(Block Q ✅, rework)* | `domain` |
-| `ModelStore`/`Sha256Verifier`/`ModelProvisioner`/`ModelManager` + `ModelDownloadScheduler` port + `ModelDownloadConfig` *(Block Q ✅)* | `data/ai-local` |
 | `AndroidDeviceProfiler` + pure `DeviceProfileClassifier`/`DeviceProfileCacheMapping` *(Block Q ✅)* | `core/android` |
-| `ModelAvailabilityRepositoryImpl` (marker + disk cross-check) *(Block Q ✅)* | `data/repository` |
-| `KtorModelDownloader` (HTTPS-only, retry taxonomy) *(Block Q ✅, rework)* | `data/ai-cloud` |
-| `ModelDownloadWorker` (`@HiltWorker`) / `WorkManagerModelDownloadScheduler` + `Configuration.Provider`/`HiltWorkerFactory` *(Block Q ✅)* | `app` |
+| Local-model provisioning (`ModelStore`/`ModelDownloader`/`ModelAvailabilityRepositoryImpl`/`ModelDownloadWorker`/ONNX NLU+embeddings) — **removed Этап 0.3** (ADR 2/4; OQ#1/#2/#3 closed, ONNX AAR gone, APK 78 MB → 6.8 MB); a future local-inference runtime is LiteRT/LiteRT-LM, not this stack | — |
 | `UiState`, dispatchers, logging contracts | `core/common` |
 | `Routes`, `NavigationEvent` | `core/common` *(→ `core/navigation` on trigger)* |
 | `DeviceProfile` detection, `PackageManager` access, `SpeechInputSource` Android impl | `core/android` |

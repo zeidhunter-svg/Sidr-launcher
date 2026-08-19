@@ -109,14 +109,6 @@ internal object PreferencesKeys {
     val AI_PROVIDER_MODEL        = stringPreferencesKey("ai_provider_model")
     val AI_PROVIDER_DISPLAY_NAME = stringPreferencesKey("ai_provider_display_name")
 
-    // Local-NLU model availability — prefix: model_ (Block Q).
-    // Set of ModelId.value strings whose on-disk `.onnx` artifact has been SHA-256-verified and
-    // promoted by the download worker (the observable signal the OnnxIntentClassifier gate reads).
-    // Carries no user data — only opaque model identifiers; the name is denylist-clean (no forbidden
-    // term). Disk presence is the real load-time gate (LocalModelFiles.modelFile() returns null when
-    // a file is gone); this flag is just the reactive availability projection.
-    val MODEL_AVAILABLE_IDS = stringSetPreferencesKey("model_available_ids")
-
     // Prayer setup + last schedule cache — prefix: prayer_ (DS-6B Task 6).
     // These key STRINGS are inventoried here ONLY so PrivacyInventoryGuardTest covers them; the
     // actual `Preferences.Key<>` objects are defined LOCALLY in `:data:prayer`
@@ -166,7 +158,6 @@ internal object PreferencesKeys {
         AI_PROVIDER_BASE_URL.name,
         AI_PROVIDER_MODEL.name,
         AI_PROVIDER_DISPLAY_NAME.name,
-        MODEL_AVAILABLE_IDS.name,
         PRAYER_METHOD.name,
         PRAYER_MADHAB.name,
         PRAYER_LOC_LABEL.name,

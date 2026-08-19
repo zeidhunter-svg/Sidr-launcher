@@ -56,9 +56,22 @@ app-name query (out of this stage's morphology scope). Gate (JDK-17): root `test
 assembleDebug` + `:core:ui:verifyRoborazziDebug` SUCCESSFUL; `RuleBasedIntentMatcherTest` 34→43 tests.
 ADR "2026-08-19 — Этап 0.2 complete — FastPath localized to ru/tr" in `decisions.md`.
 
-**Next:** the rest of Этап 0 (0.3 remove ONNX → 0.4 compress `CLAUDE.md` → 0.5 honest statuses → 0.6
-measured budgets) → Этап 2 (toolchain + KMP) → Этап 3 (agentic Master Plan + doctrinal matrix) →
-Этап 4 (A0 thin spike).
+**Этап 0.3 CLOSED the same day (2026-08-19) — the ONNX stack is deleted.** Executes ADR 2/4. Removed:
+the whole `:data:ai-local` module, its `:app` DI/work wiring, `SidrLauncherApp`'s ONNX teardown branch,
+`LayeredIntentMatcher`/`NluConfidenceCalibrator` (unqualified `IntentMatcher` now binds
+`RuleBasedIntentMatcher()` directly), `ModelAvailabilityRepositoryImpl`, `KtorModelDownloader`, and
+`domain/ai/local/` + `MatcherSource.NLU`. Compiler-forced beyond the plan's named list:
+`SemanticSuggestionRanker` (its whole body depended on the now-deleted `TextEmbedder`; suggestions now
+rank via plain `HeuristicSuggestionRanker`) and `LocalInferenceGate` (zero callers left). `DeviceProfile`/
+`DeviceCapability`/`DeviceProfileProvider`/`AndroidDeviceProfiler` are untouched per the plan, though
+`DeviceProfileProvider`'s `@Provides` had to move to a new `app/di/DeviceProfileProvidesModule.kt` (its
+old home was deleted with `ModelProvisionProvidesModule`). **Release APK: 78 MB → 6.8 MB.** Gate
+(JDK-17): root `testDebugUnitTest assembleDebug` + `:core:ui:verifyRoborazziDebug` +
+`:app:assembleRelease` all SUCCESSFUL; `:domain` classpath = stdlib + coroutines only. ADR "2026-08-19 —
+Этап 0.3 complete — ONNX stack removed" in `decisions.md`.
+
+**Next:** the rest of Этап 0 (0.4 compress `CLAUDE.md` → 0.5 honest statuses → 0.6 measured budgets) →
+Этап 2 (toolchain + KMP) → Этап 3 (agentic Master Plan + doctrinal matrix) → Этап 4 (A0 thin spike).
 
 ## I18N-2 residual localization + barrier 4 — CLOSED (2026-08-19)
 

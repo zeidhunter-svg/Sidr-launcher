@@ -27,8 +27,7 @@ session for the next one — read it.
 | Stage | State |
 |---|---|
 | **1** — strategic ADR package | ✅ 2026-08-19 — four ADRs, docs only |
-| **0.1** owner sign-off (release gate cleared — `:app:assembleRelease` green for the first time) · **0.2** FastPath `ru`/`tr` · **0.3** delete ONNX (APK 78 MB → 6.8 MB) · **0.4** compress this file · **0.7** I18N residue | ✅ 2026-08-19 |
-| **0.5** — honest statuses (`CODE-GREEN`/`DEVICE-ACCEPTED`/`CLOSED`) | open |
+| **0.1** owner sign-off (release gate cleared — `:app:assembleRelease` green for the first time) · **0.2** FastPath `ru`/`tr` · **0.3** delete ONNX (APK 78 MB → 6.8 MB) · **0.4** compress this file · **0.5** honest statuses (`CODE-GREEN`/`DEVICE-ACCEPTED`/`CLOSED`) · **0.7** I18N residue | ✅ 2026-08-19 |
 | **0.6** — budgets rewritten on measured numbers | open — needs the project's first heap measurement |
 | **2** toolchain + `:domain` → KMP · **3** agentic Master Plan + doctrinal matrix | queued |
 | **4–7** — A0 spike, A1′ ToolRegistry, A4′ runtime, A2/A3/A5/A6 | each needs its own spec + plan (`brainstorm → spec → plan → build`) |
@@ -54,8 +53,12 @@ place) belongs to Этап 5, on a spec rewritten after ADR 2/4. Do not pre-empt
 
 ## Shipped surface (2026-08-19)
 
-Everything below is on `launcher--7`, gate-green, and device-accepted on SM-A325F / Android 13 unless
-the debt list says otherwise.
+Everything below is on `launcher--7` and `CODE-GREEN` (gate green: `testDebugUnitTest assembleDebug`,
+plus `verifyRoborazziDebug` where `core/ui` is touched). Most of it is also `DEVICE-ACCEPTED` on
+SM-A325F / Android 13 — the owner personally ran on-device verification and signed off — **except**
+FastPath's `ru`/`tr` locale forms (0.2), Action & Safety (DS-5), and the i18n surface (I18N-1), which are
+`CODE-GREEN` only; see Known debt. `CLOSED` = both, with any residual limitation named rather than
+implied absent (Этап 0.5 — status vocabulary).
 
 - **Launcher core** — home, app drawer, settings, app launch; fully offline.
 - **FastPath routing** — `RuleBasedIntentMatcher`, verb/keyword vocabulary in `en`/`ru`/`tr`
@@ -77,12 +80,17 @@ the debt list says otherwise.
 
 ## Known debt (honest list)
 
-Not green. Each item is recorded in its own ADR; Этап 0.5 formalizes the status vocabulary and
-Этап 0.6 the numbers.
+Not `CLOSED`. Status vocabulary (Этап 0.5): `CODE-GREEN` (gate green, no device claim) /
+`DEVICE-ACCEPTED` (owner ran on-device verification and signed off — an agent-driven `adb`/`uiautomator`
+pass does not count) / `CLOSED` (both, plus any residual limitation named, not implied absent). Each item
+below is recorded in its own ADR; Этап 0.6 still owes the performance numbers.
 
-- **Device-pending:** DS-5's own acceptance checklist (since 2026-07-13); I18N-1's offline path,
-  live TalkBack, fontScale 2.0, and the system per-app-language picker; DS-6B's MWL times are
-  cross-implementation-verified only (Istanbul/Makkah are authority-table-anchored).
+- **`CODE-GREEN`, not `DEVICE-ACCEPTED`:** DS-5's own acceptance checklist has never been run (since
+  2026-07-13); I18N-1 was verified only by agent-driven `adb`/`uiautomator` — its offline path, live
+  TalkBack, fontScale 2.0, and the system per-app-language picker are untested. DS-6B is `CLOSED` (owner
+  ran full on-device acceptance 2026-08-08) but carries one named residual: its MWL times are
+  cross-implementation-verified only (Istanbul/Makkah are authority-table-anchored) — `CLOSED` is not a
+  zero-debt claim.
 - **Performance:** cold start 766 ms (`< 400 ms` was never met — aspirational, not a ship gate);
   heap has **never** been measured; `baselineprofile/` has no `StartupTimingMetric`.
 - **Release gate:** `checkOwnerReviewedLocaleStrings` checks the `OWNER-REVIEWED` marker's *presence*,
@@ -209,4 +217,4 @@ Not green. Each item is recorded in its own ADR; Этап 0.5 formalizes the sta
 - UX + hardening: **X1 → X6**, **Y1 → Y7**, device-acceptance rounds 1–3
 - Stage-1 AI Launcher: **AIL-0 → AIL-6** · Stage-2 memory: **S2-1**, **S2-2**
 - Design track: **DS-0 → DS-11** + Vision MVP preview · Localization: **I18N-1**, **I18N-2**
-- Agentic restart (2026-08-19): **ADR 1/4 … 4/4**, **Этап 0.2 / 0.3 / 0.4**
+- Agentic restart (2026-08-19): **ADR 1/4 … 4/4**, **Этап 0.2 / 0.3 / 0.4 / 0.5**

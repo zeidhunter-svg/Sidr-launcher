@@ -3,11 +3,16 @@
 > **Authoritative history lives in `ai-context/decisions.md` (ADR log); `CLAUDE.md` carries current
 > state, hard rules and pointers only (compressed 2026-08-19 by Этап 0.4 — it is no longer a session
 > digest); per-phase plans carry their own checklists.** This file is the status snapshot — if it
-> disagrees with an ADR, the ADR wins. Last re-based: 2026-08-19 (Этап 0.4 — `CLAUDE.md` compressed
-> 101 KB → 15 KB; same-day I18N-2 residual localization + barrier 4 CLOSED; prior re-base
-> 2026-08-16 I18N-1 Multilingual UI CLOSED — device-verified; prior re-base 2026-08-10 DS-10 Assistant
-> Migration CLOSED — device-accepted; same-day DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED;
-> prior re-base 2026-08-08 DS-6B Prayer Correctness COMPLETE).
+> disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
+> (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
+> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-08-19
+> (Этап 0.5 — corrected I18N-1's and DS-5's headline labels from an unqualified `CLOSED`/`CODE-CLOSED`
+> to `CODE-GREEN`, see below; DS-6B checked and confirmed `CLOSED`); same-day Этап 0.4 — `CLAUDE.md`
+> compressed 101 KB → 15 KB; same-day I18N-2 residual localization + barrier 4 CLOSED; prior re-base
+> 2026-08-16 I18N-1 Multilingual UI CODE-GREEN — agent-driven device smoke, owner did not run
+> acceptance; prior re-base 2026-08-10 DS-10 Assistant Migration CLOSED — device-accepted; same-day
+> DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer
+> Correctness CLOSED — device-accepted by the owner).
 
 ## Agentic track — Этап 1 (strategic ADR package) DONE (2026-08-19)
 
@@ -88,8 +93,19 @@ case-suffix limitation, the untested device matrices), and a `History map` namin
 track. Docs only — zero code, zero test changes. ADR "2026-08-19 — Этап 0.4 complete — CLAUDE.md
 compressed" in `decisions.md`.
 
-**Next:** the rest of Этап 0 (0.5 honest statuses, 0.6 measured budgets — independent, either order) →
-Этап 2 (toolchain + KMP) → Этап 3 (agentic Master Plan + doctrinal matrix) → Этап 4 (A0 thin spike).
+**Этап 0.5 CLOSED the same day (2026-08-19) — honest statuses.** Introduced `CODE-GREEN` /
+`DEVICE-ACCEPTED` / `CLOSED` (definitions at the top of this file) and re-audited the three blocks the
+plan names. **DS-5** and **I18N-1** were both self-labelled `CLOSED`-adjacent (`CODE-CLOSED`, `CLOSED —
+device-verified`) while their own ADR bodies already listed real, un-run device checks — corrected to
+**CODE-GREEN** for both; no fact changed, only the terminal label, which previously overclaimed. **DS-6B**
+was checked and confirmed correctly **CLOSED** — the owner ran the full on-device acceptance and its MWL
+limitation is a named residual, not a hidden one; `CLOSED` does not mean zero debt. Docs-only, zero code:
+`CLAUDE.md`'s `Known debt`/`Shipped surface` and this file's headings for DS-5/I18N-1 updated to match.
+ADR "2026-08-19 — Этап 0.5 complete — honest statuses (CODE-GREEN / DEVICE-ACCEPTED / CLOSED)" in
+`decisions.md`.
+
+**Next:** 0.6 measured budgets (needs the project's first heap measurement) → Этап 2 (toolchain + KMP) →
+Этап 3 (agentic Master Plan + doctrinal matrix) → Этап 4 (A0 thin spike).
 
 ## I18N-2 residual localization + barrier 4 — CLOSED (2026-08-19)
 
@@ -117,7 +133,7 @@ here: `checkOwnerReviewedLocaleStrings` checks the `OWNER-REVIEWED` marker's *pr
 — a signed file can silently gain an unreviewed key later. ADR "2026-08-19 — I18N-2 residual
 localization + barrier 4" in `decisions.md`.
 
-## I18N-1 Multilingual UI — CLOSED (2026-08-16), device-verified
+## I18N-1 Multilingual UI — CODE-GREEN (2026-08-16); not device-accepted, not closed
 
 `en`/`ru`/`tr` shipped across every migrated production screen behind a single `core/ui` seam
 (`sidrString`, entry-name-keyed overlay for a future `translate_ui`). Two owner exemptions stay English
@@ -143,12 +159,16 @@ TalkBack, fontScale 2.0, release-build cold-start comparison (blocked by the new
 residue items found during this pass's own smoke, routed to I18N-2 rather than fixed here: a hardcoded
 `"Current location"` label in `core/android` (out of spec scope, same class as the already-known
 suggestion-label gaps), and a real bug where Home's per-cell prayer `contentDescription` announces the
-untranslated enum name instead of the localized prayer name (`PrayerSummaryMapper.kt:64`). ADR
-"2026-08-16 — I18N-1 Multilingual UI complete" in `decisions.md`; plan
-`docs/superpowers/plans/2026-08-11-i18n-1-multilingual.md` (STATUS CLOSED).
+untranslated enum name instead of the localized prayer name (`PrayerSummaryMapper.kt:64`). **All device
+verification above was agent-driven (`adb`/`uiautomator`); the owner has not run an on-device acceptance
+pass.** Under Этап 0.5's vocabulary this block is **CODE-GREEN**, not `CLOSED` — the four "not
+device-covered" items are real open debt, carried in `CLAUDE.md`'s `Known debt` since 0.4. ADR
+"2026-08-16 — I18N-1 Multilingual UI complete" in `decisions.md`, corrected by the Этап 0.5 addendum;
+plan `docs/superpowers/plans/2026-08-11-i18n-1-multilingual.md` (code-complete; device acceptance still
+pending the owner).
 
-## Design track (DS) — DS-1…DS-4 + Vision MVP DONE; DS-5 CODE-CLOSED (2026-07-13, device-pending);
-DS-6B COMPLETE (2026-08-08); DS-7 + S2-2 CLOSED (2026-08-10); DS-10 CLOSED — device-accepted
+## Design track (DS) — DS-1…DS-4 + Vision MVP DONE; DS-5 CODE-GREEN (2026-07-13, not device-accepted);
+DS-6B CLOSED (2026-08-08); DS-7 + S2-2 CLOSED (2026-08-10); DS-10 CLOSED — device-accepted
 (2026-08-10). **The DS v1.1 release gate is now open, but blocked from producing a release artifact
 until the owner completes I18N-1's `OWNER-REVIEWED` sign-off (see above).**
 
@@ -233,18 +253,22 @@ states, prayer names moved to per-cell `contentDescription`, provenance line rem
 detail screen). **Full Verification Gate GREEN** (JDK-17): `:domain:test :data:prayer:testDebugUnitTest
 :data:repository:testDebugUnitTest :feature:prayer:testDebugUnitTest :feature:settings:testDebugUnitTest
 :feature:launcher:testDebugUnitTest :core:ui:testDebugUnitTest :core:ui:verifyRoborazziDebug
-testDebugUnitTest assembleDebug` — BUILD SUCCESSFUL. **Device status is PARTIAL**: on SM-A325F the
-no-data invariant passed (fresh install → calm Home, no strip/prompt/fabricated times) and a real
-Diyanet/Turkey setup rendered a correct-looking strip, but the full interactive + religious-correctness
-acceptance (authority-table cross-check, airplane-mode cache, stale path, device-location grant,
-tz-conflict, font-scale 2.0, TalkBack, router-off parity) is **PENDING the owner** — mirrors the DS-5
-device-pending precedent. **Known limitation:** Istanbul (Diyanet) and Makkah (Umm al-Qura) golden times
-are authority-table-anchored; London and Kazan (MWL) are cross-implementation-verified only (MWL has no
-official authority portal). DS-6A (the Shahada component) stays UI-only and separate from DS-6B. ADR:
-decisions.md "2026-08-08 — DS-6B Prayer Correctness (COMPLETE — device-accepted by owner)".
+testDebugUnitTest assembleDebug` — BUILD SUCCESSFUL. **Device status: the agent-driven pass was
+PARTIAL** — on SM-A325F the no-data invariant passed (fresh install → calm Home, no
+strip/prompt/fabricated times) and a real Diyanet/Turkey setup rendered a correct-looking strip, but the
+full interactive + religious-correctness acceptance (authority-table cross-check, airplane-mode cache,
+stale path, device-location grant, tz-conflict, font-scale 2.0, TalkBack, router-off parity) needed the
+owner. **The owner then ran that full pass the same day (2026-08-08) and accepted the block** —
+interactive setup, the strip rendering a correct schedule, and the authority-table cross-check were all
+performed and signed off; **DS-6B is CLOSED**, not merely code-green. **Known limitation, still open and
+named rather than hidden:** Istanbul (Diyanet) and Makkah (Umm al-Qura) golden times are
+authority-table-anchored; London and Kazan (MWL) are cross-implementation-verified only (MWL has no
+official authority portal) — this stands next to the CLOSED label, not instead of it (Этап 0.5). DS-6A
+(the Shahada component) stays UI-only and separate from DS-6B. ADR: decisions.md "2026-08-08 — DS-6B
+Prayer Correctness (COMPLETE — device-accepted by owner)".
 
-**DS-5 Action & Safety is CODE-CLOSED (implemented 2026-07-12, reconciled + gated 2026-07-13);
-device acceptance PENDING.** `core/ui/component/SidrActionSafety.kt` (`SidrActionProposal`,
+**DS-5 Action & Safety is CODE-GREEN (implemented 2026-07-12, reconciled + gated 2026-07-13);
+not device-accepted, not closed (Этап 0.5).** `core/ui/component/SidrActionSafety.kt` (`SidrActionProposal`,
 `SidrPermissionNotice`, `SidrPrivacyNotice`, `SidrResultSurface`, `SidrErrorSurface`,
 `SidrOfflineState`, `SidrBlockedState`, shared `SidrSurfaceActions` stacking at fontScale ≥ 1.7) +
 hardened one-shot `SidrActionGate`; adopted in `LauncherScreen` (SAFE → `SidrActionProposal`,
@@ -302,7 +326,7 @@ pass** (typed launch, WEB/SITE/ASK, router-off "Unknown command" parity, Setting
 discoverability, no crash). Spec:
 `docs/superpowers/specs/2026-07-11-ds4-home-universal-input-design.md`; plan (DONE):
 `docs/superpowers/plans/2026-07-11-ds4-home-universal-input.md`; ADR: decisions.md "2026-07-11 — DS-4
-complete". **DS-5 Action & Safety is CODE-CLOSED (2026-07-13, see the section above; device-pending)**:
+complete". **DS-5 Action & Safety is CODE-GREEN (2026-07-13, see the section above; not device-accepted)**:
 `docs/superpowers/specs/2026-07-11-ds5-action-safety-design.md` +
 `docs/superpowers/plans/2026-07-11-ds5-action-safety.md`. **Next design block: DS-10 Assistant Migration
 — the last production surface still in the pre-v1.1 look — then the DS v1.1 release gate** (DS-7 closed

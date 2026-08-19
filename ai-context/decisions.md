@@ -6035,3 +6035,75 @@ recorded, not re-measured). `ai-context/current-status.md` (60 KB) and `decision
 compressed — 0.4's radius is `CLAUDE.md`, and `decisions.md` is by design the place history accumulates.
 The `llmRouterEnabled` → `localOnlyMode` inversion (ADR 1/4) is still unimplemented and still belongs to
 no named stage; the new `CLAUDE.md` says so explicitly instead of leaving it implied.
+
+## 2026-08-19 — Этап 0.5 complete — honest statuses (`CODE-GREEN` / `DEVICE-ACCEPTED` / `CLOSED`)
+
+**Status: CODE-GREEN (docs only — zero production code, zero test changes).** Agentic restart plan,
+Этап 0.5: *«Ввести CODE-GREEN / DEVICE-ACCEPTED / CLOSED. Пересмотреть текущие «CLOSED» и вернуть в
+видимость device-долг: DS-5, I18N-1, DS-6B.»* This is a correction pass, not new work: no code touched,
+no block re-opened. Original ADR prose below is left exactly as written (append-only log); this entry is
+the addendum that supplies the missing vocabulary and points at the three places it changes the reading.
+
+**Vocabulary, drawn from the one block that already applied it rigorously (DS-6B) plus 0.4's own
+`Status:` line above:**
+
+```
+CODE-GREEN      — the build/test gate is green: `testDebugUnitTest assembleDebug`, plus
+                  `verifyRoborazziDebug` when core/ui is touched. Says nothing about device
+                  behavior — a compiler and a JVM test runner cannot see a screen.
+
+DEVICE-ACCEPTED — the OWNER personally ran on-device verification and signed off. An
+                  agent-driven adb/uiautomator pass does not qualify by itself — DS-6B's own
+                  ADR already draws this line ("the agent-driven pass had verified only the
+                  no-data invariant... Device acceptance — CLOSED 2026-08-08 (owner)").
+
+CLOSED          — CODE-GREEN AND DEVICE-ACCEPTED, AND any known residual limitation is named
+                  explicitly rather than implied absent. CLOSED is not a zero-debt claim — see
+                  DS-6B's own MWL caveat, which stands next to its CLOSED label, not instead of
+                  it.
+```
+
+**Reclassified — terminology corrected, no underlying fact changes, nothing re-opened:**
+
+- **DS-5 Action & Safety** — was self-labelled `CODE-CLOSED; device acceptance PENDING` (ADR
+  2026-07-13). `CODE-CLOSED` reads as closed; it was not. Correct label: **CODE-GREEN**. Device
+  acceptance for DS-5's own checklist (auto-hide nav, DS-5 surfaces on real branches, accent
+  switching, router-off/offline parity — listed in the 2026-07-13 ADR's own "Device-pending"
+  paragraph) has still not been run. Not `DEVICE-ACCEPTED`, not `CLOSED`.
+- **I18N-1 Multilingual UI** — its own ADR (2026-08-16) and `current-status.md`'s summary both
+  end on an unqualified **"I18N-1 is CLOSED"** / **"CLOSED — device-verified"**. The same ADR's own
+  body says otherwise: every on-device pass in it was agent-driven (`adb`, `uiautomator`), never
+  run by the owner, and its own "Not covered, with reason" list names the system per-app-language
+  picker, the offline path, live TalkBack, and fontScale 2.0 as untested. Under the vocabulary
+  above this is **CODE-GREEN**, not `CLOSED` — the gate is green and the in-app language switch was
+  agent-verified on-device, but owner sign-off never happened and four real gaps remain open, not
+  hidden (they were already named in the ADR body — only the terminal label overclaimed). No new
+  finding: `CLAUDE.md`'s `Known debt` already carries these four items since 0.4.
+- **DS-6B Prayer Correctness** — checked against the vocabulary and confirmed correctly
+  **CLOSED**: the owner personally ran the full on-device acceptance (interactive
+  method/madhab/city setup, religious-correctness cross-check against authority tables) on
+  SM-A325F on 2026-08-08 and signed off, per that ADR's own closing addendum. Its documented
+  limitation — London/Kazan `MWL` golden times are cross-implementation-verified only, not
+  authority-table-anchored like Istanbul/Makkah — stands as the named residual the vocabulary
+  requires; it does not un-close the block.
+
+**Docs synced to the vocabulary (no facts changed, only the label):**
+- `CLAUDE.md` `Known debt` — the "Device-pending" bullet now states DS-5 and I18N-1 are
+  `CODE-GREEN` (not yet `DEVICE-ACCEPTED`) instead of neutral prose; 0.4 deliberately withheld the
+  vocabulary here to avoid pre-empting this stage.
+- `CLAUDE.md` `Shipped surface` intro line, which blanket-claimed "gate-green, and device-accepted
+  ... unless the debt list says otherwise" — corrected to state the vocabulary applies per item.
+- `ai-context/current-status.md` — the I18N-1 section heading and the Этап 0.4-era re-base note
+  both said unqualified `CLOSED`; both corrected to `CODE-GREEN`. DS-5's heading already said
+  `CODE-CLOSED (device-pending)`; corrected to `CODE-GREEN`. DS-6B's heading is unchanged
+  (`COMPLETE — device-accepted by the owner`; already accurate under the new vocabulary read as
+  `CLOSED`).
+
+**Verification.** Docs-only change — no `.kt`/`.xml`/`.gradle.kts`/golden touched. Gate re-run to
+confirm the tree 0.4 left is still green (JDK-17, not piped through `tail`):
+`./gradlew --no-daemon testDebugUnitTest assembleDebug` → BUILD SUCCESSFUL.
+
+**Not done here (out of scope for 0.5, per the plan):** no other ADR in this log was re-audited or
+relabeled — only the three blocks the plan names (DS-5, I18N-1, DS-6B). Retroactively relabeling every
+past `CLOSED`/`COMPLETE`/`DONE` in this 6,000-line log is a different, much larger task the plan does not
+ask for here. 0.6 (measured performance budgets) is untouched and remains open.

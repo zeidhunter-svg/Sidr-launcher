@@ -1,8 +1,10 @@
 # Current Status
 
-> **Authoritative status lives in `CLAUDE.md` (session digest), `ai-context/decisions.md` (ADR log),
-> and the per-phase plans.** This file is a short pointer/snapshot only — if it disagrees with those,
-> they win. Last re-based: 2026-08-19 (I18N-2 residual localization + barrier 4 CLOSED; prior re-base
+> **Authoritative history lives in `ai-context/decisions.md` (ADR log); `CLAUDE.md` carries current
+> state, hard rules and pointers only (compressed 2026-08-19 by Этап 0.4 — it is no longer a session
+> digest); per-phase plans carry their own checklists.** This file is the status snapshot — if it
+> disagrees with an ADR, the ADR wins. Last re-based: 2026-08-19 (Этап 0.4 — `CLAUDE.md` compressed
+> 101 KB → 15 KB; same-day I18N-2 residual localization + barrier 4 CLOSED; prior re-base
 > 2026-08-16 I18N-1 Multilingual UI CLOSED — device-verified; prior re-base 2026-08-10 DS-10 Assistant
 > Migration CLOSED — device-accepted; same-day DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED;
 > prior re-base 2026-08-08 DS-6B Prayer Correctness COMPLETE).
@@ -70,7 +72,23 @@ old home was deleted with `ModelProvisionProvidesModule`). **Release APK: 78 MB 
 `:app:assembleRelease` all SUCCESSFUL; `:domain` classpath = stdlib + coroutines only. ADR "2026-08-19 —
 Этап 0.3 complete — ONNX stack removed" in `decisions.md`.
 
-**Next:** the rest of Этап 0 (0.4 compress `CLAUDE.md` → 0.5 honest statuses → 0.6 measured budgets) →
+**Этап 0.4 CLOSED the same day (2026-08-19) — `CLAUDE.md` compressed 101 KB → 15 KB.** The file is now
+current state + hard rules + pointers only; every historical block it narrated (Blocks A→W, Phase UX
+X1–X6, Phase 9 Y1–Y7, AIL-0…6, S2-1/S2-2, DS-0…DS-11, Vision MVP, I18N-1/2, the four agentic ADRs) was
+verified block-by-block to already exist as an ADR in `decisions.md` before its narration was deleted;
+nothing was copied, nothing was lost, and the pre-compression text stays verbatim in git at
+`9de23ab:CLAUDE.md`. Owner decided both forks at the start of the stage: **pointers only** (no archive
+duplicate file) and the **`Contract → Owner module` table stays in `CLAUDE.md`**, cleaned of per-block
+annotations and of the ONNX rows deleted by 0.3. Three things were carried forward rather than dropped
+because they were load-bearing but buried in the archive: a `Build & verification gate` section (JDK 17
+toolchain, the gate command, the "never pipe `gradlew` through `tail`" rule that masked a red gate on
+2026-07-13, commit-but-never-push), a `Known debt` list (device-pending DS-5/I18N-1/DS-6B items, the
+766 ms cold start and never-measured heap, the `OWNER-REVIEWED` presence-vs-coverage gap, the Turkish
+case-suffix limitation, the untested device matrices), and a `History map` naming which ADR to open per
+track. Docs only — zero code, zero test changes. ADR "2026-08-19 — Этап 0.4 complete — CLAUDE.md
+compressed" in `decisions.md`.
+
+**Next:** the rest of Этап 0 (0.5 honest statuses, 0.6 measured budgets — independent, either order) →
 Этап 2 (toolchain + KMP) → Этап 3 (agentic Master Plan + doctrinal matrix) → Этап 4 (A0 thin spike).
 
 ## I18N-2 residual localization + barrier 4 — CLOSED (2026-08-19)

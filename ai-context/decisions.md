@@ -5959,3 +5959,79 @@ would not exercise anything this stage changed. No device available in this sess
 statuses), 0.6 (measured perf budgets — still pending the first-ever heap measurement). The
 `llmRouterEnabled` → `localOnlyMode` flag inversion (ADR 1/4) is still not flipped by any 0.x stage so
 far — HANDOFF still flags it as needing an explicit owner call on which session does it.
+
+## 2026-08-19 — Этап 0.4 complete — `CLAUDE.md` compressed 101 KB → 15 KB
+
+**Status: CODE-GREEN (docs only — zero production code, zero test changes).** Agentic restart plan
+(`docs/superpowers/plans/2026-08-18-agentic-track-restart.md`), Этап 0.4: *«90 KB → ~10–15 KB: текущее
+состояние, hard rules, указатели. История переезжает в `decisions.md`, где ей место.»* The file had
+grown to **101,025 bytes / 1,093 lines**, of which ~80 KB was a narrated archive of closed phases going
+back to June: every session paid that reading tax before doing any work.
+
+**Two forks put to the owner before writing (both answered, both taken as recommended):**
+
+1. *Where does the removed history go?* — the plan says "moves to `decisions.md`", but I first verified
+   that it is **already there**: every narrated block has a matching ADR
+   (Blocks A→H, I→N, O→R, S→W; Phase UX X1–X6; Phase 9 Y1–Y7; AIL-0…AIL-6; S2-1/S2-2; DS-0…DS-11 +
+   Vision MVP; I18N-1/I18N-2; the four agentic ADRs; Этапы 0.2/0.3), and the specific facts most at risk
+   of being lost were spot-checked one by one in `decisions.md`: the DS-7 follow-ups (Aliases list
+   ordering, discarded `OperationResult`s, tab-bar label clipping at fontScale 2.0), the I18N-1/DS-10
+   "not covered on device" lists, the `OWNER-REVIEWED` presence-vs-coverage gap, DS-6B's MWL caveat, the
+   Android 9/11/14 + LOW_END matrices, boot warmup, and OQ#4's `Ready`/`Partial` states. All present.
+   **Decision: pointers only** — nothing copied, no archive duplicate file; `9de23ab:CLAUDE.md` holds
+   the 101,025-byte original verbatim in git.
+   *(Этап 0.1 is the one item with no dedicated ADR of its own — it is recorded in
+   `current-status.md` and inside ADR 2/4, which carries its 78 MB measurement. Writing a retroactive
+   0.1 ADR was offered as the third option and declined as scope expansion.)*
+2. *Where does the `Contract → Owner module` table live?* — it is ~4.6 KB of a 10–15 KB budget.
+   **Decision: it stays in `CLAUDE.md`**, cleaned: per-block annotations (`*(Block Q ✅)*` etc.) removed,
+   the ONNX/local-model-provisioning row removed (deleted by 0.3), rows added for the shipped
+   `:data:prayer` / prayer domain that the table never listed.
+
+**Shape of the new file (15,420 bytes):** a header stating what the file is and where the history went ·
+*What this is* · *Current goal* (agentic track, stage table, the four ADRs in one paragraph each, the
+deliberately-undecided A1 fork) · *Shipped surface* · *Known debt* · *Hard rules* (carried **verbatim** —
+this is the one section that must not be paraphrased) · *Build & verification gate* · *Contract → Owner
+module* · *Do not* · *Source of truth* + a *History map* naming which ADR to open per track.
+
+**Three things were added rather than deleted, because they were load-bearing but buried inside the
+archive being removed:**
+
+- **`Build & verification gate`** — the JDK-17 toolchain requirement (the machine's default JDK is
+  newer and Gradle cannot parse it) lived only inside AIL-6's narration; the **"never pipe `gradlew`
+  through `tail`"** rule (it masked a red gate as exit 0 on 2026-07-13) lived only in the plan's §0 and
+  in agent memory; the closing discipline (gate → ADR → docs → *propose* a commit, agent never pushes)
+  lived only in the plan. All three now sit in the file every session reads first.
+- **`Known debt`** — a five-bullet honest list (device-pending DS-5 / I18N-1 / DS-6B items; 766 ms cold
+  start and never-measured heap; the `OWNER-REVIEWED` presence-vs-coverage gap; the Turkish
+  case-suffix limitation from 0.2; the untested Android 9/11/14 + LOW_END + STT + boot-warmup matrices).
+  Deliberately written in **neutral vocabulary**, not in `CODE-GREEN`/`DEVICE-ACCEPTED`/`CLOSED`, so it
+  does not pre-empt Этап 0.5 — which will formalize exactly that vocabulary and re-audit these statuses.
+- **`History map`** — six lines mapping track → ADR names, so "where is DS-6B written down" costs one
+  `grep` in `decisions.md` instead of a memory of the deleted digest.
+
+**Corrections made while compressing (facts that had drifted):**
+`Do not` still said *"Don't start Phase 5 (cloud AI) ahead of its own approved plan"* — Phase 5 closed
+2026-06-27; replaced with the live prohibitions (no `core/data`, no generative AI in `IntentMatcher`, no
+`EncryptedSharedPreferences`, **no resurrection of the deleted ONNX stack**, `ActionIds` frozen, no
+autonomy without consent, and no history back into this file). `Source of truth` claimed
+`docs/architecture.md` was "IN SYNC as of Block H6 (2026-06-23)" — stale; ADR 2/4 rewrote its
+performance section on 2026-08-19. The `Hard rules` gained two entries that already governed the project
+but were only written elsewhere: `:domain` must stay KMP-ready (ADR 3/4, Этап 2.2) and the
+`OutboundContextPolicy` positive-allow-list rule (Block L).
+
+**Verification.** `./gradlew --no-daemon testDebugUnitTest assembleDebug --rerun-tasks` under JDK 17
+(`/home/Suleiman/jdks/jdk-17.0.19+10`): **BUILD SUCCESSFUL in 1m 5s, 509 actionable tasks: 509
+executed**, exit 0, output not piped through `tail`. The `--rerun-tasks` form was used deliberately: the
+first run reported `509 up-to-date` — correct for a docs-only diff, but "up-to-date" is not a test
+result, so the suites were forced to actually execute. Documentation-only change — `git diff --stat`
+touches exactly `CLAUDE.md`, `ai-context/current-status.md`, `ai-context/decisions.md` and the plan file;
+no `.kt`, `.xml`, `.gradle.kts` or golden PNG is modified, so the gate is a regression check that the
+tree is still the green tree 0.3 left, not a check of this stage's content.
+
+**Not done here (out of scope for 0.4, per the plan):** 0.5 (honest statuses — the debt list above is
+raw material for it, not a substitute), 0.6 (measured budgets; the 766 ms / never-measured-heap facts are
+recorded, not re-measured). `ai-context/current-status.md` (60 KB) and `decisions.md` (482 KB) were **not**
+compressed — 0.4's radius is `CLAUDE.md`, and `decisions.md` is by design the place history accumulates.
+The `llmRouterEnabled` → `localOnlyMode` inversion (ADR 1/4) is still unimplemented and still belongs to
+no named stage; the new `CLAUDE.md` says so explicitly instead of leaving it implied.

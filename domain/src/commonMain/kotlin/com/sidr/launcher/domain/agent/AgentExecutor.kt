@@ -55,6 +55,12 @@ class AgentExecutor(
      * `StepStarted` + `ToolInvoked` and returns — the cursor is deliberately NOT advanced yet, because
      * the step has not actually run.
      *
+     * `cursor` is read below as a list position while [perform] writes it as `invoked.index + 1`. Those
+     * are the same number only because [ExecutionPlan] enforces `steps[i].index == i`; the same
+     * invariant is what makes `isSatisfied`'s `observations[index - 1]` genuinely "the previous step"
+     * and `checkpointFor`'s `it.index < step.index` genuinely "the steps that already ran". See the
+     * invariant's KDoc on [ExecutionPlan] for what went wrong when nothing enforced it.
+     *
      * If [session] is already mid-step (see [midStepInvocation]), this returns it unchanged instead of
      * re-clearing the same step. Without this, `advance` on a session persisted right after a previous
      * [prepare] call — the exact shape a resumed session has — would append a second `StepStarted` +
@@ -123,11 +129,19 @@ class AgentExecutor(
      *    tool just because the trace tail still looks mid-step. [prepare] only guards the half of the
      *    transition it owns; this is the other half's own guard, not a duplicate of it.
      *  - **The resolved step must match the trace.** The step is looked up by `PlanStep.index` — the
-     *    same identity [ToolInvoked.index] carries — never by list position, because nothing forces a
-     *    `PlanStep`'s `index` field to equal its position in [ExecutionPlan.steps]. The lookup then
-     *    asserts the resolved step's `invocation.id` equals the `toolId` [ToolInvoked] recorded. Either
-     *    check failing means the plan and the trace disagree about which step this is, and the only
-     *    fail-closed move is to invoke nothing.
+     *    same identity [TraceEvent.ToolInvoked.index] carries — and the lookup then asserts the
+     *    resolved step's `invocation.id` equals the `toolId` [TraceEvent.ToolInvoked] recorded.
+     *
+     *    [ExecutionPlan] enforces `index == position`, so within one plan the two addressings agree
+     *    and this lookup is not defending against them diverging. What it defends against is the
+     *    **plan and the trace disagreeing** — the invariant binds an index to a position inside a
+     *    single [ExecutionPlan], but nothing binds a *persisted* trace to the plan it is later
+     *    replayed against. A plan swapped under a stored trace (a restore against a different build,
+     *    a shorter re-plan) can leave the tail naming a step the plan no longer contains, or a
+     *    different tool at that index. Either check failing means exactly that, and the only
+     *    fail-closed move is to invoke nothing. Resolving by index rather than by
+     *    `steps[invoked.index]` is what makes the first of those two checks possible at all: an
+     *    out-of-range index resolves to nothing instead of silently addressing some other step.
      */
     suspend fun perform(session: AgentSession): AgentSession {
         if (session.state != ExecutionState.Running) return session

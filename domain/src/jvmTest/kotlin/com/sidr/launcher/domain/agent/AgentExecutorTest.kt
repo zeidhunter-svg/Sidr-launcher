@@ -279,36 +279,29 @@ class AgentExecutorTest {
     }
 
     @Test
-    fun `perform resolves the step by PlanStep index, not list position`() = runTest {
-        // Positions are shuffled relative to `.index`: position 0 carries index 1 (SAFE, LAUNCH_APP),
-        // position 1 carries index 0 (CONFIRM, PLAY_STORE_SEARCH). A position-based lookup keyed off the
-        // trace's recorded index would grab the CONFIRM step and run it with no consent checkpoint ever
-        // evaluated for it. The index-based lookup must invoke only the step `prepare` actually cleared.
-        val shuffled = ExecutionPlan(
-            listOf(
-                PlanStep(
-                    index = 1,
-                    invocation = ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to "x")),
-                    risk = ActionRiskLevel.SAFE,
-                    precondition = StepPrecondition.None,
-                    rationale = StepRationale.GOAL_DIRECT,
-                ),
-                PlanStep(
-                    index = 0,
-                    invocation = ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to "x")),
-                    risk = ActionRiskLevel.CONFIRM,
-                    precondition = StepPrecondition.None,
-                    rationale = StepRationale.APP_NOT_INSTALLED_FALLBACK,
-                ),
-            ),
-        )
+    fun `perform refuses to invoke when the trace names a step index the plan does not contain`() = runTest {
+        // `ExecutionPlan` now enforces index == position, so the trace/plan disagreement this branch
+        // guards can no longer be expressed as a shuffled plan — it is expressed from the TRACE side,
+        // which is where it was always the realistic one. The invariant binds an index to a position
+        // *within one plan*; nothing binds a persisted trace to the plan it is later replayed against,
+        // so a plan swapped underneath a stored trace (a restore against a different build, a shorter
+        // re-plan) can leave the tail naming a step that no longer exists.
+        //
+        // The recorded toolId deliberately MATCHES step 0's, so only the index lookup can refuse this:
+        // a lookup that fell back to the first step would sail straight through the id-match assertion.
         val tools = FakeToolExecutor(listOf(ToolResult.Effected))
         val executor = AgentExecutor(registry, tools, budget)
 
-        val after = executor.advance(session().copy(plan = shuffled))
+        val stale = session().copy(
+            trace = ExecutionTrace(
+                listOf(TraceEvent.StepStarted(5), TraceEvent.ToolInvoked(5, ToolIds.LAUNCH_APP)),
+            ),
+        )
 
-        assertEquals(listOf(ToolIds.LAUNCH_APP), tools.invocations.map { it.id })
-        assertTrue(after.trace.events.none { it is TraceEvent.ConsentRequested })
+        val after = executor.perform(stale)
+
+        assertEquals(0, tools.invocations.size)
+        assertEquals(stale, after)
     }
 
     @Test

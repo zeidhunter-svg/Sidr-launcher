@@ -306,12 +306,20 @@ tasks.withType<Test>().configureEach {
 //    every `values-<locale>` folder, including the long-tail warn-only scan) via `resFiles()`, for
 //    both the 7 modules hand-listed in `modulePrefixes` AND (in
 //    `module_prefixes_cover_every_module_that_ships_strings`) every module `settings.gradle.kts`
-//    includes - so declared as one repo-wide `res/values*/**` tree rather than 7 hand-picked module
+//    includes - so declared as one repo-wide `res/**` tree rather than 7 hand-picked module
 //    dirs, exactly so a future module never falls into the same silent-skip gap that test itself
 //    guards against. Resource XML is never part of any module's compiled Kotlin output, so unlike
 //    .kt sources (see below) nothing else was ever going to catch a change here.
+//    The tree is `res/**`, NOT the narrower `res/values*/**` it was until 2026-08-20: that pattern
+//    did not match `res/xml/locales_config.xml`, which a comment right below wrongly claimed it
+//    "already covered" - so the fourth locale source was unpinned and a `<locale android:name="de"/>`
+//    planted there left `:app:testDebugUnitTest` UP-TO-DATE and exit 0 (re-review finding N1). One
+//    include covering everything the guards actually read beats hand-maintained paths that drift, and
+//    this narrow form had already drifted once. It costs an over-declaration of a handful of non-string
+//    res files (`colors.xml`, `styles.xml`, drawables) - a rare needless re-run, which is the cheap
+//    direction of this trade; the expensive direction is a guard that silently does not run.
 //  - `locale_lists_agree_across_the_four_sources` additionally reads
-//    `app/src/main/res/xml/locales_config.xml` (inside the res tree above, already covered),
+//    `app/src/main/res/xml/locales_config.xml` (matched by the `res/**` tree above),
 //    `feature/settings/.../SettingsScreen.kt` (a .kt source in a project(":feature:settings")
 //    dependency of :app - NOT declared, see below), `app/build.gradle.kts` itself, and
 //    `settings.gradle.kts` - the latter two are build scripts, never part of any compiled classpath,
@@ -339,11 +347,11 @@ tasks.withType<Test>().configureEach {
 tasks.withType<Test>().configureEach {
     inputs.files(
         fileTree(rootProject.projectDir) {
-            include("**/src/main/res/values*/**")
+            include("**/src/main/res/**")
             exclude("**/build/**")
         },
     )
-        .withPropertyName("i18nGuardRepoWideResValuesScan")
+        .withPropertyName("i18nGuardRepoWideResScan")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 
     inputs.files(

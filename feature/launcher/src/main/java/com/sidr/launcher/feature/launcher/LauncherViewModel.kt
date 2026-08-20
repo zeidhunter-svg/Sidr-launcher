@@ -11,13 +11,10 @@ import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.domain.action.ActionCatalog
 import com.sidr.launcher.domain.action.LauncherAction
-import com.sidr.launcher.domain.history.AppUsageRecord
 import com.sidr.launcher.domain.history.UsageHistoryRepository
 import com.sidr.launcher.domain.memory.alias.ResolveCommandWithAliasUseCase
 import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
-import com.sidr.launcher.domain.memory.resolution.ResolutionLearningToken
 import com.sidr.launcher.domain.memory.resolution.ResolvedCommand
-import com.sidr.launcher.domain.memory.resolution.ResolvedTarget
 import com.sidr.launcher.domain.connectivity.ConnectivityChecker
 import com.sidr.launcher.domain.input.InputIntent
 import com.sidr.launcher.domain.input.UniversalInputRouter
@@ -28,11 +25,8 @@ import com.sidr.launcher.domain.preferences.UserPreferencesRepository
 import com.sidr.launcher.domain.prayer.GetPrayerContextUseCase
 import com.sidr.launcher.domain.prayer.PrayerContext
 import com.sidr.launcher.domain.prayer.UnavailableReason
-import com.sidr.launcher.domain.intent.ActionExecutionResult
 import com.sidr.launcher.domain.intent.ActionExecutor
-import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.CommandOutcome
-import com.sidr.launcher.domain.intent.ExecutableAction
 import com.sidr.launcher.domain.intent.ExecuteActionUseCase
 import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.model.InstalledApp
@@ -45,9 +39,7 @@ import com.sidr.launcher.domain.voice.SpeechInputSource
 import com.sidr.launcher.domain.voice.SpeechRecognitionError
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,7 +47,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -119,10 +110,6 @@ class LauncherViewModel @Inject constructor(
     }
 
     // ── App-list state ─────────────────────────────────────────────────────
-    // Raw app-list load result; null = the full launcher app inventory is still loading in the
-    // background. Home must still paint from cheap cached state while this is null.
-    private val _rawAppsResult = MutableStateFlow<OperationResult<List<InstalledApp>>?>(null)
-
     // Этап 4 / A0: extracted to LauncherSuggestions — see observeSuggestionFlag()'s old call site
     // (now suggestionsSection.observeFlag()) below, wired from init.
     private val suggestionsSection = LauncherSuggestions(
@@ -132,6 +119,19 @@ class LauncherViewModel @Inject constructor(
         installedAppsRepository = installedAppsRepository,
         ioDispatcher = ioDispatcher,
         scope = viewModelScope,
+    )
+
+    // Task 3 / A0: extracted to LauncherAppList — the app-inventory load, the usage-aware grid sort,
+    // favorites derivation and the combine()/stateIn() that used to build [uiState] here directly (see
+    // that class's kdoc). Takes [suggestionsSection] per the controller's Ruling R1 so label
+    // resolution against the loaded apps also moves out of this class.
+    private val appList = LauncherAppList(
+        installedAppsRepository = installedAppsRepository,
+        usageHistoryRepository = usageHistoryRepository,
+        userPreferencesRepository = userPreferencesRepository,
+        ioDispatcher = ioDispatcher,
+        scope = viewModelScope,
+        suggestions = suggestionsSection,
     )
 
     // Block X6: deferred UI preferences (favorites row size, mic toggle, first-run nudge flag).
@@ -179,46 +179,10 @@ class LauncherViewModel @Inject constructor(
             initialValue = PrayerContext.Unavailable(UnavailableReason.NOT_CONFIGURED),
         )
 
-    // Derived state: combines the loaded app list with live usage records so the grid
-    // re-sorts automatically whenever a launch is recorded (F6 demo slice), surfaces the
-    // launcher-owned suggestion row state (Phase 7, Block W-lite), and carries the Block X6
-    // favorites cap + first-run nudge flag through user preferences.
-    val uiState: StateFlow<UiState<LauncherUiState>> = combine(
-        _rawAppsResult,
-        usageHistoryRepository.getUsageRecords().catch { emit(emptyList()) },
-        suggestionsSection.suggestions,
-        userPreferences,
-    ) { appsResult, usageRecords, suggestions, prefs ->
-            when (appsResult) {
-                // Full app inventory is not first-frame-critical: paint the home shell + cached
-                // suggestions immediately, then fill apps/favorites once PackageManager returns.
-                null -> UiState.Success(
-                    LauncherUiState(
-                        suggestions = suggestionsSection.resolveLabels(suggestions, emptyList()),
-                        setupHintDismissed = prefs.setupHintDismissed,
-                    ),
-                )
-                is OperationResult.Failure ->
-                    UiState.Error(appsResult.error.toUiError(), retryable = appsResult.error.isRetryable())
-                is OperationResult.Success -> {
-                    val sorted = sortByUsage(appsResult.value, usageRecords)
-                    if (sorted.isEmpty()) UiState.Empty
-                    else UiState.Success(
-                        LauncherUiState(
-                            apps = sorted,
-                            suggestions = suggestionsSection.resolveLabels(suggestions, sorted),
-                            favorites = deriveFavorites(usageRecords, sorted, prefs.favoritesCount),
-                            setupHintDismissed = prefs.setupHintDismissed,
-                        ),
-                    )
-                }
-            }
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.Eagerly,
-            initialValue = UiState.Success(LauncherUiState()),
-        )
+    // Task 3 / A0: extracted to LauncherAppList — the combine()/stateIn() that built this moved
+    // whole (see that class's `state`); same value, same construction, delegated here under the
+    // identical public name so every existing call site (VM-internal and screen-facing) is unchanged.
+    val uiState: StateFlow<UiState<LauncherUiState>> get() = appList.state
 
     /**
      * I18N-1 Fix round 1: the typed detail behind a [OperationError.PermissionDenied]/
@@ -230,7 +194,7 @@ class LauncherViewModel @Inject constructor(
      * fallback it always was. Null whenever the last result isn't one of these two argument-carrying
      * failures.
      */
-    val appListErrorDetail: StateFlow<AppDrawerError?> = _rawAppsResult
+    val appListErrorDetail: StateFlow<AppDrawerError?> = appList.rawAppsResult
         .map { result ->
             (result as? OperationResult.Failure)?.error?.let { error ->
                 when (error) {
@@ -260,7 +224,7 @@ class LauncherViewModel @Inject constructor(
     // command pipeline; this only decides what the "search overtakes" panel shows.
     val inputResults: StateFlow<HomeInputResults> = combine(
         commandInput,
-        _rawAppsResult,
+        appList.rawAppsResult,
     ) { buffer, appsResult ->
         when (val intent = UniversalInputRouter.classify(buffer)) {
             InputIntent.Empty, InputIntent.DevSentinel -> HomeInputResults()
@@ -292,11 +256,6 @@ class LauncherViewModel @Inject constructor(
     private val _pendingRoutedAction = MutableStateFlow<PendingRoutedAction?>(null)
     val pendingRoutedAction: StateFlow<PendingRoutedAction?> = _pendingRoutedAction
 
-    // ── Pending learned-resolution token (S2-1 Task 11) — transient, VM-internal only. Set whenever
-    // the last outcome was an app-ambiguity list; consumed by a subsequent successful app launch to
-    // record the user's explicit choice. No public UI surface — nothing renders it directly.
-    private val _pendingLearningToken = MutableStateFlow<ResolutionLearningToken?>(null)
-
     // ── Developer Command console (AIL-3 / DF-1) — session-only, in-memory. No persisted key, so the
     // privacy denylist guard is untouched; both flags reset on process death. Two-factor unlock:
     // arm via 7 wordmark taps (screen), then submit the "//dev-mode" sentinel to toggle.
@@ -318,27 +277,28 @@ class LauncherViewModel @Inject constructor(
         onError = { error -> _commandFeedback.value = CommandFeedback.VoiceError(error) },
     )
 
-    // Tracks the in-flight app load so a new load (init or retry) cancels the previous one.
-    private var loadJob: Job? = null
+    // Task 3 / A0: extracted to LauncherAppLaunch — launchApp()/recordUsage()/recordChoiceIfPending()
+    // and the pending learning token moved unchanged (see that class's kdoc). Shared by the app grid
+    // (onAppClicked/onSuggestionClicked below) and the command pipeline (onCommandSubmitted's
+    // AutoLaunch branch) — the reason it is its own collaborator rather than folded into
+    // [LauncherAppList], per the task's "why two collaborators" note.
+    private val appLaunch = LauncherAppLaunch(
+        actionExecutor = actionExecutor,
+        usageHistoryRepository = usageHistoryRepository,
+        featureFlagRepository = featureFlagRepository,
+        recordResolutionChoice = recordResolutionChoice,
+        applicationScope = applicationScope,
+        scope = viewModelScope,
+        onFeedback = { feedback -> _commandFeedback.value = feedback },
+    )
 
     /** Whether a speech recognizer is usable. The UI shows the mic affordance only when true. */
     val isVoiceInputAvailable: Boolean
         get() = speechInputSource.isAvailable()
 
     init {
-        loadApps()
+        appList.load()
         suggestionsSection.observeFlag()
-    }
-
-    private fun loadApps() {
-        // Cancel any in-flight load first: rapid retries (double-tap) must not run parallel reloads.
-        // Only the latest attempt's result is ever applied; a redundant not-yet-started load never
-        // reaches the repository, and one already suspended mid-call is cancelled with its result
-        // discarded — so the screen sees a single clean Loading → Success/Error, no flicker.
-        loadJob?.cancel()
-        loadJob = viewModelScope.launch(ioDispatcher) {
-            _rawAppsResult.value = installedAppsRepository.getInstalledApps()
-        }
     }
 
     /**
@@ -346,8 +306,7 @@ class LauncherViewModel @Inject constructor(
      * Resetting to null keeps the cache-first home shell visible before the reload emits its result.
      */
     fun retry() {
-        _rawAppsResult.value = null
-        loadApps()
+        appList.retry()
     }
 
     // ── UI actions ─────────────────────────────────────────────────────────
@@ -360,7 +319,7 @@ class LauncherViewModel @Inject constructor(
         // Editing/clearing the buffer without submitting abandons any pending ambiguity: drop the
         // learning token so a later unrelated grid/suggestion tap (both funnel through onAppClicked)
         // can't be misrecorded as an explicit resolution of that stale ambiguity.
-        _pendingLearningToken.value = null
+        appLaunch.rememberLearningToken(null)
     }
 
     /** Arm the hidden developer console (called by the screen after 7 rapid wordmark taps). */
@@ -387,7 +346,7 @@ class LauncherViewModel @Inject constructor(
                     // Non-ambiguous → learningToken is null (parity: identical to the pre-S2-1 outcome
                     // path). Ambiguous with no stored preference → outcome is the original
                     // NeedsConfirmation, unchanged, plus a token for a later candidate tap to record.
-                    _pendingLearningToken.value = resolved.learningToken
+                    appLaunch.rememberLearningToken(resolved.learningToken)
                     applyOutcome(resolved.outcome)
                     if (devConsole.consoleOn.value) {
                         devConsole.append(text, outcomeSummary(resolved.outcome))
@@ -397,7 +356,7 @@ class LauncherViewModel @Inject constructor(
                     // A confident learned preference — launch it directly. Executed-like semantics
                     // (input clear) come only from launchApp's real success; a failure renders the
                     // decorator's reordered fallback outcome exactly as a typed command would.
-                    _pendingLearningToken.value = null
+                    appLaunch.rememberLearningToken(null)
                     val packageName = resolved.target.packageName
                     val activityName = (uiState.value as? UiState.Success)
                         ?.data
@@ -407,7 +366,7 @@ class LauncherViewModel @Inject constructor(
                     if (devConsole.consoleOn.value) {
                         devConsole.append(text, "auto $packageName")
                     }
-                    launchApp(
+                    appLaunch.launch(
                         packageName = packageName,
                         activityName = activityName,
                         onResult = { success ->
@@ -476,7 +435,7 @@ class LauncherViewModel @Inject constructor(
                 _commandFeedback.value = CommandFeedback.None
                 navigateTo(suggestion.actionId)
             }
-            else -> launchApp(
+            else -> appLaunch.launch(
                 packageName = suggestion.actionId,
                 activityName = null,
             )
@@ -486,37 +445,11 @@ class LauncherViewModel @Inject constructor(
     /** Tap-to-launch from the grid (or from an ambiguity suggestion): the app is already known, */
     /** so launch it directly through the executor — no matching needed. Does not touch input. */
     fun onAppClicked(app: InstalledApp) {
-        launchApp(
+        appLaunch.launch(
             packageName = app.packageName,
             activityName = app.activityName,
-            onResult = { success -> if (success) recordChoiceIfPending(app.packageName) },
+            onResult = { success -> if (success) appLaunch.recordChoiceIfPending(app.packageName) },
         )
-    }
-
-    /**
-     * S2-1 Task 11: if the last outcome was an app-ambiguity list awaiting a choice, and
-     * [packageName] is one of the candidates that list actually offered, records the explicit choice
-     * fire-and-forget on [applicationScope] — the returned [OperationResult] is ignored (the launch
-     * already completed; a failed/aborted record must never surface as a launch error). Any app
-     * launch (grid tap or candidate tap) ends the pending interaction. A grid tap with no pending
-     * token, or a tap on an app the ambiguity list never offered, is a plain launch and never records
-     * — the VM makes no other decision here; membership/streak/risk logic lives in the use-cases.
-     */
-    private fun recordChoiceIfPending(packageName: String) {
-        val token = _pendingLearningToken.value ?: return
-        _pendingLearningToken.value = null
-        if (!token.isAppAmbiguityFlow) return
-        val chosen = ResolvedTarget.App(packageName)
-        if (chosen !in token.candidateSet.targets) return
-        applicationScope.launch {
-            try {
-                recordResolutionChoice.record(token.capabilityKey, token.context, chosen, token.candidateSet)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Throwable) {
-                // Non-critical — the app already launched successfully.
-            }
-        }
     }
 
     fun dismissFeedback() {
@@ -648,101 +581,13 @@ class LauncherViewModel @Inject constructor(
         is LauncherAction.PlayStoreSearch -> "install ${action.query}"
     }
 
-    // ── Usage-aware grid sort ───────────────────────────────────────────────
-    // Apps with usage history rise to the top (by launchCount then lastUsedEpochMs).
-    // Apps without history keep their original relative order as the fallback.
-    private fun sortByUsage(
-        apps: List<InstalledApp>,
-        usageRecords: List<AppUsageRecord>,
-    ): List<InstalledApp> {
-        if (usageRecords.isEmpty()) return apps
-        val byPackage = usageRecords.associateBy { it.packageName }
-        val (withHistory, withoutHistory) = apps.partition { byPackage.containsKey(it.packageName) }
-        val sorted = withHistory.sortedWith(
-            compareByDescending<InstalledApp> { byPackage[it.packageName]!!.launchCount }
-                .thenByDescending { byPackage[it.packageName]!!.lastUsedEpochMs }
-        )
-        return sorted + withoutHistory
-    }
-
-    // ── Favorites (Block X2) ───────────────────────────────────────────────
-    // The decluttered home shows a small top-N most-used row instead of the full grid.
-    // [usageRecords] arrives most-used-first (UsageHistoryRepository contract); we map each to its
-    // currently-installed app (dropping records for apps that are gone) and cap at [favoritesCount]
-    // (Block X6 — user-configurable via Settings). Empty history (fresh install) → empty favorites
-    // (an alphabetical fallback is a later block).
-    private fun deriveFavorites(
-        usageRecords: List<AppUsageRecord>,
-        installed: List<InstalledApp>,
-        favoritesCount: Int,
-    ): List<InstalledApp> {
-        if (usageRecords.isEmpty() || favoritesCount <= 0) return emptyList()
-        val byPackage = installed.associateBy { it.packageName }
-        return usageRecords
-            .mapNotNull { byPackage[it.packageName] }
-            .take(favoritesCount)
-    }
-
     /**
      * Dismiss the one-shot first-run "set as default launcher" nudge (Block X6). Persisted so the
      * hint never resurfaces. Idempotent; a write failure leaves the flag unset (the nudge may show
      * again — acceptable for a purely advisory hint).
      */
     fun dismissSetupHint() {
-        viewModelScope.launch(ioDispatcher) {
-            try {
-                val current = userPreferencesRepository.getPreferences().first()
-                if (!current.setupHintDismissed) {
-                    userPreferencesRepository.updatePreferences(current.copy(setupHintDismissed = true))
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Throwable) {
-                // Advisory hint — a failed dismiss is non-critical.
-            }
-        }
-    }
-
-    private fun launchApp(
-        packageName: String,
-        activityName: String?,
-        // S2-1 Task 11: optional success signal for callers that need to react to a real launch
-        // result (e.g. recording a learned choice, or falling back on an AutoLaunch failure).
-        // Existing callers pass nothing, so their behavior is byte-for-byte unchanged.
-        onResult: ((success: Boolean) -> Unit)? = null,
-    ) {
-        viewModelScope.launch {
-            val action = ExecutableAction.LaunchAppAction(
-                packageName = packageName,
-                activityName = activityName,
-            )
-            val result = actionExecutor.execute(action)
-            _commandFeedback.value = when (result) {
-                is ActionExecutionResult.Success -> CommandFeedback.None
-                is ActionExecutionResult.Failure -> CommandFeedback.Failure(result.failure)
-                is ActionExecutionResult.Unsupported -> CommandFeedback.Failure(CommandFailure.Generic)
-            }
-            // Record usage only on a successful launch — soft-wrapped, never blocks the launch.
-            // Command-executed launches (CommandOutcome.Executed) are not tracked here because
-            // the package name is not available at the ViewModel boundary; a future slice can
-            // extend HandleUserCommandUseCase to carry it in the outcome.
-            if (result is ActionExecutionResult.Success) {
-                recordUsage(packageName)
-            }
-            onResult?.invoke(result is ActionExecutionResult.Success)
-        }
-    }
-
-    private suspend fun recordUsage(packageName: String) {
-        try {
-            // Gate: skip the write when the user has not enabled usage-history tracking.
-            if (!featureFlagRepository.getFlags().first().usageHistoryEnabled) return
-            usageHistoryRepository.recordLaunch(packageName, System.currentTimeMillis())
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Throwable) {
-            // Non-critical — launch already completed successfully.
-        }
+        appList.dismissSetupHint()
     }
 
     /**
@@ -757,32 +602,6 @@ class LauncherViewModel @Inject constructor(
         is LauncherIntent.OpenUrlIntent -> SuggestedIntent.OpenUrl(intent.url)
         is LauncherIntent.PlayStoreSearchIntent -> SuggestedIntent.PlayStoreSearch(intent.query)
         is LauncherIntent.UnknownIntent -> SuggestedIntent.Unknown
-    }
-
-    // ── OperationError → UiError — exhaustive when, no else branch ─────────
-    // Add a new branch here whenever OperationError gains a new subtype.
-    // I18N-1 Fix round 1: left byte-identical to its pre-Task-12 shape on purpose (structurally
-    // analogous to AppDrawerViewModel's twin — see that file's toUiError() comment) — the real typed,
-    // live seam is [appListErrorDetail] above, not a construct-then-discard AppDrawerError built only
-    // to be flattened back into English here.
-    private fun OperationError.toUiError(): UiError = when (this) {
-        is OperationError.NetworkError     -> UiError.Network
-        is OperationError.AiUnavailable    -> UiError.Unknown
-        is OperationError.PermissionDenied -> UiError.Message("Permission denied: $permission")
-        is OperationError.DeviceNotCapable -> UiError.Message("Not supported: $feature")
-        is OperationError.UnknownError     -> UiError.Unknown
-    }
-
-    // Whether re-running the load could plausibly succeed (per architecture.md error categories).
-    // Network/Unknown are offered a retry ("generic recovery"); PermissionDenied/DeviceNotCapable/
-    // AiUnavailable are not button-fixable — granting/capability/fallback are handled elsewhere.
-    // Exhaustive when, no else — add a branch when OperationError gains a subtype.
-    private fun OperationError.isRetryable(): Boolean = when (this) {
-        is OperationError.NetworkError     -> true
-        is OperationError.UnknownError     -> true
-        is OperationError.AiUnavailable    -> false
-        is OperationError.PermissionDenied -> false
-        is OperationError.DeviceNotCapable -> false
     }
 
     private companion object {
@@ -805,3 +624,33 @@ internal fun String.isKnownRoute(): Boolean =
         this == Routes.Settings.ROUTE ||
         this == Routes.PermissionEducation.ROUTE ||
         this.startsWith("${Routes.PermissionEducation.ROUTE}?")
+
+// Task 3 / A0: widened from private-member-extension to package-level internal for the same reason
+// as isKnownRoute() above — LauncherAppList's `state` combine (extracted out of this class) needs to
+// call these too, and a member extension is only callable with an instance of its dispatch receiver
+// in scope. Same logic, byte-for-byte, still package-internal.
+// ── OperationError → UiError — exhaustive when, no else branch ─────────
+// Add a new branch here whenever OperationError gains a new subtype.
+// I18N-1 Fix round 1: left byte-identical to its pre-Task-12 shape on purpose (structurally
+// analogous to AppDrawerViewModel's twin — see that file's toUiError() comment) — the real typed,
+// live seam is [LauncherViewModel.appListErrorDetail], not a construct-then-discard AppDrawerError
+// built only to be flattened back into English here.
+internal fun OperationError.toUiError(): UiError = when (this) {
+    is OperationError.NetworkError     -> UiError.Network
+    is OperationError.AiUnavailable    -> UiError.Unknown
+    is OperationError.PermissionDenied -> UiError.Message("Permission denied: $permission")
+    is OperationError.DeviceNotCapable -> UiError.Message("Not supported: $feature")
+    is OperationError.UnknownError     -> UiError.Unknown
+}
+
+// Whether re-running the load could plausibly succeed (per architecture.md error categories).
+// Network/Unknown are offered a retry ("generic recovery"); PermissionDenied/DeviceNotCapable/
+// AiUnavailable are not button-fixable — granting/capability/fallback are handled elsewhere.
+// Exhaustive when, no else — add a branch when OperationError gains a subtype.
+internal fun OperationError.isRetryable(): Boolean = when (this) {
+    is OperationError.NetworkError     -> true
+    is OperationError.UnknownError     -> true
+    is OperationError.AiUnavailable    -> false
+    is OperationError.PermissionDenied -> false
+    is OperationError.DeviceNotCapable -> false
+}

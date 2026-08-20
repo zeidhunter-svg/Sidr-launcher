@@ -5,7 +5,8 @@
 > digest); per-phase plans carry their own checklists.** This file is the status snapshot — if it
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
-> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-08-20
+> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-08-21
+> (agentic-track revision — the two-consumers fork, block A0.5, fork F6 in A0; docs only); prior 2026-08-20
 > (Этап 4.0 — understanding-flag inversion, first behavioural change of the agentic track); prior 2026-08-19
 > (Этап 0.5 — corrected I18N-1's and DS-5's headline labels from an unqualified `CLOSED`/`CODE-CLOSED`
 > to `CODE-GREEN`, see below; DS-6B checked and confirmed `CLOSED`); same-day Этап 0.4 — `CLAUDE.md`
@@ -15,6 +16,47 @@
 > acceptance; prior re-base 2026-08-10 DS-10 Assistant Migration CLOSED — device-accepted; same-day
 > DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer
 > Correctness CLOSED — device-accepted by the owner).
+
+## Agentic track — revision + the two-consumers fork (2026-08-21) — DOCS ONLY
+
+**One owner decision, not a package of changes.** A revision of the agentic track produced eight
+proposals; rather than running eight of them through change-control, they were reduced to the single
+fork that determines six: *is the track's subject an Android agent that PC is bolted onto later, or a
+portable core with two consumers from the start?* The owner chose **two consumers from the start**.
+Full record, including the evidence and the five consequences: ADR "2026-08-21 — Развилка агентного
+трека" in [decisions.md](decisions.md).
+
+- **The evidence that forced the fork.** ADR 3/4 declared the portable core on 2026-08-19, but it was
+  backed only by build configuration: `:domain` builds for `androidTarget()` and `jvm()`, yet **`jvm()`
+  has zero consumers** (all twelve modules depending on `:domain` are Android), the module has **zero
+  `expect`/`actual`**, and `commonMain` carries **eight `java.*` imports**. That is the `:data:ai-local`
+  pattern — a contract built against a consumer that never arrives — at the level of the core itself.
+- **Master Plan amended in three places:** readiness criterion **10** (one goal runs the same cycle on
+  the second consumer); block **A0.5** inserted between A0 and A1′ (§3.1a); milestone M-A1 extended.
+  §5 change-control gained the reverse entry, so dropping the decision costs the same ADR it cost to
+  take.
+- **A0 spec amended — fork F6, step-to-step data flow.** Today `ToolResult.Observed` carries a
+  two-valued enum and `ToolInvocation.args` carries literal strings, so a step cannot hand a value to
+  the next one — unexpressible in the types, not merely unimplemented, which makes every plan the
+  engine can hold a fallback chain rather than a composition. F6 adds `ToolDescriptor.outputSchema`,
+  `ToolOutput`, `ArgSource.Literal`/`FromStep`, `ResolvedInvocation` and a two-phase validator
+  (static check + binding), with three new fail-closed rejection reasons. `ToolExecutor` accepts only
+  `ResolvedInvocation` and `resolve` is its only constructor, so an unbound reference **cannot compile**
+  its way to the world. **It must land before the Room 3→4 migration** — afterwards the same change
+  costs a migration 4→5 plus a persisted-trace conversion. Work order gained item **2b**; the A0 plan
+  gained Task 5b, written compactly on purpose.
+- **A0.5 is a brief, not an implementation plan** —
+  [2026-08-21-a05-second-consumer.md](../docs/superpowers/plans/2026-08-21-a05-second-consumer.md).
+  Four forks go to the owner before any code, with the agent's recommendations recorded.
+- **Everything else the revision found is parked in `§HANDOFF`, not built:** `LauncherApps` + app
+  shortcuts as a runtime-discovered tool source (unused in the repo today; available at minSdk 28
+  because Sidr is the default launcher), tool selection before the planner (`CatalogSchemaRenderer`
+  renders the whole catalog — fine at seven tools, impossible at two hundred), Tier-0 system intents,
+  the planner's router-sized budget, the agent's missing "body" (foreground service + assist role),
+  outbound context by reference, and BYOK as the real distribution ceiling.
+- **Zero code changed.** `git diff --stat` is `.md` files only; no gate run is claimed because no source
+  set was touched. The spec now deliberately runs **ahead** of the code — Task 5b is the work that
+  reconciles them, and reconciling by editing the spec back down would be the wrong direction.
 
 ## Agentic track — Этап 4.0 (understanding-flag inversion) CODE-GREEN (2026-08-20)
 

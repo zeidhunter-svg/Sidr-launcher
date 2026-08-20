@@ -34,6 +34,16 @@ principles' **checkable** part now lives in
 `DOC-*` rules — cite a rule by ID, never paraphrase it; a rule's third column is a real test name or
 an honest `<нет>`, and `DoctrineMatrixGuardTest` fails the build on a false claim.
 
+**Owner decision 2026-08-21 — two consumers from the start.** ADR 3/4's "portable core, two consumers"
+was backed only by a build flag: `:domain` builds for `androidTarget()` + `jvm()`, but `jvm()` has zero
+consumers, the module has zero `expect`/`actual`, and `commonMain` carries eight `java.*` imports. The
+owner resolved the fork in favour of a real second consumer. Consequences already in force: criterion 10
+in the Master Plan's readiness definition; a new block **A0.5** between A0 and A1′
+([brief](docs/superpowers/plans/2026-08-21-a05-second-consumer.md)); and fork **F6** in the A0 spec —
+tools return values and steps bind to them, landing **before** the Room 3→4 migration. Full record: ADR
+"2026-08-21 — Развилка агентного трека" in `decisions.md`. Everything else the revision found is parked
+in `§HANDOFF`, not built.
+
 | Stage | State |
 |---|---|
 | **1** — strategic ADR package | ✅ 2026-08-19 — four ADRs, docs only |
@@ -41,7 +51,8 @@ an honest `<нет>`, and `DoctrineMatrixGuardTest` fails the build on a false c
 | **2** toolchain (AGP 9.3.1/Kotlin 2.4.10/Gradle 9.5.0/compileSdk 37) + `:domain` → KMP | ✅ 2026-08-19 |
 | **3** agentic Master Plan + doctrinal matrix (`docs/governing/`) | ✅ 2026-08-19 — docs + one guard test |
 | **4.0** — invert the understanding flag (`llmRouterEnabled` → `localOnlyMode`, ADR 1/4) | ✅ 2026-08-20 — `CODE-GREEN`; first behavioural change of the track |
-| **4–7** — A0 spike, A1′ ToolRegistry, A4′ runtime, A2/A3/A5/A6 | each needs its own spec + plan (`brainstorm → spec → plan → build`) |
+| **4** — A0 thin agentic spike | 🔄 **in flight** — work-order items 1–3 done (VM split; `domain/tool`+`agent`+`trace`+executor; planner + use cases). Items 4–9 open, **plus new item 2b (F6, step-to-step data flow) which must land before the Room 3→4 migration** |
+| **4.5–7** — A0.5 second consumer, A1′ ToolRegistry, A4′ runtime, A2/A3/A5/A6 | each needs its own spec + plan (`brainstorm → spec → plan → build`) |
 
 The four strategic ADRs (all 2026-08-19, in `decisions.md`):
 

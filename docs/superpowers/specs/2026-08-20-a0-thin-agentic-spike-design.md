@@ -1,8 +1,18 @@
 # A0 - Thin Agentic Spike (Design Spec)
 
-> **Status: PROPOSED (2026-08-20).** A0 is the first vertical slice of the agentic track. One real
-> two-step goal passes `goal -> plan -> gate -> tool -> observe -> tool -> result -> trace` and is
-> accepted on device. The purpose is to **prove the engine, not to build the layers**.
+> **Status: PROPOSED (2026-08-20), amended 2026-08-21 (F6 — step-to-step data flow).** A0 is the first
+> vertical slice of the agentic track. One real two-step goal passes
+> `goal -> plan -> gate -> tool -> observe -> tool -> result -> trace` and is accepted on device. The
+> purpose is to **prove the engine, not to build the layers**.
+>
+> **Amendment 2026-08-21 — F6.** The tool contract gains typed outputs and argument binding, so a step
+> can consume what a previous step produced. Reason and change-control record: ADR "2026-08-21 —
+> Развилка агентного трека: портируемое ядро с двумя потребителями с самого начала" in
+> `ai-context/decisions.md`. It lands **before** the Room migration of §7, because afterwards the same
+> change costs a migration rather than a contract edit. Sections touched: §2 (F6), §3, §4.1, §4.2,
+> §6.1, §6.2, §7, §11, §13, §14, §15. **§12 (device acceptance) is deliberately unchanged** — the
+> binding is not separately observable on the phone, and inventing an acceptance item that the owner
+> cannot actually check would be the kind of decorative gate Этап 0.5 exists to prevent.
 >
 > **Governing sources:** `docs/governing/sidr-agentic-master-plan-v1.0.md` §3.1 (block A0, its exit
 > list, acceptance and doctrine debts), §4 (agentic-block DoD), §5 (change-control);
@@ -46,10 +56,19 @@ by the owner on 2026-08-20.
 | F3 | Who builds the plan in A0 | A deterministic `TemplatePlanner` over the **goal shape** - the seed of the learned-plan cache (rule 2 of the new rule). The model planner is A4'. This requires amending `DOC-ADL-3` (§8.1). |
 | F4 | Where the agent branch cuts into `RouteCommandUseCase` | **Before** the `localOnlyMode` check - the agent runs in every state, including local-only and offline. The signed Class B toggle copy promises only "nothing leaves this device", which a local planner does not breach, so that string is **not** re-signed. |
 | F5 | What survives process death, where it lives, when it is deleted | The whole active session - goal, plan, observations, consents, trace - in Room (migration 3 -> 4), deleted by cascade on any terminal state. |
+| F6 | Can a step consume what a previous step produced | **Yes - laid now, before the migration.** Tools declare an `outputSchema` and return a `ToolOutput`; a step's arguments are `ArgSource.Literal` or `ArgSource.FromStep(index, key)`, resolved by the engine and type-checked by the validator. Raised and answered 2026-08-21, after F1-F5. |
 
 Two further decisions were taken by the agent and approved with the design sections rather than as
 forks: the execution surface lives on Home and not in a PREVIEW tab (§9), and the
 `LauncherViewModel` split is a behaviour-preserving refactor that ships first (§10).
+
+**Why F6 is here rather than in A4'.** It is the one item of the 2026-08-21 revision that could not
+wait for its own block. Today `ToolResult.Observed` carries a two-valued enum and `ToolInvocation.args`
+carries literal strings, so carrying a value from step 0 to step 1 is not "unimplemented" - it is
+**unexpressible in the types**. Every plan the engine can hold is therefore a fallback chain, never a
+composition. The cost of fixing that is one contract edit today and a Room migration 4 -> 5 plus a
+persisted-trace conversion the moment §7 ships. It also stops being optional at A0.5, where PC tools
+return values as a matter of course.
 
 ## 3. The proof goal
 
@@ -58,13 +77,15 @@ goal:  "открой убер"          (Uber is not installed)
   |
   v  TemplatePlanner
 ExecutionPlan - 2 steps, both declared up front (this is not a re-plan)
-  step 0  launch_app(query="убер")         risk SAFE     precondition None
-  step 1  play_store_search(query="убер")  risk CONFIRM  precondition PreviousStepObserved(APP_NOT_INSTALLED)
+  step 0  launch_app(query = Literal("убер"))          risk SAFE     precondition None
+  step 1  play_store_search(query = FromStep(0,        risk CONFIRM  precondition PreviousStepObserved(
+                            "resolved_query"))                         APP_NOT_INSTALLED)
   |
   v
 gate   step 0 is SAFE and does not raise risk        -> runs
-tool   launch_app -> IntentActionResolver finds no match -> ToolResult.Observed(APP_NOT_INSTALLED)
-observe step 1's precondition is SATISFIED
+tool   launch_app -> IntentActionResolver finds no match
+       -> ToolResult.Observed(APP_NOT_INSTALLED, output = { resolved_query: "убер" })
+observe step 1's precondition is SATISFIED, and its `query` binds to step 0's `resolved_query`
 gate   risk rises SAFE -> CONFIRM                    -> ConsentCheckpoint
          session state AwaitingConsent - the loop is STOPPED
   |
@@ -77,7 +98,16 @@ trace  every step present, in order
 **The same plan when the app *is* installed:** step 0 launches it and observes `Effected`; step 1's
 precondition is unsatisfied, so the step is **skipped** and recorded as `StepSkipped`; the session ends
 `Completed` with one executed step. This is a precondition, not a re-plan, and it is deliberately not
-`PartiallyCompleted` (§4.4).
+`PartiallyCompleted` (§4.4). The unresolved binding is never evaluated, because a skipped step is never
+resolved.
+
+**Why the binding is real work and not decoration (F6).** Before the amendment the planner wrote the
+same literal `"убер"` into both steps, so the two steps could silently disagree about what was being
+searched for - the plan carried the query twice and nothing tied the copies together. With the binding,
+step 1 searches for **exactly what step 0 failed to find**, because it is the same value and not a
+second copy of it. That is the smallest honest demonstration of data flow available inside A0's two
+tools, and it costs no third tool and no widening of scope: `launch_app` already knows the query it
+resolved against and currently discards it.
 
 Today, without A0, this command ends at "Приложение «убер» не найдено" and nothing else happens.
 
@@ -101,6 +131,15 @@ enum class ToolDurability { TRANSIENT, DURABLE }
 data class ToolDescriptor(
     val id: ToolId,
     val argSchema: List<ActionArg> = emptyList(),
+    /**
+     * What this tool can hand to a later step (F6). Declared, not inferred: a step may only bind to a
+     * key that appears here, so the validator can reject a bad binding at plan time instead of
+     * discovering it mid-run. Empty for a tool that produces nothing.
+     *
+     * `ActionArg` is reused for outputs as well as inputs, so one type describes both ends of a
+     * binding and the type check is a comparison rather than a mapping.
+     */
+    val outputSchema: List<ActionArg> = emptyList(),
     val risk: ActionRiskLevel,
     val durability: ToolDurability,             // A0 MARKS only; rollback machinery is A4'
     val permissionGate: PermissionFeature? = null,
@@ -117,16 +156,41 @@ object ToolIds {
     val PLAY_STORE_SEARCH = ToolId("play_store_search")
 }
 
-data class ToolInvocation(val id: ToolId, val args: Map<String, String>)
+/**
+ * Where one argument's value comes from (F6). A plan is written in terms of [ArgSource]; only the
+ * engine ever holds concrete values, and only for the step it is about to run.
+ */
+sealed interface ArgSource {
+    data class Literal(val value: String) : ArgSource
+    /** The value produced by the step at [stepIndex] under [key]. [stepIndex] must be strictly earlier. */
+    data class FromStep(val stepIndex: Int, val key: String) : ArgSource
+}
+
+/** What a plan says to call. Arguments may still be unresolved references. */
+data class ToolInvocation(val id: ToolId, val args: Map<String, ArgSource> = emptyMap())
+
+/**
+ * What is actually called. Every argument is a concrete value, so the executor **cannot** be handed an
+ * unresolved reference - that is a compile-time property, not a convention. `ToolExecutor` takes this
+ * type and never [ToolInvocation].
+ */
+data class ResolvedInvocation(val id: ToolId, val args: Map<String, String> = emptyMap())
+
+/**
+ * What a tool produced. Keys must appear in the tool's [ToolDescriptor.outputSchema]. Values are
+ * opaque strings in A0 - richer types wait for a real consumer, exactly as `ArgType` already does for
+ * inputs.
+ */
+data class ToolOutput(val values: Map<String, String> = emptyMap())
 
 enum class ObservedFact { APP_NOT_INSTALLED, APP_AMBIGUOUS }
 
 sealed interface ToolResult {
-    /** The tool performed its side effect. */
-    data object Effected : ToolResult
+    /** The tool performed its side effect, and may have produced values for later steps. */
+    data class Effected(val output: ToolOutput = ToolOutput()) : ToolResult
     /** The tool ran and reported a fact; nothing changed on the device. */
-    data class Observed(val fact: ObservedFact) : ToolResult
-    /** Technical failure; [failure] is safe to display (no PII/stack). */
+    data class Observed(val fact: ObservedFact, val output: ToolOutput = ToolOutput()) : ToolResult
+    /** Technical failure; [failure] is safe to display (no PII/stack). Produces no output by construction. */
     data class Failed(val failure: CommandFailure) : ToolResult
 }
 
@@ -138,12 +202,28 @@ interface ToolRegistry {
 
 /** Port: the ONLY path from the agent to the world. */
 interface ToolExecutor {
-    suspend fun invoke(invocation: ToolInvocation): ToolResult
+    suspend fun invoke(invocation: ResolvedInvocation): ToolResult
 }
 ```
 
-`ToolResult.Observed` is the load-bearing piece: it is what turns "app not found" from a dead end into
-an **observation** the next step can depend on. Without it the chosen goal is two unrelated commands.
+`ToolResult` is the load-bearing piece, and F6 is what makes it load-bearing twice over. `Observed`
+turns "app not found" from a dead end into an **observation** the next step can depend on; `ToolOutput`
+turns that observation into a **value** the next step can consume. With only the first, every plan the
+engine can express is a fallback chain - "if this failed, try that" - and the chosen goal is two
+unrelated commands sharing a copied literal. With both, a plan can compose.
+
+**Two tools A0 registers, with their schemas:**
+
+| Tool | `argSchema` | `outputSchema` | risk | durability |
+|---|---|---|---|---|
+| `launch_app` | `query` (required) | `resolved_query` | SAFE | TRANSIENT |
+| `play_store_search` | `query` (required) | - | CONFIRM | TRANSIENT |
+
+`launch_app` emits `resolved_query` on **every** result, including `Effected`: a tool's outputs are a
+property of the tool, not of the branch it happened to take, and a schema that only sometimes holds is
+not a schema. Nothing consumes it on the `Effected` path in A0, and that is fine - an unused declared
+output is not the same liability as an unused `ContextSnapshot` field (Master Plan §3.4), because it
+crosses no privacy boundary and costs no permission.
 
 ### 4.2 `domain/agent/`
 
@@ -196,15 +276,49 @@ data class RuntimeBudget(val maxSteps: Int, val maxConsecutiveFailures: Int)
 data class ConsentCheckpoint(val stepIndex: Int, val reason: ConsentReason)
 enum class ConsentReason { RISK_LEVEL, RISK_RAISED, MISSING_PERMISSION, DURABLE_EFFECT }
 
-/** Fail-closed argument validation, modeled on `ProposalValidator`. Pure, stdlib-only. */
+/**
+ * Fail-closed argument validation, modeled on `ProposalValidator`. Pure, stdlib-only, and deliberately
+ * free of every `domain/agent` type: the layering is agent -> tool, and F6 must not invert it.
+ */
 object InvocationValidator {
-    fun validate(invocation: ToolInvocation, registry: ToolRegistry): InvocationCheck
+
+    /**
+     * Shape check. Needs no observations, so it runs at plan time **and** again before every step,
+     * including after a resume.
+     *
+     * @param precedingTools the tool id of each earlier step, position == step index. Its size *is*
+     *   this step's index (`ExecutionPlan` pins `index == position`), so a `FromStep` naming an index
+     *   outside it is a forward or out-of-range reference and is rejected without a special case.
+     */
+    fun validate(
+        invocation: ToolInvocation,
+        precedingTools: List<ToolId>,
+        registry: ToolRegistry,
+    ): InvocationCheck
+
+    /** Binding. Turns every [ArgSource] into a value or fails closed; the only producer of [ResolvedInvocation]. */
+    fun resolve(invocation: ToolInvocation, observations: Map<Int, ToolResult>): ResolutionResult
 }
+
 sealed interface InvocationCheck {
     data object Valid : InvocationCheck
     data class Rejected(val reason: RejectionReason) : InvocationCheck
 }
-enum class RejectionReason { UNKNOWN_TOOL, UNDECLARED_ARG, MISSING_REQUIRED_ARG }
+
+sealed interface ResolutionResult {
+    data class Resolved(val invocation: ResolvedInvocation) : ResolutionResult
+    data class Rejected(val reason: RejectionReason) : ResolutionResult
+}
+
+enum class RejectionReason {
+    UNKNOWN_TOOL, UNDECLARED_ARG, MISSING_REQUIRED_ARG,
+    /** A `FromStep` naming this step, a later one, or an index the plan does not have. */
+    FORWARD_ARG_SOURCE,
+    /** A `FromStep` whose key is not in the source tool's declared `outputSchema`. */
+    UNDECLARED_OUTPUT,
+    /** The source step ran but produced no value under that key - e.g. it Failed. Run-time only. */
+    UNRESOLVED_ARG_SOURCE,
+}
 ```
 
 ### 4.3 `domain/trace/`
@@ -354,7 +468,7 @@ coroutine timing.
 Per the growth rule, all seven boundaries are laid on this first slice, for two tools:
 
 **1. The registry is the only path to the world.** `AgentExecutor` knows nothing of `LauncherAction`,
-`ExecutableAction`, `Intent`, or the word "Play Store" - only `toolExecutor.invoke(ToolInvocation)`.
+`ExecutableAction`, `Intent`, or the word "Play Store" - only `toolExecutor.invoke(ResolvedInvocation)`.
 This is what keeps the owner's requirement open: when A1' registers F-Droid, Galaxy Store or a
 vendor site as tools, the engine does not change by a line. Guard: `domain/agent/` must not reference
 `ActionId` / `LauncherAction` / `ExecutableAction`.
@@ -364,6 +478,39 @@ outside the declared schema, or a missing/blank required arg => the step does no
 `Failed`, the trace records why. Validation runs **before every step**, not once at planning time: a
 plan can outlive a process restart, and by the time it resumes the app may have been uninstalled or a
 permission revoked. A plan valid yesterday is not valid today.
+
+F6 splits this boundary into two phases, and the split is what keeps it fail-closed rather than
+merely more capable:
+
+- **Shape (`validate`)** - everything checkable without having run anything: the three original
+  reasons, plus `FORWARD_ARG_SOURCE` (a binding that names this step, a later one, or an index the
+  plan does not have) and `UNDECLARED_OUTPUT` (a binding to a key the source tool never promised).
+  Both are **static defects in the plan itself**, so they are caught before the first step runs and
+  again on every resume - a plan restored against a build whose tool no longer declares that output
+  now fails here instead of half-executing.
+- **Binding (`resolve`)** - the only producer of `ResolvedInvocation`, and therefore the only way a
+  value reaches the executor. A source step that ran but produced nothing under that key (it
+  `Failed`, or the adapter returned an empty output) is `UNRESOLVED_ARG_SOURCE`: the step does not
+  run. **Nothing is substituted, defaulted, or left blank** - an agent that silently searches for an
+  empty string is worse than one that stops and says why.
+
+**Binding runs in `prepare`, before `ToolInvoked` is recorded - not in `perform`.** `perform` runs only
+on a session that is already mid-step, and "`ToolInvoked(i)` with no `ToolObserved(i)`" has exactly one
+meaning in this design: the process died during the call, so the step must not be re-run and the session
+comes back `Paused` (§6.5, §7). A rejection raised after that event would counterfeit that shape without
+a process ever having died, and `DOC-ILM-3`'s "the trace is 1:1 with reality" would be false. `perform`
+re-resolves only to obtain the value; that is deterministic and free, because `resolve` is a pure
+function of the invocation and the observations, and observations cannot change between the `prepare`
+and the `perform` of one step.
+
+The type system carries the guarantee rather than a convention: `ToolExecutor.invoke` accepts only
+`ResolvedInvocation`, and `resolve` is the only function that constructs one. An unresolved reference
+therefore cannot reach the world even if a future edit forgets to check the result - it will not
+compile.
+
+The type check between a binding's source and target (`ActionArg.type` on both ends) is written and
+tested, and is **vacuous today**: `ArgType` has one value, `STRING`. That is stated rather than
+implied, on the same terms as the `DURABLE` gate in boundary 7 - the seam is laid, not demonstrated.
 
 **3. The consent gate has exactly one call site.** `ToolExecutor.invoke` is called from exactly one
 place in the whole codebase, and that place sits after the checkpoint. The guard counts call sites and
@@ -403,7 +550,8 @@ existing `MigrationTest`.
 ```text
 agent_session      0 or 1 row - id, goal_text, goal_shape, goal_query, state, cursor, created_at
 agent_plan_step    session_id, step_index, tool_id, args_json, risk, precondition_fact,
-                   rationale, observation_type, observation_fact, consent
+                   rationale, observation_type, observation_fact, observation_output_json,
+                   consent
 agent_trace_event  session_id, seq, type, step_index, detail, at
                    (both children ON DELETE CASCADE)
 ```
@@ -423,9 +571,16 @@ agent_trace_event  session_id, seq, type, step_index, detail, at
   deciding for them.
 - **Trace events are flat columns, not a JSON blob**, so A5 ("trace as a surface") can query "the last
   N events" without converting a format.
+- **`args_json` stores `ArgSource`, not values (F6).** A `Literal` persists its string; a `FromStep`
+  persists its index and key. This is what makes a resumed plan re-bind against the observations that
+  actually survived rather than replaying a value captured at plan time - and it is the reason this
+  amendment had to land before the migration rather than after it. `observation_output_json` holds the
+  producing side of the same pair; a step with no output stores `null`, not `{}`, so "produced nothing"
+  and "produced an empty map" stay distinguishable.
 - **One named fidelity gap.** A persisted `Failed` observation keeps its type but not the
   `CommandFailure` variant, and restores as `Generic`. In A0 it never round-trips — a failed step ends
   the session, which is then deleted. If A4' starts keeping failed sessions, that column must widen.
+  `Failed` carries no output by construction, so nothing is lost on the F6 side of the same row.
 
 ## 8. Doctrine
 
@@ -534,8 +689,14 @@ tenth area inside 886 lines. Class names are fixed in the implementation plan.
 - **Unit tests (`:domain:jvmTest`):** planner over goal shape; validator fail-closed cases; precondition
   satisfied / unsatisfied / skipped; risk-transition consent; cancel between transitions; budget
   exhaustion -> `Blocked`; every state transition; trace completeness.
+- **F6 tests (`:domain:jvmTest`):** a binding resolves to the producing step's value; `FORWARD_ARG_SOURCE`
+  for a self-, later- and out-of-range reference; `UNDECLARED_OUTPUT` for a key absent from the source
+  tool's `outputSchema`; `UNRESOLVED_ARG_SOURCE` when the source step `Failed`, and the step does **not**
+  run and nothing is substituted; a skipped step never evaluates its binding; the two-step goal end to
+  end with `play_store_search` receiving exactly what `launch_app` reported.
 - **Data tests:** migration 3 -> 4; cascade delete on each terminal state; idempotent resume under a
-  double confirmation.
+  double confirmation; a `FromStep` binding survives a save/restore round trip and re-binds against the
+  restored observation rather than a value frozen at plan time.
 - **Pipeline tests:** `Message(NoAppFound)` reaches the agent branch; both memory decorators pass
   `AgentSessionStarted` through untouched; alias and learned-resolution behaviour is unchanged for every
   other outcome.
@@ -569,7 +730,10 @@ of device time.
 ## 13. Non-goals
 
 A3 / A5 / A6 · DAG plans · re-planning · `PartiallyCompleted` · new `core/ui` primitives · turning any
-PREVIEW surface live · the model planner and its multi-step response schema · tool levels
+PREVIEW surface live · **richer `ArgType` values than `STRING`, and any binding that transforms rather
+than passes a value through** (both wait for a consumer; the seam is the point, not the expressiveness)
+· **binding to anything other than a previous step's declared output** — no session variables, no goal
+fields, no ambient context · the model planner and its multi-step response schema · tool levels
 (`DOC-ILM-2`) · choosing among install sources or registering new sources · widening `ActionIds` ·
 foreground service or any background autonomous loop · a wall-clock budget · rollback machinery
 (`DOC-HMA-3`) · the A1 fork (parallel tool vocabulary vs. evolving `ActionCatalog` in place) - it
@@ -578,9 +742,13 @@ cheap.
 
 ## 14. Work order
 
-1. `LauncherViewModel` split - zero diff on existing tests
-2. `domain/tool` + `domain/agent` + `domain/trace` + `AgentExecutor` + `InvocationValidator` + tests
-3. `TemplatePlanner`
+1. `LauncherViewModel` split - zero diff on existing tests ✅
+2. `domain/tool` + `domain/agent` + `domain/trace` + `AgentExecutor` + `InvocationValidator` + tests ✅
+2b. **F6 - step-to-step data flow.** Re-opens item 2's contract: `outputSchema`, `ArgSource`,
+   `ResolvedInvocation`, `ToolOutput`, the two-phase validator, and the executor's resolve step,
+   with the tests of §11. **Must land before item 5** - after the migration the same change costs
+   a migration 4 -> 5 and a persisted-trace conversion.
+3. `TemplatePlanner` ✅ (amended by 2b: step 1 binds instead of repeating the literal)
 4. `SystemIntentToolSource` + `ToolExecutor` over the **unchanged** `ExecuteActionUseCase`
 5. Room 3 -> 4 + `AgentSessionStore`
 6. the `RouteCommandUseCase` cut + `CommandOutcome.AgentSessionStarted` + the pass-through branches the
@@ -594,6 +762,9 @@ Each numbered item is at least one commit; the split may be several.
 ## 15. Success criteria
 
 - The cycle `goal -> plan -> gate -> tool -> observe -> tool -> result -> trace` runs on device.
+- **Step 1 acts on what step 0 produced, not on a copy of the same literal (F6)** - and an unresolvable
+  binding stops the step instead of substituting a blank. This is the difference between a plan that
+  composes and a fallback chain that happens to have two entries.
 - Consent is inside the loop, not a wrapper around it: there is one call site to the world and it is
   behind the gate.
 - The session survives process death and resumes without executing anything twice.

@@ -818,6 +818,130 @@ executor ports, and InvocationValidator. ToolIds mirrors two frozen ActionIds
 strings on purpose and a test pins them so they cannot drift."
 ```
 
+### Task 5b: Step-to-step data flow (F6) — added 2026-08-21
+
+> **Why this task exists and why it is here.** Tasks 5–8 shipped a contract in which a tool cannot
+> return a value and a step cannot consume one: `ToolResult.Observed` carries a two-valued enum and
+> `ToolInvocation.args` carries literal strings. Every plan the engine can express is therefore a
+> fallback chain, never a composition. Spec §2 fork **F6** (2026-08-21) closes that, and ADR
+> "2026-08-21 — Развилка агентного трека" records the decision. It is Task **5b** rather than a later
+> task because it **must land before Task 10**: once migration 3 → 4 ships with the current
+> `args_json` / `observation_*` shape, the same change costs a migration 4 → 5 plus a persisted-trace
+> conversion instead of a contract edit.
+>
+> **This task is written compactly on purpose.** The contract it changes is already specified in
+> design-spec §4.1/§4.2/§6.2, and reproducing every test body here would add ~200 lines of plan for
+> ~120 lines of code. The spec is the contract; this is the work order.
+
+**Files:**
+- Modify: `domain/src/commonMain/kotlin/com/sidr/launcher/domain/tool/ToolDescriptor.kt` — add `outputSchema`
+- Modify: `domain/src/commonMain/kotlin/com/sidr/launcher/domain/tool/ToolInvocation.kt` — `ArgSource`,
+  `ResolvedInvocation`, `ToolOutput`, `args: Map<String, ArgSource>`, outputs on `Effected` / `Observed`
+- Modify: `domain/src/commonMain/kotlin/com/sidr/launcher/domain/tool/ToolExecutor.kt` — takes `ResolvedInvocation`
+- Modify: `domain/src/commonMain/kotlin/com/sidr/launcher/domain/tool/InvocationValidator.kt` — two phases
+- Modify: `domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/AgentExecutor.kt` — resolve before invoke
+- Modify: `domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/TemplatePlanner.kt` — step 1 binds
+- Modify: `core/testing/src/main/java/com/sidr/launcher/core/testing/FakeToolExecutor.kt`,
+  `FakeToolRegistry.kt` — follow the signatures
+- Test: `domain/src/jvmTest/kotlin/com/sidr/launcher/domain/tool/InvocationValidatorTest.kt` (extend)
+- Test: `domain/src/jvmTest/kotlin/com/sidr/launcher/domain/agent/AgentExecutorTest.kt` (extend)
+- Test: `domain/src/jvmTest/kotlin/com/sidr/launcher/domain/agent/AgentSessionUseCasesTest.kt` (follow)
+
+**Interfaces:**
+- Produces: `ArgSource.Literal` / `ArgSource.FromStep(stepIndex, key)`, `ResolvedInvocation`,
+  `ToolOutput`, `ToolDescriptor.outputSchema`, `InvocationValidator.validate(invocation,
+  precedingTools, registry)`, `InvocationValidator.resolve(invocation, observations)`,
+  `ResolutionResult`, `RejectionReason.{FORWARD_ARG_SOURCE, UNDECLARED_OUTPUT, UNRESOLVED_ARG_SOURCE}`.
+- Unchanged on purpose: `ToolId`, `ToolIds`, `ObservedFact`, `ToolRegistry`, every `domain/agent` type
+  except `AgentExecutor` and `TemplatePlanner`, and the whole `domain/trace` vocabulary —
+  `TraceEvent.ToolObserved` already carries the full `ToolResult`, so the output is traced for free.
+
+- [ ] **Step 1: Extend `InvocationValidatorTest` red first**
+
+Cases, in this order: a `Literal`-only invocation still validates exactly as before (regression);
+`FromStep` naming its own index, a later index, and an index beyond the plan → `FORWARD_ARG_SOURCE`;
+`FromStep` naming a key absent from the source tool's `outputSchema` → `UNDECLARED_OUTPUT`; `resolve`
+binds to the producing step's value; `resolve` on a source step that `Failed` → `UNRESOLVED_ARG_SOURCE`
+and **no `ResolvedInvocation` is produced**; `resolve` never substitutes a blank or a default.
+
+- [ ] **Step 2: Change the tool contract**
+
+`outputSchema` on `ToolDescriptor`; `ArgSource`, `ResolvedInvocation`, `ToolOutput` in
+`ToolInvocation.kt`; `Effected` becomes a `data class` with a defaulted `output`; `Observed` gains one.
+`ToolExecutor.invoke` takes `ResolvedInvocation`. Keep `resolve` the **only** constructor call site of
+`ResolvedInvocation` — that is what makes "an unresolved reference cannot reach the world" a
+compile-time property rather than a convention.
+
+- [ ] **Step 3: Split the validator into `validate` + `resolve`**
+
+`validate` keeps the three original reasons and adds the two static ones; it takes `precedingTools:
+List<ToolId>` (position == step index) so `domain/tool` still references no `domain/agent` type — the
+layering is agent → tool and F6 must not invert it. `resolve` takes `observations: Map<Int, ToolResult>`
+for the same reason.
+
+- [ ] **Step 4: `AgentExecutor` — resolve in `prepare`, before `ToolInvoked` is written**
+
+`prepare` gains two things: `validate` now receives `precedingTools` built from
+`session.plan.steps.filter { it.index < next.index }.map { it.invocation.id }`, and **`resolve` runs
+here**, after the consent checkpoint and **before** `StepStarted` / `ToolInvoked` are recorded. A
+`ResolutionResult.Rejected` records `TraceEvent.StepRejected(index, reason)` and ends the session
+`Failed` — the same fail-closed shape a validator rejection already uses, so there is one rejection
+path and not two.
+
+**Resolution must not sit in `perform`, and the reason is the trace.** `perform` runs only when the
+session is already mid-step, i.e. when `ToolInvoked(i)` is recorded with no matching `ToolObserved(i)`.
+That shape has exactly one meaning today — "the process died during the tool call" — and the resume
+path reads it to decide **not** to re-run the step and to present the session as `Paused` instead. A
+rejection raised after `ToolInvoked` would leave the trace in precisely that shape without a process
+ever having died, so a plan with a bad binding would come back as "we may have half-run something,
+please decide" instead of the honest "this step could not be bound". `DOC-ILM-3` says the trace is 1:1
+with reality; that would break it.
+
+`perform` therefore re-resolves purely to obtain the value it passes to the executor. That is
+deterministic and free: `resolve` is a pure function of `(invocation, observations)`, and observations
+cannot change between the `prepare` and the `perform` of the same step. If the second call somehow
+rejects, `perform` records `ToolObserved(index, ToolResult.Failed(...))` before ending the session, so
+the trace never sits mid-step — belt and braces, and it costs three lines.
+
+The call site count stays **one**; `ToolExecutorCallSiteGuardTest` must stay green without being
+relaxed.
+
+- [ ] **Step 5: `TemplatePlanner` — bind instead of repeating the literal**
+
+Step 0 stays `launch_app(query = Literal(query))`. Step 1 becomes
+`play_store_search(query = FromStep(0, "resolved_query"))`. The planner keeps naming no destination.
+
+- [ ] **Step 6: The tool source declares `resolved_query`** *(carried into Task 9)*
+
+`launch_app` declares `outputSchema = listOf(ActionArg("resolved_query", …))` and returns it on every
+result — outputs are a property of the tool, not of the branch it took. Task 9's adapter already has
+the value; today it discards it.
+
+- [ ] **Step 7: Run the gate**
+
+```bash
+./gradlew --no-daemon :domain:jvmTest testDebugUnitTest assembleDebug
+```
+
+Output **not** piped through `tail`; check the exit code. Then the mutation check: break exactly what
+each new rejection reason should catch (a forward reference, an undeclared output key, a failed source
+step) and confirm each goes red on its own test and only on it.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add domain/src/commonMain/kotlin/com/sidr/launcher/domain/ \
+        domain/src/jvmTest/kotlin/com/sidr/launcher/domain/ \
+        core/testing/src/main/java/com/sidr/launcher/core/testing/
+git commit -m "feat(agentic-4/A0): step-to-step data flow — tools return values, steps bind to them
+
+F6. ToolDescriptor.outputSchema, ArgSource, ResolvedInvocation and ToolOutput;
+InvocationValidator splits into a static validate and a binding resolve, with
+three new fail-closed rejection reasons. ToolExecutor takes only a resolved
+invocation, so an unbound reference cannot reach the world. Lands before the
+Room migration, where the same change would cost 4 -> 5 plus a trace conversion."
+```
+
 ### Task 6: The agent types, the trace, and the executor
 
 **Files:**
@@ -1862,8 +1986,7 @@ import com.sidr.launcher.domain.trace.ExecutionTrace
 import com.sidr.launcher.domain.trace.TraceEvent
 
 /** Goal -> plan -> a persisted `Running` session. `NoPlan` returns `null` and writes nothing. */
-class StartAgentSessionUseCase(
-    private val planner: Planner,
+пукп    private val planner: Planner,
     private val store: AgentSessionStore,
     private val ids: AgentSessionIdFactory,
     private val registry: ToolRegistry,
@@ -2446,6 +2569,7 @@ agent_plan_step(
   session_id TEXT NOT NULL, step_index INTEGER NOT NULL, tool_id TEXT NOT NULL,
   args_json TEXT NOT NULL, risk TEXT NOT NULL, precondition_fact TEXT,
   rationale TEXT NOT NULL, observation_type TEXT, observation_fact TEXT,
+  observation_output_json TEXT,
   consent INTEGER,
   PRIMARY KEY(session_id, step_index),
   FOREIGN KEY(session_id) REFERENCES agent_session(id) ON DELETE CASCADE)
@@ -2460,6 +2584,13 @@ agent_trace_event(
 `goal_shape` exists although A0 has one shape: adding a second shape must then be a migration, not a
 silent reinterpretation of an existing column. Trace events are **flat columns rather than a JSON
 blob**, so A5 ("trace as a surface") can query "the last N events" without a format conversion.
+
+**`args_json` and `observation_output_json` are the two halves of one F6 pair** (Task 5b, spec §7).
+`args_json` stores `ArgSource` — a `Literal`'s string, or a `FromStep`'s index and key — and **not**
+resolved values: a resumed plan must re-bind against the observations that actually survived, not
+replay a value frozen when the plan was written. `observation_output_json` stores the producing side.
+A step with no output stores `NULL`, not `{}`, so "produced nothing" stays distinguishable from
+"produced an empty map"; assert that in the DAO test rather than relying on the mapper's default.
 
 **One named fidelity gap:** a `Failed` observation persists only its type, not the `CommandFailure`
 variant, and restores as `CommandFailure.Generic`. In A0 that never round-trips — a failed step ends

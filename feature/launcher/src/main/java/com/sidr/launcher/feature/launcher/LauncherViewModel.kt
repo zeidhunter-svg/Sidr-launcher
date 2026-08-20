@@ -44,7 +44,6 @@ import com.sidr.launcher.domain.suggestions.SuggestionEngine
 import com.sidr.launcher.domain.suggestions.SuggestionSource
 import com.sidr.launcher.domain.voice.SpeechInputSource
 import com.sidr.launcher.domain.voice.SpeechRecognitionError
-import com.sidr.launcher.domain.voice.SpeechRecognitionState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CancellationException
@@ -296,18 +295,26 @@ class LauncherViewModel @Inject constructor(
     // ── Developer Command console (AIL-3 / DF-1) — session-only, in-memory. No persisted key, so the
     // privacy denylist guard is untouched; both flags reset on process death. Two-factor unlock:
     // arm via 7 wordmark taps (screen), then submit the "//dev-mode" sentinel to toggle.
-    private val _devArmed = MutableStateFlow(false)
-    private val _devConsoleOn = MutableStateFlow(false)
-    val devConsoleOn: StateFlow<Boolean> = _devConsoleOn
-    private val _consoleLines = MutableStateFlow<List<ConsoleLine>>(emptyList())
-    val consoleLines: StateFlow<List<ConsoleLine>> = _consoleLines
+    // Этап 4 / A0: extracted to LauncherDevConsole — this delegates under the identical public names.
+    private val devConsole = LauncherDevConsole(viewModelScope)
+    val devConsoleOn: StateFlow<Boolean> get() = devConsole.consoleOn
+    val consoleLines: StateFlow<List<ConsoleLine>> get() = devConsole.lines
+
+    // Этап 4 / A0: extracted to LauncherVoiceInput — see startVoiceInput() below for the wiring.
+    private val voiceInput = LauncherVoiceInput(
+        speechInputSource = speechInputSource,
+        scope = viewModelScope,
+        onPartial = { text -> setCommandInput(text) },
+        onFinal = { text ->
+            setCommandInput(text)
+            // Same entry point as the keyboard's IME "Done" / submit.
+            onCommandSubmitted(text)
+        },
+        onError = { error -> _commandFeedback.value = CommandFeedback.VoiceError(error) },
+    )
 
     // Tracks the in-flight app load so a new load (init or retry) cancels the previous one.
     private var loadJob: Job? = null
-
-    // Tracks an in-flight voice recognition so a second mic tap restarts cleanly (cancelling the
-    // previous collection calls destroy() on the recognizer via the impl's awaitClose).
-    private var voiceJob: Job? = null
 
     // Tracks the live suggestion-stream collector so flag toggles can cancel/restart it cleanly.
     private var suggestionsJob: Job? = null
@@ -356,7 +363,7 @@ class LauncherViewModel @Inject constructor(
 
     /** Arm the hidden developer console (called by the screen after 7 rapid wordmark taps). */
     fun armDevMode() {
-        _devArmed.value = true
+        devConsole.arm()
         _commandFeedback.value = CommandFeedback.Message("dev mode armed — submit //dev-mode")
     }
 
@@ -364,11 +371,11 @@ class LauncherViewModel @Inject constructor(
         // Additive AIL-3 pre-check: an ARMED "//dev-mode" toggles the console and is consumed here so it
         // never reaches HandleUserCommandUseCase. Un-armed, it falls through unchanged (Unknown), so the
         // command pipeline stays byte-for-byte for every real input.
-        if (_devArmed.value && UniversalInputRouter.classify(text) is InputIntent.DevSentinel) {
-            _devConsoleOn.value = !_devConsoleOn.value
+        if (devConsole.armed.value && UniversalInputRouter.classify(text) is InputIntent.DevSentinel) {
+            devConsole.toggle(!devConsole.consoleOn.value)
             setCommandInput("")
             _commandFeedback.value = CommandFeedback.Message(
-                if (_devConsoleOn.value) "dev console on" else "dev console off",
+                if (devConsole.consoleOn.value) "dev console on" else "dev console off",
             )
             return
         }
@@ -380,9 +387,8 @@ class LauncherViewModel @Inject constructor(
                     // NeedsConfirmation, unchanged, plus a token for a later candidate tap to record.
                     _pendingLearningToken.value = resolved.learningToken
                     applyOutcome(resolved.outcome)
-                    if (_devConsoleOn.value) {
-                        _consoleLines.value =
-                            _consoleLines.value + ConsoleLine(text, outcomeSummary(resolved.outcome))
+                    if (devConsole.consoleOn.value) {
+                        devConsole.append(text, outcomeSummary(resolved.outcome))
                     }
                 }
                 is ResolvedCommand.AutoLaunch -> {
@@ -396,8 +402,8 @@ class LauncherViewModel @Inject constructor(
                         ?.apps
                         ?.firstOrNull { it.packageName == packageName }
                         ?.activityName
-                    if (_devConsoleOn.value) {
-                        _consoleLines.value = _consoleLines.value + ConsoleLine(text, "auto $packageName")
+                    if (devConsole.consoleOn.value) {
+                        devConsole.append(text, "auto $packageName")
                     }
                     launchApp(
                         packageName = packageName,
@@ -528,23 +534,7 @@ class LauncherViewModel @Inject constructor(
             _commandFeedback.value = CommandFeedback.VoiceError(SpeechRecognitionError.UNAVAILABLE)
             return
         }
-        voiceJob?.cancel()
-        voiceJob = viewModelScope.launch {
-            speechInputSource.listen(languageTag).collect { state ->
-                when (state) {
-                    SpeechRecognitionState.Ready -> Unit
-                    is SpeechRecognitionState.Partial -> setCommandInput(state.text)
-                    is SpeechRecognitionState.Final -> {
-                        setCommandInput(state.text)
-                        // Same entry point as the keyboard's IME "Done" / submit.
-                        onCommandSubmitted(state.text)
-                    }
-                    is SpeechRecognitionState.Error ->
-                        _commandFeedback.value = CommandFeedback.VoiceError(state.error)
-                    SpeechRecognitionState.Ended -> Unit
-                }
-            }
-        }
+        voiceInput.start(languageTag)
     }
 
     // ── CommandOutcome → UI — exhaustive when, no else branch ──────────────
@@ -633,9 +623,8 @@ class LauncherViewModel @Inject constructor(
         viewModelScope.launch {
             val outcome = executeAction.execute(pending.action)
             applyOutcome(outcome)
-            if (_devConsoleOn.value) {
-                _consoleLines.value =
-                    _consoleLines.value + ConsoleLine("confirm ${pending.action.id.value}", outcomeSummary(outcome))
+            if (devConsole.consoleOn.value) {
+                devConsole.append("confirm ${pending.action.id.value}", outcomeSummary(outcome))
             }
         }
     }

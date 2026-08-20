@@ -2219,6 +2219,16 @@ nothing accumulates at rest."
 
 ### Task 9: The one tool source and the executor over the unchanged action path
 
+> 🛑 **BLOCKED ON TASK 5b — read this before writing a line.** Task 5b was inserted on 2026-08-21,
+> after Tasks 5–8 had already shipped, so a run that resumes "at Task 9" by position will step over it.
+> Task 9 writes the adapter that implements `ToolExecutor`, and 5b **changes that interface**:
+> `invoke` takes `ResolvedInvocation`, not `ToolInvocation`, and `launch_app` must declare
+> `outputSchema = listOf(ActionArg("resolved_query", …))` and return it on every result (5b Step 6 is
+> the half of that work that lands here). Writing Task 9 first means writing it against a signature
+> that is about to change, then rewriting it.
+>
+> **Do Task 5b first. If it is already done, delete this block and continue.**
+
 **Files:**
 - Create: `data/repository/src/main/java/com/sidr/launcher/data/repository/agent/SystemIntentToolSource.kt`
 - Create: `data/repository/src/main/java/com/sidr/launcher/data/repository/agent/SystemIntentToolExecutor.kt`
@@ -2537,6 +2547,16 @@ than a dead end, which is what makes the two-step plan a loop."
 ```
 
 ### Task 10: Room 3 -> 4 and the session store
+
+> 🛑 **POINT OF NO RETURN — Task 5b must be done before this task, not after.** Once migration 3 → 4
+> ships with the pre-F6 `args_json` / `observation_*` shape, adding step-to-step data flow stops being
+> a contract edit and becomes a migration 4 → 5 plus a conversion of the persisted trace. The schema
+> below is already the **post-5b** one: `args_json` holds `ArgSource` (a `Literal`'s string, or a
+> `FromStep`'s index and key) rather than resolved values, and `observation_output_json` exists.
+> Writing this task against the pre-5b domain types will produce mappers that do not compile against
+> them.
+>
+> **If Task 5b is not done, stop and do it. If it is, delete this block and continue.**
 
 **Files:**
 - Create: `data/repository/src/main/java/com/sidr/launcher/data/repository/db/entity/AgentSessionEntity.kt`

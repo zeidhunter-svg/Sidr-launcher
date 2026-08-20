@@ -73,15 +73,16 @@ class HardcodedUiTextGuardTest {
      * Two categories, both owner-approved 2026-08-10:
      * 1. **PREVIEW mock-up screens** (~58 literals) - `PREVIEW`-badged, non-functional mock-ups the
      *    A-stage replaces wholesale.
-     * 2. **The hidden dev console** in `LauncherViewModel.kt` (~12 literals: the 7-tap wordmark arm,
-     *    the `//dev-mode` toggle, `outcomeSummary` labels) - a debug surface, not product;
-     *    `outcomeSummary` values are pipeline state names, more useful stable than translated. F3's
-     *    case-insensitive sink match additionally catches `RISK_CONFIRM_LABEL = "CONFIRM"` in the same
-     *    file - spec §7.1 enumerated locked vocabulary (the DF-4 gate-risk chip, deliberately identical
-     *    in every locale), not a miss to extract: `riskLabel` is born in this ViewModel, so resolving it
-     *    to a resource needs the full spec §8 typed-value refactor through `PendingRoutedAction` +
-     *    `ConfirmActionCard` + their tests, well outside a fix round. One exemption entry covers both
-     *    reasons for this one file.
+     * 2. **The hidden dev console** (~12 literals: the 7-tap wordmark arm, the `//dev-mode` toggle,
+     *    `outcomeSummary` labels) - a debug surface, not product; `outcomeSummary` values are pipeline
+     *    state names, more useful stable than translated. F3's case-insensitive sink match additionally
+     *    catches `RISK_CONFIRM_LABEL = "CONFIRM"` in the same file - spec §7.1 enumerated locked
+     *    vocabulary (the DF-4 gate-risk chip, deliberately identical in every locale), not a miss to
+     *    extract: `riskLabel` is born in the command pipeline, so resolving it to a resource needs the
+     *    full spec §8 typed-value refactor through `PendingRoutedAction` + `ConfirmActionCard` + their
+     *    tests, well outside a fix round. One exemption entry covers both reasons for this one file.
+     *    Task 4 / A0 (Этап 4) moved this whole surface out of `LauncherViewModel.kt` into
+     *    `LauncherCommandSession.kt`; the exemption key moved with it - same code, same reasons.
      */
     private val exemptions = mapOf(
         "feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/preview/TasksPreviewScreen.kt"
@@ -94,12 +95,13 @@ class HardcodedUiTextGuardTest {
             to "PREVIEW mock-up, replaced wholesale by the A-stage",
         "feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/preview/MomentsPreviewScreen.kt"
             to "PREVIEW mock-up, replaced wholesale by the A-stage",
-        "feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/LauncherViewModel.kt"
+        "feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/LauncherCommandSession.kt"
             to "spec §3.2's second owner-approved exemption: the hidden dev console (7-tap arm, " +
             "//dev-mode toggle, outcomeSummary labels, ~12 literals), a debug surface not product; " +
             "PLUS RISK_CONFIRM_LABEL = \"CONFIRM\" (spec §7.1 enumerated locked vocabulary, the DF-4 " +
             "gate-risk chip - extracting it needs the full spec §8 typed-value refactor, out of scope " +
-            "for a fix round). Caught only after F3's case-insensitive sink match; one entry, two reasons.",
+            "for a fix round). Caught only after F3's case-insensitive sink match; one entry, two reasons. " +
+            "Moved here from LauncherViewModel.kt by Task 4 / A0 (Этап 4) - same code, same reasons.",
     )
 
     /** A literal is only interesting if it contains a letter run: `[ %1$s ]` and `> ` are decoration. */

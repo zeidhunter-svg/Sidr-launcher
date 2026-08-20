@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -38,6 +37,13 @@ import kotlinx.coroutines.launch
  * and the plain loaded app list for the latter's search-overtakes panel). Exposing the same backing
  * [MutableStateFlow] read-only keeps both on the exact same source of truth instead of a second
  * `combine`/`collect` that could drift from [state] or double-run the load.
+ *
+ * Task 4 / A0, Ruling R7: the separate `favorites: StateFlow<List<InstalledApp>>` this class also
+ * carried had no consumer — `LauncherUiState.favorites` (read by `LauncherScreen` and the ViewModel
+ * test suite) is a different, already-correct value computed inside [state]'s own `combine`. This
+ * second copy was backed by its own eager `stateIn` collector parked on `scope` for the lifetime of
+ * every `LauncherViewModel` instance, for a value nothing ever read — confirmed by grepping `feature/`
+ * and `app/` for a use before removing it.
  */
 internal class LauncherAppList(
     private val installedAppsRepository: InstalledAppsRepository,
@@ -106,14 +112,6 @@ internal class LauncherAppList(
             scope = scope,
             started = SharingStarted.Eagerly,
             initialValue = UiState.Success(LauncherUiState()),
-        )
-
-    val favorites: StateFlow<List<InstalledApp>> = state
-        .map { (it as? UiState.Success)?.data?.favorites ?: emptyList() }
-        .stateIn(
-            scope = scope,
-            started = SharingStarted.Eagerly,
-            initialValue = emptyList(),
         )
 
     fun load() {

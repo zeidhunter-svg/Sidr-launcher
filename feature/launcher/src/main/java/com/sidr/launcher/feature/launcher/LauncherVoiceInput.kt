@@ -5,9 +5,6 @@ import com.sidr.launcher.domain.voice.SpeechRecognitionError
 import com.sidr.launcher.domain.voice.SpeechRecognitionState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -22,6 +19,11 @@ import kotlinx.coroutines.launch
  * `collect { }` block performed inline (`setCommandInput` on Partial/Final, `onCommandSubmitted` on
  * Final, and the `CommandFeedback.VoiceError` write on Error); wiring them at construction keeps
  * `start(languageTag)`'s public signature identical to the original `startVoiceInput(languageTag)`.
+ *
+ * Task 4 / A0, Ruling R7: a `state: StateFlow<SpeechRecognitionState>` this class also exposed had no
+ * consumer — the three callbacks above are how every state transition already reaches the ViewModel;
+ * nothing read this second copy — confirmed by grepping `feature/` and `app/` for a use before
+ * removing it.
  */
 internal class LauncherVoiceInput(
     private val speechInputSource: SpeechInputSource,
@@ -30,9 +32,6 @@ internal class LauncherVoiceInput(
     private val onFinal: (String) -> Unit,
     private val onError: (SpeechRecognitionError) -> Unit,
 ) {
-
-    private val _state = MutableStateFlow<SpeechRecognitionState>(SpeechRecognitionState.Ready)
-    val state: StateFlow<SpeechRecognitionState> = _state.asStateFlow()
 
     // Tracks the in-flight recognition so a second call restarts cleanly (cancelling the previous
     // collection calls destroy() on the recognizer via the impl's awaitClose) — same as the original
@@ -43,7 +42,6 @@ internal class LauncherVoiceInput(
         job?.cancel()
         job = scope.launch {
             speechInputSource.listen(languageTag).collect { recognitionState ->
-                _state.value = recognitionState
                 when (recognitionState) {
                     SpeechRecognitionState.Ready -> Unit
                     is SpeechRecognitionState.Partial -> onPartial(recognitionState.text)

@@ -10,13 +10,10 @@ import com.sidr.launcher.core.common.di.IoDispatcher
 import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.domain.action.ActionCatalog
-import com.sidr.launcher.domain.action.LauncherAction
 import com.sidr.launcher.domain.history.UsageHistoryRepository
 import com.sidr.launcher.domain.memory.alias.ResolveCommandWithAliasUseCase
 import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
-import com.sidr.launcher.domain.memory.resolution.ResolvedCommand
 import com.sidr.launcher.domain.connectivity.ConnectivityChecker
-import com.sidr.launcher.domain.input.InputIntent
 import com.sidr.launcher.domain.input.UniversalInputRouter
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.preferences.SuggestionsCacheRepository
@@ -26,9 +23,7 @@ import com.sidr.launcher.domain.prayer.GetPrayerContextUseCase
 import com.sidr.launcher.domain.prayer.PrayerContext
 import com.sidr.launcher.domain.prayer.UnavailableReason
 import com.sidr.launcher.domain.intent.ActionExecutor
-import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.ExecuteActionUseCase
-import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.domain.result.OperationError
@@ -42,17 +37,13 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
@@ -116,7 +107,6 @@ class LauncherViewModel @Inject constructor(
         suggestionEngine = suggestionEngine,
         suggestionsCacheRepository = suggestionsCacheRepository,
         featureFlagRepository = featureFlagRepository,
-        installedAppsRepository = installedAppsRepository,
         ioDispatcher = ioDispatcher,
         scope = viewModelScope,
     )
@@ -135,8 +125,10 @@ class LauncherViewModel @Inject constructor(
     )
 
     // Block X6: deferred UI preferences (favorites row size, mic toggle, first-run nudge flag).
-    // Held as a hot StateFlow so both the derived [uiState] and the imperative voice/nudge paths
-    // read a consistent snapshot. A read failure degrades to defaults (mic on, 8 favorites).
+    // Held as a hot StateFlow so both [showMic] and startVoiceInput()'s mic-enabled gate read a
+    // consistent snapshot. Task 3 moved [uiState]'s own copy of this collection into LauncherAppList,
+    // so this instance no longer feeds uiState — only the two voice-input read sites below do.
+    // A read failure degrades to defaults (mic on, 8 favorites).
     private val userPreferences: StateFlow<UserPreferences> =
         userPreferencesRepository.getPreferences()
             .catch { emit(UserPreferences()) }
@@ -210,86 +202,61 @@ class LauncherViewModel @Inject constructor(
             initialValue = null,
         )
 
-    // ── Command input — independent of app-list loading ────────────────────
-    // Backed by SavedStateHandle so the typed text survives process death (H3). Every writer
-    // goes through setCommandInput(...) so the handle stays the single source of truth.
-    val commandInput: StateFlow<String> = savedStateHandle.getStateFlow(KEY_COMMAND_INPUT, "")
-
-    private fun setCommandInput(text: String) {
-        savedStateHandle[KEY_COMMAND_INPUT] = text
-    }
-
-    // ── Universal-input live results (AIL-3) ───────────────────────────────
-    // Derived purely from the buffer + the loaded app list. Enter still routes through the unchanged
-    // command pipeline; this only decides what the "search overtakes" panel shows.
-    val inputResults: StateFlow<HomeInputResults> = combine(
-        commandInput,
-        appList.rawAppsResult,
-    ) { buffer, appsResult ->
-        when (val intent = UniversalInputRouter.classify(buffer)) {
-            InputIntent.Empty, InputIntent.DevSentinel -> HomeInputResults()
-            is InputIntent.Query -> {
-                val loaded = (appsResult as? OperationResult.Success)?.value ?: emptyList()
-                val chips = buildList {
-                    add(RouteChipKind.WEB)
-                    add(RouteChipKind.ASK)
-                    if (intent.siteUrl != null) add(RouteChipKind.SITE)
-                }
-                HomeInputResults(
-                    active = true,
-                    appMatches = filterApps(loaded, intent.raw),
-                    chips = chips,
-                )
-            }
-        }
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.Eagerly,
-        initialValue = HomeInputResults(),
-    )
-
-    // ── Command feedback — transient result of the last submitted command ──
-    private val _commandFeedback = MutableStateFlow<CommandFeedback>(CommandFeedback.None)
-    val commandFeedback: StateFlow<CommandFeedback> = _commandFeedback
-
-    // ── Pending router proposal (AIL-5) — a RoutedAction awaiting confirm/one-tap. Null = none. ──
-    private val _pendingRoutedAction = MutableStateFlow<PendingRoutedAction?>(null)
-    val pendingRoutedAction: StateFlow<PendingRoutedAction?> = _pendingRoutedAction
-
     // ── Developer Command console (AIL-3 / DF-1) — session-only, in-memory. No persisted key, so the
     // privacy denylist guard is untouched; both flags reset on process death. Two-factor unlock:
     // arm via 7 wordmark taps (screen), then submit the "//dev-mode" sentinel to toggle.
     // Этап 4 / A0: extracted to LauncherDevConsole — this delegates under the identical public names.
-    private val devConsole = LauncherDevConsole(viewModelScope)
+    private val devConsole = LauncherDevConsole()
     val devConsoleOn: StateFlow<Boolean> get() = devConsole.consoleOn
     val consoleLines: StateFlow<List<ConsoleLine>> get() = devConsole.lines
 
-    // Этап 4 / A0: extracted to LauncherVoiceInput — see startVoiceInput() below for the wiring.
-    private val voiceInput = LauncherVoiceInput(
-        speechInputSource = speechInputSource,
-        scope = viewModelScope,
-        onPartial = { text -> setCommandInput(text) },
-        onFinal = { text ->
-            setCommandInput(text)
-            // Same entry point as the keyboard's IME "Done" / submit.
-            onCommandSubmitted(text)
-        },
-        onError = { error -> _commandFeedback.value = CommandFeedback.VoiceError(error) },
-    )
-
-    // Task 3 / A0: extracted to LauncherAppLaunch — launchApp()/recordUsage()/recordChoiceIfPending()
-    // and the pending learning token moved unchanged (see that class's kdoc). Shared by the app grid
-    // (onAppClicked/onSuggestionClicked below) and the command pipeline (onCommandSubmitted's
-    // AutoLaunch branch) — the reason it is its own collaborator rather than folded into
-    // [LauncherAppList], per the task's "why two collaborators" note.
-    private val appLaunch = LauncherAppLaunch(
+    // Task 3 / A0: extracted to LauncherAppLaunch (see that class's kdoc). Shared by the app grid and
+    // the command pipeline. onFeedback forward-references [commandSession], declared below — legal
+    // because the lambda only runs after construction finishes (same pattern as [voiceInput]'s onFinal).
+    // The explicit `: LauncherAppLaunch`/`: LauncherCommandSession` types on this pair are required, not
+    // stylistic — the mutual forward reference otherwise trips a Kotlin compiler recursive-inference bug.
+    private val appLaunch: LauncherAppLaunch = LauncherAppLaunch(
         actionExecutor = actionExecutor,
         usageHistoryRepository = usageHistoryRepository,
         featureFlagRepository = featureFlagRepository,
         recordResolutionChoice = recordResolutionChoice,
         applicationScope = applicationScope,
         scope = viewModelScope,
-        onFeedback = { feedback -> _commandFeedback.value = feedback },
+        onFeedback = { feedback -> commandSession.showFeedback(feedback) },
+    )
+
+    // Task 4 / A0: extracted to LauncherCommandSession — the whole command pipeline (see that class's
+    // kdoc). [onNavigate] forwards to this class's own nav Channel, its one piece of retained state.
+    private val commandSession: LauncherCommandSession = LauncherCommandSession(
+        resolveCommand = resolveCommand,
+        executeAction = executeAction,
+        actionCatalog = actionCatalog,
+        universalInputRouter = UniversalInputRouter,
+        savedStateHandle = savedStateHandle,
+        appLaunch = appLaunch,
+        appList = appList,
+        devConsole = devConsole,
+        scope = viewModelScope,
+        onNavigate = { route -> navigateTo(route) },
+    )
+
+    val commandInput: StateFlow<String> get() = commandSession.input
+    val inputResults: StateFlow<HomeInputResults> get() = commandSession.liveResults
+    val commandFeedback: StateFlow<CommandFeedback> get() = commandSession.feedback
+    val pendingRoutedAction: StateFlow<PendingRoutedAction?> get() = commandSession.pendingRoutedAction
+
+    // Этап 4 / A0: extracted to LauncherVoiceInput — see startVoiceInput() below for the wiring. The
+    // callbacks forward-reference [commandSession] the same way [appLaunch]'s onFeedback does above.
+    private val voiceInput = LauncherVoiceInput(
+        speechInputSource = speechInputSource,
+        scope = viewModelScope,
+        onPartial = { text -> commandSession.setCommandInput(text) },
+        onFinal = { text ->
+            commandSession.setCommandInput(text)
+            // Same entry point as the keyboard's IME "Done" / submit.
+            commandSession.submit(text)
+        },
+        onError = { error -> commandSession.showFeedback(CommandFeedback.VoiceError(error)) },
     )
 
     /** Whether a speech recognizer is usable. The UI shows the mic affordance only when true. */
@@ -312,116 +279,27 @@ class LauncherViewModel @Inject constructor(
     // ── UI actions ─────────────────────────────────────────────────────────
 
     fun onCommandChanged(text: String) {
-        setCommandInput(text)
-        // Editing a new command clears stale feedback and any pending confirm card.
-        _commandFeedback.value = CommandFeedback.None
-        _pendingRoutedAction.value = null
-        // Editing/clearing the buffer without submitting abandons any pending ambiguity: drop the
-        // learning token so a later unrelated grid/suggestion tap (both funnel through onAppClicked)
-        // can't be misrecorded as an explicit resolution of that stale ambiguity.
-        appLaunch.rememberLearningToken(null)
+        commandSession.onChanged(text)
     }
 
     /** Arm the hidden developer console (called by the screen after 7 rapid wordmark taps). */
     fun armDevMode() {
         devConsole.arm()
-        _commandFeedback.value = CommandFeedback.Message("dev mode armed — submit //dev-mode")
+        commandSession.showFeedback(CommandFeedback.Message("dev mode armed — submit //dev-mode"))
     }
 
     fun onCommandSubmitted(text: String) {
-        // Additive AIL-3 pre-check: an ARMED "//dev-mode" toggles the console and is consumed here so it
-        // never reaches HandleUserCommandUseCase. Un-armed, it falls through unchanged (Unknown), so the
-        // command pipeline stays byte-for-byte for every real input.
-        if (devConsole.armed.value && UniversalInputRouter.classify(text) is InputIntent.DevSentinel) {
-            devConsole.toggle(!devConsole.consoleOn.value)
-            setCommandInput("")
-            _commandFeedback.value = CommandFeedback.Message(
-                if (devConsole.consoleOn.value) "dev console on" else "dev console off",
-            )
-            return
-        }
-        viewModelScope.launch {
-            when (val resolved = resolveCommand.resolve(text)) {
-                is ResolvedCommand.Outcome -> {
-                    // Non-ambiguous → learningToken is null (parity: identical to the pre-S2-1 outcome
-                    // path). Ambiguous with no stored preference → outcome is the original
-                    // NeedsConfirmation, unchanged, plus a token for a later candidate tap to record.
-                    appLaunch.rememberLearningToken(resolved.learningToken)
-                    applyOutcome(resolved.outcome)
-                    if (devConsole.consoleOn.value) {
-                        devConsole.append(text, outcomeSummary(resolved.outcome))
-                    }
-                }
-                is ResolvedCommand.AutoLaunch -> {
-                    // A confident learned preference — launch it directly. Executed-like semantics
-                    // (input clear) come only from launchApp's real success; a failure renders the
-                    // decorator's reordered fallback outcome exactly as a typed command would.
-                    appLaunch.rememberLearningToken(null)
-                    val packageName = resolved.target.packageName
-                    val activityName = (uiState.value as? UiState.Success)
-                        ?.data
-                        ?.apps
-                        ?.firstOrNull { it.packageName == packageName }
-                        ?.activityName
-                    if (devConsole.consoleOn.value) {
-                        devConsole.append(text, "auto $packageName")
-                    }
-                    appLaunch.launch(
-                        packageName = packageName,
-                        activityName = activityName,
-                        onResult = { success ->
-                            if (success) setCommandInput("") else applyOutcome(resolved.fallback)
-                        },
-                    )
-                }
-            }
-        }
+        commandSession.submit(text)
     }
 
-    /**
-     * One-line console summary of a [CommandOutcome] (dev console only; display-safe, session-only,
-     * developer-facing — exempt from I18N-1 per spec §3.2). [CommandOutcome.Message]/[CommandOutcome.Failed]
-     * render their typed payload's own `toString()` (a `data object`/`data class` gives a readable
-     * name like `Help` or `NoAppFound(query=telegram)`) rather than resurrecting a user-facing English
-     * constant that I18N-1 deleted.
-     */
-    private fun outcomeSummary(outcome: CommandOutcome): String = when (outcome) {
-        CommandOutcome.Empty -> "empty"
-        CommandOutcome.Executed -> "✓ executed"
-        CommandOutcome.NoOp -> "no-op"
-        is CommandOutcome.Message -> outcome.message.toString()
-        is CommandOutcome.NeedsConfirmation -> "? ${outcome.candidates.size} candidates"
-        is CommandOutcome.Suggest -> "? suggest"
-        CommandOutcome.LowConfidence -> "low confidence"
-        is CommandOutcome.Unknown -> "unknown"
-        is CommandOutcome.Failed -> "✗ ${outcome.failure}"
-        CommandOutcome.OpenAssistant -> "→ assistant"
-        CommandOutcome.OpenSettings -> "→ settings"
-        CommandOutcome.ShowApps -> "→ apps"
-        CommandOutcome.ClearInput -> "cleared"
-        is CommandOutcome.RoutedAction -> "→ route ${outcome.action.id.value}"
-    }
-
-    /**
-     * Web-search route chip (AIL-3): prefix the buffer with the `search` verb and route it through the
-     * UNCHANGED command pipeline (AIL-2 web search, already history-redacted). No new executor path.
-     */
+    /** Web-search route chip (AIL-3) — see [LauncherCommandSession.submitWebSearch]. */
     fun submitWebSearch(query: String) {
-        val q = query.trim()
-        if (q.isEmpty()) return
-        // Avoid "search search x" when the buffer already carries the search verb.
-        val command = if (q.lowercase(Locale.ROOT).startsWith("search ")) q else "search $q"
-        onCommandSubmitted(command)
+        commandSession.submitWebSearch(query)
     }
 
-    /**
-     * Open-site route chip (AIL-3): the buffer is already a safe URL (the chip is offered only then), so
-     * submitting it as-is routes to AIL-2's OpenUrl through the UNCHANGED pipeline. One-tap "submit".
-     */
+    /** Open-site route chip (AIL-3) — see [LauncherCommandSession.submitSite]. */
     fun submitSite(query: String) {
-        val q = query.trim()
-        if (q.isEmpty()) return
-        onCommandSubmitted(q)
+        commandSession.submitSite(query)
     }
 
     fun onSuggestionClicked(suggestion: Suggestion) {
@@ -432,7 +310,7 @@ class LauncherViewModel @Inject constructor(
         when {
             app != null -> onAppClicked(app)
             suggestion.actionId.isKnownRoute() -> {
-                _commandFeedback.value = CommandFeedback.None
+                commandSession.dismissFeedback()
                 navigateTo(suggestion.actionId)
             }
             else -> appLaunch.launch(
@@ -453,7 +331,7 @@ class LauncherViewModel @Inject constructor(
     }
 
     fun dismissFeedback() {
-        _commandFeedback.value = CommandFeedback.None
+        commandSession.dismissFeedback()
     }
 
     // ── Voice input (Block T) ──────────────────────────────────────────────
@@ -466,119 +344,20 @@ class LauncherViewModel @Inject constructor(
         // bypasses the showMic gate) becomes a no-op rather than starting the recognizer.
         if (!userPreferences.value.micInputEnabled) return
         if (!speechInputSource.isAvailable()) {
-            _commandFeedback.value = CommandFeedback.VoiceError(SpeechRecognitionError.UNAVAILABLE)
+            commandSession.showFeedback(CommandFeedback.VoiceError(SpeechRecognitionError.UNAVAILABLE))
             return
         }
         voiceInput.start(languageTag)
     }
 
-    // ── CommandOutcome → UI — exhaustive when, no else branch ──────────────
-    // Add a new branch here whenever CommandOutcome gains a new variant.
-    private fun applyOutcome(outcome: CommandOutcome) {
-        // Any new outcome dismisses a stale confirm card; the RoutedAction branch re-arms it below.
-        _pendingRoutedAction.value = null
-        when (outcome) {
-            CommandOutcome.Empty ->
-                _commandFeedback.value = CommandFeedback.EmptyInput
-
-            CommandOutcome.Executed -> {
-                setCommandInput("")
-                _commandFeedback.value = CommandFeedback.None
-            }
-
-            CommandOutcome.NoOp ->
-                _commandFeedback.value = CommandFeedback.None
-
-            is CommandOutcome.Message ->
-                _commandFeedback.value = CommandFeedback.Domain(outcome.message)
-
-            is CommandOutcome.NeedsConfirmation ->
-                _commandFeedback.value = CommandFeedback.Ambiguous(outcome.candidates)
-
-            is CommandOutcome.Suggest ->
-                _commandFeedback.value = CommandFeedback.Suggestion(suggestedIntentFor(outcome.intent))
-
-            CommandOutcome.LowConfidence ->
-                _commandFeedback.value = CommandFeedback.LowConfidence
-
-            is CommandOutcome.Unknown ->
-                _commandFeedback.value = CommandFeedback.UnknownCommand
-
-            is CommandOutcome.Failed ->
-                _commandFeedback.value = CommandFeedback.Failure(outcome.failure)
-
-            CommandOutcome.OpenAssistant -> {
-                setCommandInput("")
-                _commandFeedback.value = CommandFeedback.None
-                // Route string belongs to the UI layer — the domain only said "OpenAssistant".
-                navigateTo(Routes.Assistant.ROUTE)
-            }
-
-            CommandOutcome.OpenSettings -> {
-                setCommandInput("")
-                _commandFeedback.value = CommandFeedback.None
-                navigateTo(Routes.Settings.ROUTE)
-            }
-
-            CommandOutcome.ShowApps -> {
-                setCommandInput("")
-                _commandFeedback.value = CommandFeedback.None
-            }
-
-            CommandOutcome.ClearInput -> {
-                setCommandInput("")
-                _commandFeedback.value = CommandFeedback.None
-            }
-
-            // AIL-4/5: the LLM router proposed a registered action. Per Fork R4 it is NEVER
-            // auto-executed — it is surfaced as a pending affordance (confirm card for CONFIRM risk,
-            // one-tap for SAFE) that the user must act on. Execution happens in confirmRoutedAction().
-            is CommandOutcome.RoutedAction -> {
-                _commandFeedback.value = CommandFeedback.None
-                _pendingRoutedAction.value = PendingRoutedAction(
-                    action = outcome.action,
-                    commandLine = commandLineFor(outcome.action),
-                    riskLabel = RISK_CONFIRM_LABEL,
-                    requiresConfirmation = outcome.needsConfirmation,
-                    permissionGate = actionCatalog.descriptor(outcome.action.id)?.permissionGate,
-                )
-            }
-        }
-    }
-
-    /**
-     * Execute the pending router proposal (AIL-5) — the user confirmed the card or tapped the SAFE
-     * one-tap affordance. Runs through [ExecuteActionUseCase] (resolve → execute) and feeds the result
-     * back through [applyOutcome], so a successful launch clears the input, a navigation routes, and an
-     * ambiguous/not-found result surfaces exactly as a typed command would. No-op if nothing is pending.
-     */
+    /** Execute the pending router proposal (AIL-5) — see [LauncherCommandSession.confirm]. */
     fun confirmRoutedAction() {
-        val pending = _pendingRoutedAction.value ?: return
-        _pendingRoutedAction.value = null
-        viewModelScope.launch {
-            val outcome = executeAction.execute(pending.action)
-            applyOutcome(outcome)
-            if (devConsole.consoleOn.value) {
-                devConsole.append("confirm ${pending.action.id.value}", outcomeSummary(outcome))
-            }
-        }
+        commandSession.confirm()
     }
 
-    /** Dismiss the pending router proposal without executing (CANCEL). Leaves the typed text in place. */
+    /** Dismiss the pending router proposal without executing — see [LauncherCommandSession.cancel]. */
     fun cancelRoutedAction() {
-        _pendingRoutedAction.value = null
-        _commandFeedback.value = CommandFeedback.None
-    }
-
-    /** The `>`-prefixed command form shown on the confirm card / one-tap chip (display-safe). */
-    private fun commandLineFor(action: LauncherAction): String = when (action) {
-        is LauncherAction.LaunchApp -> "open ${action.query}"
-        is LauncherAction.WebSearch -> "search ${action.query}"
-        LauncherAction.OpenSettings -> "settings"
-        is LauncherAction.OpenAssistant -> "assistant"
-        LauncherAction.ShowApps -> "apps"
-        is LauncherAction.OpenUrl -> "open ${action.url}"
-        is LauncherAction.PlayStoreSearch -> "install ${action.query}"
+        commandSession.cancel()
     }
 
     /**
@@ -588,28 +367,6 @@ class LauncherViewModel @Inject constructor(
      */
     fun dismissSetupHint() {
         appList.dismissSetupHint()
-    }
-
-    /**
-     * What `describe()` used to word, named instead (I18N-1 spec §3.5) — one [SuggestedIntent]
-     * variant per [LauncherIntent] branch; `LauncherPresentation.feedbackText` picks the sentence.
-     */
-    private fun suggestedIntentFor(intent: LauncherIntent): SuggestedIntent = when (intent) {
-        is LauncherIntent.LaunchAppIntent -> SuggestedIntent.LaunchApp(intent.displayNameQuery)
-        is LauncherIntent.SearchIntent -> SuggestedIntent.Search(intent.query)
-        is LauncherIntent.OpenSettingsIntent -> SuggestedIntent.OpenSettings
-        is LauncherIntent.SimpleCommandIntent -> SuggestedIntent.SimpleCommand
-        is LauncherIntent.OpenUrlIntent -> SuggestedIntent.OpenUrl(intent.url)
-        is LauncherIntent.PlayStoreSearchIntent -> SuggestedIntent.PlayStoreSearch(intent.query)
-        is LauncherIntent.UnknownIntent -> SuggestedIntent.Unknown
-    }
-
-    private companion object {
-        // AIL-5: the bracketed risk tag on the confirm card. MVP produces a card only for CONFIRM-risk
-        // (or unregistered) proposals; DANGEROUS is reserved for Stage 3.
-        const val RISK_CONFIRM_LABEL = "CONFIRM"
-        // SavedStateHandle key for the typed command text (H3 process-death restoration).
-        const val KEY_COMMAND_INPUT = "command_input"
     }
 }
 

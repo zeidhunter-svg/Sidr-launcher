@@ -1,6 +1,5 @@
 package com.sidr.launcher.feature.launcher
 
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -12,8 +11,12 @@ import kotlinx.coroutines.flow.asStateFlow
  *
  * [ConsoleLine] stays a top-level type in `HomeInputResults.kt` (same package) — it was never declared
  * inside the ViewModel, so it is imported implicitly via the shared package, not moved.
+ *
+ * Task 4 / A0, Ruling R7: the original `scope: CoroutineScope` constructor parameter had no consumer
+ * in this class's body (nothing here launches a coroutine) and no external caller read it either —
+ * confirmed by grepping `feature/` and `app/` for a use before removing it.
  */
-internal class LauncherDevConsole(private val scope: CoroutineScope) {
+internal class LauncherDevConsole {
 
     private val _armed = MutableStateFlow(false)
     val armed: StateFlow<Boolean> = _armed.asStateFlow()

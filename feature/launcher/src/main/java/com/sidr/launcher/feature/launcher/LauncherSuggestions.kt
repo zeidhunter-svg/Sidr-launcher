@@ -3,7 +3,6 @@ package com.sidr.launcher.feature.launcher
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.preferences.SuggestionsCacheRepository
-import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.domain.suggestions.Suggestion
 import com.sidr.launcher.domain.suggestions.SuggestionEngine
 import com.sidr.launcher.domain.suggestions.SuggestionSource
@@ -31,15 +30,14 @@ import kotlinx.coroutines.launch
  * ViewModel-only state (per the Task 3 ruling: `LauncherAppList` will take this instance as a
  * constructor parameter and call it directly once the app-list `combine` moves there).
  *
- * [installedAppsRepository] is not read by any member here today — it is carried in the
- * constructor per the Task 2 interface contract ahead of later blocks; do not remove it as
- * "unused" without checking with the plan.
+ * Task 4 / A0, Ruling R7: the `installedAppsRepository` constructor parameter Task 2 carried ahead
+ * of later blocks "just in case" was never actually read by any member here, and no block since has
+ * needed it — confirmed by grepping `feature/` and `app/` for a use before removing it.
  */
 internal class LauncherSuggestions(
     private val suggestionEngine: SuggestionEngine,
     private val suggestionsCacheRepository: SuggestionsCacheRepository,
     private val featureFlagRepository: FeatureFlagRepository,
-    private val installedAppsRepository: InstalledAppsRepository,
     private val ioDispatcher: CoroutineDispatcher,
     private val scope: CoroutineScope,
 ) {

@@ -52,12 +52,12 @@ android {
 // compileKotlinJvm/compileTestKotlinJvm via the normal Kotlin source-set graph, so a change there
 // already invalidates jvmTest's up-to-date check without any extra declaration.
 tasks.withType<Test>().configureEach {
-    // ResolutionPrivacyScopeGuardTest — single file, read by path.
-    inputs.file(
-        rootProject.file(
-            "feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/LauncherAppLaunch.kt",
-        ),
-    )
+    // ResolutionPrivacyScopeGuardTest — widened 2026-08-20 (review item IMPORTANT 6) from a single
+    // hard-coded file to the whole feature/launcher/src/main tree: LauncherViewModel.kt also holds
+    // the recordResolutionChoice dependency (it injects it and hands it to LauncherAppLaunch), so a
+    // single-file declaration would have re-created the exact same staleness trap for that second
+    // file. Declared as the directory, not one file, to match what the widened guard now scans.
+    inputs.dir(rootProject.file("feature/launcher/src/main"))
         .withPropertyName("resolutionRecordCallGuardTarget")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 

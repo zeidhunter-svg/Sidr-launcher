@@ -291,3 +291,75 @@ tasks.withType<Test>().configureEach {
         .withPropertyName("doctrineMatrix")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }
+
+// Fix-privacy-guard, review item IMPORTANT 7 (2026-08-20). Four I18N guards in app/src/test read
+// repo paths by java.io.File(...) - LocaleCompletenessGuardTest, HardcodedUiTextGuardTest,
+// DomainIdentifierLeakGuardTest, StringSeamGuardTest - and only the doctrine-matrix file above was
+// ever declared as a Test input. Demonstrated end to end: deleting a translated key from
+// app/src/main/res/values-tr/strings.xml left `:app:testDebugUnitTest` UP-TO-DATE (exit 0) because
+// removing a values-tr entry never changes R, so nothing else invalidates the task - the very rule
+// this project calls sacred (en/ru/tr ship complete in the same commit) was being enforced by a
+// guard that silently did not run.
+//
+// What's declared, and what deliberately is NOT, per guard:
+//  - LocaleCompletenessGuardTest reads every module's `res/values*/strings*.xml` (base "values" plus
+//    every `values-<locale>` folder, including the long-tail warn-only scan) via `resFiles()`, for
+//    both the 7 modules hand-listed in `modulePrefixes` AND (in
+//    `module_prefixes_cover_every_module_that_ships_strings`) every module `settings.gradle.kts`
+//    includes - so declared as one repo-wide `res/values*/**` tree rather than 7 hand-picked module
+//    dirs, exactly so a future module never falls into the same silent-skip gap that test itself
+//    guards against. Resource XML is never part of any module's compiled Kotlin output, so unlike
+//    .kt sources (see below) nothing else was ever going to catch a change here.
+//  - `locale_lists_agree_across_the_four_sources` additionally reads
+//    `app/src/main/res/xml/locales_config.xml` (inside the res tree above, already covered),
+//    `feature/settings/.../SettingsScreen.kt` (a .kt source in a project(":feature:settings")
+//    dependency of :app - NOT declared, see below), `app/build.gradle.kts` itself, and
+//    `settings.gradle.kts` - the latter two are build scripts, never part of any compiled classpath,
+//    so declared explicitly.
+//  - HardcodedUiTextGuardTest / DomainIdentifierLeakGuardTest walk `scopedRoots` (core/ui,
+//    feature/launcher, feature/settings, feature/prayer, feature/permission_education,
+//    feature/assistant, feature/suggestions, app) for `.kt` files under `src/main`; StringSeamGuardTest
+//    walks the ENTIRE repo tree the same way, unrestricted. Every one of those `scopedRoots` modules
+//    is already an `implementation(project(...))` (or, for `app` itself, the same module hosting the
+//    test) - verified empirically, not assumed: planting a real hardcoded-text violation in
+//    core/ui/.../SectionHeader.kt and running `:app:testDebugUnitTest` with NO extra declaration
+//    already re-executed the task and failed the guard, because editing a dependency module's .kt
+//    source changes that module's compiled jar, which IS already part of the test runtime classpath.
+//    So no separate declaration was added for `scopedRoots` alone. StringSeamGuardTest's unrestricted
+//    walk is different: `:baselineprofile` (settings.gradle.kts line 34) ships
+//    `src/main/java/.../BaselineProfileGenerator.kt` but is wired only via the special
+//    `baselineProfile(project(...))` configuration, never `implementation`/`testImplementation` - it
+//    is NOT part of :app's test classpath by any route, so it (and any future module in the same
+//    position) would be a genuine, silent gap. Declared as one repo-wide `src/main/**/*.kt` tree
+//    (same shape as :domain's `prayerGuardRepoWideSrcMainScan`) rather than special-casing
+//    `:baselineprofile` by name, so a similarly-wired future module is covered automatically; this
+//    also acts as a belt-and-suspenders backstop for the two `scopedRoots` guards above.
+//    `feature/settings/.../SettingsScreen.kt` (used by `locale_lists_agree_across_the_four_sources`)
+//    falls under this same tree and needs no separate declaration either.
+tasks.withType<Test>().configureEach {
+    inputs.files(
+        fileTree(rootProject.projectDir) {
+            include("**/src/main/res/values*/**")
+            exclude("**/build/**")
+        },
+    )
+        .withPropertyName("i18nGuardRepoWideResValuesScan")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    inputs.files(
+        fileTree(rootProject.projectDir) {
+            include("**/src/main/**/*.kt")
+            exclude("**/build/**")
+        },
+    )
+        .withPropertyName("i18nGuardRepoWideSrcMainScan")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    inputs.file(rootProject.file("settings.gradle.kts"))
+        .withPropertyName("i18nGuardSettingsGradleKts")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    inputs.file(rootProject.file("app/build.gradle.kts"))
+        .withPropertyName("i18nGuardAppBuildGradleKts")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}

@@ -64,15 +64,23 @@ class ResolutionPrivacyScopeGuardTest {
 
     @Test
     fun `recording call is gated by an app-ambiguity learning token`() {
+        // Repointed 2026-08-20 (A0 fix-privacy-guard): commit 23000ae ("extract app launch and app
+        // list from LauncherViewModel", Task 3 of the A0 extraction) moved
+        // recordChoiceIfPending()/launch() out of LauncherViewModel.kt and into the new
+        // LauncherAppLaunch.kt collaborator. The record call and its gate moved together, byte-for-
+        // byte, so the invariant this guard protects was never actually broken — only its file key
+        // went stale, and because that key points outside :domain's own source sets, Gradle had no
+        // way to notice the guard had stopped running (see the `inputs.file` declaration in
+        // domain/build.gradle.kts this fix adds alongside it).
         val source = File(
             repoRoot(),
-            "feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/LauncherViewModel.kt",
+            "feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/LauncherAppLaunch.kt",
         ).readText()
         val recordCalls = Regex("""recordResolutionChoice\.record\(""").findAll(source).toList()
         val tokenGateIndex = source.indexOf("if (!token.isAppAmbiguityFlow) return")
 
         assertEquals(
-            "LauncherViewModel should have exactly one learned-resolution record call",
+            "LauncherAppLaunch should have exactly one learned-resolution record call",
             1,
             recordCalls.size,
         )

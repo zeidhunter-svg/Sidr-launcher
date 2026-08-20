@@ -226,4 +226,120 @@ class AgentExecutorTest {
         assertEquals(0, tools.invocations.size)
         assertEquals(untouched, after)
     }
+
+    // --- Fix round 1 regression + coverage tests -----------------------------------------------
+
+    @Test
+    fun `prepare does not advance the cursor`() = runTest {
+        val tools = FakeToolExecutor(listOf(ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED)))
+        val executor = AgentExecutor(registry, tools, budget)
+
+        val prepared = executor.prepare(session())
+
+        assertEquals(0, prepared.cursor)
+    }
+
+    @Test
+    fun `perform does not re-invoke a step that already has a matching ToolObserved`() = runTest {
+        // Last event IS ToolInvoked(0), but an earlier ToolObserved(0) already exists in the trace —
+        // this is exactly the shape the "alreadyObserved" half of the mid-step predicate must catch;
+        // without it, this reads as mid-step and the tool fires a second time.
+        val tools = FakeToolExecutor(emptyList())
+        val executor = AgentExecutor(registry, tools, budget)
+
+        val corrupted = session().copy(
+            trace = ExecutionTrace(
+                listOf(
+                    TraceEvent.ToolInvoked(0, ToolIds.LAUNCH_APP),
+                    TraceEvent.ToolObserved(0, ToolResult.Effected),
+                    TraceEvent.ToolInvoked(0, ToolIds.LAUNCH_APP),
+                ),
+            ),
+        )
+
+        val after = executor.perform(corrupted)
+
+        assertEquals(0, tools.invocations.size)
+        assertEquals(corrupted, after)
+    }
+
+    @Test
+    fun `advance never invokes the tool for a Cancelled or Paused mid-step session`() = runTest {
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected))
+        val executor = AgentExecutor(registry, tools, budget)
+        val midStepTrace = ExecutionTrace(
+            listOf(TraceEvent.StepStarted(0), TraceEvent.ToolInvoked(0, ToolIds.LAUNCH_APP)),
+        )
+
+        for (state in listOf(ExecutionState.Cancelled, ExecutionState.Paused)) {
+            val frozen = session().copy(state = state, trace = midStepTrace)
+            assertEquals(frozen, executor.advance(frozen))
+        }
+        assertEquals(0, tools.invocations.size)
+    }
+
+    @Test
+    fun `perform resolves the step by PlanStep index, not list position`() = runTest {
+        // Positions are shuffled relative to `.index`: position 0 carries index 1 (SAFE, LAUNCH_APP),
+        // position 1 carries index 0 (CONFIRM, PLAY_STORE_SEARCH). A position-based lookup keyed off the
+        // trace's recorded index would grab the CONFIRM step and run it with no consent checkpoint ever
+        // evaluated for it. The index-based lookup must invoke only the step `prepare` actually cleared.
+        val shuffled = ExecutionPlan(
+            listOf(
+                PlanStep(
+                    index = 1,
+                    invocation = ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to "x")),
+                    risk = ActionRiskLevel.SAFE,
+                    precondition = StepPrecondition.None,
+                    rationale = StepRationale.GOAL_DIRECT,
+                ),
+                PlanStep(
+                    index = 0,
+                    invocation = ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to "x")),
+                    risk = ActionRiskLevel.CONFIRM,
+                    precondition = StepPrecondition.None,
+                    rationale = StepRationale.APP_NOT_INSTALLED_FALLBACK,
+                ),
+            ),
+        )
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected))
+        val executor = AgentExecutor(registry, tools, budget)
+
+        val after = executor.advance(session().copy(plan = shuffled))
+
+        assertEquals(listOf(ToolIds.LAUNCH_APP), tools.invocations.map { it.id })
+        assertTrue(after.trace.events.none { it is TraceEvent.ConsentRequested })
+    }
+
+    @Test
+    fun `perform refuses to invoke when the resolved step's tool does not match the trace`() = runTest {
+        // Step 0's real invocation is LAUNCH_APP; a corrupted trace claims PLAY_STORE_SEARCH was the one
+        // invoked for it. The id-match assertion must refuse to invoke rather than run either tool.
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected))
+        val executor = AgentExecutor(registry, tools, budget)
+
+        val tampered = session().copy(
+            trace = ExecutionTrace(
+                listOf(TraceEvent.StepStarted(0), TraceEvent.ToolInvoked(0, ToolIds.PLAY_STORE_SEARCH)),
+            ),
+        )
+
+        val after = executor.perform(tampered)
+
+        assertEquals(0, tools.invocations.size)
+        assertEquals(tampered, after)
+    }
+
+    @Test
+    fun `resuming through advance after persisting the prepared step does not duplicate ToolInvoked`() = runTest {
+        val tools = FakeToolExecutor(listOf(ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED)))
+        val executor = AgentExecutor(registry, tools, budget)
+
+        val prepared = executor.prepare(session())    // simulates: persisted right after prepare
+        val resumed = executor.advance(prepared)       // simulates: process restarts, resumes via advance()
+
+        val invoked = resumed.trace.events.filterIsInstance<TraceEvent.ToolInvoked>()
+        assertEquals(1, invoked.size)
+        assertEquals(1, tools.invocations.size)
+    }
 }

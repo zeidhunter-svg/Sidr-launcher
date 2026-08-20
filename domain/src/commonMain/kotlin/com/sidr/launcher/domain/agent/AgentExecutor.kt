@@ -25,6 +25,17 @@ import com.sidr.launcher.domain.trace.TraceEvent
  * in the trace but before the tool has been called; a resume that finds a session in that shape (see
  * [perform]'s "mid-step" check below) is exactly the "process died mid-call" signal a later task uses.
  *
+ * Two invariants the split must hold on its own, because the single guard the un-split version had no
+ * longer covers both halves:
+ *  - **[perform] re-checks `state == Running`.** A session persisted mid-step can have its `state`
+ *    changed independently (e.g. a cancel use case marks it `Cancelled` or `Paused` without touching the
+ *    trace) before the runner resumes it with [advance]. [prepare] guards the first half; [perform] must
+ *    guard the second half itself, or a cancelled/paused session still fires its tool on resume.
+ *  - **[prepare] short-circuits when the session is already mid-step**, so [advance] is safe as the
+ *    single resume entry point: `advance` on a session persisted right after [prepare] must run the
+ *    pending tool call exactly once, not re-clear the same step and append a second `StepStarted` /
+ *    `ToolInvoked` before [perform] ever runs.
+ *
  * The engine knows nothing of `LauncherAction`, `ExecutableAction`, `Intent`, or any store's name — it
  * only knows [ToolExecutor]. `AgentVocabularyGuardTest` pins that, because it is what keeps A1' free to
  * register F-Droid, a vendor site, or an MCP tool without touching a line in here.
@@ -43,9 +54,17 @@ class AgentExecutor(
      * validator rejection, and the consent checkpoint. When a step is cleared to run it records
      * `StepStarted` + `ToolInvoked` and returns — the cursor is deliberately NOT advanced yet, because
      * the step has not actually run.
+     *
+     * If [session] is already mid-step (see [midStepInvocation]), this returns it unchanged instead of
+     * re-clearing the same step. Without this, `advance` on a session persisted right after a previous
+     * [prepare] call — the exact shape a resumed session has — would append a second `StepStarted` +
+     * `ToolInvoked` for the same step before [perform] ever ran, so the trace would claim the step was
+     * invoked twice when [perform] only ever calls the tool once. `advance` is the only entry point the
+     * resume path uses, so this is what keeps it correct there.
      */
     suspend fun prepare(session: AgentSession): AgentSession {
         if (session.state != ExecutionState.Running) return session
+        if (session.midStepInvocation() != null) return session
 
         val next = session.plan.steps.getOrNull(session.cursor)
             ?: return session.ended(ExecutionState.Completed)
@@ -97,20 +116,36 @@ class AgentExecutor(
      * predicate is deliberately trace-derived rather than a new field — it is persisted for free, and
      * it is the same signal a later task uses to detect "the process died during a tool call" after a
      * restart.
+     *
+     * Two guards run before the call:
+     *  - **`state == Running`.** A mid-step session whose `state` was independently moved to
+     *    `Cancelled` or `Paused` (the cancel path touches `state`, not the trace) must not fire its
+     *    tool just because the trace tail still looks mid-step. [prepare] only guards the half of the
+     *    transition it owns; this is the other half's own guard, not a duplicate of it.
+     *  - **The resolved step must match the trace.** The step is looked up by `PlanStep.index` — the
+     *    same identity [ToolInvoked.index] carries — never by list position, because nothing forces a
+     *    `PlanStep`'s `index` field to equal its position in [ExecutionPlan.steps]. The lookup then
+     *    asserts the resolved step's `invocation.id` equals the `toolId` [ToolInvoked] recorded. Either
+     *    check failing means the plan and the trace disagree about which step this is, and the only
+     *    fail-closed move is to invoke nothing.
      */
     suspend fun perform(session: AgentSession): AgentSession {
-        val index = session.midStepIndex() ?: return session
-        val step = session.plan.steps.getOrNull(index) ?: return session
+        if (session.state != ExecutionState.Running) return session
+        val invoked = session.midStepInvocation() ?: return session
+        val step = session.plan.steps
+            .firstOrNull { it.index == invoked.index }
+            ?.takeIf { it.invocation.id == invoked.toolId }
+            ?: return session
 
         // The ONE call site to the world. It is below the checkpoint by construction, and
         // ToolExecutorCallSiteGuardTest fails the build if a second one ever appears.
         val result = toolExecutor.invoke(step.invocation)
 
         val observed = session
-            .record(TraceEvent.ToolObserved(index, result))
+            .record(TraceEvent.ToolObserved(invoked.index, result))
             .copy(
-                cursor = index + 1,
-                observations = session.observations + (index to result),
+                cursor = invoked.index + 1,
+                observations = session.observations + (invoked.index to result),
             )
 
         return if (result is ToolResult.Failed && observed.trailingFailures() >= budget.maxConsecutiveFailures) {
@@ -120,11 +155,14 @@ class AgentExecutor(
         }
     }
 
-    /** The index of the step whose tool call has been decided but not yet performed, or `null`. */
-    private fun AgentSession.midStepIndex(): Int? {
+    /**
+     * The [TraceEvent.ToolInvoked] event of the step whose tool call has been decided but not yet
+     * performed, or `null` if [AgentSession] is not currently mid-step.
+     */
+    private fun AgentSession.midStepInvocation(): TraceEvent.ToolInvoked? {
         val last = trace.events.lastOrNull() as? TraceEvent.ToolInvoked ?: return null
         val alreadyObserved = trace.events.any { it is TraceEvent.ToolObserved && it.index == last.index }
-        return if (alreadyObserved) null else last.index
+        return if (alreadyObserved) null else last
     }
 
     private fun isSatisfied(

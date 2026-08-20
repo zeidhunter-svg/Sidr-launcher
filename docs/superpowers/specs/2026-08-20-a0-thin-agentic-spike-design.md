@@ -92,13 +92,30 @@ are **reused unchanged** from `domain/action/` and `domain/permission/` rather t
 ```kotlin
 @JvmInline value class ToolId(val value: String)
 
+/**
+ * How much of a footprint a tool leaves behind. [DURABLE] is the "irreversible steps are marked BEFORE
+ * execution" half of `DOC-HMA-3` without claiming the machinery. Both A0 tools are [TRANSIENT].
+ */
+enum class ToolDurability { TRANSIENT, DURABLE }
+
 data class ToolDescriptor(
     val id: ToolId,
     val argSchema: List<ActionArg> = emptyList(),
     val risk: ActionRiskLevel,
-    val reversible: Boolean,                    // A0 MARKS only; rollback machinery is A4'
+    val durability: ToolDurability,             // A0 MARKS only; rollback machinery is A4'
     val permissionGate: PermissionFeature? = null,
 )
+
+/**
+ * The two tools A0 registers. The strings mirror the frozen `ActionIds` and are repeated rather than
+ * imported, so `domain/tool` and `domain/agent` never reference the action vocabulary - the absent edge
+ * that keeps the A1 fork genuinely open. `ToolIdsTest` pins them against `ActionIds` so they cannot
+ * drift silently.
+ */
+object ToolIds {
+    val LAUNCH_APP = ToolId("launch_app")
+    val PLAY_STORE_SEARCH = ToolId("play_store_search")
+}
 
 data class ToolInvocation(val id: ToolId, val args: Map<String, String>)
 
@@ -131,7 +148,20 @@ an **observation** the next step can depend on. Without it the chosen goal is tw
 ### 4.2 `domain/agent/`
 
 ```kotlin
-data class AgentGoal(val text: String)
+/**
+ * What the deterministic layer already recognised about the goal. A0 has exactly one shape; the `when`
+ * over it in the planner is exhaustive, so a second shape later forces a deliberate decision.
+ */
+sealed interface GoalShape {
+    /** FastPath resolved the command to an app launch and found no such app installed. */
+    data class AppNotInstalled(val query: String) : GoalShape
+}
+
+/**
+ * [text] is the raw command, kept for the surface and for A4''s model planner. [shape] is what the cut
+ * site already knew, so the planner never re-parses text the deterministic layer had understood.
+ */
+data class AgentGoal(val text: String, val shape: GoalShape)
 
 sealed interface StepPrecondition {
     data object None : StepPrecondition
@@ -164,7 +194,7 @@ sealed interface PlanningResult {
 data class RuntimeBudget(val maxSteps: Int, val maxConsecutiveFailures: Int)
 
 data class ConsentCheckpoint(val stepIndex: Int, val reason: ConsentReason)
-enum class ConsentReason { RISK_LEVEL, RISK_RAISED, MISSING_PERMISSION, IRREVERSIBLE }
+enum class ConsentReason { RISK_LEVEL, RISK_RAISED, MISSING_PERMISSION, DURABLE_EFFECT }
 
 /** Fail-closed argument validation, modeled on `ProposalValidator`. Pure, stdlib-only. */
 object InvocationValidator {
@@ -186,6 +216,7 @@ sealed interface TraceEvent {
     data class PlanCreated(val stepCount: Int) : TraceEvent
     data class StepStarted(val index: Int) : TraceEvent
     data class StepSkipped(val index: Int, val precondition: StepPrecondition) : TraceEvent
+    data class StepRejected(val index: Int, val reason: RejectionReason) : TraceEvent
     data class ConsentRequested(val index: Int, val reason: ConsentReason) : TraceEvent
     data class ConsentResolved(val index: Int, val granted: Boolean) : TraceEvent
     data class ToolInvoked(val index: Int, val toolId: ToolId) : TraceEvent
@@ -196,7 +227,9 @@ sealed interface TraceEvent {
 }
 ```
 
-The goal text is stored **once**, on the session, never repeated per event.
+The goal text is stored **once**, on the session, never repeated per event. Events carry **no
+timestamp**: `commonMain` has no clock across two targets, so the data layer stamps rows when it
+persists them — the same reason the wall-clock budget is honestly deferred to A4'.
 
 ### 4.4 Session states - eight, not nine
 
@@ -206,6 +239,9 @@ enum class ExecutionState {
 }
 
 @JvmInline value class AgentSessionId(val value: String)
+
+/** Port: `commonMain` has no UUID API, and tests must be deterministic. */
+interface AgentSessionIdFactory { fun newId(): AgentSessionId }
 
 data class AgentSession(
     val id: AgentSessionId,
@@ -277,10 +313,16 @@ decorator resolves app ambiguity only. `Message(NoAppFound)` passes through both
 relocating that one outcome changes nothing about learned resolutions or aliases - and a test pins this
 rather than leaving it to a comment.
 
-**The new variant is enumerated by the compiler, not by us.** `CommandOutcome` is consumed by exhaustive
-`when` expressions with no `else` - in the decorators and in `LauncherViewModel.applyOutcome`. Adding
-`AgentSessionStarted` therefore fails compilation at every site that must decide what to do with it,
-which is the desired behaviour: pass-through in the decorators, a real branch in the ViewModel.
+**Which consumers the compiler will catch, and which it will not.** The two decorators do **not** match
+exhaustively over `CommandOutcome`; each passes anything it does not recognise straight through by an
+early return (`if (outcome !is NeedsConfirmation) return ...` and `as? Unknown ?: return resolved`).
+That is the behaviour A0 wants, but it is **silent** - adding a variant compiles clean and a future
+edit could break the pass-through without any compiler complaint. It is therefore pinned by a test
+(§11), not left to the shape of the code.
+
+`LauncherViewModel.applyOutcome` is the opposite case: an exhaustive `when` with no `else`. Adding
+`AgentSessionStarted` fails compilation there until a real branch exists, which is exactly the site
+where a silent default would be wrong.
 
 **The cut is narrow by construction.** The only FastPath outcome that opens the agent branch in A0 is
 `CommandMessage.NoAppFound` - not "any `Message`", not "anything that did not execute". Widening that
@@ -327,8 +369,10 @@ permission revoked. A plan valid yesterday is not valid today.
 place in the whole codebase, and that place sits after the checkpoint. The guard counts call sites and
 fails on two. This is the mechanical version of "tool #21 gets consent for free" - not because we will
 remember, but because there is nowhere to forget. Triggers in A0: `risk >= CONFIRM`; risk **rises**
-relative to the previous executed step; a required permission is missing; the step is marked
-irreversible.
+relative to the previous executed step; the tool **declares** a permission gate; the tool is marked
+`DURABLE`. The permission trigger fires on the declaration rather than on the real grant state: reading
+the grant state would put `PermissionChecker` inside the engine, and stopping unconditionally is the
+fail-safe half of that. Neither A0 tool declares a gate.
 
 **4. Loop bounds.** `RuntimeBudget(maxSteps, maxConsecutiveFailures)`. Exhaustion maps to `Blocked`,
 never to a silent stop. **Named gap:** a wall-clock limit needs a clock port, and `:domain` is
@@ -346,8 +390,9 @@ and `domain/tool/` depend on no transport, no `GenerativeAiEngine` and no `Comma
 sentinel planted in the goal text appears in no outbound channel. When the model planner arrives in A4',
 it must pass through `OutboundContextPolicy`.
 
-**7. Rollback.** A0 **marks** `reversible` and refuses to run an irreversible step without explicit
-consent. There is no compensation machinery, and `DOC-HMA-3` is **not** claimed as closed.
+**7. Rollback.** A0 **marks** `durability` and refuses to run a `DURABLE` step without explicit
+consent. Both A0 tools are `TRANSIENT`, so the trigger is unit-tested rather than exercised in the
+slice — the boundary is laid, not demonstrated. There is no compensation machinery, and `DOC-HMA-3` is **not** claimed as closed.
 
 ## 7. Persistence and resume
 
@@ -356,9 +401,10 @@ Migration 3 -> 4, exported schema `4.json`, following `Migration1To2` / `Migrati
 existing `MigrationTest`.
 
 ```text
-agent_session      0 or 1 row - id, goal_text, state, cursor, created_at
-agent_plan_step    session_id, index, tool_id, args_json, risk, precondition, status, observation
-agent_trace_event  session_id, seq, type, payload, at
+agent_session      0 or 1 row - id, goal_text, goal_shape, goal_query, state, cursor, created_at
+agent_plan_step    session_id, step_index, tool_id, args_json, risk, precondition_fact,
+                   rationale, observation_type, observation_fact, consent
+agent_trace_event  session_id, seq, type, step_index, detail, at
                    (both children ON DELETE CASCADE)
 ```
 
@@ -372,7 +418,14 @@ agent_trace_event  session_id, seq, type, payload, at
   Two fast taps cannot diverge. Whole-object writes were deliberately avoided here: that pattern
   already cost this project the `autoHideNavBar` bug (DS-11), which only surfaced on device.
 - **Resume re-validates.** Before continuing, the surviving plan is re-checked against the current
-  registry (§6.2).
+  registry (§6.2). A session that outlived its process is presented as `Paused` and never resumed
+  silently — the user asked for this minutes or days ago, and continuing unasked would be the system
+  deciding for them.
+- **Trace events are flat columns, not a JSON blob**, so A5 ("trace as a surface") can query "the last
+  N events" without converting a format.
+- **One named fidelity gap.** A persisted `Failed` observation keeps its type but not the
+  `CommandFailure` variant, and restores as `Generic`. In A0 it never round-trips — a failed step ends
+  the session, which is then deleted. If A4' starts keeping failed sessions, that column must widen.
 
 ## 8. Doctrine
 

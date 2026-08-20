@@ -41,16 +41,13 @@ import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.suggestions.Suggestion
 import com.sidr.launcher.domain.suggestions.SuggestionEngine
-import com.sidr.launcher.domain.suggestions.SuggestionSource
 import com.sidr.launcher.domain.voice.SpeechInputSource
 import com.sidr.launcher.domain.voice.SpeechRecognitionError
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -58,8 +55,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -127,7 +122,17 @@ class LauncherViewModel @Inject constructor(
     // Raw app-list load result; null = the full launcher app inventory is still loading in the
     // background. Home must still paint from cheap cached state while this is null.
     private val _rawAppsResult = MutableStateFlow<OperationResult<List<InstalledApp>>?>(null)
-    private val _suggestions = MutableStateFlow<List<Suggestion>>(emptyList())
+
+    // Этап 4 / A0: extracted to LauncherSuggestions — see observeSuggestionFlag()'s old call site
+    // (now suggestionsSection.observeFlag()) below, wired from init.
+    private val suggestionsSection = LauncherSuggestions(
+        suggestionEngine = suggestionEngine,
+        suggestionsCacheRepository = suggestionsCacheRepository,
+        featureFlagRepository = featureFlagRepository,
+        installedAppsRepository = installedAppsRepository,
+        ioDispatcher = ioDispatcher,
+        scope = viewModelScope,
+    )
 
     // Block X6: deferred UI preferences (favorites row size, mic toggle, first-run nudge flag).
     // Held as a hot StateFlow so both the derived [uiState] and the imperative voice/nudge paths
@@ -181,7 +186,7 @@ class LauncherViewModel @Inject constructor(
     val uiState: StateFlow<UiState<LauncherUiState>> = combine(
         _rawAppsResult,
         usageHistoryRepository.getUsageRecords().catch { emit(emptyList()) },
-        _suggestions,
+        suggestionsSection.suggestions,
         userPreferences,
     ) { appsResult, usageRecords, suggestions, prefs ->
             when (appsResult) {
@@ -189,7 +194,7 @@ class LauncherViewModel @Inject constructor(
                 // suggestions immediately, then fill apps/favorites once PackageManager returns.
                 null -> UiState.Success(
                     LauncherUiState(
-                        suggestions = resolveSuggestionLabels(suggestions, emptyList()),
+                        suggestions = suggestionsSection.resolveLabels(suggestions, emptyList()),
                         setupHintDismissed = prefs.setupHintDismissed,
                     ),
                 )
@@ -201,7 +206,7 @@ class LauncherViewModel @Inject constructor(
                     else UiState.Success(
                         LauncherUiState(
                             apps = sorted,
-                            suggestions = resolveSuggestionLabels(suggestions, sorted),
+                            suggestions = suggestionsSection.resolveLabels(suggestions, sorted),
                             favorites = deriveFavorites(usageRecords, sorted, prefs.favoritesCount),
                             setupHintDismissed = prefs.setupHintDismissed,
                         ),
@@ -316,16 +321,13 @@ class LauncherViewModel @Inject constructor(
     // Tracks the in-flight app load so a new load (init or retry) cancels the previous one.
     private var loadJob: Job? = null
 
-    // Tracks the live suggestion-stream collector so flag toggles can cancel/restart it cleanly.
-    private var suggestionsJob: Job? = null
-
     /** Whether a speech recognizer is usable. The UI shows the mic affordance only when true. */
     val isVoiceInputAvailable: Boolean
         get() = speechInputSource.isAvailable()
 
     init {
         loadApps()
-        observeSuggestionFlag()
+        suggestionsSection.observeFlag()
     }
 
     private fun loadApps() {
@@ -646,65 +648,6 @@ class LauncherViewModel @Inject constructor(
         is LauncherAction.PlayStoreSearch -> "install ${action.query}"
     }
 
-    private fun observeSuggestionFlag() {
-        viewModelScope.launch(ioDispatcher) {
-            try {
-                featureFlagRepository.getFlags()
-                    .map { it.aiSuggestionsEnabled }
-                    .distinctUntilChanged()
-                    .collect { enabled ->
-                        if (enabled) {
-                            restoreAndRefreshSuggestions()
-                        } else {
-                            clearSuggestions()
-                        }
-                    }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Throwable) {
-                clearSuggestions()
-            }
-        }
-    }
-
-    private suspend fun restoreAndRefreshSuggestions() {
-        suggestionsJob?.cancelAndJoin()
-        suggestionsJob = null
-        try {
-            _suggestions.value = suggestionsCacheRepository.getCachedSuggestions().first().map { cached ->
-                // The cache stores only the display-safe repaint fields; the synthetic source/score are
-                // placeholders until the fresh engine result supersedes this first paint.
-                Suggestion(
-                    label = cached.label,
-                    actionId = cached.actionId,
-                    source = SuggestionSource.RECENT_USAGE,
-                    score = 0.0,
-                )
-            }
-
-            suggestionsJob = viewModelScope.launch(ioDispatcher, start = CoroutineStart.UNDISPATCHED) {
-                suggestionEngine
-                    .suggestions()
-                    .drop(1)
-                    .collect { fresh ->
-                        _suggestions.value = fresh
-                    }
-            }
-
-            suggestionEngine.refresh()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Throwable) {
-            clearSuggestions()
-        }
-    }
-
-    private suspend fun clearSuggestions() {
-        suggestionsJob?.cancelAndJoin()
-        suggestionsJob = null
-        _suggestions.value = emptyList()
-    }
-
     // ── Usage-aware grid sort ───────────────────────────────────────────────
     // Apps with usage history rise to the top (by launchCount then lastUsedEpochMs).
     // Apps without history keep their original relative order as the fallback.
@@ -756,22 +699,6 @@ class LauncherViewModel @Inject constructor(
                 throw e
             } catch (_: Throwable) {
                 // Advisory hint — a failed dismiss is non-critical.
-            }
-        }
-    }
-
-    private fun resolveSuggestionLabels(
-        suggestions: List<Suggestion>,
-        apps: List<InstalledApp>,
-    ): List<Suggestion> {
-        if (suggestions.isEmpty()) return emptyList()
-        val appsByPackage = apps.associateBy { it.packageName }
-        return suggestions.mapNotNull { suggestion ->
-            val app = appsByPackage[suggestion.actionId]
-            when {
-                app != null -> suggestion.copy(label = app.label)
-                suggestion.actionId.isKnownRoute() -> suggestion
-                else -> null
             }
         }
     }
@@ -858,13 +785,6 @@ class LauncherViewModel @Inject constructor(
         is OperationError.DeviceNotCapable -> false
     }
 
-    private fun String.isKnownRoute(): Boolean =
-        this == Routes.Launcher.ROUTE ||
-            this == Routes.Assistant.ROUTE ||
-            this == Routes.Settings.ROUTE ||
-            this == Routes.PermissionEducation.ROUTE ||
-            this.startsWith("${Routes.PermissionEducation.ROUTE}?")
-
     private companion object {
         // AIL-5: the bracketed risk tag on the confirm card. MVP produces a card only for CONFIRM-risk
         // (or unregistered) proposals; DANGEROUS is reserved for Stage 3.
@@ -873,3 +793,15 @@ class LauncherViewModel @Inject constructor(
         const val KEY_COMMAND_INPUT = "command_input"
     }
 }
+
+// Task 2 / A0: moved out of LauncherViewModel's body (and widened from private to internal) so
+// LauncherSuggestions.resolveLabels() — extracted out of this class — can call it too. A member
+// extension can only be called with an instance of its dispatch receiver in scope, which a plain
+// collaborator class does not have; a package-level extension has no such restriction. Same file,
+// same logic, still package-internal — not part of any public API.
+internal fun String.isKnownRoute(): Boolean =
+    this == Routes.Launcher.ROUTE ||
+        this == Routes.Assistant.ROUTE ||
+        this == Routes.Settings.ROUTE ||
+        this == Routes.PermissionEducation.ROUTE ||
+        this.startsWith("${Routes.PermissionEducation.ROUTE}?")

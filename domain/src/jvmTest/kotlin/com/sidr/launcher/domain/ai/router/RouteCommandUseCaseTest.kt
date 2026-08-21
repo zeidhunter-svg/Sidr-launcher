@@ -20,6 +20,7 @@ import com.sidr.launcher.domain.action.LauncherAction
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.AgentSessionIdFactory
+import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.Planner
 import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
@@ -366,5 +367,49 @@ class RouteCommandUseCaseTest {
 
         assertEquals(CommandOutcome.Executed, outcome)
         assertTrue("no session may be started for an achieved goal", agentStore.saved.isEmpty())
+    }
+
+    /**
+     * The other half of "the cut is narrow by construction" (spec §5) — the half nothing held.
+     * `Help` is a real, reachable FastPath outcome that **is** a `Message` and is **not**
+     * `NoAppFound`, so it is exactly what the "not any Message" clause is about.
+     *
+     * Found by mutation: widening the key from `is CommandMessage.NoAppFound` to any `Message` left
+     * every other test in this class green, and would turn "помощь" into an agent session that plans
+     * a Play Store search for the word "помощь".
+     */
+    @Test
+    fun `a decided Message that is not NoAppFound is not handed to the agent`() = runTest {
+        matcher.intentToReturn = LauncherIntent.SimpleCommandIntent(SimpleCommand.HELP)
+        matcher.confidenceToReturn = 0.99f
+
+        val outcome = useCase().route("помощь")
+
+        assertEquals(CommandOutcome.Message(CommandMessage.Help), outcome)
+        assertTrue("only NoAppFound may open the agent branch", agentStore.saved.isEmpty())
+    }
+
+    /**
+     * **What** is handed over, not merely that something was — the gap the five tests above shared.
+     *
+     * The shape's argument is the app name FastPath extracted (`NoAppFound.query`), never the whole
+     * command: with `AppNotInstalled("открой убер")` step 0 tries to launch that literal phrase and
+     * step 1 searches the store for it. `text` carries the raw command trimmed, because it is what
+     * A4''s model planner will read and what the surface shows. The padded input pins the trim.
+     *
+     * Found by mutation: substituting `rawInput.trim()` for `message.query` was green everywhere.
+     */
+    @Test
+    fun `the goal handed to the agent carries the extracted app name, not the whole command`() = runTest {
+        driveAppLaunch()
+        appsRepo.appsToReturn = emptyList()
+
+        val outcome = useCase().route("  открой убер  ")
+
+        assertTrue("expected an agent session, was $outcome", outcome is CommandOutcome.AgentSessionStarted)
+        assertEquals(
+            AgentGoal(text = "открой убер", shape = GoalShape.AppNotInstalled("убер")),
+            agentStore.saved.first().goal,
+        )
     }
 }

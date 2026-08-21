@@ -13,6 +13,22 @@ import java.io.File
  * is worth more here than one that needs a bytecode analyser. Working directory is the module dir, so
  * the repo root is `..` — same convention as the i18n and doctrine guards.
  *
+ * **Two scans, because one of them fails open on its own.** The call-site scan matches the literal
+ * receiver spelling `toolExecutor.invoke(`; a second call reached through any other property name —
+ * `executor.invoke(resolved)` — is invisible to it, and matching `\.invoke\(` on any receiver instead
+ * would drown in `Function0.invoke` and every unrelated `operator invoke` in the tree. So the gap is
+ * closed one step earlier, at the **declaration**: a new call site needs a new holder of the type, and
+ * holders are few and declarative. `the declared holders of a ToolExecutor are exactly the known three`
+ * pins that set, so an injected `private val executor: ToolExecutor` is red before it is ever called.
+ *
+ * **What is actually enforced, stated plainly** (the KDoc on `ToolExecutor` used to claim more):
+ *  - exactly one call spelled `toolExecutor.invoke(`, in `AgentExecutor.kt`, below the checkpoint;
+ *  - exactly three files that declare the type at all — the holder, the DI module, the one adapter.
+ *
+ * Both scans run over comment-stripped text ([stripComments]), so documentation that spells a call or
+ * a type in prose cannot turn the guard red on correct code. That stripping's own false-negative
+ * direction is named on [stripComments] itself: it can hide text from a scan, never invent a hit.
+ *
  * The roots it walks are declared as `Test` inputs in `app/build.gradle.kts`; without that the task
  * stays UP-TO-DATE when only a scanned source changes and this guard silently does not run.
  */
@@ -27,6 +43,17 @@ class ToolExecutorCallSiteGuardTest {
         "app/src/main/java",
     ).map { File(repoRoot, it) }
 
+    /**
+     * A declaration of the type: a constructor/parameter/property type, a return type, or a supertype
+     * list entry. `\b` is what keeps `SystemIntentToolExecutor` from matching as a *name* — in
+     * `impl: SystemIntentToolExecutor` the text after `:\s*` is `S…`, not `ToolExecutor` — while the
+     * same file's `) : ToolExecutor {` supertype line does match, and is meant to.
+     */
+    private val declaresToolExecutor = Regex(""":\s*ToolExecutor\b""")
+
+    private fun productionSources(): List<File> =
+        productionRoots.flatMap { it.walkTopDown().filter { f -> f.isFile && f.extension == "kt" } }
+
     @Test
     fun `scanned roots all exist`() {
         // A guard whose walk finds nothing passes vacuously — the exact failure Этап 2 found in three
@@ -38,10 +65,10 @@ class ToolExecutorCallSiteGuardTest {
 
     @Test
     fun `there is exactly one call site of ToolExecutor invoke in production code`() {
-        val hits = productionRoots
-            .flatMap { it.walkTopDown().filter { f -> f.extension == "kt" } }
+        val hits = productionSources()
             .flatMap { file ->
-                file.readLines()
+                stripComments(file.readText())
+                    .lines()
                     .withIndex()
                     .filter { (_, line) -> line.contains("toolExecutor.invoke(") }
                     .map { (i, line) -> "${file.path}:${i + 1}: ${line.trim()}" }
@@ -56,11 +83,38 @@ class ToolExecutorCallSiteGuardTest {
 
     @Test
     fun `the one call site lives in AgentExecutor`() {
-        val files = productionRoots
-            .flatMap { it.walkTopDown().filter { f -> f.extension == "kt" } }
-            .filter { it.readText().contains("toolExecutor.invoke(") }
+        val files = productionSources()
+            .filter { stripComments(it.readText()).contains("toolExecutor.invoke(") }
             .map { it.name }
 
         assertEquals(listOf("AgentExecutor.kt"), files)
+    }
+
+    /**
+     * The scan the call-site count cannot do for itself. Asserted as a **sorted list, not a size**: a
+     * holder that disappears has to be as red as one that appears, because a vanished holder means the
+     * wiring moved and this guard's premise needs re-reading, not a quietly decremented number.
+     *
+     * The three, and why each is legitimate:
+     *  - `AgentExecutor.kt` — the one holder, and the one call site, below the checkpoint;
+     *  - `AgentProvidesModule.kt` — the Hilt binding and the `AgentExecutor` factory that passes it on;
+     *  - `SystemIntentToolExecutor.kt` — the sole implementation, matched on its supertype line. A
+     *    second implementation is a second path to the world, so catching it here is the point.
+     */
+    @Test
+    fun `the declared holders of a ToolExecutor are exactly the known three`() {
+        val files = productionSources()
+            .filter { declaresToolExecutor.containsMatchIn(stripComments(it.readText())) }
+            .map { it.name }
+            .sorted()
+
+        assertEquals(
+            "Every declaration of ToolExecutor is a potential second call site, and the call-site " +
+                "count above only sees the receiver spelled `toolExecutor`. If this list grew, the " +
+                "new holder must be justified and this guard updated deliberately; if it shrank, the " +
+                "wiring moved and the premise of this whole guard needs re-checking. Found: $files",
+            listOf("AgentExecutor.kt", "AgentProvidesModule.kt", "SystemIntentToolExecutor.kt"),
+            files,
+        )
     }
 }

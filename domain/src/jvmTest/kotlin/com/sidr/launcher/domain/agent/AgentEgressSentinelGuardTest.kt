@@ -136,14 +136,19 @@ class AgentEgressSentinelGuardTest {
         return tools
     }
 
-    /** Nothing in the fake's record may carry the sentinel, and the seam must never have been asked. */
+    /**
+     * Nothing in the fake's record may carry the sentinel, and the seam must never have been asked.
+     *
+     * There is deliberately no `lastCommand?.contains(sentinel) != true` follow-up here. It used to be
+     * there and it could never fail: if the [assertNull] above passes then `lastCommand` is null,
+     * `null?.contains(…)` is null, and `null != true` is true — an assertion reporting a safety it
+     * never checked, in the file whose whole subject is that distinction. The live-seam control at the
+     * bottom of this class makes the same-shaped check against a *non-null* payload, where it is the
+     * load-bearing one.
+     */
     private fun assertNothingLeft() {
         assertEquals("the model planner was consulted", 0, modelPlanner.planCallCount)
         assertNull("an outbound payload was recorded: ${modelPlanner.lastCommand}", modelPlanner.lastCommand)
-        assertTrue(
-            "the sentinel reached the outbound seam: ${modelPlanner.lastCommand}",
-            modelPlanner.lastCommand?.contains(sentinel) != true,
-        )
     }
 
     @Test

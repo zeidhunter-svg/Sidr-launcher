@@ -6,7 +6,9 @@
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
 > / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-08-21
-> (agentic-track revision — the two-consumers fork, block A0.5, fork F6 in A0; docs only); prior 2026-08-20
+> (A0 work-order items 2b/4/5 — F6, the one tool source, Room 3→4 + the session store; `CODE-GREEN`,
+> nothing on device); same-day (agentic-track revision — the two-consumers fork, block A0.5, fork F6 in
+> A0; docs only); prior 2026-08-20
 > (Этап 4.0 — understanding-flag inversion, first behavioural change of the agentic track); prior 2026-08-19
 > (Этап 0.5 — corrected I18N-1's and DS-5's headline labels from an unqualified `CLOSED`/`CODE-CLOSED`
 > to `CODE-GREEN`, see below; DS-6B checked and confirmed `CLOSED`); same-day Этап 0.4 — `CLAUDE.md`
@@ -16,6 +18,52 @@
 > acceptance; prior re-base 2026-08-10 DS-10 Assistant Migration CLOSED — device-accepted; same-day
 > DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer
 > Correctness CLOSED — device-accepted by the owner).
+
+## Agentic track — Этап 4 (A0), work-order items 2b/4/5 — CODE-GREEN (2026-08-21)
+
+**Three of the nine work-order items landed the same day the revision reframed the block, and the
+ordering the revision insisted on was honoured.** Recorded here rather than at block close because the
+in-flight state was being read wrong: `§HANDOFF`, `CLAUDE.md` and the spec's own work order all still
+said items 4–9 were open.
+
+- **Item 2b — F6, step-to-step data flow (`08b632f`).** Landed **before** the migration, which was the
+  whole point: afterwards the same change would have cost a migration 4→5 plus a persisted-trace
+  conversion. Two properties it leaves standing: `ToolExecutor` accepts only `ResolvedInvocation` and
+  `InvocationValidator.resolve` is its sole constructor, so an unbound reference cannot **compile** its
+  way to the world; and a plan persists `ArgSource`, never resolved values.
+- **Item 4 — the one tool source (`7baa7ae`, with `89e3bfb`).** `SystemIntentToolSource` +
+  `SystemIntentToolExecutor` over the **unchanged** `ExecuteActionUseCase → IntentActionResolver →
+  ActionExecutor` chain. `ActionIds`' seven values untouched (ADR 3/4).
+- **Item 5 — Room 3→4 + `RoomAgentSessionStore` (`538a689`, review fixes `c6cc2bf`).** Three tables,
+  cascade on `session_id`, schema `4.json` committed; `1/2/3.json` frozen. Consent is a conditional
+  `UPDATE`, so a double confirmation applies to nothing instead of running a step twice. `args_json`
+  holds `ArgSource` and `observation_output_json` its producing half; a step with no output stores
+  `NULL`, not `{}`.
+
+**The review of item 5 found one defect with a real failure mode, fixed in `c6cc2bf`.** Every write was
+transactional and the read was not: `active()` issued three separate queries, so a `delete` landing
+between two of them returned a session row with no steps — and `ExecutionPlan(emptyList())` is
+constructible, so that assembled into a well-formed `Success` with an empty plan. `AgentExecutor.prepare`
+then finds no step at the cursor and ends the session `Completed`: **success reported for a goal on
+which nothing executed and nothing was traced**, the same fail-silent shape the `index == position`
+invariant was added to prevent. Now `AgentSessionDao.loadActive()` reads all three tables in one
+transaction, and the mapper refuses a session row with zero steps outright — the second is the half that
+can be broken and caught, and is.
+
+**Owner decision, 2026-08-21:** the session table's shape argument is `goal_shape_arg`, not the spec's
+original `goal_query` — `query` is a forbidden term in `RoomColumnNamesGuardTest`'s denylist and the old
+name would have widened the database's one owner-granted exemption to two. The **spec** was amended to
+match the code (`b0bc428`); `resolution_preferences.query` stays the only approved collision.
+
+**Status is `CODE-GREEN`, and narrowly so.** Gate `:domain:jvmTest testDebugUnitTest assembleDebug` green
+at 1098 tests, 0 failures. **Nothing has run on device.** In particular `MigrationTest`'s 3→4 and 1→4
+cases are `androidTest`: they compile, and no task in the unit gate executes them, so `Migration3To4`'s
+SQL has never actually run anywhere. It is verified only by byte-for-byte comparison against the
+generated `4.json`.
+
+**Open: items 6–9** — the `RouteCommandUseCase` cut, the surface + `en`/`ru`/`tr`, the guards with their
+mutation check, and the ADR + `DOC-ADL-3` amendment + the sync of this file and `CLAUDE.md` at block
+close.
 
 ## Agentic track — revision + the two-consumers fork (2026-08-21) — DOCS ONLY
 
@@ -868,7 +916,8 @@ See [`device-acceptance-brief.md`](device-acceptance-brief.md).
 The `<400ms` cold-start number remains aspirational (final release median 766ms, ship-band PASS).
 Still not claimed: Android 9/11/14 and real LOW_END hardware validation; OQ#1–OQ#4 real models/vocab/
 embedder + on-device NLU acceptance; voice `Ready`/`Partial` intermediate states (OQ#4); boot-warmup
-after reboot (C.5).
+after reboot (C.5); **`Migration3To4` has never been executed** — its `MigrationTest` cases are
+`androidTest` and no device has run them, so schema v4 is proven only against the generated `4.json`.
 *(Real assistant streaming against a live provider — done Round 3.)*
 
 ## Source of truth

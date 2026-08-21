@@ -6,8 +6,8 @@
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
 > / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-08-21
-> (A0 work-order items 2b/4/5 — F6, the one tool source, Room 3→4 + the session store; `CODE-GREEN`,
-> nothing on device); same-day (agentic-track revision — the two-consumers fork, block A0.5, fork F6 in
+> (A0 work-order items 2b/4/5/6/7 — F6, the one tool source, Room 3→4 + the session store, the
+> `RouteCommandUseCase` cut, the execution surface; `CODE-GREEN`, nothing on device); same-day (agentic-track revision — the two-consumers fork, block A0.5, fork F6 in
 > A0; docs only); prior 2026-08-20
 > (Этап 4.0 — understanding-flag inversion, first behavioural change of the agentic track); prior 2026-08-19
 > (Этап 0.5 — corrected I18N-1's and DS-5's headline labels from an unqualified `CLOSED`/`CODE-CLOSED`
@@ -19,7 +19,7 @@
 > DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer
 > Correctness CLOSED — device-accepted by the owner).
 
-## Agentic track — Этап 4 (A0), work-order items 2b/4/5 — CODE-GREEN (2026-08-21)
+## Agentic track — Этап 4 (A0), work-order items 2b/4/5/6/7 — CODE-GREEN (2026-08-21)
 
 **Three of the nine work-order items landed the same day the revision reframed the block, and the
 ordering the revision insisted on was honoured.** Recorded here rather than at block close because the
@@ -61,9 +61,28 @@ cases are `androidTest`: they compile, and no task in the unit gate executes the
 SQL has never actually run anywhere. It is verified only by byte-for-byte comparison against the
 generated `4.json`.
 
-**Open: items 6–9** — the `RouteCommandUseCase` cut, the surface + `en`/`ru`/`tr`, the guards with their
-mutation check, and the ADR + `DOC-ADL-3` amendment + the sync of this file and `CLAUDE.md` at block
-close.
+- **Item 6 — the cut into the command pipeline (`c7152e1`, review fixes `f4e61d3`).**
+  `RouteCommandUseCase` gains one branch keyed on `CommandMessage.NoAppFound`, above the local-only
+  check: A0's planner is deterministic and offline, so it consults no model and transmits nothing.
+  Fails open to the FastPath outcome on `NoPlan`. `CommandOutcome.AgentSessionStarted` is added, and a
+  test pins that both memory decorators pass it through without consulting their stores.
+- **Item 7 — the execution surface (`5f04a1d`, review fixes `fa1fded`).** One component per runtime
+  state, from DS-5 primitives only; nothing new in `core/ui`. `en`/`ru`/`tr` ship in the same commit,
+  15 keys each. A session that outlived its process is presented as `Paused` with an offer, never
+  resumed silently.
+
+**Every reviewed item carried a defect with a reproducible failure scenario.** Item 5: a non-transactional
+read (above). Item 6: the narrowness of the cut and the content of the goal handed over were held by
+nothing — widening the key from `NoAppFound` to any `Message`, and substituting the raw command for the
+extracted app name, were both green across all 396 domain tests. Item 7: `restoreOnStart` assumed the row
+on disk is always an interrupted `Running` session, so a terminal session was offered for continuation
+("you left before this plan finished" about a plan that finished) and every process restart appended
+another `SessionPaused` to a session that paused once — unbounded on a home-screen app, and a trace no
+longer 1:1 with reality (`DOC-ILM-3`). All five findings are fixed and mutation-verified, each caught by
+only its own test.
+
+**Open: items 8–9** — the guards with their mutation check, and the ADR + `DOC-ADL-3` amendment + the
+sync of this file and `CLAUDE.md` at block close.
 
 ## Agentic track — revision + the two-consumers fork (2026-08-21) — DOCS ONLY
 

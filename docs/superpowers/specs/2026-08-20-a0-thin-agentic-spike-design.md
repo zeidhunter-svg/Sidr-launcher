@@ -757,8 +757,8 @@ cheap.
 4. `SystemIntentToolSource` + `ToolExecutor` over the **unchanged** `ExecuteActionUseCase` ✅
 5. Room 3 -> 4 + `AgentSessionStore` ✅
 6. the `RouteCommandUseCase` cut + `CommandOutcome.AgentSessionStarted` + the pass-through branches the
-   compiler demands in both memory decorators and in `applyOutcome`
-7. surface + `en`/`ru`/`tr` strings
+   compiler demands in both memory decorators and in `applyOutcome` ✅
+7. surface + `en`/`ru`/`tr` strings ✅
 8. guards + mutation check
 9. ADR + `DOC-ADL-3` amendment (matrix §6 journal) + `CLAUDE.md` / `ai-context/current-status.md` sync
 

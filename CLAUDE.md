@@ -51,7 +51,7 @@ in `§HANDOFF`, not built.
 | **2** toolchain (AGP 9.3.1/Kotlin 2.4.10/Gradle 9.5.0/compileSdk 37) + `:domain` → KMP | ✅ 2026-08-19 |
 | **3** agentic Master Plan + doctrinal matrix (`docs/governing/`) | ✅ 2026-08-19 — docs + one guard test |
 | **4.0** — invert the understanding flag (`llmRouterEnabled` → `localOnlyMode`, ADR 1/4) | ✅ 2026-08-20 — `CODE-GREEN`; first behavioural change of the track |
-| **4** — A0 thin agentic spike | 🔄 **in flight** — work-order items 1, 2, 2b, 3, 4, 5 done (VM split; `domain/tool`+`agent`+`trace`+executor; F6 step-to-step data flow; planner + use cases; the one tool source over the unchanged action path; Room 3→4 + `RoomAgentSessionStore`). Items 6–9 open: the `RouteCommandUseCase` cut, the surface, the guards, the ADR + doc sync. All of it `CODE-GREEN` — nothing has run on device, including `MigrationTest`'s 3→4 and 1→4 cases |
+| **4** — A0 thin agentic spike | 🔄 **in flight** — work-order items 1–7 done (VM split; `domain/tool`+`agent`+`trace`+executor; F6 step-to-step data flow; planner + use cases; the one tool source over the unchanged action path; Room 3→4 + `RoomAgentSessionStore`; the `RouteCommandUseCase` cut; the execution surface + `en`/`ru`/`tr`). Items 8–9 open: the guards with their mutation check, the ADR + `DOC-ADL-3` amendment + doc sync. All of it `CODE-GREEN` — nothing has run on device, including `MigrationTest`'s 3→4 and 1→4 cases |
 | **4.5–7** — A0.5 second consumer, A1′ ToolRegistry, A4′ runtime, A2/A3/A5/A6 | each needs its own spec + plan (`brainstorm → spec → plan → build`) |
 
 The four strategic ADRs (all 2026-08-19, in `decisions.md`):

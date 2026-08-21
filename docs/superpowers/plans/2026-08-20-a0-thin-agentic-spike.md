@@ -2219,15 +2219,12 @@ nothing accumulates at rest."
 
 ### Task 9: The one tool source and the executor over the unchanged action path
 
-> 🛑 **BLOCKED ON TASK 5b — read this before writing a line.** Task 5b was inserted on 2026-08-21,
-> after Tasks 5–8 had already shipped, so a run that resumes "at Task 9" by position will step over it.
-> Task 9 writes the adapter that implements `ToolExecutor`, and 5b **changes that interface**:
-> `invoke` takes `ResolvedInvocation`, not `ToolInvocation`, and `launch_app` must declare
-> `outputSchema = listOf(ActionArg("resolved_query", …))` and return it on every result (5b Step 6 is
-> the half of that work that lands here). Writing Task 9 first means writing it against a signature
-> that is about to change, then rewriting it.
->
-> **Do Task 5b first. If it is already done, delete this block and continue.**
+> ℹ️ **Task 5b is done (`08b632f`) — this task is unblocked, but its contract moved.** `ToolExecutor`
+> now takes `ResolvedInvocation`, not `ToolInvocation`. And 5b Step 6 deliberately deferred half of its
+> own work to here: `launch_app`'s descriptor must declare
+> `outputSchema = listOf(ActionArg("resolved_query", …))`, and the adapter must return that value on
+> **every** result — including `Effected` — because a tool's outputs are a property of the tool, not of
+> the branch it happened to take. A schema that only sometimes holds is not a schema.
 
 **Files:**
 - Create: `data/repository/src/main/java/com/sidr/launcher/data/repository/agent/SystemIntentToolSource.kt`
@@ -2548,15 +2545,11 @@ than a dead end, which is what makes the two-step plan a loop."
 
 ### Task 10: Room 3 -> 4 and the session store
 
-> 🛑 **POINT OF NO RETURN — Task 5b must be done before this task, not after.** Once migration 3 → 4
-> ships with the pre-F6 `args_json` / `observation_*` shape, adding step-to-step data flow stops being
-> a contract edit and becomes a migration 4 → 5 plus a conversion of the persisted trace. The schema
-> below is already the **post-5b** one: `args_json` holds `ArgSource` (a `Literal`'s string, or a
-> `FromStep`'s index and key) rather than resolved values, and `observation_output_json` exists.
-> Writing this task against the pre-5b domain types will produce mappers that do not compile against
-> them.
->
-> **If Task 5b is not done, stop and do it. If it is, delete this block and continue.**
+> ℹ️ **Task 5b is done (`08b632f`), so the schema below is the right one — it is already post-F6.**
+> `args_json` holds `ArgSource` (a `Literal`'s string, or a `FromStep`'s index and key) and **not**
+> resolved values: a resumed plan must re-bind against the observations that survived, not replay a
+> value frozen at plan time. `observation_output_json` holds the producing side. This was the migration
+> whose window F6 had to beat — getting the shape right here is what that ordering bought.
 
 **Files:**
 - Create: `data/repository/src/main/java/com/sidr/launcher/data/repository/db/entity/AgentSessionEntity.kt`

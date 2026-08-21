@@ -752,10 +752,10 @@ cheap.
 2b. **F6 - step-to-step data flow.** Re-opens item 2's contract: `outputSchema`, `ArgSource`,
    `ResolvedInvocation`, `ToolOutput`, the two-phase validator, and the executor's resolve step,
    with the tests of §11. **Must land before item 5** - after the migration the same change costs
-   a migration 4 -> 5 and a persisted-trace conversion.
+   a migration 4 -> 5 and a persisted-trace conversion. ✅ (landed before item 5, as required)
 3. `TemplatePlanner` ✅ (amended by 2b: step 1 binds instead of repeating the literal)
-4. `SystemIntentToolSource` + `ToolExecutor` over the **unchanged** `ExecuteActionUseCase`
-5. Room 3 -> 4 + `AgentSessionStore`
+4. `SystemIntentToolSource` + `ToolExecutor` over the **unchanged** `ExecuteActionUseCase` ✅
+5. Room 3 -> 4 + `AgentSessionStore` ✅
 6. the `RouteCommandUseCase` cut + `CommandOutcome.AgentSessionStarted` + the pass-through branches the
    compiler demands in both memory decorators and in `applyOutcome`
 7. surface + `en`/`ru`/`tr` strings

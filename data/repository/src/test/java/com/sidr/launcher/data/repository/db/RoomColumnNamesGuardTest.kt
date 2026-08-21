@@ -154,6 +154,27 @@ class RoomColumnNamesGuardTest {
     }
 
     /**
+     * A0 Task 10. Two claims, and the second is the load-bearing one: the agent tables are inventoried
+     * at all, and they added **no** new exemption. The A0 spec's `goal_query` would have needed one;
+     * the column is `goal_shape_arg` instead, so the scan covers these three tables with its full
+     * denylist and `resolution_preferences.query` stays the only approved collision in the database.
+     */
+    @Test
+    fun `agent session tables are inventoried and need no exemption`() {
+        listOf("agent_session", "agent_plan_step", "agent_trace_event").forEach { table ->
+            assertTrue("$table is missing from the table inventory", RoomColumnNames.TABLE_NAMES.contains(table))
+            assertTrue("$table is missing from the column inventory", RoomColumnNames.BY_TABLE.containsKey(table))
+        }
+        assertEquals(
+            setOf("resolution_preferences.query"),
+            RoomColumnNames.APPROVED_SENSITIVE_COLUMNS,
+        )
+        assertTrue(RoomColumnNames.ALL.containsAll(RoomColumnNames.AGENT_SESSION))
+        assertTrue(RoomColumnNames.ALL.containsAll(RoomColumnNames.AGENT_PLAN_STEP))
+        assertTrue(RoomColumnNames.ALL.containsAll(RoomColumnNames.AGENT_TRACE_EVENT))
+    }
+
+    /**
      * Task 9 scoped-exemption teeth test, part (b): the exemption is table+column scoped, NOT a
      * bare "query" allow. An unrelated table's `query` column must still be flagged even though
      * the column name is identical to the approved one.

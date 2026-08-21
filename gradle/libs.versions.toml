@@ -97,6 +97,9 @@ compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 # DS-6B Task 4 — :data:prayer only (see build.gradle.kts + grep-confinement gate in the report).
 adhan2 = { module = "com.batoulapps.adhan:adhan2", version.ref = "adhan2" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
+# Test-only: lets a guard test enumerate a sealed hierarchy, so a new variant cannot be added
+# without the test that must cover it turning red (A0 Task 10, AgentSessionMappersTest).
+kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

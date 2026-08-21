@@ -290,6 +290,41 @@ tasks.withType<Test>().configureEach {
     inputs.file(rootProject.file("docs/governing/sidr-doctrine-matrix-v1.0.md"))
         .withPropertyName("doctrineMatrix")
         .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    // Этап 4 / A0 Task 13. `ToolExecutorCallSiteGuardTest` and `AgentVocabularyGuardTest` scan .kt
+    // sources outside :app's source set - the same silent-skip trap as the matrix above.
+    //
+    // Only ONE of the three declarations below is load-bearing, and what it is load-bearing FOR is
+    // narrower than it looks. Both facts were measured, not assumed (Task 13 Step 7, row 7):
+    //  - `domainSources` IS. The repo-wide `i18nGuardRepoWideSrcMainScan` tree further down includes
+    //    `**/src/main/**/*.kt`, and :domain went KMP in Этап 2.2 - its production segment is
+    //    `commonMain`, not `main` - so nothing in :domain matches that pattern.
+    //  - But :domain is on :app's test RUNTIME CLASSPATH, and that is already a declared input. So a
+    //    :domain edit that changes the compiled output re-triggers this task anyway, declaration or
+    //    no declaration: with these lines removed, adding `import ...action.LauncherAction` to
+    //    domain/src/commonMain/.../AgentExecutor.kt still re-ran the task and still went RED, because
+    //    the added line shifts every line below it and :domain's compiled output changed with it.
+    //  - The gap is edits where the scanned TEXT and the BYTECODE disagree - and an import is exactly
+    //    that, since an import contributes no bytecode of its own. Re-running the same mutation with
+    //    the added import balanced by a deleted blank line, so no executable line moved, left
+    //    :domain's output byte-identical: with these lines removed `:app:testDebugUnitTest` came back
+    //    FROM-CACHE at exit 0, serving the stale 4-tests-0-failures result while `domain/agent` sat
+    //    there importing `LauncherAction`. Restoring these lines, same mutation, same command: RED.
+    //    A guard that only catches the careless half of a change is not a guard.
+    //  - `dataRepositorySources` and `launcherSources` are NOT load-bearing: both already match
+    //    `**/src/main/**/*.kt`. They are declared anyway because that tree was written for the i18n
+    //    guards, not for these two, and a future narrowing of it (it has already been re-widened once
+    //    - see the `res/**` note below) would silently take these guards' inputs with it. Defence in
+    //    depth costs a rare needless re-run; the other direction costs a guard that does not run.
+    inputs.dir(rootProject.file("domain/src/commonMain/kotlin"))
+        .withPropertyName("domainSources")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(rootProject.file("data/repository/src/main/java"))
+        .withPropertyName("dataRepositorySources")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(rootProject.file("feature/launcher/src/main/java"))
+        .withPropertyName("launcherSources")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // Fix-privacy-guard, review item IMPORTANT 7 (2026-08-20). Four I18N guards in app/src/test read

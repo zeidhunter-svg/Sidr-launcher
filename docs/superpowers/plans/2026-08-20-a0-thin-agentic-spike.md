@@ -3349,7 +3349,7 @@ ship here. Nothing new in core/ui."
 - Consumes: everything.
 - Produces: four guards, each named in the doctrine matrix by Task 14.
 
-- [ ] **Step 1: Declare the scanned sources as Gradle inputs — before writing the guards**
+- [x] **Step 1: Declare the scanned sources as Gradle inputs — before writing the guards**
 
 Two of these guards read `.kt` files outside `:app`'s source set. Gradle cannot know that, so the test
 task stays `UP-TO-DATE` when only the scanned sources change and the guard silently does not run. This
@@ -3375,7 +3375,7 @@ tasks.withType<Test>().configureEach {
 }
 ```
 
-- [ ] **Step 2: Write the call-site guard**
+- [x] **Step 2: Write the call-site guard**
 
 ```kotlin
 package com.sidr.launcher.agent
@@ -3443,7 +3443,7 @@ class ToolExecutorCallSiteGuardTest {
 }
 ```
 
-- [ ] **Step 3: Write the vocabulary guard**
+- [x] **Step 3: Write the vocabulary guard**
 
 Same shape. `domain/agent/` and `domain/tool/` production files must contain none of `LauncherAction`,
 `ExecutableAction`, `ActionCatalog`, `ActionId`, `GenerativeAiEngine`, `CommandPlanner`, `io.ktor`,
@@ -3454,7 +3454,7 @@ before walking them.
 `Planner.kt` names `ToolRegistry` with a fully-qualified reference; if that trips a substring check,
 fix the import rather than loosening the guard.
 
-- [ ] **Step 4: Write the egress sentinel guard**
+- [x] **Step 4: Write the egress sentinel guard**
 
 ```kotlin
 package com.sidr.launcher.domain.agent
@@ -3478,14 +3478,14 @@ class AgentEgressSentinelGuardTest {
 }
 ```
 
-- [ ] **Step 5: Write the at-rest guard**
+- [x] **Step 5: Write the at-rest guard**
 
 `AgentAtRestGuardTest` (Robolectric, `:data:repository`): for **each** terminal state — `Completed`,
 `Cancelled`, `Failed`, `Blocked` — drive a session to it through the real store and assert
 `activeSession()` is null and `stepsFor` / `traceFor` are empty. The claim "at rest, the agent tables
 are empty" is a privacy claim, so it is tested per state rather than once.
 
-- [ ] **Step 6: Run all four guards**
+- [x] **Step 6: Run all four guards**
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
@@ -3496,7 +3496,7 @@ are empty" is a privacy claim, so it is tested per state rather than once.
 
 Expected: PASS.
 
-- [ ] **Step 7: Mutation-check every new guard — a green run proves nothing**
+- [x] **Step 7: Mutation-check every new guard — a green run proves nothing**
 
 For each guard, break exactly what it should catch, confirm RED, then revert:
 
@@ -3513,7 +3513,7 @@ For each guard, break exactly what it should catch, confirm RED, then revert:
 Record the result of each mutation in the ADR. `§HANDOFF` is explicit that a green run of a new guard
 proves nothing on its own, and the last row is how you prove the `UP-TO-DATE` trap is actually closed.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add app/src/test/java/com/sidr/launcher/agent/ app/build.gradle.kts \

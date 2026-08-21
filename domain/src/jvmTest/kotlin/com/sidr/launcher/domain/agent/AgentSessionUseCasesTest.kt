@@ -7,7 +7,8 @@ import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.ObservedFact
 import com.sidr.launcher.domain.tool.ToolExecutor
 import com.sidr.launcher.domain.tool.ToolIds
-import com.sidr.launcher.domain.tool.ToolInvocation
+import com.sidr.launcher.domain.tool.ResolvedInvocation
+import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.trace.ExecutionTrace
 import com.sidr.launcher.domain.trace.TraceEvent
@@ -29,6 +30,12 @@ class AgentSessionUseCasesTest {
         override fun newId() = AgentSessionId("s${++n}")
     }
     private val goal = AgentGoal("открой убер", GoalShape.AppNotInstalled("убер"))
+
+    /** `launch_app`'s missing-app result, carrying the `resolved_query` step 1 binds to (F6). */
+    private fun notInstalled(query: String = "убер") = ToolResult.Observed(
+        ObservedFact.APP_NOT_INSTALLED,
+        ToolOutput(mapOf("resolved_query" to query)),
+    )
 
     private fun runner(tools: ToolExecutor) =
         RunAgentSessionUseCase(AgentExecutor(registry, tools, RuntimeBudget.Default), store)
@@ -55,7 +62,7 @@ class AgentSessionUseCasesTest {
 
     @Test
     fun `run stops at the consent checkpoint with the session persisted`() = runTest {
-        val tools = FakeToolExecutor(listOf(ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED)))
+        val tools = FakeToolExecutor(listOf(notInstalled()))
         StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry).start(goal)
 
         val ran = runner(tools).run(store.active)
@@ -68,7 +75,7 @@ class AgentSessionUseCasesTest {
     @Test
     fun `a completed session is deleted, leaving nothing at rest`() = runTest {
         val tools = FakeToolExecutor(
-            listOf(ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED), ToolResult.Effected),
+            listOf(notInstalled(), ToolResult.Effected()),
         )
         StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry).start(goal)
         val run = runner(tools)
@@ -84,7 +91,7 @@ class AgentSessionUseCasesTest {
     @Test
     fun `a second confirmation of the same step does not execute it twice`() = runTest {
         val tools = FakeToolExecutor(
-            listOf(ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED), ToolResult.Effected),
+            listOf(notInstalled(), ToolResult.Effected()),
         )
         StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry).start(goal)
         val run = runner(tools)
@@ -100,7 +107,7 @@ class AgentSessionUseCasesTest {
 
     @Test
     fun `cancelling deletes the session and the next step never runs`() = runTest {
-        val tools = FakeToolExecutor(listOf(ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED)))
+        val tools = FakeToolExecutor(listOf(notInstalled()))
         StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry).start(goal)
         runner(tools).run(store.active)
 
@@ -112,7 +119,7 @@ class AgentSessionUseCasesTest {
 
     @Test
     fun `a store failure is surfaced as a Failure and never thrown`() = runTest {
-        val tools = FakeToolExecutor(listOf(ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED)))
+        val tools = FakeToolExecutor(listOf(notInstalled()))
         StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry).start(goal)
         store.failNextSave = true
 
@@ -138,11 +145,11 @@ class AgentSessionUseCasesTest {
     fun `the session is persisted between prepare and perform, so a mid-call crash is legible`() = runTest {
         val snapshots = mutableListOf<AgentSession>()
         val probe = object : ToolExecutor {
-            val invocations = mutableListOf<ToolInvocation>()
-            override suspend fun invoke(invocation: ToolInvocation): ToolResult {
+            val invocations = mutableListOf<ResolvedInvocation>()
+            override suspend fun invoke(invocation: ResolvedInvocation): ToolResult {
                 snapshots += store.active
                 invocations += invocation
-                return ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED)
+                return notInstalled()
             }
         }
         StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry).start(goal)
@@ -188,7 +195,7 @@ class AgentSessionUseCasesTest {
      */
     @Test(timeout = 30_000)
     fun `a session the engine cannot move is Blocked rather than spun on forever`() = runTest(timeout = 5.seconds) {
-        val tools = FakeToolExecutor(listOf(ToolResult.Effected))
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
         StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry).start(goal)
         val stalled = store.active.copy(
             state = ExecutionState.Running,

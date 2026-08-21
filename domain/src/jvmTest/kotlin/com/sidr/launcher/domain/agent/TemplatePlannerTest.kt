@@ -2,13 +2,14 @@ package com.sidr.launcher.domain.agent
 
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.tool.ArgSource
+import com.sidr.launcher.domain.tool.InvocationCheck
+import com.sidr.launcher.domain.tool.InvocationValidator
 import com.sidr.launcher.domain.tool.ObservedFact
-import com.sidr.launcher.domain.tool.ToolDescriptor
 import com.sidr.launcher.domain.tool.ToolIds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -31,10 +32,40 @@ class TemplatePlannerTest {
     }
 
     @Test
-    fun `the query flows into both steps unchanged`() = runTest {
+    fun `the goal's query is a literal on the first step only`() = runTest {
         val plan = (TemplatePlanner().plan(goal, registry) as PlanningResult.Planned).plan
 
-        assertTrue(plan.steps.all { it.invocation.args == mapOf("query" to "убер") })
+        assertEquals(mapOf("query" to ArgSource.Literal("убер")), plan.steps[0].invocation.args)
+    }
+
+    /**
+     * F6. The store step does not carry a second copy of the goal text — it **binds** to what the
+     * launch step reported. Before the amendment the planner wrote the same literal into both steps,
+     * so the two could silently disagree about what was being searched for.
+     */
+    @Test
+    fun `the second step binds to what the first step resolved, rather than repeating the literal`() = runTest {
+        val plan = (TemplatePlanner().plan(goal, registry) as PlanningResult.Planned).plan
+
+        assertEquals(
+            mapOf("query" to ArgSource.FromStep(0, "resolved_query")),
+            plan.steps[1].invocation.args,
+        )
+    }
+
+    /** The binding the planner writes must survive the validator it will meet on every step. */
+    @Test
+    fun `the plan the planner produces validates against the registry it planned over`() = runTest {
+        val plan = (TemplatePlanner().plan(goal, registry) as PlanningResult.Planned).plan
+
+        plan.steps.forEach { step ->
+            val preceding = plan.steps.filter { it.index < step.index }.map { it.invocation.id }
+            assertEquals(
+                "step ${step.index} does not validate",
+                InvocationCheck.Valid,
+                InvocationValidator.validate(step.invocation, preceding, registry),
+            )
+        }
     }
 
     @Test

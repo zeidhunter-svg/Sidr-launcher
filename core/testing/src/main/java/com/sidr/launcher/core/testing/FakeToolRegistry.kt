@@ -21,6 +21,11 @@ class FakeToolRegistry(private val descriptors: List<ToolDescriptor>) : ToolRegi
                 ToolDescriptor(
                     id = ToolIds.LAUNCH_APP,
                     argSchema = listOf(ActionArg("query", description = "The app name to launch")),
+                    // Declared on the tool, not on the branch: `launch_app` reports what it resolved
+                    // against on every result, and step 1 of the A0 plan binds to it (F6).
+                    outputSchema = listOf(
+                        ActionArg("resolved_query", description = "The query this launch resolved against"),
+                    ),
                     risk = ActionRiskLevel.SAFE,
                     durability = ToolDurability.TRANSIENT,
                 ),

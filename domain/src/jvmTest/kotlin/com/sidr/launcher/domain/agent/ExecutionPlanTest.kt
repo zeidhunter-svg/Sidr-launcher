@@ -2,6 +2,7 @@ package com.sidr.launcher.domain.agent
 
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.tool.ToolIds
+import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ToolInvocation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
@@ -29,7 +30,7 @@ class ExecutionPlanTest {
 
     private fun step(index: Int) = PlanStep(
         index = index,
-        invocation = ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to "x")),
+        invocation = ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal("x"))),
         risk = ActionRiskLevel.SAFE,
         precondition = StepPrecondition.None,
         rationale = StepRationale.GOAL_DIRECT,

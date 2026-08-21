@@ -4,10 +4,13 @@ import com.sidr.launcher.core.testing.FakeToolExecutor
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.intent.CommandFailure
+import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ObservedFact
+import com.sidr.launcher.domain.tool.RejectionReason
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
+import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.trace.ExecutionTrace
 import com.sidr.launcher.domain.trace.TraceEvent
@@ -27,18 +30,30 @@ class AgentExecutorTest {
     private val registry = FakeToolRegistry.withA0Tools()
     private val budget = RuntimeBudget(maxSteps = 8, maxConsecutiveFailures = 2)
 
+    /**
+     * What `launch_app` reports when the app is missing. The output is not decoration: step 1 binds
+     * its `query` to `resolved_query`, so a script without it cannot reach the store at all (F6).
+     */
+    private fun notInstalled(query: String = "убер") = ToolResult.Observed(
+        ObservedFact.APP_NOT_INSTALLED,
+        ToolOutput(mapOf("resolved_query" to query)),
+    )
+
     private fun planForMissingApp(query: String) = ExecutionPlan(
         listOf(
             PlanStep(
                 index = 0,
-                invocation = ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to query)),
+                invocation = ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal(query))),
                 risk = ActionRiskLevel.SAFE,
                 precondition = StepPrecondition.None,
                 rationale = StepRationale.GOAL_DIRECT,
             ),
             PlanStep(
                 index = 1,
-                invocation = ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to query)),
+                invocation = ToolInvocation(
+                    ToolIds.PLAY_STORE_SEARCH,
+                    mapOf("query" to ArgSource.FromStep(0, "resolved_query")),
+                ),
                 risk = ActionRiskLevel.CONFIRM,
                 precondition = StepPrecondition.PreviousStepObserved(ObservedFact.APP_NOT_INSTALLED),
                 rationale = StepRationale.APP_NOT_INSTALLED_FALLBACK,
@@ -59,18 +74,18 @@ class AgentExecutorTest {
 
     @Test
     fun `a SAFE first step runs without consent and records the observation`() = runTest {
-        val tools = FakeToolExecutor(listOf(ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED)))
+        val tools = FakeToolExecutor(listOf(notInstalled()))
         val after = AgentExecutor(registry, tools, budget).advance(session())
 
         assertEquals(listOf(ToolIds.LAUNCH_APP), tools.invocations.map { it.id })
         assertEquals(1, after.cursor)
         assertEquals(ExecutionState.Running, after.state)
-        assertEquals(ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED), after.observations[0])
+        assertEquals(notInstalled(), after.observations[0])
     }
 
     @Test
     fun `the risk transition stops the loop before the second tool is ever called`() = runTest {
-        val tools = FakeToolExecutor(listOf(ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED)))
+        val tools = FakeToolExecutor(listOf(notInstalled()))
         val executor = AgentExecutor(registry, tools, budget)
 
         val afterFirst = executor.advance(session())
@@ -88,7 +103,7 @@ class AgentExecutorTest {
     @Test
     fun `granted consent runs the second step and completes`() = runTest {
         val tools = FakeToolExecutor(
-            listOf(ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED), ToolResult.Effected),
+            listOf(notInstalled(), ToolResult.Effected()),
         )
         val executor = AgentExecutor(registry, tools, budget)
 
@@ -103,7 +118,7 @@ class AgentExecutorTest {
 
     @Test
     fun `denied consent cancels and never invokes the tool`() = runTest {
-        val tools = FakeToolExecutor(listOf(ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED)))
+        val tools = FakeToolExecutor(listOf(notInstalled()))
         val executor = AgentExecutor(registry, tools, budget)
 
         var s = executor.advance(session())
@@ -115,7 +130,7 @@ class AgentExecutorTest {
 
     @Test
     fun `an installed app skips the fallback step and still completes`() = runTest {
-        val tools = FakeToolExecutor(listOf(ToolResult.Effected))
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
         val executor = AgentExecutor(registry, tools, budget)
 
         var s = executor.advance(session())      // step 0 launches the app
@@ -135,7 +150,7 @@ class AgentExecutorTest {
                 plan = ExecutionPlan(
                     listOf(
                         it.plan.steps[0].copy(
-                            invocation = ToolInvocation(ToolId("not_registered"), mapOf("query" to "x")),
+                            invocation = ToolInvocation(ToolId("not_registered"), mapOf("query" to ArgSource.Literal("x"))),
                         ),
                     ),
                 ),
@@ -151,7 +166,7 @@ class AgentExecutorTest {
 
     @Test
     fun `exhausting the step budget blocks instead of stopping silently`() = runTest {
-        val tools = FakeToolExecutor(listOf(ToolResult.Effected, ToolResult.Effected))
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected(), ToolResult.Effected()))
         val tight = AgentExecutor(registry, tools, RuntimeBudget(maxSteps = 1, maxConsecutiveFailures = 2))
 
         var s = tight.advance(session())
@@ -190,7 +205,7 @@ class AgentExecutorTest {
     @Test
     fun `every executed step carries both a ToolInvoked and a ToolObserved event`() = runTest {
         val tools = FakeToolExecutor(
-            listOf(ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED), ToolResult.Effected),
+            listOf(notInstalled(), ToolResult.Effected()),
         )
         val executor = AgentExecutor(registry, tools, budget)
 
@@ -206,7 +221,7 @@ class AgentExecutorTest {
 
     @Test
     fun `prepare records ToolInvoked without calling the tool`() = runTest {
-        val tools = FakeToolExecutor(listOf(ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED)))
+        val tools = FakeToolExecutor(listOf(notInstalled()))
         val executor = AgentExecutor(registry, tools, budget)
 
         val prepared = executor.prepare(session())
@@ -217,7 +232,7 @@ class AgentExecutorTest {
 
     @Test
     fun `perform on a session that is not mid-step is a no-op`() = runTest {
-        val tools = FakeToolExecutor(listOf(ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED)))
+        val tools = FakeToolExecutor(listOf(notInstalled()))
         val executor = AgentExecutor(registry, tools, budget)
 
         val untouched = session()
@@ -231,7 +246,7 @@ class AgentExecutorTest {
 
     @Test
     fun `prepare does not advance the cursor`() = runTest {
-        val tools = FakeToolExecutor(listOf(ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED)))
+        val tools = FakeToolExecutor(listOf(notInstalled()))
         val executor = AgentExecutor(registry, tools, budget)
 
         val prepared = executor.prepare(session())
@@ -251,7 +266,7 @@ class AgentExecutorTest {
             trace = ExecutionTrace(
                 listOf(
                     TraceEvent.ToolInvoked(0, ToolIds.LAUNCH_APP),
-                    TraceEvent.ToolObserved(0, ToolResult.Effected),
+                    TraceEvent.ToolObserved(0, ToolResult.Effected()),
                     TraceEvent.ToolInvoked(0, ToolIds.LAUNCH_APP),
                 ),
             ),
@@ -265,7 +280,7 @@ class AgentExecutorTest {
 
     @Test
     fun `advance never invokes the tool for a Cancelled or Paused mid-step session`() = runTest {
-        val tools = FakeToolExecutor(listOf(ToolResult.Effected))
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
         val executor = AgentExecutor(registry, tools, budget)
         val midStepTrace = ExecutionTrace(
             listOf(TraceEvent.StepStarted(0), TraceEvent.ToolInvoked(0, ToolIds.LAUNCH_APP)),
@@ -289,7 +304,7 @@ class AgentExecutorTest {
         //
         // The recorded toolId deliberately MATCHES step 0's, so only the index lookup can refuse this:
         // a lookup that fell back to the first step would sail straight through the id-match assertion.
-        val tools = FakeToolExecutor(listOf(ToolResult.Effected))
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
         val executor = AgentExecutor(registry, tools, budget)
 
         val stale = session().copy(
@@ -308,7 +323,7 @@ class AgentExecutorTest {
     fun `perform refuses to invoke when the resolved step's tool does not match the trace`() = runTest {
         // Step 0's real invocation is LAUNCH_APP; a corrupted trace claims PLAY_STORE_SEARCH was the one
         // invoked for it. The id-match assertion must refuse to invoke rather than run either tool.
-        val tools = FakeToolExecutor(listOf(ToolResult.Effected))
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
         val executor = AgentExecutor(registry, tools, budget)
 
         val tampered = session().copy(
@@ -325,7 +340,7 @@ class AgentExecutorTest {
 
     @Test
     fun `resuming through advance after persisting the prepared step does not duplicate ToolInvoked`() = runTest {
-        val tools = FakeToolExecutor(listOf(ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED)))
+        val tools = FakeToolExecutor(listOf(notInstalled()))
         val executor = AgentExecutor(registry, tools, budget)
 
         val prepared = executor.prepare(session())    // simulates: persisted right after prepare
@@ -335,4 +350,146 @@ class AgentExecutorTest {
         assertEquals(1, invoked.size)
         assertEquals(1, tools.invocations.size)
     }
+
+    // --- F6: step-to-step data flow -------------------------------------------------------------
+
+    /**
+     * The whole point of the binding. The goal's literal is `убер`; step 0 *reports* `uber`. If step 1
+     * were carrying its own copy of the goal text, the store would be asked for `убер` — it is asked
+     * for what step 0 actually reported, because it is the same value and not a second copy of it.
+     */
+    @Test
+    fun `the second step is invoked with exactly what the first step reported`() = runTest {
+        val tools = FakeToolExecutor(listOf(notInstalled(query = "uber"), ToolResult.Effected()))
+        val executor = AgentExecutor(registry, tools, budget)
+
+        var s = executor.advance(session(query = "убер"))
+        s = executor.advance(s)
+        s = executor.advance(s.copy(state = ExecutionState.Running, consents = mapOf(1 to true)))
+
+        assertEquals(mapOf("query" to "убер"), tools.invocations[0].args)
+        assertEquals(mapOf("query" to "uber"), tools.invocations[1].args)
+    }
+
+    /**
+     * A binding that cannot be bound is a rejection, and it is raised in `prepare` — **before**
+     * `ToolInvoked` reaches the trace. `ToolInvoked(i)` with no `ToolObserved(i)` has exactly one
+     * meaning in this design ("the process died during the call"), and a rejection that counterfeited
+     * that shape would make `DOC-ILM-3`'s "the trace is 1:1 with reality" false.
+     */
+    @Test
+    fun `an unresolvable binding is rejected before ToolInvoked is written`() = runTest {
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
+        val executor = AgentExecutor(registry, tools, budget)
+
+        val afterFailedSource = session().copy(
+            cursor = 1,
+            consents = mapOf(1 to true),
+            observations = mapOf(0 to ToolResult.Failed(CommandFailure.Generic)),
+            plan = unconditionalFallbackPlan(),
+            trace = ExecutionTrace(
+                listOf(
+                    TraceEvent.StepStarted(0),
+                    TraceEvent.ToolInvoked(0, ToolIds.LAUNCH_APP),
+                    TraceEvent.ToolObserved(0, ToolResult.Failed(CommandFailure.Generic)),
+                ),
+            ),
+        )
+
+        val after = executor.advance(afterFailedSource)
+
+        assertEquals(ExecutionState.Failed, after.state)
+        assertEquals(0, tools.invocations.size)
+        assertTrue(
+            after.trace.events.any {
+                it is TraceEvent.StepRejected &&
+                    it.index == 1 &&
+                    it.reason == RejectionReason.UNRESOLVED_ARG_SOURCE
+            },
+        )
+        assertTrue(
+            "a resolution rejection must not counterfeit a mid-step trace",
+            after.trace.events.none { it is TraceEvent.ToolInvoked && it.index == 1 },
+        )
+    }
+
+    /** Resolution runs *after* the consent checkpoint, so a stop for consent is never pre-empted. */
+    @Test
+    fun `an unresolvable binding still stops at the consent checkpoint first`() = runTest {
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
+        val executor = AgentExecutor(registry, tools, budget)
+
+        val afterFailedSource = session().copy(
+            cursor = 1,
+            observations = mapOf(0 to ToolResult.Failed(CommandFailure.Generic)),
+            plan = unconditionalFallbackPlan(),
+            trace = ExecutionTrace(emptyList()),
+        )
+
+        val after = executor.advance(afterFailedSource)
+
+        assertEquals(ExecutionState.AwaitingConsent, after.state)
+        assertTrue(after.trace.events.none { it is TraceEvent.StepRejected })
+    }
+
+    /**
+     * A skipped step is never resolved. Step 0 here returns `Effected()` with **no** output, so if the
+     * engine resolved step 1's binding before honouring its precondition, the session would fail
+     * instead of completing.
+     */
+    @Test
+    fun `a skipped step never evaluates its binding`() = runTest {
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
+        val executor = AgentExecutor(registry, tools, budget)
+
+        var s = executor.advance(session())
+        s = executor.advance(s)
+        s = executor.advance(s)
+
+        assertEquals(ExecutionState.Completed, s.state)
+        assertTrue(s.trace.events.any { it is TraceEvent.StepSkipped && it.index == 1 })
+        assertTrue(s.trace.events.none { it is TraceEvent.StepRejected })
+    }
+
+    /**
+     * A forward reference is a static defect in the plan, caught by `validate` before anything runs —
+     * not something the engine discovers mid-flight.
+     */
+    @Test
+    fun `a step binding to itself is rejected before any tool is called`() = runTest {
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
+        val selfBinding = session().copy(
+            plan = ExecutionPlan(
+                listOf(
+                    session().plan.steps[0].copy(
+                        invocation = ToolInvocation(
+                            ToolIds.LAUNCH_APP,
+                            mapOf("query" to ArgSource.FromStep(0, "resolved_query")),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val after = AgentExecutor(registry, tools, budget).advance(selfBinding)
+
+        assertEquals(ExecutionState.Failed, after.state)
+        assertEquals(0, tools.invocations.size)
+        assertTrue(
+            after.trace.events.any {
+                it is TraceEvent.StepRejected && it.reason == RejectionReason.FORWARD_ARG_SOURCE
+            },
+        )
+    }
+
+    /**
+     * The same two steps, but step 1 is not gated on an observation — the only way to drive a
+     * *resolution* rejection, since a skipped step is never resolved at all.
+     */
+    private fun unconditionalFallbackPlan() = ExecutionPlan(
+        listOf(
+            planForMissingApp("убер").steps[0],
+            planForMissingApp("убер").steps[1].copy(precondition = StepPrecondition.None),
+        ),
+    )
 }

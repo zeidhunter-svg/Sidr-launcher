@@ -856,7 +856,7 @@ strings on purpose and a test pins them so they cannot drift."
   except `AgentExecutor` and `TemplatePlanner`, and the whole `domain/trace` vocabulary —
   `TraceEvent.ToolObserved` already carries the full `ToolResult`, so the output is traced for free.
 
-- [ ] **Step 1: Extend `InvocationValidatorTest` red first**
+- [x] **Step 1: Extend `InvocationValidatorTest` red first**
 
 Cases, in this order: a `Literal`-only invocation still validates exactly as before (regression);
 `FromStep` naming its own index, a later index, and an index beyond the plan → `FORWARD_ARG_SOURCE`;
@@ -864,7 +864,7 @@ Cases, in this order: a `Literal`-only invocation still validates exactly as bef
 binds to the producing step's value; `resolve` on a source step that `Failed` → `UNRESOLVED_ARG_SOURCE`
 and **no `ResolvedInvocation` is produced**; `resolve` never substitutes a blank or a default.
 
-- [ ] **Step 2: Change the tool contract**
+- [x] **Step 2: Change the tool contract**
 
 `outputSchema` on `ToolDescriptor`; `ArgSource`, `ResolvedInvocation`, `ToolOutput` in
 `ToolInvocation.kt`; `Effected` becomes a `data class` with a defaulted `output`; `Observed` gains one.
@@ -872,14 +872,14 @@ and **no `ResolvedInvocation` is produced**; `resolve` never substitutes a blank
 `ResolvedInvocation` — that is what makes "an unresolved reference cannot reach the world" a
 compile-time property rather than a convention.
 
-- [ ] **Step 3: Split the validator into `validate` + `resolve`**
+- [x] **Step 3: Split the validator into `validate` + `resolve`**
 
 `validate` keeps the three original reasons and adds the two static ones; it takes `precedingTools:
 List<ToolId>` (position == step index) so `domain/tool` still references no `domain/agent` type — the
 layering is agent → tool and F6 must not invert it. `resolve` takes `observations: Map<Int, ToolResult>`
 for the same reason.
 
-- [ ] **Step 4: `AgentExecutor` — resolve in `prepare`, before `ToolInvoked` is written**
+- [x] **Step 4: `AgentExecutor` — resolve in `prepare`, before `ToolInvoked` is written**
 
 `prepare` gains two things: `validate` now receives `precedingTools` built from
 `session.plan.steps.filter { it.index < next.index }.map { it.invocation.id }`, and **`resolve` runs
@@ -906,18 +906,18 @@ the trace never sits mid-step — belt and braces, and it costs three lines.
 The call site count stays **one**; `ToolExecutorCallSiteGuardTest` must stay green without being
 relaxed.
 
-- [ ] **Step 5: `TemplatePlanner` — bind instead of repeating the literal**
+- [x] **Step 5: `TemplatePlanner` — bind instead of repeating the literal**
 
 Step 0 stays `launch_app(query = Literal(query))`. Step 1 becomes
 `play_store_search(query = FromStep(0, "resolved_query"))`. The planner keeps naming no destination.
 
-- [ ] **Step 6: The tool source declares `resolved_query`** *(carried into Task 9)*
+- [x] **Step 6: The tool source declares `resolved_query`** *(carried into Task 9)*
 
 `launch_app` declares `outputSchema = listOf(ActionArg("resolved_query", …))` and returns it on every
 result — outputs are a property of the tool, not of the branch it took. Task 9's adapter already has
 the value; today it discards it.
 
-- [ ] **Step 7: Run the gate**
+- [x] **Step 7: Run the gate**
 
 ```bash
 ./gradlew --no-daemon :domain:jvmTest testDebugUnitTest assembleDebug
@@ -927,7 +927,7 @@ Output **not** piped through `tail`; check the exit code. Then the mutation chec
 each new rejection reason should catch (a forward reference, an undeclared output key, a failed source
 step) and confirm each goes red on its own test and only on it.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add domain/src/commonMain/kotlin/com/sidr/launcher/domain/ \

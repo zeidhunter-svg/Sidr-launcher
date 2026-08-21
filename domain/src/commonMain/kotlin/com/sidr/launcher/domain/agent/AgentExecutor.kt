@@ -1,8 +1,10 @@
 package com.sidr.launcher.domain.agent
 
 import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.tool.InvocationCheck
 import com.sidr.launcher.domain.tool.InvocationValidator
+import com.sidr.launcher.domain.tool.ResolutionResult
 import com.sidr.launcher.domain.tool.ToolDurability
 import com.sidr.launcher.domain.tool.ToolExecutor
 import com.sidr.launcher.domain.tool.ToolRegistry
@@ -51,9 +53,9 @@ class AgentExecutor(
 
     /**
      * Everything up to but NOT including the call to the world: end-of-plan, budget, precondition,
-     * validator rejection, and the consent checkpoint. When a step is cleared to run it records
-     * `StepStarted` + `ToolInvoked` and returns — the cursor is deliberately NOT advanced yet, because
-     * the step has not actually run.
+     * validator rejection, the consent checkpoint, and — since F6 — the **binding** of the step's
+     * arguments. When a step is cleared to run it records `StepStarted` + `ToolInvoked` and returns —
+     * the cursor is deliberately NOT advanced yet, because the step has not actually run.
      *
      * `cursor` is read below as a list position while [perform] writes it as `invoked.index + 1`. Those
      * are the same number only because [ExecutionPlan] enforces `steps[i].index == i`; the same
@@ -83,7 +85,11 @@ class AgentExecutor(
                 .copy(cursor = session.cursor + 1)
         }
 
-        when (val check = InvocationValidator.validate(next.invocation, registry)) {
+        val precedingTools = session.plan.steps
+            .filter { it.index < next.index }
+            .map { it.invocation.id }
+
+        when (val check = InvocationValidator.validate(next.invocation, precedingTools, registry)) {
             is InvocationCheck.Rejected ->
                 return session
                     .record(TraceEvent.StepRejected(next.index, check.reason))
@@ -102,6 +108,19 @@ class AgentExecutor(
                     .ended(ExecutionState.Cancelled)
                 true -> Unit
             }
+        }
+
+        // Binding, and it belongs HERE — after the checkpoint, before `ToolInvoked` (F6). A rejection
+        // raised after `ToolInvoked` would leave the trace in the one shape that already means "the
+        // process died during the call", so a plan with a bad binding would come back as "we may have
+        // half-run something, please decide" instead of the honest "this step could not be bound".
+        // One rejection path, not two: this ends the session exactly as a validator rejection does.
+        when (val resolution = InvocationValidator.resolve(next.invocation, session.observations)) {
+            is ResolutionResult.Rejected ->
+                return session
+                    .record(TraceEvent.StepRejected(next.index, resolution.reason))
+                    .ended(ExecutionState.Failed)
+            is ResolutionResult.Resolved -> Unit
         }
 
         // Cleared to run. This is the save point: a persisted session here has `ToolInvoked` in its
@@ -151,9 +170,28 @@ class AgentExecutor(
             ?.takeIf { it.invocation.id == invoked.toolId }
             ?: return session
 
+        // Re-bind, purely to obtain the value. `resolve` is a pure function of the invocation and the
+        // observations, and observations cannot change between the `prepare` and the `perform` of one
+        // step, so this cannot disagree with the decision `prepare` already made. If it somehow does,
+        // the failure is recorded as an OBSERVATION rather than a rejection: the trace must never be
+        // left sitting mid-step, because that shape means "the process died" and nothing else.
+        val resolved = when (val resolution = InvocationValidator.resolve(step.invocation, session.observations)) {
+            is ResolutionResult.Resolved -> resolution.invocation
+            is ResolutionResult.Rejected -> {
+                val failure = ToolResult.Failed(CommandFailure.Generic)
+                return session
+                    .record(TraceEvent.ToolObserved(invoked.index, failure))
+                    .copy(
+                        cursor = invoked.index + 1,
+                        observations = session.observations + (invoked.index to failure),
+                    )
+                    .ended(ExecutionState.Failed)
+            }
+        }
+
         // The ONE call site to the world. It is below the checkpoint by construction, and
         // ToolExecutorCallSiteGuardTest fails the build if a second one ever appears.
-        val result = toolExecutor.invoke(step.invocation)
+        val result = toolExecutor.invoke(resolved)
 
         val observed = session
             .record(TraceEvent.ToolObserved(invoked.index, result))

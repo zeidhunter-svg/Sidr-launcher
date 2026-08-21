@@ -7,7 +7,11 @@ package com.sidr.launcher.domain.tool
  * codebase, and that it sits behind the consent checkpoint. That is the mechanical version of the
  * growth rule's promise: tool #21 gets consent for free not because we will remember, but because
  * there is nowhere to forget.
+ *
+ * [invoke] takes a [ResolvedInvocation] and never a [ToolInvocation] (F6). `InvocationValidator.resolve`
+ * is the only producer of that type, so "an unbound reference cannot reach the world" is enforced by
+ * the compiler rather than by a check a future edit could forget.
  */
 interface ToolExecutor {
-    suspend fun invoke(invocation: ToolInvocation): ToolResult
+    suspend fun invoke(invocation: ResolvedInvocation): ToolResult
 }

@@ -3,6 +3,7 @@ package com.sidr.launcher.domain.agent
 import com.sidr.launcher.core.testing.FakeAgentSessionStore
 import com.sidr.launcher.core.testing.FakeToolExecutor
 import com.sidr.launcher.core.testing.FakeToolRegistry
+import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.ObservedFact
 import com.sidr.launcher.domain.tool.ToolExecutor
@@ -208,5 +209,36 @@ class AgentSessionUseCasesTest {
 
         assertEquals(ExecutionState.Blocked, (ran as OperationResult.Success).value.state)
         assertEquals(0, tools.invocations.size)
+        // `Blocked` is terminal, so the at-rest guarantee applies to it exactly as it does to
+        // `Completed`: `RunAgentSessionUseCase.persist` keys deletion on `ExecutionState.isTerminal`,
+        // and asserting the state alone would pass even if that deletion were removed.
+        assertNull(store.activeOrNull)
+    }
+
+    /**
+     * The fourth terminal state, and the last one whose deletion was asserted nowhere. `Failed` is
+     * reached here through the real engine — `perform` applies the consecutive-failure budget and
+     * calls `ended(ExecutionState.Failed)` itself — rather than by hand-constructing a failed session,
+     * so what is being tested is the path a device would actually take.
+     *
+     * The tight budget is the established idiom for this branch (`AgentExecutorTest`'s "repeated tool
+     * failures fail the session rather than looping" builds the executor the same way): under
+     * `RuntimeBudget.Default` one failed step is under the limit, and the A0 plan's step 1 is then
+     * skipped by its precondition, so the session would end `Completed` and never exercise `Failed`.
+     */
+    @Test
+    fun `a failed session is deleted, leaving nothing at rest`() = runTest {
+        val tools = FakeToolExecutor(listOf(ToolResult.Failed(CommandFailure.Generic)))
+        val failFast = RunAgentSessionUseCase(
+            AgentExecutor(registry, tools, RuntimeBudget(maxSteps = 8, maxConsecutiveFailures = 1)),
+            store,
+        )
+        StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry).start(goal)
+
+        val ran = failFast.run(store.active)
+
+        assertEquals(ExecutionState.Failed, (ran as OperationResult.Success).value.state)
+        assertEquals(1, tools.invocations.size)
+        assertNull(store.activeOrNull)
     }
 }

@@ -3,6 +3,7 @@ package com.sidr.launcher.di
 import com.sidr.launcher.core.common.di.IoDispatcher
 import com.sidr.launcher.data.aicloud.LlmCommandPlanner
 import com.sidr.launcher.domain.action.ActionCatalog
+import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.ai.AiProviderConfigRepository
 import com.sidr.launcher.domain.ai.router.CommandPlanner
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
@@ -62,6 +63,7 @@ object RouterProvidesModule {
         featureFlagRepository: FeatureFlagRepository,
         providerConfigRepository: AiProviderConfigRepository,
         connectivityChecker: ConnectivityChecker,
+        startAgentSession: StartAgentSessionUseCase,
     ): RouteCommandUseCase = RouteCommandUseCase(
         handleUserCommand = handleUserCommand,
         planner = planner,
@@ -69,5 +71,6 @@ object RouterProvidesModule {
         featureFlagRepository = featureFlagRepository,
         providerConfigRepository = providerConfigRepository,
         connectivityChecker = connectivityChecker,
+        startAgentSession = startAgentSession,
     )
 }

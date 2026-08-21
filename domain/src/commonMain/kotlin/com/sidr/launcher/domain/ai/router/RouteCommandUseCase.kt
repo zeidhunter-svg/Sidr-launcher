@@ -2,12 +2,16 @@ package com.sidr.launcher.domain.ai.router
 
 import com.sidr.launcher.domain.action.ActionCatalog
 import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.agent.AgentGoal
+import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.ai.AiProviderConfigRepository
 import com.sidr.launcher.domain.connectivity.ConnectivityChecker
 import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
+import com.sidr.launcher.domain.result.OperationResult
 import kotlinx.coroutines.flow.first
 
 /**
@@ -24,21 +28,35 @@ import kotlinx.coroutines.flow.first
  * understanding-unavailable messages can be reached for a single command:
  * 1. Run FastPath (`handle`) exactly once — offline, unchanged, and the source of the recorded side
  *    effects.
- * 2. **`localOnlyMode` on ⇒ byte-for-byte FastPath parity** — the planner is never consulted and
+ * 2. **A goal FastPath DECIDED but did not ACHIEVE ⇒ the agent** ([StartAgentSessionUseCase], A0
+ *    Task 11). Exactly one outcome qualifies: [CommandMessage.NoAppFound] — FastPath understood
+ *    "open X" and found no such app. Not "any Message", not "anything that did not execute";
+ *    widening the list is a separate decision for a later block.
+ * 3. **`localOnlyMode` on ⇒ byte-for-byte FastPath parity** — the planner is never consulted and
  *    nothing leaves the device. A FastPath hit returns untouched; a miss says so plainly
  *    ([CommandMessage.UnderstandingLocalOnly]) instead of claiming the command was unknown.
- * 3. FastPath decided confidently ⇒ return its outcome untouched; the planner is not consulted.
- * 4. **No provider configured ⇒ [CommandMessage.UnderstandingNeedsProvider]**, planner never
+ * 4. FastPath decided confidently ⇒ return its outcome untouched; the planner is not consulted.
+ * 5. **No provider configured ⇒ [CommandMessage.UnderstandingNeedsProvider]**, planner never
  *    consulted. This check lives *here*, in the gate, and not in the planner implementation (Этап
  *    4.0 fork F4): with the flag inverted it is a privacy guarantee — "no provider ⇒ no outbound
  *    call" — and a guarantee may not rest on how one adapter happens to be written.
  *    [AiProviderConfigRepository] is an existing `commonMain` port, so the gate stays KMP-portable
  *    and gains no new module edge (ADR 3/4). The API key deliberately stays the planner's business:
  *    the gate decides *whether to ask*, never touches secrets.
- * 5. **Offline ⇒ [CommandMessage.UnderstandingNeedsNetwork]** — no socket the planner would abandon.
- * 6. Map the plan: a [PlanResult.RoutedAction] surfaces as a **non-executing** proposal
+ * 6. **Offline ⇒ [CommandMessage.UnderstandingNeedsNetwork]** — no socket the planner would abandon.
+ * 7. Map the plan: a [PlanResult.RoutedAction] surfaces as a **non-executing** proposal
  *    ([CommandOutcome.RoutedAction], Fork R4 — never auto-execute); a [PlanResult.Clarify] becomes a
  *    message; [PlanResult.NoPlan] keeps the FastPath outcome.
+ *
+ * **Step 2 sits above step 3 and that does not weaken the chain.** The three
+ * understanding-unavailable messages stay mutually exclusive because step 2 is keyed on an outcome
+ * FastPath *produced* — a decided [CommandMessage.NoAppFound] — and not on a system state, whereas
+ * steps 3, 5 and 6 are each keyed on one of the three states. A command that reaches step 2 was never
+ * going to reach any of them: `NoAppFound` is a decided outcome, so `isUndecided()` is false and
+ * `orHonestly` would have returned it verbatim at step 3 anyway. And `DOC-ADL-3` is untouched by the
+ * ordering: A0's [com.sidr.launcher.domain.agent.Planner] is deterministic and offline, so this
+ * branch consults no model and transmits nothing, which is exactly what the signed local-only copy
+ * promises. Should that ever stop being true, this branch has to move below step 3, not be excused.
  */
 class RouteCommandUseCase(
     private val handleUserCommand: HandleUserCommandUseCase,
@@ -47,31 +65,51 @@ class RouteCommandUseCase(
     private val featureFlagRepository: FeatureFlagRepository,
     private val providerConfigRepository: AiProviderConfigRepository,
     private val connectivityChecker: ConnectivityChecker,
+    private val startAgentSession: StartAgentSessionUseCase,
 ) {
 
     suspend fun route(rawInput: String): CommandOutcome {
         // (1) FastPath first — unchanged, offline, runs exactly once (its recording side effect too).
         val ruleOutcome = handleUserCommand.handle(rawInput)
 
-        // (2) Local-only ⇒ exact FastPath parity; the planner is never consulted.
+        // (2) A goal FastPath DECIDED but did not ACHIEVE: it understood "open X" and found no such
+        // app. This is the one outcome A0 hands to the agent — not "any Message", not "anything that
+        // did not execute". The branch sits above the localOnlyMode check on purpose: the planner
+        // here is deterministic and offline, so it consults no model and transmits nothing, which is
+        // what the amended DOC-ADL-3 requires and what the signed local-only copy promises ("nothing
+        // leaves this device"). Widening this list is a separate decision for a later block.
+        val message = (ruleOutcome as? CommandOutcome.Message)?.message
+        if (message is CommandMessage.NoAppFound) {
+            val goal = AgentGoal(
+                text = rawInput.trim(),
+                shape = GoalShape.AppNotInstalled(message.query),
+            )
+            // Fails open: NoPlan, or any store failure, leaves the FastPath outcome exactly as it was.
+            val started = startAgentSession.start(goal)
+            if (started is OperationResult.Success && started.value != null) {
+                return CommandOutcome.AgentSessionStarted(started.value)
+            }
+        }
+
+        // (3) Local-only ⇒ exact FastPath parity; the planner is never consulted.
         if (featureFlagRepository.getFlags().first().localOnlyMode) {
             return ruleOutcome.orHonestly(CommandMessage.UnderstandingLocalOnly)
         }
 
-        // (3) FastPath decided — a confident outcome is returned untouched.
+        // (4) FastPath decided — a confident outcome is returned untouched.
         if (!ruleOutcome.isUndecided()) return ruleOutcome
 
-        // (4) No provider ⇒ nothing may leave the device, and we say why (F4 — gate, not adapter).
+        // (5) No provider ⇒ nothing may leave the device, and we say why (F4 — gate, not adapter).
         if (providerConfigRepository.activeConfig().first() == null) {
             return CommandOutcome.Message(CommandMessage.UnderstandingNeedsProvider)
         }
 
-        // (5) Offline ⇒ honest "needs network"; never open a socket the planner would abandon.
+        // (6) Offline ⇒ honest "needs network"; never open a socket the planner would abandon.
         if (!connectivityChecker.isOnline()) {
             return CommandOutcome.Message(CommandMessage.UnderstandingNeedsNetwork)
         }
 
-        // (6) Consult the planner and map its structured decision; any failure ⇒ NoPlan ⇒ FastPath outcome.
+        // (7) Consult the planner and map its structured decision; any failure ⇒ NoPlan ⇒ FastPath outcome.
         return when (val plan = planner.plan(rawInput.trim(), catalog)) {
             is PlanResult.RoutedAction -> CommandOutcome.RoutedAction(
                 action = plan.action,

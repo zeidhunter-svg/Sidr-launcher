@@ -2906,7 +2906,7 @@ double confirmation apply to nothing instead of running a step twice."
 - Produces: `CommandOutcome.AgentSessionStarted(val id: AgentSessionId)`; `RouteCommandUseCase` gains a
   `startAgentSession: StartAgentSessionUseCase` constructor parameter.
 
-- [ ] **Step 1: Write the failing router tests**
+- [x] **Step 1: Write the failing router tests**
 
 Append to `RouteCommandUseCaseTest`:
 
@@ -2966,7 +2966,7 @@ fun `an outcome FastPath decided and achieved is untouched by the agent`() = run
 Match the existing fixture's real member names (`flags`, `connectivity`, `providerConfig`, `planner`,
 `appsRepo`) — read the top of the file first; the names above are its current shape.
 
-- [ ] **Step 2: Write the failing pass-through test**
+- [x] **Step 2: Write the failing pass-through test**
 
 Create `domain/src/jvmTest/kotlin/com/sidr/launcher/domain/memory/AgentOutcomePassThroughTest.kt`:
 
@@ -3009,7 +3009,7 @@ Fill both bodies using the constructor shapes in `MemoryProvidesModule.kt` and t
 `ResolveCommandWithPreferenceUseCaseTest` fixtures. Assert `assertEquals(agentOutcome, result.outcome)`
 and that no store was consulted.
 
-- [ ] **Step 3: Run both to verify they fail**
+- [x] **Step 3: Run both to verify they fail**
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
@@ -3018,7 +3018,7 @@ and that no store was consulted.
 
 Expected: FAIL — `CommandOutcome.AgentSessionStarted` does not exist.
 
-- [ ] **Step 4: Add the outcome variant**
+- [x] **Step 4: Add the outcome variant**
 
 ```kotlin
 /**
@@ -3033,7 +3033,7 @@ Compilation will now fail in `LauncherViewModel`'s (post-split: `LauncherCommand
 `applyOutcome`, whose `when` has no `else`. Leave it failing — Task 12 writes that branch. Everything
 else compiles, because the two decorators pass unrecognised outcomes through by early return.
 
-- [ ] **Step 5: Write the cut**
+- [x] **Step 5: Write the cut**
 
 In `RouteCommandUseCase.route`, immediately after the FastPath call:
 
@@ -3062,7 +3062,7 @@ Renumber the existing comments (3)–(7) and extend the class KDoc so the ordere
 correctly, including why the new branch does not disturb the mutual exclusivity of the three
 understanding-unavailable messages: it is keyed on an outcome FastPath produced, not on a system state.
 
-- [ ] **Step 6: Wire the graph**
+- [x] **Step 6: Wire the graph**
 
 Create `app/src/main/java/com/sidr/launcher/di/AgentProvidesModule.kt` binding, all `@Singleton`:
 `ToolRegistry` -> `SystemIntentToolSource`, `ToolExecutor` -> `SystemIntentToolExecutor`,
@@ -3071,7 +3071,7 @@ Create `app/src/main/java/com/sidr/launcher/di/AgentProvidesModule.kt` binding, 
 `RuntimeBudget.Default`, and the four use cases. Add `startAgentSession` to
 `RouterProvidesModule.provideRouteCommandUseCase`.
 
-- [ ] **Step 7: Run the domain tests**
+- [x] **Step 7: Run the domain tests**
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
@@ -3081,7 +3081,7 @@ Create `app/src/main/java/com/sidr/launcher/di/AgentProvidesModule.kt` binding, 
 Expected: PASS. `:app` and `:feature:launcher` still fail to compile until Task 12 — that is the
 intended, visible consequence of the exhaustive `when`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add domain/src/commonMain/kotlin/com/sidr/launcher/domain/ \

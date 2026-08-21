@@ -1,6 +1,7 @@
 package com.sidr.launcher.domain.intent
 
 import com.sidr.launcher.domain.action.LauncherAction
+import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.model.InstalledApp
 
 /**
@@ -68,4 +69,11 @@ sealed interface CommandOutcome {
         val confidence: Float,
         val needsConfirmation: Boolean,
     ) : CommandOutcome
+
+    /**
+     * A goal FastPath decided but did not achieve — the app does not exist — has been handed to the
+     * agent, and [id] identifies the session now in flight. The command surface stops rendering a
+     * message and starts rendering session state.
+     */
+    data class AgentSessionStarted(val id: AgentSessionId) : CommandOutcome
 }

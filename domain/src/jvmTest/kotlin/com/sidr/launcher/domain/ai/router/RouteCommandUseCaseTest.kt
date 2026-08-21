@@ -1,11 +1,13 @@
 package com.sidr.launcher.domain.ai.router
 
 import com.sidr.launcher.core.testing.FakeActionExecutor
+import com.sidr.launcher.core.testing.FakeAgentSessionStore
 import com.sidr.launcher.core.testing.FakeCommandPlanner
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeIntentMatcher
+import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.core.testing.configuredProvider
 import com.sidr.launcher.domain.action.ActionArg
 import com.sidr.launcher.domain.action.ActionCatalog
@@ -15,6 +17,13 @@ import com.sidr.launcher.domain.action.ActionId
 import com.sidr.launcher.domain.action.ActionIds
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.action.LauncherAction
+import com.sidr.launcher.domain.agent.AgentGoal
+import com.sidr.launcher.domain.agent.AgentSessionId
+import com.sidr.launcher.domain.agent.AgentSessionIdFactory
+import com.sidr.launcher.domain.agent.Planner
+import com.sidr.launcher.domain.agent.PlanningResult
+import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
+import com.sidr.launcher.domain.agent.TemplatePlanner
 import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
@@ -22,10 +31,13 @@ import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.intent.SimpleCommand
+import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.preferences.FeatureFlags
+import com.sidr.launcher.domain.tool.ToolRegistry
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -53,6 +65,16 @@ class RouteCommandUseCaseTest {
     private val executor = FakeActionExecutor()
     private val planner = FakeCommandPlanner()
     private val connectivity = FakeConnectivityChecker(initiallyOnline = true)
+
+    // The agent side of the cut (Task 11). The real `TemplatePlanner` over the real A0 tool set, not a
+    // stub that always says yes: the branch is only worth testing if the plan it produces is the one
+    // the slice actually ships.
+    private val agentStore = FakeAgentSessionStore()
+    private val toolRegistry = FakeToolRegistry.withA0Tools()
+    private val agentIds = object : AgentSessionIdFactory {
+        private var n = 0
+        override fun newId() = AgentSessionId("s${++n}")
+    }
 
     private val catalog: ActionCatalog = object : ActionCatalog {
         private val list = listOf(
@@ -83,7 +105,10 @@ class RouteCommandUseCaseTest {
      * understanding is available unless something concrete prevents it. Each test that exercises a
      * prevented state turns exactly one of those three off.
      */
-    private fun useCase(localOnly: Boolean = false): RouteCommandUseCase = RouteCommandUseCase(
+    private fun useCase(
+        localOnly: Boolean = false,
+        agentPlanner: Planner = TemplatePlanner(),
+    ): RouteCommandUseCase = RouteCommandUseCase(
         handleUserCommand = HandleUserCommandUseCase(
             matcher = matcher,
             resolver = IntentActionResolver(appsRepo),
@@ -96,6 +121,7 @@ class RouteCommandUseCaseTest {
         featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = localOnly)),
         providerConfigRepository = provider,
         connectivityChecker = connectivity,
+        startAgentSession = StartAgentSessionUseCase(agentPlanner, agentStore, agentIds, toolRegistry),
     )
 
     private fun driveUnknown() {
@@ -106,6 +132,18 @@ class RouteCommandUseCaseTest {
     private fun driveConfidentShowApps() {
         matcher.intentToReturn = LauncherIntent.SimpleCommandIntent(SimpleCommand.SHOW_APPS)
         matcher.confidenceToReturn = 0.99f
+    }
+
+    /** FastPath DECIDES "open убер" and, with no such app installed, cannot ACHIEVE it. */
+    private fun driveAppLaunch(query: String = "убер") {
+        matcher.intentToReturn = LauncherIntent.LaunchAppIntent(displayNameQuery = query)
+        matcher.confidenceToReturn = 0.99f
+    }
+
+    /** An A0 planner that plans nothing, so the cut has to fail open to the FastPath outcome. */
+    private fun neverPlans(): Planner = object : Planner {
+        override suspend fun plan(goal: AgentGoal, registry: ToolRegistry): PlanningResult =
+            PlanningResult.NoPlan
     }
 
     @Test
@@ -259,5 +297,74 @@ class RouteCommandUseCaseTest {
 
         // handle() → matcher.match() exactly once: the router wraps, never double-runs the rule path.
         assertEquals(1, matcher.callCount)
+    }
+
+    // --- Task 11: the cut into the command pipeline ---------------------------------------------
+
+    /**
+     * The one outcome A0 hands to the agent: a goal FastPath **decided** (it understood "open X") but
+     * could not **achieve** (no such app). Not "any Message", not "anything that did not execute".
+     */
+    @Test
+    fun `a command for an app that is not installed becomes an agent session`() = runTest {
+        driveAppLaunch()
+        appsRepo.appsToReturn = emptyList()
+
+        val outcome = useCase().route("открой убер")
+
+        assertTrue("expected an agent session, was $outcome", outcome is CommandOutcome.AgentSessionStarted)
+    }
+
+    /**
+     * The branch sits ABOVE the local-only check on purpose, and that is not a hole in `DOC-ADL-3`:
+     * the A0 planner is deterministic and offline, so the model planner is still never consulted and
+     * nothing leaves the device.
+     */
+    @Test
+    fun `the agent runs in local-only mode and the model planner is still never consulted`() = runTest {
+        driveAppLaunch()
+        appsRepo.appsToReturn = emptyList()
+
+        val outcome = useCase(localOnly = true).route("открой убер")
+
+        assertTrue("expected an agent session, was $outcome", outcome is CommandOutcome.AgentSessionStarted)
+        assertEquals(0, planner.planCallCount)
+    }
+
+    @Test
+    fun `the agent runs offline and with no provider configured, and nothing is transmitted`() = runTest {
+        driveAppLaunch()
+        appsRepo.appsToReturn = emptyList()
+        connectivity.online = false
+        provider.clearActiveConfig()
+
+        val outcome = useCase().route("открой убер")
+
+        assertTrue("expected an agent session, was $outcome", outcome is CommandOutcome.AgentSessionStarted)
+        assertEquals(0, planner.planCallCount)
+    }
+
+    /** Fails open: no plan, no session, and the FastPath outcome is returned byte-for-byte. */
+    @Test
+    fun `when the agent produces no plan the FastPath outcome is returned byte-for-byte`() = runTest {
+        driveAppLaunch()
+        appsRepo.appsToReturn = emptyList()
+
+        val outcome = useCase(agentPlanner = neverPlans()).route("открой убер")
+
+        assertEquals(CommandOutcome.Message(CommandMessage.NoAppFound("убер")), outcome)
+        assertTrue("nothing may be persisted when there is no plan", agentStore.saved.isEmpty())
+    }
+
+    /** An outcome FastPath decided AND achieved is not the agent's business. */
+    @Test
+    fun `an outcome FastPath decided and achieved is untouched by the agent`() = runTest {
+        driveAppLaunch()
+        appsRepo.appsToReturn = listOf(InstalledApp("com.uber", "убер", "Main"))
+
+        val outcome = useCase().route("открой убер")
+
+        assertEquals(CommandOutcome.Executed, outcome)
+        assertTrue("no session may be started for an achieved goal", agentStore.saved.isEmpty())
     }
 }

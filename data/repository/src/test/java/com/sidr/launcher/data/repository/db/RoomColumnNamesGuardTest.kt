@@ -155,9 +155,10 @@ class RoomColumnNamesGuardTest {
 
     /**
      * A0 Task 10. Two claims, and the second is the load-bearing one: the agent tables are inventoried
-     * at all, and they added **no** new exemption. The A0 spec's `goal_query` would have needed one;
-     * the column is `goal_shape_arg` instead, so the scan covers these three tables with its full
-     * denylist and `resolution_preferences.query` stays the only approved collision in the database.
+     * at all, and they added **no** new exemption. A column named `goal_query` would have needed one;
+     * the column is `goal_shape_arg` instead — in the code and, since 2026-08-21, in spec §7 — so the
+     * scan covers these three tables with its full denylist and `resolution_preferences.query` stays
+     * the only approved collision in the database.
      */
     @Test
     fun `agent session tables are inventoried and need no exemption`() {

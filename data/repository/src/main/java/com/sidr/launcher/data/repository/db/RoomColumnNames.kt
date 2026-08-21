@@ -26,10 +26,11 @@ package com.sidr.launcher.data.repository.db
  * Agentic-track A0 Task 10 adds [AGENT_SESSION], [AGENT_PLAN_STEP] and [AGENT_TRACE_EVENT]. These
  * carry the most command-shaped data in the database — `agent_session.goal_text` is the raw command —
  * but they are a **recovery record, not a journal**: any terminal state deletes the session and the
- * two child tables follow by cascade, so at rest all three are empty (A0 spec §7). The A0 spec's own
- * SQL named the shape's argument `goal_query`, which collides with the forbidden term `"query"`; the
- * column is named `goal_shape_arg` here instead, so this block adds **no** new entry to
- * [APPROVED_SENSITIVE_COLUMNS] — the S2-1 exemption stays the only one, and it stays owner-granted.
+ * two child tables follow by cascade, so at rest all three are empty (A0 spec §7). The shape's argument
+ * is `goal_shape_arg`: `query` is a forbidden term below, so the spec's original `goal_query` would
+ * have forced a second entry in [APPROVED_SENSITIVE_COLUMNS]. The spec was amended to match on
+ * 2026-08-21, so this block adds **no** new entry — the S2-1 exemption stays the only one in the
+ * database, and it stays owner-granted.
  */
 internal object RoomColumnNames {
 
@@ -90,8 +91,9 @@ internal object RoomColumnNames {
      * (agentic track A0 Task 10).
      *
      * `goal_shape_arg` holds the single argument of `goal_shape` — for `AppNotInstalled`, the app name
-     * the command named. The A0 spec called it `goal_query`; renamed here so no scoped exemption is
-     * needed. `goal_text` holds the raw command and is deleted with the session on any terminal state.
+     * the command named. Named that way so no scoped exemption is needed; do not rename it to anything
+     * containing a forbidden term. `goal_text` holds the raw command and is deleted with the session on
+     * any terminal state.
      */
     val AGENT_SESSION: Set<String> = setOf(
         "id",

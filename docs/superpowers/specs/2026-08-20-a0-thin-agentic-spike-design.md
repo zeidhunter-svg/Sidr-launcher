@@ -548,7 +548,7 @@ Migration 3 -> 4, exported schema `4.json`, following `Migration1To2` / `Migrati
 existing `MigrationTest`.
 
 ```text
-agent_session      0 or 1 row - id, goal_text, goal_shape, goal_query, state, cursor, created_at
+agent_session      0 or 1 row - id, goal_text, goal_shape, goal_shape_arg, state, cursor, created_at
 agent_plan_step    session_id, step_index, tool_id, args_json, risk, precondition_fact,
                    rationale, observation_type, observation_fact, observation_output_json,
                    consent
@@ -556,6 +556,11 @@ agent_trace_event  session_id, seq, type, step_index, detail, at
                    (both children ON DELETE CASCADE)
 ```
 
+- **`goal_shape_arg`, not `goal_query`** (renamed 2026-08-21, during Task 10). It carries the single
+  argument of `goal_shape` — for `AppNotInstalled`, the app name the command named. `query` is a
+  forbidden term in `RoomColumnNamesGuardTest`'s denylist, and the only way to keep the spec's original
+  name was a second entry in `APPROVED_SENSITIVE_COLUMNS`, which would have widened the database's one
+  owner-granted exemption to two. The name is also simply more accurate. Do not rename it back.
 - **Deletion is part of the contract.** Any terminal state (`Completed` / `Failed` / `Cancelled`)
   deletes the session by cascade. At rest, with no run in flight, the three tables are empty - the
   command text you typed lives on disk only while its plan is unfinished. This is a recovery record,

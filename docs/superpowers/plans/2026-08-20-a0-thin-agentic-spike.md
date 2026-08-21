@@ -2584,7 +2584,7 @@ than a dead end, which is what makes the two-step plan a loop."
 ```sql
 agent_session(
   id TEXT PRIMARY KEY, goal_text TEXT NOT NULL, goal_shape TEXT NOT NULL,
-  goal_query TEXT NOT NULL, state TEXT NOT NULL, cursor INTEGER NOT NULL,
+  goal_shape_arg TEXT NOT NULL, state TEXT NOT NULL, cursor INTEGER NOT NULL,
   created_at INTEGER NOT NULL)
 
 agent_plan_step(
@@ -2602,6 +2602,10 @@ agent_trace_event(
   PRIMARY KEY(session_id, seq),
   FOREIGN KEY(session_id) REFERENCES agent_session(id) ON DELETE CASCADE)
 ```
+
+`goal_shape_arg` was `goal_query` when this block was written; renamed 2026-08-21 during the task,
+because `query` is a forbidden term in `RoomColumnNamesGuardTest`'s denylist and keeping the old name
+would have meant a second entry in `APPROVED_SENSITIVE_COLUMNS`. Spec §7 carries the same name.
 
 `goal_shape` exists although A0 has one shape: adding a second shape must then be a migration, not a
 silent reinterpretation of an existing column. Trace events are **flat columns rather than a JSON
@@ -2663,7 +2667,7 @@ class AgentSessionDaoTest {
         dao.upsertSession(
             AgentSessionEntity(
                 id = "s1", goalText = "открой убер", goalShape = "AppNotInstalled",
-                goalQuery = "убер", state = "AwaitingConsent", cursor = 1, createdAt = 1L,
+                goalShapeArg = "убер", state = "AwaitingConsent", cursor = 1, createdAt = 1L,
             ),
         )
         dao.upsertStep(

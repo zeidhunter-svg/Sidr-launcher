@@ -53,10 +53,23 @@ import kotlinx.coroutines.flow.first
  * FastPath *produced* — a decided [CommandMessage.NoAppFound] — and not on a system state, whereas
  * steps 3, 5 and 6 are each keyed on one of the three states. A command that reaches step 2 was never
  * going to reach any of them: `NoAppFound` is a decided outcome, so `isUndecided()` is false and
- * `orHonestly` would have returned it verbatim at step 3 anyway. And `DOC-ADL-3` is untouched by the
- * ordering: A0's [com.sidr.launcher.domain.agent.Planner] is deterministic and offline, so this
- * branch consults no model and transmits nothing, which is exactly what the signed local-only copy
- * promises. Should that ever stop being true, this branch has to move below step 3, not be excused.
+ * `orHonestly` would have returned it verbatim at step 3 anyway.
+ *
+ * **What the ordering DOES break, stated rather than glossed.** `DOC-ADL-3` currently reads "…and
+ * every outcome FastPath **decided** is returned byte-for-byte". `NoAppFound` is an outcome FastPath
+ * decided, and under `localOnlyMode` this branch replaces it with
+ * [CommandOutcome.AgentSessionStarted]. So that last clause is now false, and deliberately: spec §8.1
+ * narrows the rule to what it always meant — **no model is consulted and nothing leaves the device** —
+ * because deterministic plan replay is part of the local path and may legitimately change an outcome
+ * FastPath decided. The amendment is A0 Task 14 Step 1 and **has not landed yet**: until it does, the
+ * matrix carries the un-amended wording while `RouteCommandUseCaseTest` — the very test that rule
+ * names as its proof — contains `the agent runs in local-only mode…`, which proves the opposite.
+ * Do not read this comment as evidence the amendment is done.
+ *
+ * What the ordering does *not* break is the part that matters: A0's
+ * [com.sidr.launcher.domain.agent.Planner] is deterministic and offline, so this branch consults no
+ * model and transmits nothing, which is exactly what the signed local-only copy promises. Should that
+ * ever stop being true, this branch has to move below step 3, not be excused.
  */
 class RouteCommandUseCase(
     private val handleUserCommand: HandleUserCommandUseCase,
@@ -76,8 +89,9 @@ class RouteCommandUseCase(
         // app. This is the one outcome A0 hands to the agent — not "any Message", not "anything that
         // did not execute". The branch sits above the localOnlyMode check on purpose: the planner
         // here is deterministic and offline, so it consults no model and transmits nothing, which is
-        // what the amended DOC-ADL-3 requires and what the signed local-only copy promises ("nothing
-        // leaves this device"). Widening this list is a separate decision for a later block.
+        // what the signed local-only copy promises ("nothing leaves this device"). It DOES falsify
+        // DOC-ADL-3's byte-for-byte clause, which Task 14 Step 1 narrows per spec §8.1 — see the
+        // class KDoc. Widening this list is a separate decision for a later block.
         val message = (ruleOutcome as? CommandOutcome.Message)?.message
         if (message is CommandMessage.NoAppFound) {
             val goal = AgentGoal(

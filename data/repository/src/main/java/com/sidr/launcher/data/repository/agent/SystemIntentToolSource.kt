@@ -59,9 +59,16 @@ class SystemIntentToolSource @Inject constructor(
         )
     }
 
-    private companion object {
+    internal companion object {
+        /**
+         * The one spelling of `launch_app`'s output key. [SystemIntentToolExecutor] emits under this
+         * same constant, so the declaration and the value can never disagree on the name — only
+         * `SystemIntentToolSourceTest` states the literal, and it does so as the wire contract.
+         */
+        internal const val RESOLVED_QUERY = "resolved_query"
+
         val RESOLVED_QUERY_OUTPUT = listOf(
-            ActionArg("resolved_query", description = "The query this launch resolved against"),
+            ActionArg(RESOLVED_QUERY, description = "The query this launch resolved against"),
         )
     }
 }

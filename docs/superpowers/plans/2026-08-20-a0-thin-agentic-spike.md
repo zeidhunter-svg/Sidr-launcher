@@ -2226,6 +2226,15 @@ nothing accumulates at rest."
 > **every** result — including `Effected` — because a tool's outputs are a property of the tool, not of
 > the branch it happened to take. A schema that only sometimes holds is not a schema.
 
+> ✅ **Done — `7baa7ae`, amended by a follow-up commit after review.** The review found the fail-closed
+> test vacuous (it handed an unregistered id no `query`, so the blank-query guard answered first and the
+> `when (invocation.id)` branch was never reached — replacing that branch with a fall-through to
+> `LaunchApp` left the suite green); `resolved_query` reporting the raw argument rather than the trimmed
+> value the launch resolved against; and nothing tying `outputSchema` to what the adapter returns
+> (deleting the declaration left every executor test green). The follow-up splits the guard into two
+> tests, normalises the query once so one value feeds both the action and the output, and adds
+> `SystemIntentToolContractTest`. Every fix is mutation-verified in both directions.
+
 **Files:**
 - Create: `data/repository/src/main/java/com/sidr/launcher/data/repository/agent/SystemIntentToolSource.kt`
 - Create: `data/repository/src/main/java/com/sidr/launcher/data/repository/agent/SystemIntentToolExecutor.kt`
@@ -2242,7 +2251,7 @@ nothing accumulates at rest."
 mapping `ActionDescriptor -> ToolDescriptor` is thirty lines in one adapter, so A1' can add sources
 next to it *or* delete it and grow `ActionCatalog` in place. Neither bank is made cheaper by A0.
 
-- [ ] **Step 1: Write the failing source test**
+- [x] **Step 1: Write the failing source test**
 
 ```kotlin
 package com.sidr.launcher.data.repository.agent
@@ -2296,7 +2305,7 @@ class SystemIntentToolSourceTest {
 }
 ```
 
-- [ ] **Step 2: Write the failing executor test**
+- [x] **Step 2: Write the failing executor test**
 
 ```kotlin
 package com.sidr.launcher.data.repository.agent
@@ -2395,7 +2404,7 @@ Read `FakeInstalledAppsRepository`, `FakeActionExecutor` and `InstalledApp` befo
 match their real property names; the fields above (`apps`, `executed`, `nextFailure`) are the shape to
 look for, not a guarantee of the exact names.
 
-- [ ] **Step 3: Run both to verify they fail**
+- [x] **Step 3: Run both to verify they fail**
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
@@ -2404,7 +2413,7 @@ look for, not a guarantee of the exact names.
 
 Expected: FAIL — neither class exists.
 
-- [ ] **Step 4: Write the source**
+- [x] **Step 4: Write the source**
 
 ```kotlin
 package com.sidr.launcher.data.repository.agent
@@ -2458,7 +2467,7 @@ class SystemIntentToolSource @Inject constructor(
 }
 ```
 
-- [ ] **Step 5: Write the executor**
+- [x] **Step 5: Write the executor**
 
 ```kotlin
 package com.sidr.launcher.data.repository.agent
@@ -2522,7 +2531,7 @@ class SystemIntentToolExecutor @Inject constructor(
 }
 ```
 
-- [ ] **Step 6: Run both to verify they pass**
+- [x] **Step 6: Run both to verify they pass**
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
@@ -2531,7 +2540,7 @@ class SystemIntentToolExecutor @Inject constructor(
 
 Expected: PASS, 11 tests.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add data/repository/src/main/java/com/sidr/launcher/data/repository/agent/ \

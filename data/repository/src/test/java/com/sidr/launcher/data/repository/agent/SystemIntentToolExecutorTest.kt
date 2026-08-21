@@ -83,12 +83,43 @@ class SystemIntentToolExecutorTest {
         assertEquals(ToolResult.Effected(ToolOutput()), result)
     }
 
+    /**
+     * The two fail-closed guards get one test each, and each is handed arguments that make it the
+     * **only** guard standing between the invocation and the action path. The earlier single test gave
+     * an unregistered id no `query` at all, so the blank-query check answered first and the
+     * `when (invocation.id)` branch it was named for was never reached — replacing that branch with a
+     * fall-through to `LaunchApp` left the whole suite green.
+     */
     @Test
-    fun `an unmappable tool id fails closed and never reaches the action path`() = runTest {
-        val result = executor().invoke(ResolvedInvocation(ToolId("nope")))
+    fun `an unregistered tool id fails closed and never reaches the action path`() = runTest {
+        apps.appsToReturn = listOf(InstalledApp(packageName = "com.uber", label = "убер", activityName = "Main"))
+
+        val result = executor().invoke(ResolvedInvocation(ToolId("web_search"), mapOf("query" to "убер")))
 
         assertTrue(result is ToolResult.Failed)
         assertEquals(0, actionExecutor.executedActions.size)
+    }
+
+    @Test
+    fun `a blank query fails closed and never reaches the action path`() = runTest {
+        val result = executor().invoke(ResolvedInvocation(ToolIds.LAUNCH_APP, mapOf("query" to "   ")))
+
+        assertTrue(result is ToolResult.Failed)
+        assertEquals(0, actionExecutor.executedActions.size)
+    }
+
+    /**
+     * `resolved_query` is what the launch **resolved against**, not the argument as it arrived: the
+     * action is built from the trimmed value, so a later step binding to this output searches for
+     * exactly the string that failed to match, character for character.
+     */
+    @Test
+    fun `the reported resolved query is the value the launch actually resolved against`() = runTest {
+        apps.appsToReturn = listOf(InstalledApp(packageName = "com.uber", label = "убер", activityName = "Main"))
+
+        val result = executor().invoke(ResolvedInvocation(ToolIds.LAUNCH_APP, mapOf("query" to "  убер  ")))
+
+        assertEquals(ToolResult.Effected(ToolOutput(mapOf("resolved_query" to "убер"))), result)
     }
 
     @Test

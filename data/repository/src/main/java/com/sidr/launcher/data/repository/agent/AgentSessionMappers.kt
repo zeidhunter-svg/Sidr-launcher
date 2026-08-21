@@ -216,6 +216,17 @@ internal object AgentSessionMappers {
         steps: List<AgentPlanStepEntity>,
         trace: List<AgentTraceEventEntity>,
     ): AgentSession {
+        // A persisted plan always has at least one step: `TemplatePlanner` returns either two steps or
+        // `NoPlan`, and `StartAgentSessionUseCase` writes nothing for `NoPlan`. So zero steps under a
+        // live session row is not an empty plan — it is the two tables disagreeing, which is what a
+        // `delete` landing between two reads looks like. Refusing it here is the load-bearing half of
+        // the pair; `AgentSessionDao.loadActive`'s transaction is the other. Without this an empty
+        // `ExecutionPlan` is constructible, `AgentExecutor.prepare` finds no step at the cursor, and
+        // the run reports `Completed` for a goal on which nothing ran and nothing was traced.
+        if (steps.isEmpty()) {
+            throw CorruptAgentRowException("agent session \"${session.id}\" has a row but no steps")
+        }
+
         val observations = steps.mapNotNull { row -> readObservation(row)?.let { row.stepIndex to it } }.toMap()
         val consents = steps.mapNotNull { row -> row.consent?.let { row.stepIndex to it } }.toMap()
 

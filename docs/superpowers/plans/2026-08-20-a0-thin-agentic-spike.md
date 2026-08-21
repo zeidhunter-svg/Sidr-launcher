@@ -2619,7 +2619,7 @@ variant, and restores as `CommandFailure.Generic`. In A0 that never round-trips 
 the session, which is then deleted. If A4' starts keeping failed sessions, this column must widen.
 Write that as a comment on the mapper, not only here.
 
-- [ ] **Step 1: Write the failing DAO test**
+- [x] **Step 1: Write the failing DAO test**
 
 ```kotlin
 package com.sidr.launcher.data.repository.db
@@ -2712,7 +2712,7 @@ class AgentSessionDaoTest {
 }
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
@@ -2721,7 +2721,7 @@ class AgentSessionDaoTest {
 
 Expected: FAIL — the entities, the DAO and `agentSessionDao()` do not exist.
 
-- [ ] **Step 3: Write the three entities**
+- [x] **Step 3: Write the three entities**
 
 Follow `AliasEntity` exactly: `@Entity(tableName = ..., primaryKeys = [...])` with `@ColumnInfo(name =
 "snake_case")` on every field. Declare the two children's foreign keys:
@@ -2755,7 +2755,7 @@ data class AgentPlanStepEntity(
 
 `AgentSessionEntity` and `AgentTraceEventEntity` follow the SQL above with the same conventions.
 
-- [ ] **Step 4: Write the DAO**
+- [x] **Step 4: Write the DAO**
 
 ```kotlin
 @Dao
@@ -2803,7 +2803,7 @@ interface AgentSessionDao {
 }
 ```
 
-- [ ] **Step 5: Register the entities, bump the version, write the migration**
+- [x] **Step 5: Register the entities, bump the version, write the migration**
 
 In `SidrDatabase.kt`: add the three entities, `version = 4`, and `abstract fun agentSessionDao(): AgentSessionDao`.
 Update the KDoc the same way versions 2 and 3 were documented.
@@ -2813,7 +2813,7 @@ matching the SQL above **exactly** — Room compares the migrated schema against
 fails loudly on any drift. Register it wherever `Migration1To2` and `Migration2To3` are passed to the
 Room builder.
 
-- [ ] **Step 6: Run the DAO test to verify it passes and commit the golden schema**
+- [x] **Step 6: Run the DAO test to verify it passes and commit the golden schema**
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
@@ -2824,7 +2824,7 @@ git status --short data/repository/schemas/
 Expected: PASS, 4 tests, and `data/repository/schemas/4.json` appears as a new file. Commit it —
 `1.json`, `2.json` and `3.json` stay frozen.
 
-- [ ] **Step 7: Write the store and its mappers**
+- [x] **Step 7: Write the store and its mappers**
 
 `RoomAgentSessionStore` implements the four `AgentSessionStore` methods. `save` writes the session row,
 all step rows (including observations and consents) and the trace rows in **one** `@Transaction`, so a
@@ -2847,7 +2847,7 @@ Mapper rules, all as explicit `when` expressions in both directions — no refle
 - an unknown string on the way **in** returns `OperationResult.Failure`, never a guessed default. A
   corrupt row must not silently become a runnable plan.
 
-- [ ] **Step 8: Write the store round-trip test**
+- [x] **Step 8: Write the store round-trip test**
 
 `RoomAgentSessionStoreTest` (Robolectric, same setup as the DAO test):
 
@@ -2858,13 +2858,13 @@ Mapper rules, all as explicit `when` expressions in both directions — no refle
 - a row with an unrecognised `state` string yields `OperationResult.Failure`, not a crash and not a
   guessed state.
 
-- [ ] **Step 9: Extend the instrumented migration test**
+- [x] **Step 9: Extend the instrumented migration test**
 
 Add a 3 -> 4 case to `data/repository/src/androidTest/.../MigrationTest.kt` following the existing
 1 -> 2 and 2 -> 3 cases. This one needs a device or emulator and is **not** part of the unit gate; run
 it when one is available and say so plainly in the ADR if it has not been run.
 
-- [ ] **Step 10: Run the module suite**
+- [x] **Step 10: Run the module suite**
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
@@ -2873,7 +2873,7 @@ it when one is available and say so plainly in the ADR if it has not been run.
 
 Expected: PASS, including every pre-existing test in the module.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add data/repository/src/main/java/com/sidr/launcher/data/repository/db/ \

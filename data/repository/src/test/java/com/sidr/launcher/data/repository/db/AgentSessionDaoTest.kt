@@ -170,10 +170,24 @@ class AgentSessionDaoTest {
     /**
      * "Produced nothing" and "produced an empty map" are different facts, and the column is what keeps
      * them different — asserted here, at the SQL level, rather than through the mapper's default.
+     *
+     * Both halves are asserted on the **same** step, before and after it runs. Asserting the NULL half
+     * on a step that was never seeded with an output would prove nothing, and asserting it on a
+     * different column would prove something else: an earlier revision of this test read `consent`
+     * under a message about output, and a mapper writing `"{}"` where it should write `null` went
+     * straight past it.
      */
     @Test
     fun `a step with no output stores NULL and an empty output stores an empty object`() = runTest {
         seedAwaitingConsent()
+
+        // Step 1 has not run: NULL is how the column says "produced nothing".
+        assertNull(
+            "a step that has not run produced nothing, and the column must say so with NULL",
+            dao.stepsFor("s1").first { it.stepIndex == 1 }.observationOutputJson,
+        )
+
+        // The same step, now run, having produced an empty map — a different fact, a different value.
         dao.upsertSteps(
             listOf(
                 AgentPlanStepEntity(
@@ -188,12 +202,11 @@ class AgentSessionDaoTest {
         )
 
         val steps = dao.stepsFor("s1")
-        assertNull(
-            "a step that has not run yet produced nothing",
-            steps.first { it.stepIndex == 0 }.consent,
-        )
         assertEquals("{}", steps.first { it.stepIndex == 1 }.observationOutputJson)
-        assertNotNull(steps.first { it.stepIndex == 0 }.observationOutputJson)
+        assertNotNull(
+            "the step that did produce values must still carry them",
+            steps.first { it.stepIndex == 0 }.observationOutputJson,
+        )
     }
 
     @Test

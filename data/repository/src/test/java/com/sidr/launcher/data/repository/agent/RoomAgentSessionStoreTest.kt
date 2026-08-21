@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.data.repository.db.SidrDatabase
 import com.sidr.launcher.data.repository.db.dao.AgentSessionDao
+import com.sidr.launcher.data.repository.db.entity.AgentSessionEntity
 import com.sidr.launcher.data.repository.db.entity.AgentTraceEventEntity
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.AgentSession
@@ -42,9 +43,12 @@ import org.robolectric.annotation.Config
  * back as is the plan that was written, and a row that is not readable is a failure rather than a
  * guess.
  *
- * The plan under test is built by the **real** [TemplatePlanner] over the real A0 tool descriptors, so
- * what round-trips here is the production plan shape — a `Literal` in step 0 and a `FromStep` binding
- * in step 1 — and not a hand-written stand-in that might be easier to persist than the real thing.
+ * The plan under test is built by the **real** [TemplatePlanner], over `FakeToolRegistry.withA0Tools()`
+ * — which mirrors what `SystemIntentToolSource` projects, and is not pinned to it by any test. So what
+ * round-trips here is the production plan *shape* — a `Literal` in step 0 and a `FromStep` binding in
+ * step 1 — rather than a hand-written stand-in that might be easier to persist than the real thing. The
+ * descriptors themselves being a mirror does not weaken that: the F6 assertion below is about the
+ * reference surviving as a reference, which holds whatever the arguments are called.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE)
@@ -239,6 +243,31 @@ class RoomAgentSessionStoreTest {
 
         val trace = dao.traceFor("s1")
         assertEquals(listOf(100L, 999L), trace.map { it.at })
+    }
+
+    /**
+     * A session row whose steps are gone is the two tables disagreeing, and it must fail closed.
+     *
+     * This is what a `delete` landing between two of the reads used to produce, back when `active()`
+     * issued three separate queries: an empty `ExecutionPlan` is constructible, so it assembled into a
+     * well-formed `Success` whose plan was empty — and `AgentExecutor.prepare` then finds no step at
+     * the cursor and ends the session `Completed`. The run would report success for a goal on which
+     * nothing executed and nothing was traced. `loadActive`'s transaction closes the race; this test
+     * covers the refusal, which is the half that can actually be checked by breaking it.
+     */
+    @Test
+    fun `a session row without its steps is corrupt, not an empty plan`() = runTest {
+        dao.upsertSession(
+            AgentSessionEntity(
+                id = "s1", goalText = "открой убер", goalShape = "AppNotInstalled",
+                goalShapeArg = "убер", state = "Running", cursor = 1, createdAt = 1L,
+            ),
+        )
+
+        assertEquals(
+            OperationResult.Failure(OperationError.UnknownError("db_agent_session_corrupt")),
+            store.active(),
+        )
     }
 
     /** The store holds one session. Enforced on the way in, not assumed by `activeSession()`'s LIMIT 1. */

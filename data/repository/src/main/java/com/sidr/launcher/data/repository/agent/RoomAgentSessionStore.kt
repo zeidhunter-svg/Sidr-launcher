@@ -19,7 +19,8 @@ import javax.inject.Inject
  *  - **one session, or none.** [save] writes the row, its steps and its trace in a single
  *    transaction and removes any other session id in the same one, so "0 or 1 row" is enforced on the
  *    way in. [delete] removes the session row only; the two child tables follow by cascade, which is
- *    what makes "at rest the three tables are empty" true rather than aspirational.
+ *    what makes "at rest the three tables are empty" true rather than aspirational. [active] reads all
+ *    three in one transaction too — a writer that is atomic and a reader that is not still tears.
  *  - **consent is a conditional `UPDATE`.** [recordConsentIfPending] reports whether it applied, and
  *    two racing taps cannot both be told yes. Whole-object writes were avoided deliberately: that
  *    pattern already cost this project the `autoHideNavBar` bug (DS-11), which only surfaced on device.
@@ -45,8 +46,8 @@ class RoomAgentSessionStore(
     ) : this(dao, ioDispatcher, System::currentTimeMillis)
 
     override suspend fun active(): OperationResult<AgentSession?> = guarded("db_agent_session_read_failed") {
-        val row = dao.activeSession() ?: return@guarded null
-        AgentSessionMappers.toDomain(row, dao.stepsFor(row.id), dao.traceFor(row.id))
+        val rows = dao.loadActive() ?: return@guarded null
+        AgentSessionMappers.toDomain(rows.session, rows.steps, rows.trace)
     }
 
     override suspend fun save(session: AgentSession): OperationResult<Unit> =

@@ -10,8 +10,18 @@ import com.sidr.launcher.data.repository.db.entity.AgentSessionEntity
 import com.sidr.launcher.data.repository.db.entity.AgentTraceEventEntity
 
 /**
+ * The three tables of one session, read together. A holder rather than three call sites, because the
+ * point of it is that the three reads happened inside one transaction — see [AgentSessionDao.loadActive].
+ */
+data class AgentSessionRows(
+    val session: AgentSessionEntity,
+    val steps: List<AgentPlanStepEntity>,
+    val trace: List<AgentTraceEventEntity>,
+)
+
+/**
  * SQL for the agent session (A0 Task 10). An abstract class rather than an interface because
- * [replaceSession] needs a body inside `@Transaction`.
+ * [replaceSession] and [loadActive] need a body inside `@Transaction`.
  */
 @Dao
 abstract class AgentSessionDao {
@@ -74,6 +84,26 @@ abstract class AgentSessionDao {
         """,
     )
     abstract suspend fun recordConsentIfPending(sessionId: String, stepIndex: Int, granted: Boolean): Int
+
+    /**
+     * The whole session — row, steps and trace — in **one** transaction, and that is the whole reason
+     * it exists rather than three calls at the call site.
+     *
+     * [replaceSession] is transactional, so a writer is atomic; three separate reads are not, and each
+     * one sees whatever is committed at the moment it runs. A `delete` landing between them (the cancel
+     * path is a single `DELETE` plus cascade) returns a session row with **no** steps — and an empty
+     * `ExecutionPlan` is constructible, so that assembles into a perfectly well-formed session whose
+     * plan is empty. `AgentExecutor.prepare` then finds no step at the cursor and ends it `Completed`:
+     * the run reports success for a goal on which nothing executed and nothing was traced.
+     *
+     * The transaction is the belt. The braces are in the mapper, which refuses a session with no steps
+     * outright — a persisted plan always has at least one, so zero means the tables disagree.
+     */
+    @Transaction
+    open suspend fun loadActive(): AgentSessionRows? {
+        val session = activeSession() ?: return null
+        return AgentSessionRows(session, stepsFor(session.id), traceFor(session.id))
+    }
 
     /**
      * The whole session — row, steps and trace — in **one** transaction, so a crash cannot leave a

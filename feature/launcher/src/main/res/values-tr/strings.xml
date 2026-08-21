@@ -80,4 +80,21 @@
     <string name="launcher_understanding_needs_provider">Henüz bir yapay zeka sağlayıcısı ayarlanmadı.</string>
     <string name="launcher_understanding_provider_action">Sağlayıcıyı ayarla</string>
     <string name="launcher_understanding_needs_network">Bu komutu anlamak için ağ bağlantısı gerekiyor.</string>
+
+    <!-- Этап 4 / A0 Task 12 — ajan yürütme yüzeyi. Class A (sıradan arayüz metni). -->
+    <string name="launcher_agent_title">Ajan</string>
+    <string name="launcher_agent_running_title">Çalışıyor</string>
+    <string name="launcher_agent_step_launch">%1$s uygulamasını aç</string>
+    <string name="launcher_agent_step_store">%1$s uygulamasını uygulama mağazasında bul</string>
+    <string name="launcher_agent_gate_title">Bu adımı onaylayın</string>
+    <string name="launcher_agent_gate_consequence">Sidr sırada şunu yapacak: %1$s. Siz onaylamadan hiçbir şey çalışmaz.</string>
+    <string name="launcher_agent_gate_confirm">Onayla</string>
+    <string name="launcher_agent_cancel">Kapat</string>
+    <string name="launcher_agent_paused_title">Plan duraklatıldı</string>
+    <string name="launcher_agent_paused_body">Bu plan bitmeden ayrıldınız. Devam ederseniz Sidr kaldığı yerden sürdürür; kapatırsanız başka hiçbir şey çalışmaz.</string>
+    <string name="launcher_agent_paused_continue">Devam et</string>
+    <string name="launcher_agent_completed_title">Plan tamamlandı</string>
+    <string name="launcher_agent_failed_title">Bu plan tamamlanamadı</string>
+    <string name="launcher_agent_blocked_title">Plan durduruldu</string>
+    <string name="launcher_agent_blocked_body">Sidr bu planı durdurdu, çünkü artık güvenle sürdüremiyordu. Başka hiçbir şey çalışmayacak.</string>
 </resources>

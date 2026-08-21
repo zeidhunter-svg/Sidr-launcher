@@ -117,4 +117,26 @@
     <string name="launcher_understanding_needs_provider">No AI provider is set up yet.</string>
     <string name="launcher_understanding_provider_action">Set up provider</string>
     <string name="launcher_understanding_needs_network">Understanding this command needs a network connection.</string>
+
+    <!-- Этап 4 / A0 Task 12 — the agent execution surface. Class A (ordinary UI), NOT the
+         owner-signed Class B set in strings_locked.xml: the step gate is a risk confirmation, the
+         same class as the AIL-5 confirm card, whose copy has always been Class A. Should the owner
+         want the consent line owner-reviewed, that is a separate decision. -->
+    <string name="launcher_agent_title">Agent</string>
+    <string name="launcher_agent_running_title">Working on it</string>
+    <string name="launcher_agent_step_launch">Open %1$s</string>
+    <string name="launcher_agent_step_store">Find %1$s in the app store</string>
+    <string name="launcher_agent_gate_title">Confirm this step</string>
+    <string name="launcher_agent_gate_consequence">Sidr will do this next: %1$s. Nothing runs until you confirm.</string>
+    <string name="launcher_agent_gate_confirm">Confirm</string>
+    <string name="launcher_agent_cancel">Dismiss</string>
+    <!-- Paused is not an error: it says what happened (you left mid-plan) and what is on offer
+         (the rest of it), plus what dismissing costs. -->
+    <string name="launcher_agent_paused_title">Plan paused</string>
+    <string name="launcher_agent_paused_body">You left before this plan finished. Continue and Sidr picks it up where it stopped; dismiss it and nothing further runs.</string>
+    <string name="launcher_agent_paused_continue">Continue</string>
+    <string name="launcher_agent_completed_title">Plan complete</string>
+    <string name="launcher_agent_failed_title">This plan could not finish</string>
+    <string name="launcher_agent_blocked_title">Plan stopped</string>
+    <string name="launcher_agent_blocked_body">Sidr stopped this plan because it could no longer follow it safely. Nothing further will run.</string>
 </resources>

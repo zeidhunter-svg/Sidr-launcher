@@ -5,6 +5,9 @@ import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.core.testing.FakeActionCatalog
+import com.sidr.launcher.core.testing.FakeAgentSessionStore
+import com.sidr.launcher.core.testing.FakeToolExecutor
+import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.configuredProvider
 import com.sidr.launcher.core.testing.FakeAliasStore
@@ -17,6 +20,15 @@ import com.sidr.launcher.core.testing.FakePrayerScheduleCache
 import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
 import androidx.lifecycle.SavedStateHandle
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
+import com.sidr.launcher.domain.agent.AgentExecutor
+import com.sidr.launcher.domain.agent.AgentSessionId
+import com.sidr.launcher.domain.agent.AgentSessionIdFactory
+import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
+import com.sidr.launcher.domain.agent.ResolveConsentUseCase
+import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
+import com.sidr.launcher.domain.agent.RuntimeBudget
+import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
+import com.sidr.launcher.domain.agent.TemplatePlanner
 import com.sidr.launcher.domain.memory.alias.Alias
 import com.sidr.launcher.domain.memory.alias.AliasTarget
 import com.sidr.launcher.domain.memory.alias.ResolvedCommandStep
@@ -149,6 +161,29 @@ class LauncherViewModelTest {
         recordingScope = CoroutineScope(testDispatcher + SupervisorJob()),
     )
 
+    // Task 11 / A0 made `startAgentSession` a required collaborator of RouteCommandUseCase, and Task
+    // 12 made the four agent ports required by LauncherViewModel. One in-memory fixture serves both,
+    // and it is deliberately INERT for every pre-existing test: the store starts empty, so
+    // `restoreOnStart()` finds nothing, and TemplatePlanner only produces a plan for a decided
+    // NoAppFound, which none of the fixtures below ever produces. Every existing assertion therefore
+    // still exercises what it was written to exercise.
+    private val fakeAgentStore = FakeAgentSessionStore()
+    private val agentIds = object : AgentSessionIdFactory {
+        private var n = 0
+        override fun newId() = AgentSessionId("test-agent-${++n}")
+    }
+    private val agentRegistry = FakeToolRegistry.withA0Tools()
+    private val startAgentSession = StartAgentSessionUseCase(
+        planner = TemplatePlanner(),
+        store = fakeAgentStore,
+        ids = agentIds,
+        registry = agentRegistry,
+    )
+    private val runAgentSession = RunAgentSessionUseCase(
+        executor = AgentExecutor(agentRegistry, FakeToolExecutor(emptyList()), RuntimeBudget.Default),
+        store = fakeAgentStore,
+    )
+
     // AIL-4: the VM routes through RouteCommandUseCase. Этап 4.0 re-pointed this fixture at the new
     // default posture — local-only OFF, a provider configured, online — with a planner that returns
     // NoPlan (FakeCommandPlanner's default). That combination still yields the FastPath outcome
@@ -163,6 +198,7 @@ class LauncherViewModelTest {
         featureFlagRepository = fakeFlagRepo,
         providerConfigRepository = configuredProvider(),
         connectivityChecker = FakeConnectivityChecker(),
+        startAgentSession = startAgentSession,
     )
 
     // AIL-5: executes a confirmed router-proposed action through the same resolver/executor path.
@@ -237,6 +273,10 @@ class LauncherViewModelTest {
         speechInputSource = fakeSpeech,
         connectivityChecker = connectivity,
         getPrayerContext = getPrayerContext,
+        runAgentSession = runAgentSession,
+        resolveAgentConsent = ResolveConsentUseCase(fakeAgentStore, runAgentSession),
+        cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
+        agentSessionStore = fakeAgentStore,
         ioDispatcher = testDispatcher,
         applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
         savedStateHandle = savedStateHandle,
@@ -273,6 +313,7 @@ class LauncherViewModelTest {
             // (fork F4), so the router fixture has to configure one to exercise the routed path.
             providerConfigRepository = configuredProvider(),
             connectivityChecker = FakeConnectivityChecker(initiallyOnline = online),
+            startAgentSession = startAgentSession,
         )
         return LauncherViewModel(
             installedAppsRepository = fakeRepo,
@@ -293,6 +334,10 @@ class LauncherViewModelTest {
             speechInputSource = fakeSpeech,
             connectivityChecker = FakeConnectivityChecker(),
             getPrayerContext = defaultGetPrayerContext,
+            runAgentSession = runAgentSession,
+            resolveAgentConsent = ResolveConsentUseCase(fakeAgentStore, runAgentSession),
+            cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
+            agentSessionStore = fakeAgentStore,
             ioDispatcher = testDispatcher,
             applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),
@@ -619,6 +664,10 @@ class LauncherViewModelTest {
             speechInputSource = fakeSpeech,
             connectivityChecker = FakeConnectivityChecker(),
             getPrayerContext = defaultGetPrayerContext,
+            runAgentSession = runAgentSession,
+            resolveAgentConsent = ResolveConsentUseCase(fakeAgentStore, runAgentSession),
+            cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
+            agentSessionStore = fakeAgentStore,
             ioDispatcher = testDispatcher,
             applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),
@@ -868,6 +917,10 @@ class LauncherViewModelTest {
             speechInputSource = fakeSpeech,
             connectivityChecker = FakeConnectivityChecker(),
             getPrayerContext = defaultGetPrayerContext,
+            runAgentSession = runAgentSession,
+            resolveAgentConsent = ResolveConsentUseCase(fakeAgentStore, runAgentSession),
+            cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
+            agentSessionStore = fakeAgentStore,
             ioDispatcher = testDispatcher,
             applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),

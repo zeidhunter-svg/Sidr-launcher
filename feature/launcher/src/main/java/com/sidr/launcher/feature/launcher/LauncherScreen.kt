@@ -54,6 +54,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sidr.launcher.feature.launcher.agent.AgentSessionSurface
 import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.navigation.Routes
@@ -114,6 +115,9 @@ fun LauncherScreen(
     val pendingRoutedAction by viewModel.pendingRoutedAction.collectAsStateWithLifecycle()
     val devConsoleOn by viewModel.devConsoleOn.collectAsStateWithLifecycle()
     val consoleLines by viewModel.consoleLines.collectAsStateWithLifecycle()
+    // Task 12 / A0: the agent runtime's session, if one is in flight or was restored at startup.
+    val agentSession by viewModel.agentSessionState.collectAsStateWithLifecycle()
+    val agentConfirming by viewModel.agentConfirming.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     // First-run nudge (Block X6): whether this launcher is already the system default HOME app.
@@ -244,6 +248,21 @@ fun LauncherScreen(
                     pending = pending,
                     onConfirm = onConfirm,
                     onCancel = viewModel::cancelRoutedAction,
+                )
+            }
+
+            // Task 12 / A0: the agent runtime's surface — one component per runtime state, rendered
+            // from what the session itself reported. It sits below the router's pending card because
+            // the two are mutually exclusive in practice: a started session cleared the feedback and
+            // the pending card on its way in (see LauncherCommandSession.applyOutcome).
+            agentSession?.let { session ->
+                AgentSessionSurface(
+                    session = session,
+                    confirming = agentConfirming,
+                    onConfirm = viewModel::confirmAgentStep,
+                    onDeny = viewModel::denyAgentStep,
+                    onContinue = viewModel::continueAgentSession,
+                    onDismiss = viewModel::dismissAgentSession,
                 )
             }
 

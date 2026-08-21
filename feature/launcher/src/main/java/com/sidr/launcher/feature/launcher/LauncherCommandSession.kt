@@ -13,6 +13,7 @@ import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.memory.alias.ResolveCommandWithAliasUseCase
 import com.sidr.launcher.domain.memory.resolution.ResolvedCommand
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.feature.launcher.agent.LauncherAgentSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -70,6 +71,10 @@ internal class LauncherCommandSession(
     private val appLaunch: LauncherAppLaunch,
     private val appList: LauncherAppList,
     private val devConsole: LauncherDevConsole,
+    // Task 12 / A0: the seventh collaborator. `applyOutcome` hands it a started session and stops
+    // there — the command pipeline neither drives the agent nor reads its state, which is what keeps
+    // the two surfaces separable.
+    private val agentSession: LauncherAgentSession,
     private val scope: CoroutineScope,
     private val onNavigate: (String) -> Unit,
 ) {
@@ -202,6 +207,7 @@ internal class LauncherCommandSession(
         CommandOutcome.ShowApps -> "→ apps"
         CommandOutcome.ClearInput -> "cleared"
         is CommandOutcome.RoutedAction -> "→ route ${outcome.action.id.value}"
+        is CommandOutcome.AgentSessionStarted -> "→ agent ${outcome.id.value}"
     }
 
     /**
@@ -311,6 +317,15 @@ internal class LauncherCommandSession(
                     requiresConfirmation = outcome.needsConfirmation,
                     permissionGate = actionCatalog.descriptor(outcome.action.id)?.permissionGate,
                 )
+            }
+
+            // Task 11 started a session and persisted it; Task 12's job here is to hand the id over
+            // and get out of the way. The feedback line is cleared because the agent surface is now
+            // the honest account of what is happening — leaving "no such app" underneath it would
+            // contradict the plan that was made precisely because of it.
+            is CommandOutcome.AgentSessionStarted -> {
+                _feedback.value = CommandFeedback.None
+                agentSession.attach(outcome.id)
             }
         }
     }

@@ -3125,7 +3125,7 @@ step confirmation is a *risk* gate, the same class as the AIL-5 confirm card, wh
 Class A. No new owner signature is required by this task. If the owner wants the agent's consent line
 owner-reviewed, that is a separate decision — flag it, do not decide it here.
 
-- [ ] **Step 1: Write the failing collaborator test**
+- [x] **Step 1: Write the failing collaborator test**
 
 ```kotlin
 package com.sidr.launcher.feature.launcher.agent
@@ -3173,7 +3173,7 @@ class LauncherAgentSessionTest {
 Fill the bodies with `FakeAgentSessionStore`, `FakeToolExecutor` and `FakeToolRegistry` from Phase 2 —
 every collaborator here takes ports, so no Android or Compose is needed.
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
@@ -3183,7 +3183,7 @@ every collaborator here takes ports, so no Android or Compose is needed.
 Expected: FAIL — `LauncherAgentSession` does not exist; the module also still fails to compile from
 Task 11's exhaustive `when`.
 
-- [ ] **Step 3: Write the collaborator**
+- [x] **Step 3: Write the collaborator**
 
 ```kotlin
 package com.sidr.launcher.feature.launcher.agent
@@ -3250,7 +3250,7 @@ internal class LauncherAgentSession(
 `:domain` — they record `SessionPaused` / `SessionResumed` and set the state, so the trace keeps its 1:1
 property across a restart. Add a domain test for the pair in `AgentExecutorTest`'s file or its own.
 
-- [ ] **Step 4: Write the presentation mapper**
+- [x] **Step 4: Write the presentation mapper**
 
 `AgentSessionPresentation.kt` maps the typed domain values to string resources — this is the seam the
 hard rule requires, and the reason `StepRationale` and `ObservedFact` are enums rather than sentences:
@@ -3265,7 +3265,7 @@ internal fun StepRationale.label(query: String): String = when (this) {
 
 with equivalents for `ExecutionState` titles and `ConsentReason`.
 
-- [ ] **Step 5: Write the surface**
+- [x] **Step 5: Write the surface**
 
 `AgentSessionSurface.kt` — one composable per state, DS-5 primitives only, **nothing new in `core/ui`**:
 
@@ -3283,7 +3283,7 @@ with equivalents for `ExecutionState` titles and `ConsentReason`.
 The step list is rendered from `session.plan.steps`, so a 2-step and a 7-step plan differ in list length
 and in nothing else. Do not hard-code two rows.
 
-- [ ] **Step 6: Write the `applyOutcome` branch**
+- [x] **Step 6: Write the `applyOutcome` branch**
 
 In `LauncherCommandSession`:
 
@@ -3296,7 +3296,7 @@ is CommandOutcome.AgentSessionStarted -> {
 
 The module compiles again from here.
 
-- [ ] **Step 7: Add the strings in all three locales**
+- [x] **Step 7: Add the strings in all three locales**
 
 `feature/launcher/src/main/res/values/strings.xml` and its `values-ru` / `values-tr` siblings, in the
 same commit (`LocaleCompletenessGuardTest`):
@@ -3310,7 +3310,7 @@ same commit (`LocaleCompletenessGuardTest`):
 The Paused copy must say what actually happened and what will happen — the user left mid-plan and is
 being offered the remaining step, not being told something went wrong.
 
-- [ ] **Step 8: Run the module suite and the i18n guards**
+- [x] **Step 8: Run the module suite and the i18n guards**
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
@@ -3323,7 +3323,7 @@ Expected: PASS, including `LocaleCompletenessGuardTest`, `HardcodedUiTextGuardTe
 be able to say why every changed line changed — Phase 1's parity claim was about the refactor, and it
 already holds in the history.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add feature/launcher/src/main/ feature/launcher/src/test/ \

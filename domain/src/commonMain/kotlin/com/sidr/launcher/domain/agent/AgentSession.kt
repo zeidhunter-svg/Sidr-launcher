@@ -52,4 +52,32 @@ data class AgentSession(
 
     internal fun ended(next: ExecutionState): AgentSession =
         copy(state = next).record(TraceEvent.SessionEnded(next))
+
+    /**
+     * The restart transition (Task 12). A session that outlived its process is presented as
+     * [ExecutionState.Paused] and never resumed silently — the user asked for this minutes or days
+     * ago, and continuing without asking would be the system deciding on their behalf.
+     *
+     * It records [TraceEvent.SessionPaused] rather than only setting the state, because the trace is
+     * 1:1 with reality (`DOC-ILM-3`) and "the process died and we stopped here" is part of reality. A
+     * state change with no event would leave a persisted trace that reads as if the plan simply ran
+     * on, and the resume below would then appear out of nowhere.
+     *
+     * **Public, not `internal`.** [record] and [ended] stay `internal` — arbitrary trace writing is
+     * the domain's business alone — but these two named transitions are called from the feature
+     * layer's `LauncherAgentSession`, and Kotlin's `internal` is per-Gradle-module, so `internal`
+     * here would simply not compile there. Exposing exactly two named transitions rather than
+     * [record] is what keeps the seam narrow.
+     */
+    fun pausedForRestore(): AgentSession =
+        copy(state = ExecutionState.Paused).record(TraceEvent.SessionPaused)
+
+    /**
+     * The other half of [pausedForRestore]: the user chose to pick the plan back up. Sets
+     * [ExecutionState.Running] and records [TraceEvent.SessionResumed], so the engine re-evaluates
+     * from the persisted cursor — which puts a pending consent checkpoint back on screen rather than
+     * stepping past it.
+     */
+    fun resumed(): AgentSession =
+        copy(state = ExecutionState.Running).record(TraceEvent.SessionResumed)
 }

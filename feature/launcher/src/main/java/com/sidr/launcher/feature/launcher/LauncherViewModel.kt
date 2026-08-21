@@ -10,6 +10,11 @@ import com.sidr.launcher.core.common.di.IoDispatcher
 import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.domain.action.ActionCatalog
+import com.sidr.launcher.domain.agent.AgentSession
+import com.sidr.launcher.domain.agent.AgentSessionStore
+import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
+import com.sidr.launcher.domain.agent.ResolveConsentUseCase
+import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.history.UsageHistoryRepository
 import com.sidr.launcher.domain.memory.alias.ResolveCommandWithAliasUseCase
 import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
@@ -32,6 +37,7 @@ import com.sidr.launcher.domain.suggestions.Suggestion
 import com.sidr.launcher.domain.suggestions.SuggestionEngine
 import com.sidr.launcher.domain.voice.SpeechInputSource
 import com.sidr.launcher.domain.voice.SpeechRecognitionError
+import com.sidr.launcher.feature.launcher.agent.LauncherAgentSession
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -79,6 +85,13 @@ class LauncherViewModel @Inject constructor(
     // strip. Its own [prayerContext] StateFlow is cold + WhileSubscribed, so nothing calculates on
     // the construction/startup path before the UI actually subscribes.
     private val getPrayerContext: GetPrayerContextUseCase,
+    // Task 12 / A0: the agent runtime's four ports. All four are lazy `@Singleton`s in the Hilt
+    // graph, so injecting them here costs a reference and no work; the only startup touch is the one
+    // `store.active()` read [LauncherAgentSession.restoreOnStart] makes off the main thread.
+    private val runAgentSession: RunAgentSessionUseCase,
+    private val resolveAgentConsent: ResolveConsentUseCase,
+    private val cancelAgentSession: CancelAgentSessionUseCase,
+    private val agentSessionStore: AgentSessionStore,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     // S2-1 Task 11: fire-and-forget scope for recording a learned choice — survives the launch's own
     // viewModelScope coroutine (Block-F recordUsage precedent) so a quick nav-away never drops it.
@@ -225,6 +238,24 @@ class LauncherViewModel @Inject constructor(
         onFeedback = { feedback -> commandSession.showFeedback(feedback) },
     )
 
+    // Task 12 / A0: the seventh collaborator — the agent runtime. Declared BEFORE [commandSession]
+    // because that class takes it: `applyOutcome`'s AgentSessionStarted branch hands it the id of the
+    // session Task 11's cut already started and persisted. The dependency is one-way, CommandSession
+    // -> AgentSession; nothing here reads the command pipeline.
+    private val agentSession = LauncherAgentSession(
+        runSession = runAgentSession,
+        resolveConsent = resolveAgentConsent,
+        cancelSession = cancelAgentSession,
+        store = agentSessionStore,
+        scope = viewModelScope,
+    )
+
+    /** The agent runtime's current session, or null when none is on screen. */
+    val agentSessionState: StateFlow<AgentSession?> get() = agentSession.session
+
+    /** Whether a consent decision is in flight — bound to the gate's `confirming`. */
+    val agentConfirming: StateFlow<Boolean> get() = agentSession.confirming
+
     // Task 4 / A0: extracted to LauncherCommandSession — the whole command pipeline (see that class's
     // kdoc). [onNavigate] forwards to this class's own nav Channel, its one piece of retained state.
     private val commandSession: LauncherCommandSession = LauncherCommandSession(
@@ -236,6 +267,7 @@ class LauncherViewModel @Inject constructor(
         appLaunch = appLaunch,
         appList = appList,
         devConsole = devConsole,
+        agentSession = agentSession,
         scope = viewModelScope,
         onNavigate = { route -> navigateTo(route) },
     )
@@ -266,6 +298,10 @@ class LauncherViewModel @Inject constructor(
     init {
         appList.load()
         suggestionsSection.observeFlag()
+        // Task 12 / A0: anything that outlived the last process is presented as Paused with an
+        // offer — never resumed silently. A store with nothing in it is a no-op, which is every
+        // launch that did not end mid-plan.
+        agentSession.restoreOnStart()
     }
 
     /**
@@ -358,6 +394,28 @@ class LauncherViewModel @Inject constructor(
     /** Dismiss the pending router proposal without executing — see [LauncherCommandSession.cancel]. */
     fun cancelRoutedAction() {
         commandSession.cancel()
+    }
+
+    // ── Agent runtime (Task 12 / A0) — thin delegations, exactly like the pairs above ──────
+
+    /** The user granted the consent checkpoint standing at [stepIndex]. */
+    fun confirmAgentStep(stepIndex: Int) {
+        agentSession.confirm(stepIndex)
+    }
+
+    /** The user refused it. The engine cancels the session; nothing further runs. */
+    fun denyAgentStep(stepIndex: Int) {
+        agentSession.deny(stepIndex)
+    }
+
+    /** Pick a paused plan back up. The engine re-evaluates, so a pending checkpoint returns. */
+    fun continueAgentSession() {
+        agentSession.continueSession()
+    }
+
+    /** Clear the agent surface and delete the session. */
+    fun dismissAgentSession() {
+        agentSession.cancel()
     }
 
     /**

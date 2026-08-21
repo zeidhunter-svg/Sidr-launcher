@@ -80,4 +80,21 @@
     <string name="launcher_understanding_needs_provider">ИИ-провайдер ещё не настроен.</string>
     <string name="launcher_understanding_provider_action">Настроить провайдера</string>
     <string name="launcher_understanding_needs_network">Чтобы понять эту команду, нужна сеть.</string>
+
+    <!-- Этап 4 / A0 Task 12 — поверхность выполнения агента. Class A (обычный UI). -->
+    <string name="launcher_agent_title">Агент</string>
+    <string name="launcher_agent_running_title">Выполняю</string>
+    <string name="launcher_agent_step_launch">Открыть %1$s</string>
+    <string name="launcher_agent_step_store">Найти %1$s в магазине приложений</string>
+    <string name="launcher_agent_gate_title">Подтвердите этот шаг</string>
+    <string name="launcher_agent_gate_consequence">Следующее действие Sidr: %1$s. Ничего не выполнится, пока вы не подтвердите.</string>
+    <string name="launcher_agent_gate_confirm">Подтвердить</string>
+    <string name="launcher_agent_cancel">Закрыть</string>
+    <string name="launcher_agent_paused_title">План приостановлен</string>
+    <string name="launcher_agent_paused_body">Вы вышли до того, как план завершился. Продолжите — и Sidr возьмётся с того места, где остановился; закройте — и больше ничего не выполнится.</string>
+    <string name="launcher_agent_paused_continue">Продолжить</string>
+    <string name="launcher_agent_completed_title">План выполнен</string>
+    <string name="launcher_agent_failed_title">План не удалось завершить</string>
+    <string name="launcher_agent_blocked_title">План остановлен</string>
+    <string name="launcher_agent_blocked_body">Sidr остановил этот план: продолжать его безопасно уже нельзя. Больше ничего не выполнится.</string>
 </resources>

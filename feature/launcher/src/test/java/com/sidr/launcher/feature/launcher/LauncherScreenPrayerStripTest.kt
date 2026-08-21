@@ -5,6 +5,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.lifecycle.SavedStateHandle
 import com.sidr.launcher.core.testing.FakeActionCatalog
+import com.sidr.launcher.core.testing.FakeAgentSessionStore
+import com.sidr.launcher.core.testing.FakeToolExecutor
+import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeAliasStore
 import com.sidr.launcher.core.testing.FakeCommandPlanner
@@ -24,6 +27,15 @@ import com.sidr.launcher.core.testing.FakeUsageHistoryRepository
 import com.sidr.launcher.core.testing.FakeUserPreferencesRepository
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
+import com.sidr.launcher.domain.agent.AgentExecutor
+import com.sidr.launcher.domain.agent.AgentSessionId
+import com.sidr.launcher.domain.agent.AgentSessionIdFactory
+import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
+import com.sidr.launcher.domain.agent.ResolveConsentUseCase
+import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
+import com.sidr.launcher.domain.agent.RuntimeBudget
+import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
+import com.sidr.launcher.domain.agent.TemplatePlanner
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
 import com.sidr.launcher.domain.intent.ExecuteActionUseCase
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
@@ -104,6 +116,19 @@ class LauncherScreenPrayerStripTest {
             confidencePolicy = DefaultIntentConfidencePolicy(),
             recordingScope = CoroutineScope(dispatcher + SupervisorJob()),
         )
+        // Task 11 / A0 made `startAgentSession` required here, and Task 12 the four agent ports on
+        // the ViewModel. Same inert fixture as LauncherViewModelTest: an empty store means
+        // `restoreOnStart()` finds nothing, so this test keeps testing the prayer strip.
+        val agentStore = FakeAgentSessionStore()
+        val agentRegistry = FakeToolRegistry.withA0Tools()
+        val agentIds = object : AgentSessionIdFactory {
+            private var n = 0
+            override fun newId() = AgentSessionId("test-agent-${++n}")
+        }
+        val runAgent = RunAgentSessionUseCase(
+            executor = AgentExecutor(agentRegistry, FakeToolExecutor(emptyList()), RuntimeBudget.Default),
+            store = agentStore,
+        )
         val routeUseCase = RouteCommandUseCase(
             handleUserCommand = useCase,
             planner = FakeCommandPlanner(),
@@ -113,6 +138,12 @@ class LauncherScreenPrayerStripTest {
             // provider keeps this screen test testing the prayer strip, not the routing gate.
             providerConfigRepository = configuredProvider(),
             connectivityChecker = FakeConnectivityChecker(),
+            startAgentSession = StartAgentSessionUseCase(
+                planner = TemplatePlanner(),
+                store = agentStore,
+                ids = agentIds,
+                registry = agentRegistry,
+            ),
         )
         val resolutionStore = FakeResolutionPreferenceStore()
         val preferenceResolver = ResolveCommandWithPreferenceUseCase(
@@ -144,6 +175,10 @@ class LauncherScreenPrayerStripTest {
             speechInputSource = FakeSpeechInputSource(),
             connectivityChecker = FakeConnectivityChecker(),
             getPrayerContext = getPrayerContext,
+            runAgentSession = runAgent,
+            resolveAgentConsent = ResolveConsentUseCase(agentStore, runAgent),
+            cancelAgentSession = CancelAgentSessionUseCase(agentStore),
+            agentSessionStore = agentStore,
             ioDispatcher = dispatcher,
             applicationScope = CoroutineScope(dispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),

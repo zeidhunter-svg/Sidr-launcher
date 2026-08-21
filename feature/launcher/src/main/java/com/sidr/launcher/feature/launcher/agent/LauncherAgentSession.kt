@@ -4,6 +4,7 @@ import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.AgentSessionStore
 import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
+import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.result.OperationResult
@@ -50,9 +51,34 @@ internal class LauncherAgentSession(
         _session.value = (runSession.run(active) as? OperationResult.Success)?.value
     }
 
-    /** Called once from the ViewModel's init. Anything that survived is Paused, with an honest offer. */
+    /**
+     * Called once from the ViewModel's init. Anything genuinely interrupted is presented as Paused,
+     * with an honest offer — but two rows on disk are **not** that, and each is skipped for its own
+     * reason.
+     *
+     * **A terminal session is finished, not interrupted.** `RunAgentSessionUseCase.persist` saves a
+     * terminal state and then deletes it; a process death between those two leaves a `Completed` (or
+     * `Failed`/`Cancelled`/`Blocked`) row behind. Pausing it would tell the user "you left before this
+     * plan finished" about a plan that did finish. Finish the delete the dead process owed instead.
+     *
+     * **A session already Paused is not paused a second time.** [AgentSession.pausedForRestore]
+     * records `SessionPaused`, and the trace is 1:1 with reality (`DOC-ILM-3`): a session that paused
+     * once carries one pause, not one per process death. This launcher is the home screen, so without
+     * this branch the trace grows by a row on every start for as long as the plan sits unanswered.
+     */
     fun restoreOnStart() = scope.launch {
         val active = (store.active() as? OperationResult.Success)?.value ?: return@launch
+
+        if (active.state.isTerminal) {
+            store.delete(active.id)
+            return@launch
+        }
+
+        if (active.state == ExecutionState.Paused) {
+            _session.value = active
+            return@launch
+        }
+
         val paused = active.pausedForRestore()
         store.save(paused)
         _session.value = paused

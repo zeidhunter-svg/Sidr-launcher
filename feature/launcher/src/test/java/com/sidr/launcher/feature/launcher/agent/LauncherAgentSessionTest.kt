@@ -98,6 +98,62 @@ class LauncherAgentSessionTest {
         assertEquals(invocationsAfterSeed, tools.invocations.size)
     }
 
+    /**
+     * The second restart is not a second pause. `pausedForRestore` records `SessionPaused`, and the
+     * trace is 1:1 with reality (`DOC-ILM-3`) — a session that paused once carries one pause, not one
+     * per process death. This launcher is the home screen, so the unguarded version grew the persisted
+     * trace by a row on every start for as long as the plan sat unanswered.
+     *
+     * Found by probe: three restarts produced three `SessionPaused` events.
+     */
+    @Test
+    fun `a second restart presents the same paused session without recording another pause`() = runTest {
+        val tools = FakeToolExecutor(listOf(notInstalled(), ToolResult.Effected()))
+        seedRunningAtCursorOne(tools)
+
+        collaborator(tools, this).restoreOnStart()
+        advanceUntilIdle()
+        // The process dies again; a fresh collaborator reads the same row on the next start.
+        val second = collaborator(tools, this)
+        second.restoreOnStart()
+        advanceUntilIdle()
+
+        assertEquals(ExecutionState.Paused, second.session.value?.state)
+        assertEquals(ExecutionState.Paused, store.active.state)
+        assertEquals(
+            "a session that paused once must carry exactly one SessionPaused",
+            1,
+            store.active.trace.events.count { it == TraceEvent.SessionPaused },
+        )
+    }
+
+    /**
+     * A terminal session on disk is finished, not interrupted. `RunAgentSessionUseCase.persist` saves
+     * the terminal state and then deletes it; a death between those two leaves the row behind. Offering
+     * to continue it says "you left before this plan finished" about a plan that did finish.
+     *
+     * Found by probe: an on-disk `Completed` was presented as `Paused`.
+     */
+    @Test
+    fun `a terminal session left on disk is deleted, not offered as a paused plan`() = runTest {
+        // One Effected step: step 0 succeeds, step 1's APP_NOT_INSTALLED precondition is unsatisfied
+        // and it is skipped, so the session ends Completed.
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
+        val runner = RunAgentSessionUseCase(AgentExecutor(registry, tools, RuntimeBudget.Default), store)
+        StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry).start(goal)
+        runner.run(store.active)
+        // Put the terminal row back: this is the state the dead process left, delete not yet done.
+        store.save(store.saved.last { it.state.isTerminal })
+        check(store.active.state.isTerminal) { "seed expected a terminal row, was ${store.active.state}" }
+
+        val agent = collaborator(tools, this)
+        agent.restoreOnStart()
+        advanceUntilIdle()
+
+        assertNull("a finished plan is not an interrupted one", agent.session.value)
+        assertNull("and the delete the dead process owed is completed", store.activeOrNull)
+    }
+
     @Test
     fun `continuing a paused session that owes consent returns to AwaitingConsent`() = runTest {
         val tools = FakeToolExecutor(listOf(notInstalled(), ToolResult.Effected()))

@@ -1,7 +1,7 @@
 ---
 name: implementer-critical
 description: Correctness-critical implementer for tasks where a silent error is expensive — golden-test validation against primary sources, parity-sensitive ViewModel wiring, privacy/AI-leak guards, migrations. Use when the cost of a confident mistake outweighs speed.
-model: fable
+model: opus
 effort: xhigh
 ---
 

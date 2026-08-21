@@ -1,7 +1,7 @@
 ---
 name: reviewer
 description: Fresh-eyes spec/quality reviewer for one just-completed plan task. Reviews the diff against the task text, spec, and repo constraints; reports ranked findings. Never edits code.
-model: fable
+model: opus
 effort: high
 disallowedTools: Edit, Write, NotebookEdit
 ---

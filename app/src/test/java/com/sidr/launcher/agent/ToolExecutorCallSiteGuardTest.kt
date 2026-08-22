@@ -21,8 +21,12 @@ import java.io.File
  * holders are few and declarative. `the declared holders of a ToolExecutor are exactly the known three`
  * pins that set, so an injected `private val executor: ToolExecutor` is red before it is ever called.
  *
- * **What is actually enforced, stated plainly** (the KDoc on `ToolExecutor` used to claim more):
- *  - exactly one call spelled `toolExecutor.invoke(`, in `AgentExecutor.kt`, below the checkpoint;
+ * **What is actually enforced, stated plainly** (the KDoc on `ToolExecutor` used to claim more, and
+ * this list said "below the checkpoint" until the A0 Task 14 review, 2026-08-22, pointed out that
+ * nothing here reads a position):
+ *  - exactly one call spelled `toolExecutor.invoke(`, in the **file** `AgentExecutor.kt`. Where in that
+ *    file it sits is NOT checked: moving it into `prepare` above the consent checkpoint keeps all four
+ *    assertions green. "Below the checkpoint" is held behaviourally by `AgentExecutorTest`, not here;
  *  - exactly three files that declare the type at all — the holder, the DI module, the one adapter.
  *
  * Both scans run over comment-stripped text ([stripComments]), so documentation that spells a call or

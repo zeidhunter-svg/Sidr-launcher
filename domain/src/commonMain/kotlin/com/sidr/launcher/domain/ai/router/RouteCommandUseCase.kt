@@ -55,16 +55,16 @@ import kotlinx.coroutines.flow.first
  * going to reach any of them: `NoAppFound` is a decided outcome, so `isUndecided()` is false and
  * `orHonestly` would have returned it verbatim at step 3 anyway.
  *
- * **What the ordering DOES break, stated rather than glossed.** `DOC-ADL-3` currently reads "…and
+ * **What the ordering DOES break, stated rather than glossed.** `DOC-ADL-3` used to read "…and
  * every outcome FastPath **decided** is returned byte-for-byte". `NoAppFound` is an outcome FastPath
  * decided, and under `localOnlyMode` this branch replaces it with
- * [CommandOutcome.AgentSessionStarted]. So that last clause is now false, and deliberately: spec §8.1
- * narrows the rule to what it always meant — **no model is consulted and nothing leaves the device** —
- * because deterministic plan replay is part of the local path and may legitimately change an outcome
- * FastPath decided. The amendment is A0 Task 14 Step 1 and **has not landed yet**: until it does, the
- * matrix carries the un-amended wording while `RouteCommandUseCaseTest` — the very test that rule
- * names as its proof — contains `the agent runs in local-only mode…`, which proves the opposite.
- * Do not read this comment as evidence the amendment is done.
+ * [CommandOutcome.AgentSessionStarted], so that clause was false exactly where the rule was written to
+ * bite. **The amendment landed 2026-08-22** (A0 Task 14, commit `ccf7426`; matrix §6 journal row): the
+ * rule now says what it always meant in substance — **no model is consulted and nothing leaves the
+ * device** — because deterministic plan replay is part of the local path and may legitimately change an
+ * outcome FastPath decided. What survives byte-for-byte is an outcome FastPath decided **and
+ * achieved**; `NoAppFound` is decided and *not* achieved, which is why this branch may take it.
+ * Cite the rule by ID: it has been amended twice and the §6 journal carries both texts.
  *
  * What the ordering does *not* break is the part that matters: A0's
  * [com.sidr.launcher.domain.agent.Planner] is deterministic and offline, so this branch consults no

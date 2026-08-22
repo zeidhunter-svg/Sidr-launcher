@@ -47,8 +47,15 @@ import org.junit.Test
  *
  * Two properties are load-bearing and are what this class exists to hold down.
  *
- * **`DOC-ADL-3` - parity.** Local-only / no provider / offline ⇒ the planner is never consulted and
- * nothing leaves the device, and every outcome FastPath actually *decided* is returned byte-for-byte.
+ * **`DOC-ADL-3` - parity, re-anchored to the wording amended 2026-08-22** (A0 Task 14; spec §8.1
+ * required this re-anchoring and the docs-only commit `ccf7426` missed it — the A0 Task 14 review
+ * caught it). The rule is now exactly two claims: local-only / no provider / offline ⇒ the **model**
+ * planner is never consulted, and nothing leaves the device. The former trailing clause — "every
+ * outcome FastPath *decided* is returned byte-for-byte" — no longer holds unqualified, because A0
+ * replaces `NoAppFound` with a deterministic two-step plan. What survives, and what
+ * `local-only and FastPath decided…` and `an outcome FastPath decided **and achieved** is untouched by
+ * the agent` hold below, is that a decided *and achieved* outcome is byte-identical. The agent side of
+ * the same rule is held by `AgentEgressSentinelGuardTest`, not here.
  * Note what Этап 4.0 changed and what it did not: parity is a property of FastPath's decisions and of
  * the absence of any outbound call. It was never a promise to keep answering "Unknown command" when
  * FastPath decided nothing - that answer was a claim about the *command* while the truth was about

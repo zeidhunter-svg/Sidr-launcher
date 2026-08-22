@@ -154,7 +154,7 @@ below is recorded in its own ADR.
   `CommandFailure` variant** and restores as `Generic`, so a resumed session reports a less specific
   failure than the one that occurred; `GoalShape` must stay at **one** value until A4′ (Master Plan
   §3.6 `B1`).
-- **A0 guards, deferred findings D1–D10** (full text in `§HANDOFF` of the track plan).
+- **A0 guards, deferred findings D1–D11** (full text in `§HANDOFF` of the track plan).
   *Owner-level* — they need the `Test` inputs block in `app/build.gradle.kts` widened, which costs
   another repo-wide snapshot per test task: **D1** the `ToolExecutor` declaration scan covers four
   roots only, so an implementation in `data/ai-cloud`, `core/android` or another `feature/*` is
@@ -168,7 +168,11 @@ below is recorded in its own ADR.
   admitted — loud false RED, never a silent miss; **D7** an assertion recomputes the roots instead of
   checking the field it protects; **D9** the call-site guard compares file *names*, so an
   `expect`/`actual` split reads as a duplicate-scan bug; **D10** one assertion is a tautology after the
-  derivation started filtering by the same predicate.
+  derivation started filtering by the same predicate; **D11** (from the Task 14 review) three of
+  `checkpointFor`'s four consent triggers — `RISK_RAISED`, `MISSING_PERMISSION`, `DURABLE_EFFECT` — have
+  **zero** test coverage: the first is unreachable while risk has three levels, the other two because no
+  test builds a `ToolDescriptor` with a gate or `DURABLE`. Fail-safe by construction, unproven by test;
+  owned by whoever inserts a risk level below `CONFIRM` (A1′).
 - **Not owned by any block:** `RoomColumnNames` is a hand-written inventory and its guard scans **it**,
   not the entities or the exported schema — a column added to an `@Entity` and forgotten there passes
   silently, including one with a denylisted term in its name (Block F design). It matters more since A0

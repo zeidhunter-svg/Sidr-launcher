@@ -6791,13 +6791,18 @@ and `LauncherAgentSessionTest` — the user's cancel deletes the record, and no 
 on disk; `DOC-HMA-1` (cancel does not act; confirmation acts exactly once) now also cites
 `AgentSessionUseCasesTest`, where the agent loop is a second surface for the same rule.
 
-**One of the four new guards is in no row, on purpose.** `AgentVocabularyGuardTest` holds the A1 fork
-open mechanically — `domain/agent` and `domain/tool` may name no action vocabulary and no transport —
-and **no `DOC-*` rule states that**. Writing a rule for it would be adding a doctrine rule (change-
-control §5) and would pre-empt A1′, so it was not done. Recorded here so its absence reads as a
-decision rather than an oversight; the same is true of the second, structural half of
-`ToolExecutorCallSiteGuardTest` («the registry is the only path to the world» is a Master Plan growth
-rule, not a matrix row).
+**`AgentVocabularyGuardTest` is cited by half, and absent by half — and the first draft of this ADR
+got that wrong.** It was originally left out of the matrix entirely on the reasoning that no `DOC-*`
+rule states what it holds. **Review overturned that** (see the fix round below): the guard forbids two
+different things, and one of them — that the engine may not name `GenerativeAiEngine`, `CommandPlanner`,
+Ktor or an `HttpClient` — *is* `DOC-ADL-3`, as the very test cited on that row says in its own KDoc
+(«between them the two guards cover both halves: nothing may be reachable, and what is reachable is
+never called»). Naming an existing test in an existing evidence cell is not a doctrine addition, so no
+change-control argument protected the omission. It is now cited on `DOC-ADL-3`. The **other** half —
+no action vocabulary in the engine — stays in no row deliberately: it holds the A1 fork open, and
+writing a rule for it would both add a doctrine rule (change-control §5) and decide that fork by
+documentation. That reasoning is now recorded in the matrix itself (§3, «Тесты, которые не попали ни в
+одну строку»), not only here — a reader auditing coverage looks at the matrix, not at an ADR.
 
 ### Mutation results — the whole basis for believing any guard
 
@@ -6887,6 +6892,62 @@ grew it — an assertion that cannot fail, appearing inside the fix *for* assert
 It was not copied; it arose because the derivation now filters what the assertion used to check.
 Three times in this block a fix produced its own disease one step sideways, and each time the *next*
 review caught it. That is the argument against shortening the chain when a round comes back APPROVE.
+
+### The Task 14 review, and the fix round it forced (2026-08-22, commit two)
+
+Task 14 was reviewed by two independent reviewers, split so neither could confirm the other: one took
+the two rows the plan mandated (`DOC-ILM-3`, `DOC-HMA-2`), one took the three rows edited beyond the
+plan plus the omission. **Both returned PARTIALLY HELD, and five findings were defects worth fixing.**
+No code behaviour changed in the fix round — every item is a claim brought back down to what is held.
+
+1. **A production KDoc said this amendment had not happened.** `RouteCommandUseCase.kt` carried, by the
+   deliberate design of commit `4a39741`, a block ending «The amendment is A0 Task 14 Step 1 and **has
+   not landed yet** … Do not read this comment as evidence the amendment is done.» Task 14's commit was
+   scoped «docs only, no code touched», so the placeholder outlived the thing it waited for. Worse, spec
+   §8.1 explicitly required «`RouteCommandUseCaseTest` is re-anchored to the amended wording», and that
+   test's KDoc still stated the retired byte-for-byte clause. **The spec is binding authority over the
+   plan's file list; this was a miss, not a scope decision.** Both corrected. The test KDoc now states
+   which property actually survives: an outcome FastPath decided **and achieved** is byte-identical —
+   `NoAppFound` is decided and *not* achieved, which is precisely why the agent may take it.
+2. **`DOC-HMA-2` claimed a position the guard does not check.** The cell read «единственная точка вызова
+   инструмента, **ниже чекпоинта**». `ToolExecutorCallSiteGuardTest` matches a file *name* and a count
+   and reads no position. `checkpointFor` is consulted in `prepare`, the call sits in `perform` — move
+   the call up into `prepare`, above the checkpoint, and all four assertions stay green while every
+   CONFIRM-risk step fires before consent. The cell now says the scan holds the *count* and
+   `AgentExecutorTest` holds the *position*, behaviourally. The same overclaim sat in two KDocs
+   (`ToolExecutor.kt`, and the guard's own «what is actually enforced, stated plainly» list); both are
+   corrected. Note the shape: the guard's KDoc asserted that the `ToolExecutor` KDoc «used to claim
+   more» — the correction was believed done and was not.
+3. **`DOC-ILM-3` cited, as proof of a faithful trace, the test that freezes the trace's one infidelity.**
+   `RoomAgentSessionStoreTest#a Failed observation stores no output and restores as Generic` pins that a
+   persisted failure loses its `CommandFailure` variant, and the mapper rebuilds a trace event's payload
+   from the step observation — so a *restored* trace reports `Generic` for a step that failed with
+   something specific. The gap was named in `CLAUDE.md` § Known debt but not in the machine-citable row.
+   The row now carries it, and gains `ToolExecutorCallSiteGuardTest`: «nothing can execute past the
+   trace» is a system claim, and the one-call-site scan is the only thing that makes it one.
+4. **Half-closed rows had become ungreppable.** `DOC-ILM-2` and `DOC-HMA-2` are blocked on the same
+   missing concept — tool levels, A1′ — but after Task 14 the first was still `<нет> ← долг A1′` while
+   the second was Russian prose inside a filled cell. §1 says the fourth column *is* the debt list, so an
+   A1′ session building that list by grep would have missed the half-open rule. **The reviewer's own fix
+   — put `<нет>` back — was rejected with evidence:** `every_named_test_exists_in_the_repository` skips
+   any cell containing that token, so adding it would have silently switched off the existence check for
+   the real test names beside it. The convention adopted instead is `← долг <блок>` **without** `<нет>`:
+   both guard assertions survive it and `grep '← долг'` finds it. §5 now records that the guard cannot
+   see a half-closed row and that this marker is how a human does.
+5. **`DOC-ADL-3`'s egress half scoped, and the omission corrected** — see the paragraph above on
+   `AgentVocabularyGuardTest`.
+
+Two findings were recorded rather than fixed. `ConsentReason.RISK_RAISED`, `MISSING_PERMISSION` and
+`DURABLE_EFFECT` have **zero** test coverage — the first is unreachable while risk has three levels
+(any upward transition lands on `CONFIRM` or `DANGEROUS` and the earlier branch takes it), the other two
+because no test anywhere builds a `ToolDescriptor` with a gate or `DURABLE`. `AgentExecutor`'s KDoc
+claimed the permission branch was «unit-tested»; it is not, and the KDoc is corrected. The coverage
+itself is **`D11`**, owned by whoever inserts a risk level below `CONFIRM`.
+
+**`ccf7426`'s commit message says «two of the four new guards are in no row». Only one was, and after
+this round none is wholly absent.** It stands unamended on `D5`'s precedent — that commit has been
+reviewed, and rewriting reviewed history for one sentence is the worse trade. This paragraph is the
+correction of record.
 
 ### Verification (JDK-17 Temurin via `org.gradle.java.installations.paths`, exit code checked, output never piped through `tail`)
 

@@ -232,8 +232,16 @@ class AgentExecutor(
     /**
      * Four triggers, all fail-safe. [ConsentReason.MISSING_PERMISSION] fires whenever a tool merely
      * *declares* a gate: consulting the real grant state would put `PermissionChecker` inside the
-     * engine, and stopping unconditionally is the conservative half of that. Neither A0 tool declares
-     * one, so the branch is unit-tested rather than exercised in the slice.
+     * engine, and stopping unconditionally is the conservative half of that.
+     *
+     * **Coverage, corrected by the A0 Task 14 review (2026-08-22) — this KDoc used to say the branch
+     * was "unit-tested", and it is not.** Neither A0 tool declares a gate or is `DURABLE`, and no test
+     * anywhere constructs a `ToolDescriptor` that does, so [ConsentReason.MISSING_PERMISSION] and
+     * [ConsentReason.DURABLE_EFFECT] have **zero** coverage: fail-safe by construction, unproven by
+     * test. [ConsentReason.RISK_RAISED] is untested as well, and today unreachable — with
+     * `SAFE < CONFIRM < DANGEROUS`, any upward transition lands on CONFIRM or DANGEROUS and the first
+     * branch takes it. It goes live the moment a level is inserted below CONFIRM, which is A1′'s
+     * business; whoever inserts it writes the case with it. Tracked as `D11` in `§HANDOFF`.
      */
     private fun checkpointFor(session: AgentSession, step: PlanStep): ConsentCheckpoint? {
         val descriptor = registry.find(step.invocation.id) ?: return null

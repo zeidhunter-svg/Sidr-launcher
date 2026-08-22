@@ -34,10 +34,14 @@ import java.io.File
  * Working directory is the module dir, so the repo root is `..` — same convention as the i18n and
  * doctrine guards. The scanned root is declared as a `Test` input in `app/build.gradle.kts`; :domain's
  * segment is `commonMain`, so it matches none of the existing repo-wide `src/main` declarations and
- * without that line this guard silently would not re-run. **Residual, named:** that declaration is
- * `domain/src/commonMain/kotlin` specifically, so the day a second production source set appears the
- * derived roots below will scan it but the Gradle input list will not yet cover it — whoever adds
- * `androidMain`/`jvmMain` adds the matching `inputs.dir`.
+ * without that line this guard silently would not re-run.
+ *
+ * **Residual, named — the input declaration is narrower than the scan.** That declaration is
+ * `domain/src/commonMain/kotlin` specifically, while [engineRoots] now derives every non-test source
+ * set. A violation planted in `domain/src/main/java` or `domain/src/androidMain/kotlin` would be
+ * *scanned* but might not *re-trigger* the task, so `:app:testDebugUnitTest` could serve a stale green
+ * — the same staleness trap the declaration was added to close. Widening it is an owner-level call on
+ * the Gradle inputs block, parked in `§HANDOFF`; whoever takes it adds `domain/src` as the input.
  */
 class AgentVocabularyGuardTest {
 
@@ -46,33 +50,32 @@ class AgentVocabularyGuardTest {
     private val domainSrc = File(repoRoot, "domain/src")
 
     /**
-     * **Derived, not hard-coded — `:domain` is KMP.** Until this fix round the two roots below were
-     * written out as `domain/src/commonMain/...`, so a source under a future `androidMain` or
-     * `jvmMain` would have been entirely unscanned, and — unlike the call-site guard's named
-     * limitation — nothing in the test would have told a reader so. Enumerating the source sets means
-     * a new one is scanned the day it appears, which is the right default: an assertion that "no other
-     * source set exists" would go red on a legitimate `androidMain` *without* scanning it.
+     * **Derived, not hard-coded — `:domain` is KMP.** What is enforced, precisely: `domain/agent` and
+     * `domain/tool` under **every non-test source set** of `:domain`, in both its `kotlin/` and
+     * `java/` directories. See [kmpProductionRoots] for which directories this module's compilers
+     * actually read, measured rather than assumed, and for the limitations of deriving this from a
+     * filesystem convention.
      *
-     * **Only `…Main` source sets.** The Kotlin MPP convention is `<target>Main` for production and
-     * `<target>Test` for tests, and the test sets must stay out: `domain/src/jvmTest/kotlin/.../agent`
-     * exists today and legitimately imports `LauncherAction` and `FakeCommandPlanner`
-     * (`AgentEgressSentinelGuardTest`), `ActionIds` (`ToolIdsTest`) — as *code*, not comments. Scanning
-     * every child of `domain/src` would therefore turn this guard red on correct code. What is
-     * forbidden is the engine *depending* on the action vocabulary; a test is allowed to name both
-     * sides of a boundary in order to prove they stay apart.
+     * Two earlier versions of this list were narrower than the claim above them, which is the defect
+     * this guard exists to prevent, in the guard itself:
+     *  - before Task 13's F1-F5 round: hard-coded to `domain/src/commonMain/...`, with nothing telling
+     *    a reader that any other source set was unscanned;
+     *  - after it: `name.endsWith("Main")` and `kotlin/` only, above a KDoc sentence promising a new
+     *    source set "is scanned the day it appears". `domain/src/main/java` is compiled into this
+     *    module's android artifact and `"main"` is not a `…Main` name, so that sentence was false.
+     *
+     * **Test source sets stay out, and that is not cosmetic.** `domain/src/jvmTest/kotlin/.../agent`
+     * legitimately imports `LauncherAction` and `FakeCommandPlanner` (`AgentEgressSentinelGuardTest`)
+     * and `ActionIds` (`ToolIdsTest`) — as *code*, not comments — so scanning it turns this guard red
+     * on correct code. What is forbidden is the engine **depending** on the action vocabulary; a test
+     * is allowed to name both sides of a boundary in order to prove they stay apart.
      *
      * `scanned roots all exist and are not empty` is what stops this derivation from silently coming
      * back empty.
      */
     private val engineRoots: List<File> =
-        (domainSrc.listFiles()?.sortedBy { it.name } ?: emptyList())
-            .filter { it.isDirectory && it.name.endsWith("Main") }
-            .flatMap { sourceSet ->
-                listOf("agent", "tool").map { pkg ->
-                    File(sourceSet, "kotlin/com/sidr/launcher/domain/$pkg")
-                }
-            }
-            .filter { it.isDirectory }
+        listOf("agent", "tool")
+            .flatMap { pkg -> kmpProductionRoots(domainSrc, "com/sidr/launcher/domain/$pkg") }
 
     /**
      * The action vocabulary and the two transports. Note what is NOT here: `ActionArg`,
@@ -211,5 +214,4 @@ class AgentVocabularyGuardTest {
         """.trimIndent()
         assertEquals(emptyList<Hit>(), hitsIn("Sanctioned.kt", sanctioned))
     }
-
 }

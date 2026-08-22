@@ -30,18 +30,37 @@ import java.io.File
  * direction is named on [stripComments] itself: it can hide text from a scan, never invent a hit.
  *
  * The roots it walks are declared as `Test` inputs in `app/build.gradle.kts`; without that the task
- * stays UP-TO-DATE when only a scanned source changes and this guard silently does not run.
+ * stays UP-TO-DATE when only a scanned source changes and this guard silently does not run. What
+ * "the roots" are, and what they still miss, is on [productionRoots] rather than implied here.
  */
 class ToolExecutorCallSiteGuardTest {
 
     private val repoRoot = File("..")
 
-    private val productionRoots = listOf(
-        "domain/src/commonMain/kotlin",
-        "data/repository/src/main/java",
-        "feature/launcher/src/main/java",
-        "app/src/main/java",
-    ).map { File(repoRoot, it) }
+    /**
+     * `:domain`'s roots are **derived** ([kmpProductionRoots]) and the other three are hard-coded.
+     *
+     * The asymmetry is deliberate and measured, not an oversight. `:domain` is
+     * `kotlin.multiplatform` + `com.android.library`: a holder planted at `domain/src/main/java` or
+     * `domain/src/androidMain/kotlin` compiles into the shipped artifact, and the old
+     * `domain/src/commonMain/kotlin` entry saw neither. This is the guard that mechanically holds the
+     * consent boundary, so a known fail-open direction in it is not something to leave for later — a
+     * second holder is exactly how a second call site arrives. The other three are single-variant
+     * android modules whose production Kotlin is `src/main/java`.
+     *
+     * **Named, not closed:** those three still miss `src/main/kotlin`, and no module outside these
+     * four is scanned at all. Widening *that* needs the `Test` inputs declarations in
+     * `app/build.gradle.kts` widened in step, or the guard gains reach it cannot re-run for; it is an
+     * owner-level build trade-off parked in `§HANDOFF`. The same staleness caveat already applies to
+     * the derived `:domain` roots: only `domain/src/commonMain/kotlin` is a declared input.
+     */
+    private val productionRoots: List<File> =
+        kmpProductionRoots(File(repoRoot, "domain/src")) +
+            listOf(
+                "data/repository/src/main/java",
+                "feature/launcher/src/main/java",
+                "app/src/main/java",
+            ).map { File(repoRoot, it) }
 
     /**
      * A declaration of the type: a constructor/parameter/property type, a return type, or a supertype
@@ -57,7 +76,14 @@ class ToolExecutorCallSiteGuardTest {
     @Test
     fun `scanned roots all exist`() {
         // A guard whose walk finds nothing passes vacuously — the exact failure Этап 2 found in three
-        // privacy guards. Assert the roots first.
+        // privacy guards. Assert the roots first. Since :domain's are derived, the derivation itself
+        // can come back empty, which is the same failure one step earlier.
+        assertEquals(
+            "no :domain source root was derived — the module layout moved and this guard went blind " +
+                "to the module that declares and calls ToolExecutor",
+            true,
+            kmpProductionRoots(File(repoRoot, "domain/src")).isNotEmpty(),
+        )
         productionRoots.forEach { root ->
             assertEquals("missing scan root: $root", true, root.isDirectory)
         }

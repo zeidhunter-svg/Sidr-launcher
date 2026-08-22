@@ -50,8 +50,8 @@ in `§HANDOFF`, not built.
 | **0.1** owner sign-off (release gate cleared — `:app:assembleRelease` green for the first time) · **0.2** FastPath `ru`/`tr` · **0.3** delete ONNX (APK 78 MB → 6.8 MB) · **0.4** compress this file · **0.5** honest statuses (`CODE-GREEN`/`DEVICE-ACCEPTED`/`CLOSED`) · **0.6** budgets rewritten on measured numbers (heap 55 MB PSS) · **0.7** I18N residue | ✅ 2026-08-19 |
 | **2** toolchain (AGP 9.3.1/Kotlin 2.4.10/Gradle 9.5.0/compileSdk 37) + `:domain` → KMP | ✅ 2026-08-19 |
 | **3** agentic Master Plan + doctrinal matrix (`docs/governing/`) | ✅ 2026-08-19 — docs + one guard test |
-| **4.0** — invert the understanding flag (`llmRouterEnabled` → `localOnlyMode`, ADR 1/4) | ✅ 2026-08-20 — `CODE-GREEN`; first behavioural change of the track |
-| **4** — A0 thin agentic spike | 🔄 **code complete 2026-08-22, block NOT closed** — all nine work-order items done (VM split; `domain/tool`+`agent`+`trace`+executor; F6 step-to-step data flow; planner + use cases; the one tool source over the unchanged action path; Room 3→4 + `RoomAgentSessionStore`; the `RouteCommandUseCase` cut; the execution surface + `en`/`ru`/`tr`; four mutation-verified guards; this sync + the ADR). `CODE-GREEN`. **What remains is Task 15 — device acceptance, owner-only on the SM-A325F** (Master Plan §4 DoD: a block touching a production surface is not done without it), and nothing has run on device, `MigrationTest`'s 3→4 and 1→4 included |
+| **4.0** — invert the understanding flag (`llmRouterEnabled` → `localOnlyMode`, ADR 1/4) | ✅ 2026-08-20 code, **`DEVICE-ACCEPTED` 2026-08-22** in the Task 15 session (`ru-RU`, no provider ⇒ «ИИ-провайдер ещё не настроен» + a route to the provider screen, not `Unknown command`); first behavioural change of the track |
+| **4** — A0 thin agentic spike | ✅ **2026-08-22 — `CLOSED`** — all nine work-order items, then Task 15: the owner ran all eight §12 acceptance items on the SM-A325F and signed off. Migration 3→4 executed for real by both routes (instrumented 9/9 on device; and a genuine `user_version` 3→4 upgrade of the owner's own database, `identity_hash` matching `4.json`). Four residual limitations named in Known debt — the largest is that §12.8 is unreachable by any path a user can take (an A4′ debt) |
 | **4.5–7** — A0.5 second consumer, A1′ ToolRegistry, A4′ runtime, A2/A3/A5/A6 | each needs its own spec + plan (`brainstorm → spec → plan → build`) |
 
 The four strategic ADRs (all 2026-08-19, in `decisions.md`):
@@ -59,8 +59,8 @@ The four strategic ADRs (all 2026-08-19, in `decisions.md`):
 1. **Deterministic-first redefined** — understanding belongs to the model, execution to the
    deterministic layer (see Hard rules). `FeatureFlags.llmRouterEnabled` was **inverted onto the new
    key** `localOnlyMode` / `flag_local_only`, default `false` (a plain default flip would have been
-   inert — DS-11 `autoHideNavBar` precedent). **Implemented 2026-08-20 by Этап 4.0**, `CODE-GREEN`;
-   the old key is orphaned and there is no migration.
+   inert — DS-11 `autoHideNavBar` precedent). **Implemented 2026-08-20 by Этап 4.0**, `DEVICE-ACCEPTED`
+   2026-08-22; the old key is orphaned and there is no migration.
 2. **Platform re-baseline 2026** — ONNX NLU closed, OQ#1/#2/#3 closed; local-inference runtime is
    **LiteRT / LiteRT-LM** (alternative on record: ExecuTorch; separate path: AICore); `AppFunctions` /
    `MCP` are first-class tool sources; performance budgets become three tiers.
@@ -79,9 +79,10 @@ Everything below is on `launcher--7` and `CODE-GREEN` (gate green: `:domain:jvmT
 assembleDebug` — `:domain:jvmTest` must be listed, `testDebugUnitTest` does not reach it since `:domain`
 went KMP; plus `verifyRoborazziDebug` where `core/ui` is touched). Most of it is also `DEVICE-ACCEPTED`
 on SM-A325F / Android 13 — the owner personally ran on-device verification and signed off — **except**
-FastPath's `ru`/`tr` locale forms (0.2), Action & Safety (DS-5), the i18n surface (I18N-1), the flag
-inversion (Этап 4.0) and the whole A0 agent slice (Этап 4), which are `CODE-GREEN` only; see Known
-debt. `CLOSED` = both, with any residual limitation named rather than implied absent (Этап 0.5 —
+Action & Safety (DS-5), the i18n surface (I18N-1) and FastPath's `tr` locale forms, which are
+`CODE-GREEN` only; see Known debt. Этап 4.0 and the whole A0 agent slice (Этап 4) became
+`DEVICE-ACCEPTED` on 2026-08-22 in the Task 15 session, which also exercised FastPath's `ru` launch
+verb («открой …») on the phone — `tr` still has not run there. `CLOSED` = both, with any residual limitation named rather than implied absent (Этап 0.5 —
 status vocabulary).
 
 - **Launcher core** — home, app drawer, settings, app launch; fully offline.
@@ -101,7 +102,7 @@ status vocabulary).
 - **Design system v1.1** — grey tokens, `core/ui` primitives + controls, Roborazzi goldens.
 - **i18n** — `en`/`ru`/`tr` on every migrated screen through one `sidrString` seam; per-app language
   switch; four guard tests + an owner-sign-off release gate.
-- **Agent slice (A0, `CODE-GREEN` only — nothing has run on a device)** — one goal crosses two tool
+- **Agent slice (A0, `CLOSED` — owner-accepted on the SM-A325F 2026-08-22, four residual limitations in Known debt)** — one goal crosses two tool
   calls where the second consumes what the first **observed**, and the risk transition between them
   stops the loop for consent. `domain/tool` + `domain/agent` + `domain/trace` are the portable engine;
   `ToolExecutor` is its only path to the world and has exactly **one** call site, below the checkpoint
@@ -123,16 +124,22 @@ Not `CLOSED`. Status vocabulary (Этап 0.5): `CODE-GREEN` (gate green, no dev
 pass does not count) / `CLOSED` (both, plus any residual limitation named, not implied absent). Each item
 below is recorded in its own ADR.
 
-- **`CODE-GREEN`, not `DEVICE-ACCEPTED`:** the **whole A0 agent slice** (Этап 4) — its eight
-  acceptance items (spec §12) are Task 15, owner-only on the SM-A325F, and by Master Plan §4 DoD the
-  block is **not closed** without them. In particular `MigrationTest`'s 3→4 and 1→4 cases are
-  `androidTest`: they compile, no task in the unit gate executes them, so `Migration3To4`'s SQL has
-  never actually run anywhere — it is verified only byte-for-byte against the generated `4.json`.
-  Этап 4.0's flag inversion has not run on the SM-A325F either —
-  its device check (`ru-RU`, no provider configured ⇒ the honest message, not `Unknown command`) is
-  outstanding, it is the first change of the track a user would actually *feel*, and no later block
-  may be declared `DEVICE-ACCEPTED` on top of it. Task 15 clears both in one session.
-  DS-5's own acceptance checklist has never been run (since 2026-07-13); I18N-1 was verified only by agent-driven `adb`/`uiautomator` — its offline path, live
+- **A0 and Этап 4.0 are `DEVICE-ACCEPTED` as of 2026-08-22, with four residual limitations** (owner ran
+  all eight §12 items on the SM-A325F and signed off; full record in the A0 ADR): **(1)** §12.8 —
+  "app installed ⇒ the store step is skipped" — is **unreachable by any path a user can take**, because
+  `AgentSession.resumed()` continues from the persisted cursor and nothing re-plans, so a session that
+  already observed `APP_NOT_INSTALLED` opens the store even if the app was installed while the plan sat
+  paused; it passed only through the `cursor == 0` / mid-step shapes, the latter produced with
+  `pm disable-user` plus an on-device `force-stop` poll (window 157–170 ms warm, 1033 ms cold). This is
+  a **staleness** debt owned by **A4′**, alongside the missing wall-clock budget, and it is narrow today
+  only because Master Plan §3.6 `B1` holds `GoalShape` at one value. **(2)** the plan list is not drawn
+  in `AwaitingConsent` — the two-step shape is visible in `Paused` and `Completed` only. **(3)** «План
+  выполнен» means "every step ran", not "the goal was achieved". **(4)** item 8's acceptance needed agent
+  intervention, so it exercises the engine rather than the product. Migration 3→4 is no longer a debt:
+  it executed on device both instrumented (9/9) and as a genuine `user_version` 3→4 upgrade with a
+  matching `identity_hash`.
+- **`CODE-GREEN`, not `DEVICE-ACCEPTED`:** DS-5's own acceptance checklist has never been run
+  (since 2026-07-13); I18N-1 was verified only by agent-driven `adb`/`uiautomator` — its offline path, live
   TalkBack, fontScale 2.0, and the system per-app-language picker are untested. DS-6B is `CLOSED` (owner
   ran full on-device acceptance 2026-08-08) but carries one named residual: its MWL times are
   cross-implementation-verified only (Istanbul/Makkah are authority-table-anchored) — `CLOSED` is not a
@@ -152,7 +159,10 @@ below is recorded in its own ADR.
   `RuntimeBudget` bounds steps and consecutive failures only, and the domain is deliberately clock-free,
   so a hanging tool is bounded by nothing (A4′); a persisted `Failed` observation **loses its
   `CommandFailure` variant** and restores as `Generic`, so a resumed session reports a less specific
-  failure than the one that occurred; `GoalShape` must stay at **one** value until A4′ (Master Plan
+  failure than the one that occurred; **a resumed plan never re-checks its preconditions against the
+  world** — `resumed()` continues from the persisted cursor, so an observation taken before the pause is
+  acted on afterwards however stale it has become (found by Task 15's device acceptance, same A4′
+  staleness family as the wall-clock gap); `GoalShape` must stay at **one** value until A4′ (Master Plan
   §3.6 `B1`).
 - **A0 guards, deferred findings D1–D11** (full text in `§HANDOFF` of the track plan).
   *Owner-level* — they need the `Test` inputs block in `app/build.gradle.kts` widened, which costs

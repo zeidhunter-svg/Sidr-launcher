@@ -18,9 +18,19 @@ import com.sidr.launcher.domain.tool.ToolRegistry
  * engine below is untouched.
  *
  * Step 0 re-attempts the launch that FastPath already tried. That is deliberate: the plan must be
- * self-contained across a process restart (it cannot depend on an observation that lives outside the
- * session), and if the user installed the app while the session was paused, step 0 launches it and
- * step 1 correctly skips.
+ * self-contained across a process restart — it cannot depend on an observation that lives outside the
+ * session.
+ *
+ * **What that re-attempt buys, and what it does not — corrected by the Task 15 device acceptance
+ * (2026-08-22), where this KDoc claimed more than the engine does.** If the process died *before*
+ * step 0 recorded its observation — `cursor == 0`, or the mid-step shape where `ToolInvoked` carries
+ * no `ToolObserved` — the resumed session runs step 0 again, so an app installed in the meantime is
+ * launched and step 1 skips on its precondition. That path is verified on device. It is **not** the
+ * path a user takes: [AgentSession.resumed] continues from the persisted cursor, so a session that
+ * already observed `APP_NOT_INSTALLED` keeps that observation and opens the store even if the app was
+ * installed while the plan sat paused. Re-checking a precondition against a world that moved on is a
+ * staleness concern, of a piece with the missing wall-clock budget, and belongs to A4' with the
+ * execution model rather than to a half-patch here.
  *
  * **Step 1 binds rather than repeats (F6).** Before the amendment the planner wrote the same literal
  * into both steps, so the two could silently disagree about what was being searched for — the plan

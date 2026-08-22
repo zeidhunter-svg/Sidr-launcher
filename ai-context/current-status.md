@@ -6,9 +6,11 @@
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
 > / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-08-22
-> (A0 work-order items 8–9 — the four mutation-verified guards, the second `DOC-ADL-3` amendment, the
-> ADR and this sync; the block is code-complete and `CODE-GREEN`, and **not closed** — Task 15 device
-> acceptance is owner-only); prior 2026-08-21
+> (**Task 15 — A0 device acceptance on the SM-A325F: all eight §12 items run by the owner and signed
+> off, the inherited Этап 4.0 check passed in the same session, migration 3→4 executed for real by both
+> routes; A0 and Этап 4.0 are now `DEVICE-ACCEPTED`, A0 `CLOSED` with four named residuals**);
+> same-day (A0 work-order items 8–9 — the four mutation-verified guards, the second `DOC-ADL-3`
+> amendment and the ADR); prior 2026-08-21
 > (A0 work-order items 2b/4/5/6/7 — F6, the one tool source, Room 3→4 + the session store, the
 > `RouteCommandUseCase` cut, the execution surface; `CODE-GREEN`, nothing on device); same-day (agentic-track revision — the two-consumers fork, block A0.5, fork F6 in
 > A0; docs only); prior 2026-08-20
@@ -22,12 +24,32 @@
 > DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer
 > Correctness CLOSED — device-accepted by the owner).
 
-## Agentic track — Этап 4 (A0) — code complete, `CODE-GREEN`, block NOT closed (2026-08-22)
+## Agentic track — Этап 4 (A0) — `CLOSED`, device-accepted (2026-08-22)
 
-**All nine work-order items are done. The block is not.** Master Plan §4 DoD requires device
-acceptance by the owner when a block touches a production surface, and A0 touches one — so the honest
-label is `CODE-GREEN` with Task 15 outstanding, not a closed block. Full record: ADR
-«2026-08-22 — Этап 4 (A0)» in [decisions.md](decisions.md).
+**All nine work-order items are done, and so is Task 15.** The owner personally ran all eight §12
+acceptance items on the SM-A325F and signed off, so A0 is `CLOSED`: gate green **and**
+`DEVICE-ACCEPTED`, with four residual limitations named rather than implied absent (below). The
+inherited Этап 4.0 check ran in the same session and passed, which lifts **4.0** to `DEVICE-ACCEPTED`
+and removes the `§HANDOFF` bar on declaring later blocks accepted. Full record: ADR
+«2026-08-22 — Этап 4 (A0)» in [decisions.md](decisions.md), section «Task 15».
+
+**What the device added to what the gate already claimed.** Migration 3→4 executed for real by both
+routes — instrumented `:data:repository:connectedDebugAndroidTest` 9/9 on the phone, and a genuine
+`user_version` 3→4 upgrade of the owner's own database with `identity_hash` matching `4.json`; that
+debt is retired. F6 was confirmed on hardware (step 1's `args_json` held `from_step`, not a frozen
+copy). `force-stop` mid-plan came back as `Paused` with exactly one `SessionPaused`; a double-tapped
+confirm opened the store exactly once; a cancelled plan left all three `agent_*` tables empty by
+cascade.
+
+**Four residual limitations.** (1) §12.8 — "app installed ⇒ store step skipped" — is **unreachable by
+any path a user can take**: `resumed()` continues from the persisted cursor and nothing re-plans, so a
+stale `APP_NOT_INSTALLED` observation still opens the store. It passed only via the `cursor == 0` /
+mid-step shapes, the latter produced with `pm disable-user` and an on-device `force-stop` poll (window
+157–170 ms warm, 1033 ms cold). Recorded as an **A4′ staleness debt** beside the missing wall-clock
+budget; `TemplatePlanner`'s KDoc, which claimed the user-facing version, was corrected in the closing
+commit. (2) The plan list is not drawn in `AwaitingConsent`. (3) «План выполнен» means "every step
+ran", not "the goal was achieved". (4) Item 8's acceptance needed agent intervention, so it exercises
+the engine rather than the product.
 
 **What the slice does.** One goal crosses two tool calls where the second consumes what the first
 *observed*, and the risk transition between them stops the loop for consent. «открой убер» with Uber
@@ -92,11 +114,12 @@ original `goal_query` — `query` is a forbidden term in `RoomColumnNamesGuardTe
 name would have widened the database's one owner-granted exemption to two. The **spec** was amended to
 match the code (`b0bc428`); `resolution_preferences.query` stays the only approved collision.
 
-**Status is `CODE-GREEN`, and narrowly so.** Gate `:domain:jvmTest testDebugUnitTest assembleDebug` green
-at 1098 tests, 0 failures. **Nothing has run on device.** In particular `MigrationTest`'s 3→4 and 1→4
-cases are `androidTest`: they compile, and no task in the unit gate executes them, so `Migration3To4`'s
-SQL has never actually run anywhere. It is verified only by byte-for-byte comparison against the
-generated `4.json`.
+**Status was `CODE-GREEN` at code completion; Task 15 lifted it to `CLOSED` on 2026-08-22.** Gate
+`:domain:jvmTest testDebugUnitTest assembleDebug` green at 1098 tests, 0 failures. What was written
+here as "nothing has run on device" — in particular that `MigrationTest`'s 3→4 and 1→4 cases are
+`androidTest`, compiled but executed by no task in the unit gate, so `Migration3To4`'s SQL had run
+nowhere — is **no longer true**: both cases ran on the SM-A325F, and the same migration then ran again
+as a genuine upgrade of the owner's database.
 
 - **Item 6 — the cut into the command pipeline (`c7152e1`, review fixes `f4e61d3`).**
   `RouteCommandUseCase` gains one branch keyed on `CommandMessage.NoAppFound`, above the local-only
@@ -118,10 +141,13 @@ another `SessionPaused` to a session that paused once — unbounded on a home-sc
 longer 1:1 with reality (`DOC-ILM-3`). All five findings are fixed and mutation-verified, each caught by
 only its own test.
 
-**Open: Task 15 only — device acceptance, and it is owner-only.** The eight items of spec §12 on the
-SM-A325F, plus the inherited Этап 4.0 check in the same session (`ru-RU`, no provider ⇒ the honest
-message, not `Unknown command`). An agent-driven `adb`/`uiautomator` pass does **not** count (Этап 0.5
-vocabulary). A1′ is **not** started automatically (Master Plan §4 DoD).
+**Task 15 — done 2026-08-22, owner-run on the SM-A325F.** All eight items of spec §12 passed, and the
+inherited Этап 4.0 check passed in the same session (`ru-RU`, no provider ⇒ «ИИ-провайдер ещё не
+настроен» plus a route to the provider screen, not `Unknown command`). The owner performed every item
+personally; the agent prepared, drove instrumentation and recorded, and no claim here rests on an
+agent-driven `adb` pass (Этап 0.5 vocabulary). One finding, four residual limitations — see the head of
+this section and the ADR. A1′ is **not** started (Master Plan §4 DoD); the next block in the queue is
+**A0.5**, a brief with four forks for the owner before any code.
 
 **Gate at close (2026-08-22).** `:domain:jvmTest testDebugUnitTest assembleDebug --rerun-tasks` —
 BUILD SUCCESSFUL, exit 0, **553/553 tasks genuinely executed**, **1138 tests / 0 failures**;

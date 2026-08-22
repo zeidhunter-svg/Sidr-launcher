@@ -6656,12 +6656,16 @@ Android-специфичным решением, принятым по доро�
 в релиз с текущей формой `args_json`/`observation_*`, поток данных перестаёт быть правкой контракта и
 становится миграцией. Поэтому пункт 3 исполняется первым и отдельно от остальных.
 
-## 2026-08-22 — Этап 4 (A0) — Thin Agentic Spike: the engine is proved in code, the block is not accepted
+## 2026-08-22 — Этап 4 (A0) — Thin Agentic Spike: the engine is proved in code, and accepted on device
 
-**Status: `CODE-GREEN`. Not `DEVICE-ACCEPTED`, and — deliberately — not closed.** Master Plan §4 DoD
-requires device acceptance by the owner when a block touches a production surface; A0 touches one
-(the execution surface on Home). Task 15 is owner-only, on the SM-A325F, and has not been performed.
-Everything below is a claim about a green unit gate and nothing else. Block A0 of
+**Status: `CLOSED` — gate green *and* `DEVICE-ACCEPTED`, with four residual limitations named below
+rather than implied absent.** Master Plan §4 DoD requires device acceptance by the owner when a block
+touches a production surface; A0 touches one (the execution surface on Home). The owner personally ran
+all eight acceptance items of spec §12 on the SM-A325F on 2026-08-22 and signed off; the inherited
+Этап 4.0 check ran in the same session and also passed, which lifts **4.0** to `DEVICE-ACCEPTED` and
+unblocks later blocks from being declared accepted on top of it. See «Task 15» below for what was
+observed, and for the one finding the device produced. Everything above that section is a claim about
+a green unit gate; everything in that section is a claim about the phone. Block A0 of
 [docs/governing/sidr-agentic-master-plan-v1.0.md](../docs/governing/sidr-agentic-master-plan-v1.0.md)
 §3.1; spec `docs/superpowers/specs/2026-08-20-a0-thin-agentic-spike-design.md`; plan
 `docs/superpowers/plans/2026-08-20-a0-thin-agentic-spike.md`; milestone M-A1.
@@ -6976,9 +6980,87 @@ declarations), plus the doctrine matrix. **`ActionIds` untouched** (frozen, ADR 
 `OutboundContextPolicy.ALLOWED` not widened by a single field. `core/ui` untouched. PREVIEW surfaces
 untouched. The A1 fork **not** pre-empted — F2 keeps both of its answers available.
 
-**Known limitation, stated rather than implied absent:** this is `CODE-GREEN` and the block is **open**.
-Nothing in it has run on a device. Task 15 — the eight acceptance items of spec §12 — is owner-only,
-and it also carries the inherited Этап 4.0 device check (`ru-RU`, no provider configured ⇒ the honest
-message, not `Unknown command`). Until the owner performs both, A0 is not `DEVICE-ACCEPTED`, and by
-`§HANDOFF`'s standing rule no later block may be declared `DEVICE-ACCEPTED` on top of it. A1′ is
-**not** started automatically (Master Plan §4 DoD).
+### Task 15 — device acceptance, SM-A325F / Android 13, owner-run (2026-08-22)
+
+The owner personally performed every item; the agent prepared, drove the instrumentation and recorded.
+An `adb`/`uiautomator` pass by an agent does not count (Этап 0.5 vocabulary), and nothing below rests
+on one.
+
+**Device state before the run, verified rather than assumed:** locale `ru-RU`; the DataStore file held
+only the device-profile cache, i.e. **no provider configured** and `localOnlyMode` at its default
+`false`; `sidr_history.db` was a genuine `user_version = 3` file written by the 2026-08-19 install.
+The new debug build was installed **over** it without an uninstall, so the first database open ran the
+real migration.
+
+**The eight items of spec §12, each with what actually evidenced it:**
+
+1. **Two-step plan** — plan of two steps created (`PlanCreated` detail `2`, two `agent_plan_step`
+   rows). The *list* is not drawn in `AwaitingConsent` (see limitation 2), so the owner saw it in
+   `Paused` and in `Completed`; at the gate the two-step shape showed as the provenance line
+   `АГЕНТ · LAUNCH_APP · PLAY_STORE_SEARCH`.
+2. **The gate stops at the risk transition** — `SAFE → CONFIRM`, `ConsentRequested(1, RISK_LEVEL)`,
+   before the store step.
+3. **Cancel mid-plan** — no store activity in logcat, and all three `agent_*` tables empty afterwards:
+   the terminal state deleted the session by cascade, as `AgentAtRestGuardTest` claims, now on hardware.
+4. **The trace shows every step** — read out of the database while the session sat at the gate:
+   `PlanCreated(2) · StepStarted(0) · ToolInvoked(0, launch_app) · ToolObserved(0) ·
+   ConsentRequested(1, RISK_LEVEL)`. Step 1's `args_json` held `from_step`, not a frozen copy of the
+   query — **F6 verified on device**.
+5. **`am force-stop` mid-plan → `Paused`** — same session id, state `Paused`, cursor unchanged, and
+   the trace grew by **exactly one** `SessionPaused`. Honest offer to continue, no silent resume.
+6. **Double-tap confirm** — Play Store came to the front **exactly once** (one `onTop=true`, one task,
+   one `Fully drawn` in logcat). The step ran once.
+7. **Zero diff over the pre-split ViewModel suites** — `git diff 5a966df..64553a3` over the nine suites
+   that existed before the split is empty. The only later change is +53 lines in `LauncherViewModelTest`
+   from `f4e61d3`, which is the behavioural cut and is exactly what spec §10 permits.
+8. **App installed ⇒ step 1 skipped, `Completed`** — see below; passed, but only by a path a user
+   cannot take.
+
+**The inherited Этап 4.0 check, same session:** `ru-RU`, no provider, a command FastPath cannot match
+produced «ИИ-провайдер ещё не настроен.» plus «Настроить провайдера» — the honest statement of which of
+the three blocked states it is, with a route to fixing it, and **not** `Unknown command`.
+**Этап 4.0 is therefore `DEVICE-ACCEPTED`**, and the standing `§HANDOFF` prohibition it created is
+lifted.
+
+**Migration 3 → 4 — executed for real, by both available routes.** (a) `:data:repository:connected
+DebugAndroidTest` on the SM-A325F: exit 0, 9/9, including
+`v3_to_v4_migration_addsAgentSessionTables_andValidatesAgainstGoldenSchema` and
+`v1_to_v4_migrationRunway_composes`. (b) The genuine upgrade: `user_version` went 3 → 4 on the owner's
+own database, the three `agent_*` tables appeared beside the five existing ones, and
+`room_master_table.identity_hash` came out `4f50e433566f387714cb09ecc5017737` — identical to
+`schemas/…/4.json`. The debt «`Migration3To4`'s SQL has never run anywhere» is retired from both sides.
+Stated honestly: all five pre-existing tables were **empty**, so this proves the migration executed and
+produced the expected schema, **not** that it preserves data; `fallbackToDestructiveMigration()` is on
+in DEBUG but cannot mask a failure here, since Room falls back only when no migration *path* exists and
+`Migration3To4` is registered.
+
+**The finding the device produced — item 8 is unreachable by any path a user can take.**
+`AgentSession.resumed()` continues from the **persisted cursor**, and `RunAgentSessionUseCase` does not
+re-plan. So a session that already observed `APP_NOT_INSTALLED` keeps that observation: install the app
+while the plan sits paused, press Continue, and Sidr opens the store anyway, acting on a picture of the
+world that has moved on. Item 8 passed only through the two shapes where step 0 has not yet recorded an
+observation — `cursor == 0`, and the mid-step shape where `ToolInvoked` carries no `ToolObserved`. The
+second was produced deliberately: `pm disable-user org.telegram.plus` made the app invisible to
+FastPath, an on-device poll fired `force-stop` inside the mid-step window, `pm enable` restored the app,
+and Continue then re-ran step 0, launched Plus, **skipped** step 1 on its precondition and closed the
+plan `Completed` — the store never opened. The window is **157–170 ms on a warm process and 1033 ms on
+a cold one**, measured from the traces; a USB round-trip cannot hit it, which is why the poll had to run
+on the phone. `TemplatePlanner`'s KDoc claimed the user-facing version of this behaviour and was
+**corrected in this commit** — the code was not touched. The behaviour itself is a **staleness**
+concern, of a piece with the missing wall-clock budget, and is recorded as an **A4′ debt**: re-checking
+a precondition against a world that moved belongs with the execution model, not to a half-patch. It is
+narrow today by construction — Master Plan §3.6 `B1` holds `GoalShape` at one value until A4′.
+
+**Four residual limitations, named rather than implied absent:**
+
+1. **Item 8 is not reachable by a user** (above). Owner-decided on 2026-08-22: acceptance stands, the
+   behaviour becomes an A4′ debt.
+2. **The plan list is not drawn in `AwaitingConsent`** — `AgentSessionSurface` renders the gate with a
+   provenance line but no step list, so the two-step shape is visible in `Paused` and `Completed` only.
+3. **«План выполнен» means "every step ran", not "the goal was achieved"** — in the Signal run the plan
+   closed `Completed` while the app remained uninstalled. True to the engine, wider than the wording.
+4. **Item 8's acceptance required agent intervention** (`pm disable-user` plus a `force-stop` poll), so
+   it exercises the engine rather than the product.
+
+A1′ is **not** started (Master Plan §4 DoD: the next block is not begun automatically). The next block
+in the queue is **A0.5**, and it is a brief with four forks for the owner **before** any code.

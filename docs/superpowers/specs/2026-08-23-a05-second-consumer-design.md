@@ -227,6 +227,19 @@ closed two-value Android enum.
 recorded against A1′ (§11.2) and pinned by a test that asserts both outcomes side by side, so the
 divergence is a fact in CI rather than a paragraph in a document.
 
+> **Owner instruction, 2026-08-23 — the asymmetry STAYS. Unifying the two outcomes is NOT a task in
+> this block, and no implementer may take it as one.** §6.3 describes a recorded architectural finding,
+> not a defect awaiting repair. Making the JVM consumer end `Completed` here would require naming the
+> fact — a new `ObservedFact` value in `commonMain` — which is exactly the Approach B this block
+> rejected in §2 and exactly the "fix it now" reflex Master Plan §3.4 warns against. The finding is
+> owned by **A1′**.
+>
+> This is held **mechanically, not by this paragraph.** The divergence test asserts both outcomes, so a
+> "fix" that unifies them turns it **RED**; its name and KDoc say the divergence is intended, so
+> deleting or relaxing it is a conscious act against a named owner decision rather than a tidy-up. A
+> guard also pins `ObservedFact` at its two values and `GoalShape` at its two, so growing either fails
+> closed — which incidentally gives Master Plan §3.6 `B1` its first test.
+
 ## 7. What changes in `commonMain` — exactly two edits
 
 **7.1 — `GoalShape` gains one value.**
@@ -457,6 +470,10 @@ two **own** consumers, not a published API (§7). Any Android code. A model plan
 MCP client (`F3`). Deciding the A1 fork — both branches must be exactly as cheap after this block as
 before. Widening `ActionIds`. Widening `OutboundContextPolicy.ALLOWED`. Fixing the vocabulary findings
 of §11.2 — they are recorded with addresses, and fixing them here is Approach B/C, rejected in §2.
+
+**Named explicitly because it is the one an implementer will reach for:** unifying the
+`Failed` / `Completed` divergence of §6.3. It is a recorded finding owned by A1′, it stays, and §6.3
+holds it with a test rather than with a sentence.
 
 ## 16. Work order
 

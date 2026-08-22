@@ -3536,7 +3536,7 @@ silently skip on an incremental build."
 - Modify: `ai-context/current-status.md`
 - Modify: `docs/superpowers/plans/2026-08-18-agentic-track-restart.md`
 
-- [ ] **Step 1: Amend `DOC-ADL-3` and log it**
+- [x] **Step 1: Amend `DOC-ADL-3` and log it**
 
 Replace the rule's text with the wording agreed in spec §8.1:
 
@@ -3549,7 +3549,7 @@ Add a row to §6, the amendment journal, in the same voice as the 2026-08-20 row
 old text said, why A0 made its last clause false, that rule 5 of the new rule already put the plan cache
 on the local path, and that the rule ID survives while the text does not.
 
-- [ ] **Step 2: Give `DOC-ILM-3` and `DOC-HMA-2` real test names**
+- [x] **Step 2: Give `DOC-ILM-3` and `DOC-HMA-2` real test names**
 
 Replace their `<нет>` cells with the actual class names from Tasks 6 and 13. `DoctrineMatrixGuardTest`
 fails the build on a claim naming a test that does not exist, so run it immediately:
@@ -3562,7 +3562,7 @@ fails the build on a claim naming a test that does not exist, so run it immediat
 Leave `DOC-HMA-3`, `DOC-ILM-2`, `DOC-NYH-3` and `DOC-HMA-4` as `<нет>` with their debt owners. A matrix
 that cannot show debt is a matrix where debt hides.
 
-- [ ] **Step 3: Write the ADR**
+- [x] **Step 3: Write the ADR**
 
 Append to `ai-context/decisions.md`, following the format of the 2026-08-20 Этап 4.0 entry. It must
 record: the five owner-resolved forks and the reasoning that moved the recommendation on F3; the eight
@@ -3571,7 +3571,7 @@ closed; the mutation results from Task 13 Step 7; the named gaps (no wall-clock 
 `Failed` observation loses its `CommandFailure` variant; the 3 -> 4 migration test is instrumented and
 may not have run); and the honest status label.
 
-- [ ] **Step 4: Sync `CLAUDE.md`**
+- [x] **Step 4: Sync `CLAUDE.md`**
 
 Update the stage table (Этап 4 -> ✅ with its status), the Shipped-surface list (the agent slice, and
 that a FastPath "no such app" now becomes a two-step plan in every network state), the Known-debt list,
@@ -3579,12 +3579,12 @@ and the Contract -> Owner module table with `domain/tool`, `domain/agent`, `doma
 `AgentSessionStore` and the data-layer adapters. Add the Этап 4 entry to the history map. Do **not** put
 history into `CLAUDE.md` — it points at the ADR.
 
-- [ ] **Step 5: Sync `ai-context/current-status.md`**
+- [x] **Step 5: Sync `ai-context/current-status.md`**
 
 Re-base on Этап 4 with the status vocabulary from Этап 0.5, naming what was and was not verified on a
 device.
 
-- [ ] **Step 6: Mark the stage and rewrite `§HANDOFF`**
+- [x] **Step 6: Mark the stage and rewrite `§HANDOFF`**
 
 In `docs/superpowers/plans/2026-08-18-agentic-track-restart.md`, mark the Этап 4 section ✅ with a
 result paragraph, and rewrite `§HANDOFF` for the next session. It must carry forward at minimum: that
@@ -3593,7 +3593,7 @@ that `DOC-ADL-3` has now been amended twice and its ID is the stable handle; the
 trap and that A0 closed it for two more roots; that `:domain:jvmTest` is not reached by
 `testDebugUnitTest`; and every debt this block left open.
 
-- [ ] **Step 7: Run the full gate**
+- [x] **Step 7: Run the full gate**
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
@@ -3605,7 +3605,7 @@ trap and that A0 closed it for two more roots; that `:domain:jvmTest` is not rea
 Expected: BUILD SUCCESSFUL for both. Read the output. Do not pipe through `tail`. `verifyRoborazziDebug`
 passing with no golden changes is the proof that `core/ui` was genuinely not touched.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add docs/ ai-context/ CLAUDE.md

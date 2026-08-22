@@ -5,7 +5,10 @@
 > digest); per-phase plans carry their own checklists.** This file is the status snapshot — if it
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
-> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-08-21
+> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-08-22
+> (A0 work-order items 8–9 — the four mutation-verified guards, the second `DOC-ADL-3` amendment, the
+> ADR and this sync; the block is code-complete and `CODE-GREEN`, and **not closed** — Task 15 device
+> acceptance is owner-only); prior 2026-08-21
 > (A0 work-order items 2b/4/5/6/7 — F6, the one tool source, Room 3→4 + the session store, the
 > `RouteCommandUseCase` cut, the execution surface; `CODE-GREEN`, nothing on device); same-day (agentic-track revision — the two-consumers fork, block A0.5, fork F6 in
 > A0; docs only); prior 2026-08-20
@@ -19,12 +22,46 @@
 > DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer
 > Correctness CLOSED — device-accepted by the owner).
 
-## Agentic track — Этап 4 (A0), work-order items 2b/4/5/6/7 — CODE-GREEN (2026-08-21)
+## Agentic track — Этап 4 (A0) — code complete, `CODE-GREEN`, block NOT closed (2026-08-22)
 
-**Three of the nine work-order items landed the same day the revision reframed the block, and the
-ordering the revision insisted on was honoured.** Recorded here rather than at block close because the
-in-flight state was being read wrong: `§HANDOFF`, `CLAUDE.md` and the spec's own work order all still
-said items 4–9 were open.
+**All nine work-order items are done. The block is not.** Master Plan §4 DoD requires device
+acceptance by the owner when a block touches a production surface, and A0 touches one — so the honest
+label is `CODE-GREEN` with Task 15 outstanding, not a closed block. Full record: ADR
+«2026-08-22 — Этап 4 (A0)» in [decisions.md](decisions.md).
+
+**What the slice does.** One goal crosses two tool calls where the second consumes what the first
+*observed*, and the risk transition between them stops the loop for consent. «открой убер» with Uber
+not installed becomes a two-step plan — launch, observe `APP_NOT_INSTALLED`, offer the store — in
+**every** network state, because the A0 planner is deterministic and consults no model. That is what
+forced the second `DOC-ADL-3` amendment below.
+
+**Items 8–9, closed 2026-08-22.** Item 8 — four guards, each mutation-verified, over three rounds
+(`651d718`, `5e315d7`, `2e43b5d`), each round independently reviewed and approved: one call site to the
+world; no action vocabulary and no transport inside the engine; a planted sentinel reaching no outbound
+channel in four local-only × offline states plus «no provider configured»; the agent tables empty at
+rest in all five terminal paths. Item 9 — the doctrine amendment, the ADR and this sync. Ten review
+findings are deferred as **D1–D10**, none blocking, and they live in `§HANDOFF` and `CLAUDE.md`
+§ Known debt rather than only in the SDD ledger — three items of that family were lost once exactly
+that way.
+
+**The mutation row worth keeping.** Proving a text-scanning guard's Gradle input declaration needs a
+mutation whose **bytecode is identical**: the naive version (add an import) shifts every line below it,
+`:domain`'s compiled output changes, the task re-runs for an unrelated reason and reports a false
+"trap closed". The line-balanced variant left `:app:testDebugUnitTest` `FROM-CACHE` at exit 0 while
+`domain/agent` sat there importing `LauncherAction`; with the inputs block restored, the same mutation
+went RED.
+
+**Doctrine.** `DOC-ADL-3` amended a second time — parity narrowed to «the model planner is not
+consulted and nothing leaves the device», because deterministic replay *may* change an outcome FastPath
+decided and in A0 it does. `DOC-ILM-3` and `DOC-HMA-2` got real test names; `DOC-ILM-3`'s verification
+type was corrected `arch-guard` → `unit` with its own journal row; `DOC-HMA-2` is closed only for the
+risk-transition half — tool levels do not exist yet and the cell says so. `DOC-HMA-3` is **not** closed:
+A0 has the marking (`ToolDurability.TRANSIENT|DURABLE`), not the rollback.
+
+**Below: the earlier items, as recorded on 2026-08-21.** Three of the nine landed the same day the
+revision reframed the block, and the ordering the revision insisted on was honoured. Recorded then
+rather than at block close because the in-flight state was being read wrong: `§HANDOFF`, `CLAUDE.md`
+and the spec's own work order all still said items 4–9 were open.
 
 - **Item 2b — F6, step-to-step data flow (`08b632f`).** Landed **before** the migration, which was the
   whole point: afterwards the same change would have cost a migration 4→5 plus a persisted-trace
@@ -81,8 +118,15 @@ another `SessionPaused` to a session that paused once — unbounded on a home-sc
 longer 1:1 with reality (`DOC-ILM-3`). All five findings are fixed and mutation-verified, each caught by
 only its own test.
 
-**Open: items 8–9** — the guards with their mutation check, and the ADR + `DOC-ADL-3` amendment + the
-sync of this file and `CLAUDE.md` at block close.
+**Open: Task 15 only — device acceptance, and it is owner-only.** The eight items of spec §12 on the
+SM-A325F, plus the inherited Этап 4.0 check in the same session (`ru-RU`, no provider ⇒ the honest
+message, not `Unknown command`). An agent-driven `adb`/`uiautomator` pass does **not** count (Этап 0.5
+vocabulary). A1′ is **not** started automatically (Master Plan §4 DoD).
+
+**Gate at close (2026-08-22).** `:domain:jvmTest testDebugUnitTest assembleDebug --rerun-tasks` —
+BUILD SUCCESSFUL, exit 0, **553/553 tasks genuinely executed**, **1138 tests / 0 failures**;
+`:core:ui:verifyRoborazziDebug` — BUILD SUCCESSFUL, exit 0, no golden changes, which is the proof that
+`core/ui` was not touched.
 
 ## Agentic track — revision + the two-consumers fork (2026-08-21) — DOCS ONLY
 

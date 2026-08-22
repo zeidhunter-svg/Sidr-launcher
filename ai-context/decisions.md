@@ -6656,3 +6656,268 @@ Android-специфичным решением, принятым по доро�
 в релиз с текущей формой `args_json`/`observation_*`, поток данных перестаёт быть правкой контракта и
 становится миграцией. Поэтому пункт 3 исполняется первым и отдельно от остальных.
 
+## 2026-08-22 — Этап 4 (A0) — Thin Agentic Spike: the engine is proved in code, the block is not accepted
+
+**Status: `CODE-GREEN`. Not `DEVICE-ACCEPTED`, and — deliberately — not closed.** Master Plan §4 DoD
+requires device acceptance by the owner when a block touches a production surface; A0 touches one
+(the execution surface on Home). Task 15 is owner-only, on the SM-A325F, and has not been performed.
+Everything below is a claim about a green unit gate and nothing else. Block A0 of
+[docs/governing/sidr-agentic-master-plan-v1.0.md](../docs/governing/sidr-agentic-master-plan-v1.0.md)
+§3.1; spec `docs/superpowers/specs/2026-08-20-a0-thin-agentic-spike-design.md`; plan
+`docs/superpowers/plans/2026-08-20-a0-thin-agentic-spike.md`; milestone M-A1.
+
+### What changed for a person holding the phone
+
+Before: «открой убер» with Uber not installed ended at one line — the app was not found, and that was
+the end of the conversation. After: the same command becomes a **two-step plan**. Step 0 tries to
+launch and *observes* that nothing is installed. Step 1 offers to search the store for it — and
+because that step's risk is higher than step 0's, the loop **stops** and asks. Nothing runs until the
+person says yes; cancelling means the second step never happens; killing the app mid-plan and
+relaunching shows the session as `Paused` with an honest offer, never a silent resume.
+
+The thing being proved is narrow and worth stating narrowly: **one goal, two tools, and the second
+call depends on what the first one observed.** Not an agent. The engine an agent needs.
+
+### The five owner-resolved forks, plus the sixth that came later (spec §2)
+
+- **F1 — which real goal proves the engine.** «Open X» → X is not installed → offer the store.
+  `launch_app` (SAFE) → observation `APP_NOT_INSTALLED` → `play_store_search` (CONFIRM). Both tools
+  come from the **seven frozen `ActionIds`** (ADR 3/4); nothing was widened.
+- **F2 — how two tools reach a registry without deciding the A1 fork.** `domain/tool/` gets its
+  **own** `ToolId`/`ToolDescriptor`. The registry is a list of sources and A0 has exactly one: a
+  projection of `ActionCatalog` into two descriptors, living **in the adapter, not in the type
+  system**. So A1′ may add sources or throw the projection away, and neither choice is pre-made here.
+- **F3 — who builds the plan.** A deterministic `TemplatePlanner` over the goal **shape**, not a model.
+  The reasoning the spec preserves: the deterministic planner is not a step backwards from an agentic
+  block but the **seed of the learned-plan cache**, which rule 2 of the new rule already places on the
+  local path; A0's subject is the engine, and a model planner would make every test of it a test of a
+  network shape instead; and the price is named rather than hidden — it forces the `DOC-ADL-3`
+  amendment below, which is a change-control item, not a footnote. **Honest gap in this record:** what
+  the pre-decision recommendation *was*, and the argument that moved it, survive in no artifact —
+  the brainstorm that produced them was not written down. Only the decision and its justification did.
+  Later blocks: write the recommendation into the fork table before asking, so the shift is legible.
+- **F4 — where the agent cuts into `RouteCommandUseCase`.** **Above** the `localOnlyMode` check: the
+  agent runs in **every** state, local-only and offline included, because its planner consults nothing.
+  The signed Class B string `settings_local_only_description` promises «nothing leaves this device»,
+  which a local planner does not breach — so it was **not** re-signed and no digest changed.
+- **F5 — what survives process death.** The whole active session — goal, plan, observations, consents,
+  trace — in Room (migration 3 → 4), deleted by cascade the moment any terminal state is reached.
+- **F6 — can a step consume what a previous step produced.** Raised 2026-08-21, after F1–F5, and
+  answered **yes, before the migration**: `ToolDescriptor.outputSchema`, `ToolOutput`,
+  `ArgSource.Literal`/`FromStep`, `ResolvedInvocation`, a two-phase validator. Without it a step
+  cannot hand a value to the next one — *unexpressible in the types*, not merely unimplemented, which
+  would have made every plan the engine can hold a fallback chain rather than a composition. It landed
+  in `08b632f`, before Task 10; afterwards the same edit would have cost a migration 4 → 5 plus a
+  persisted-trace conversion.
+
+Two decisions were taken by the agent and approved with their design sections rather than raised as
+forks: the execution surface lives on Home rather than in a PREVIEW tab (§9), and the
+`LauncherViewModel` split is a behaviour-preserving refactor that ships **first** (§10, Master Plan
+§3.1's mandatory preparatory action — the audit's Risk 1).
+
+### Eight refinements Phase 2 made to the spec's sketch, each for a stated reason
+
+1. `ToolDescriptor.reversible: Boolean` became `durability: ToolDurability { TRANSIENT, DURABLE }`.
+   «Reversible» promised a rollback A0 does not have; `DURABLE` is the **marking** `DOC-HMA-3` asks
+   for without claiming the machinery.
+2. `AgentGoal` carries a typed `shape` beside its text — the cut site already knows the shape
+   (`AppNotInstalled(query)`), and making the planner re-parse raw text would discard what is held.
+3. `TraceEvent.StepRejected` was added: a validation rejection is a step that did **not** run, and
+   `DOC-ILM-3` asks the trace to be 1:1 with reality including the refusals.
+4. `ToolIds` lives in `domain/tool/` with `ToolIdsTest` pinning it to `ActionIds`, so two copies of
+   seven frozen strings cannot drift silently.
+5. `AgentSessionIdFactory` is a **port**: `java.util.UUID` does not exist in `commonMain`, and an
+   injected factory makes every test deterministic.
+6. Trace events carry **no timestamp** — the data layer stamps rows and the domain stays clock-free.
+   This is also why the wall-clock budget is honestly deferred rather than half-built (see gaps).
+7. A tool declaring a `permissionGate` **always** stops for consent in A0. Consulting the real grant
+   state would mean injecting `PermissionChecker` into the engine; stopping unconditionally is the
+   fail-safe half, and costs nothing because neither A0 tool declares a gate.
+8. Consecutive failures are **derived** from the trailing observations rather than stored — one less
+   thing to persist and keep consistent across a restart.
+
+### The seven boundaries, laid on the first slice for two tools
+
+Master Plan §4's growth rule: functionality scales with need, **boundaries do not**. Registry as the
+only path to the world (`ToolRegistry` → `ToolExecutor`, one call site); fail-closed argument
+validation before **every** step, not once at planning time, because a plan can outlive the process
+that made it; the consent gate at the risk transition; loop bounds (`RuntimeBudget`); the trace;
+the egress allow-list (nothing outbound exists in A0, and a guard proves it rather than asserting it);
+rollback — **not** built, and named as not built (`DOC-HMA-3` below). Six of seven laid, the seventh
+marked and addressed.
+
+### Doctrine: what this block changed, and on what evidence
+
+**`DOC-ADL-3` amended a second time** (Master Plan §5 change-control; matrix §6 journal row
+2026-08-22). The 2026-08-20 wording ended «…и всякий исход, который FastPath **решил**, возвращается
+байт-в-байт». `NoAppFound` **is** an outcome FastPath decided, and with F3 and F4 resolved a
+deterministic two-step plan now replaces it in all three states — so that clause became false exactly
+where the rule was written to bite. The doctrine had already contradicted itself here: rule 5 of the
+new rule reads «local-only / offline / no-key ⇒ FastPath + **кэш планов** + честное указание причины»,
+and the plan cache *is* deterministic replay. The amendment resolves it in the direction the new rule
+already pointed and narrows parity to what it always meant in substance: **the model planner is not
+consulted and nothing leaves the device.** The ID survives; the text does not.
+
+**`DOC-ILM-3` (trace) closed in the scope of one slice**, and its verification **type corrected
+`arch-guard` → `unit`** with its own journal row. The debt was recorded in Этап 3.2 when
+`domain/trace/` did not exist and the anticipated form was a scanning `DoctrineGuardTest`. What
+actually closes it is domain behaviour: `AgentExecutorTest` holds the trace 1:1 with execution in both
+directions (every executed step carries `ToolInvoked` **and** `ToolObserved`; `prepare` writes
+`ToolInvoked` *before* the tool is called; a validator rejection is traced as `StepRejected`;
+`perform` **refuses** to invoke when the trace names a step index the plan does not contain or a tool
+that does not match; resuming does not duplicate `ToolInvoked`), and `RoomAgentSessionStoreTest`
+holds the same connectivity on disk (`ToolObserved` with no observation on its step is a `Failure`,
+not a guessed state). Leaving `arch-guard` in the cell while presenting unit evidence would have been
+precisely the unbacked claim the matrix exists to catch.
+
+**`DOC-HMA-2` (consent stops the loop) closed for the half that exists, and only that half.**
+`AgentExecutorTest` proves the risk transition stops the loop before the second tool is ever called
+and that a refusal cancels the session; `ToolExecutorCallSiteGuardTest` proves mechanically that there
+is **exactly one** place a tool can be invoked and that it sits below the checkpoint — which is what
+makes «tool #21 gets consent for free» a fact rather than an intention. The rule's other half — *a
+change of tool level* stops the loop — is **not** closed: tool levels do not exist yet (`DOC-ILM-2`
+says so on its own row). The cell says this instead of implying full closure.
+
+**`DOC-HMA-3` (rollback and compensation) is NOT closed and its row stays `<нет>` ← долг A4′.** A0
+has the **marking** half only: `ToolDurability.TRANSIENT|DURABLE` exists, is unit-tested, and both A0
+tools are `TRANSIENT` (launching an app and opening a store page write no durable state), so the
+trigger never fires in this block. Marking is not rollback. `DOC-NYH-3`, `DOC-ILM-2` and `DOC-HMA-4`
+also stay named debts of A1′/A4′ — a matrix that cannot show debt is one where debt hides.
+
+**Two rows gained agent evidence beyond the two the spec promised**, because Task 10 put the first
+**raw command text** into the database (`agent_session.goal_text`) and that makes two existing privacy
+rules newly load-bearing: `DOC-AML-5` (visible and deletable) now also cites `AgentAtRestGuardTest`
+and `LauncherAgentSessionTest` — the user's cancel deletes the record, and no terminal state leaves it
+on disk; `DOC-HMA-1` (cancel does not act; confirmation acts exactly once) now also cites
+`AgentSessionUseCasesTest`, where the agent loop is a second surface for the same rule.
+
+**One of the four new guards is in no row, on purpose.** `AgentVocabularyGuardTest` holds the A1 fork
+open mechanically — `domain/agent` and `domain/tool` may name no action vocabulary and no transport —
+and **no `DOC-*` rule states that**. Writing a rule for it would be adding a doctrine rule (change-
+control §5) and would pre-empt A1′, so it was not done. Recorded here so its absence reads as a
+decision rather than an oversight; the same is true of the second, structural half of
+`ToolExecutorCallSiteGuardTest` («the registry is the only path to the world» is a Master Plan growth
+rule, not a matrix row).
+
+### Mutation results — the whole basis for believing any guard
+
+`§HANDOFF`'s standing rule: **a green run of a new guard proves nothing.** Task 13 Step 7's table was
+executed as written, each mutation planted and reverted inside one shell invocation with a
+`trap … EXIT` restore (adopted after an agent died mid-round leaving a probe in production source).
+Logs `m1`–`m7d`; every claimed RED was re-verified against them at review time.
+
+| # | Mutation | Result |
+|---|---|---|
+| m1 | a second `toolExecutor.invoke(` in a data-layer class | RED — `there is exactly one call site…` **and** `the one call site lives in AgentExecutor`; 3 tests, 2 failed |
+| m2 | rename `AgentExecutor.kt` | RED — `the one call site lives in AgentExecutor`, and only it |
+| m3 | a scan root pointed at a nonexistent directory | RED — `scanned roots all exist`, i.e. **not** a vacuous pass |
+| m4 | `LauncherAction` imported into the engine | RED — `the engine names no action vocabulary and no transport` |
+| m5 | the agent branch calls the model planner | RED — 5 of 7 `AgentEgressSentinelGuardTest` cases (four local-only × offline states + «no provider configured») |
+| m6 | `delete` dropped from `RunAgentSessionUseCase.persist` | RED — 4 of 6 at-rest cases (`Completed`, refused consent, `Failed`, `Blocked`) |
+| m6b | (fix round) the explicit-cancel path, which does **not** go through `persist` | RED — `Cancelled by an explicit cancel…`; with m6 this gives all **five** terminal paths an observed RED |
+| m7a | control: inputs block removed, no mutation | green, and `:app:testDebugUnitTest` genuinely **executed** |
+| m7b | inputs block removed + the *naive* mutation (add an import) | RED anyway — the added line shifts `:domain`'s compiled output, which is already on `:app`'s test runtime classpath. **This row is the trap:** run alone it would have "proved" a closed trap that was open |
+| m7c | inputs block removed + the same import **balanced by a deleted blank line** (bytecode byte-identical) | `:app:testDebugUnitTest` **FROM-CACHE**, exit 0 — a stale green served while `domain/agent` sat there importing `LauncherAction` |
+| m7d | m7c's mutation with the inputs block **restored** | RED. This is the row that actually proves the `UP-TO-DATE` trap is closed |
+
+The m7 series is the most reusable thing in this block: **a text-scanning guard's Gradle input
+declaration can only be tested with a mutation whose bytecode is identical.** Any other mutation
+re-triggers the task for an unrelated reason and reports a false pass.
+
+The two fix rounds produced their own mutations, and a second lesson. Three prescriptions written by
+the controlling session were **wrong**, and all three were caught the same way — the implementer ran
+the brief's literal wording first, captured the log, and rejected it with evidence: the ruled holder
+list would have shipped a **RED** guard (`SystemIntentToolExecutor.kt`'s supertype line matches the
+regex and *should*); the ruled source-set filter `!name.endsWith("Test")` would have scanned
+`domain/src/test` as production and gone RED on legitimate test code (`"test".endsWith("Test")` is
+false); and the F6 brief mandated widening a scan while forbidding the inputs-block edit that widening
+needs (deferred as D8). **Brief every implementer to do this, and treat «I judged it wrong, here is
+the log» as the desired outcome.**
+
+### Named gaps — things this block does not do, stated rather than implied absent
+
+- **No wall-clock budget.** `RuntimeBudget` bounds `maxSteps` and `maxConsecutiveFailures` only.
+  The domain is deliberately clock-free (refinement 6), so a tool that hangs is bounded by nothing in
+  A0. Deferred to A4′ with its execution model, not half-built here.
+- **A persisted `Failed` observation loses its `CommandFailure` variant.** It stores no output and
+  restores as `Generic` (`RoomAgentSessionStoreTest#a Failed observation stores no output and restores
+  as Generic`), so a session that fails, is persisted and then resumed reports a *less specific*
+  failure than the one that actually occurred.
+- **The 3 → 4 migration has never run.** `MigrationTest`'s 3 → 4 and 1 → 4 cases are `androidTest`:
+  they compile, and **no task in the unit gate executes them**. `Migration3To4`'s SQL is verified only
+  by byte-for-byte comparison against the generated `4.json`. This is the single largest thing Task 15
+  will find out.
+- **`RoomColumnNames` is still a hand-written copy** that `RoomColumnNamesGuardTest` scans instead of
+  the entities or the exported schema (Block F design, not A0). A column added to an `@Entity` and
+  forgotten in the inventory passes silently — including one with a forbidden term in its name. It is
+  noted here because A0 added the first column holding **raw user command text**. Inventory and schema
+  agree today, checked against `schemas/…/4.json`, all eight tables.
+- **`FakeToolRegistry.withA0Tools()` mirrors `SystemIntentToolSource` and is pinned to it by nothing.**
+  `SystemIntentToolContractTest` checks the source against the executor, not the fake against the
+  source, so production could rename an argument or change a risk level while domain tests keep
+  pinning a shape that no longer ships.
+- **`GoalShape` has exactly one value and must keep exactly one** until A4′ (Master Plan §3.6 `B1`,
+  "действует сейчас"). Two values would be a taxonomy built for a consumer that has not arrived.
+
+### Ten deferred items from Task 13's reviews (D1–D10), all non-blocking
+
+None of them was ever a reason not to ship the guards; all of them are written into `§HANDOFF` and the
+cheap ones into `CLAUDE.md` § Known debt, because three items of this family were once lost by living
+only in a ledger. **Owner-level (they need the Gradle inputs block widened, which costs another
+repo-wide snapshot per test task): D1** the `ToolExecutor` declaration scan covers four roots only, so
+an implementation in `data/ai-cloud`, `core/android` or another `feature/*` is invisible to both
+halves of the call-site guard; **D3/D8** the scan is now wider than its declared input
+(`domain/src/commonMain/kotlin`), harmless today because the widened region is empty, and named in
+both guards' KDoc — whoever adds a production source set to `:domain` declares `domain/src` **in the
+same commit**. **Cheap: D2** the holder regex misses `List<ToolExecutor>` / `Map<ToolId, ToolExecutor>`,
+a plausible A1′ shape; **D4** `src/testFixtures` would be scanned as production, `srcDir(…)` additions
+are invisible to a convention scan, and three call-site roots still miss `src/main/kotlin`; **D6** the
+source-set filter still admits AGP's *variant* test source sets (`testDebug`, `androidTestDebug`) —
+none exists in this repo and the failure direction is a loud false RED, never a silent miss; **D7** a
+guard assertion recomputes the roots instead of asserting on the field it protects, so a module move
+would keep the assertion green while the field lost every `:domain` root; **D9** the call-site guard
+compares file *names*, so an `expect`/`actual` split would read as a duplicate-scan bug; **D10** one
+assertion is a tautology — `engineRoots.forEach { assertTrue(it.isDirectory) }` after the derivation
+already filters by `isDirectory`. **D5** is deliberate and stays: commit `5e315d7`'s message overclaims
+by one sentence, and rewriting reviewed history for one sentence is the worse trade — `2e43b5d`'s
+message states it correctly.
+
+**D10 is worth reading twice.** It is the same defect class as the finding that produced the fix that
+grew it — an assertion that cannot fail, appearing inside the fix *for* assertions that cannot fail.
+It was not copied; it arose because the derivation now filters what the assertion used to check.
+Three times in this block a fix produced its own disease one step sideways, and each time the *next*
+review caught it. That is the argument against shortening the chain when a round comes back APPROVE.
+
+### Verification (JDK-17 Temurin via `org.gradle.java.installations.paths`, exit code checked, output never piped through `tail`)
+
+- `:domain:jvmTest testDebugUnitTest assembleDebug` — one invocation; `:domain:jvmTest` is listed
+  explicitly because `testDebugUnitTest` does **not** reach it since Этап 2.2 and the whole engine
+  lives there. Run with `--rerun-tasks` at
+  block close: BUILD SUCCESSFUL, exit 0, **553/553 tasks genuinely executed**, **1138 tests /
+  0 failures** (`:domain` 405 in `jvmTest`, `:data:repository` 217, `:feature:launcher` 168,
+  `:core:ui` 128, the rest across the remaining eight modules).
+- `:core:ui:verifyRoborazziDebug` — BUILD SUCCESSFUL, exit 0, task executed, no golden changes. `core/ui` was not modified in this block: the
+  execution surface is built from DS-5 primitives only, and a green Roborazzi verify with no golden
+  changes is the proof rather than the claim.
+- `DoctrineMatrixGuardTest` was run immediately after the matrix edit, and then **mutated**: renaming
+  one cited class to a name that exists nowhere turned `every_named_test_exists_in_the_repository` RED
+  (exit 1) and only it; restoring the file returned the task to green. The guard genuinely reads the
+  rows this ADR describes.
+
+### Radius
+
+`:domain` (`tool/`, `agent/`, `trace/`, the `RouteCommandUseCase` cut, `CommandOutcome.AgentSessionStarted`),
+`:data:repository` (the one tool source and executor over the **unchanged** `ExecuteActionUseCase →
+IntentActionResolver → ActionExecutor` chain; Room 3 → 4, three tables, cascade, `RoomAgentSessionStore`),
+`:core:testing` (two fakes), `:feature:launcher` (the ViewModel split into six collaborators, the
+execution surface, `en`/`ru`/`tr` in the same commit), `:app` (DI, guard tests, Gradle input
+declarations), plus the doctrine matrix. **`ActionIds` untouched** (frozen, ADR 3/4).
+`OutboundContextPolicy.ALLOWED` not widened by a single field. `core/ui` untouched. PREVIEW surfaces
+untouched. The A1 fork **not** pre-empted — F2 keeps both of its answers available.
+
+**Known limitation, stated rather than implied absent:** this is `CODE-GREEN` and the block is **open**.
+Nothing in it has run on a device. Task 15 — the eight acceptance items of spec §12 — is owner-only,
+and it also carries the inherited Этап 4.0 device check (`ru-RU`, no provider configured ⇒ the honest
+message, not `Unknown command`). Until the owner performs both, A0 is not `DEVICE-ACCEPTED`, and by
+`§HANDOFF`'s standing rule no later block may be declared `DEVICE-ACCEPTED` on top of it. A1′ is
+**not** started automatically (Master Plan §4 DoD).

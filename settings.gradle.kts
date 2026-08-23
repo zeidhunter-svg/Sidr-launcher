@@ -32,3 +32,7 @@ include(":feature:permission_education")
 include(":feature:settings")
 include(":feature:prayer")
 include(":baselineprofile")
+
+// A0.5 — the second consumer of the portable core (Master Plan §2 criterion 10, §3.1a).
+// A headless JVM harness: depends on :domain and nothing else, and nothing depends on it.
+include(":consumer:jvm")

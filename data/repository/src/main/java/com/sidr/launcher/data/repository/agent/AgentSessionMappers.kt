@@ -99,10 +99,13 @@ internal object AgentSessionMappers {
      * the encode/decode pair cannot fall out of step: there is no row for `readShape` to fail on, which
      * is why `readShape` is deliberately left alone.
      *
-     * The **intended** symmetry, recorded as intent and not as present fact: Task 6 of this block is to
-     * give `:consumer:jvm` its own `SessionMapper` refusing [GoalShape.AppNotInstalled] for the same
-     * reason, so that each consumer persists its own planner's shapes and refuses the other's. That
-     * mapper does not exist on disk yet, and this sentence does not pre-decide its design.
+     * The mirrored symmetry is now present fact, not intent. Task 6 of this block gave `:consumer:jvm`
+     * its own hand-written mapper — `consumer/jvm/src/main/kotlin/com/sidr/launcher/consumer/jvm/store/
+     * SessionMapper.kt` — whose `toDto` throws `IllegalArgumentException` on
+     * [GoalShape.AppNotInstalled] for exactly the reason this one throws on [GoalShape.Free]:
+     * `FilePlanner` never produces that shape, so persisting one would record a session that consumer
+     * cannot have made. Each consumer therefore persists only its own planner's shapes and refuses the
+     * other's, and neither extends its persisted vocabulary for a shape it cannot construct.
      *
      * `IllegalArgumentException` rather than [CorruptAgentRowException]: nothing is corrupt and no row
      * exists — the argument is simply not representable here. `RoomAgentSessionStore.save` contains it

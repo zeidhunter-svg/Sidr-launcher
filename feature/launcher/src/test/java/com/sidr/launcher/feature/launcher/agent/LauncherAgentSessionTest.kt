@@ -214,4 +214,51 @@ class LauncherAgentSessionTest {
         assertNull(agent.session.value)
         assertNull(store.activeOrNull)
     }
+
+    /**
+     * **The seam this class shares with the engine, end to end** (review finding F1, 2026-08-23).
+     *
+     * A process death *during* a tool call leaves the one shape the split exists to record:
+     * `ToolInvoked(0)` with no `ToolObserved(0)`. This drives the real product path over it —
+     * [LauncherAgentSession.restoreOnStart], which appends `SessionPaused`, then
+     * [LauncherAgentSession.continueSession], which appends `SessionResumed` — and requires the pending
+     * call to be *resumed*, not re-issued.
+     *
+     * Nothing covered this before: the domain test simulates the restart by calling `advance` straight
+     * on the prepared session, so both restore events were missing from every test that existed, and
+     * the two events are precisely what used to hide the pending call from the engine.
+     */
+    @Test
+    fun `continuing a session interrupted mid-tool-call runs the pending step exactly once`() = runTest {
+        val tools = FakeToolExecutor(listOf(notInstalled(), ToolResult.Effected()))
+        val executor = AgentExecutor(registry, tools, RuntimeBudget.Default)
+
+        // The mid-call shape, written the way `RunAgentSessionUseCase` writes it: prepare, save, die.
+        StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry).start(goal)
+        store.save(executor.prepare(store.active))
+        check(store.active.trace.events.last() is TraceEvent.ToolInvoked)
+        check(tools.invocations.isEmpty()) { "the tool must not have run before the crash" }
+
+        val agent = collaborator(tools, this)
+        agent.restoreOnStart()
+        advanceUntilIdle()
+        assertEquals(ExecutionState.Paused, agent.session.value?.state)
+
+        agent.continueSession()
+        advanceUntilIdle()
+
+        assertEquals(
+            "the pending call must be performed once, not re-issued: ${tools.invocations}",
+            1,
+            tools.invocations.size,
+        )
+        val events = store.active.trace.events
+        assertEquals(
+            "one pending call is one ToolInvoked, however many times the app was restarted: $events",
+            1,
+            events.count { it is TraceEvent.ToolInvoked && it.index == 0 },
+        )
+        assertEquals(1, events.count { it is TraceEvent.StepStarted && it.index == 0 })
+        assertEquals(ExecutionState.AwaitingConsent, agent.session.value?.state)
+    }
 }

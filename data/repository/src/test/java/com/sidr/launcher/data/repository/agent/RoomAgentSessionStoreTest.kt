@@ -30,6 +30,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -268,6 +269,51 @@ class RoomAgentSessionStoreTest {
             OperationResult.Failure(OperationError.UnknownError("db_agent_session_corrupt")),
             store.active(),
         )
+    }
+
+    /**
+     * A row that cannot be read back is **removed**, not left behind (review finding F10, 2026-08-23).
+     *
+     * `LauncherAgentSession.restoreOnStart` is the one caller that cleans up after a dead process, and
+     * it returns early on a `Failure` — it has no id to delete. So an unreadable row used to sit on
+     * disk holding `goal_text`, the user's raw command, waiting for a reader that can never come. The
+     * failure is still reported: deleting it is cleanup, not recovery, and a corrupt row never becomes
+     * a guessed session.
+     */
+    @Test
+    fun `an unreadable session is deleted, not left on disk with the command text`() = runTest {
+        store.save(session())
+        // Break exactly one column: a shape name this build has no branch for. Everything else about
+        // the row — its steps, its trace, its goal_text — is intact and readable.
+        dao.upsertSession(
+            AgentSessionEntity(
+                id = "s1", goalText = "открой убер", goalShape = "SomethingFromALaterBuild",
+                goalShapeArg = "убер", state = "Running", cursor = 1, createdAt = 1L,
+            ),
+        )
+
+        assertEquals(
+            OperationResult.Failure(OperationError.UnknownError("db_agent_session_corrupt")),
+            store.active(),
+        )
+
+        assertNull("the unreadable row must be gone", dao.activeSession())
+        assertEquals("its steps must go with it", 0, dao.stepsFor("s1").size)
+        assertEquals("and its trace", 0, dao.traceFor("s1").size)
+    }
+
+    /**
+     * Non-vacuity for the delete above: a readable session is **not** deleted by being read. Without
+     * this, "the tables are empty afterwards" would pass for a store that dropped everything it read.
+     */
+    @Test
+    fun `reading a healthy session does not delete it`() = runTest {
+        store.save(session())
+
+        assertNotNull(restored())
+
+        assertNotNull(dao.activeSession())
+        assertEquals(2, dao.stepsFor("s1").size)
     }
 
     /** The store holds one session. Enforced on the way in, not assumed by `activeSession()`'s LIMIT 1. */

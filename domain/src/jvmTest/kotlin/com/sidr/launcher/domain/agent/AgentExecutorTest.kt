@@ -482,6 +482,163 @@ class AgentExecutorTest {
         )
     }
 
+    // --- The restore seam (review finding F1, 2026-08-23) ---------------------------------------
+
+    /**
+     * **The mid-step short-circuit, driven the way the product actually drives it.**
+     *
+     * `resuming through advance after persisting the prepared step…` above simulates the restart by
+     * calling `advance` straight on the prepared session. The product never does that: the only path
+     * a mid-step session takes back into the engine is `LauncherAgentSession.restoreOnStart` →
+     * [AgentSession.pausedForRestore], then `continueSession` → [AgentSession.resumed] — and both
+     * append a trace event **on top of** the pending `ToolInvoked`.
+     *
+     * With the short-circuit keyed on the trace *tail*, those two events hid the pending call: the
+     * engine re-cleared the same step, wrote a second `StepStarted` + `ToolInvoked`, and only then
+     * performed it. Two invocations recorded against one observation is not a trace 1:1 with reality,
+     * and on a step whose consent was already granted it is one confirmation buying two executions.
+     */
+    @Test
+    fun `continuing a session interrupted mid-call runs the pending step once and traces it once`() = runTest {
+        val tools = FakeToolExecutor(listOf(notInstalled()))
+        val executor = AgentExecutor(registry, tools, budget)
+
+        val midCall = executor.prepare(session())               // persisted; the process then dies
+        val offered = midCall.pausedForRestore()                // restoreOnStart
+        val after = executor.advance(offered.resumed())         // the user taps «Continue»
+
+        assertEquals(1, tools.invocations.size)
+        assertEquals(
+            "one pending call must yield one ToolInvoked, not one per resume: ${after.trace.events}",
+            1,
+            after.trace.events.count { it is TraceEvent.ToolInvoked },
+        )
+        assertEquals(1, after.trace.events.count { it is TraceEvent.StepStarted })
+        assertEquals(1, after.trace.events.count { it is TraceEvent.ToolObserved })
+        assertEquals(1, after.cursor)
+    }
+
+    /**
+     * The other half: a **consented** step interrupted mid-call must not spend the same consent twice.
+     * `consents` survives the restart, so nothing asks again — which is correct only as long as the
+     * pending call is resumed rather than re-issued.
+     */
+    @Test
+    fun `a consented step interrupted mid-call is not invoked a second time on continue`() = runTest {
+        val tools = FakeToolExecutor(listOf(notInstalled(), ToolResult.Effected()))
+        val executor = AgentExecutor(registry, tools, budget)
+
+        val afterStep0 = executor.advance(session())                       // step 0 observes
+        val consented = afterStep0.copy(consents = mapOf(1 to true))
+        val midCall = executor.prepare(consented)                          // step 1 cleared, not run
+        assertEquals(1, tools.invocations.size)
+
+        val after = executor.advance(midCall.pausedForRestore().resumed())
+
+        assertEquals(
+            "the store step must run exactly once across the interruption: ${tools.invocations}",
+            2,
+            tools.invocations.size,
+        )
+        assertEquals(1, after.trace.events.count { it is TraceEvent.ToolInvoked && it.index == 1 })
+        assertEquals(ExecutionState.Running, after.state)
+    }
+
+    // --- Risk is read from the registry, not only from the plan (finding F2) --------------------
+
+    /**
+     * A plan is a snapshot; the registry is the current truth. A session planned by a build in which
+     * `play_store_search` was `SAFE`, resumed under this build where it is `CONFIRM`, must still stop
+     * — nothing re-validates risk (`InvocationValidator` knows only shape), so if the gate trusted the
+     * persisted `PlanStep.risk` the store step would run with no `ConsentRequested` at all.
+     */
+    @Test
+    fun `a step whose persisted risk is stale still stops at the gate`() = runTest {
+        val tools = FakeToolExecutor(listOf(notInstalled(), ToolResult.Effected()))
+        val executor = AgentExecutor(registry, tools, budget)
+        val stalePlan = ExecutionPlan(
+            listOf(
+                planForMissingApp("убер").steps[0],
+                planForMissingApp("убер").steps[1].copy(risk = ActionRiskLevel.SAFE),
+            ),
+        )
+
+        var current = executor.advance(session().copy(plan = stalePlan))
+        current = executor.advance(current)
+
+        assertEquals(ExecutionState.AwaitingConsent, current.state)
+        assertEquals(listOf(ToolIds.LAUNCH_APP), tools.invocations.map { it.id })
+        assertTrue(
+            "the gate must have asked: ${current.trace.events}",
+            current.trace.events.any { it is TraceEvent.ConsentRequested && it.index == 1 },
+        )
+    }
+
+    /** The inverse: a plan that says CONFIRM still stops even if the registry has since gone quiet. */
+    @Test
+    fun `a step whose persisted risk is higher than the registry's still stops at the gate`() = runTest {
+        val allSafe = FakeToolRegistry(
+            registry.all().map { if (it.id == ToolIds.PLAY_STORE_SEARCH) it.copy(risk = ActionRiskLevel.SAFE) else it },
+        )
+        val tools = FakeToolExecutor(listOf(notInstalled(), ToolResult.Effected()))
+        val executor = AgentExecutor(allSafe, tools, budget)
+
+        var current = executor.advance(session())
+        current = executor.advance(current)
+
+        assertEquals(ExecutionState.AwaitingConsent, current.state)
+        assertEquals(1, tools.invocations.size)
+    }
+
+    // --- One decision, one event (finding F4) ----------------------------------------------------
+
+    /**
+     * `prepare` is the single writer of `ConsentResolved`. Both branches are checked here because the
+     * bug was asymmetric: a granted decision produced one event and a refused one produced two, since
+     * `ResolveConsentUseCase` wrote it as well and `prepare` wrote it again on its way to `Cancelled`.
+     */
+    @Test
+    fun `a consent decision is traced exactly once, granted or refused`() = runTest {
+        for (granted in listOf(true, false)) {
+            val tools = FakeToolExecutor(listOf(notInstalled(), ToolResult.Effected()))
+            val executor = AgentExecutor(registry, tools, budget)
+
+            val atGate = executor.advance(executor.advance(session()))
+            // What `ResolveConsentUseCase` does: record the decision, put the session back to Running.
+            val decided = atGate.copy(consents = mapOf(1 to granted), state = ExecutionState.Running)
+            val after = executor.advance(decided)
+
+            assertEquals(
+                "granted=$granted produced the wrong number of ConsentResolved: ${after.trace.events}",
+                1,
+                after.trace.events.count { it is TraceEvent.ConsentResolved && it.index == 1 },
+            )
+        }
+    }
+
+    /**
+     * Once per step is a property of the **control flow**, not of a check: a cleared step short-
+     * circuits on the mid-step tail before it can reach the consent block again, and every other route
+     * out of that block ends the session. Written as an assertion about re-entry rather than about an
+     * "already traced" guard, because the guard version of this test passed with the guard deleted —
+     * it could not fail, which is the defect this block's own review is about.
+     */
+    @Test
+    fun `a cleared step does not pass the consent block a second time`() = runTest {
+        val tools = FakeToolExecutor(listOf(notInstalled(), ToolResult.Effected()))
+        val executor = AgentExecutor(registry, tools, budget)
+
+        val atGate = executor.advance(executor.advance(session()))
+        val decided = atGate.copy(consents = mapOf(1 to true), state = ExecutionState.Running)
+        val cleared = executor.prepare(decided)
+
+        assertEquals("prepare on a cleared step must be a no-op", cleared, executor.prepare(cleared))
+        assertEquals(
+            1,
+            cleared.trace.events.count { it is TraceEvent.ConsentResolved && it.index == 1 },
+        )
+    }
+
     /**
      * The same two steps, but step 1 is not gated on an observation — the only way to drive a
      * *resolution* rejection, since a skipped step is never resolved at all.

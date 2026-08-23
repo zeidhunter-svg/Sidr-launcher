@@ -118,16 +118,23 @@ internal fun AgentSessionSurface(
             secondaryAction = dismiss,
         )
 
-        ExecutionState.Completed -> SidrResultSurface(
-            tone = SidrResultTone.Completed,
-            title = title,
-            modifier = modifier,
-            provenance = {
-                AgentPlanSteps(session = session, subject = subject)
-                AgentProvenance(session = session)
-            },
-            primaryAction = dismiss,
-        )
+        // «Plan complete» is only true when every step actually ran. A plan that closed with a step
+        // skipped by its precondition, or with a failed step the budget let pass, is a PARTIAL result
+        // and `DOC-ILM-4` says it must be shown as one rather than as success (review finding F3).
+        ExecutionState.Completed -> {
+            val whole = session.everyStepExecuted()
+            SidrResultSurface(
+                tone = if (whole) SidrResultTone.Completed else SidrResultTone.Partial,
+                title = if (whole) title else sidrString(R.string.launcher_agent_completed_partial_title),
+                modifier = modifier,
+                body = if (whole) null else sidrString(R.string.launcher_agent_completed_partial_body),
+                provenance = {
+                    AgentPlanSteps(session = session, subject = subject)
+                    AgentProvenance(session = session)
+                },
+                primaryAction = dismiss,
+            )
+        }
 
         ExecutionState.Failed -> SidrErrorSurface(
             title = title,
@@ -169,16 +176,23 @@ private fun AgentBlock(
 }
 
 /**
- * The plan, one row per step, in plan order. `stepStatus` marks done / current / pending against the
- * cursor; the label is the step's own typed rationale rendered into the current locale.
+ * The plan, one row per step, in plan order. Each row is the step's own typed rationale **and** the
+ * state the session actually recorded for it, rendered into the current locale — so done, skipped,
+ * failed and not-yet-started read differently in greyscale and to TalkBack, not only in the colour of
+ * the dot (`R-ADL-2`; review findings F3/F6).
  */
 @Composable
 private fun AgentPlanSteps(session: AgentSession, subject: String) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
         session.plan.steps.forEach { step ->
+            val state = session.stateOf(step)
             SidrStatusMarker(
-                status = stepStatus(stepIndex = step.index, cursor = session.cursor),
-                label = step.rationale.label(subject),
+                status = state.marker(),
+                label = sidrString(
+                    R.string.launcher_agent_step_line,
+                    step.rationale.label(subject),
+                    state.word(),
+                ),
             )
         }
     }

@@ -51,7 +51,7 @@ in `§HANDOFF`, not built.
 | **2** toolchain (AGP 9.3.1/Kotlin 2.4.10/Gradle 9.5.0/compileSdk 37) + `:domain` → KMP | ✅ 2026-08-19 |
 | **3** agentic Master Plan + doctrinal matrix (`docs/governing/`) | ✅ 2026-08-19 — docs + one guard test |
 | **4.0** — invert the understanding flag (`llmRouterEnabled` → `localOnlyMode`, ADR 1/4) | ✅ 2026-08-20 code, **`DEVICE-ACCEPTED` 2026-08-22** in the Task 15 session (`ru-RU`, no provider ⇒ «ИИ-провайдер ещё не настроен» + a route to the provider screen, not `Unknown command`); first behavioural change of the track |
-| **4** — A0 thin agentic spike | ✅ **2026-08-22 — `CLOSED`** — all nine work-order items, then Task 15: the owner ran all eight §12 acceptance items on the SM-A325F and signed off. Migration 3→4 executed for real by both routes (instrumented 9/9 on device; and a genuine `user_version` 3→4 upgrade of the owner's own database, `identity_hash` matching `4.json`). Four residual limitations named in Known debt — the largest is that §12.8 is unreachable by any path a user can take (an A4′ debt) |
+| **4** — A0 thin agentic spike | ✅ **2026-08-22 — `CLOSED`** — all nine work-order items, then Task 15: the owner ran all eight §12 acceptance items on the SM-A325F and signed off. Migration 3→4 executed for real by both routes (instrumented 9/9 on device; and a genuine `user_version` 3→4 upgrade of the owner's own database, `identity_hash` matching `4.json`). Residual limitations named in Known debt — the largest is that §12.8 is unreachable by any path a user can take (an A4′ debt). **Reviewed end-to-end 2026-08-23**: nine findings, eight fixed and mutation-verified (`CODE-GREEN`; two §12 items await a device re-check) |
 | **4.5–7** — A0.5 second consumer, A1′ ToolRegistry, A4′ runtime, A2/A3/A5/A6 | each needs its own spec + plan (`brainstorm → spec → plan → build`) |
 
 The four strategic ADRs (all 2026-08-19, in `decisions.md`):
@@ -102,11 +102,13 @@ status vocabulary).
 - **Design system v1.1** — grey tokens, `core/ui` primitives + controls, Roborazzi goldens.
 - **i18n** — `en`/`ru`/`tr` on every migrated screen through one `sidrString` seam; per-app language
   switch; four guard tests + an owner-sign-off release gate.
-- **Agent slice (A0, `CLOSED` — owner-accepted on the SM-A325F 2026-08-22, four residual limitations in Known debt)** — one goal crosses two tool
+- **Agent slice (A0, `CLOSED` — owner-accepted on the SM-A325F 2026-08-22; reviewed and repaired 2026-08-23, residual limitations in Known debt)** — one goal crosses two tool
   calls where the second consumes what the first **observed**, and the risk transition between them
   stops the loop for consent. `domain/tool` + `domain/agent` + `domain/trace` are the portable engine;
-  `ToolExecutor` is its only path to the world and has exactly **one** call site, below the checkpoint
-  (`ToolExecutorCallSiteGuardTest`). The planner is deterministic (`TemplatePlanner` over `GoalShape`),
+  `ToolExecutor` is its only path to the world; `ToolExecutorCallSiteGuardTest` holds mechanically that
+  there is exactly **one** call site and which file it is in, and `AgentExecutorTest` holds
+  behaviourally that it sits below the consent checkpoint — the scan reads a file name and a count,
+  never a position. The planner is deterministic (`TemplatePlanner` over `GoalShape`),
   so the agent runs in **every** network state and consults no model — the branch cuts into
   `RouteCommandUseCase` **above** the `localOnlyMode` check. A FastPath "no such app" therefore becomes
   a two-step plan (launch → offer the store) offline, local-only and online alike, instead of a dead
@@ -124,7 +126,7 @@ Not `CLOSED`. Status vocabulary (Этап 0.5): `CODE-GREEN` (gate green, no dev
 pass does not count) / `CLOSED` (both, plus any residual limitation named, not implied absent). Each item
 below is recorded in its own ADR.
 
-- **A0 and Этап 4.0 are `DEVICE-ACCEPTED` as of 2026-08-22, with four residual limitations** (owner ran
+- **A0 and Этап 4.0 are `DEVICE-ACCEPTED` as of 2026-08-22, with three residual limitations** (owner ran
   all eight §12 items on the SM-A325F and signed off; full record in the A0 ADR): **(1)** §12.8 —
   "app installed ⇒ the store step is skipped" — is **unreachable by any path a user can take**, because
   `AgentSession.resumed()` continues from the persisted cursor and nothing re-plans, so a session that
@@ -133,11 +135,21 @@ below is recorded in its own ADR.
   `pm disable-user` plus an on-device `force-stop` poll (window 157–170 ms warm, 1033 ms cold). This is
   a **staleness** debt owned by **A4′**, alongside the missing wall-clock budget, and it is narrow today
   only because Master Plan §3.6 `B1` holds `GoalShape` at one value. **(2)** the plan list is not drawn
-  in `AwaitingConsent` — the two-step shape is visible in `Paused` and `Completed` only. **(3)** «План
-  выполнен» means "every step ran", not "the goal was achieved". **(4)** item 8's acceptance needed agent
-  intervention, so it exercises the engine rather than the product. Migration 3→4 is no longer a debt:
-  it executed on device both instrumented (9/9) and as a genuine `user_version` 3→4 upgrade with a
-  matching `identity_hash`.
+  in `AwaitingConsent` — the two-step shape is visible in `Paused` and `Completed` only. **(3)** item 8's
+  acceptance needed agent intervention, so it exercises the engine rather than the product. Migration 3→4
+  is no longer a debt: it executed on device both instrumented (9/9) and as a genuine `user_version` 3→4
+  upgrade with a matching `identity_hash`. The former limitation «"План выполнен" means "every step ran"»
+  is **fixed** — and it turned out to understate the problem: a plan closed `Completed` even when a step
+  *failed*, so the wording is now `Partial`-toned and each step carries its own state (see the row below).
+- **The 2026-08-23 fix round is `CODE-GREEN`, not `DEVICE-ACCEPTED`, and A0's `CLOSED` carries that as a
+  named residual.** A cross-cutting review of the whole block found nine defects; eight are fixed, each
+  mutation-verified, gate green at 1158 tests (ADR «2026-08-23 — Сквозное ревью блока A0»). Three of them
+  change behaviour the owner accepted on 2026-08-22, so **two §12 items need re-running on the phone**:
+  §12.5 (`force-stop` mid-plan → Continue now *resumes* the pending call instead of re-issuing it — one
+  `ToolInvoked` on disk, not two) and §12.8 (the wording changed: «План пройден, выполнено не всё» with the
+  store step marked «не потребовалось», instead of «План выполнен» with two green markers). The six new
+  strings are not Class B, so the locale signature was neither touched nor re-signed. Until that re-check,
+  the changed behaviour is accepted by the gate, not by the owner.
 - **`CODE-GREEN`, not `DEVICE-ACCEPTED`:** DS-5's own acceptance checklist has never been run
   (since 2026-07-13); I18N-1 was verified only by agent-driven `adb`/`uiautomator` — its offline path, live
   TalkBack, fontScale 2.0, and the system per-app-language picker are untested. DS-6B is `CLOSED` (owner

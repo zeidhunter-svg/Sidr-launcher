@@ -94,6 +94,14 @@
     <string name="launcher_agent_paused_body">Bu plan bitmeden ayrıldınız. Devam ederseniz Sidr kaldığı yerden sürdürür; kapatırsanız başka hiçbir şey çalışmaz.</string>
     <string name="launcher_agent_paused_continue">Devam et</string>
     <string name="launcher_agent_completed_title">Plan tamamlandı</string>
+    <string name="launcher_agent_completed_partial_title">Plan bitti, her adım çalışmadı</string>
+    <string name="launcher_agent_completed_partial_body">Sidr planın tamamından geçti. Bazı adımlar çalışmadı — her birinin durumu aşağıda yazıyor.</string>
+    <string name="launcher_agent_step_line">%1$s — %2$s</string>
+    <string name="launcher_agent_step_state_done">yapıldı</string>
+    <string name="launcher_agent_step_state_skipped">gerekmedi</string>
+    <string name="launcher_agent_step_state_failed">olmadı</string>
+    <string name="launcher_agent_step_state_current">sürüyor</string>
+    <string name="launcher_agent_step_state_pending">başlamadı</string>
     <string name="launcher_agent_failed_title">Bu plan tamamlanamadı</string>
     <string name="launcher_agent_blocked_title">Plan durduruldu</string>
     <string name="launcher_agent_blocked_body">Sidr bu planı durdurdu, çünkü artık güvenle sürdüremiyordu. Başka hiçbir şey çalışmayacak.</string>

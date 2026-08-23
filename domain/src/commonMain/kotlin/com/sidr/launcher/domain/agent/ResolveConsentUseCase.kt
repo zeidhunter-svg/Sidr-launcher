@@ -1,11 +1,18 @@
 package com.sidr.launcher.domain.agent
 
 import com.sidr.launcher.domain.result.OperationResult
-import com.sidr.launcher.domain.trace.TraceEvent
 
 /**
  * Records one consent decision and resumes. Returns `null` when the decision did not apply — the step
  * was not awaiting one, which is exactly what a second tap on the same button looks like.
+ *
+ * **It does not write the trace event.** The decision is persisted by the conditional write, and
+ * `AgentExecutor.prepare` — which reads `consents` on its way past the checkpoint — is the single
+ * writer of `TraceEvent.ConsentResolved`. Until 2026-08-23 both wrote, and on a refusal the trace
+ * carried the same `ConsentResolved(i, false)` twice: `prepare` records it before ending the session
+ * `Cancelled`, and this class had already recorded it (review finding F4). One decision is one event;
+ * a trace that is 1:1 with reality (`DOC-ILM-3`) cannot double-count the one thing the user actually
+ * did.
  */
 class ResolveConsentUseCase(
     private val store: AgentSessionStore,
@@ -27,9 +34,7 @@ class ResolveConsentUseCase(
             is OperationResult.Success -> active.value ?: return OperationResult.Success(null)
         }
 
-        val resumed = current
-            .record(TraceEvent.ConsentResolved(stepIndex, granted))
-            .copy(state = ExecutionState.Running)
+        val resumed = current.copy(state = ExecutionState.Running)
 
         return when (val ran = run.run(resumed)) {
             is OperationResult.Failure -> ran

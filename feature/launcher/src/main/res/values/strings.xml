@@ -136,6 +136,14 @@
     <string name="launcher_agent_paused_body">You left before this plan finished. Continue and Sidr picks it up where it stopped; dismiss it and nothing further runs.</string>
     <string name="launcher_agent_paused_continue">Continue</string>
     <string name="launcher_agent_completed_title">Plan complete</string>
+    <string name="launcher_agent_completed_partial_title">Plan finished, not every step ran</string>
+    <string name="launcher_agent_completed_partial_body">Sidr went through the whole plan. Some steps did not run, and each one says which below.</string>
+    <string name="launcher_agent_step_line">%1$s — %2$s</string>
+    <string name="launcher_agent_step_state_done">done</string>
+    <string name="launcher_agent_step_state_skipped">not needed</string>
+    <string name="launcher_agent_step_state_failed">did not work</string>
+    <string name="launcher_agent_step_state_current">in progress</string>
+    <string name="launcher_agent_step_state_pending">not started</string>
     <string name="launcher_agent_failed_title">This plan could not finish</string>
     <string name="launcher_agent_blocked_title">Plan stopped</string>
     <string name="launcher_agent_blocked_body">Sidr stopped this plan because it could no longer follow it safely. Nothing further will run.</string>

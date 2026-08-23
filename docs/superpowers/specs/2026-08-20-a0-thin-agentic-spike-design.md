@@ -14,6 +14,31 @@
 > binding is not separately observable on the phone, and inventing an acceptance item that the owner
 > cannot actually check would be the kind of decorative gate Этап 0.5 exists to prevent.
 >
+> **Amendment 2026-08-23 — the review round.** A cross-cutting review of the closed block found nine
+> defects; eight are fixed in code, each mutation-verified. Four of them are amendments to what *this
+> document* says, and they are recorded here rather than only in the ADR («2026-08-23 — Сквозное ревью
+> блока A0»), because the spec is binding authority over the plan:
+>
+> - **§6.2/§7 — "resume re-validates against the current registry" was true only of shape.**
+>   `InvocationValidator` checks tool identity, argument schema, output schema and types, and knows
+>   nothing about risk; the consent gate read `risk` off the persisted `PlanStep` while reading
+>   `permissionGate` and `durability` from the live registry. A plan written when a tool was `SAFE` ran
+>   it with **no** `ConsentRequested` after a build raised it to `CONFIRM`. The gate now acts on
+>   `maxOf(plan, registry)` — see §6.3.
+> - **§4.2/§6.2 — "validate runs at plan time and again before every step" had only the second half.**
+>   `StartAgentSessionUseCase` persisted whatever a `Planner` returned. It now validates the plan
+>   before writing it, and refuses a 0-step plan (which stays constructible — ADR 4/4 makes it a real
+>   future shape).
+> - **§9 — `Completed` is not always a completion.** A step skipped by its precondition is a normal part
+>   of a `Completed` run (§3), but it is *not* a step that ran, and a failed step under the default
+>   budget also ends the plan `Completed`. Both were drawn as success. See §9.
+> - **§6.5 — the mid-step signal was unreadable on the only path that produces it.** The restore
+>   transitions write trace events on top of the pending `ToolInvoked`, so a predicate keyed on the
+>   trace *tail* missed it and the step was re-cleared and re-run. See §6.5.
+>
+> **§12 (device acceptance) is affected and says so:** items 5 and 8 must be re-run, because the fixes
+> change what the owner accepted on 2026-08-22.
+>
 > **Governing sources:** `docs/governing/sidr-agentic-master-plan-v1.0.md` §3.1 (block A0, its exit
 > list, acceptance and doctrine debts), §4 (agentic-block DoD), §5 (change-control);
 > `docs/superpowers/plans/2026-08-18-agentic-track-restart.md` §"Решения владельца", §"Новое правило
@@ -514,10 +539,18 @@ implied, on the same terms as the `DURABLE` gate in boundary 7 - the seam is lai
 
 **3. The consent gate has exactly one call site.** `ToolExecutor.invoke` is called from exactly one
 place in the whole codebase, and that place sits after the checkpoint. The guard counts call sites and
-fails on two. This is the mechanical version of "tool #21 gets consent for free" - not because we will
-remember, but because there is nowhere to forget. Triggers in A0: `risk >= CONFIRM`; risk **rises**
-relative to the previous executed step; the tool **declares** a permission gate; the tool is marked
-`DURABLE`. The permission trigger fires on the declaration rather than on the real grant state: reading
+fails on two — it reads a file name and a count, never a position; "below the checkpoint" is held
+behaviourally by `AgentExecutorTest` (corrected 2026-08-22, and again in `CLAUDE.md` 2026-08-23). This is
+the mechanical version of "tool #21 gets consent for free" - not because we will remember, but because
+there is nowhere to forget. Triggers in A0: `risk >= CONFIRM`; risk **rises** relative to the previous
+executed step; the tool **declares** a permission gate; the tool is marked `DURABLE`.
+
+**Which risk the gate acts on (amended 2026-08-23).** `maxOf(PlanStep.risk, registry.risk)`, for the
+current step and for the earlier ones the rise is measured against. A plan is a snapshot of the build
+that wrote it; the registry is the current truth; neither alone is safe, and `maxOf` settles it without
+an argument about which is more authoritative. A tool the registry does not know counts as `DANGEROUS`
+— unreachable while `validate` runs first, and written that way so the *default* is a stop rather than
+a pass. The permission trigger fires on the declaration rather than on the real grant state: reading
 the grant state would put `PermissionChecker` inside the engine, and stopping unconditionally is the
 fail-safe half of that. Neither A0 tool declares a gate.
 
@@ -528,8 +561,15 @@ stdlib + coroutines across two KMP targets; it belongs to A4' and A0 does not pr
 **5. Trace - `DOC-ILM-3`.** `ToolInvoked` is written **before** the call, `ToolObserved` after, in the
 same transaction that moves the cursor. Consequence, which is correct behaviour rather than a defect:
 if the process dies between the write and the call, resume sees `ToolInvoked` with no result, and that
-step is **not** re-executed automatically - the session sits in `Paused` and asks. Guard: every executed
-step has both events.
+step is **not** re-executed automatically - the session sits in `Paused` and asks, and when the user says
+yes the **pending call is performed**, not re-issued. Guard: every executed step has both events.
+
+**Amended 2026-08-23.** "Resume sees `ToolInvoked` with no result" is read from the last `ToolInvoked`,
+not from the last trace *event*: the restore path (`pausedForRestore()` then `resumed()`) writes
+`SessionPaused` and `SessionResumed` **on top of** the pending event, so a tail-keyed predicate missed
+the one shape it exists to recognise, and the step was re-cleared, re-traced and re-run. Tests that
+simulate the restart by calling `advance` directly do not exercise this; `LauncherAgentSessionTest`
+walks the real path.
 
 **6. Egress allow-list, as a checkable absence.** The A0 agent has no path off the device at all: the
 planner is local and both tools are system intents. The boundary is laid as a test - `domain/agent/`
@@ -644,10 +684,15 @@ change-control item requiring an ADR (Master Plan §5).
 | `Running` | step list, current one marked |
 | `AwaitingConsent` | `SidrActionGate` |
 | `Paused` | offer to continue + what has already happened |
-| `Completed` | `SidrResultSurface` |
+| `Completed` | `SidrResultSurface` — tone `Completed` only when **every** step actually ran; a plan that skipped or failed a step is `Partial` with its own title (amended 2026-08-23) |
 | `Failed` | `SidrErrorSurface` |
 | `Blocked` | `SidrBlockedState` |
 | `Cancelled` | return to the ordinary screen |
+
+Each step in the list carries **the state the session recorded for it** — done / not needed / did not
+work / in progress / not started — as a word beside the marker, not as a colour alone (`R-ADL-2`;
+amended 2026-08-23, when the marker was derived from the cursor and all three reasons the cursor moves
+read as success).
 
 The surface is **a function of state, not of a mockup**: one component per runtime state, composed from
 what the session actually reported. A 2-step plan and a 7-step plan differ in list length, not in
@@ -725,6 +770,12 @@ tenth area inside 886 lines. Class names are fixed in the implementation plan.
 7. `git diff` over the existing ViewModel suites is empty (after the split, §10);
 8. with the app **installed**, step 1 is skipped by its precondition and the result is `Completed`, not
    partial.
+
+**Items 5 and 8 must be re-run after the 2026-08-23 fix round.** Item 5's Continue now resumes the
+pending call instead of re-issuing it (one `ToolInvoked` on disk, not two), and item 8's wording changed:
+a plan that skipped a step now reads «План пройден, выполнено не всё» with the store step marked «не
+потребовалось». Item 8's original phrasing above ("`Completed`, not partial") was written before the
+review and is superseded: a skipped step makes the run partial, and saying so is the point.
 
 **Outstanding debt that lands here.** Этап 4.0 is still `CODE-GREEN`, and `§HANDOFF` forbids declaring a
 later block `DEVICE-ACCEPTED` on top of an unverified one. Either 4.0's own check runs in the same

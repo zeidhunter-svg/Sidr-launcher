@@ -6,10 +6,14 @@ import com.sidr.launcher.core.ui.component.SidrActionGateType
 import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrStatus
 import com.sidr.launcher.domain.agent.AgentGoal
+import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.ConsentReason
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.StepRationale
+import com.sidr.launcher.domain.tool.ToolResult
+import com.sidr.launcher.domain.trace.TraceEvent
 import com.sidr.launcher.feature.launcher.R
 
 /*
@@ -73,11 +77,66 @@ internal fun ConsentReason.gateType(): SidrActionGateType = when (this) {
 }
 
 /**
- * Where one step stands relative to the cursor. Position, not colour, is what the caller pairs this
- * with — `SidrStatusMarker` shows the dot *and* the step's own line, per `R-ADL-2`.
+ * Where one step actually stands — **read from what the session recorded, not from the cursor**
+ * (review findings F3/F6, 2026-08-23).
+ *
+ * The cursor moves for three different reasons: a step ran, a step was skipped by an unsatisfied
+ * precondition, and a step failed. Reading `stepIndex < cursor` collapsed all three into
+ * [SidrStatus.SUCCESS], so the two shapes this engine reaches most often both lied on screen:
+ *  - the app **is** installed, so step 1 is skipped on its precondition and the plan closes
+ *    `Completed` — the store step showed a success marker and the store was never opened;
+ *  - step 0 **fails**, which under `RuntimeBudget.Default` is under the consecutive-failure limit,
+ *    so step 1 skips on its precondition and the plan again closes `Completed` — two success markers
+ *    over a plan in which nothing succeeded at all.
+ *
+ * Everything needed to tell them apart was already in the session: the observation for an executed
+ * step, and `TraceEvent.StepSkipped` for a skipped one.
  */
-internal fun stepStatus(stepIndex: Int, cursor: Int): SidrStatus = when {
-    stepIndex < cursor -> SidrStatus.SUCCESS
-    stepIndex == cursor -> SidrStatus.ATTENTION
-    else -> SidrStatus.INFO
+internal enum class AgentStepState { DONE, SKIPPED, FAILED, CURRENT, PENDING }
+
+internal fun AgentSession.stateOf(step: PlanStep): AgentStepState = when {
+    observations[step.index] is ToolResult.Failed -> AgentStepState.FAILED
+    observations[step.index] != null -> AgentStepState.DONE
+    trace.events.any { it is TraceEvent.StepSkipped && it.index == step.index } -> AgentStepState.SKIPPED
+    step.index == cursor -> AgentStepState.CURRENT
+    else -> AgentStepState.PENDING
 }
+
+/** The dot. Decorative by `R-ADL-2` — [AgentStepState.word] is what actually carries the state. */
+internal fun AgentStepState.marker(): SidrStatus = when (this) {
+    AgentStepState.DONE -> SidrStatus.SUCCESS
+    AgentStepState.SKIPPED -> SidrStatus.INFO
+    AgentStepState.FAILED -> SidrStatus.DANGER
+    AgentStepState.CURRENT -> SidrStatus.ATTENTION
+    AgentStepState.PENDING -> SidrStatus.INFO
+}
+
+/**
+ * The state as a word, because `SidrStatusMarker`'s own contract is that the dot is decorative and
+ * **the label carries meaning** (`R-ADL-2`: status is never colour alone). The label used to be the
+ * step's rationale and nothing else, so done / skipped / failed / pending were distinguishable only
+ * by the colour of the dot — invisible in greyscale and to TalkBack.
+ */
+@Composable
+@ReadOnlyComposable
+internal fun AgentStepState.word(): String = when (this) {
+    AgentStepState.DONE -> sidrString(R.string.launcher_agent_step_state_done)
+    AgentStepState.SKIPPED -> sidrString(R.string.launcher_agent_step_state_skipped)
+    AgentStepState.FAILED -> sidrString(R.string.launcher_agent_step_state_failed)
+    AgentStepState.CURRENT -> sidrString(R.string.launcher_agent_step_state_current)
+    AgentStepState.PENDING -> sidrString(R.string.launcher_agent_step_state_pending)
+}
+
+/**
+ * Every step of the plan ran, and none of them failed.
+ *
+ * A skipped step is a legitimate part of a `Completed` run (spec §3), but it is **not** a step that
+ * ran, and «План выполнен» over a plan half of which was skipped or failed is the exact shape
+ * `DOC-ILM-4` forbids — a partial result presented as success. The surface pairs this with
+ * `SidrResultTone.Partial`, which is the primitive already built for saying so.
+ */
+internal fun AgentSession.everyStepExecuted(): Boolean =
+    plan.steps.all { step ->
+        val observation = observations[step.index]
+        observation != null && observation !is ToolResult.Failed
+    }

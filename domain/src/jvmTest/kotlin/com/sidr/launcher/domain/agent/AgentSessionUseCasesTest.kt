@@ -3,11 +3,15 @@ package com.sidr.launcher.domain.agent
 import com.sidr.launcher.core.testing.FakeAgentSessionStore
 import com.sidr.launcher.core.testing.FakeToolExecutor
 import com.sidr.launcher.core.testing.FakeToolRegistry
+import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.ObservedFact
 import com.sidr.launcher.domain.tool.ToolExecutor
+import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
+import com.sidr.launcher.domain.tool.ToolInvocation
+import com.sidr.launcher.domain.tool.ToolRegistry
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
@@ -240,5 +244,114 @@ class AgentSessionUseCasesTest {
         assertEquals(ExecutionState.Failed, (ran as OperationResult.Success).value.state)
         assertEquals(1, tools.invocations.size)
         assertNull(store.activeOrNull)
+    }
+
+    // --- One decision, one event, through the real use case (review finding F4, 2026-08-23) -------
+
+    /**
+     * The user said no **once**. `ResolveConsentUseCase` used to record `ConsentResolved` itself and
+     * `AgentExecutor.prepare` recorded it again on its way to `Cancelled`, so the persisted trace
+     * carried the same refusal twice — on the one path the design calls the one a user actually feels.
+     * The engine is now the single writer; this drives the whole use case to prove it end to end.
+     */
+    @Test
+    fun `a refused consent is traced exactly once through the use case`() = runTest {
+        val tools = FakeToolExecutor(listOf(notInstalled(), ToolResult.Effected()))
+        val run = runner(tools)
+        StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry).start(goal)
+        run.run(store.active)
+
+        val resolved = ResolveConsentUseCase(store, run).resolve(AgentSessionId("s1"), 1, granted = false)
+
+        val session = (resolved as OperationResult.Success).value!!
+        assertEquals(ExecutionState.Cancelled, session.state)
+        assertEquals(
+            "one refusal must be one event: ${session.trace.events}",
+            listOf(TraceEvent.ConsentResolved(1, granted = false)),
+            session.trace.events.filterIsInstance<TraceEvent.ConsentResolved>(),
+        )
+        assertEquals("the refused step must never have run", 1, tools.invocations.size)
+    }
+
+    /** The granted half, same path — it must still produce exactly one event, before the step starts. */
+    @Test
+    fun `a granted consent is traced exactly once and before the step it clears`() = runTest {
+        val tools = FakeToolExecutor(listOf(notInstalled(), ToolResult.Effected()))
+        val run = runner(tools)
+        StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry).start(goal)
+        run.run(store.active)
+
+        val resolved = ResolveConsentUseCase(store, run).resolve(AgentSessionId("s1"), 1, granted = true)
+
+        val events = (resolved as OperationResult.Success).value!!.trace.events
+        assertEquals(
+            listOf(TraceEvent.ConsentResolved(1, granted = true)),
+            events.filterIsInstance<TraceEvent.ConsentResolved>(),
+        )
+        assertTrue(
+            "consent must be traced before the step it clears: $events",
+            events.indexOf(TraceEvent.ConsentResolved(1, granted = true)) <
+                events.indexOf(TraceEvent.StepStarted(1)),
+        )
+    }
+
+    // --- The plan is validated before it is persisted (review finding F10, 2026-08-23) ------------
+
+    /**
+     * Spec §4.2/§6.2 say the shape check runs at plan time **and** before every step; only the second
+     * half existed, so `start` persisted whatever a `Planner` returned. A0's planner cannot emit a bad
+     * plan — these drive the port directly, which is exactly the seam A4' binds a model planner to.
+     */
+    @Test
+    fun `a plan whose step names an unregistered tool is not persisted`() = runTest {
+        val bogus = plannerOf(
+            ExecutionPlan(
+                listOf(
+                    PlanStep(
+                        index = 0,
+                        invocation = ToolInvocation(ToolId("rm_rf_slash"), emptyMap()),
+                        risk = ActionRiskLevel.SAFE,
+                        precondition = StepPrecondition.None,
+                        rationale = StepRationale.GOAL_DIRECT,
+                    ),
+                ),
+            ),
+        )
+
+        val started = StartAgentSessionUseCase(bogus, store, ids, registry).start(goal)
+
+        assertNull((started as OperationResult.Success).value)
+        assertTrue("nothing may reach disk: ${store.saved}", store.saved.isEmpty())
+    }
+
+    /**
+     * A 0-step plan stays constructible — ADR 4/4 makes it a real future shape ("a 0-step plan *is* a
+     * spoken reply") — but A0 has no surface for that reply, and running one to `Completed` would
+     * report success for a goal on which nothing happened and nothing was traced.
+     */
+    @Test
+    fun `an empty plan is not persisted`() = runTest {
+        val started = StartAgentSessionUseCase(plannerOf(ExecutionPlan(emptyList())), store, ids, registry)
+            .start(goal)
+
+        assertNull((started as OperationResult.Success).value)
+        assertTrue(store.saved.isEmpty())
+    }
+
+    /** Non-vacuity: the same harness persists a plan that IS runnable, so the two above mean something. */
+    @Test
+    fun `a runnable plan handed through the same port is persisted`() = runTest {
+        val good = plannerOf(
+            (TemplatePlanner().plan(goal, registry) as PlanningResult.Planned).plan,
+        )
+
+        val started = StartAgentSessionUseCase(good, store, ids, registry).start(goal)
+
+        assertEquals(AgentSessionId("s1"), (started as OperationResult.Success).value)
+        assertEquals(1, store.saved.size)
+    }
+
+    private fun plannerOf(plan: ExecutionPlan) = object : Planner {
+        override suspend fun plan(goal: AgentGoal, registry: ToolRegistry) = PlanningResult.Planned(plan)
     }
 }

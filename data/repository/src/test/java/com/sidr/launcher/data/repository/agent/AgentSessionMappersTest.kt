@@ -243,12 +243,19 @@ class AgentSessionMappersTest {
     /**
      * The tripwire for the list above. `sealedSubclasses` is reflection over a sealed hierarchy the
      * compiler already knows about, so this cannot go stale the way a hand-maintained count can.
+     *
+     * **Coverage is compared by class, not by name** (review finding F9, 2026-08-23). It used to
+     * compare `simpleName` against `typeNameOf`, which quietly required the on-disk vocabulary to
+     * equal the Kotlin class name for ever — the exact coupling `typeNameOf`'s KDoc says the longhand
+     * exists to avoid ("a rename is then a migration decision, not a silent format change"). Renaming
+     * a variant while keeping its persisted discriminator would have turned this red on correct code,
+     * and the natural fix — edit `typeNameOf` to match — is the silent format change itself.
      */
     @Test
     fun `the sample covers every TraceEvent variant`() {
         assertEquals(
-            TraceEvent::class.sealedSubclasses.mapNotNull { it.simpleName }.toSet(),
-            oneOfEachEvent.map(AgentSessionMappers::typeNameOf).toSet(),
+            TraceEvent::class.sealedSubclasses.toSet(),
+            oneOfEachEvent.map { it::class }.toSet(),
         )
     }
 

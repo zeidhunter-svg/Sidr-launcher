@@ -94,6 +94,14 @@
     <string name="launcher_agent_paused_body">Вы вышли до того, как план завершился. Продолжите — и Sidr возьмётся с того места, где остановился; закройте — и больше ничего не выполнится.</string>
     <string name="launcher_agent_paused_continue">Продолжить</string>
     <string name="launcher_agent_completed_title">План выполнен</string>
+    <string name="launcher_agent_completed_partial_title">План пройден, выполнено не всё</string>
+    <string name="launcher_agent_completed_partial_body">Sidr прошёл план до конца. Часть шагов не выполнялась — рядом с каждым написано, что с ним.</string>
+    <string name="launcher_agent_step_line">%1$s — %2$s</string>
+    <string name="launcher_agent_step_state_done">выполнено</string>
+    <string name="launcher_agent_step_state_skipped">не потребовалось</string>
+    <string name="launcher_agent_step_state_failed">не получилось</string>
+    <string name="launcher_agent_step_state_current">выполняется</string>
+    <string name="launcher_agent_step_state_pending">не начат</string>
     <string name="launcher_agent_failed_title">План не удалось завершить</string>
     <string name="launcher_agent_blocked_title">План остановлен</string>
     <string name="launcher_agent_blocked_body">Sidr остановил этот план: продолжать его безопасно уже нельзя. Больше ничего не выполнится.</string>

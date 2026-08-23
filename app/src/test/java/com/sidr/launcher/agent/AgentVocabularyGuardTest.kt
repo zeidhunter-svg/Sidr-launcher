@@ -6,7 +6,8 @@ import org.junit.Test
 import java.io.File
 
 /**
- * **The A1 fork, held open mechanically.** `domain/agent` and `domain/tool` are the portable engine.
+ * **The A1 fork, held open mechanically.** `domain/agent`, `domain/tool` and `domain/trace` are the
+ * portable engine.
  * If a single reference to the action vocabulary — `LauncherAction`, `ActionCatalog`, `ActionId` — or
  * to a transport — `GenerativeAiEngine`, `CommandPlanner`, Ktor — grows inside them, then A1' can no
  * longer choose "a parallel tool vocabulary" without first unpicking the engine, and the fork CLAUDE.md
@@ -50,9 +51,14 @@ class AgentVocabularyGuardTest {
     private val domainSrc = File(repoRoot, "domain/src")
 
     /**
-     * **Derived, not hard-coded — `:domain` is KMP.** What is enforced, precisely: `domain/agent` and
-     * `domain/tool` under **every non-test source set** of `:domain`, in both its `kotlin/` and
-     * `java/` directories. See [kmpProductionRoots] for which directories this module's compilers
+     * **Derived, not hard-coded — `:domain` is KMP.** What is enforced, precisely: `domain/agent`,
+     * `domain/tool` and `domain/trace` under **every non-test source set** of `:domain`, in both its
+     * `kotlin/` and `java/` directories.
+     *
+     * `trace` was added 2026-08-23 (review finding F7). The spec named two packages and this guard
+     * scanned two, while `CLAUDE.md` and the contract table have always called **three** of them the
+     * portable engine — and `TraceEvent` is the one type in the set that carries another type's value
+     * in a field, so it is the likeliest place for the action vocabulary to arrive by accident. See [kmpProductionRoots] for which directories this module's compilers
      * actually read, measured rather than assumed, and for the limitations of deriving this from a
      * filesystem convention.
      *
@@ -74,7 +80,7 @@ class AgentVocabularyGuardTest {
      * back empty.
      */
     private val engineRoots: List<File> =
-        listOf("agent", "tool")
+        listOf("agent", "tool", "trace")
             .flatMap { pkg -> kmpProductionRoots(domainSrc, "com/sidr/launcher/domain/$pkg") }
 
     /**
@@ -121,7 +127,9 @@ class AgentVocabularyGuardTest {
         val names = engineFiles().map { it.name }.toSet()
         assertTrue(
             "the engine scan found no sources — the roots moved and this guard went vacuous: $names",
-            names.containsAll(setOf("AgentExecutor.kt", "ExecutionPlan.kt", "ToolRegistry.kt", "ToolExecutor.kt")),
+            names.containsAll(
+                setOf("AgentExecutor.kt", "ExecutionPlan.kt", "ToolRegistry.kt", "ToolExecutor.kt", "TraceEvent.kt"),
+            ),
         )
     }
 

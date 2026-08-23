@@ -12,8 +12,10 @@ import javax.inject.Singleton
  * Binds the agentic-track A0 [AgentSessionStore] port to its Room-backed implementation (Task 10).
  *
  * Kept separate from [DatabaseModule] because Hilt forbids mixing `@Provides` and `@Binds` in one
- * module — the same reason [HistoryBindsModule] and [MemoryBindsModule] exist. Nothing on the runtime
- * path injects the store yet: Task 11 makes the cut into the command pipeline and Task 12 the surface.
+ * module — the same reason [HistoryBindsModule] and [MemoryBindsModule] exist.
+ *
+ * Tasks 11 and 12 have since landed, so the store **is** on the runtime path: `LauncherViewModel`
+ * injects it and `LauncherAgentSession.restoreOnStart` reads it off the main thread at startup.
  */
 @Module
 @InstallIn(SingletonComponent::class)

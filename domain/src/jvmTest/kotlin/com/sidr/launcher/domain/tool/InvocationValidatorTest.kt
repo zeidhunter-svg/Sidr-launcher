@@ -4,7 +4,6 @@ import com.sidr.launcher.domain.action.ActionArg
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.intent.CommandFailure
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -240,8 +239,10 @@ class InvocationValidatorTest {
             ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.FromStep(0, "resolved_query"))),
             observations = mapOf(0 to ToolResult.Failed(CommandFailure.Generic)),
         )
+        // No `assertTrue(result !is Resolved)` follow-up: after the assertEquals above it cannot fail,
+        // and an assertion that cannot fail is the defect this file's own subject is about (the F2/D10
+        // family). The equality carries the whole claim.
         assertEquals(ResolutionResult.Rejected(RejectionReason.UNRESOLVED_ARG_SOURCE), result)
-        assertTrue("a rejected resolution must not produce a value", result !is ResolutionResult.Resolved)
     }
 
     @Test

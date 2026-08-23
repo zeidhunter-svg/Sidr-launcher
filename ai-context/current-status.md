@@ -5,7 +5,10 @@
 > digest); per-phase plans carry their own checklists.** This file is the status snapshot — if it
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
-> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-08-22
+> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-08-23
+> (**cross-cutting review of the whole A0 block — nine findings, eight fixed and mutation-verified,
+> `CODE-GREEN` at 1158 tests; two §12 items await a device re-check because the fixes changed accepted
+> behaviour**); prior 2026-08-22
 > (**Task 15 — A0 device acceptance on the SM-A325F: all eight §12 items run by the owner and signed
 > off, the inherited Этап 4.0 check passed in the same session, migration 3→4 executed for real by both
 > routes; A0 and Этап 4.0 are now `DEVICE-ACCEPTED`, A0 `CLOSED` with four named residuals**);
@@ -23,6 +26,44 @@
 > acceptance; prior re-base 2026-08-10 DS-10 Assistant Migration CLOSED — device-accepted; same-day
 > DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer
 > Correctness CLOSED — device-accepted by the owner).
+
+## Agentic track — A0 cross-cutting review + fix round — `CODE-GREEN` (2026-08-23)
+
+**Nine findings, eight fixed, one withdrawn as unreachable.** The whole block (`dc80c1f..7442da4`, 39
+commits, 94 files) was reviewed as one object rather than task by task — every task in it had already
+passed its own review, so this pass looked for what a task review structurally cannot see: drift
+between spec, ADR, KDoc and code; holes at the seams between layers; and document claims nobody had
+checked against the code as a whole. Full record: ADR «2026-08-23 — Сквозное ревью блока A0» in
+[decisions.md](decisions.md).
+
+**One root cause produced three of the nine.** The domain test for resume simulated the restart by
+calling `advance` on the prepared session; the product instead goes through `restoreOnStart()` →
+`pausedForRestore()` and `continueSession()` → `resumed()`, and **both write trace events**. Keyed on
+the trace *tail*, `AgentExecutor`'s mid-step predicate therefore answered "not mid-step" on exactly the
+shape it exists to recognise: the engine re-cleared the step, wrote a second `StepStarted` +
+`ToolInvoked`, and a step whose consent had already been granted ran a second time. The predicate now
+reads the last `ToolInvoked` rather than the last event. Two more followed from the same seam being
+untested: the gate read `risk` from the persisted plan while reading `permissionGate` and `durability`
+from the live registry (so a plan written when a tool was `SAFE` ran it with **no** `ConsentRequested`
+after a build raised it to `CONFIRM`), and a refused consent was written to the trace twice.
+
+**The surface was claiming things that did not happen.** Step markers came from the cursor, and the
+cursor moves for three different reasons — a step ran, a step was skipped by its precondition, a step
+failed. All three read as a green success marker, so the two commonest shapes of this engine lied:
+the app-is-installed run (spec §12.8 itself) showed a completed store step over a store that never
+opened, and a failed step 0 under the default budget produced «План выполнен» with two green markers
+over a plan in which nothing succeeded. That is `DOC-ILM-4` — a partial result shown as success — and
+everything needed to tell the three apart was already in the session.
+
+**Withdrawn, and that is a result too.** The first version of the consent fix carried an idempotence
+guard; the mutation "record always" came back **green**, because a cleared step short-circuits before
+it can re-enter the consent block. The guard was unreachable and its test could not fail — the F2/D10
+family again, this time caught inside the same round rather than by the next review. Guard and test
+both replaced with an assertion about re-entry that does go red.
+
+**Still owed on device.** Three fixes change behaviour accepted on 2026-08-22, so §12.5 and §12.8 need
+re-running on the phone. Until then the changed behaviour is accepted by the gate, not by the owner —
+Этап 0.5's vocabulary does not allow carrying a signature across a behavioural change.
 
 ## Agentic track — Этап 4 (A0) — `CLOSED`, device-accepted (2026-08-22)
 

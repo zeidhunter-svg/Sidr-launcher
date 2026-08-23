@@ -45,9 +45,26 @@ class RoomAgentSessionStore(
         @IoDispatcher ioDispatcher: CoroutineDispatcher,
     ) : this(dao, ioDispatcher, System::currentTimeMillis)
 
+    /**
+     * The active session, or `null`. A row that cannot be read back is **deleted before the failure is
+     * reported** (review finding F10, 2026-08-23).
+     *
+     * An unreadable recovery record is not a recovery record: nothing can resume it, nothing can show
+     * it, and `LauncherAgentSession.restoreOnStart` — the one caller that would clean up after a dead
+     * process — returns early on a `Failure` and cannot name an id to delete. Left alone the row sits
+     * on disk holding `goal_text`, the user's raw command, until some later agent session happens to
+     * replace it. Deleting it here needs no widening of the port: the session **row** is readable even
+     * when assembling the domain object is not, so the id is in hand. The failure is still reported —
+     * a corrupt row never becomes a guessed session.
+     */
     override suspend fun active(): OperationResult<AgentSession?> = guarded("db_agent_session_read_failed") {
         val rows = dao.loadActive() ?: return@guarded null
-        AgentSessionMappers.toDomain(rows.session, rows.steps, rows.trace)
+        try {
+            AgentSessionMappers.toDomain(rows.session, rows.steps, rows.trace)
+        } catch (e: CorruptAgentRowException) {
+            dao.deleteSession(rows.session.id)
+            throw e
+        }
     }
 
     override suspend fun save(session: AgentSession): OperationResult<Unit> =

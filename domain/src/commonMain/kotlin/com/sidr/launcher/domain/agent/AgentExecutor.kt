@@ -36,7 +36,10 @@ import com.sidr.launcher.domain.trace.TraceEvent
  *  - **[prepare] short-circuits when the session is already mid-step**, so [advance] is safe as the
  *    single resume entry point: `advance` on a session persisted right after [prepare] must run the
  *    pending tool call exactly once, not re-clear the same step and append a second `StepStarted` /
- *    `ToolInvoked` before [perform] ever runs.
+ *    `ToolInvoked` before [perform] ever runs. The predicate deciding this reads the last
+ *    `ToolInvoked` rather than the last trace **event**, because the real restore path
+ *    ([AgentSession.pausedForRestore] then [AgentSession.resumed]) writes two events on top of the
+ *    pending one — see [midStepInvocation], where getting that wrong is review finding F1.
  *
  * The engine knows nothing of `LauncherAction`, `ExecutableAction`, `Intent`, or any store's name — it
  * only knows [ToolExecutor]. `AgentVocabularyGuardTest` pins that, because it is what keeps A1' free to
@@ -97,17 +100,19 @@ class AgentExecutor(
             InvocationCheck.Valid -> Unit
         }
 
+        // The consent decision is recorded HERE and nowhere else (F4): one decision, one event,
+        // whichever way the session was driven. `granted` carries the decision forward instead of
+        // dropping it, so the trace reads consent -> start -> invoke in the order it happened.
         val checkpoint = checkpointFor(session, next)
-        if (checkpoint != null) {
-            when (session.consents[next.index]) {
-                null -> return session
-                    .record(TraceEvent.ConsentRequested(next.index, checkpoint.reason))
-                    .copy(state = ExecutionState.AwaitingConsent)
-                false -> return session
-                    .record(TraceEvent.ConsentResolved(next.index, granted = false))
-                    .ended(ExecutionState.Cancelled)
-                true -> Unit
-            }
+        val granted = when {
+            checkpoint == null -> session
+            session.consents[next.index] == null -> return session
+                .record(TraceEvent.ConsentRequested(next.index, checkpoint.reason))
+                .copy(state = ExecutionState.AwaitingConsent)
+            session.consents[next.index] == false -> return session
+                .recordConsent(next.index, granted = false)
+                .ended(ExecutionState.Cancelled)
+            else -> session.recordConsent(next.index, granted = true)
         }
 
         // Binding, and it belongs HERE — after the checkpoint, before `ToolInvoked` (F6). A rejection
@@ -115,9 +120,9 @@ class AgentExecutor(
         // process died during the call", so a plan with a bad binding would come back as "we may have
         // half-run something, please decide" instead of the honest "this step could not be bound".
         // One rejection path, not two: this ends the session exactly as a validator rejection does.
-        when (val resolution = InvocationValidator.resolve(next.invocation, session.observations)) {
+        when (val resolution = InvocationValidator.resolve(next.invocation, granted.observations)) {
             is ResolutionResult.Rejected ->
-                return session
+                return granted
                     .record(TraceEvent.StepRejected(next.index, resolution.reason))
                     .ended(ExecutionState.Failed)
             is ResolutionResult.Resolved -> Unit
@@ -126,7 +131,7 @@ class AgentExecutor(
         // Cleared to run. This is the save point: a persisted session here has `ToolInvoked` in its
         // trace with no matching `ToolObserved` yet, which is exactly the mid-step signal `perform`
         // (and, later, a restart's resume path) reads back below.
-        return session
+        return granted
             .record(TraceEvent.StepStarted(next.index))
             .record(TraceEvent.ToolInvoked(next.index, next.invocation.id))
     }
@@ -210,9 +215,25 @@ class AgentExecutor(
     /**
      * The [TraceEvent.ToolInvoked] event of the step whose tool call has been decided but not yet
      * performed, or `null` if [AgentSession] is not currently mid-step.
+     *
+     * **It reads the last `ToolInvoked`, not the last trace event, and that difference is the whole
+     * behaviour** (review finding F1, 2026-08-23). The only path a mid-step session takes back into
+     * this engine is the restart one, and that path appends [TraceEvent.SessionPaused] and
+     * [TraceEvent.SessionResumed] *after* the pending `ToolInvoked` before the engine ever sees the
+     * session again. Keyed on the trace **tail**, the predicate therefore answered `null` on exactly
+     * the shape it exists to recognise: [prepare] did not short-circuit, re-cleared the same step,
+     * appended a second `StepStarted` + `ToolInvoked`, and [perform] then ran the pending call from
+     * the duplicate rather than from the original. Two `ToolInvoked` against one `ToolObserved` is
+     * not a trace that is 1:1 with reality (`DOC-ILM-3`), and on a step whose consent was already
+     * granted it is one confirmation authorising two executions (`DOC-HMA-1`).
+     *
+     * "The last `ToolInvoked` has no `ToolObserved` for its index" is the same predicate without the
+     * adjacency assumption: [perform] records `ToolObserved` for every step it clears — including the
+     * re-resolution failure below — so an unmatched `ToolInvoked` means the process died during the
+     * call and nothing else.
      */
     private fun AgentSession.midStepInvocation(): TraceEvent.ToolInvoked? {
-        val last = trace.events.lastOrNull() as? TraceEvent.ToolInvoked ?: return null
+        val last = trace.events.filterIsInstance<TraceEvent.ToolInvoked>().lastOrNull() ?: return null
         val alreadyObserved = trace.events.any { it is TraceEvent.ToolObserved && it.index == last.index }
         return if (alreadyObserved) null else last
     }
@@ -234,6 +255,15 @@ class AgentExecutor(
      * *declares* a gate: consulting the real grant state would put `PermissionChecker` inside the
      * engine, and stopping unconditionally is the conservative half of that.
      *
+     * **Every input is read through [effectiveRisk], not off the plan** (review finding F2,
+     * 2026-08-23). `permissionGate` and `durability` were always read from the live registry while
+     * `risk` came from the persisted [PlanStep] alone, and nothing re-checks risk on resume —
+     * `InvocationValidator.validate` covers tool identity, argument schema, output schema and types,
+     * and deliberately knows nothing about risk. A plan written when a tool was `SAFE` therefore kept
+     * running it as `SAFE` after a build that declared it `CONFIRM`: no checkpoint, no
+     * `ConsentRequested`, the tool straight to the world. Taking the higher of the two closes it in
+     * the direction that cannot be wrong.
+     *
      * **Coverage, corrected by the A0 Task 14 review (2026-08-22) — this KDoc used to say the branch
      * was "unit-tested", and it is not.** Neither A0 tool declares a gate or is `DURABLE`, and no test
      * anywhere constructs a `ToolDescriptor` that does, so [ConsentReason.MISSING_PERMISSION] and
@@ -244,24 +274,61 @@ class AgentExecutor(
      * business; whoever inserts it writes the case with it. Tracked as `D11` in `§HANDOFF`.
      */
     private fun checkpointFor(session: AgentSession, step: PlanStep): ConsentCheckpoint? {
-        val descriptor = registry.find(step.invocation.id) ?: return null
+        val descriptor = registry.find(step.invocation.id)
+        val risk = effectiveRisk(step)
         val previousRisk = session.plan.steps
             .filter { it.index < step.index && session.observations.containsKey(it.index) }
-            .maxOfOrNull { it.risk }
+            .maxOfOrNull { effectiveRisk(it) }
             ?: ActionRiskLevel.SAFE
 
         return when {
-            step.risk >= ActionRiskLevel.CONFIRM ->
+            risk >= ActionRiskLevel.CONFIRM ->
                 ConsentCheckpoint(step.index, ConsentReason.RISK_LEVEL)
-            step.risk > previousRisk ->
+            risk > previousRisk ->
                 ConsentCheckpoint(step.index, ConsentReason.RISK_RAISED)
-            descriptor.permissionGate != null ->
+            descriptor?.permissionGate != null ->
                 ConsentCheckpoint(step.index, ConsentReason.MISSING_PERMISSION)
-            descriptor.durability == ToolDurability.DURABLE ->
+            descriptor?.durability == ToolDurability.DURABLE ->
                 ConsentCheckpoint(step.index, ConsentReason.DURABLE_EFFECT)
             else -> null
         }
     }
+
+    /**
+     * The higher of what the plan recorded and what the registry declares **now** — the risk the gate
+     * actually acts on.
+     *
+     * A plan outlives the build that wrote it, so its `risk` is a snapshot; the registry is the
+     * current truth. Neither alone is safe: trusting the plan misses a tool whose risk was raised,
+     * trusting the registry misses a tool whose risk was lowered under a plan the user has not seen
+     * again. `maxOf` needs no argument about which source is more authoritative.
+     *
+     * A tool the registry does not know at all counts as [ActionRiskLevel.DANGEROUS]. That branch is
+     * unreachable while `prepare` validates first (`UNKNOWN_TOOL` ends the session before this runs),
+     * and it is written this way so the *default* is a stop rather than a pass — the previous
+     * `?: return null` made "the registry has never heard of this tool" mean "no consent needed",
+     * which is only safe as long as two calls stay in their current order.
+     */
+    private fun effectiveRisk(step: PlanStep): ActionRiskLevel =
+        maxOf(step.risk, registry.find(step.invocation.id)?.risk ?: ActionRiskLevel.DANGEROUS)
+
+    /**
+     * Records a consent decision. [prepare] is the **single writer** of [TraceEvent.ConsentResolved]
+     * (review finding F4, 2026-08-23) — `ResolveConsentUseCase` used to write it as well, and on a
+     * refusal both wrote: one "no" from the user, two events in the trace, on precisely the path the
+     * design calls the one a user would actually feel.
+     *
+     * **Once per step, by construction rather than by a check.** Every route out of the consent block
+     * either ends the session ([ExecutionState.Cancelled], or `Failed` if the binding then fails) or
+     * clears the step, and a cleared step's next visit short-circuits on [midStepInvocation] before it
+     * reaches this line. So the block cannot be entered twice for one step, and there is nothing for
+     * an "only if not already traced" guard to catch. A first version of this shipped that guard with
+     * a test beside it; the test passed with the guard deleted, which is the whole argument against
+     * keeping either (the F2/D10 family — an assertion that cannot fail, defending a branch that
+     * cannot run).
+     */
+    private fun AgentSession.recordConsent(index: Int, granted: Boolean): AgentSession =
+        record(TraceEvent.ConsentResolved(index, granted))
 
     /** Consecutive failures are derived, not stored — one less field to keep consistent across a restart. */
     private fun AgentSession.trailingFailures(): Int =

@@ -63,7 +63,12 @@ both replaced with an assertion about re-entry that does go red.
 
 **Still owed on device.** Three fixes change behaviour accepted on 2026-08-22, so §12.5 and §12.8 need
 re-running on the phone. Until then the changed behaviour is accepted by the gate, not by the owner —
-Этап 0.5's vocabulary does not allow carrying a signature across a behavioural change.
+Этап 0.5's vocabulary does not allow carrying a signature across a behavioural change. The debt is a
+checklist rather than a sentence:
+[docs/superpowers/plans/2026-08-23-a0-device-recheck.md](../docs/superpowers/plans/2026-08-23-a0-device-recheck.md),
+which separates what the **owner** must look at (the changed §12.8 surface and the six new strings)
+from what is a no-regression re-run, from what only an agent can instrument and which therefore clears
+nothing.
 
 ## Agentic track — Этап 4 (A0) — `CLOSED`, device-accepted (2026-08-22)
 

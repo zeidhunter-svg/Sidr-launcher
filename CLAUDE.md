@@ -149,7 +149,11 @@ below is recorded in its own ADR.
   `ToolInvoked` on disk, not two) and §12.8 (the wording changed: «План пройден, выполнено не всё» with the
   store step marked «не потребовалось», instead of «План выполнен» with two green markers). The six new
   strings are not Class B, so the locale signature was neither touched nor re-signed. Until that re-check,
-  the changed behaviour is accepted by the gate, not by the owner.
+  the changed behaviour is accepted by the gate, not by the owner. **The re-check is written out as a
+  runnable checklist, not left as this sentence:**
+  [docs/superpowers/plans/2026-08-23-a0-device-recheck.md](docs/superpowers/plans/2026-08-23-a0-device-recheck.md)
+  — what the owner must look at, what is a no-regression re-run, and what is agent evidence that clears
+  nothing.
 - **`CODE-GREEN`, not `DEVICE-ACCEPTED`:** DS-5's own acceptance checklist has never been run
   (since 2026-07-13); I18N-1 was verified only by agent-driven `adb`/`uiautomator` — its offline path, live
   TalkBack, fontScale 2.0, and the system per-app-language picker are untested. DS-6B is `CLOSED` (owner

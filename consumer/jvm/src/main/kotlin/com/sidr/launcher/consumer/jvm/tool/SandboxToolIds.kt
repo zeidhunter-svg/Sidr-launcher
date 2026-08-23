@@ -7,8 +7,8 @@ import com.sidr.launcher.domain.tool.ToolId
  *
  * `ToolIds` in `domain/tool` keeps exactly its two A0 values. Adding these three there would be
  * precisely the per-consumer taxonomy A0.5 exists to warn about (spec §11.2), and `ToolId`'s
- * value-class-over-`String` design already makes it unnecessary: "adding one requires no change to a
- * central enum", as `ActionId`'s KDoc puts it. That this works with no core edit is one of the two
+ * value-class-over-`String` design already makes it unnecessary: "adding an action requires no change
+ * to a central enum", as `ActionId`'s KDoc puts it. That this works with no core edit is one of the two
  * positive findings of the block — the shape that survived contact with a second consumer.
  */
 object SandboxToolIds {

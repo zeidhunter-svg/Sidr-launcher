@@ -87,9 +87,32 @@ internal object AgentSessionMappers {
 
     // ---------------------------------------------------------------- domain -> rows
 
+    /**
+     * Persists only the shapes **this** consumer's planner produces. `TemplatePlanner` answers
+     * `NoPlan` for [GoalShape.Free], so a free-text goal reaching this mapper does not mean the row is
+     * unrepresentable — it means the wrong planner built this session, and writing a row for it would
+     * record a session Android cannot have made.
+     *
+     * The throw is deliberately not a new persisted shape string. Adding one would extend the
+     * `agent_session.goal_shape` vocabulary for a value this surface cannot construct — the contract
+     * for an absent consumer that Master Plan §3.4 forbids. Because a throwing encode writes no row,
+     * the encode/decode pair cannot fall out of step: there is no row for `readShape` to fail on, which
+     * is why `readShape` is deliberately left alone.
+     *
+     * Symmetric with `:consumer:jvm`'s own `SessionMapper`, which throws on [GoalShape.AppNotInstalled]
+     * for the same reason. Each consumer persists its own planner's shapes and refuses the other's.
+     *
+     * `IllegalArgumentException` rather than [CorruptAgentRowException]: nothing is corrupt and no row
+     * exists — the argument is simply not representable here. `RoomAgentSessionStore.save` contains it
+     * as `OperationResult.Failure`, so this never throws to UI.
+     */
     fun toSessionEntity(session: AgentSession, now: Long): AgentSessionEntity {
         val (shape, arg) = when (val goalShape = session.goal.shape) {
             is GoalShape.AppNotInstalled -> SHAPE_APP_NOT_INSTALLED to goalShape.query
+            is GoalShape.Free -> throw IllegalArgumentException(
+                "the Android session store persists only shapes TemplatePlanner produces, but the " +
+                    "goal of session \"${session.id.value}\" is GoalShape.Free",
+            )
         }
         return AgentSessionEntity(
             id = session.id.value,

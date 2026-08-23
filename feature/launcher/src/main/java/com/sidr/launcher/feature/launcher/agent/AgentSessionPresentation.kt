@@ -31,9 +31,16 @@ import com.sidr.launcher.feature.launcher.R
  * What the plan is about, in the user's own words. Exhaustive over [GoalShape] on purpose: A0 has one
  * shape, and a second one must make a deliberate decision about how it reads rather than fall into a
  * default.
+ *
+ * The [GoalShape.Free] arm is that deliberate decision, and it is **unreachable on this surface**:
+ * `TemplatePlanner` answers `NoPlan` for a free-text goal, so no Android session is ever built from
+ * one, and Android's only production `GoalShape` construction site (`RouteCommandUseCase`) builds
+ * [GoalShape.AppNotInstalled]. It renders the raw goal text rather than throwing because this is the
+ * UI seam: a shape that should not be here must degrade to the user's own words, never to a crash.
  */
 internal fun AgentGoal.subject(): String = when (val shape = shape) {
     is GoalShape.AppNotInstalled -> shape.query
+    is GoalShape.Free -> shape.text
 }
 
 /** Typed provenance -> one localized line per step. [subject] is the goal the plan is serving. */

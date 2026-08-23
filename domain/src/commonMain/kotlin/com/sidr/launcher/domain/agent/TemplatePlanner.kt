@@ -44,6 +44,10 @@ class TemplatePlanner : Planner {
     override suspend fun plan(goal: AgentGoal, registry: ToolRegistry): PlanningResult =
         when (val shape = goal.shape) {
             is GoalShape.AppNotInstalled -> planMissingApp(shape, registry)
+            // The Android planner does not plan free-text goals — reading raw text is the model
+            // planner's job and arrives in A4' behind this same `Planner` port. Answering `NoPlan`
+            // here is the honest "I recognise nothing", not a stub.
+            is GoalShape.Free -> PlanningResult.NoPlan
         }
 
     private companion object {

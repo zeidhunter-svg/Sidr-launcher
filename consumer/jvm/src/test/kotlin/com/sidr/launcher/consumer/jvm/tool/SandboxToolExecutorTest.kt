@@ -232,4 +232,27 @@ class SandboxToolExecutorTest {
         )
         assertTrue(result is ToolResult.Failed)
     }
+
+    /**
+     * New-1 regression. `realPath()` used to recurse once per path component; the reviewer's reflection
+     * harness measured `StackOverflowError` escaping the compiled executor at depth 12,000/15,000/40,000,
+     * an `Error` that `invoke`'s `catch (e: Exception)` cannot catch — a throw straight out of the only
+     * path to the world, exactly what this class's KDoc promises cannot happen. `realPath()` is now an
+     * iterative `while` loop bounded by heap, not stack. 20,000 components is comfortably past every
+     * depth the reviewer observed failing.
+     */
+    @Test
+    fun `find_file fails closed instead of overflowing the stack on a deeply nested path argument`() = runTest {
+        val deep = buildString {
+            append(rootArg())
+            repeat(20_000) { append("/d") }
+        }
+        val result = executor().invoke(
+            ResolvedInvocation(
+                SandboxToolIds.FIND_FILE,
+                mapOf(SandboxKeys.QUERY to "x", SandboxKeys.ROOT to deep),
+            ),
+        )
+        assertTrue(result is ToolResult.Failed)
+    }
 }

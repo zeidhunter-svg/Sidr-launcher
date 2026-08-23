@@ -13,10 +13,10 @@ import java.nio.file.Paths
 
 /**
  * The second consumer's **only path to the world**. It is the second implementation of [ToolExecutor]
- * in this repository, but nothing wires it to `AgentExecutor` yet — only this file's own tests
- * construct it. Wiring it in, and widening `ToolExecutorCallSiteGuardTest`'s `productionRoots` to see
- * `consumer/jvm/src/main/kotlin` at all, is **future work**, not present fact; this sentence does not
- * pre-decide either design.
+ * in this repository, but nothing wires it to `AgentExecutor` yet — only `SandboxToolExecutorTest` and
+ * `SandboxToolContractTest` construct it today. Wiring it in, and widening
+ * `ToolExecutorCallSiteGuardTest`'s `productionRoots` to see `consumer/jvm/src/main/kotlin` at all, is
+ * **future work**, not present fact; this sentence does not pre-decide either design.
  *
  * Every failure this class can produce — a declined containment check, or an exception escaping the
  * filesystem calls below (a vanished root, an unreadable directory, an invalid path argument) — is
@@ -118,10 +118,22 @@ class SandboxToolExecutor(private val root: Path) : ToolExecutor {
      * nearest existing ancestor instead — which may be several levels up — and re-attaches the missing
      * tail unresolved, since there is nothing on disk there to resolve. `candidate` is always already
      * normalised by the caller, so the tail carries no `..` to re-interpret.
+     *
+     * Iterative, not recursive (fix for a regression this same round introduced): one stack frame per
+     * path component would overflow on a deep-enough argument — observed at depth 12,000+ — and
+     * `StackOverflowError` is an `Error`, so it would escape `invoke`'s `catch (e: Exception)` and throw
+     * straight out of the only path to the world. A `while` loop bounds this by heap, not stack.
      */
     private fun realPath(candidate: Path): Path {
         if (Files.exists(candidate)) return candidate.toRealPath()
-        val parent = candidate.parent ?: return candidate
-        return realPath(parent).resolve(candidate.fileName)
+        val missingTail = ArrayDeque<Path>()
+        var cursor = candidate
+        while (!Files.exists(cursor)) {
+            missingTail.addFirst(cursor.fileName)
+            cursor = cursor.parent ?: return candidate
+        }
+        var resolved = cursor.toRealPath()
+        missingTail.forEach { resolved = resolved.resolve(it) }
+        return resolved
     }
 }

@@ -197,4 +197,41 @@ class JvmAgentSessionStoreTest {
         )
         assertEquals(mapOf(2 to true), s.active().value()!!.consents)
     }
+
+    /**
+     * The gap the first round left open, and the reason it is not merely cosmetic.
+     *
+     * A [Mutex] held in a per-instance field excludes coroutines sharing **one** store object; a
+     * [java.nio.channels.FileLock] excludes a **second process**. Neither covers two store objects over
+     * one file inside one JVM — and `FileChannel.lock()` is JVM-wide, so the second acquisition throws
+     * `OverlappingFileLockException` rather than blocking. The CAS still failed closed, but the loser
+     * was handed `OperationResult.Failure(UnknownError(null))` instead of `Success(false)`.
+     *
+     * That distinction is the whole contract. `recordConsentIfPending` returns `true` iff it applied,
+     * so "another tap won" is `Success(false)`; a `Failure` says "the store broke" and propagates as a
+     * technical error, which is precisely the weakening spec §8 asks whether a file store can avoid.
+     * Asserting the **type** and not only the boolean is deliberate: a test that read only the boolean
+     * would have passed against the defect.
+     */
+    @Test
+    fun `two instances over one file - the loser is told false, not handed a failure`() = runTest {
+        val file = temp.root.toPath().resolve("session.json")
+        JvmAgentSessionStore(file).save(session(state = ExecutionState.AwaitingConsent, cursor = 2))
+        val stores = listOf(JvmAgentSessionStore(file), JvmAgentSessionStore(file))
+
+        val results = withContext(Dispatchers.Default) {
+            List(2) { i -> async { stores[i].recordConsentIfPending(id, 2, granted = true) } }.awaitAll()
+        }
+
+        assertTrue(
+            "a losing consent write must be Success(false), never a Failure — got $results",
+            results.all { it is OperationResult.Success },
+        )
+        assertEquals(
+            "exactly one of two instances racing one file may apply",
+            1,
+            results.count { it.value() },
+        )
+        assertEquals(mapOf(2 to true), stores[0].active().value()!!.consents)
+    }
 }

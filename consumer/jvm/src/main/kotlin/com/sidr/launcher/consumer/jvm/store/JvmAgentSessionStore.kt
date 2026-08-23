@@ -13,6 +13,7 @@ import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * The second consumer's [AgentSessionStore]: one JSON file holding at most one session.
@@ -24,15 +25,25 @@ import java.nio.file.StandardOpenOption
  * contract exists because Room can say `UPDATE … WHERE state = pending` in one statement; honouring it
  * here without weakening it to a whole-object write is what decides whether `AgentSessionStore` is a
  * portable port or a Room shape wearing an interface (spec §8, §11.2). Two mechanisms, because they
- * exclude different things: a [Mutex] for coroutines inside this process, a [java.nio.channels.FileLock]
- * for a second process opening the same file.
+ * exclude different things: a **process-wide, path-keyed** [Mutex] for coroutines inside this JVM, a
+ * [java.nio.channels.FileLock] for a second process opening the same file.
+ *
+ * **Why the [Mutex] is keyed by path and not simply a field.** The first cut held it per instance,
+ * which left a gap neither mechanism covered: two [JvmAgentSessionStore] objects over one file inside
+ * one JVM. `FileChannel.lock()` is JVM-wide, so the second acquisition threw
+ * `OverlappingFileLockException` instead of blocking, and the losing caller was handed
+ * `OperationResult.Failure` where the contract says `Success(false)`. The CAS still failed closed, but
+ * "another tap won" and "the store broke" became indistinguishable — which is exactly the weakening
+ * spec §8 asks whether a file store can avoid. Keying the gate by the normalised absolute path closes
+ * it: every instance addressing one file shares one gate, so the [FileLock] below is reached at most
+ * once per JVM per file and is left to do only the cross-process job it is actually able to do.
  *
  * Whole-object writes were avoided deliberately: that pattern already cost this project the
  * `autoHideNavBar` bug (DS-11), which only surfaced on device.
  */
 class JvmAgentSessionStore(private val file: Path) : AgentSessionStore {
 
-    private val mutex = Mutex()
+    private val mutex: Mutex = inProcessGate(file)
     private val lockFile: Path = file.resolveSibling(file.fileName.toString() + ".lock")
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = false }
 
@@ -112,4 +123,30 @@ class JvmAgentSessionStore(private val file: Path) : AgentSessionStore {
             onSuccess = { OperationResult.Success(it) },
             onFailure = { OperationResult.Failure(OperationError.UnknownError(it.message)) },
         )
+
+    private companion object {
+
+        /**
+         * One [Mutex] per file, shared by every [JvmAgentSessionStore] addressing it in this JVM.
+         *
+         * The key is [Path.toAbsolutePath] + [Path.normalize] — a **purely lexical** resolution, chosen
+         * over `toRealPath()` deliberately. `toRealPath()` consults the filesystem and throws when the
+         * target does not exist, and this store creates its file lazily on the first `write`, so at
+         * construction there is usually nothing to resolve. Worse, a "try real, fall back to lexical"
+         * scheme would key the *same* file differently depending on whether it happened to exist yet,
+         * which is the one behaviour a lock key must never have. Lexical normalisation is total and
+         * time-invariant: the same path string always yields the same gate.
+         *
+         * The residual is symlink aliasing — two different paths resolving to one file through a link
+         * get two gates, and fall back to the `FileLock`, where they collide as before. Naming it rather
+         * than implying it is absent: no code constructs this store through a symlink today.
+         *
+         * Entries are never evicted. Bounded by the number of distinct session paths a process opens,
+         * which is one in every use this consumer has.
+         */
+        private val gates = ConcurrentHashMap<String, Mutex>()
+
+        fun inProcessGate(file: Path): Mutex =
+            gates.computeIfAbsent(file.toAbsolutePath().normalize().toString()) { Mutex() }
+    }
 }

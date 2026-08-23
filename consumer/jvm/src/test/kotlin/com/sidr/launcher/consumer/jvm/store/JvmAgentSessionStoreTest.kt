@@ -164,10 +164,16 @@ class JvmAgentSessionStoreTest {
      */
     @Test
     fun `after delete the file is gone and active reports no session`() = runTest {
-        val s = store()
+        val file = temp.root.toPath().resolve("session.json")
+        val s = JvmAgentSessionStore(file)
         s.save(session())
         s.delete(id)
+
         assertNull(s.active().value())
+        // Without this the name is a claim no assertion checks: `read()` treats a blank file as "no
+        // session", so a delete that merely BLANKED the file would pass on `active()` alone. Added by
+        // the 2026-08-24 re-review (N2) — the same defect class as F4 itself, one layer down.
+        assertFalse("delete must remove the file, not blank it", Files.exists(file))
     }
 
     @Test
@@ -289,16 +295,6 @@ class JvmAgentSessionStoreTest {
     }
 
     /**
-     * Parity with the Room sibling. Its DAO says `UPDATE … WHERE step_index = :stepIndex`, which matches
-     * no row for a step the plan does not have, so Android answers `false`. Without the same check the
-     * file store persisted a phantom `consents[99] = true` and answered `true` — after which
-     * `ResolveConsentUseCase` flips the session to `Running` on a decision that decided nothing.
-     *
-     * On-topic for this task rather than incidental: the block's question is whether
-     * `AgentSessionStore` is a portable **port**, and two implementations answering differently for the
-     * same call is exactly what that question is about. Found by the 2026-08-24 review (F6).
-     */
-    /**
      * **A planted sentinel, because F5 was a real leak and not a style point.** `guarded` used to build
      * its `OperationError` from the caught exception's own `message`, and kotlinx-serialization appends
      * the offending *input* to a `JsonDecodingException` — so a half-written `session.json` carried the
@@ -338,6 +334,16 @@ class JvmAgentSessionStoreTest {
         )
     }
 
+    /**
+     * Parity with the Room sibling. Its DAO says `UPDATE … WHERE step_index = :stepIndex`, which matches
+     * no row for a step the plan does not have, so Android answers `false`. Without the same check the
+     * file store persisted a phantom `consents[99] = true` and answered `true` — after which
+     * `ResolveConsentUseCase` flips the session to `Running` on a decision that decided nothing.
+     *
+     * On-topic for this task rather than incidental: the block's question is whether
+     * `AgentSessionStore` is a portable **port**, and two implementations answering differently for the
+     * same call is exactly what that question is about. Found by the 2026-08-24 review (F6).
+     */
     @Test
     fun `recordConsentIfPending does not apply to a step the plan does not have`() = runTest {
         val s = store()
@@ -345,5 +351,59 @@ class JvmAgentSessionStoreTest {
 
         assertTrue(!s.recordConsentIfPending(id, 99, granted = true).value())
         assertEquals(emptyMap<Int, Boolean>(), s.active().value()!!.consents)
+    }
+
+    /**
+     * **The regression F8a introduced, and the reason atomic writes are not free.** A kill between
+     * `createTempFile` and the `ATOMIC_MOVE` — precisely the window write-to-temp exists to survive —
+     * leaves a temp file holding a *complete* session, goal text and all. Nothing removed it: the
+     * `catch` never runs on a kill, `delete` touched only the session file, and every save picks a
+     * fresh random name, so the copies accumulated. That is strictly worse than what it replaced —
+     * truncate-in-place left one partial file the next save overwrote.
+     *
+     * Found by the 2026-08-24 re-review (N1). The orphan here is planted with a sentinel so the test
+     * fails on the leak rather than on a file count.
+     */
+    @Test
+    fun `a save sweeps a temp file orphaned by a killed write`() = runTest {
+        val sentinel = "SENTINEL-orphan-must-not-survive-9c21"
+        val file = temp.root.toPath().resolve("session.json")
+        val s = JvmAgentSessionStore(file)
+        s.save(session())
+
+        val orphan = Files.createTempFile(temp.root.toPath(), "session.json", ".tmp")
+        Files.writeString(orphan, """{"goalText":"$sentinel"}""")
+        assertTrue("the fixture must really plant an orphan", Files.exists(orphan))
+
+        s.save(session(state = ExecutionState.AwaitingConsent, cursor = 2))
+
+        assertFalse(
+            "an orphaned temp holds a complete session including the raw goal text",
+            Files.exists(orphan),
+        )
+        assertEquals(
+            "the sweep must not touch the live session",
+            ExecutionState.AwaitingConsent,
+            s.active().value()!!.state,
+        )
+    }
+
+    /**
+     * The half that carries the privacy property. [JvmAgentSessionStore.delete] is the moment "nothing
+     * at rest" has to be true rather than nearly true, so an orphan surviving it would mean a finished
+     * session still had a complete copy on disk. Swept unconditionally, not only when the id matched.
+     */
+    @Test
+    fun `delete sweeps an orphaned temp too - nothing at rest means nothing`() = runTest {
+        val file = temp.root.toPath().resolve("session.json")
+        val s = JvmAgentSessionStore(file)
+        s.save(session())
+        val orphan = Files.createTempFile(temp.root.toPath(), "session.json", ".tmp")
+        Files.writeString(orphan, """{"goalText":"SENTINEL-at-rest-4b18"}""")
+
+        s.delete(id)
+
+        assertFalse("a terminal session must leave no complete copy behind", Files.exists(orphan))
+        assertFalse(Files.exists(file))
     }
 }

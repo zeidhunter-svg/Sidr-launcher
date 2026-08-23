@@ -56,9 +56,15 @@ internal class CorruptSessionFileException(message: String, cause: Throwable? = 
  * Whole-object writes were avoided deliberately: that pattern already cost this project the
  * `autoHideNavBar` bug (DS-11), which only surfaced on device.
  *
- * **Named limitation:** [delete] removes the session file but not its `.lock` sibling, which is created
- * on the first call and then stays. Nothing reads it as state — [active] keys off the session file
- * alone — so "no session at rest" holds; "no file at rest" does not.
+ * **Named limitations, and this list is meant to be exhaustive.**
+ *  - [delete] removes the session file but not its `.lock` sibling, which is created on the first call
+ *    and then stays. Nothing reads it as state — [active] keys off the session file alone — so "no
+ *    session at rest" holds; "no file at rest" does not. The lock file is always empty.
+ *  - A process killed inside [write]'s window — between creating the temp and the `ATOMIC_MOVE` —
+ *    leaves a temp file holding a **complete** session, goal text included. [sweepStaleTemps] removes
+ *    it, but only on the next [write] or [delete] against the same path. Until one of those runs, that
+ *    copy is at rest. Bounding it further would need a sweep on [active] too, which would make a read
+ *    delete files; that trade is A5's to make if it ever wants a durable journal.
  */
 class JvmAgentSessionStore(file: Path) : AgentSessionStore {
 
@@ -87,6 +93,10 @@ class JvmAgentSessionStore(file: Path) : AgentSessionStore {
                 if (read()?.id == id) {
                     Files.deleteIfExists(path)
                 }
+                // Unconditionally, and not only when the id matched: an orphaned temp holds a complete
+                // session whoever owns the live file, and `delete` is the moment "nothing at rest" has
+                // to be true rather than nearly true.
+                sweepStaleTemps()
             }
         }
 
@@ -147,7 +157,8 @@ class JvmAgentSessionStore(file: Path) : AgentSessionStore {
     private fun write(session: AgentSession) {
         val parent = path.parent
         Files.createDirectories(parent)
-        val temp = Files.createTempFile(parent, path.fileName.toString(), ".tmp")
+        sweepStaleTemps()
+        val temp = Files.createTempFile(parent, path.fileName.toString(), TEMP_SUFFIX)
         try {
             Files.writeString(
                 temp,
@@ -159,6 +170,38 @@ class JvmAgentSessionStore(file: Path) : AgentSessionStore {
         } catch (e: Throwable) {
             Files.deleteIfExists(temp)
             throw e
+        }
+    }
+
+    /**
+     * Removes temp files orphaned by a process that died inside [write]'s window.
+     *
+     * Safe to delete unconditionally **because every caller holds the file lock**: no other process can
+     * be between its own `createTempFile` and `ATOMIC_MOVE` while we hold it, and the in-process gate
+     * excludes every other coroutine in this JVM. So a temp seen here belongs to nobody.
+     *
+     * Matched by our own prefix and suffix with plain string comparison rather than a glob — a glob
+     * would give `*`, `?`, `[` and `{` in the session's own file name their pattern meanings and could
+     * reach files this store does not own. The `name != live` guard matters for the degenerate case
+     * where the session file is itself named `*.tmp`, which would otherwise match itself.
+     *
+     * Best-effort: a temp that cannot be deleted must not fail the save that was actually asked for.
+     */
+    private fun sweepStaleTemps() {
+        val parent = path.parent ?: return
+        if (!Files.isDirectory(parent)) return
+        val live = path.fileName?.toString() ?: return
+        Files.newDirectoryStream(parent).use { entries ->
+            entries.forEach { candidate ->
+                val name = candidate.fileName?.toString() ?: return@forEach
+                if (name != live && name.startsWith(live) && name.endsWith(TEMP_SUFFIX)) {
+                    try {
+                        Files.deleteIfExists(candidate)
+                    } catch (_: java.io.IOException) {
+                        // Best-effort by design; see KDoc.
+                    }
+                }
+            }
         }
     }
 
@@ -198,6 +241,8 @@ class JvmAgentSessionStore(file: Path) : AgentSessionStore {
         }
 
     private companion object {
+
+        const val TEMP_SUFFIX = ".tmp"
 
         const val READ_FAILED = "file_agent_session_read_failed"
         const val WRITE_FAILED = "file_agent_session_write_failed"

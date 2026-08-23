@@ -14,6 +14,7 @@ import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.StepRationale
 import com.sidr.launcher.domain.intent.CommandFailure
+import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ObservedFact
@@ -29,11 +30,13 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.nio.file.Files
 
 class JvmAgentSessionStoreTest {
 
@@ -295,6 +298,46 @@ class JvmAgentSessionStoreTest {
      * `AgentSessionStore` is a portable **port**, and two implementations answering differently for the
      * same call is exactly what that question is about. Found by the 2026-08-24 review (F6).
      */
+    /**
+     * **A planted sentinel, because F5 was a real leak and not a style point.** `guarded` used to build
+     * its `OperationError` from the caught exception's own `message`, and kotlinx-serialization appends
+     * the offending *input* to a `JsonDecodingException` — so a half-written `session.json` carried the
+     * user's raw goal text and workspace paths out inside an `OperationError`, which the surface is
+     * free to log or display. `CommandFailure`'s rule is explicit: "display-safe by construction, so no
+     * stack trace or PII can ride along". `RoomAgentSessionStore.guarded` takes a fixed token for this
+     * exact reason; this asserts the file store now does the same.
+     *
+     * It also pins F8's other half: an undecodable file is **deleted** before the failure is reported,
+     * mirroring the Room store's F10 fix. An unreadable recovery record is not a recovery record —
+     * nothing can resume or show it — so left alone it would sit on disk holding the goal text.
+     */
+    @Test
+    fun `an undecodable file is deleted, and the failure names a token rather than its content`() = runTest {
+        val sentinel = "SENTINEL-goal-must-not-leak-7f3a"
+        val file = temp.root.toPath().resolve("session.json")
+        val s = JvmAgentSessionStore(file)
+        s.save(session().copy(goal = AgentGoal(sentinel, GoalShape.Free(sentinel))))
+
+        val whole = Files.readString(file)
+        assertTrue("the fixture must really plant the sentinel", whole.contains(sentinel))
+        val truncated = whole.take(whole.length / 2)
+        assertTrue("the truncated file must still carry it, or this proves nothing", truncated.contains(sentinel))
+        Files.writeString(file, truncated)
+
+        val outcome = s.active()
+        assertTrue("an undecodable file is a Failure, never a guessed session", outcome is OperationResult.Failure)
+        val reason = ((outcome as OperationResult.Failure).error as OperationError.UnknownError).reason
+        assertEquals("file_agent_session_corrupt", reason)
+        assertFalse(
+            "no persisted content may ride out inside an OperationError — got: $reason",
+            reason!!.contains(sentinel),
+        )
+        assertFalse(
+            "an unreadable recovery record must not sit on disk holding the goal text",
+            Files.exists(file),
+        )
+    }
+
     @Test
     fun `recordConsentIfPending does not apply to a step the plan does not have`() = runTest {
         val s = store()

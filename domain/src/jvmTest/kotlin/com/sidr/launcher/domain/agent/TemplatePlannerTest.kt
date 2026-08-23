@@ -110,4 +110,19 @@ class TemplatePlannerTest {
 
         assertEquals(PlanningResult.NoPlan, TemplatePlanner().plan(blank, registry))
     }
+
+    /**
+     * The `Free` arm's contract, asserted rather than assumed (fix round 2, 2026-08-23 — the arm
+     * shipped held by nothing and survived a mutation that made it plan a launch after all).
+     *
+     * This planner does not read raw text: that is A4''s model planner, arriving behind this same
+     * [Planner] port. A free-text goal must therefore yield `NoPlan`, never a plan reconstructed by
+     * re-shaping the text into a query, which would be the opposite of the stated contract.
+     */
+    @Test
+    fun `a free-text goal yields NoPlan, because this planner does not read raw text`() = runTest {
+        val free = AgentGoal(text = "сделай конспект", shape = GoalShape.Free("сделай конспект"))
+
+        assertEquals(PlanningResult.NoPlan, TemplatePlanner().plan(free, registry))
+    }
 }

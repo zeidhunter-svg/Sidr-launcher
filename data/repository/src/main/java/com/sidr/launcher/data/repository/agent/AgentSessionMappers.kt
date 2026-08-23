@@ -99,8 +99,10 @@ internal object AgentSessionMappers {
      * the encode/decode pair cannot fall out of step: there is no row for `readShape` to fail on, which
      * is why `readShape` is deliberately left alone.
      *
-     * Symmetric with `:consumer:jvm`'s own `SessionMapper`, which throws on [GoalShape.AppNotInstalled]
-     * for the same reason. Each consumer persists its own planner's shapes and refuses the other's.
+     * The **intended** symmetry, recorded as intent and not as present fact: Task 6 of this block is to
+     * give `:consumer:jvm` its own `SessionMapper` refusing [GoalShape.AppNotInstalled] for the same
+     * reason, so that each consumer persists its own planner's shapes and refuses the other's. That
+     * mapper does not exist on disk yet, and this sentence does not pre-decide its design.
      *
      * `IllegalArgumentException` rather than [CorruptAgentRowException]: nothing is corrupt and no row
      * exists — the argument is simply not representable here. `RoomAgentSessionStore.save` contains it

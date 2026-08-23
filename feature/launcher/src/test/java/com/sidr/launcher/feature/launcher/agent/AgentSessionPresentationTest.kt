@@ -160,4 +160,22 @@ class AgentSessionPresentationTest {
         )
         assertEquals(markers[AgentStepState.SKIPPED], markers[AgentStepState.PENDING])
     }
+
+    /**
+     * The presentation's `Free` arm (fix round 2, 2026-08-23 — it shipped held by nothing and
+     * survived a mutation that rendered a literal in place of the user's words).
+     *
+     * Unreachable on Android is not a reason an arm cannot be asserted: the shape is constructed
+     * directly here. The goal text and the shape text are deliberately **different** so the assertion
+     * pins which of the two the arm reads — it must be the shape's own text.
+     */
+    @Test
+    fun `a free-text goal reads as the user's own words`() {
+        val free = AgentGoal(
+            text = "сделай конспект встречи",
+            shape = GoalShape.Free("сделай конспект"),
+        )
+
+        assertEquals("сделай конспект", free.subject())
+    }
 }

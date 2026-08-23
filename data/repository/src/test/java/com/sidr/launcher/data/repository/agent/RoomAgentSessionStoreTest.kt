@@ -327,4 +327,29 @@ class RoomAgentSessionStoreTest {
         assertEquals(0, dao.stepsFor("s1").size)
         assertEquals(0, dao.traceFor("s1").size)
     }
+
+    /**
+     * The mapper's `Free` arm, and the three separate things this one assertion holds (fix round 2,
+     * 2026-08-23 — the arm shipped held by nothing and survived a mutation that persisted a `Free`
+     * goal under the `AppNotInstalled` string, so `readShape` decoded it back as the **wrong shape**).
+     *
+     * It pins, at once: that the arm refuses at all; that `IllegalArgumentException` was the right
+     * choice over `CorruptAgentRowException`, since the latter surfaces as `db_agent_session_corrupt`
+     * and would report a healthy database as corrupt; and that `guarded` contains the throw, so the
+     * hard rule "never throw to UI" rests on a test rather than on a KDoc sentence. A second caller of
+     * `toSessionEntity` outside `guarded`, or a narrowed catch list, breaks this test rather than
+     * reaching a user as a crash.
+     */
+    @Test
+    fun `saving a free-text goal is a contained Failure that writes no row`() = runTest {
+        val free = session().copy(
+            goal = AgentGoal(text = "сделай конспект", shape = GoalShape.Free("сделай конспект")),
+        )
+
+        assertEquals(
+            OperationResult.Failure(OperationError.UnknownError("db_agent_session_write_failed")),
+            store.save(free),
+        )
+        assertNull("a refused goal must leave no row behind", dao.activeSession())
+    }
 }

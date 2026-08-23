@@ -6,20 +6,32 @@ import com.sidr.launcher.domain.agent.AgentSessionStore
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.util.concurrent.ConcurrentHashMap
+
+/** A persisted session that cannot be decoded. Carries no detail that could reach an [OperationError]. */
+internal class CorruptSessionFileException(message: String, cause: Throwable? = null) :
+    Exception(message, cause)
 
 /**
  * The second consumer's [AgentSessionStore]: one JSON file holding at most one session.
  *
- * **No history at rest.** A terminal state deletes the file, exactly as the Room store deletes by
- * cascade — a durable trace journal is A5's decision, not one A0.5 quietly introduces.
+ * **No history at rest — but this class is not the thing that decides it.** Nothing here inspects
+ * [ExecutionState.isTerminal]. The deletion is `RunAgentSessionUseCase`'s: it saves the terminal
+ * session and then calls [delete], so a finished session exists on disk briefly, holding the raw goal
+ * text, before it is removed. What this class guarantees is narrower and is all it can guarantee —
+ * [delete] leaves no file behind, and [active] then reports no session. A durable trace journal is A5's
+ * decision, not one A0.5 quietly introduces.
  *
  * **[recordConsentIfPending] is a real compare-and-set**, and that is the point of this class. The
  * contract exists because Room can say `UPDATE … WHERE state = pending` in one statement; honouring it
@@ -28,83 +40,126 @@ import java.util.concurrent.ConcurrentHashMap
  * exclude different things: a **process-wide, path-keyed** [Mutex] for coroutines inside this JVM, a
  * [java.nio.channels.FileLock] for a second process opening the same file.
  *
+ * **The [java.nio.channels.FileLock] is verified by no test in this repository.** Every test runs in a
+ * single JVM, where the gate above makes the lock uncontended — removing the `FileLock` entirely leaves
+ * the suite green. It is kept because it is the only mechanism that *can* cover a second process, not
+ * because anything proves it does; a forked-JVM test is the follow-up if A5 makes the PC consumer real.
+ *
  * **Why the [Mutex] is keyed by path and not simply a field.** The first cut held it per instance,
  * which left a gap neither mechanism covered: two [JvmAgentSessionStore] objects over one file inside
  * one JVM. `FileChannel.lock()` is JVM-wide, so the second acquisition threw
  * `OverlappingFileLockException` instead of blocking, and the losing caller was handed
  * `OperationResult.Failure` where the contract says `Success(false)`. The CAS still failed closed, but
  * "another tap won" and "the store broke" became indistinguishable — which is exactly the weakening
- * spec §8 asks whether a file store can avoid. Keying the gate by the normalised absolute path closes
- * it: every instance addressing one file shares one gate, so the [FileLock] below is reached at most
- * once per JVM per file and is left to do only the cross-process job it is actually able to do.
+ * spec §8 asks whether a file store can avoid.
  *
  * Whole-object writes were avoided deliberately: that pattern already cost this project the
  * `autoHideNavBar` bug (DS-11), which only surfaced on device.
+ *
+ * **Named limitation:** [delete] removes the session file but not its `.lock` sibling, which is created
+ * on the first call and then stays. Nothing reads it as state — [active] keys off the session file
+ * alone — so "no session at rest" holds; "no file at rest" does not.
  */
-class JvmAgentSessionStore(private val file: Path) : AgentSessionStore {
+class JvmAgentSessionStore(file: Path) : AgentSessionStore {
 
-    private val mutex: Mutex = inProcessGate(file)
-    private val lockFile: Path = file.resolveSibling(file.fileName.toString() + ".lock")
+    /**
+     * Absolute and lexically normalised, and used for **every** filesystem operation below.
+     *
+     * The gate is keyed by this same normalisation, so the path a store locks and the path it writes
+     * can never disagree. It also means a bare relative filename — whose `parent` is `null` — has a
+     * real parent directory here, which [write] needs for its temp file.
+     */
+    private val path: Path = file.toAbsolutePath().normalize()
+
+    private val mutex: Mutex = inProcessGate(path)
+    private val lockFile: Path = path.resolveSibling(path.fileName.toString() + ".lock")
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = false }
 
-    override suspend fun active(): OperationResult<AgentSession?> = mutex.withLock {
-        guarded { withFileLock { read() } }
-    }
+    override suspend fun active(): OperationResult<AgentSession?> =
+        guarded(READ_FAILED) { withFileLock { read() } }
 
-    override suspend fun save(session: AgentSession): OperationResult<Unit> = mutex.withLock {
-        guarded { withFileLock { write(session) } }
-    }
+    override suspend fun save(session: AgentSession): OperationResult<Unit> =
+        guarded(WRITE_FAILED) { withFileLock { write(session) } }
 
-    override suspend fun delete(id: AgentSessionId): OperationResult<Unit> = mutex.withLock {
-        guarded {
+    override suspend fun delete(id: AgentSessionId): OperationResult<Unit> =
+        guarded(DELETE_FAILED) {
             withFileLock {
                 if (read()?.id == id) {
-                    Files.deleteIfExists(file)
+                    Files.deleteIfExists(path)
                 }
             }
         }
-    }
 
     override suspend fun recordConsentIfPending(
         id: AgentSessionId,
         stepIndex: Int,
         granted: Boolean,
-    ): OperationResult<Boolean> = mutex.withLock {
-        guarded {
-            withFileLock {
-                val current = read()
-                when {
-                    current == null -> false
-                    current.id != id -> false
-                    current.state != ExecutionState.AwaitingConsent -> false
-                    // The decisive condition: a step that already carries a decision is no longer
-                    // pending, so a second tap that raced the first cannot also win.
-                    current.consents.containsKey(stepIndex) -> false
-                    else -> {
-                        write(current.copy(consents = current.consents + (stepIndex to granted)))
-                        true
-                    }
+    ): OperationResult<Boolean> = guarded(CONSENT_FAILED) {
+        withFileLock {
+            val current = read()
+            when {
+                current == null -> false
+                current.id != id -> false
+                current.state != ExecutionState.AwaitingConsent -> false
+                // Parity with the Room sibling, whose `UPDATE … WHERE step_index = :stepIndex` matches
+                // no row for a step the plan does not have and therefore reports `false`. Without this
+                // the file store would persist a phantom `consents[99]`, and `ResolveConsentUseCase`
+                // would flip the session to Running on a decision that decided nothing.
+                current.plan.steps.none { it.index == stepIndex } -> false
+                // The decisive condition: a step that already carries a decision is no longer
+                // pending, so a second tap that raced the first cannot also win.
+                current.consents.containsKey(stepIndex) -> false
+                else -> {
+                    write(current.copy(consents = current.consents + (stepIndex to granted)))
+                    true
                 }
             }
         }
     }
 
+    /**
+     * An undecodable file is **deleted before the failure is reported** — the same reasoning as the
+     * Room sibling's F10 fix (2026-08-23). An unreadable recovery record is not a recovery record:
+     * nothing can resume it and nothing can show it, so left alone it would sit on disk holding the
+     * user's raw goal text until some later session happened to overwrite it. The failure is still
+     * reported; a corrupt file never becomes a guessed session.
+     */
     private fun read(): AgentSession? {
-        if (!Files.exists(file)) return null
-        val text = Files.readString(file)
+        if (!Files.exists(path)) return null
+        val text = Files.readString(path)
         if (text.isBlank()) return null
-        return SessionMapper.fromDto(json.decodeFromString(SessionDto.serializer(), text))
+        return try {
+            SessionMapper.fromDto(json.decodeFromString(SessionDto.serializer(), text))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Files.deleteIfExists(path)
+            throw CorruptSessionFileException("the persisted session could not be decoded", e)
+        }
     }
 
+    /**
+     * Write-to-temp then `ATOMIC_MOVE`, never truncate in place. `TRUNCATE_EXISTING` on the live file
+     * means a kill between truncate and write leaves **partial JSON** on disk, and [read] treats only a
+     * *blank* file as "no session" — so a half-written file would come back as a decode failure on the
+     * next start rather than as an absent session.
+     */
     private fun write(session: AgentSession) {
-        Files.createDirectories(file.parent)
-        Files.writeString(
-            file,
-            json.encodeToString(SessionDto.serializer(), SessionMapper.toDto(session)),
-            StandardOpenOption.CREATE,
-            StandardOpenOption.TRUNCATE_EXISTING,
-            StandardOpenOption.WRITE,
-        )
+        val parent = path.parent
+        Files.createDirectories(parent)
+        val temp = Files.createTempFile(parent, path.fileName.toString(), ".tmp")
+        try {
+            Files.writeString(
+                temp,
+                json.encodeToString(SessionDto.serializer(), SessionMapper.toDto(session)),
+                StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE,
+            )
+            Files.move(temp, path, StandardCopyOption.ATOMIC_MOVE)
+        } catch (e: Throwable) {
+            Files.deleteIfExists(temp)
+            throw e
+        }
     }
 
     private fun <T> withFileLock(block: () -> T): T {
@@ -117,25 +172,49 @@ class JvmAgentSessionStore(private val file: Path) : AgentSessionStore {
      * The hard rule: repository/use-case operations return `OperationResult` and never throw to the
      * caller. [SessionMapper] throws on an unreadable value on purpose; this is where that becomes a
      * `Failure` rather than a crash.
+     *
+     * **[reason] is a fixed token and the exception's own text is never used**, matching
+     * `RoomAgentSessionStore.guarded`. kotlinx-serialization appends the offending *input* to a
+     * `JsonDecodingException`, so propagating `e.message` would carry the user's raw goal text and
+     * workspace paths out inside an [OperationError] — the leak `CommandFailure`'s "display-safe by
+     * construction" rule exists to prevent.
+     *
+     * `Dispatchers.IO` because `channel.lock()` blocks **uninterruptibly**: on `Dispatchers.Default` it
+     * would pin one of a small, CPU-sized pool of workers for as long as another process holds the file.
      */
-    private inline fun <T> guarded(block: () -> T): OperationResult<T> =
-        runCatching(block).fold(
-            onSuccess = { OperationResult.Success(it) },
-            onFailure = { OperationResult.Failure(OperationError.UnknownError(it.message)) },
-        )
+    private suspend fun <T> guarded(reason: String, block: () -> T): OperationResult<T> =
+        withContext(Dispatchers.IO) {
+            mutex.withLock {
+                try {
+                    OperationResult.Success(block())
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: CorruptSessionFileException) {
+                    OperationResult.Failure(OperationError.UnknownError(reason = CORRUPT))
+                } catch (_: Exception) {
+                    OperationResult.Failure(OperationError.UnknownError(reason = reason))
+                }
+            }
+        }
 
     private companion object {
+
+        const val READ_FAILED = "file_agent_session_read_failed"
+        const val WRITE_FAILED = "file_agent_session_write_failed"
+        const val DELETE_FAILED = "file_agent_session_delete_failed"
+        const val CONSENT_FAILED = "file_agent_consent_write_failed"
+        const val CORRUPT = "file_agent_session_corrupt"
 
         /**
          * One [Mutex] per file, shared by every [JvmAgentSessionStore] addressing it in this JVM.
          *
          * The key is [Path.toAbsolutePath] + [Path.normalize] — a **purely lexical** resolution, chosen
          * over `toRealPath()` deliberately. `toRealPath()` consults the filesystem and throws when the
-         * target does not exist, and this store creates its file lazily on the first `write`, so at
+         * target does not exist, and this store creates its file lazily on the first [write], so at
          * construction there is usually nothing to resolve. Worse, a "try real, fall back to lexical"
          * scheme would key the *same* file differently depending on whether it happened to exist yet,
          * which is the one behaviour a lock key must never have. Lexical normalisation is total and
-         * time-invariant: the same path string always yields the same gate.
+         * time-invariant: the same path always yields the same gate.
          *
          * The residual is symlink aliasing — two different paths resolving to one file through a link
          * get two gates, and fall back to the `FileLock`, where they collide as before. Naming it rather
@@ -146,7 +225,6 @@ class JvmAgentSessionStore(private val file: Path) : AgentSessionStore {
          */
         private val gates = ConcurrentHashMap<String, Mutex>()
 
-        fun inProcessGate(file: Path): Mutex =
-            gates.computeIfAbsent(file.toAbsolutePath().normalize().toString()) { Mutex() }
+        fun inProcessGate(path: Path): Mutex = gates.computeIfAbsent(path.toString()) { Mutex() }
     }
 }

@@ -23,8 +23,18 @@ import com.sidr.launcher.domain.trace.ExecutionTrace
 import com.sidr.launcher.domain.trace.TraceEvent
 
 /**
- * Domain ↔ [SessionDto]. Total in both directions; an unreadable value throws
- * [IllegalArgumentException], which [JvmAgentSessionStore] turns into an `OperationResult.Failure`.
+ * Domain ↔ [SessionDto]. **Exhaustive in both directions, with no silent default** — every `when` here
+ * covers the full set of its type's variants and ends in a throw rather than in a fallback value.
+ *
+ * Exhaustive is not the same as *total*, and this mapper is deliberately not total. There are two
+ * throws, for two unrelated reasons:
+ *  - **Decode side — unreadability.** A persisted value naming no known variant throws
+ *    [IllegalArgumentException]. [JvmAgentSessionStore] deletes the undecodable file and reports the
+ *    fixed token `file_agent_session_corrupt`.
+ *  - **Encode side — provenance.** [toDto] refuses [GoalShape.AppNotInstalled], which is a perfectly
+ *    well-formed value and readable in every sense. It is refused because *this* consumer's planner
+ *    cannot have produced it, mirroring `AgentSessionMappers.toSessionEntity`'s refusal of
+ *    [GoalShape.Free] on the Android side.
  *
  * **Failing loudly is deliberate.** A store that guesses at a value it cannot read produces a session
  * that looks whole and is not — the failure mode `RoomAgentSessionStoreTest` guards against on the

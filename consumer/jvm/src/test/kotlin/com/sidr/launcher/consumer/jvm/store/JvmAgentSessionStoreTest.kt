@@ -16,6 +16,8 @@ import com.sidr.launcher.domain.agent.StepRationale
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.ArgSource
+import com.sidr.launcher.domain.tool.ObservedFact
+import com.sidr.launcher.domain.tool.RejectionReason
 import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
@@ -47,6 +49,7 @@ class JvmAgentSessionStoreTest {
         observations: Map<Int, ToolResult> = emptyMap(),
         consents: Map<Int, Boolean> = emptyMap(),
         trace: ExecutionTrace = ExecutionTrace(listOf(TraceEvent.PlanCreated(3))),
+        precondition: StepPrecondition = StepPrecondition.None,
     ) = AgentSession(
         id = id,
         goal = AgentGoal("remove stale.lock", GoalShape.Free("remove stale.lock")),
@@ -70,7 +73,7 @@ class JvmAgentSessionStoreTest {
                     2,
                     ToolInvocation(SandboxToolIds.DELETE_FILE, mapOf(SandboxKeys.PATH to ArgSource.FromStep(1, SandboxKeys.RESOLVED_PATH))),
                     ActionRiskLevel.DANGEROUS,
-                    StepPrecondition.None,
+                    precondition,
                     StepRationale.GOAL_DIRECT,
                 ),
             ),
@@ -90,25 +93,41 @@ class JvmAgentSessionStoreTest {
     }
 
     @Test
-    fun `a saved session round-trips byte-for-byte through the file`() = runTest {
+    fun `a saved session round-trips - every TraceEvent variant and every ToolResult`() = runTest {
         val original = session(
             state = ExecutionState.AwaitingConsent,
             cursor = 2,
             observations = mapOf(
                 0 to ToolResult.Effected(ToolOutput(mapOf(SandboxKeys.ROOT to "/tmp/box"))),
-                1 to ToolResult.Effected(ToolOutput(mapOf(SandboxKeys.RESOLVED_PATH to "/tmp/box/stale.lock"))),
+                1 to ToolResult.Observed(
+                    ObservedFact.APP_AMBIGUOUS,
+                    ToolOutput(mapOf(SandboxKeys.RESOLVED_PATH to "/tmp/box/stale.lock")),
+                ),
+                2 to ToolResult.Failed(CommandFailure.CantOpenUrl),
             ),
-            consents = mapOf(1 to true),
+            consents = mapOf(1 to true, 2 to false),
+            precondition = StepPrecondition.PreviousStepObserved(ObservedFact.APP_NOT_INSTALLED),
             trace = ExecutionTrace(
                 listOf(
                     TraceEvent.PlanCreated(3),
                     TraceEvent.StepStarted(0),
                     TraceEvent.ToolInvoked(0, SandboxToolIds.WORKSPACE_INFO),
                     TraceEvent.ToolObserved(0, ToolResult.Effected(ToolOutput(mapOf(SandboxKeys.ROOT to "/tmp/box")))),
-                    TraceEvent.StepSkipped(1, StepPrecondition.None),
+                    TraceEvent.ToolObserved(
+                        1,
+                        ToolResult.Observed(
+                            ObservedFact.APP_AMBIGUOUS,
+                            ToolOutput(mapOf(SandboxKeys.RESOLVED_PATH to "/tmp/box/stale.lock")),
+                        ),
+                    ),
+                    TraceEvent.ToolObserved(2, ToolResult.Failed(CommandFailure.CantOpenUrl)),
+                    TraceEvent.StepSkipped(1, StepPrecondition.PreviousStepObserved(ObservedFact.APP_NOT_INSTALLED)),
+                    TraceEvent.StepRejected(1, RejectionReason.UNRESOLVED_ARG_SOURCE),
                     TraceEvent.ConsentRequested(2, ConsentReason.RISK_LEVEL),
+                    TraceEvent.ConsentResolved(2, granted = false),
                     TraceEvent.SessionPaused,
                     TraceEvent.SessionResumed,
+                    TraceEvent.SessionEnded(ExecutionState.Cancelled),
                 ),
             ),
         )
@@ -132,8 +151,16 @@ class JvmAgentSessionStoreTest {
         )
     }
 
+    /**
+     * Scoped to what this class actually decides. "No history at rest" is a property of
+     * `RunAgentSessionUseCase`, which saves the terminal session and *then* deletes it; nothing here
+     * inspects `ExecutionState.isTerminal`, and this test hands `delete` a `Running` session. What is
+     * verified is the half the store owns: after [JvmAgentSessionStore.delete] there is no file, and
+     * [JvmAgentSessionStore.active] reports no session. Renamed after the 2026-08-24 review (F4), which
+     * caught the old name claiming the use-case's property as this class's.
+     */
     @Test
-    fun `delete leaves the store empty - no history at rest`() = runTest {
+    fun `after delete the file is gone and active reports no session`() = runTest {
         val s = store()
         s.save(session())
         s.delete(id)
@@ -233,5 +260,47 @@ class JvmAgentSessionStoreTest {
             results.count { it.value() },
         )
         assertEquals(mapOf(2 to true), stores[0].active().value()!!.consents)
+    }
+
+    /**
+     * **A refusal must persist as a refusal.** Every other test in this class records `granted = true`,
+     * and the one `false` call is the one the CAS deliberately rejects — so it never reaches the write.
+     * That left the *value* asserted by nothing: a store that wrote `stepIndex to true` unconditionally
+     * passed the entire suite, including every test with "consent" in its name.
+     *
+     * What that costs, concretely: the user refuses the `DANGEROUS` `delete_file` step, the store
+     * records a grant, `AgentExecutor.prepare` reads `consents[2] == true`, and the file is deleted on
+     * a decision the user made the other way. Found by the 2026-08-24 fresh-eyes review (F1).
+     */
+    @Test
+    fun `a refused consent is persisted as false, not merely as decided`() = runTest {
+        val s = store()
+        s.save(session(state = ExecutionState.AwaitingConsent, cursor = 2))
+
+        assertTrue("the refusal itself applies", s.recordConsentIfPending(id, 2, granted = false).value())
+        assertEquals(
+            "a refusal must come back a refusal — a grant here executes what the user declined",
+            mapOf(2 to false),
+            s.active().value()!!.consents,
+        )
+    }
+
+    /**
+     * Parity with the Room sibling. Its DAO says `UPDATE … WHERE step_index = :stepIndex`, which matches
+     * no row for a step the plan does not have, so Android answers `false`. Without the same check the
+     * file store persisted a phantom `consents[99] = true` and answered `true` — after which
+     * `ResolveConsentUseCase` flips the session to `Running` on a decision that decided nothing.
+     *
+     * On-topic for this task rather than incidental: the block's question is whether
+     * `AgentSessionStore` is a portable **port**, and two implementations answering differently for the
+     * same call is exactly what that question is about. Found by the 2026-08-24 review (F6).
+     */
+    @Test
+    fun `recordConsentIfPending does not apply to a step the plan does not have`() = runTest {
+        val s = store()
+        s.save(session(state = ExecutionState.AwaitingConsent, cursor = 2))
+
+        assertTrue(!s.recordConsentIfPending(id, 99, granted = true).value())
+        assertEquals(emptyMap<Int, Boolean>(), s.active().value()!!.consents)
     }
 }

@@ -10,6 +10,29 @@
 > evidence for those answers. Where the core turns out to be launcher-shaped, this block **records the
 > finding with an address** and does not fix it — see §2 (owner decision, Approach A) and §11.
 >
+> **Amendment 2026-08-23 (evening) — re-anchored to `a7f4755` after the A0 review round.** This spec
+> was written against `7442da4`. A cross-cutting review of the closed A0 block then found nine defects
+> and fixed eight of them, **in `commonMain`** — the very code this consumer is the second user of. ADR
+> «2026-08-23 — Сквозное ревью блока A0». Four consequences for this block, all of them making it
+> easier rather than harder:
+>
+> - **The engine repairs are consumer-neutral, and this block is where that gets measured.** None of
+>   the eight fixes added a platform branch, an `expect`/`actual`, or a `java.*` import; `:consumer:jvm`
+>   inherits every one of them without writing a line. That is itself evidence for §11.2, and it is
+>   reported there rather than assumed.
+> - **The consent gate now reads `maxOf(PlanStep.risk, registry.risk)`, not the plan alone** (finding
+>   F2). For this consumer the two always agree — `FilePlanner` copies risk out of `SandboxToolSource`,
+>   exactly as `TemplatePlanner` copies it out of the projection — so the happy path is unchanged and
+>   §6.2 still takes `checkpointFor`'s first branch. It sharpens §11.3's answer: see there.
+> - **`StartAgentSessionUseCase` now validates a plan before persisting it** (finding F10). The JVM
+>   consumer gets that free, and it is the first time the seam is exercised by a `Planner` the core
+>   does not own. §6.3's miss path is **unaffected** — that failure is a *resolution* failure at run
+>   time, not a shape defect at plan time.
+> - **The mid-call restore seam is now the cheapest thing this consumer can prove that Android could
+>   not.** Finding F1 was that the engine's "the process died during a tool call" signal was unreadable
+>   on the only path that produces it, and Android could reach that window only with `pm disable-user`
+>   plus an on-device poll (157–170 ms warm). On JVM it is a function call. §9 and §16 now require it.
+>
 > **Governing sources:** `docs/governing/sidr-agentic-master-plan-v1.0.md` §2 criterion 10, §3.1a
 > (block A0.5), §3.4 (the `:data:ai-local` rule), §3.6 row `B1`, §4 (agentic-block DoD), §5
 > (change-control), §6 M-A1, §7 (no SDK); ADR «2026-08-21 — Развилка агентного трека» and ADR
@@ -71,20 +94,22 @@ finding `D9` and obliges the `domain/src` Gradle-input widening in the same comm
 ## 3. Verification of the brief's premises — what actually holds
 
 The brief was written 2026-08-21; block A0 has since added `tool/`, `agent/` and `trace/` to
-`:domain`. Every load-bearing claim was re-checked against the tree at `7442da4`. **Two of three do
-not hold as written**, and the corrections change what the block is for.
+`:domain`. Every load-bearing claim was re-checked against the tree at `7442da4`, and re-confirmed at
+`a7f4755` after the A0 review round. **Two of three do not hold as written**, and the corrections
+change what the block is for.
 
 **3.1 — "The `jvm()` target has zero consumers; all twelve dependants of `:domain` are Android." —
 FALSE as stated.** Twelve modules depend on `:domain`. Eleven are `com.android.library` or
 `com.android.application`. The twelfth, `:core:testing`, is a plain `kotlin.jvm` module, and Gradle
 resolution confirms it consumes `:domain`'s **`jvmApiElements`** variant
-(`org.jetbrains.kotlin.platform.type = jvm`). `:domain:jvmTest` is a second such consumer — 405 tests.
+(`org.jetbrains.kotlin.platform.type = jvm`). `:domain:jvmTest` is a second such consumer — 416 tests
+(405 when this was first checked at `7442da4`).
 
 *What is true:* the `jvm()` target has **zero product consumers**. Nothing outside test and fixture
 code runs a goal.
 
 *Why the correction matters:* "can the engine compile and run without Android" is already answered
-**yes**, daily, by 405 tests. The open question is not the core's portability in the abstract but what
+**yes**, daily, by 416 tests. The open question is not the core's portability in the abstract but what
 a **real adapter** costs and what the core forces it to say. This spec is written against that
 question, not the brief's.
 
@@ -94,7 +119,8 @@ since 2026-08-21: `java.util.Locale` ×3 (`input/UniversalInputRouter`, `intent/
 `prayer/PrayerCalculator`, `prayer/PrayerModels`).
 
 *The new fact the brief could not know:* A0 added roughly 1085 lines to `commonMain` (`agent/` 731,
-`tool/` 320, `trace/` 34) and **zero** `java.*` imports. All eight sit **outside** the engine. The
+`tool/` 320, `trace/` 34) and **zero** `java.*` imports — and the 2026-08-23 repair round added none
+either, so the count is still exactly eight and all eight still sit outside the engine. All eight sit **outside** the engine. The
 "core is JVM-locked" framing is therefore not the portability obstacle for this block: the engine is
 already `java.*`-free, and what is JVM-locked is prayer plus the intent normalizer, which a PC consumer
 never touches. This is why Approach C's `expect`/`actual` half was rejected — it would fix code the
@@ -208,8 +234,10 @@ value is `APP_NOT_INSTALLED_FALLBACK`, which no non-launcher consumer can ever u
 not worked around.
 
 **6.2 — The hit path.** Steps 0 and 1 run and produce outputs. At step 2 `checkpointFor` takes its
-first branch (`step.risk >= CONFIRM`) and returns `ConsentCheckpoint(2, RISK_LEVEL)`; the session goes
-`AwaitingConsent` **before** `ToolExecutor` is reached. On consent the file is deleted and the session
+first branch — since 2026-08-23 the condition is `maxOf(PlanStep.risk, registry.risk) >= CONFIRM`, and
+for this consumer the two are the same value because `FilePlanner` copies risk out of the registry — and
+returns `ConsentCheckpoint(2, RISK_LEVEL)`; the session goes `AwaitingConsent` **before** `ToolExecutor`
+is reached. On consent the file is deleted and the session
 ends `Completed`. On refusal it ends `Cancelled` and nothing is deleted.
 
 **6.3 — The miss path, and the block's sharpest finding.** When nothing matches, `find_file` emits a
@@ -222,6 +250,12 @@ becomes a satisfied precondition on the next step, and the session ends **`Compl
 consumer it has no name, surfaces as an unbindable argument, and ends **`Failed`**. Same reality, two
 different session outcomes and two different traces, purely because the observation vocabulary is a
 closed two-value Android enum.
+
+**Plan-time validation does not touch this** (A0 finding F10, 2026-08-23). `InvocationValidator.validate`
+is a *shape* check: `FromStep(1, "resolved_path")` names a key `find_file` really does declare, so the
+plan is valid when it is written and persisted. What fails is `resolve`, at run time, when the value
+turns out blank. The two halves of the validator staying separate is exactly what makes this finding
+expressible at all.
 
 **This is a trace-fidelity gap, not a safety gap** — the step correctly does not run either way. It is
 recorded against A1′ (§11.2) and pinned by a test that asserts both outcomes side by side, so the
@@ -298,6 +332,12 @@ Pinned by a test that fires two concurrent `recordConsentIfPending(id, 2, true)`
 **exactly one** returns `true` — the "double confirmation must not execute a step twice" property,
 proved on the second consumer.
 
+**One decision is one trace event, and the consumer inherits that** (A0 finding F4, 2026-08-23).
+`ResolveConsentUseCase` no longer writes `ConsentResolved` — `AgentExecutor.prepare` is the single
+writer, on both the granted and the refused branch. Before the fix a refusal produced the event twice,
+so any consumer printing or persisting the trace would have printed it twice. The store's DTO mapping
+is unaffected; what changes is how many events reach it.
+
 ## 9. The console driver
 
 `main()`: take the goal on the command line, build `AgentGoal(text, GoalShape.Free(text))`, wire
@@ -309,10 +349,22 @@ event by event, and prompt on stdin at `AwaitingConsent` before calling `Resolve
 **The harness never calls `ToolExecutor.invoke` itself.** It drives `AgentExecutor`, which owns the one
 call site below the consent checkpoint. §10 holds that mechanically rather than by intention.
 
-**Process-death demonstration:** the harness exits at `AwaitingConsent`. Re-running it finds the
-persisted session, presents it as `Paused` via `pausedForRestore()`, and continues only on an explicit
-choice — never a silent resume. That is M-A1's "session survives process death", on the second
-consumer.
+**Process-death demonstration, in two shapes.** The first is the cheap one: the harness exits at
+`AwaitingConsent`, re-running it finds the persisted session, presents it as `Paused` via
+`pausedForRestore()`, and continues only on an explicit choice — never a silent resume. That is M-A1's
+"session survives process death", on the second consumer.
+
+**The second shape is the one this consumer can prove and Android could not**, and it is required
+rather than optional (added 2026-08-23). A process that dies **during a tool call** leaves
+`ToolInvoked(i)` with no `ToolObserved(i)` — the signal the engine's `prepare`/`perform` split exists
+to record. A0 finding F1 was that this signal was unreadable on the only path that produces it: the
+restore transitions write `SessionPaused` and `SessionResumed` on top of the pending event, so a
+predicate keyed on the trace *tail* missed it, the step was re-cleared, re-traced and re-run, and a
+step whose consent had already been granted ran twice. Android could reach that window only with
+`pm disable-user` plus an on-device `force-stop` poll — 157–170 ms on a warm process. **Here it is a
+function call:** persist after `prepare`, drop the harness, start a new one. The consumer therefore
+holds a core invariant that the first consumer's own acceptance could only approximate, which is a
+concrete answer to "what is a second consumer *for*" beyond portability.
 
 ## 10. Guards — the boundary, extended (`F5`)
 
@@ -328,8 +380,10 @@ beside the three already there, or the widened guard silently would not re-run �
 `§HANDOFF` documents. This is a single named directory, not the repo-wide widening findings
 `D1`/`D3`/`D8` describe as an owner-level build trade-off.
 
-**`AgentVocabularyGuardTest` is deliberately NOT extended.** It scans `domain/agent` and `domain/tool`
-because the *engine* is what must stay free of action vocabulary and transports. A consumer may name
+**`AgentVocabularyGuardTest` is deliberately NOT extended.** It scans `domain/agent`, `domain/tool`
+and — since 2026-08-23 (A0 finding F7) — `domain/trace`, because the *engine* is what must stay free of
+action vocabulary and transports, and the contract table has always called those three the portable
+engine. A consumer may name
 whatever it likes; that is what being a consumer means. Extending it would misstate what the guard
 protects.
 
@@ -361,6 +415,15 @@ determinable answer at the cost of a transport dependency and a decision that be
   declares its own ids with no core edit); `AgentSessionIdFactory` (a port precisely because `UUID` is
   not in `commonMain`); the whole execution machinery — `AgentSession`, cursor, `RuntimeBudget`,
   `InvocationValidator`, `ConsentCheckpoint`, `ExecutionTrace`.
+
+  **"Survived unchanged" is about the *shape*, and the 2026-08-23 repair round is the sharper evidence
+  for it.** Eight defects were fixed inside exactly this machinery — the mid-step predicate, the risk
+  the gate acts on, the single writer of `ConsentResolved`, plan-time validation, the deletion of an
+  unreadable session row — and **not one of them needed a platform branch, an `expect`/`actual`, or a
+  `java.*` import.** `:consumer:jvm` inherits every fix by existing. A core that can be repaired in
+  eight places without either consumer noticing is portable in the way that matters; a core that is
+  merely *compilable* for two targets is not the same claim. The block reports this as a measured
+  fact rather than as a prediction.
 - **Launcher-shaped, cost measured:** `GoalShape` (§7.1 — the one edit this block makes);
   `ObservedFact` (§6.3 — a whole class of reality unsayable, with a user-visible `Failed`/`Completed`
   divergence); `CommandFailure`; `StepRationale`; `ArgType` (§11.1); `TemplatePlanner`.
@@ -392,6 +455,18 @@ closed.** The recorded finding is:
 > core-owned. Two adapters over one scale, disagreeing about what a comparable act is worth
 > (`CONFIRM` for a store page, `DANGEROUS` for a file delete), is the evidence. Question 3 is therefore
 > **renamed with an address (A1′)**, not closed.
+>
+> **A third owner surfaced on 2026-08-23, and it is neither adapter: the persisted plan.** A0's review
+> (finding F2) found the gate reading `risk` off the stored `PlanStep` while reading `permissionGate`
+> and `durability` off the live registry, so a plan written when a tool was `SAFE` ran it with **no**
+> `ConsentRequested` after a build raised it to `CONFIRM`. The gate now acts on
+> `maxOf(plan, registry)`. That refines this question's answer rather than changing its address: risk
+> has *two* sources with different lifetimes — a snapshot taken when the plan was written and the
+> declaration in force when it runs — and the core resolves the disagreement conservatively instead of
+> picking a winner. **This consumer is where that stops being theoretical**: A1′ federates sources, and
+> two sources mean two lifetimes per plan. `SandboxToolSource` and `SystemIntentToolSource` agreeing
+> with their planners today is what makes the property checkable at all; nothing guarantees a third
+> adapter will.
 
 The "user is still stopped" sentence is load-bearing and must survive editing: without it the finding
 reads as though durable actions slip past consent, which is false and would send a future session
@@ -454,6 +529,14 @@ checked, output **never** piped through `tail`.
 5. **Guard mutations** — the three of §10, each planted and reverted inside **one** shell invocation
    with a `trap … EXIT` restore, per the precedent of an agent dying mid-round and leaving a probe in
    production source.
+6. **No test in this block may *simulate* a path the harness actually walks** — added 2026-08-23, and
+   it is the single most transferable lesson of the A0 review. Three of that block's nine findings grew
+   from one domain test that stood in for the restart by calling `advance` on a prepared session, while
+   the product went through `restoreOnStart()` → `pausedForRestore()` and `continueSession()` →
+   `resumed()`; both of those write trace events, and those events were what hid the defect. The rule
+   for this block: **if the console harness has a transition, a test drives the harness through it, not
+   an equivalent-looking sequence of use-case calls.** A path with a transition no test walks is an
+   unverified path, however complete the case list looks.
 6. **Reported numbers, not estimates:** lines of adapter code the second consumer required, split by
    mapper / store / tools / planner / driver. §8 claims a mapper per consumer is part of the cost; the
    ADR states the measured figure.
@@ -484,7 +567,9 @@ holds it with a test rather than with a sentence.
 4. `FilePlanner` + its tests (§6.1).
 5. `JvmAgentSessionStore` + the concurrent-consent test (§8).
 6. End-to-end: hit path, miss path, and the `Failed`/`Completed` divergence test (§6.2, §6.3).
-7. Console driver + the process-death demonstration (§9).
+7. Console driver + **both** process-death demonstrations (§9): died-at-the-gate, and died-mid-call —
+   the second is required, not optional, and is the invariant Android's own acceptance could only
+   approximate through a 157–170 ms window.
 8. Guards extended and **mutated** (§10).
 9. Full gate, ADR, `CLAUDE.md` + `ai-context/current-status.md` sync, commit proposed to the owner.
 
@@ -499,4 +584,6 @@ holds it with a test rather than with a sentence.
   is a finding rather than a shortcut.
 - All four §3.1a questions have written answers, negative ones included; `B1` has a written answer.
 - The second `ToolExecutor` is under the same mechanical boundary as the first, proved by mutation.
+- A process death **during a tool call** is resumed rather than re-issued, proved on the harness — the
+  seam A0's review found unheld and Android could only reach with an on-device timing poll.
 - Gate green; `git diff` over the Android surface empty; both A1 branches still equally cheap.

@@ -17,7 +17,24 @@ launcher-shaped contract the consumer collides with is **recorded with an addres
 kotlinx-coroutines 1.9.0, JUnit4.
 
 **Spec:** [docs/superpowers/specs/2026-08-23-a05-second-consumer-design.md](../specs/2026-08-23-a05-second-consumer-design.md)
-(committed `5e98497`, amended `ec8eca1`). The plan argues from the spec; read both.
+(committed `5e98497`, amended `ec8eca1`, re-anchored to `a7f4755` on 2026-08-23). The plan argues from
+the spec; read both.
+
+> **Re-anchored 2026-08-23 (evening) after the A0 review round (`a7f4755`).** A cross-cutting review of
+> the closed A0 block found nine defects and fixed eight, **inside the `commonMain` engine this module
+> is the second consumer of** (ADR «2026-08-23 — Сквозное ревью блока A0»). Nothing in this plan's
+> architecture changes; four things in its detail do, and each is marked at the task that owns it:
+>
+> - **Task 7** — `checkpointFor` now branches on `maxOf(PlanStep.risk, registry.risk)`. `FilePlanner`
+>   copies risk out of the registry, so the two agree and the hit path is unchanged; the assertion's
+>   wording is corrected, and one new test pins the agreement instead of assuming it.
+> - **Task 7 / Task 8** — a **mid-call** process death is now a required demonstration, not an optional
+>   one. It is the seam A0's finding F1 exposed, and on JVM it costs a function call where Android
+>   needed `pm disable-user` plus an on-device poll inside a 157–170 ms window.
+> - **Task 9** — `AgentVocabularyGuardTest` scans **three** packages now (`domain/trace` was added by
+>   finding F7). It still is not extended to the consumer; do not "fix" either fact.
+> - **Global Constraints** — the repo's test baseline moved from 1138 to 1158 (`:domain:jvmTest` 405 →
+>   416), and one new rule was added below: do not let a test *simulate* a path the harness walks.
 
 ## Global Constraints
 
@@ -35,7 +52,8 @@ Every task's requirements implicitly include this section.
   it and do not commit it.**
 - **Block gate:** `:domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test`.
   `:domain:jvmTest` must be listed explicitly — `testDebugUnitTest` has not reached it since `:domain`
-  went KMP, and 405 of the repo's 1138 tests live there.
+  went KMP, and **416 of the repo's 1158 tests** live there (baseline at `a7f4755`, after the A0 review
+  round added twenty; it was 405 of 1138 at `7442da4`).
 - **`:domain` is stdlib + coroutines only.** Production code lives in `commonMain` and must compile for
   both `androidTarget()` and `jvm()`. Introduce nothing JVM- or Android-specific there. Tests go in
   `jvmTest`.
@@ -45,6 +63,13 @@ Every task's requirements implicitly include this section.
   `ActionCatalog` in place — must be exactly as cheap after this block as before.
 - **The §6.3 asymmetry stays.** "Unify the Android and JVM outcomes" is **not** a task here (owner
   instruction, 2026-08-23). See Task 7, Step 5.
+- **No test may *simulate* a path the harness actually walks.** Three of the A0 review's nine findings
+  grew from a single domain test that stood in for a restart by calling `advance` on a prepared
+  session, while the product went through `restoreOnStart()` → `pausedForRestore()` and
+  `continueSession()` → `resumed()` — both of which write trace events, and those events were exactly
+  what hid the defect. In this block: if `ConsoleHarness` has a transition, a test drives **the
+  harness** through it, not an equivalent-looking sequence of use-case calls. A path with a transition
+  no test walks is unverified, however complete the case list looks.
 - **The agent commits; the agent never pushes.**
 - No Android code, no desktop UI, no distribution, no public SDK, no model planner, no MCP client.
 
@@ -332,7 +357,7 @@ of `plan`:
 
 Run: `./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 :domain:jvmTest`
 
-Expected: PASS, 405 + 2 tests, 0 failures. If any existing `TemplatePlanner` or `AgentGoal` test fails,
+Expected: PASS, 416 + 2 tests, 0 failures. If any existing `TemplatePlanner` or `AgentGoal` test fails,
 **stop and report** — the change is meant to be purely additive.
 
 - [ ] **Step 6: Commit**
@@ -1962,6 +1987,7 @@ import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.ConsentReason
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
@@ -2011,6 +2037,9 @@ class AgentLoopTest {
         assertEquals(2, paused.cursor)
         assertTrue("nothing was deleted before consent", file.exists())
         assertTrue(
+            // `checkpointFor`'s first branch since 2026-08-23 is `maxOf(PlanStep.risk, registry.risk)
+            // >= CONFIRM` (A0 finding F2). DANGEROUS takes it either way, and the reason is RISK_LEVEL
+            // rather than DURABLE_EFFECT — spec §11.3's recorded finding, not a defect to fix here.
             "the gate names the risk level, not durability — DANGEROUS takes checkpointFor's first branch",
             paused.trace.events.contains(TraceEvent.ConsentRequested(2, ConsentReason.RISK_LEVEL)),
         )
@@ -2018,6 +2047,81 @@ class AgentLoopTest {
             "step 1 bound its path from step 0's output",
             paused.trace.events.contains(TraceEvent.ToolInvoked(1, SandboxToolIds.FIND_FILE)),
         )
+    }
+
+    /**
+     * **The plan's risk and the registry's risk agree — asserted, not assumed** (A0 finding F2,
+     * 2026-08-23).
+     *
+     * The gate acts on `maxOf(PlanStep.risk, registry.risk)` because the two have different lifetimes:
+     * a plan is a snapshot of the build that wrote it, the registry is the declaration in force when it
+     * runs. `FilePlanner` copies risk out of `SandboxToolSource`, so for this consumer they are the same
+     * value — which is what makes the hit path above take the branch it does. That agreement is a
+     * property of `FilePlanner`, not a law, so it is pinned here: a future `FilePlanner` that assigned
+     * its own risk levels would still be *safe* (the max wins) but would stop being the clean evidence
+     * spec §11.3 reports.
+     */
+    @Test
+    fun `the planner's risk for every step is the registry's risk`() = runTest {
+        val planned = FilePlanner().plan(goal(), registry)
+        assertTrue("expected a plan", planned is PlanningResult.Planned)
+
+        (planned as PlanningResult.Planned).plan.steps.forEach { step ->
+            val declared = registry.find(step.invocation.id)
+            assertTrue("no descriptor for ${step.invocation.id.value}", declared != null)
+            assertEquals(
+                "step ${step.index} (${step.invocation.id.value}) disagrees with the registry",
+                declared!!.risk,
+                step.risk,
+            )
+        }
+    }
+
+    /**
+     * **A process death DURING a tool call is resumed, not re-issued** (A0 finding F1, 2026-08-23).
+     *
+     * This is the seam the A0 review found unheld, and the reason it went unheld for a whole block is
+     * worth carrying into this one: the domain test that "covered" it simulated the restart by calling
+     * `advance` on the prepared session, while the product goes through `pausedForRestore()` and
+     * `resumed()` — both of which append trace events on top of the pending `ToolInvoked`. Keyed on the
+     * trace *tail*, the engine's mid-step predicate missed the one shape it exists to recognise.
+     *
+     * Android could only reach this window with `pm disable-user` plus an on-device `force-stop` poll,
+     * 157–170 ms wide. Here it is three lines: prepare, persist, walk away. That asymmetry — a core
+     * invariant that the second consumer can hold and the first could only approximate — is itself an
+     * answer to "what is a second consumer for", and Task 10 Step 4 reports it as one.
+     */
+    @Test
+    fun `a step interrupted mid-call is performed once when the session is picked back up`() = runTest {
+        temp.newFile("stale.lock")
+        val store = store()
+        val start = StartAgentSessionUseCase(FilePlanner(), store, JvmAgentSessionIdFactory(), registry)
+        start.start(goal()).value()
+
+        // The mid-call shape, written the way `RunAgentSessionUseCase` writes it: prepare, save, die.
+        val prepared = executor().prepare(store.active().value()!!)
+        store.save(prepared)
+        val tail = prepared.trace.events.last()
+        assertTrue("the seed must be mid-step, was $tail", tail is TraceEvent.ToolInvoked)
+
+        // A fresh process: find it, offer it, and continue only on an explicit choice.
+        val offered = store.active().value()!!.pausedForRestore()
+        store.save(offered)
+        assertEquals(ExecutionState.Paused, offered.state)
+
+        val continued = RunAgentSessionUseCase(executor(), store).run(offered.resumed()).value()
+
+        val invokedZero = continued.trace.events.count {
+            it is TraceEvent.ToolInvoked && it.index == 0
+        }
+        assertEquals(
+            "one pending call is one ToolInvoked, however many times the process died: " +
+                "${continued.trace.events}",
+            1,
+            invokedZero,
+        )
+        assertEquals(1, continued.trace.events.count { it is TraceEvent.StepStarted && it.index == 0 })
+        assertEquals(ExecutionState.AwaitingConsent, continued.state)
     }
 
     @Test
@@ -2068,8 +2172,11 @@ class AgentLoopTest {
 
 Run: `./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 :consumer:jvm:test --tests "*AgentLoopTest*"`
 
-Expected: PASS, 4 tests. **If `RunAgentSessionUseCase` or `AgentExecutor` needed any change to make
-this pass, stop and report** — the block's claim is that the engine runs unmodified.
+Expected: PASS, **6 tests** (four hit-path, plus the risk-agreement and mid-call ones added when the
+spec was re-anchored to `a7f4755`). **If `RunAgentSessionUseCase` or `AgentExecutor` needed any change
+to make this pass, stop and report** — the block's claim is that the engine runs unmodified, and after
+the A0 review round that claim is sharper rather than weaker: eight defects were repaired inside that
+engine without either consumer needing a line.
 
 - [ ] **Step 3: Commit the hit path**
 
@@ -2079,6 +2186,10 @@ git commit -m "test(agentic-4.5/A0.5): the loop runs end to end on JVM, engine u
 
 Three steps, two bindings, consent at the SAFE -> DANGEROUS transition before
 anything is deleted, refusal leaves the file, a second tap does not re-run.
+Plus the two the A0 review round earned: the planner's risk equals the
+registry's (the gate takes the max of the two since finding F2), and a step
+interrupted mid-call is performed once rather than re-issued (finding F1) —
+the seam Android could only reach through a 157-170 ms window.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
@@ -2294,7 +2405,64 @@ class ConsoleHarnessTest {
         assertTrue("it recorded SessionPaused, not a silent resume", printed.joinToString("\n").contains("SessionPaused"))
         assertEquals(ExecutionState.Completed, resumed)
     }
+
+    /**
+     * **The second shape of process death: the process died DURING a tool call** — spec §9, required
+     * rather than optional since the spec was re-anchored to `a7f4755`.
+     *
+     * A0's finding F1 was that the engine's own "died mid-call" signal — `ToolInvoked(i)` with no
+     * `ToolObserved(i)` — was unreadable on the only path that produces it, because the restore
+     * transitions write `SessionPaused` and `SessionResumed` on top of it and the predicate was keyed
+     * on the trace *tail*. The step was re-cleared, re-traced and re-run; a step whose consent had
+     * already been granted ran twice. Android could reach that window only with `pm disable-user` plus
+     * an on-device `force-stop` poll, 157-170 ms wide. **This consumer reaches it by seeding a file.**
+     *
+     * Note what is simulated and what is not. A live process cannot be asked to die, so the mid-call
+     * *state* is seeded through the store — that is setup. The **transition under test** — find it,
+     * offer it, continue — is walked by the harness itself, which is what the Global Constraints rule
+     * about simulated paths demands. Seeding the state and then also hand-rolling the restore would
+     * reproduce exactly the mistake that cost A0 three findings.
+     */
+    @Test
+    fun `a session that died mid-call is offered, and the pending call runs once`() = runTest {
+        temp.newFile("stale.lock")
+        val store = JvmAgentSessionStore(temp.root.toPath().resolve(".sidr-agent/session.json"))
+        val registry = SandboxToolSource()
+        val executor = AgentExecutor(registry, SandboxToolExecutor(temp.root.toPath()))
+        val goal = AgentGoal("remove stale.lock", GoalShape.Free("remove stale.lock"))
+
+        StartAgentSessionUseCase(FilePlanner(), store, JvmAgentSessionIdFactory(), registry)
+            .start(goal)
+        val prepared = executor.prepare((store.active() as OperationResult.Success).value!!)
+        store.save(prepared)
+        assertTrue(
+            "the seed must be mid-call, was ${prepared.trace.events.last()}",
+            prepared.trace.events.last() is TraceEvent.ToolInvoked,
+        )
+
+        val state = harness(mutableListOf("y")).run("remove stale.lock")
+
+        val log = printed.joinToString("\n")
+        assertTrue("the fresh harness reports the pause", log.contains("Paused"))
+        assertEquals(
+            "one pending call is one ToolInvoked, however many times the process died:\n$log",
+            1,
+            Regex("ToolInvoked\\(0,").findAll(log).count(),
+        )
+        assertEquals(ExecutionState.Completed, state)
+    }
 }
+```
+
+The harness test needs these imports beside the ones above:
+
+```kotlin
+import com.sidr.launcher.domain.agent.AgentExecutor
+import com.sidr.launcher.domain.agent.AgentGoal
+import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
+import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.trace.TraceEvent
 ```
 
 - [ ] **Step 2: Run it and verify it fails**
@@ -2503,7 +2671,13 @@ fun main(args: Array<String>) {
 
 Run: `./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 :consumer:jvm:test --tests "*ConsoleHarnessTest*"`
 
-Expected: PASS, 4 tests.
+Expected: PASS, **5 tests** — the fifth is the died-mid-call demonstration the spec requires since it
+was re-anchored to `a7f4755`.
+
+**If the mid-call test fails with two `ToolInvoked(0, …)` lines, do not touch the test.** That is A0
+finding F1 reappearing, and it means something in `AgentExecutor.midStepInvocation()` went back to
+reading the trace *tail* instead of the last `ToolInvoked`. Stop and report: the engine is supposed to
+run unmodified in this block, so a regression there is a finding about the core, not about the harness.
 
 - [ ] **Step 6: Commit**
 
@@ -2517,6 +2691,11 @@ Never calls ToolExecutor.invoke itself; it drives AgentExecutor, which owns the
 one call site below the checkpoint. A session left at the gate is found by a
 fresh harness, presented as Paused with SessionPaused in the trace, and never
 resumed silently — M-A1's 'survives process death', on the second consumer.
+
+Two shapes of that death, not one: at the gate, and DURING a tool call. The
+second is the seam A0's finding F1 exposed, and this consumer reaches it by
+seeding a file where Android needed pm disable-user plus an on-device poll
+inside a 157-170 ms window.
 
 English developer output, recorded as an exception rather than a gap: the
 strings rule governs product surfaces and this module ships none.
@@ -2535,6 +2714,14 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: `SandboxToolExecutor` (Task 4).
 - Produces: no production code. Extends the mechanical boundary to cover the second consumer.
+
+> **`AgentVocabularyGuardTest` is NOT touched by this task, and two facts about it are easy to
+> misread.** It scans `domain/agent`, `domain/tool` **and `domain/trace`** — the third was added
+> 2026-08-23 by A0 finding F7, because `CLAUDE.md` and the contract table have always called those
+> three the portable engine while the guard only covered two. And it deliberately does **not** reach
+> into `consumer/jvm`: what must stay free of action vocabulary and transports is the *engine*; a
+> consumer may name whatever it likes, which is what being a consumer means. Extending it would
+> misstate what the guard protects (spec §10).
 
 - [ ] **Step 1: Add the scan root**
 
@@ -2722,8 +2909,12 @@ Expected: exit 0, task executed, no golden changes.
 - [ ] **Step 3: Prove the Android surface diff is empty**
 
 ```bash
-git diff --stat 7442da4..HEAD -- feature core data app
+git diff --stat a7f4755..HEAD -- feature core data app
 ```
+
+**The baseline is `a7f4755`, not `7442da4`.** `7442da4` closed A0; `a7f4755` is the A0 review round
+that followed it, and it legitimately touched `feature/`, `data/` and `app/`. Diffing from the older
+commit would attribute that block's changes to this one and the check would report a false widening.
 
 Expected: **only** `app/build.gradle.kts` (one `inputs.dir` block) and
 `app/src/test/java/com/sidr/launcher/agent/ToolExecutorCallSiteGuardTest.kt`. Any other file under
@@ -2756,6 +2947,15 @@ minimum:
 - **What this block does NOT close:** no doctrine row; the A1 fork still open; `ObservedFact`,
   `CommandFailure`, `StepRationale`, `ArgType` all recorded against A1′; `DURABLE_EFFECT` and the
   execution-model layers against A4′.
+- **Two things the A0 review round (`a7f4755`) hands this ADR, and they belong in §11.2's write-up.**
+  First: eight defects were repaired inside `commonMain`'s engine and **not one** needed a platform
+  branch, an `expect`/`actual`, or a `java.*` import — `:consumer:jvm` inherited every fix by existing.
+  A core that can be repaired in eight places without either consumer noticing is portable in a way
+  that "compiles for two targets" is not, and this block is the first place that claim is checkable.
+  Second: risk now has a **third** owner beside the two adapters — the persisted plan, whose snapshot
+  can disagree with the registry that outlived it — and the core resolves that conservatively with
+  `maxOf` rather than picking a winner. Both go under question 3 (§11.3), which stays *renamed with an
+  address*, not closed.
 
 - [ ] **Step 5: Sync `CLAUDE.md`**
 
@@ -2799,8 +2999,10 @@ A1′ is not started (Master Plan §4 DoD: the next block is not begun automatic
 ## Self-review notes
 
 **Spec coverage.** §4 module → Task 1. §5 tools → Tasks 3–4. §6 plan and both paths → Tasks 5, 7.
-§6.3 divergence and the owner instruction → Task 7 Steps 5, 7. §7 the two `commonMain` edits → Task 2.
-§8 store and CAS → Task 6. §9 driver and process death → Task 8. §10 guards and mutations → Task 9.
+§6.2's `maxOf(plan, registry)` gate → Task 7 Step 1 (the risk-agreement test). §6.3 divergence and the
+owner instruction → Task 7 Steps 5, 7. §7 the two `commonMain` edits → Task 2.
+§8 store and CAS → Task 6. §9 driver and **both** process-death shapes → Task 8 (died-at-the-gate) and
+Task 7 Step 1 + Task 8 Step 1 (died-mid-call). §10 guards and mutations → Task 9.
 §11.1–§11.4 the four answers → evidence produced in Tasks 3, 4, 6, 7, 8; written up in Task 10 Step 4.
 §12 `B1` → Task 2 and Task 10 Step 4. §13 doctrine and localization → Task 10 Steps 4–5. §14
 verification → Task 1 Step 5, Task 10 Steps 1–3. §16 work order → the task order here.
@@ -2820,3 +3022,9 @@ session from being silently persisted. `ConsoleHarness` names its `RunAgentSessi
 - Task 6 is much larger than the others and could be split. It is kept whole because its deliverable —
   "does a file store honour the CAS contract" — is one reviewable question, and half a store is not
   independently testable.
+- The two mid-call tests (Task 7 and Task 8) look like duplicates and are not. Task 7's drives the
+  **use cases** and proves the engine performs the pending call once; Task 8's drives the **harness**
+  and proves the product path — restore, offer, continue — reaches that engine behaviour. Keeping only
+  the first would repeat the mistake that cost A0 three findings: a test that stands in for the path
+  instead of walking it. Keeping only the second would leave the engine property provable only through
+  a console driver.

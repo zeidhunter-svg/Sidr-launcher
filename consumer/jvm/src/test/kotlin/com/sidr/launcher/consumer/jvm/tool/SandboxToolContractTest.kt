@@ -9,6 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.File
 
 /**
  * The twin of `SystemIntentToolContractTest`, for the second consumer.
@@ -47,6 +48,15 @@ class SandboxToolContractTest {
                 SandboxToolIds.FIND_FILE,
                 mapOf(SandboxKeys.QUERY to "absent.lock", SandboxKeys.ROOT to rootArg()),
                 {},
+                "Effected",
+            ),
+            // F7: SystemIntentToolContractTest covers both its tools, including the zero-output one —
+            // the case that catches "someone declared an output on the tool that emits none". delete_file
+            // is this source's zero-output tool; without this case the comparison never runs on it.
+            Case(
+                SandboxToolIds.DELETE_FILE,
+                mapOf(SandboxKeys.PATH to File(temp.root, "delete-me.lock").absolutePath),
+                { temp.newFile("delete-me.lock") },
                 "Effected",
             ),
         )

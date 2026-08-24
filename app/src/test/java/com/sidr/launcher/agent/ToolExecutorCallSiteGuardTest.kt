@@ -27,7 +27,8 @@ import java.io.File
  *  - exactly one call spelled `toolExecutor.invoke(`, in the **file** `AgentExecutor.kt`. Where in that
  *    file it sits is NOT checked: moving it into `prepare` above the consent checkpoint keeps all four
  *    assertions green. "Below the checkpoint" is held behaviourally by `AgentExecutorTest`, not here;
- *  - exactly three files that declare the type at all — the holder, the DI module, the one adapter.
+ *  - exactly four files that declare the type at all — the holder, the DI module, and the two
+ *    adapters (`SystemIntentToolExecutor`, `SandboxToolExecutor`).
  *
  * Both scans run over comment-stripped text ([stripComments]), so documentation that spells a call or
  * a type in prose cannot turn the guard red on correct code. That stripping's own false-negative
@@ -64,6 +65,12 @@ class ToolExecutorCallSiteGuardTest {
                 "data/repository/src/main/java",
                 "feature/launcher/src/main/java",
                 "app/src/main/java",
+                // A0.5 — the second consumer. Its `SandboxToolExecutor` is a second path to the world,
+                // so it belongs inside this scan and not outside it: Master Plan §4's growth rule puts
+                // boundaries on the first slice, never behind the second consumer. Declared as a `Test`
+                // input in app/build.gradle.kts in the same commit, or the widened guard silently would
+                // not re-run.
+                "consumer/jvm/src/main/kotlin",
             ).map { File(repoRoot, it) }
 
     /**
@@ -125,14 +132,18 @@ class ToolExecutorCallSiteGuardTest {
      * holder that disappears has to be as red as one that appears, because a vanished holder means the
      * wiring moved and this guard's premise needs re-reading, not a quietly decremented number.
      *
-     * The three, and why each is legitimate:
+     * The four, and why each is legitimate:
      *  - `AgentExecutor.kt` — the one holder, and the one call site, below the checkpoint;
      *  - `AgentProvidesModule.kt` — the Hilt binding and the `AgentExecutor` factory that passes it on;
-     *  - `SystemIntentToolExecutor.kt` — the sole implementation, matched on its supertype line. A
-     *    second implementation is a second path to the world, so catching it here is the point.
+     *  - `SandboxToolExecutor.kt` — A0.5's implementation, the second consumer's only path to the world;
+     *  - `SystemIntentToolExecutor.kt` — the Android implementation, matched on its supertype line.
+     *
+     * Two implementations are now legitimate, and that changes nothing about the property this guard
+     * holds: **one call site**, not one implementation. A second consumer may reach the world by its own
+     * adapter; it may not reach it by its own call.
      */
     @Test
-    fun `the declared holders of a ToolExecutor are exactly the known three`() {
+    fun `the declared holders of a ToolExecutor are exactly the known four`() {
         val files = productionSources()
             .filter { declaresToolExecutor.containsMatchIn(stripComments(it.readText())) }
             .map { it.name }
@@ -143,7 +154,12 @@ class ToolExecutorCallSiteGuardTest {
                 "count above only sees the receiver spelled `toolExecutor`. If this list grew, the " +
                 "new holder must be justified and this guard updated deliberately; if it shrank, the " +
                 "wiring moved and the premise of this whole guard needs re-checking. Found: $files",
-            listOf("AgentExecutor.kt", "AgentProvidesModule.kt", "SystemIntentToolExecutor.kt"),
+            listOf(
+                "AgentExecutor.kt",
+                "AgentProvidesModule.kt",
+                "SandboxToolExecutor.kt",
+                "SystemIntentToolExecutor.kt",
+            ),
             files,
         )
     }

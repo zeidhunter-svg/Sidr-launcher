@@ -325,6 +325,13 @@ tasks.withType<Test>().configureEach {
     inputs.dir(rootProject.file("feature/launcher/src/main/java"))
         .withPropertyName("launcherSources")
         .withPathSensitivity(PathSensitivity.RELATIVE)
+    // A0.5 — ToolExecutorCallSiteGuardTest now scans the second consumer too. A test that reads files
+    // outside its own source set is not an input Gradle can infer: without this line the task stays
+    // UP-TO-DATE and the widened guard silently does not re-run. One named directory, not the repo-wide
+    // widening that findings D1/D3/D8 park as an owner-level build trade-off.
+    inputs.dir(rootProject.file("consumer/jvm/src/main/kotlin"))
+        .withPropertyName("consumerJvmSources")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // Fix-privacy-guard, review item IMPORTANT 7 (2026-08-20). Four I18N guards in app/src/test read

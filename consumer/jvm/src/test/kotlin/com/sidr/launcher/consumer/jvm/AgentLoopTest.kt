@@ -176,8 +176,33 @@ class AgentLoopTest {
         assertEquals("a terminal state leaves nothing at rest", null, store.active().value())
     }
 
+    /**
+     * **Renamed from `a second tap on confirm does not run the step twice` — that name promised a CAS
+     * proof this test cannot give.** Step 2 is this plan's last step (spec §6.1: one `DANGEROUS` step,
+     * always last), so granting it drives the session to `Completed`, and `RunAgentSessionUseCase.persist`
+     * deletes a terminal session. The second `resolve()` call therefore hits
+     * `recordConsentIfPending`'s **first** branch — `current == null -> false` — and never reaches the
+     * `consents.containsKey(stepIndex)` branch that is the actual compare-and-set. A fresh-eyes review
+     * proved this by deleting the `containsKey` branch outright: this test stayed green.
+     *
+     * What this test actually holds — a decision arriving after the session has already ended and been
+     * swept from disk is a no-op, which matters for the same reason double-tapping a "Buy" button after
+     * checkout must not double-charge — is real and worth keeping under its own name.
+     *
+     * **The compare-and-set itself is proven elsewhere, not here:**
+     * `JvmAgentSessionStoreTest` (`consumer/jvm/src/test/kotlin/.../store/JvmAgentSessionStoreTest.kt`)
+     * holds it directly against a session parked **mid-plan** (`AwaitingConsent`, not deleted) —
+     * `recordConsentIfPending does not apply twice for the same step`, and, with two genuinely racing
+     * calls, `two concurrent consent writes for the same step - exactly one applies`.
+     *
+     * **A named residual, not implied absent:** the loop-level double-tap on a *non-terminal* risky step
+     * — the shape this test's original name promised — is structurally unreachable on this consumer.
+     * `FilePlanner` only ever produces the one three-step shape spec §6.1 defines, whose sole `DANGEROUS`
+     * step is always last; reaching a risky-then-another-step plan would mean changing that shape, which
+     * is out of this block's scope.
+     */
     @Test
-    fun `a second tap on confirm does not run the step twice`() = runTest {
+    fun `a decision that arrives after the session ended is a no-op`() = runTest {
         temp.newFile("stale.lock")
         val store = store()
         val paused = startAndRun(store)
@@ -185,7 +210,7 @@ class AgentLoopTest {
         val resolve = ResolveConsentUseCase(store, RunAgentSessionUseCase(executor(), store))
         assertTrue(resolve.resolve(paused.id, 2, granted = true).value() != null)
         assertEquals(
-            "the second tap must not apply — recordConsentIfPending is a CAS",
+            "a decision for a session already ended (and swept from disk) must not apply",
             null,
             resolve.resolve(paused.id, 2, granted = true).value(),
         )

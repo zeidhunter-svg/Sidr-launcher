@@ -190,4 +190,88 @@ class AgentLoopTest {
             resolve.resolve(paused.id, 2, granted = true).value(),
         )
     }
+
+    /**
+     * **Deviation from the brief, evidenced.** The brief's literal body was `startAndRun(store)` alone,
+     * asserting `Failed` directly. Run as written it never reaches `Failed` — it stops at
+     * `AwaitingConsent`, cursor 2, exactly like the hit path, because `AgentExecutor.prepare` computes
+     * `checkpointFor` (pure risk, `delete_file` is DANGEROUS regardless of whether the target exists)
+     * **before** it ever calls `InvocationValidator.resolve` to bind step 2's argument (`prepare`'s own
+     * KDoc: "Binding... belongs HERE — after the checkpoint, before ToolInvoked"). A missing file changes
+     * nothing about *whether* the gate fires, only what binding does once past it. So the rejection this
+     * test is named for is reachable only *after* consent is granted for step 2 — same as the "granting
+     * consent completes the plan" test above, except here `find_file` reported a blank `resolved_path`
+     * (`SandboxToolExecutor.findFile`: the key is emitted on every branch, blank when nothing matched),
+     * so the bind fails closed instead of succeeding.
+     */
+    @Test
+    fun `a missing target rejects the bound step and never reaches the world`() = runTest {
+        val store = store()
+        val paused = startAndRun(store)
+
+        val resolve = ResolveConsentUseCase(store, RunAgentSessionUseCase(executor(), store))
+        val ended = resolve.resolve(paused.id, stepIndex = 2, granted = true).value()!!
+
+        assertEquals(ExecutionState.Failed, ended.state)
+        assertTrue(
+            "the binding failed closed rather than deleting something blank",
+            ended.trace.events.contains(TraceEvent.StepRejected(2, RejectionReason.UNRESOLVED_ARG_SOURCE)),
+        )
+        assertTrue(
+            "delete_file was never invoked",
+            ended.trace.events.none { it is TraceEvent.ToolInvoked && it.index == 2 },
+        )
+    }
+
+    /**
+     * **A recorded architectural finding, held as a test rather than as a paragraph** (spec §6.3,
+     * §11.2; owner instruction 2026-08-23).
+     *
+     * The same shape of reality — "the thing you named is not there" — takes two different paths:
+     *  - on the **Android** consumer it has a name, `ObservedFact.APP_NOT_INSTALLED`. It satisfies the
+     *    next step's precondition, the store step runs, and the session ends `Completed`.
+     *  - **here** it has no name. `find_file` reports a blank `resolved_path`, the binding fails closed
+     *    as `UNRESOLVED_ARG_SOURCE`, and the session ends `Failed`.
+     *
+     * Same reality, two session outcomes and two traces, purely because `ObservedFact` is a closed
+     * two-value Android-shaped enum. It is a **trace-fidelity** gap, not a safety gap: the step
+     * correctly does not run either way.
+     *
+     * **THE ASYMMETRY IS INTENDED AND STAYS.** Owned by A1'. If you have just made this test fail by
+     * making the two agree, you have changed the thing this block exists to record — revert it, or take
+     * the decision to the owner. Relaxing or deleting this test is a conscious act against a named
+     * decision, not a tidy-up.
+     *
+     * **Mechanics note, not part of the finding:** reaching `Failed` requires granting consent for step
+     * 2 first — same reason as the miss-path test above: the DANGEROUS-risk checkpoint on `delete_file`
+     * fires on risk alone, before binding is attempted, so it gates identically whether or not the
+     * target exists. Only past that gate does the blank `resolved_path` from `find_file` turn into
+     * `UNRESOLVED_ARG_SOURCE`. This is scaffolding to reach the divergence, not the divergence itself.
+     */
+    @Test
+    fun `a missing target ends Failed here where Android ends Completed - INTENDED divergence, owned by A1 prime`() = runTest {
+        val store = store()
+        val paused = startAndRun(store)
+        val resolve = ResolveConsentUseCase(store, RunAgentSessionUseCase(executor(), store))
+        val ended = resolve.resolve(paused.id, stepIndex = 2, granted = true).value()!!
+
+        // Half one: the outcome on this consumer.
+        assertEquals(
+            "the JVM consumer ends Failed for a missing target. If this now says Completed, someone " +
+                "has unified the two consumers' outcomes — see the KDoc above; that is not a task here.",
+            ExecutionState.Failed,
+            ended.state,
+        )
+
+        // Half two: WHY it differs, and the mechanical hold. The Android consumer ends `Completed`
+        // because it can name the fact. The moment `ObservedFact` gains a value for "the thing is not
+        // there", this assertion fails — which is precisely the edit this block has decided not to
+        // make, and the reason this test is the guard rather than a comment.
+        assertEquals(
+            "ObservedFact must stay at A0's two values. A third value here means the finding was " +
+                "'fixed' instead of recorded (spec §2 Approach A; owner instruction 2026-08-23).",
+            listOf("APP_NOT_INSTALLED", "APP_AMBIGUOUS"),
+            ObservedFact.entries.map { it.name },
+        )
+    }
 }

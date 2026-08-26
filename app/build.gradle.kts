@@ -294,7 +294,7 @@ tasks.withType<Test>().configureEach {
     // Этап 4 / A0 Task 13. `ToolExecutorCallSiteGuardTest` and `AgentVocabularyGuardTest` scan .kt
     // sources outside :app's source set - the same silent-skip trap as the matrix above.
     //
-    // Only ONE of the three declarations below is load-bearing, and what it is load-bearing FOR is
+    // Only ONE of the four declarations below is load-bearing, and what it is load-bearing FOR is
     // narrower than it looks. Both facts were measured, not assumed (Task 13 Step 7, row 7):
     //  - `domainSources` IS. The repo-wide `i18nGuardRepoWideSrcMainScan` tree further down includes
     //    `**/src/main/**/*.kt`, and :domain went KMP in Этап 2.2 - its production segment is
@@ -325,10 +325,17 @@ tasks.withType<Test>().configureEach {
     inputs.dir(rootProject.file("feature/launcher/src/main/java"))
         .withPropertyName("launcherSources")
         .withPathSensitivity(PathSensitivity.RELATIVE)
-    // A0.5 — ToolExecutorCallSiteGuardTest now scans the second consumer too. A test that reads files
-    // outside its own source set is not an input Gradle can infer: without this line the task stays
-    // UP-TO-DATE and the widened guard silently does not re-run. One named directory, not the repo-wide
-    // widening that findings D1/D3/D8 park as an owner-level build trade-off.
+    // A0.5 — ToolExecutorCallSiteGuardTest now scans the second consumer too. NOT load-bearing today,
+    // and that was measured rather than assumed: `consumer/jvm/src/main/kotlin/**/*.kt` already matches
+    // the repo-wide `i18nGuardRepoWideSrcMainScan` tree further down, so removing this block alone and
+    // re-running with a second call site planted in `consumer/jvm` still came back RED at exit 1 — no
+    // stale green. It is declared for the same reason as `dataRepositorySources` and `launcherSources`
+    // above: that tree was written for the i18n guards, not for this one, and a future narrowing of it
+    // would silently take this guard's input with it. That it IS load-bearing in the world it exists
+    // for was proved by narrowing the i18n tree to `app/` first: without this block the task then came
+    // back UP-TO-DATE at exit 0 with the mutation present, and with the block restored the same
+    // mutation went RED. One named directory, not the repo-wide widening that findings D1/D3/D8 park
+    // as an owner-level build trade-off.
     inputs.dir(rootProject.file("consumer/jvm/src/main/kotlin"))
         .withPropertyName("consumerJvmSources")
         .withPathSensitivity(PathSensitivity.RELATIVE)

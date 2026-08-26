@@ -18,7 +18,7 @@ import java.io.File
  * `executor.invoke(resolved)` — is invisible to it, and matching `\.invoke\(` on any receiver instead
  * would drown in `Function0.invoke` and every unrelated `operator invoke` in the tree. So the gap is
  * closed one step earlier, at the **declaration**: a new call site needs a new holder of the type, and
- * holders are few and declarative. `the declared holders of a ToolExecutor are exactly the known three`
+ * holders are few and declarative. `the declared holders of a ToolExecutor are exactly the known four`
  * pins that set, so an injected `private val executor: ToolExecutor` is red before it is ever called.
  *
  * **What is actually enforced, stated plainly** (the KDoc on `ToolExecutor` used to claim more, and
@@ -34,8 +34,9 @@ import java.io.File
  * a type in prose cannot turn the guard red on correct code. That stripping's own false-negative
  * direction is named on [stripComments] itself: it can hide text from a scan, never invent a hit.
  *
- * The roots it walks are declared as `Test` inputs in `app/build.gradle.kts`; without that the task
- * stays UP-TO-DATE when only a scanned source changes and this guard silently does not run. What
+ * The roots it walks are declared as `Test` inputs in `app/build.gradle.kts`, which is what keeps the
+ * task from staying UP-TO-DATE when only a scanned source changes; that build file records, per root,
+ * which of those declarations is actually load-bearing and which is defence in depth. What
  * "the roots" are, and what they still miss, is on [productionRoots] rather than implied here.
  */
 class ToolExecutorCallSiteGuardTest {
@@ -43,21 +44,24 @@ class ToolExecutorCallSiteGuardTest {
     private val repoRoot = File("..")
 
     /**
-     * `:domain`'s roots are **derived** ([kmpProductionRoots]) and the other three are hard-coded.
+     * `:domain`'s roots are **derived** ([kmpProductionRoots]) and the other four are hard-coded.
      *
      * The asymmetry is deliberate and measured, not an oversight. `:domain` is
      * `kotlin.multiplatform` + `com.android.library`: a holder planted at `domain/src/main/java` or
      * `domain/src/androidMain/kotlin` compiles into the shipped artifact, and the old
      * `domain/src/commonMain/kotlin` entry saw neither. This is the guard that mechanically holds the
      * consent boundary, so a known fail-open direction in it is not something to leave for later — a
-     * second holder is exactly how a second call site arrives. The other three are single-variant
-     * android modules whose production Kotlin is `src/main/java`.
+     * second holder is exactly how a second call site arrives. Three of the other four are
+     * single-variant android modules whose production Kotlin is `src/main/java`; the fourth,
+     * `consumer/jvm`, is a plain `kotlin.jvm` module laid out at `src/main/kotlin`.
      *
-     * **Named, not closed:** those three still miss `src/main/kotlin`, and no module outside these
-     * four is scanned at all. Widening *that* needs the `Test` inputs declarations in
-     * `app/build.gradle.kts` widened in step, or the guard gains reach it cannot re-run for; it is an
-     * owner-level build trade-off parked in `§HANDOFF`. The same staleness caveat already applies to
-     * the derived `:domain` roots: only `domain/src/commonMain/kotlin` is a declared input.
+     * **Named, not closed:** those three android roots still miss `src/main/kotlin`, the hard-coded
+     * `consumer/jvm` root misses the `src/main/java` that the `kotlin.jvm` plugin also compiles, and
+     * no module outside these five is scanned at all. Widening *that* needs the `Test` inputs
+     * declarations in `app/build.gradle.kts` widened in step, or the guard gains reach it cannot
+     * re-run for; it is an owner-level build trade-off parked in `§HANDOFF`. The same staleness caveat
+     * already applies to the derived `:domain` roots: only `domain/src/commonMain/kotlin` is a
+     * declared input.
      */
     private val productionRoots: List<File> =
         kmpProductionRoots(File(repoRoot, "domain/src")) +
@@ -68,8 +72,10 @@ class ToolExecutorCallSiteGuardTest {
                 // A0.5 — the second consumer. Its `SandboxToolExecutor` is a second path to the world,
                 // so it belongs inside this scan and not outside it: Master Plan §4's growth rule puts
                 // boundaries on the first slice, never behind the second consumer. Declared as a `Test`
-                // input in app/build.gradle.kts in the same commit, or the widened guard silently would
-                // not re-run.
+                // input in app/build.gradle.kts in the same commit — defence in depth rather than the
+                // load-bearing mechanism, since the repo-wide `**/src/main/**/*.kt` tree declared there
+                // already covers this directory today; that build file records which declaration is
+                // which, and why this one is declared anyway.
                 "consumer/jvm/src/main/kotlin",
             ).map { File(repoRoot, it) }
 

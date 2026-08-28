@@ -50,6 +50,13 @@ Every task's requirements implicitly include this section.
   `-Porg.gradle.java.installations.paths`. The uncommitted modification to `gradle.properties`
   (`org.gradle.tooling.parallel=true`) is deliberate, an owner decision of 2026-08-22 — **do not touch
   it and do not commit it.**
+
+  > **FALSE — corrected 2026-08-29.** No document ever carried that decision; the label travelled from
+  > kickoff to kickoff without a source. The owner confirmed he did not write it: Android Studio
+  > appended it (file mtime 2026-08-22 03:37, the same IDE session that produced the
+  > `gradle-daemon-jvm.properties` trap `§HANDOFF` documents). Reverted. It was inert for the gate
+  > anyway — `org.gradle.parallel=true` is already line 2, and `org.gradle.tooling.parallel` is a
+  > Tooling-API/IDE-sync key that `./gradlew` does not use.
 - **Block gate:** `:domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test`.
   `:domain:jvmTest` must be listed explicitly — `testDebugUnitTest` has not reached it since `:domain`
   went KMP, and **416 of the repo's 1158 tests** live there (baseline at `a7f4755`, after the A0 review

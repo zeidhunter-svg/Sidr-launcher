@@ -183,7 +183,12 @@ below is recorded in its own ADR.
   unreadable-directory test yields coverage only on non-root runs. **(4) `JvmAgentSessionStore`** — its
   `FileLock` is **proved by nothing** (no single-JVM test can discriminate it; the mechanism is kept and
   the claim dropped), `SessionDto` carries no version field while an undecodable file is now deleted, so
-  version skew is indistinguishable from corruption (→ A5), and `delete()` leaves an orphaned `.lock`.
+  version skew is indistinguishable from corruption (→ A5), and `delete()` leaves an orphaned `.lock`
+  (observed in the first terminal run, not merely predicted). **(5) the two consumers disagree about
+  what `pausedForRestore()` records** — `ConsoleHarness` writes a pause on every restore, while
+  `LauncherAgentSession.restoreOnStart` has an explicit branch against exactly that; both are defensible
+  (a harness restart *is* a process death, an app start is not), so the real gap is that the engine
+  never says which the event means. → A4′.
 - **`CODE-GREEN`, not `DEVICE-ACCEPTED`:** DS-5's own acceptance checklist has never been run
   (since 2026-07-13); I18N-1 was verified only by agent-driven `adb`/`uiautomator` — its offline path, live
   TalkBack, fontScale 2.0, and the system per-app-language picker are untested. DS-6B is `CLOSED` (owner

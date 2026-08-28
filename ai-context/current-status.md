@@ -48,10 +48,12 @@ distinction is Этап 0.5's whole point.
 **The central finding, measured rather than argued.** `ToolId` is an open value class over `String`: the
 new consumer declared **three** of its own ids with **zero** core edits. `GoalShape` is a closed sum: **one**
 added value cost **four files across three modules**, because exhaustive else-free `when` sites live
-outside `:domain` and `:domain:jvmTest` never compiles them. The two contracts that survived contact with
-a second consumer are the two built as open value types; the six that did not are all closed sums. That
-is an **observation for A1′, not a decision** — the A1 fork stays open and both its branches are exactly
-as cheap as they were.
+outside `:domain` and `:domain:jvmTest` never compiles them. The six contracts that did **not** survive
+contact with a second consumer are all **closed sums**; the one that survived with zero core edits is
+`ToolId`, an open value class. (The second survivor, `AgentSessionIdFactory`, is a **port**, not a value
+type — it shows a different mechanism for the same end: push the unportable thing across a boundary
+rather than name it in the core.) That is an **observation for A1′, not a decision** — the A1 fork stays
+open and both its branches are exactly as cheap as they were.
 
 **The sharpest recorded finding, and it is not a defect to fix.** When nothing matches, the JVM
 consumer's session ends **`Failed`**; on Android the same reality — "the thing you asked about is not
@@ -68,6 +70,17 @@ an on-device poll inside 157–170 ms. Here it is a function call on a seeded fi
 itself rather than simulated. The eight engine repairs of 2026-08-23 are the other half of the evidence:
 not one needed a platform branch, an `expect`/`actual`, or a `java.*` import, and `:consumer:jvm`
 inherited every one of them by existing.
+
+**The harness was finally run from a terminal, and that caught something no review had.** Until the
+last commit of the block every proof — including both process-death shapes — came from a test, and
+`Main.kt` documented a `./gradlew :consumer:jvm:run` that **did not exist**. Making the documented
+command true (a `JavaExec` task, not the `application` plugin — distribution is a named non-goal) and
+then actually walking it exposed that Gradle hands such a task an **empty stdin**, so `readlnOrNull`
+returns `null` and consent could never have been typed. The first real run then went
+`PlanCreated → … → ConsentRequested(2, RISK_LEVEL) → ConsentResolved(2, granted=true) → delete_file →
+SessionEnded(Completed)`: the file really deleted, `session.json` really removed on the terminal state,
+and the orphaned `.lock` really left behind — the store's first named limitation, observed rather than
+argued.
 
 **Named residuals** (they are named, not implied absent): the sandbox's `findFile` follows symlinks when
 testing `isRegularFile`, so an in-sandbox link can be reported under its in-sandbox path — a leaked

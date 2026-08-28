@@ -283,6 +283,13 @@ divergence is a fact in CI rather than a paragraph in a document.
 > deleting or relaxing it is a conscious act against a named owner decision rather than a tidy-up. A
 > guard also pins `ObservedFact` at its two values and `GoalShape` at its two, so growing either fails
 > closed — which incidentally gives Master Plan §3.6 `B1` its first test.
+>
+> > **Corrected 2026-08-26 by the block's ADR — the `GoalShape` half of that claim is generous.** The
+> > `ObservedFact` half is genuine and mutation-proved (a third value turns two guards RED in two
+> > modules). But the guard's runtime assertion on `GoalShape` is a **tautology**: enforcement comes
+> > from the compiler's exhaustive `when`, and a third shape fails **earlier** — at
+> > `TemplatePlanner.kt:45`, not in the guard file. The file gave `B1` an **address and a message**,
+> > not its first enforcement; the mechanism already existed.
 
 ## 7. What changes in `commonMain` — exactly two edits
 

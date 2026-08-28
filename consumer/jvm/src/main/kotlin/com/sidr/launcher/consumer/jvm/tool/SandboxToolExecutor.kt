@@ -15,8 +15,10 @@ import java.nio.file.Paths
  * The second consumer's **only path to the world**, and the second implementation of [ToolExecutor] in
  * this repository.
  *
- * `ConsoleHarness` wires it — `AgentExecutor(registry, SandboxToolExecutor(root))` — so every call it
- * receives comes from `AgentExecutor.perform`, the single call site, below the consent checkpoint. It
+ * `ConsoleHarness` wires it — `AgentExecutor(registry, SandboxToolExecutor(root))` — so in production
+ * every call it receives comes from `AgentExecutor.perform`, the single call site, below the consent
+ * checkpoint. (Tests call [invoke] directly — `SandboxToolExecutorTest` and `SandboxToolContractTest`
+ * — which is the normal way to unit-test a class, not a second production path.) It
  * sits inside the **same** mechanical boundary as the Android adapter, not outside it:
  * `ToolExecutorCallSiteGuardTest` scans `consumer/jvm/src/main/kotlin` as one of its production roots,
  * and this file is one of the four declared holders it pins by name (with `AgentExecutor.kt`,

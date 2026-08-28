@@ -73,9 +73,13 @@ internal class CorruptSessionFileException(message: String, cause: Throwable? = 
  *    consent gate, so this is reach, not a silent effect. Moving the state directory out of the sandbox
  *    is a design change and not this note's business.
  *  - **No `fsync`.** Neither the temp file nor the parent directory is flushed around the `ATOMIC_MOVE`,
- *    so a power loss (as opposed to a process kill) can leave the rename unflushed. The observable
- *    result is a zero-length `session.json`, which [read] already treats as "no session" — benign, and
- *    named here rather than left as the one thing this list did not mention.
+ *    so a power loss (as opposed to a process kill) can leave the rename unflushed, and the outcome is
+ *    not one fixed shape. A zero-length `session.json` is the benign case — [read] already treats it as
+ *    "no session". But the same unflushed rename can instead leave the **previous** `session.json`
+ *    intact, so the next start resumes an older cursor and consent set as if it were current; or it can
+ *    leave partial non-blank content, which [read] treats as corrupt, deletes, and reports as
+ *    `file_agent_session_corrupt` — a store failure printed rather than "no session". Named here as a
+ *    range of outcomes, not as the one this list happened to single out.
  */
 class JvmAgentSessionStore(file: Path) : AgentSessionStore {
 

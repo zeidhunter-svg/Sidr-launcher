@@ -35,7 +35,11 @@ class ConsoleHarnessTest {
 
     @Test
     fun `a granted run completes and prints the whole trace`() = runTest {
-        temp.newFile("stale.lock")
+        val file = temp.newFile("stale.lock")
+        // Computed before the run, since the run itself deletes the file — toRealPath() needs the
+        // file to exist, and this must be the same value SandboxToolExecutor resolves it to.
+        val resolvedTarget = file.toPath().toRealPath().toString()
+
         val state = harness(mutableListOf("y")).run("remove stale.lock")
 
         assertEquals(ExecutionState.Completed, state)
@@ -43,6 +47,16 @@ class ConsoleHarnessTest {
         assertTrue("the plan is announced", log.contains("PlanCreated(stepCount=3)"))
         assertTrue("the gate is visible", log.contains("ConsentRequested"))
         assertTrue("the outcome is stated", log.contains("Completed"))
+
+        // The consent prompt must name the actual bound target, not just say something was found —
+        // this is boundArguments() calling the engine's own InvocationValidator.resolve, and the
+        // value asserted here is the real path SandboxToolExecutor will act on, computed the same way
+        // it computes it (toRealPath()), not a loose substring like "Arguments" that a wrong value
+        // would still satisfy.
+        assertTrue(
+            "the consent prompt names the real path about to be deleted:\n$log",
+            log.contains("Arguments: path=$resolvedTarget"),
+        )
     }
 
     @Test
@@ -87,7 +101,14 @@ class ConsoleHarnessTest {
         val log = printed.joinToString("\n")
         assertTrue("the fresh harness reports the pause:\n$log", log.contains("Paused"))
         assertTrue("it recorded SessionPaused, not a silent resume:\n$log", log.contains("SessionPaused"))
-        assertTrue("the persisted goal is named, so a `y` is informed:\n$log", log.contains("remove stale.lock"))
+        // Pinned to restore()'s own wording ("Its goal:"), not gate()'s ("Goal:") — this run also
+        // passes through gate() for the same persisted session, which prints the goal again under a
+        // different phrasing. A substring shared by both prints would stay green if restore()'s own
+        // disclosure were deleted, since gate()'s later print would still satisfy it.
+        assertTrue(
+            "restore() itself names the persisted goal, so a `y` is informed before gate() runs:\n$log",
+            log.contains("Its goal: \"remove stale.lock\""),
+        )
         assertFalse("the goal typed now is not what runs:\n$log", log.contains("remove other.lock"))
         assertEquals(ExecutionState.Completed, resumed)
 

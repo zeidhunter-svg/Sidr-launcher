@@ -12,11 +12,16 @@ import java.nio.file.Path
 import java.nio.file.Paths
 
 /**
- * The second consumer's **only path to the world**. It is the second implementation of [ToolExecutor]
- * in this repository, but nothing wires it to `AgentExecutor` yet — only `SandboxToolExecutorTest` and
- * `SandboxToolContractTest` construct it today. Wiring it in, and widening
- * `ToolExecutorCallSiteGuardTest`'s `productionRoots` to see `consumer/jvm/src/main/kotlin` at all, is
- * **future work**, not present fact; this sentence does not pre-decide either design.
+ * The second consumer's **only path to the world**, and the second implementation of [ToolExecutor] in
+ * this repository.
+ *
+ * `ConsoleHarness` wires it — `AgentExecutor(registry, SandboxToolExecutor(root))` — so every call it
+ * receives comes from `AgentExecutor.perform`, the single call site, below the consent checkpoint. It
+ * sits inside the **same** mechanical boundary as the Android adapter, not outside it:
+ * `ToolExecutorCallSiteGuardTest` scans `consumer/jvm/src/main/kotlin` as one of its production roots,
+ * and this file is one of the four declared holders it pins by name (with `AgentExecutor.kt`,
+ * `AgentProvidesModule.kt` and `SystemIntentToolExecutor.kt`). Two implementations are legitimate; the
+ * property the guard holds is **one call site**, and it is still one.
  *
  * Every failure this class can produce — a declined containment check, or an exception escaping the
  * filesystem calls below (a vanished root, an unreadable directory, an invalid path argument) — is

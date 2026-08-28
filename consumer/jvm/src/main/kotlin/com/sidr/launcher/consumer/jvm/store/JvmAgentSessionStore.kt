@@ -65,6 +65,17 @@ internal class CorruptSessionFileException(message: String, cause: Throwable? = 
  *    it, but only on the next [write] or [delete] against the same path. Until one of those runs, that
  *    copy is at rest. Bounding it further would need a sweep on [active] too, which would make a read
  *    delete files; that trade is A5's to make if it ever wants a durable journal.
+ *  - **This store's own files are inside the sandbox its tools can reach.** `ConsoleHarness` places the
+ *    session at `<root>/.sidr-agent/session.json` and hands `SandboxToolExecutor` the same `<root>`;
+ *    `findFile` walks that root with `Files.walk` and skips no hidden directory, and `contained()`
+ *    accepts anything under it. So `remove session.json` plans a `DANGEROUS` delete of the agent's own
+ *    recovery record — and `remove session.json.lock` of its lock file. The user is still stopped at the
+ *    consent gate, so this is reach, not a silent effect. Moving the state directory out of the sandbox
+ *    is a design change and not this note's business.
+ *  - **No `fsync`.** Neither the temp file nor the parent directory is flushed around the `ATOMIC_MOVE`,
+ *    so a power loss (as opposed to a process kill) can leave the rename unflushed. The observable
+ *    result is a zero-length `session.json`, which [read] already treats as "no session" — benign, and
+ *    named here rather than left as the one thing this list did not mention.
  */
 class JvmAgentSessionStore(file: Path) : AgentSessionStore {
 

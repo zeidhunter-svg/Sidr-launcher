@@ -14,10 +14,12 @@ import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.trace.TraceEvent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.File
 
 class ConsoleHarnessTest {
 
@@ -63,20 +65,34 @@ class ConsoleHarnessTest {
      * session persisted and unresolved. A **fresh** harness over the same directory must then find it
      * and present it as `Paused` — never resume it silently, because the person asked for this
      * minutes or days ago.
+     *
+     * **The second harness is given a different goal, and that is the whole test.** With the same goal
+     * string on both runs, every assertion here passes just as well if the harness ignored the
+     * persisted session and re-planned the text it was handed — the two hypotheses produce identical
+     * output and identical effects, so the name "found by a fresh harness" was held by nothing. A
+     * distinct second goal separates them: the persisted goal is the one printed, and the persisted
+     * target is the file that disappears.
      */
     @Test
     fun `a session left at the gate is found by a fresh harness and offered, not resumed`() = runTest {
         temp.newFile("stale.lock")
+        temp.newFile("other.lock")
 
         val first = harness(mutableListOf()).run("remove stale.lock")
         assertEquals(ExecutionState.AwaitingConsent, first)
 
         printed.clear()
-        val resumed = harness(mutableListOf("y")).run("remove stale.lock")
+        val resumed = harness(mutableListOf("y")).run("remove other.lock")
 
-        assertTrue("the fresh harness reports the pause", printed.joinToString("\n").contains("Paused"))
-        assertTrue("it recorded SessionPaused, not a silent resume", printed.joinToString("\n").contains("SessionPaused"))
+        val log = printed.joinToString("\n")
+        assertTrue("the fresh harness reports the pause:\n$log", log.contains("Paused"))
+        assertTrue("it recorded SessionPaused, not a silent resume:\n$log", log.contains("SessionPaused"))
+        assertTrue("the persisted goal is named, so a `y` is informed:\n$log", log.contains("remove stale.lock"))
+        assertFalse("the goal typed now is not what runs:\n$log", log.contains("remove other.lock"))
         assertEquals(ExecutionState.Completed, resumed)
+
+        assertFalse("the persisted target is what was deleted", File(temp.root, "stale.lock").exists())
+        assertTrue("the typed target was never touched", File(temp.root, "other.lock").exists())
     }
 
     /**

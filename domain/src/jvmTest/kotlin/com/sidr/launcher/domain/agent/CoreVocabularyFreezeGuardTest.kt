@@ -39,9 +39,15 @@ class CoreVocabularyFreezeGuardTest {
      * taxonomy — there can never be a second `Free`. `B1` otherwise stands: no **recognised** shape may
      * be added before A4'.
      *
-     * The `when` below is exhaustive and has no `else` on purpose: a third `GoalShape` makes this file
-     * fail to **compile**, which is earlier and louder than a failing assertion. This gives `B1` its
-     * first test.
+     * **What this test actually holds, stated plainly: an address and a message, not enforcement.** The
+     * assertion below is a tautology — the list is built here from two literal constructions and then
+     * mapped, so nothing an implementer does to `GoalShape` can make it fail at run time. The `when` is
+     * exhaustive and has no `else`, so a third shape does make this file fail to **compile** — but it is
+     * not the first thing to do so, and this file is therefore not the enforcement either. Enforcement
+     * is the compiler's, spread across every else-free `when` over `GoalShape` in the tree, and the one
+     * a third shape hits first is `TemplatePlanner.kt:45`, in `commonMain`, which compiles before this
+     * source set exists. What this file adds is the place the message lands — the paragraph above, at
+     * the address someone will actually be standing on. `B1` had no test before it and has none now.
      */
     @Test
     fun `GoalShape holds exactly the two shapes this project has decided on`() {

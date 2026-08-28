@@ -261,6 +261,16 @@ expressible at all.
 recorded against A1′ (§11.2) and pinned by a test that asserts both outcomes side by side, so the
 divergence is a fact in CI rather than a paragraph in a document.
 
+> **Incomplete as written — sharpened 2026-08-26 by the block's ADR (Ruling P18).** The consent gate
+> fires **before** argument resolution: `AgentExecutor.prepare` runs `InvocationValidator.validate`
+> (shape — passes), then `checkpointFor` (consent), then `InvocationValidator.resolve` (value — fails
+> on the blank). So on the miss path the trace reads `ConsentRequested(2, RISK_LEVEL)` followed by
+> `StepRejected(2, UNRESOLVED_ARG_SOURCE)`: the user is asked to approve deleting a file that was
+> never found, and that approval is what unblocks the discovery that nothing can bind. The order is
+> deliberate, documented at the binding site, and fail-**safe** — the user is stopped more than
+> necessary, never less. It makes the asymmetry **sharper**: on Android the same "yes" leads to an act
+> that happens; here it leads nowhere.
+
 > **Owner instruction, 2026-08-23 — the asymmetry STAYS. Unifying the two outcomes is NOT a task in
 > this block, and no implementer may take it as one.** §6.3 describes a recorded architectural finding,
 > not a defect awaiting repair. Making the JVM consumer end `Completed` here would require naming the
@@ -432,7 +442,11 @@ determinable answer at the cost of a transport dependency and a decision that be
   does not assert the outcome in advance; the implementation reports it.
 
 **The recommendation this contrast yields, which decides nothing:** the two contracts that survived are
-the two built as **open value types**, and the six that did not are all **closed sums**. A1′ may take
+the two built as **open value types**, and the six that did not are all **closed sums**.
+[*Corrected 2026-08-26 by the block's ADR: the six are indeed all closed sums, and `ToolId` is indeed
+an open value class — but the second survivor, `AgentSessionIdFactory`, is a **port**, not a value
+type. It demonstrates a different mechanism for the same end: push the unportable thing (`UUID`)
+across a boundary rather than name it in the core.*] A1′ may take
 that either way — a parallel vocabulary or an evolved `ActionCatalog` — and this block deliberately
 does not choose. It records which shape survived contact with a second consumer.
 
@@ -526,6 +540,15 @@ checked, output **never** piped through `tail`.
 4. **Android-surface diff empty:** `git diff` touches no `feature/*`, no `core/*`, no `data/*`, no
    `app/src/main`. The only `app/` change is the one `inputs.dir` line and the guard test; the only
    `:domain` change is §7's two edits.
+
+   > **FALSE as written — corrected 2026-08-26 by the block's ADR, and the correction strengthens the
+   > spec's own thesis.** Measured at close: `git diff --stat a7f4755..HEAD -- feature core data app`
+   > touches **six** files. Beyond the two predicted, `GoalShape` is a closed sum with exhaustive
+   > else-free `when` sites **outside** `:domain` that `:domain:jvmTest` never compiles —
+   > `feature/launcher/.../AgentSessionPresentation.kt` and
+   > `data/repository/.../AgentSessionMappers.kt` (plus each one's test). That is §11.2's measured cost
+   > of a closed sum, arriving through the verification section instead of the findings section.
+   > **§7 stays TRUE:** neither file is `commonMain`, and nothing else in `commonMain` moved.
 5. **Guard mutations** — the three of §10, each planted and reverted inside **one** shell invocation
    with a `trap … EXIT` restore, per the precedent of an agent dying mid-round and leaving a probe in
    production source.

@@ -5,7 +5,10 @@
 > digest); per-phase plans carry their own checklists.** This file is the status snapshot — if it
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
-> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-08-23
+> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-08-26
+> (**A0.5 — second consumer of the portable core: `:consumer:jvm` runs a goal end to end on plain JVM over
+> unchanged engine contracts; `CODE-GREEN` at 1219 tests, device acceptance *not applicable*, all four
+> §3.1a questions answered with addresses**); prior 2026-08-23
 > (**cross-cutting review of the whole A0 block — nine findings, eight fixed and mutation-verified,
 > `CODE-GREEN` at 1158 tests; two §12 items await a device re-check because the fixes changed accepted
 > behaviour**); prior 2026-08-22
@@ -26,6 +29,54 @@
 > acceptance; prior re-base 2026-08-10 DS-10 Assistant Migration CLOSED — device-accepted; same-day
 > DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer
 > Correctness CLOSED — device-accepted by the owner).
+
+## Agentic track — Этап 4.5 (A0.5) — second consumer — `CODE-GREEN` (2026-08-26)
+
+**The portable core now has a consumer that is not a test.** `:consumer:jvm` — a plain `kotlin.jvm`
+module with **zero Android artifacts** on its resolved classpath — takes one goal (`remove stale.lock`)
+through `goal → plan → gate → tool → observe → tool → result → trace`: three steps, two step-to-step
+bindings, one risk transition that stops the loop for consent before anything is touched, and a session
+that survives process death in **two** shapes. The engine contracts (`domain/agent`, `domain/tool`,
+`domain/trace`) are **unchanged**; the block's whole `commonMain` footprint is **two** edits in two
+files — the `GoalShape.Free` value and the `NoPlan` arm it forces in `TemplatePlanner` — both from one
+owner decision. Full record: ADR «2026-08-26 — Этап 4.5 (A0.5)» in [decisions.md](decisions.md).
+
+**Status is `CODE-GREEN`, and `DEVICE-ACCEPTED` is marked *not applicable* rather than absent** — the
+block changes nothing on the phone, and demanding an acceptance run would pretend that it does. That
+distinction is Этап 0.5's whole point.
+
+**The central finding, measured rather than argued.** `ToolId` is an open value class over `String`: the
+new consumer declared **three** of its own ids with **zero** core edits. `GoalShape` is a closed sum: **one**
+added value cost **four files across three modules**, because exhaustive else-free `when` sites live
+outside `:domain` and `:domain:jvmTest` never compiles them. The two contracts that survived contact with
+a second consumer are the two built as open value types; the six that did not are all closed sums. That
+is an **observation for A1′, not a decision** — the A1 fork stays open and both its branches are exactly
+as cheap as they were.
+
+**The sharpest recorded finding, and it is not a defect to fix.** When nothing matches, the JVM
+consumer's session ends **`Failed`**; on Android the same reality — "the thing you asked about is not
+there" — has a name (`ObservedFact.APP_NOT_INSTALLED`), satisfies the next step's precondition, and ends
+**`Completed`**. Same reality, two outcomes, purely because the observation vocabulary is a closed
+two-value enum written for a launcher. The owner instructed on 2026-08-23 that the asymmetry **stays**,
+and it is held by two guards in two modules rather than by a paragraph. A0.5 also sharpened it: the
+consent gate fires **before** argument binding, so on the miss path the user approves deleting a file
+that was never found, and that approval is what unblocks the discovery that nothing can bind.
+
+**What a second consumer is *for*, beyond portability.** A process that dies **during** a tool call is
+the seam A0's review found unheld — and Android could reach that window only with `pm disable-user` plus
+an on-device poll inside 157–170 ms. Here it is a function call on a seeded file, walked by the harness
+itself rather than simulated. The eight engine repairs of 2026-08-23 are the other half of the evidence:
+not one needed a platform branch, an `expect`/`actual`, or a `java.*` import, and `:consumer:jvm`
+inherited every one of them by existing.
+
+**Named residuals** (they are named, not implied absent): the sandbox's `findFile` follows symlinks when
+testing `isRegularFile`, so an in-sandbox link can be reported under its in-sandbox path — a leaked
+*name*, never content, and binding it into `delete_file` is refused; the TOCTOU window inherent to
+path-based containment; `JvmAgentSessionStore`'s `FileLock` is **proved by nothing** and the KDoc now says
+so instead of claiming otherwise; `SessionDto` has no version field while an undecodable file is deleted,
+so version skew is indistinguishable from corruption (→ A5). `DURABLE_EFFECT` is unreachable for any tool
+at `CONFIRM` or above — **the user is still stopped**, so it is a trace-fidelity gap, not a safety hole
+(→ A4′).
 
 ## Agentic track — A0 cross-cutting review + fix round — `CODE-GREEN` (2026-08-23)
 

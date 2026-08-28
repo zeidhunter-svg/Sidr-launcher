@@ -52,7 +52,8 @@ in `§HANDOFF`, not built.
 | **3** agentic Master Plan + doctrinal matrix (`docs/governing/`) | ✅ 2026-08-19 — docs + one guard test |
 | **4.0** — invert the understanding flag (`llmRouterEnabled` → `localOnlyMode`, ADR 1/4) | ✅ 2026-08-20 code, **`DEVICE-ACCEPTED` 2026-08-22** in the Task 15 session (`ru-RU`, no provider ⇒ «ИИ-провайдер ещё не настроен» + a route to the provider screen, not `Unknown command`); first behavioural change of the track |
 | **4** — A0 thin agentic spike | ✅ **2026-08-22 — `CLOSED`** — all nine work-order items, then Task 15: the owner ran all eight §12 acceptance items on the SM-A325F and signed off. Migration 3→4 executed for real by both routes (instrumented 9/9 on device; and a genuine `user_version` 3→4 upgrade of the owner's own database, `identity_hash` matching `4.json`). Residual limitations named in Known debt — the largest is that §12.8 is unreachable by any path a user can take (an A4′ debt). **Reviewed end-to-end 2026-08-23**: nine findings, eight fixed and mutation-verified (`CODE-GREEN`; two §12 items await a device re-check) |
-| **4.5–7** — A0.5 second consumer, A1′ ToolRegistry, A4′ runtime, A2/A3/A5/A6 | each needs its own spec + plan (`brainstorm → spec → plan → build`) |
+| **4.5** — A0.5 second consumer of the portable core (`:consumer:jvm`) | ✅ **2026-08-26 — `CODE-GREEN`**; `DEVICE-ACCEPTED` **not applicable**, not absent — the block changes nothing on the phone. All four §3.1a questions answered with addresses, `B1` answered, the §6.3 divergence recorded and held by a test |
+| **5–7** — A1′ ToolRegistry, A4′ runtime, A2/A3/A5/A6 | each needs its own spec + plan (`brainstorm → spec → plan → build`) |
 
 The four strategic ADRs (all 2026-08-19, in `decisions.md`):
 
@@ -116,6 +117,18 @@ status vocabulary).
   **deleted by cascade** on any terminal state (`AgentAtRestGuardTest`, five terminal paths). The one
   registered tool source projects the **unchanged** `ExecuteActionUseCase → IntentActionResolver →
   ActionExecutor` chain into two descriptors.
+- **Second consumer of the portable core (A0.5, `CODE-GREEN` — device acceptance **not applicable**, the
+  block changes nothing on the phone)** — `:consumer:jvm`, a plain `kotlin.jvm` module with **zero Android
+  artifacts on its resolved classpath**, runs one goal through `goal → plan → gate → tool → observe → tool
+  → result → trace` on the same **unchanged** `domain/agent` / `domain/tool` / `domain/trace` contracts.
+  Its own three sandboxed file tools (zero-, two- and one-argument), its own deterministic `FilePlanner`,
+  its own JSON session store honouring `recordConsentIfPending` as a **real** compare-and-set, and a
+  console harness that walks both process-death shapes — including a death **mid tool call**, the seam
+  Android's own acceptance could only reach through a 157–170 ms window. `SandboxToolExecutor` is inside
+  the **same** mechanical boundary as the Android one: `ToolExecutorCallSiteGuardTest` scans the consumer
+  too, holders go three → four, and the call-site count stays exactly **one**. The whole block's `commonMain`
+  footprint is two edits in two files: the `GoalShape.Free` value and the `NoPlan` arm it forces in
+  `TemplatePlanner`.
 - **PREVIEW surfaces** — Tasks / Agents / Activity / Terminal: non-functional badged mock-ups, zero
   fabricated data (owner decision 2026-08-18: they stay).
 
@@ -154,6 +167,23 @@ below is recorded in its own ADR.
   [docs/superpowers/plans/2026-08-23-a0-device-recheck.md](docs/superpowers/plans/2026-08-23-a0-device-recheck.md)
   — what the owner must look at, what is a no-regression re-run, and what is agent evidence that clears
   nothing.
+- **A0.5 (second consumer) is `CODE-GREEN`; `DEVICE-ACCEPTED` is marked *not applicable*, not absent** —
+  the block changes nothing on the phone, so requiring acceptance would pretend that it does (Этап 0.5's
+  vocabulary). What it leaves behind, each named rather than implied absent (full record in the A0.5 ADR):
+  **(1) four vocabulary findings addressed to A1′** — `ObservedFact` (a whole class of reality unsayable:
+  the same "it is not there" ends `Failed` on JVM and `Completed` on Android, §6.3, held by a test and
+  **not to be "fixed"** — it is a recorded owner decision), `CommandFailure`, `StepRationale`, `ArgType`
+  (one value, so "typed" means "named" and a rich MCP schema is not expressible). **(2) `DURABLE_EFFECT`
+  is unreachable for any tool at `CONFIRM` or above** — a branch-order property of `checkpointFor`, so the
+  `DURABLE` marking is inert exactly where risk is highest. **The user is still stopped** (`RISK_LEVEL`
+  takes the branch): a trace-fidelity gap, not a safety hole. → A4′. **(3) the JVM sandbox's own limits** —
+  `findFile` follows symlinks when testing `isRegularFile`, so an in-sandbox link to an outside file can be
+  reported under its in-sandbox path (leaks a *name*, never content; binding it into `delete_file` is
+  refused); the TOCTOU window inherent to path-based containment without `O_NOFOLLOW`/dirfd; the
+  unreadable-directory test yields coverage only on non-root runs. **(4) `JvmAgentSessionStore`** — its
+  `FileLock` is **proved by nothing** (no single-JVM test can discriminate it; the mechanism is kept and
+  the claim dropped), `SessionDto` carries no version field while an undecodable file is now deleted, so
+  version skew is indistinguishable from corruption (→ A5), and `delete()` leaves an orphaned `.lock`.
 - **`CODE-GREEN`, not `DEVICE-ACCEPTED`:** DS-5's own acceptance checklist has never been run
   (since 2026-07-13); I18N-1 was verified only by agent-driven `adb`/`uiautomator` — its offline path, live
   TalkBack, fontScale 2.0, and the system per-app-language picker are untested. DS-6B is `CLOSED` (owner
@@ -212,6 +242,11 @@ below is recorded in its own ADR.
   `kotlin.multiplatform` (`android` + `jvm` targets, Этап 2.2, ADR 3/4) — production code lives in
   `commonMain`, so introduce nothing JVM- or Android-specific there; it would fail to compile for the
   other target. Tests live in `jvmTest` (JUnit4 isn't `commonTest`-portable) — see `core:testing`.
+- **A closed sum in `commonMain` is not a one-file edit — weigh that before adding a value.** Measured in
+  A0.5: `GoalShape` gained **one** value and cost **four files in three modules** (`:domain`,
+  `:data:repository`, `:feature:launcher`), because exhaustive else-free `when` sites live outside
+  `:domain` and `:domain:jvmTest` never compiles them. The open value types over `String` (`ToolId`,
+  `ActionId`) cost **zero** for the same kind of addition.
 - Interfaces in `domain`; implementations in `data/*`. UI holds no business logic.
 - No `feature -> feature` deps. Single `NavHost` in `app`. ViewModels emit
   `NavigationEvent`; they never touch `NavHostController`.
@@ -256,9 +291,12 @@ below is recorded in its own ADR.
 
 - **JDK 17.** The machine's default JDK is newer and Gradle cannot parse it; run with the Temurin 17
   toolchain (`-Porg.gradle.java.installations.paths`, `local.properties` is git-ignored).
-- Gate: `./gradlew --no-daemon testDebugUnitTest assembleDebug` — plus
-  `:core:ui:verifyRoborazziDebug` whenever `core/ui` is touched, and `:app:assembleRelease` for
-  release-affecting work.
+- Gate: `./gradlew --no-daemon :domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test` —
+  plus `:core:ui:verifyRoborazziDebug` whenever `core/ui` is touched, and `:app:assembleRelease` for
+  release-affecting work. **`:domain:jvmTest` and `:consumer:jvm:test` must be listed explicitly:**
+  `testDebugUnitTest` has not reached `:domain` since it went KMP, and it never reaches `:consumer:jvm`
+  at all. Baseline at 2026-08-26: **1219 tests, 0 failures** (419 `:domain:jvmTest` + 56 `:consumer:jvm`).
+  Read counts from the JUnit XML, not the console.
 - **Never pipe `gradlew` through `tail`** — that masked a red gate as exit 0 on 2026-07-13. Check the
   exit code and read the real output.
 - A stage/block is not closed until the gate is green, an ADR is written, `CLAUDE.md` +
@@ -296,6 +334,7 @@ below is recorded in its own ADR.
 | `AndroidPermissionChecker`, `AndroidDeviceProfiler` + `DeviceProfileClassifier`, `AndroidSpeechInputSource`, `PackageManager` access | `core/android` |
 | `UiState`, dispatchers, logging contracts; `Routes`, `NavigationEvent` | `core/common` *(→ `core/navigation` on trigger)* |
 | Design system, theme, primitives/controls, `sidrString`/`SidrStringOverlay`, Roborazzi goldens | `core/ui` |
+| `SandboxToolIds`/`SandboxToolSource`/`SandboxToolExecutor` (the second path to the world, same guard) + `FilePlanner` + `JvmAgentSessionStore`/`JvmAgentSessionIdFactory` + `SessionDto`/`SessionMapper` + `ConsoleHarness` | `consumer/jvm` |
 | Test fakes / fixtures | `core/testing` |
 | Feature UI + ViewModels + feature-local presentation mappers | `feature/*` |
 | Single `NavHost`, composition root, Hilt graph, DI modules, i18n guard tests, WorkManager wiring | `app` |
@@ -311,6 +350,12 @@ below is recorded in its own ADR.
   `TextEmbedder`, `:data:ai-local`). A future local runtime is a **new design** on LiteRT/LiteRT-LM,
   not a restoration (ADR 2/4).
 - Don't widen `ActionIds` or change its seven string values (ADR 3/4).
+- Don't unify the `Failed`/`Completed` divergence of A0.5 §6.3. The same reality — "the thing you asked
+  about is not there" — ends `Failed` on `:consumer:jvm` and `Completed` on Android, because the
+  observation vocabulary is a closed two-value enum. That is a **recorded finding owned by A1′**, not a
+  defect awaiting repair (owner instruction 2026-08-23), and it is held mechanically by
+  `CoreVocabularyFreezeGuardTest` and by `AgentLoopTest`'s named divergence test. A diff that touches
+  either to make the two agree is a revert, not a result.
 - Don't add autonomy without consent, and don't route around the risk/permission gates.
 - Don't put history back into this file.
 
@@ -337,4 +382,5 @@ below is recorded in its own ADR.
 - Stage-1 AI Launcher: **AIL-0 → AIL-6** · Stage-2 memory: **S2-1**, **S2-2**
 - Design track: **DS-0 → DS-11** + Vision MVP preview · Localization: **I18N-1**, **I18N-2**
 - Agentic restart: **ADR 1/4 … 4/4**, **Этап 0.2 / 0.3 / 0.4 / 0.5 / 0.6 / 0.7 / 2 / 3** (2026-08-19) ·
-  **Этап 4.0** (2026-08-20) · «Развилка агентного трека» — two consumers (2026-08-21) · **Этап 4 (A0)** (2026-08-22)
+  **Этап 4.0** (2026-08-20) · «Развилка агентного трека» — two consumers (2026-08-21) · **Этап 4 (A0)** (2026-08-22) ·
+  «Сквозное ревью блока A0» (2026-08-23) · **Этап 4.5 (A0.5)** — second consumer (2026-08-26)

@@ -16,6 +16,13 @@
 >
 > **Rewrites** `docs/superpowers/specs/2026-07-11-a1-tool-capability-design.md`, written 2026-07-11
 > against a target architecture that ADR 2/4 has since re-baselined.
+>
+> **Amendment 2026-08-29 (while writing the implementation plan) — reachability.** The spec as first
+> written chose two tools without asking *what plans them*. Android's only planner is `TemplatePlanner`
+> over `GoalShape`, which `B1` freezes, and whose only production shape is `AppNotInstalled`. The two
+> Tier-0 tools would therefore have been **registered and unplannable** — the "a capability exists but
+> is never offered" failure this very spec names as `B3`'s risk, arriving two blocks early. §8.4 adds
+> the one thing that fixes it without buying a taxonomy, and §16's criteria are re-stated against it.
 
 ---
 
@@ -390,6 +397,47 @@ The reason `dial` is not chosen is different and survives:
   `INSERT` in `A1″` — message bodies and event contents. It belongs there, answered once, not
   half-answered here. → recorded in §11 as an obligation on `B`.
 
+### 8.4. Reachability — one generic arm, not a taxonomy
+
+**The problem.** Registering a tool does not make it reachable. `TemplatePlanner.plan` is exhaustive
+over `GoalShape`: `AppNotInstalled` yields the launch→store plan, `Free` yields `NoPlan`
+(`TemplatePlanner.kt:44-51`), and `RouteCommandUseCase` builds only `AppNotInstalled`
+(`RouteCommandUseCase.kt:96-100`). No goal on the phone can invoke a Tier-0 tool.
+
+**The rejected fix.** Adding `GoalShape.SetTimer` and a planner arm per tool works and is cheap once.
+It is refused because it is **linear per tool**: `A1″`'s twelve tools would need twelve shapes and
+twelve arms, which contradicts in code the exact thesis this block exists to establish — that tool #21
+is free. It would also spend `B1`, whose stated failure mode is precisely a hand-written taxonomy.
+
+**The fix.** One generic arm, and `GoalShape` gains **no** value:
+
+- `RouteCommandUseCase` gets step **2b**, immediately after the existing agent branch and above the
+  `localOnlyMode` check: when FastPath is undecided, build `AgentGoal(text, GoalShape.Free(text))` and
+  offer it to the planner. The use case learns **nothing** about tools — it already fails open on
+  `NoPlan`, so with no matching tool the behaviour is byte-identical to today.
+- A second `Planner`, `ToolMatchPlanner`, lives in `:data:repository` (where localized vocabulary
+  already lives, beside `RuleBasedIntentMatcher`) and plans `GoalShape.Free`: if deterministic matching
+  yields exactly **one** registered tool and its required arguments are fillable, emit a one-step plan;
+  otherwise `NoPlan`. `TemplatePlanner` is untouched and keeps `AppNotInstalled`.
+- The two are composed behind the existing `Planner` port. `commonMain` gains nothing: text matching
+  never enters `:domain`, so the JVM consumer is unaffected and the KMP rule holds.
+- `StepRationale` gains **no** value either. A one-step plan is `GOAL_DIRECT`, and the step's line stops
+  assuming a launch: the feature layer maps `ToolId` → string resource, which is what
+  `ToolDescriptor`'s own KDoc already prescribes ("the surface maps `id` to a string resource in the
+  feature layer"). §10.3's answer for `StepRationale` is unaffected.
+
+**Why this is doctrinally clean, not a loophole.** Step 2b is deterministic, consults no model and
+transmits nothing, so all three "understanding unavailable" states keep their meaning and the chain
+stays a chain of early returns with one reportable cause. It changes an outcome FastPath decided —
+which `DOC-ADL-3` **explicitly permits** since its 2026-08-22 amendment, with A0's two-step plan as the
+precedent. Under `localOnlyMode` a matching command now produces a plan instead of
+`UnderstandingLocalOnly`: that is the rule working as amended, and the parity tests state it.
+
+**What it costs, named rather than implied.** The block grows past what fork F2 implied, and it touches
+the understanding path — the most acceptance-sensitive code in the app. Every local state
+(`localOnlyMode`, no provider, offline) gets an explicit parity test, and the existing invariant test
+`all three causes at once — only the outermost is reported` must stay green untouched.
+
 ### 8.3. The duration argument
 
 `duration` is the first argument in this project that is not a string by nature. It travels as
@@ -565,7 +613,10 @@ reverted in **one** shell invocation with `trap … EXIT`, and the tree checked 
     `DomainIdentifierLeakGuardTest`'s KDoc re-pointed from `ToolTier` to `ToolLevel` (§6.5).
 11. `DoctrineGuardTest`: declared adapter set, no network type named (§9.3).
 12. `FakeToolRegistry` parity line (§9.4).
-13. Documents: ADR; `CLAUDE.md` + `current-status.md`; matrix rows for `DOC-ILM-2` / `DOC-ADL-1` /
+13. `ToolMatchPlanner` in `:data:repository` + its localized tool vocabulary (`en`/`ru`/`tr`), composed
+    behind the `Planner` port; `RouteCommandUseCase` step 2b with parity tests for all three local
+    states; the step line keyed on `ToolId` rather than assuming a launch (§8.4).
+14. Documents: ADR; `CLAUDE.md` + `current-status.md`; matrix rows for `DOC-ILM-2` / `DOC-ADL-1` /
     `DOC-ADL-3` + the change-control entry for the type change; `A1″` added to Master Plan §3.2 and named as the address in §3.6;
     the `§HANDOFF` `args_json` sentence corrected (§3.6 of this spec).
 
@@ -574,7 +625,9 @@ reverted in **one** shell invocation with `trap … EXIT`, and the tree checked 
 ## 16. Success criteria
 
 1. Two sources are registered in **one** federation on Android, and a goal runs end to end through a
-   tool from each — on the device, accepted by the owner.
+   tool from each — on the device, accepted by the owner. Concretely: the existing «no such app» goal
+   still runs its two-step plan through the `in_app` adapter, and a timer command runs a one-step plan
+   through the `system_intent` adapter. **No registered tool is unreachable.**
 2. `find()` and `all()` agree with what the dispatcher can route, **by construction** (one object), and
    a test says so.
 3. A duplicate `ToolId` planted in the production federation turns a guard red.
@@ -586,4 +639,6 @@ reverted in **one** shell invocation with `trap … EXIT`, and the tree checked 
 6. `:consumer:jvm` runs its goal through the same federation types with **zero** Android artifacts on
    its resolved classpath, as today.
 7. Gate green at ≥ 1219 tests, 0 failures; every new guard mutation-proved.
-8. Three doctrine rows carry a real test name; `DOC-HMA-2` is **not** claimed closed.
+8. `RouteCommandUseCase`'s three local states behave exactly as today when no tool matches, proved by
+   test, and the existing mutual-exclusion invariant test is green untouched.
+9. Three doctrine rows carry a real test name; `DOC-HMA-2` is **not** claimed closed.

@@ -6,8 +6,10 @@ import com.sidr.launcher.domain.action.ActionId
 import com.sidr.launcher.domain.action.ActionIds
 import com.sidr.launcher.domain.tool.ToolDescriptor
 import com.sidr.launcher.domain.tool.ToolDurability
+import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
+import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolRegistry
 import javax.inject.Inject
 
@@ -48,6 +50,10 @@ class SystemIntentToolSource @Inject constructor(
         val descriptor = catalog.descriptor(actionId) ?: return null
         return ToolDescriptor(
             id = toolId,
+            level = ToolLevels.IN_APP,
+            // Both projected families reach another app. No projected tool is LOCAL today; the LOCAL
+            // value is carried by `:consumer:jvm`'s sandbox. Named, not implied absent (spec §6.4).
+            effect = ToolEffect.EXTERNAL,
             argSchema = descriptor.argSchema,
             outputSchema = outputSchema,
             risk = descriptor.risk,

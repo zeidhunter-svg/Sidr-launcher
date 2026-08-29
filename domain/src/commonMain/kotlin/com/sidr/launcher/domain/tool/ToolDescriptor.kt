@@ -21,6 +21,20 @@ enum class ToolDurability { TRANSIENT, DURABLE }
  */
 data class ToolDescriptor(
     val id: ToolId,
+
+    /**
+     * Provenance, half one: which source supplied this tool. **No default.** A defaulted level would
+     * let an adapter that forgets the field inherit someone else's provenance silently, which is
+     * fail-open on the exact field `DOC-ILM-2` rests on.
+     */
+    val level: ToolLevel,
+
+    /**
+     * Provenance, half two: whether the effect crosses the device boundary. **No default**, for the
+     * same reason — a defaulted `LOCAL` is a lie an adapter can tell by omission.
+     */
+    val effect: ToolEffect,
+
     val argSchema: List<ActionArg> = emptyList(),
     /**
      * What this tool can hand to a later step (F6). **Declared, not inferred:** a step may only bind to

@@ -3,8 +3,10 @@ package com.sidr.launcher.data.repository.agent
 import com.sidr.launcher.data.repository.action.DefaultActionCatalog
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.tool.ToolDurability
+import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
+import com.sidr.launcher.domain.tool.ToolLevels
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -55,5 +57,13 @@ class SystemIntentToolSourceTest {
     fun `an action family that is not an A0 tool is not registered`() {
         assertNull(source.find(ToolId("web_search")))
         assertNull(source.find(ToolId("open_url")))
+    }
+
+    @Test
+    fun `every projected tool declares the in-app level and an external effect`() {
+        val source = SystemIntentToolSource(DefaultActionCatalog())
+
+        assertEquals(listOf(ToolLevels.IN_APP, ToolLevels.IN_APP), source.all().map { it.level })
+        assertEquals(listOf(ToolEffect.EXTERNAL, ToolEffect.EXTERNAL), source.all().map { it.effect })
     }
 }

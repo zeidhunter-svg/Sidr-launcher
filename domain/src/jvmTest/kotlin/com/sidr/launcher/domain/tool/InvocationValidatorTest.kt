@@ -20,6 +20,8 @@ class InvocationValidatorTest {
 
     private val launchApp = ToolDescriptor(
         id = ToolIds.LAUNCH_APP,
+        level = ToolLevels.IN_APP,
+        effect = ToolEffect.EXTERNAL,
         argSchema = listOf(ActionArg("query", description = "The app name to launch")),
         outputSchema = listOf(ActionArg("resolved_query", description = "What was searched for")),
         risk = ActionRiskLevel.SAFE,
@@ -28,6 +30,8 @@ class InvocationValidatorTest {
 
     private val playStore = ToolDescriptor(
         id = ToolIds.PLAY_STORE_SEARCH,
+        level = ToolLevels.IN_APP,
+        effect = ToolEffect.EXTERNAL,
         argSchema = listOf(ActionArg("query", description = "The app name to find")),
         risk = ActionRiskLevel.CONFIRM,
         durability = ToolDurability.TRANSIENT,

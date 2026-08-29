@@ -4,7 +4,9 @@ import com.sidr.launcher.domain.action.ActionArg
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.tool.ToolDescriptor
 import com.sidr.launcher.domain.tool.ToolDurability
+import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolId
+import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolRegistry
 
 /**
@@ -23,6 +25,8 @@ class SandboxToolSource : ToolRegistry {
     private val descriptors: List<ToolDescriptor> = listOf(
         ToolDescriptor(
             id = SandboxToolIds.WORKSPACE_INFO,
+            level = ToolLevels.SANDBOX,
+            effect = ToolEffect.LOCAL,
             argSchema = emptyList(),
             outputSchema = listOf(
                 ActionArg(SandboxKeys.ROOT, description = "Absolute path of the sandbox root"),
@@ -32,6 +36,8 @@ class SandboxToolSource : ToolRegistry {
         ),
         ToolDescriptor(
             id = SandboxToolIds.FIND_FILE,
+            level = ToolLevels.SANDBOX,
+            effect = ToolEffect.LOCAL,
             argSchema = listOf(
                 ActionArg(SandboxKeys.QUERY, description = "Exact file name to look for"),
                 ActionArg(SandboxKeys.ROOT, description = "Directory to search, must be inside the sandbox"),
@@ -47,6 +53,8 @@ class SandboxToolSource : ToolRegistry {
         ),
         ToolDescriptor(
             id = SandboxToolIds.DELETE_FILE,
+            level = ToolLevels.SANDBOX,
+            effect = ToolEffect.LOCAL,
             argSchema = listOf(
                 ActionArg(SandboxKeys.PATH, description = "Absolute path of the file to delete"),
             ),

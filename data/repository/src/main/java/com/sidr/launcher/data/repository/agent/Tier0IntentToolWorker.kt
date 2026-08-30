@@ -64,6 +64,15 @@ class Tier0IntentToolWorker @Inject constructor(
      * that declines and says so. Same reasoning as `InvocationValidator.resolve`'s refusal to bind a
      * blank.
      *
+     * **The unit token is matched exactly, never by prefix** (fix round 1, controller ruling R11). A
+     * `startsWith` match let `"1 min 30 sec"` silently read as 60 seconds instead of 90, and let
+     * `"10 minecraft"` silently start a real 600-second timer from nonsense — the worse of the two
+     * failures this KDoc already names, because it does not decline, it lies. The token left after the
+     * digits must therefore be a single word — any whitespace or digit in it fails closed rather than
+     * being read as "the first word matched" — and that word is compared with `==` against an explicit,
+     * intentionally narrow list per unit. An unlisted-but-valid inflection is declined, not guessed;
+     * widening the vocabulary is Task 8's job (`ToolMatchPlanner`), not this worker's.
+     *
      * Unit words are read here rather than in `ToolVocabulary` because they belong to reading the
      * **value**, not to recognising the tool; the vocabulary hands this string over verbatim.
      */
@@ -75,9 +84,10 @@ class Tier0IntentToolWorker @Inject constructor(
         val unit = text.drop(digits.length).trim()
         val multiplier = when {
             unit.isEmpty() -> MINUTE
-            SECOND_FORMS.any { unit.startsWith(it) } -> 1
-            MINUTE_FORMS.any { unit.startsWith(it) } -> MINUTE
-            HOUR_FORMS.any { unit.startsWith(it) } -> MINUTE * 60
+            unit.any { it.isWhitespace() || it.isDigit() } -> return null
+            unit in SECOND_FORMS -> 1
+            unit in MINUTE_FORMS -> MINUTE
+            unit in HOUR_FORMS -> MINUTE * 60
             else -> return null
         }
         return amount * multiplier
@@ -85,8 +95,8 @@ class Tier0IntentToolWorker @Inject constructor(
 
     private companion object {
         const val MINUTE = 60
-        val SECOND_FORMS = listOf("sec", "сек", "saniye")
-        val MINUTE_FORMS = listOf("min", "мин", "dakika", "dk")
-        val HOUR_FORMS = listOf("hour", "час", "saat")
+        val SECOND_FORMS = setOf("sec", "secs", "second", "seconds", "сек", "секунда", "секунды", "секунд", "saniye")
+        val MINUTE_FORMS = setOf("min", "mins", "minute", "minutes", "мин", "минута", "минуты", "минут", "dakika", "dk")
+        val HOUR_FORMS = setOf("hour", "hours", "hr", "hrs", "час", "часа", "часов", "saat")
     }
 }

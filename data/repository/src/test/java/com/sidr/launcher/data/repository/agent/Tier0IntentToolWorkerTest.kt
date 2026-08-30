@@ -47,6 +47,124 @@ class Tier0IntentToolWorkerTest {
         assertEquals(600, launched.single().getIntExtra(AlarmClock.EXTRA_LENGTH, -1))
         assertEquals(false, launched.single().getBooleanExtra(AlarmClock.EXTRA_SKIP_UI, true))
     }
+
+    /**
+     * Fix round 1 (controller ruling R11): a `startsWith` unit match let a multi-word tail get read as
+     * its first word — `"1 min 30 sec"` silently became 60 seconds, not 90. The fix requires the token
+     * after the digits to be a single word, so any embedded whitespace fails closed instead.
+     */
+    @Test
+    fun `a duration with a second number-unit pair fails closed rather than reading only the first word`() = runTest {
+        val launched = mutableListOf<Intent>()
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "1 min 30 sec")))
+
+        assertEquals(ToolResult.Failed(CommandFailure.Generic), result)
+        assertEquals(emptyList<Intent>(), launched)
+    }
+
+    /**
+     * Fix round 1: a `startsWith` unit match let `"minecraft"` match the `"min"` prefix and silently
+     * start a real 600-second timer from nonsense. Exact (`==`) matching against the unit list closes
+     * this: an unlisted word is declined, not guessed.
+     */
+    @Test
+    fun `an unlisted word that merely starts with a unit prefix fails closed rather than matching it`() = runTest {
+        val launched = mutableListOf<Intent>()
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 minecraft")))
+
+        assertEquals(ToolResult.Failed(CommandFailure.Generic), result)
+        assertEquals(emptyList<Intent>(), launched)
+    }
+
+    @Test
+    fun `zero with no unit fails closed`() = runTest {
+        val launched = mutableListOf<Intent>()
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "0")))
+
+        assertEquals(ToolResult.Failed(CommandFailure.Generic), result)
+        assertEquals(emptyList<Intent>(), launched)
+    }
+
+    @Test
+    fun `zero minutes fails closed`() = runTest {
+        val launched = mutableListOf<Intent>()
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "0 minutes")))
+
+        assertEquals(ToolResult.Failed(CommandFailure.Generic), result)
+        assertEquals(emptyList<Intent>(), launched)
+    }
+
+    @Test
+    fun `a five-digit amount fails closed`() = runTest {
+        val launched = mutableListOf<Intent>()
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "12345")))
+
+        assertEquals(ToolResult.Failed(CommandFailure.Generic), result)
+        assertEquals(emptyList<Intent>(), launched)
+    }
+
+    @Test
+    fun `a unit word with no leading number fails closed`() = runTest {
+        val launched = mutableListOf<Intent>()
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "minutes")))
+
+        assertEquals(ToolResult.Failed(CommandFailure.Generic), result)
+        assertEquals(emptyList<Intent>(), launched)
+    }
+
+    @Test
+    fun `an unrecognised unit fails closed`() = runTest {
+        val launched = mutableListOf<Intent>()
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 fortnights")))
+
+        assertEquals(ToolResult.Failed(CommandFailure.Generic), result)
+        assertEquals(emptyList<Intent>(), launched)
+    }
+
+    @Test
+    fun `trailing junk after a valid unit fails closed`() = runTest {
+        val launched = mutableListOf<Intent>()
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 minutes now")))
+
+        assertEquals(ToolResult.Failed(CommandFailure.Generic), result)
+        assertEquals(emptyList<Intent>(), launched)
+    }
+
+    @Test
+    fun `an accepted russian minute form resolves to the right number of seconds`() = runTest {
+        val launched = mutableListOf<Intent>()
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+
+        worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 минут")))
+
+        assertEquals(600, launched.single().getIntExtra(AlarmClock.EXTRA_LENGTH, -1))
+    }
+
+    @Test
+    fun `an accepted turkish minute form resolves to the right number of seconds`() = runTest {
+        val launched = mutableListOf<Intent>()
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+
+        worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 dakika")))
+
+        assertEquals(600, launched.single().getIntExtra(AlarmClock.EXTRA_LENGTH, -1))
+    }
 }
 
 private class FakeIntentLauncher(private val record: MutableList<Intent>) : IntentLauncher {

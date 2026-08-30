@@ -22,9 +22,11 @@ import java.nio.file.Paths
  * **same** mechanical boundary as the Android worker, not outside it: `ToolWorkerCallSiteGuardTest`
  * scans `consumer/jvm/src/main/kotlin` as one of its production roots, and this file is one of the
  * declared `ToolWorker` holders it pins by name (with `ToolFederation.kt`, `SystemIntentToolWorker.kt`
- * and, from A1' Task 6, `Tier0IntentToolWorker.kt`). Two workers are legitimate; the property the
- * guard holds is **one call site to a worker**, which federation guards as a second, equally strict
- * hop rather than a weaker one.
+ * and, since A1' Task 6, `Tier0IntentToolWorker.kt`). Three workers are legitimate — this class,
+ * `SystemIntentToolWorker` and `Tier0IntentToolWorker`, alongside `ToolFederation.kt`'s own
+ * `val worker: ToolWorker` field declaration, which the guard pins as a fourth holder for the same
+ * reason; the property the guard holds is **one call site to a worker**, which federation guards as a
+ * second, equally strict hop rather than a weaker one.
  *
  * Every failure this class can produce — a declined containment check, or an exception escaping the
  * filesystem calls below (a vanished root, an unreadable directory, an invalid path argument) — is

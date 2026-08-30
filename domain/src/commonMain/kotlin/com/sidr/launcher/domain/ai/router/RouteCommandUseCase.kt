@@ -2,6 +2,7 @@ package com.sidr.launcher.domain.ai.router
 
 import com.sidr.launcher.domain.action.ActionCatalog
 import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.action.requiresConsent
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
@@ -153,5 +154,5 @@ class RouteCommandUseCase(
      * requires an explicit confirm card (`true`), the fail-safe default.
      */
     private fun needsConfirmation(plan: PlanResult.RoutedAction): Boolean =
-        catalog.descriptor(plan.action.id)?.risk != ActionRiskLevel.SAFE
+        requiresConsent(catalog.descriptor(plan.action.id)?.risk ?: ActionRiskLevel.DANGEROUS)
 }

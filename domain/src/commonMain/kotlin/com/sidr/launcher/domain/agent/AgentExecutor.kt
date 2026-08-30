@@ -1,6 +1,7 @@
 package com.sidr.launcher.domain.agent
 
 import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.action.requiresConsent
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.tool.InvocationCheck
 import com.sidr.launcher.domain.tool.InvocationValidator
@@ -282,7 +283,7 @@ class AgentExecutor(
             ?: ActionRiskLevel.SAFE
 
         return when {
-            risk >= ActionRiskLevel.CONFIRM ->
+            requiresConsent(risk) ->
                 ConsentCheckpoint(step.index, ConsentReason.RISK_LEVEL)
             risk > previousRisk ->
                 ConsentCheckpoint(step.index, ConsentReason.RISK_RAISED)

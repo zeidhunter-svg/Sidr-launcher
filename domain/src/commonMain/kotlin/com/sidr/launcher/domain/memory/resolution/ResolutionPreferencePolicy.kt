@@ -1,6 +1,7 @@
 package com.sidr.launcher.domain.memory.resolution
 
 import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.action.requiresConsent
 
 interface ResolutionPreferencePolicy {
     fun decide(
@@ -26,7 +27,7 @@ class DefaultResolutionPreferencePolicy(
         if (preference == null) return ResolutionDecision.NoPreference
         if (preference.preferredTarget !in candidates.targets) return ResolutionDecision.Stale(preference)
         val eligible = strength(preference.evidence) == PreferenceStrength.CONFIDENT &&
-            risk == ActionRiskLevel.SAFE &&
+            !requiresConsent(risk) &&
             fingerprintOf(candidates) == preference.learnedInSetFingerprint
         return if (eligible) ResolutionDecision.AutoResolve(preference.preferredTarget)
         else ResolutionDecision.RankFirst(preference.preferredTarget)

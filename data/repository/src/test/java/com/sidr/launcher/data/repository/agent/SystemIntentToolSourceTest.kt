@@ -1,6 +1,7 @@
 package com.sidr.launcher.data.repository.agent
 
 import com.sidr.launcher.data.repository.action.DefaultActionCatalog
+import com.sidr.launcher.domain.action.ActionIds
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.tool.ToolDurability
 import com.sidr.launcher.domain.tool.ToolEffect
@@ -22,8 +23,14 @@ class SystemIntentToolSourceTest {
     private val source = SystemIntentToolSource(DefaultActionCatalog())
 
     @Test
-    fun `exactly two tools are registered`() {
-        assertEquals(listOf(ToolIds.LAUNCH_APP, ToolIds.PLAY_STORE_SEARCH), source.all().map { it.id })
+    fun `exactly two tools are registered, their ids derived from ActionIds`() {
+        // Identity C (owner fork F1, 2026-08-29): the projected id must equal ActionIds directly, not
+        // ToolIds — ToolIds is itself only pinned to ActionIds by ToolIdsTest, so comparing against it
+        // here would not catch the projection drifting from its source of truth.
+        assertEquals(
+            listOf(ActionIds.LAUNCH_APP.value, ActionIds.PLAY_STORE_SEARCH.value),
+            source.all().map { it.id.value },
+        )
     }
 
     @Test

@@ -8,7 +8,6 @@ import com.sidr.launcher.domain.tool.ToolDescriptor
 import com.sidr.launcher.domain.tool.ToolDurability
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolId
-import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolRegistry
 import javax.inject.Inject
@@ -33,8 +32,8 @@ class SystemIntentToolSource @Inject constructor(
 
     private val projected: List<ToolDescriptor> by lazy {
         listOfNotNull(
-            project(ActionIds.LAUNCH_APP, ToolIds.LAUNCH_APP, outputSchema = RESOLVED_QUERY_OUTPUT),
-            project(ActionIds.PLAY_STORE_SEARCH, ToolIds.PLAY_STORE_SEARCH),
+            project(ActionIds.LAUNCH_APP, outputSchema = RESOLVED_QUERY_OUTPUT),
+            project(ActionIds.PLAY_STORE_SEARCH),
         )
     }
 
@@ -44,12 +43,13 @@ class SystemIntentToolSource @Inject constructor(
 
     private fun project(
         actionId: ActionId,
-        toolId: ToolId,
         outputSchema: List<ActionArg> = emptyList(),
     ): ToolDescriptor? {
         val descriptor = catalog.descriptor(actionId) ?: return null
         return ToolDescriptor(
-            id = toolId,
+            // Identity C: the tool IS the action, so its id is the action's id rather than a second
+            // spelling of it kept in step by a test. Tools that are not projections mint their own.
+            id = ToolId(actionId.value),
             level = ToolLevels.IN_APP,
             // Both projected families reach another app. No projected tool is LOCAL today; the LOCAL
             // value is carried by `:consumer:jvm`'s sandbox. Named, not implied absent (spec §6.4).

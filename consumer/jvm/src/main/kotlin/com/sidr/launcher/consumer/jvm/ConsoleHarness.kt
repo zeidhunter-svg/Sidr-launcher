@@ -3,8 +3,8 @@ package com.sidr.launcher.consumer.jvm
 import com.sidr.launcher.consumer.jvm.plan.FilePlanner
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionIdFactory
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionStore
-import com.sidr.launcher.consumer.jvm.tool.SandboxToolExecutor
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolSource
+import com.sidr.launcher.consumer.jvm.tool.SandboxToolWorker
 import com.sidr.launcher.domain.agent.AgentExecutor
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.AgentSession
@@ -50,7 +50,7 @@ class ConsoleHarness(
 ) {
     private val registry = SandboxToolSource()
     private val store = JvmAgentSessionStore(root.resolve(".sidr-agent/session.json"))
-    private val executor = AgentExecutor(registry, SandboxToolExecutor(root))
+    private val executor = AgentExecutor(registry, SandboxToolWorker(root))
 
     // Named `runner`, not `run`: this class already has a `run` member, and `kotlin.run { }` is used
     // nowhere here precisely so no reader has to work out which `run` a call resolves to.

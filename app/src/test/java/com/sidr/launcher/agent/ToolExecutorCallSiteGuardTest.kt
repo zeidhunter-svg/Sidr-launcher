@@ -18,7 +18,7 @@ import java.io.File
  * `executor.invoke(resolved)` — is invisible to it, and matching `\.invoke\(` on any receiver instead
  * would drown in `Function0.invoke` and every unrelated `operator invoke` in the tree. So the gap is
  * closed one step earlier, at the **declaration**: a new call site needs a new holder of the type, and
- * holders are few and declarative. `the declared holders of a ToolExecutor are exactly the known four`
+ * holders are few and declarative. `the declared holders of a ToolExecutor are exactly the known three`
  * pins that set, so an injected `private val executor: ToolExecutor` is red before it is ever called.
  *
  * **What is actually enforced, stated plainly** (the KDoc on `ToolExecutor` used to claim more, and
@@ -27,8 +27,10 @@ import java.io.File
  *  - exactly one call spelled `toolExecutor.invoke(`, in the **file** `AgentExecutor.kt`. Where in that
  *    file it sits is NOT checked: moving it into `prepare` above the consent checkpoint keeps all four
  *    assertions green. "Below the checkpoint" is held behaviourally by `AgentExecutorTest`, not here;
- *  - exactly four files that declare the type at all — the holder, the DI module, and the two
- *    adapters (`SystemIntentToolExecutor`, `SandboxToolExecutor`).
+ *  - exactly three files that declare the type at all — the holder (`AgentExecutor`), the DI module
+ *    (`AgentProvidesModule`), and — since A1′ collapsed the former two adapters into `ToolWorker`s
+ *    behind a dispatcher — the **one** implementation, `ToolFederation`. The second hop those former
+ *    adapters now sit behind has its own sibling guard, `ToolWorkerCallSiteGuardTest`.
  *
  * Both scans run over comment-stripped text ([stripComments]), so documentation that spells a call or
  * a type in prose cannot turn the guard red on correct code. That stripping's own false-negative
@@ -69,7 +71,7 @@ class ToolExecutorCallSiteGuardTest {
                 "data/repository/src/main/java",
                 "feature/launcher/src/main/java",
                 "app/src/main/java",
-                // A0.5 — the second consumer. Its `SandboxToolExecutor` is a second path to the world,
+                // A0.5 — the second consumer. Its `SandboxToolWorker` is a second path to the world,
                 // so it belongs inside this scan and not outside it: Master Plan §4's growth rule puts
                 // boundaries on the first slice, never behind the second consumer. Declared as a `Test`
                 // input in app/build.gradle.kts in the same commit — defence in depth rather than the
@@ -81,9 +83,11 @@ class ToolExecutorCallSiteGuardTest {
 
     /**
      * A declaration of the type: a constructor/parameter/property type, a return type, or a supertype
-     * list entry. `\b` is what keeps `SystemIntentToolExecutor` from matching as a *name* — in
-     * `impl: SystemIntentToolExecutor` the text after `:\s*` is `S…`, not `ToolExecutor` — while the
-     * same file's `) : ToolExecutor {` supertype line does match, and is meant to.
+     * list entry. `\b` is what keeps a name merely *containing* `ToolExecutor` from matching as that
+     * name — pre-A1′, `impl: SystemIntentToolExecutor` had `S…` right after `:\s*`, not `ToolExecutor`,
+     * so only that same file's own `) : ToolExecutor {` supertype line matched. Today's live example is
+     * `ToolFederation.kt`'s `val executor: ToolExecutor = object : ToolExecutor {` — both matches, one
+     * file.
      */
     private val declaresToolExecutor = Regex(""":\s*ToolExecutor\b""")
 
@@ -135,21 +139,21 @@ class ToolExecutorCallSiteGuardTest {
 
     /**
      * The scan the call-site count cannot do for itself. Asserted as a **sorted list, not a size**: a
-     * holder that disappears has to be as red as one that appears, because a vanished holder means the
-     * wiring moved and this guard's premise needs re-reading, not a quietly decremented number.
+     * holder that disappears has to be as red as one that appears.
      *
-     * The four, and why each is legitimate:
-     *  - `AgentExecutor.kt` — the one holder, and the one call site, below the checkpoint;
-     *  - `AgentProvidesModule.kt` — the Hilt binding and the `AgentExecutor` factory that passes it on;
-     *  - `SandboxToolExecutor.kt` — A0.5's implementation, the second consumer's only path to the world;
-     *  - `SystemIntentToolExecutor.kt` — the Android implementation, matched on its supertype line.
+     * A1′ took this list from four to three, and that is the federation working rather than the guard
+     * weakening. `ToolExecutor` now has exactly **one** implementation — the dispatcher inside
+     * `ToolFederation` — and the two former adapters became `ToolWorker`s, reachable only from it.
+     * The second hop has its own guard (`ToolWorkerCallSiteGuardTest`); neither is sufficient alone,
+     * and together they hold what one type held before.
      *
-     * Two implementations are now legitimate, and that changes nothing about the property this guard
-     * holds: **one call site**, not one implementation. A second consumer may reach the world by its own
-     * adapter; it may not reach it by its own call.
+     * The three, and why each is legitimate:
+     *  - `AgentExecutor.kt` — the one holder, and the one call site;
+     *  - `AgentProvidesModule.kt` — the Hilt binding that hands the dispatcher to the engine;
+     *  - `ToolFederation.kt` — the one implementation, `val executor: ToolExecutor`.
      */
     @Test
-    fun `the declared holders of a ToolExecutor are exactly the known four`() {
+    fun `the declared holders of a ToolExecutor are exactly the known three`() {
         val files = productionSources()
             .filter { declaresToolExecutor.containsMatchIn(stripComments(it.readText())) }
             .map { it.name }
@@ -163,8 +167,7 @@ class ToolExecutorCallSiteGuardTest {
             listOf(
                 "AgentExecutor.kt",
                 "AgentProvidesModule.kt",
-                "SandboxToolExecutor.kt",
-                "SystemIntentToolExecutor.kt",
+                "ToolFederation.kt",
             ),
             files,
         )

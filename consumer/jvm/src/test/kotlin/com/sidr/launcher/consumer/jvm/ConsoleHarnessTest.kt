@@ -3,14 +3,17 @@ package com.sidr.launcher.consumer.jvm
 import com.sidr.launcher.consumer.jvm.plan.FilePlanner
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionIdFactory
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionStore
-import com.sidr.launcher.consumer.jvm.tool.SandboxToolExecutor
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolSource
+import com.sidr.launcher.consumer.jvm.tool.SandboxToolWorker
 import com.sidr.launcher.domain.agent.AgentExecutor
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.tool.ResolvedInvocation
+import com.sidr.launcher.domain.tool.ToolExecutor
+import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.trace.TraceEvent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -37,7 +40,7 @@ class ConsoleHarnessTest {
     fun `a granted run completes and prints the whole trace`() = runTest {
         val file = temp.newFile("stale.lock")
         // Computed before the run, since the run itself deletes the file — toRealPath() needs the
-        // file to exist, and this must be the same value SandboxToolExecutor resolves it to.
+        // file to exist, and this must be the same value SandboxToolWorker resolves it to.
         val resolvedTarget = file.toPath().toRealPath().toString()
 
         val state = harness(mutableListOf("y")).run("remove stale.lock")
@@ -50,7 +53,7 @@ class ConsoleHarnessTest {
 
         // The consent prompt must name the actual bound target, not just say something was found —
         // this is boundArguments() calling the engine's own InvocationValidator.resolve, and the
-        // value asserted here is the real path SandboxToolExecutor will act on, computed the same way
+        // value asserted here is the real path SandboxToolWorker will act on, computed the same way
         // it computes it (toRealPath()), not a loose substring like "Arguments" that a wrong value
         // would still satisfy.
         assertTrue(
@@ -138,7 +141,15 @@ class ConsoleHarnessTest {
         temp.newFile("stale.lock")
         val store = JvmAgentSessionStore(temp.root.toPath().resolve(".sidr-agent/session.json"))
         val registry = SandboxToolSource()
-        val executor = AgentExecutor(registry, SandboxToolExecutor(temp.root.toPath()))
+        // A1' Task 3 compile bridge: AgentExecutor still takes a ToolExecutor until Task 4 rewires
+        // this consumer through ToolFederation (see ConsoleHarness's own note).
+        val worker = SandboxToolWorker(temp.root.toPath())
+        val executor = AgentExecutor(
+            registry,
+            object : ToolExecutor {
+                override suspend fun invoke(invocation: ResolvedInvocation): ToolResult = worker.invoke(invocation)
+            },
+        )
         val goal = AgentGoal("remove stale.lock", GoalShape.Free("remove stale.lock"))
 
         StartAgentSessionUseCase(FilePlanner(), store, JvmAgentSessionIdFactory(), registry)

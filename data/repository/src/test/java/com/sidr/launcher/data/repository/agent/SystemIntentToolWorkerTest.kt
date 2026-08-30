@@ -31,12 +31,12 @@ import org.junit.Test
  * tool and not of the branch it happened to take.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class SystemIntentToolExecutorTest {
+class SystemIntentToolWorkerTest {
 
     private val apps = FakeInstalledAppsRepository()
     private val actionExecutor = FakeActionExecutor()
 
-    private fun executor() = SystemIntentToolExecutor(
+    private fun executor() = SystemIntentToolWorker(
         ExecuteActionUseCase(IntentActionResolver(apps), actionExecutor),
     )
 

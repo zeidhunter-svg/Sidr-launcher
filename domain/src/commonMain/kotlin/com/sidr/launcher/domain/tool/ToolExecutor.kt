@@ -9,7 +9,9 @@ package com.sidr.launcher.domain.tool
  *  1. exactly one call **spelled** `toolExecutor.invoke(`, and that it is in the file `AgentExecutor.kt`.
  *     A call through a differently named receiver would not match — which is why
  *  2. exactly three files **declare** the type (`:\s*ToolExecutor`): `AgentExecutor` (the holder),
- *     `AgentProvidesModule` (the binding) and `SystemIntentToolExecutor` (the one implementation). A
+ *     `AgentProvidesModule` (the binding) and `ToolFederation` (the one implementation — A1' collapsed
+ *     the former two adapters, `SystemIntentToolWorker` and `SandboxToolWorker`, into `ToolWorker`s
+ *     reachable only from this dispatcher; `ToolWorkerCallSiteGuardTest` holds that second hop). A
  *     new call site needs a new holder, so a fourth declaration is red before anything can call it.
  *
  * That is the mechanical version of the growth rule's promise: tool #21 gets consent for free not

@@ -294,6 +294,12 @@ tasks.withType<Test>().configureEach {
     // Этап 4 / A0 Task 13. `ToolExecutorCallSiteGuardTest` and `AgentVocabularyGuardTest` scan .kt
     // sources outside :app's source set - the same silent-skip trap as the matrix above.
     //
+    // A1' Task 3 - `ToolWorkerCallSiteGuardTest` scans the identical five roots (the derived
+    // `:domain` set plus these four declared dirs) as the second hop's guard, so it is a second
+    // consumer of every declaration below - not a reason to add a sixth. Verified the same way as the
+    // consumerJvmSources note further down: no new `inputs.dir` needed, because nothing about which
+    // directories are scanned changed, only which files inside them a second test also reads.
+    //
     // Only ONE of the four declarations below is load-bearing, and what it is load-bearing FOR is
     // narrower than it looks. Both facts were measured, not assumed (Task 13 Step 7, row 7):
     //  - `domainSources` IS. The repo-wide `i18nGuardRepoWideSrcMainScan` tree further down includes

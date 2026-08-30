@@ -21,7 +21,7 @@ import org.junit.Test
  *
  * `ToolDescriptor.outputSchema` states that a tool which declares an output returns it on *every*
  * result that can carry one. [SystemIntentToolSource] makes that declaration and
- * [SystemIntentToolExecutor] honours it — but they are two files, and the tests for each of them pass
+ * [SystemIntentToolWorker] honours it — but they are two files, and the tests for each of them pass
  * happily while the two drift apart: deleting `launch_app`'s `outputSchema` leaves every executor test
  * green, because no executor test ever consults the registry.
  *
@@ -37,7 +37,7 @@ class SystemIntentToolContractTest {
     private val apps = FakeInstalledAppsRepository()
     private val actionExecutor = FakeActionExecutor()
 
-    private fun executor() = SystemIntentToolExecutor(
+    private fun executor() = SystemIntentToolWorker(
         ExecuteActionUseCase(IntentActionResolver(apps), actionExecutor),
     )
 

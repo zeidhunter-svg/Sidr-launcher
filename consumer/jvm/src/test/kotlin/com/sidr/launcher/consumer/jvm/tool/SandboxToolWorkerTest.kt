@@ -11,11 +11,11 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.nio.file.Files
 
-class SandboxToolExecutorTest {
+class SandboxToolWorkerTest {
 
     @get:Rule val temp = TemporaryFolder()
 
-    private fun executor() = SandboxToolExecutor(temp.root.toPath())
+    private fun executor() = SandboxToolWorker(temp.root.toPath())
 
     // F8: canonicalized, matching what the executor itself emits (canonicalRoot() = toRealPath()).
     // Green on a machine where the temp root is not itself a symlink coincides with green on one where
@@ -149,7 +149,7 @@ class SandboxToolExecutorTest {
     fun `workspace_info fails closed when the sandbox root no longer exists`() = runTest {
         val gone = temp.newFolder("gone").toPath()
         Files.delete(gone)
-        val result = SandboxToolExecutor(gone).invoke(ResolvedInvocation(SandboxToolIds.WORKSPACE_INFO))
+        val result = SandboxToolWorker(gone).invoke(ResolvedInvocation(SandboxToolIds.WORKSPACE_INFO))
         assertTrue(result is ToolResult.Failed)
     }
 

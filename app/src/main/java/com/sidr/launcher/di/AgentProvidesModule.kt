@@ -1,7 +1,7 @@
 package com.sidr.launcher.di
 
-import com.sidr.launcher.data.repository.agent.SystemIntentToolExecutor
 import com.sidr.launcher.data.repository.agent.SystemIntentToolSource
+import com.sidr.launcher.data.repository.agent.SystemIntentToolWorker
 import com.sidr.launcher.domain.agent.AgentExecutor
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.AgentSessionIdFactory
@@ -13,8 +13,10 @@ import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RuntimeBudget
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.TemplatePlanner
+import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolExecutor
 import com.sidr.launcher.domain.tool.ToolRegistry
+import com.sidr.launcher.domain.tool.ToolResult
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -49,9 +51,18 @@ object AgentProvidesModule {
     @Singleton
     fun provideToolRegistry(impl: SystemIntentToolSource): ToolRegistry = impl
 
+    /**
+     * **A1' Task 3 compile bridge, not the federation.** `AgentExecutor` still takes a single
+     * [ToolExecutor] until Task 4 rewires this binding through `ToolFederation`; [SystemIntentToolWorker]
+     * is now that federation's registered worker, not a second [ToolExecutor] of its own, so this
+     * wraps it only long enough for the graph to keep compiling across the rename. Task 4 replaces this
+     * function's body entirely — it does not extend it.
+     */
     @Provides
     @Singleton
-    fun provideToolExecutor(impl: SystemIntentToolExecutor): ToolExecutor = impl
+    fun provideToolExecutor(impl: SystemIntentToolWorker): ToolExecutor = object : ToolExecutor {
+        override suspend fun invoke(invocation: ResolvedInvocation): ToolResult = impl.invoke(invocation)
+    }
 
     /** A0 binds the deterministic planner; A4' binds a model planner behind this same seam. */
     @Provides

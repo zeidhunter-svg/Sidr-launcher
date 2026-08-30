@@ -24,7 +24,7 @@ class SandboxToolContractTest {
     @get:Rule val temp = TemporaryFolder()
 
     private val source = SandboxToolSource()
-    private fun executor() = SandboxToolExecutor(temp.root.toPath())
+    private fun executor() = SandboxToolWorker(temp.root.toPath())
     private fun rootArg() = temp.root.toPath().toAbsolutePath().toString()
 
     private data class Case(

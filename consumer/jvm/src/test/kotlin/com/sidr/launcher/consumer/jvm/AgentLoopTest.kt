@@ -3,9 +3,9 @@ package com.sidr.launcher.consumer.jvm
 import com.sidr.launcher.consumer.jvm.plan.FilePlanner
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionIdFactory
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionStore
-import com.sidr.launcher.consumer.jvm.tool.SandboxToolExecutor
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolIds
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolSource
+import com.sidr.launcher.consumer.jvm.tool.SandboxToolWorker
 import com.sidr.launcher.domain.agent.AgentExecutor
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.AgentSession
@@ -19,6 +19,9 @@ import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.ObservedFact
 import com.sidr.launcher.domain.tool.RejectionReason
+import com.sidr.launcher.domain.tool.ResolvedInvocation
+import com.sidr.launcher.domain.tool.ToolExecutor
+import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.trace.TraceEvent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -37,7 +40,18 @@ class AgentLoopTest {
 
     private val registry = SandboxToolSource()
     private fun store() = JvmAgentSessionStore(temp.root.toPath().resolve("state/session.json"))
-    private fun executor() = AgentExecutor(registry, SandboxToolExecutor(temp.root.toPath()))
+
+    // A1' Task 3 compile bridge: AgentExecutor still takes a ToolExecutor until Task 4 rewires this
+    // consumer through ToolFederation (see ConsoleHarness's own note).
+    private fun executor(): AgentExecutor {
+        val worker = SandboxToolWorker(temp.root.toPath())
+        return AgentExecutor(
+            registry,
+            object : ToolExecutor {
+                override suspend fun invoke(invocation: ResolvedInvocation): ToolResult = worker.invoke(invocation)
+            },
+        )
+    }
 
     private fun <T> OperationResult<T>.value(): T = (this as OperationResult.Success).value
 
@@ -226,7 +240,7 @@ class AgentLoopTest {
      * nothing about *whether* the gate fires, only what binding does once past it. So the rejection this
      * test is named for is reachable only *after* consent is granted for step 2 — same as the "granting
      * consent completes the plan" test above, except here `find_file` reported a blank `resolved_path`
-     * (`SandboxToolExecutor.findFile`: the key is emitted on every branch, blank when nothing matched),
+     * (`SandboxToolWorker.findFile`: the key is emitted on every branch, blank when nothing matched),
      * so the bind fails closed instead of succeeding.
      */
     @Test

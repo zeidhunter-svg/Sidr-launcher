@@ -67,7 +67,7 @@ class SystemIntentToolSource @Inject constructor(
 
     internal companion object {
         /**
-         * The one spelling of `launch_app`'s output key. [SystemIntentToolExecutor] emits under this
+         * The one spelling of `launch_app`'s output key. [SystemIntentToolWorker] emits under this
          * same constant, so the declaration and the value can never disagree on the name — only
          * `SystemIntentToolSourceTest` states the literal, and it does so as the wire contract.
          */

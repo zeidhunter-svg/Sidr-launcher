@@ -2,9 +2,9 @@ package com.sidr.launcher.consumer.jvm.tool
 
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.tool.ResolvedInvocation
-import com.sidr.launcher.domain.tool.ToolExecutor
 import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
+import com.sidr.launcher.domain.tool.ToolWorker
 import kotlinx.coroutines.CancellationException
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -12,18 +12,19 @@ import java.nio.file.Path
 import java.nio.file.Paths
 
 /**
- * The second consumer's **only path to the world**, and the second implementation of [ToolExecutor] in
- * this repository.
- *
- * `ConsoleHarness` wires it — `AgentExecutor(registry, SandboxToolExecutor(root))` — so in production
- * every call it receives comes from `AgentExecutor.perform`, the single call site, below the consent
- * checkpoint. (Tests call [invoke] directly — `SandboxToolExecutorTest` and `SandboxToolContractTest`
- * — which is the normal way to unit-test a class, not a second production path.) It
- * sits inside the **same** mechanical boundary as the Android adapter, not outside it:
- * `ToolExecutorCallSiteGuardTest` scans `consumer/jvm/src/main/kotlin` as one of its production roots,
- * and this file is one of the four declared holders it pins by name (with `AgentExecutor.kt`,
- * `AgentProvidesModule.kt` and `SystemIntentToolExecutor.kt`). Two implementations are legitimate; the
- * property the guard holds is **one call site**, and it is still one.
+ * The second consumer's worker: what actually performs a tool call for its registered adapter in
+ * `ToolFederation`, this repository's **one and only** [com.sidr.launcher.domain.tool.ToolExecutor]
+ * implementation. This is not a second boundary — a [ToolWorker] is reachable only from that
+ * dispatcher's `adapter.worker.invoke(invocation)`, never called directly in production, and every
+ * call still traces back to `AgentExecutor.perform`, the single call site below the consent
+ * checkpoint. (Tests call [invoke] directly — `SandboxToolWorkerTest` and `SandboxToolContractTest`
+ * — which is the normal way to unit-test a class, not a second production path.) It sits inside the
+ * **same** mechanical boundary as the Android worker, not outside it: `ToolWorkerCallSiteGuardTest`
+ * scans `consumer/jvm/src/main/kotlin` as one of its production roots, and this file is one of the
+ * declared `ToolWorker` holders it pins by name (with `ToolFederation.kt`, `SystemIntentToolWorker.kt`
+ * and, from A1' Task 6, `Tier0IntentToolWorker.kt`). Two workers are legitimate; the property the
+ * guard holds is **one call site to a worker**, which federation guards as a second, equally strict
+ * hop rather than a weaker one.
  *
  * Every failure this class can produce — a declined containment check, or an exception escaping the
  * filesystem calls below (a vanished root, an unreadable directory, an invalid path argument) — is
@@ -36,7 +37,7 @@ import java.nio.file.Paths
  * cannot say "permission denied" or "outside the sandbox" in the vocabulary the core gives it. Owned
  * by A1'; **not** repaired here (Approach A, spec §2).
  */
-class SandboxToolExecutor(private val root: Path) : ToolExecutor {
+class SandboxToolWorker(private val root: Path) : ToolWorker {
 
     override suspend fun invoke(invocation: ResolvedInvocation): ToolResult = try {
         when (invocation.id) {

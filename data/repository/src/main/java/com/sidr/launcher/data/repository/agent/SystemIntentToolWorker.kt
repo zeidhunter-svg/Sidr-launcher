@@ -7,18 +7,19 @@ import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.ExecuteActionUseCase
 import com.sidr.launcher.domain.tool.ObservedFact
 import com.sidr.launcher.domain.tool.ResolvedInvocation
-import com.sidr.launcher.domain.tool.ToolExecutor
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
+import com.sidr.launcher.domain.tool.ToolWorker
 import javax.inject.Inject
 
 /**
  * The `SYSTEM_INTENT` tier of the agent's world: the **unchanged**
- * `ExecuteActionUseCase -> IntentActionResolver -> ActionExecutor` chain, wearing the [ToolExecutor]
- * contract. No new executor surface is introduced, which is why the launcher's existing behaviour is
- * unaffected by construction rather than by testing.
+ * `ExecuteActionUseCase -> IntentActionResolver -> ActionExecutor` chain, wearing the [ToolWorker]
+ * contract — A1' federation's registered worker for this source, reachable only from
+ * `ToolFederation`'s dispatcher, not a boundary of its own. No new executor surface is introduced,
+ * which is why the launcher's existing behaviour is unaffected by construction rather than by testing.
  *
  * The mapping that matters is `Message(NoAppFound) -> Observed(APP_NOT_INSTALLED)`. To the command
  * pipeline "no such app" is a terminal message; to the agent it is an observation, and the whole
@@ -27,9 +28,9 @@ import javax.inject.Inject
  * [invoke] takes a [ResolvedInvocation] (F6, Task 5b): its arguments are already concrete values, so
  * this adapter never resolves an [com.sidr.launcher.domain.tool.ArgSource] itself.
  */
-class SystemIntentToolExecutor @Inject constructor(
+class SystemIntentToolWorker @Inject constructor(
     private val executeAction: ExecuteActionUseCase,
-) : ToolExecutor {
+) : ToolWorker {
 
     override suspend fun invoke(invocation: ResolvedInvocation): ToolResult {
         // The query is normalised once and the same value feeds both the action and the output, so

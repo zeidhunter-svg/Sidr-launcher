@@ -81,20 +81,3 @@ class ToolFederation(private val adapters: List<ToolAdapter>) {
         }
     }
 }
-
-/**
- * **A1' Task 3 compile bridge, not a second production implementation of [ToolExecutor].** A consumer
- * that has not yet been rewired through [ToolFederation] — today, `consumer/jvm`'s `ConsoleHarness` —
- * still constructs `AgentExecutor` with a single [ToolExecutor], and its one registered [ToolWorker] has
- * to reach that shape somehow. Task 4 deletes every caller of this function and replaces it with a real
- * `ToolFederation(listOf(ToolAdapter(...)))`, at which point this bridge has no remaining use and should
- * be deleted, not extended.
- *
- * Declared here rather than inline at each call site so the mechanical guards
- * (`ToolExecutorCallSiteGuardTest`, `ToolWorkerCallSiteGuardTest`) see one more declaration in a file
- * they already recognise as holding both types, instead of a new holder file per bridged consumer.
- */
-fun ToolWorker.asToolExecutorBridge(): ToolExecutor = object : ToolExecutor {
-    override suspend fun invoke(invocation: ResolvedInvocation): ToolResult =
-        this@asToolExecutorBridge.invoke(invocation)
-}

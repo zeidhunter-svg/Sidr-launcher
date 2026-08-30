@@ -17,7 +17,9 @@ import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.InvocationValidator
 import com.sidr.launcher.domain.tool.ResolutionResult
-import com.sidr.launcher.domain.tool.asToolExecutorBridge
+import com.sidr.launcher.domain.tool.ToolAdapter
+import com.sidr.launcher.domain.tool.ToolFederation
+import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.trace.TraceEvent
 import java.nio.file.Path
 
@@ -49,20 +51,16 @@ class ConsoleHarness(
     private val out: (String) -> Unit,
     private val ask: () -> String?,
 ) {
-    private val registry = SandboxToolSource()
+    // This consumer reaches the world through one federation, same as the plan's Task 4 Step 2 shape
+    // pulled forward by one task: SandboxToolWorker is that federation's registered worker for the
+    // SANDBOX level, not a ToolExecutor of its own. AgentExecutor takes the federation's one dispatcher
+    // (`federation.executor`), so no bridge and no second-guessed ToolExecutor holder is needed here.
+    private val federation = ToolFederation(
+        listOf(ToolAdapter(ToolLevels.SANDBOX, SandboxToolSource(), SandboxToolWorker(root))),
+    )
+    private val registry = federation.registry
     private val store = JvmAgentSessionStore(root.resolve(".sidr-agent/session.json"))
-
-    // A1' Task 3 compile bridge, not the federation: AgentExecutor still takes a single ToolExecutor
-    // until Task 4 rewires this consumer through ToolFederation (plan's Task 4 Step 2 —
-    // ToolFederation(listOf(ToolAdapter(ToolLevels.SANDBOX, SandboxToolSource(), SandboxToolWorker(root))))).
-    // SandboxToolWorker is now that federation's registered worker, not a ToolExecutor of its own, so
-    // this wraps it only long enough for the production entry point to keep compiling across the rename.
-    // The wrap itself is `ToolWorker.asToolExecutorBridge()` (domain/tool/ToolFederation.kt) rather than
-    // an inline `object : ToolExecutor { ... }` here: an inline literal would make this file a fourth
-    // declared holder of ToolExecutor, which ToolExecutorCallSiteGuardTest holds at exactly three
-    // (AgentExecutor.kt, AgentProvidesModule.kt, ToolFederation.kt) — the bridge function lives inside
-    // the third of those so no new holder appears.
-    private val executor = AgentExecutor(registry, SandboxToolWorker(root).asToolExecutorBridge())
+    private val executor = AgentExecutor(registry, federation.executor)
 
     // Named `runner`, not `run`: this class already has a `run` member, and `kotlin.run { }` is used
     // nowhere here precisely so no reader has to work out which `run` a call resolves to.

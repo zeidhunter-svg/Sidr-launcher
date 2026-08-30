@@ -13,10 +13,11 @@ import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RuntimeBudget
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.TemplatePlanner
-import com.sidr.launcher.domain.tool.ResolvedInvocation
+import com.sidr.launcher.domain.tool.ToolAdapter
 import com.sidr.launcher.domain.tool.ToolExecutor
+import com.sidr.launcher.domain.tool.ToolFederation
+import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolRegistry
-import com.sidr.launcher.domain.tool.ToolResult
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -43,26 +44,38 @@ import javax.inject.Singleton
 object AgentProvidesModule {
 
     /**
-     * The only tool source A0 has: a projection of two of the seven frozen `ActionIds` families. The
-     * registry is the single path to the world, so binding it here is what makes the "nothing
-     * executes except through the registry" rule a property of the graph rather than of a convention.
+     * The federation, and the **composition root's ordering decision**: built-ins first. Collision
+     * precedence is first-adapter-wins (`ToolFederation`), so this order is what prevents a later
+     * source from shadowing a projected family. `DoctrineGuardTest` asserts this list is the declared
+     * set and that no adapter in it names a network type.
+     *
+     * One adapter today: `Tier0IntentToolSource`/`Tier0IntentToolWorker` do not exist yet — Task 6
+     * creates them and adds the second `ToolAdapter(ToolLevels.SYSTEM_INTENT, …)` line here. The
+     * single-adapter list below is that sequencing, not an oversight.
      */
     @Provides
     @Singleton
-    fun provideToolRegistry(impl: SystemIntentToolSource): ToolRegistry = impl
+    fun provideToolFederation(
+        inAppRegistry: SystemIntentToolSource,
+        inAppWorker: SystemIntentToolWorker,
+    ): ToolFederation = ToolFederation(
+        listOf(
+            ToolAdapter(ToolLevels.IN_APP, inAppRegistry, inAppWorker),
+        ),
+    )
 
     /**
-     * **A1' Task 3 compile bridge, not the federation.** `AgentExecutor` still takes a single
-     * [ToolExecutor] until Task 4 rewires this binding through `ToolFederation`; [SystemIntentToolWorker]
-     * is now that federation's registered worker, not a second [ToolExecutor] of its own, so this
-     * wraps it only long enough for the graph to keep compiling across the rename. Task 4 replaces this
-     * function's body entirely — it does not extend it.
+     * Both ports come from the **same** federation object, which is why the registry cannot advertise
+     * a tool the dispatcher fails to route. Deriving them separately from a shared list would restore
+     * exactly the two-sources-one-decision shape of A0 finding F2.
      */
     @Provides
     @Singleton
-    fun provideToolExecutor(impl: SystemIntentToolWorker): ToolExecutor = object : ToolExecutor {
-        override suspend fun invoke(invocation: ResolvedInvocation): ToolResult = impl.invoke(invocation)
-    }
+    fun provideToolRegistry(federation: ToolFederation): ToolRegistry = federation.registry
+
+    @Provides
+    @Singleton
+    fun provideToolExecutor(federation: ToolFederation): ToolExecutor = federation.executor
 
     /** A0 binds the deterministic planner; A4' binds a model planner behind this same seam. */
     @Provides

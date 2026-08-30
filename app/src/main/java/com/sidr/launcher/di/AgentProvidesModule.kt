@@ -1,7 +1,11 @@
 package com.sidr.launcher.di
 
+import com.sidr.launcher.data.repository.agent.ContextIntentLauncher
+import com.sidr.launcher.data.repository.agent.IntentLauncher
 import com.sidr.launcher.data.repository.agent.SystemIntentToolSource
 import com.sidr.launcher.data.repository.agent.SystemIntentToolWorker
+import com.sidr.launcher.data.repository.agent.Tier0IntentToolSource
+import com.sidr.launcher.data.repository.agent.Tier0IntentToolWorker
 import com.sidr.launcher.domain.agent.AgentExecutor
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.AgentSessionIdFactory
@@ -49,20 +53,28 @@ object AgentProvidesModule {
      * source from shadowing a projected family. `DoctrineGuardTest` asserts this list is the declared
      * set and that no adapter in it names a network type.
      *
-     * One adapter today: `Tier0IntentToolSource`/`Tier0IntentToolWorker` do not exist yet — Task 6
-     * creates them and adds the second `ToolAdapter(ToolLevels.SYSTEM_INTENT, …)` line here. The
-     * single-adapter list below is that sequencing, not an oversight.
+     * Two adapters: the `IN_APP` projection of `ActionCatalog`, and Task 6's `Tier0IntentToolSource` /
+     * `Tier0IntentToolWorker` — two Android system intents that are not among the frozen seven
+     * `ActionIds`, so they mint their own ids and never travel `ExecuteActionUseCase`.
      */
     @Provides
     @Singleton
     fun provideToolFederation(
         inAppRegistry: SystemIntentToolSource,
         inAppWorker: SystemIntentToolWorker,
+        tier0Registry: Tier0IntentToolSource,
+        tier0Worker: Tier0IntentToolWorker,
     ): ToolFederation = ToolFederation(
         listOf(
             ToolAdapter(ToolLevels.IN_APP, inAppRegistry, inAppWorker),
+            ToolAdapter(ToolLevels.SYSTEM_INTENT, tier0Registry, tier0Worker),
         ),
     )
+
+    /** `Tier0IntentToolWorker`'s one seam to the world (Task 6). */
+    @Provides
+    @Singleton
+    fun provideIntentLauncher(impl: ContextIntentLauncher): IntentLauncher = impl
 
     /**
      * Both ports come from the **same** federation object, which is why the registry cannot advertise

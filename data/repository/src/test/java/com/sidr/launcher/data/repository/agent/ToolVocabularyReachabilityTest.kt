@@ -42,7 +42,7 @@ class ToolVocabularyReachabilityTest {
     fun `no vocabulary trigger is claimed by FastPath before the planner is asked`() = runTest {
         val failures = mutableListOf<String>()
 
-        ToolVocabulary().entries.forEach { entry ->
+        guardedEntries().forEach { entry ->
             entry.prefixByLocale.forEach { (locale, forms) ->
                 forms.forEach { form ->
                     val command = if (entry.argName == null) form else "$form $SAMPLE_ARGUMENT"
@@ -69,7 +69,7 @@ class ToolVocabularyReachabilityTest {
         val vocabulary = ToolVocabulary()
         val failures = mutableListOf<String>()
 
-        vocabulary.entries.forEach { entry ->
+        guardedEntries().forEach { entry ->
             entry.prefixByLocale.forEach { (locale, forms) ->
                 forms.forEach { form ->
                     val command = if (entry.argName == null) form else "$form $SAMPLE_ARGUMENT"
@@ -91,6 +91,34 @@ class ToolVocabularyReachabilityTest {
         assertTrue(failures.joinToString("\n"), failures.isEmpty())
     }
 
+    /**
+     * The entry table — returned only **after** proving there is something to loop over.
+     *
+     * Both assertions in this class are `forEach`es over the table, so an empty or truncated table
+     * makes this guard pass while checking nothing — and what it would stop checking is the property
+     * the whole task turns on: that FastPath does not claim a trigger before the planner is asked.
+     * Emptying the vocabulary undoes Task 8 entirely and would leave this green. Asserting the floor
+     * **here** rather than in one extra `@Test` means no individual test in this class can be vacuous,
+     * including one added later by someone who never read this comment.
+     *
+     * On the choice of floor: it is *containment* of the two tools A1' shipped, not equality with the
+     * table and not any trigger string. `A1"`'s twelfth entry and every legitimate rewording must stay
+     * green. See [ToolVocabularyLocaleGuardTest.guardedEntries] for the full reasoning; the two are
+     * deliberately separate rather than shared, so each guard states in its own words what it loses.
+     */
+    private fun guardedEntries(): List<ToolVocabulary.Entry> {
+        val entries = ToolVocabulary().entries
+        val missing = REQUIRED_TOOLS.filterNot { required -> entries.any { it.id == required } }
+        assertTrue(
+            "ToolVocabulary has no entry for ${missing.joinToString { it.value }} " +
+                "(the table holds ${entries.size} entr${if (entries.size == 1) "y" else "ies"}). " +
+                "Both assertions in this guard loop over that table, so it would otherwise report " +
+                "'no trigger is claimed by FastPath' after examining no triggers at all.",
+            missing.isEmpty(),
+        )
+        return entries
+    }
+
     private suspend fun fastPathClaim(
         entry: ToolVocabulary.Entry,
         locale: String,
@@ -110,5 +138,8 @@ class ToolVocabularyReachabilityTest {
     private companion object {
         /** Stands in for whatever an argument-carrying tool needs; FastPath's rules do not read it. */
         const val SAMPLE_ARGUMENT = "10 minutes"
+
+        /** The floor, never the ceiling — see [guardedEntries]. */
+        val REQUIRED_TOOLS = listOf(Tier0ToolIds.SET_TIMER, Tier0ToolIds.OPEN_SYSTEM_SETTINGS)
     }
 }

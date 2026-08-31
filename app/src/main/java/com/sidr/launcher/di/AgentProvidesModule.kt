@@ -6,11 +6,13 @@ import com.sidr.launcher.data.repository.agent.SystemIntentToolSource
 import com.sidr.launcher.data.repository.agent.SystemIntentToolWorker
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolWorker
+import com.sidr.launcher.data.repository.agent.ToolMatchPlanner
 import com.sidr.launcher.domain.agent.AgentExecutor
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.AgentSessionIdFactory
 import com.sidr.launcher.domain.agent.AgentSessionStore
 import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
+import com.sidr.launcher.domain.agent.CompositePlanner
 import com.sidr.launcher.domain.agent.Planner
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
@@ -89,10 +91,25 @@ object AgentProvidesModule {
     @Singleton
     fun provideToolExecutor(federation: ToolFederation): ToolExecutor = federation.executor
 
-    /** A0 binds the deterministic planner; A4' binds a model planner behind this same seam. */
+    /**
+     * A0 bound the deterministic template planner alone. A1' composes it with the tool matcher so a
+     * registered tool is reachable **without a goal shape of its own** — the alternative was one
+     * `GoalShape` value and one planner arm per tool, which is linear per tool and contradicts the
+     * federation's whole claim. A4' adds the model planner to this same list.
+     *
+     * The order is a tie-break that never fires: the two planners own disjoint goal shapes
+     * (`AppNotInstalled` and `Free`), which `CompositePlanner`'s KDoc states and their own tests hold.
+     *
+     * [ToolMatchPlanner] is **injected** rather than built here, unlike [TemplatePlanner]: it declares
+     * an `@Inject` constructor, so constructing it by hand would make that annotation decorative and
+     * would hard-code its dependency list into this module. `TemplatePlanner` is built by hand because
+     * it lives in `:domain`, which is `commonMain` and carries no `javax.inject`. Same shape as
+     * [provideToolFederation], which injects its `@Inject`-constructor sources and composes them.
+     */
     @Provides
     @Singleton
-    fun providePlanner(): Planner = TemplatePlanner()
+    fun providePlanner(toolMatchPlanner: ToolMatchPlanner): Planner =
+        CompositePlanner(listOf(TemplatePlanner(), toolMatchPlanner))
 
     /** The domain must not know about UUIDs — hence a port, and hence its one implementation here. */
     @Provides

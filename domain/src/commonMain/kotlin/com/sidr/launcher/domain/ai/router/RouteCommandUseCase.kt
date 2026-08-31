@@ -33,6 +33,13 @@ import kotlinx.coroutines.flow.first
  *    Task 11). Exactly one outcome qualifies: [CommandMessage.NoAppFound] — FastPath understood
  *    "open X" and found no such app. Not "any Message", not "anything that did not execute";
  *    widening the list is a separate decision for a later block.
+ * 2b. **A goal FastPath could not decide at all ⇒ offer it to the deterministic planner** (A1' Task
+ *    9). The same [StartAgentSessionUseCase], the same fail-open shape as step 2, and this gate
+ *    learns **nothing** about tools: it hands over the raw command as a [GoalShape.Free] goal and the
+ *    planner answers. A `NoPlan` — the state of the world for any text with no registered tool behind
+ *    it — leaves `ruleOutcome` untouched and the whole chain below runs exactly as it did before.
+ *    `StartAgentSessionUseCase.start` returns `Success(null)` *before* it touches the store on
+ *    `NoPlan` and on an unrunnable plan, so an unrecognised command persists nothing.
  * 3. **`localOnlyMode` on ⇒ byte-for-byte FastPath parity** — the planner is never consulted and
  *    nothing leaves the device. A FastPath hit returns untouched; a miss says so plainly
  *    ([CommandMessage.UnderstandingLocalOnly]) instead of claiming the command was unknown.
@@ -55,6 +62,20 @@ import kotlinx.coroutines.flow.first
  * steps 3, 5 and 6 are each keyed on one of the three states. A command that reaches step 2 was never
  * going to reach any of them: `NoAppFound` is a decided outcome, so `isUndecided()` is false and
  * `orHonestly` would have returned it verbatim at step 3 anyway.
+ *
+ * **Steps 2 and 2b sit above step 3 and that does not weaken the chain either.** Step 2b is the one
+ * branch above step 3 that *is* keyed on an undecided outcome, so the argument above does not cover
+ * it and it needs its own. It holds for a different reason: **step 2b reports none of the three
+ * causes.** It has exactly two exits — a [CommandOutcome.AgentSessionStarted], or a fall-through
+ * that changes nothing — so it can neither produce one of the three messages nor suppress another
+ * branch's. Whichever of steps 3, 5 and 6 a command was going to reach, it still reaches, with the
+ * same message; the only commands step 2b removes from that chain are the ones a registered tool
+ * matched, and those never reach it at all. `all three causes at once — only the outermost is
+ * reported` is the test that holds this, and it passed unmodified across this change.
+ *
+ * Steps 2 and 2b are disjoint by construction, not by ordering: `NoAppFound` is a decided
+ * [CommandOutcome.Message], so `isUndecided()` is false for it and a `NoAppFound` that failed open at
+ * step 2 is never re-planned at 2b.
  *
  * **What the ordering DOES break, stated rather than glossed.** `DOC-ADL-3` used to read "…and
  * every outcome FastPath **decided** is returned byte-for-byte". `NoAppFound` is an outcome FastPath
@@ -101,6 +122,26 @@ class RouteCommandUseCase(
             )
             // Fails open: NoPlan, or any store failure, leaves the FastPath outcome exactly as it was.
             val started = startAgentSession.start(goal)
+            if (started is OperationResult.Success && started.value != null) {
+                return CommandOutcome.AgentSessionStarted(started.value)
+            }
+        }
+
+        // (2b) FastPath could not decide, but a registered tool may match the text deterministically.
+        // This use case learns NOTHING about tools: it offers the raw goal and the planner answers.
+        // `NoPlan` — the case where nothing matches — leaves `ruleOutcome` untouched and the chain
+        // below runs exactly as it did before, which is what the three parity tests pin.
+        //
+        // It sits above the localOnlyMode check for the same reason branch (2) does: the planner here
+        // is deterministic and offline, so no model is consulted and nothing leaves the device. That
+        // is precisely what DOC-ADL-3 permits since its 2026-08-22 amendment.
+        //
+        // Nothing is persisted when nothing matches: `StartAgentSessionUseCase.start` returns
+        // `Success(null)` before it touches the store on `NoPlan` and on an unrunnable plan, so an
+        // unrecognised command does not leave a `goal_text` row behind for every miss.
+        if (ruleOutcome.isUndecided()) {
+            val trimmed = rawInput.trim()
+            val started = startAgentSession.start(AgentGoal(text = trimmed, shape = GoalShape.Free(trimmed)))
             if (started is OperationResult.Success && started.value != null) {
                 return CommandOutcome.AgentSessionStarted(started.value)
             }

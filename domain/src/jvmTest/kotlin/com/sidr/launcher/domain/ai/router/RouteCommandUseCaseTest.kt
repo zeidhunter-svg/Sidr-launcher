@@ -20,10 +20,14 @@ import com.sidr.launcher.domain.action.LauncherAction
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.AgentSessionIdFactory
+import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.Planner
 import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
+import com.sidr.launcher.domain.agent.StepPrecondition
+import com.sidr.launcher.domain.agent.StepRationale
 import com.sidr.launcher.domain.agent.TemplatePlanner
 import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.intent.CommandOutcome
@@ -34,6 +38,8 @@ import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.intent.SimpleCommand
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.preferences.FeatureFlags
+import com.sidr.launcher.domain.tool.ArgSource
+import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolRegistry
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
@@ -418,5 +424,141 @@ class RouteCommandUseCaseTest {
             AgentGoal(text = "открой убер", shape = GoalShape.AppNotInstalled("убер")),
             agentStore.saved.first().goal,
         )
+    }
+
+    // --- Task 9: routing step 2b — a FastPath miss may reach a registered tool ------------------
+
+    /**
+     * A planner that plans one SAFE step, standing in for a matched Tier-0 tool.
+     *
+     * **Its arguments are derived from the descriptor, not typed in.** The brief wrote
+     * `mapOf("query" to ArgSource.Literal("x"))`, which happens to validate against
+     * [FakeToolRegistry.withA0Tools]'s first tool (`launch_app` declares a required `query`) — but only
+     * by coincidence of that fixture's contents. `StartAgentSessionUseCase.start` runs
+     * `InvocationValidator.validate` over the plan before persisting anything, so a stand-in naming an
+     * argument the descriptor does not declare would be rejected as `UNDECLARED_ARG` and the tests
+     * below would assert a shape that can never occur. Reading the schema makes the fake faithful to
+     * what [com.sidr.launcher.domain.agent.Planner] implementations actually do (`ToolMatchPlanner`
+     * fills exactly the declared args) and keeps it correct for whatever the fixture holds.
+     */
+    private fun plansOneStep(): Planner = object : Planner {
+        override suspend fun plan(goal: AgentGoal, registry: ToolRegistry): PlanningResult {
+            val tool = registry.all().firstOrNull() ?: return PlanningResult.NoPlan
+            val args = tool.argSchema
+                .filter { it.required }
+                .associate { it.name to ArgSource.Literal("x") }
+            return PlanningResult.Planned(
+                ExecutionPlan(
+                    listOf(
+                        PlanStep(
+                            index = 0,
+                            invocation = ToolInvocation(tool.id, args),
+                            risk = tool.risk,
+                            precondition = StepPrecondition.None,
+                            rationale = StepRationale.GOAL_DIRECT,
+                        ),
+                    ),
+                ),
+            )
+        }
+    }
+
+    /**
+     * The three local states are the acceptance-sensitive surface. A planner that plans nothing must
+     * leave every one of them byte-for-byte identical, or step 2b is a behaviour change wearing a
+     * capability's clothes. All three were green **before** step 2b existed and must still be green
+     * after — that is the whole point of pinning them here.
+     */
+    @Test
+    fun `local-only with no matching tool behaves exactly as before`() = runTest {
+        driveUnknown()
+
+        val outcome = useCase(localOnly = true, agentPlanner = neverPlans()).route("do a barrel roll")
+
+        assertEquals(CommandOutcome.Message(CommandMessage.UnderstandingLocalOnly), outcome)
+        assertEquals(0, planner.planCallCount)
+        assertTrue("a goal nothing planned may not be persisted", agentStore.saved.isEmpty())
+    }
+
+    @Test
+    fun `no provider with no matching tool still says no provider`() = runTest {
+        driveUnknown()
+        provider.clearActiveConfig()
+        connectivity.online = true
+
+        val outcome = useCase(agentPlanner = neverPlans()).route("do a barrel roll")
+
+        assertEquals(CommandOutcome.Message(CommandMessage.UnderstandingNeedsProvider), outcome)
+        assertEquals(0, planner.planCallCount)
+        assertTrue("a goal nothing planned may not be persisted", agentStore.saved.isEmpty())
+    }
+
+    @Test
+    fun `offline with no matching tool still says needs network`() = runTest {
+        driveUnknown()
+        connectivity.online = false
+
+        val outcome = useCase(agentPlanner = neverPlans()).route("do a barrel roll")
+
+        assertEquals(CommandOutcome.Message(CommandMessage.UnderstandingNeedsNetwork), outcome)
+        assertEquals(0, planner.planCallCount)
+        assertTrue("a goal nothing planned may not be persisted", agentStore.saved.isEmpty())
+    }
+
+    /**
+     * `DOC-ADL-3` as amended 2026-08-22: deterministic plan replay is part of the local path and MAY
+     * change an outcome FastPath decided. What stays invariant is that no model is consulted and
+     * nothing leaves the device — `AgentEgressSentinelGuardTest` holds that half, and this test's
+     * planner is [plansOneStep], which is not a model.
+     */
+    @Test
+    fun `a matching tool starts an agent session even in local-only mode`() = runTest {
+        driveUnknown()
+
+        val outcome = useCase(localOnly = true, agentPlanner = plansOneStep()).route("do a barrel roll")
+
+        assertTrue("expected an agent session, was $outcome", outcome is CommandOutcome.AgentSessionStarted)
+        assertEquals(0, planner.planCallCount)
+    }
+
+    /**
+     * **What** is handed over, not merely that something was.
+     *
+     * Step 2b builds [GoalShape.Free] and never [GoalShape.AppNotInstalled] — the latter is block (2)'s
+     * shape, and a mutation swapping them stays green in every other test here because [plansOneStep]
+     * ignores the shape entirely. Against the shipped `CompositePlanner` it would not: `TemplatePlanner`
+     * claims `AppNotInstalled` and would plan a Play Store search for the whole unrecognised command.
+     *
+     * `text` carries the raw command **trimmed**, exactly as block (2) does. The padded input pins it.
+     */
+    @Test
+    fun `the goal step 2b hands over is the trimmed raw command under GoalShape Free`() = runTest {
+        driveUnknown()
+
+        val outcome = useCase(agentPlanner = plansOneStep()).route("  do a barrel roll  ")
+
+        assertTrue("expected an agent session, was $outcome", outcome is CommandOutcome.AgentSessionStarted)
+        assertEquals(
+            AgentGoal(text = "do a barrel roll", shape = GoalShape.Free("do a barrel roll")),
+            agentStore.saved.first().goal,
+        )
+    }
+
+    /**
+     * Step 2b is keyed on `isUndecided()`, so a confident FastPath hit keeps its byte-for-byte return
+     * and never becomes an agent session.
+     *
+     * This one is green **before** step 2b exists as well as after — it is a mutation guard, not a
+     * failing-first test. Its non-vacuity was checked by planting the mutation it exists to catch:
+     * dropping the `ruleOutcome.isUndecided()` condition from step 2b turns it RED.
+     */
+    @Test
+    fun `a decided FastPath outcome is never handed to the tool planner`() = runTest {
+        driveConfidentShowApps()
+
+        val outcome = useCase(agentPlanner = plansOneStep()).route("show apps")
+
+        assertEquals(CommandOutcome.ShowApps, outcome)
+        assertTrue("only an undecided command may open step 2b", agentStore.saved.isEmpty())
     }
 }

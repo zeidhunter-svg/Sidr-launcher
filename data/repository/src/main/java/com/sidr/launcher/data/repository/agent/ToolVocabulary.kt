@@ -34,10 +34,16 @@ data class ToolMatch(val id: ToolId, val args: Map<String, String>)
  * precisely the edit someone reaches for when "fixing" localization, and is why `CommandNormalizer`
  * spells the locale out rather than relying on the default.
  *
- * **Locale shape mirrors `RuleBasedIntentMatcher.VerbForms`:** `en`/`ru` are prefix (SVO) languages,
- * `tr` is a suffix (SOV) language. [ToolVocabularyLocaleGuardTest] asserts every entry carries a
- * non-empty form for all three locales, so a tool added with English triggers only is red rather than
- * quietly monolingual.
+ * **The two maps encode grammatical position, not locale.** They mirror
+ * `RuleBasedIntentMatcher.VerbForms`, and the axis is where the *verb* sits: `en`/`ru` are SVO, so a
+ * verb-carrying form is a prefix ("set a timer for ..."), and `tr` is SOV, so its verb-carrying forms
+ * are suffixes ("... zamanlayici ayarla"). A **verbless** form has no verb to place and is declared as
+ * a prefix whatever its locale — which, for a zero-argument entry, means "the text must equal it".
+ * That is why `set_timer` declares `tr` suffixes while `open_system_settings` declares `tr` prefixes:
+ * its shipped triggers are noun phrases in all three locales, exactly as
+ * `RuleBasedIntentMatcher.SETTINGS_KEYWORDS_BY_LOCALE` already is. [ToolVocabularyLocaleGuardTest]
+ * therefore checks locale *coverage* across both maps and never position, so a tool added with English
+ * triggers only is red rather than quietly monolingual.
  *
  * **A trigger FastPath already claims is a capability that exists only in this table.** FastPath runs
  * first and `RouteCommandUseCase` only builds a `GoalShape.Free` goal for a command it left undecided,
@@ -65,8 +71,17 @@ class ToolVocabulary internal constructor(val entries: List<Entry>) {
 
     /**
      * One tool's triggers. [argName] is `null` for a zero-argument tool; when it is set, whatever
-     * follows (or precedes, in `tr`) the trigger is handed over **verbatim** as that argument's value.
-     * Reading the value is the worker's business, not the vocabulary's.
+     * follows (or precedes, in a suffix form) the trigger becomes that argument's value — **normalized,
+     * not verbatim**: [match] runs [CommandNormalizer.normalize] over the whole text before matching,
+     * so what reaches the worker is lower-cased and whitespace-collapsed. `"timer for 10 Minutes"`
+     * yields `"10 minutes"`. Reading the value is the worker's business, not the vocabulary's.
+     *
+     * **The cost of that, named here rather than discovered in a worker.** A duration does not care.
+     * The first `A1"` tool whose argument is free text — a note body, a search phrase, a contact name —
+     * will receive a case-folded, whitespace-collapsed payload, and **the original is unrecoverable
+     * from this type**: [ToolMatch] carries the value, not a span into the raw command. Such a tool
+     * needs the raw text handed back (offsets into the unnormalized string, or a per-entry opt-out),
+     * decided when it arrives rather than guessed now.
      *
      * For a **zero-argument** entry the two maps are interchangeable — the text must equal the trigger
      * either way — so such an entry declares all its forms, in every locale, as prefixes.
@@ -106,6 +121,22 @@ class ToolVocabulary internal constructor(val entries: List<Entry>) {
      *
      * The longest matching form of an entry wins, so a trigger may be extended with a more specific one
      * without the shorter form swallowing it.
+     *
+     * **A prefix hit is final, including its refusal.** If a prefix matches and [toMatch] then declines
+     * — a required argument with nothing after it, or trailing words on a zero-argument tool — this
+     * returns `null` rather than trying [Entry.suffixByLocale] against the same text. That is a
+     * decision, not an oversight, and it is unreachable with the two shipping entries either way.
+     * The fall-through would re-read a text this entry has already claimed under a second grammar, and
+     * what it can produce is assembled from the trigger's own words: an entry with the prefix
+     * `"set timer"` and the suffix `"timer"` would read `"set timer"` as a duration of `"set"`.
+     * Declining for a reason that can be stated beats matching for one that cannot, and a miss is free
+     * — routing falls through to the model exactly as before.
+     *
+     * **What a future entry declaring both shapes must know:** the prefix grammar is tried first and
+     * wins outright, so do not declare a prefix form ending in one of your own suffix forms and expect
+     * the suffix to rescue it. `ToolVocabularyTest`'s
+     * `a declined prefix does not fall through to the suffix` pins this; chaining the two is defensible
+     * but must be a change that deletes that test deliberately, not an accident that discovers it.
      */
     private fun Entry.matchIn(text: String): ToolMatch? {
         val prefix = prefixByLocale.values.flatten()

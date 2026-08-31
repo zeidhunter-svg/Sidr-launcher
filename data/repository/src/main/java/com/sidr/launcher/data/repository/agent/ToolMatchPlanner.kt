@@ -28,7 +28,9 @@ import javax.inject.Inject
  * (A0 finding F2), so a tool that becomes riskier between planning and execution still stops.
  *
  * **It recognises; it does not validate the value.** [ToolVocabulary] hands the remainder over
- * verbatim and this planner only checks that a required argument is *present*. Whether "10 minutes" is
+ * **normalized** — lower-cased and whitespace-collapsed, never the raw span; see its KDoc for the
+ * free-text limitation that implies — and this planner only checks that a required argument is
+ * *present*. Whether "10 minutes" is
  * a readable duration is the worker's question, and a tool whose value cannot be read fails closed
  * there (`Tier0IntentToolWorker.parseSeconds`). The consequence, named rather than implied: a goal like
  * "timer for the meeting" produces a plan that fails at the worker instead of falling through to the

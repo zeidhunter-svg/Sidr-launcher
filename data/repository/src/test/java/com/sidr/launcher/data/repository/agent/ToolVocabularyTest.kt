@@ -140,4 +140,29 @@ class ToolVocabularyTest {
             nested.match("remind me to call mum"),
         )
     }
+
+    /**
+     * Pins the deliberate short-circuit in `matchIn`: a prefix hit is final, refusal included.
+     *
+     * "set timer" matches the prefix exactly and leaves no duration, so the entry declines — and the
+     * suffix "timer" is **not** then tried against the same text. Chaining them would match, reading
+     * the trigger's own word "set" as the duration; refusing for a reason that can be stated beats
+     * matching for one that cannot. Chaining is a defensible alternative, but adopting it must be a
+     * change that deletes this test on purpose rather than an accident that discovers it.
+     */
+    @Test
+    fun `a declined prefix does not fall through to the suffix`() {
+        val bothShapes = ToolVocabulary(
+            listOf(
+                ToolVocabulary.Entry(
+                    id = ToolId("alpha"),
+                    prefixByLocale = mapOf("en" to setOf("set timer")),
+                    suffixByLocale = mapOf("tr" to setOf("timer")),
+                    argName = "duration",
+                ),
+            ),
+        )
+
+        assertEquals(null, bothShapes.match("set timer"))
+    }
 }

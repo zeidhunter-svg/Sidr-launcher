@@ -74,7 +74,11 @@ class Tier0IntentToolWorker @Inject constructor(
      * widening the vocabulary is Task 8's job (`ToolMatchPlanner`), not this worker's.
      *
      * Unit words are read here rather than in `ToolVocabulary` because they belong to reading the
-     * **value**, not to recognising the tool; the vocabulary hands this string over verbatim.
+     * **value**, not to recognising the tool; the vocabulary hands this string over **unparsed** — it
+     * never reads the value for meaning. Not *verbatim*, though: since Task 8 the vocabulary matches on
+     * `CommandNormalizer`-normalized text, so what arrives here is already lower-cased and
+     * whitespace-collapsed. Harmless for a duration — the trim/lowercase below is then redundant rather
+     * than wrong — but see `ToolVocabulary.Entry` for why a free-text argument will need the raw span.
      */
     private fun parseSeconds(raw: String): Int? {
         val text = raw.trim().lowercase()

@@ -63,15 +63,18 @@ import kotlinx.coroutines.flow.first
  * going to reach any of them: `NoAppFound` is a decided outcome, so `isUndecided()` is false and
  * `orHonestly` would have returned it verbatim at step 3 anyway.
  *
- * **Steps 2 and 2b sit above step 3 and that does not weaken the chain either.** Step 2b is the one
- * branch above step 3 that *is* keyed on an undecided outcome, so the argument above does not cover
- * it and it needs its own. It holds for a different reason: **step 2b reports none of the three
- * causes.** It has exactly two exits — a [CommandOutcome.AgentSessionStarted], or a fall-through
- * that changes nothing — so it can neither produce one of the three messages nor suppress another
- * branch's. Whichever of steps 3, 5 and 6 a command was going to reach, it still reaches, with the
- * same message; the only commands step 2b removes from that chain are the ones a registered tool
- * matched, and those never reach it at all. `all three causes at once — only the outermost is
- * reported` is the test that holds this, and it passed unmodified across this change.
+ * **Step 2b sits above step 3 too, and that does not weaken the chain either.** Step 2b is the one
+ * branch above step 3 that *is* keyed on an undecided outcome, so the argument above (about step 2)
+ * does not cover it and it needs its own. It holds for a different reason: **step 2b reports none of
+ * the three causes.** It has exactly two exits — a [CommandOutcome.AgentSessionStarted], or a
+ * fall-through that changes nothing — so it can neither produce one of the three messages nor
+ * suppress another branch's. Whichever of steps 3, 5 and 6 a command was going to reach, it still
+ * reaches, with the same message; the only commands step 2b removes from that chain are the ones a
+ * registered tool matched, and those never reach it at all. Two tests hold the two exits
+ * separately: `all three causes at once - only the outermost is reported` holds the fall-through —
+ * it runs with the default [com.sidr.launcher.domain.agent.TemplatePlanner], which answers `NoPlan`
+ * to [GoalShape.Free], and it passed unmodified across this change — while `a matching tool starts
+ * an agent session even in local-only mode` holds the [CommandOutcome.AgentSessionStarted] exit.
  *
  * Steps 2 and 2b are disjoint by construction, not by ordering: `NoAppFound` is a decided
  * [CommandOutcome.Message], so `isUndecided()` is false for it and a `NoAppFound` that failed open at

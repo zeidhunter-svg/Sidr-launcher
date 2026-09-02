@@ -171,9 +171,16 @@ class AgentSessionPresentationTest {
      * The presentation's `Free` arm (fix round 2, 2026-08-23 — it shipped held by nothing and
      * survived a mutation that rendered a literal in place of the user's words).
      *
-     * Unreachable on Android is not a reason an arm cannot be asserted: the shape is constructed
-     * directly here. The goal text and the shape text are deliberately **different** so the assertion
-     * pins which of the two the arm reads — it must be the shape's own text.
+     * It was written while the arm was unreachable on Android, on the principle that unreachable is
+     * not a reason an arm cannot be asserted. Since A1' Task 9 it is reachable — step 2b builds a
+     * free-text goal for every undecided command — so this now covers the ordinary case rather than a
+     * hypothetical one, unchanged.
+     *
+     * The goal text and the shape text are deliberately **different** so the assertion pins which of
+     * the two the arm reads — it must be the shape's own text. The same distinction is load-bearing
+     * one layer down: `AgentSessionMappers` stores the shape's own text in `goal_shape_arg` rather
+     * than rebuilding it from `goal_text`, and `RoomAgentSessionStoreTest` pins that with the same
+     * two-different-strings trick.
      */
     @Test
     fun `a free-text goal reads as the user's own words`() {

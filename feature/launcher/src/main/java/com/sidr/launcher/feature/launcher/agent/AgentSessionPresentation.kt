@@ -39,11 +39,13 @@ import com.sidr.launcher.feature.launcher.R
  * shape, and a second one must make a deliberate decision about how it reads rather than fall into a
  * default.
  *
- * The [GoalShape.Free] arm is that deliberate decision, and it is **unreachable on this surface**:
- * `TemplatePlanner` answers `NoPlan` for a free-text goal, so no Android session is ever built from
- * one, and Android's only production `GoalShape` construction site (`RouteCommandUseCase`) builds
- * [GoalShape.AppNotInstalled]. It renders the raw goal text rather than throwing because this is the
- * UI seam: a shape that should not be here must degrade to the user's own words, never to a crash.
+ * The [GoalShape.Free] arm is that deliberate decision, and since A1' Task 9 it is the **common** one
+ * rather than an unreachable branch — `RouteCommandUseCase` step 2b builds a free-text goal for every
+ * undecided command, `ToolMatchPlanner` plans it, and `AgentSessionMappers` persists it. (Until then
+ * the arm was genuinely dead: `TemplatePlanner` answered `NoPlan` to a free-text goal and the Android
+ * mapper refused to write one. Both premises are gone.) It renders the shape's own text rather than
+ * throwing for the reason it always did — this is the UI seam, and a shape it cannot place must
+ * degrade to the user's own words, never to a crash.
  */
 internal fun AgentGoal.subject(): String = when (val shape = shape) {
     is GoalShape.AppNotInstalled -> shape.query

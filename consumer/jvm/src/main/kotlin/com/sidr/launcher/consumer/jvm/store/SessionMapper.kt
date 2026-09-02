@@ -33,8 +33,12 @@ import com.sidr.launcher.domain.trace.TraceEvent
  *    fixed token `file_agent_session_corrupt`.
  *  - **Encode side — provenance.** [toDto] refuses [GoalShape.AppNotInstalled], which is a perfectly
  *    well-formed value and readable in every sense. It is refused because *this* consumer's planner
- *    cannot have produced it, mirroring `AgentSessionMappers.toSessionEntity`'s refusal of
- *    [GoalShape.Free] on the Android side.
+ *    cannot have produced it. The rule is "each consumer persists only its own planner's shapes", and
+ *    it is unchanged; what changed is the other side of it. `AgentSessionMappers.toSessionEntity` used
+ *    to refuse [GoalShape.Free] as the exact mirror of this arm, and since A1' Task 9 it **encodes**
+ *    it, because `CompositePlanner(TemplatePlanner, ToolMatchPlanner)` makes `Free` a shape the
+ *    Android planner really does produce. `FilePlanner` still never produces `AppNotInstalled`, so
+ *    this arm stands as it is — the asymmetry is now in the planners, not in the mappers' reasoning.
  *
  * **Failing loudly is deliberate.** A store that guesses at a value it cannot read produces a session
  * that looks whole and is not — the failure mode `RoomAgentSessionStoreTest` guards against on the

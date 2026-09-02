@@ -329,27 +329,61 @@ class RoomAgentSessionStoreTest {
     }
 
     /**
-     * The mapper's `Free` arm, and the three separate things this one assertion holds (fix round 2,
-     * 2026-08-23 — the arm shipped held by nothing and survived a mutation that persisted a `Free`
-     * goal under the `AppNotInstalled` string, so `readShape` decoded it back as the **wrong shape**).
+     * The mapper's `Free` arm. It **refused** until A1' Task 9 composed a planner that produces
+     * `GoalShape.Free` on Android, at which point the refusal stopped protecting an absent consumer
+     * and started killing the block's headline capability in silence; this test replaces the one that
+     * pinned the refusal (`saving a free-text goal is a contained Failure that writes no row`).
      *
-     * It pins, at once: that the arm refuses at all; that `IllegalArgumentException` was the right
-     * choice over `CorruptAgentRowException`, since the latter surfaces as `db_agent_session_corrupt`
-     * and would report a healthy database as corrupt; and that `guarded` contains the throw, so the
-     * hard rule "never throw to UI" rests on a test rather than on a KDoc sentence. A second caller of
-     * `toSessionEntity` outside `guarded`, or a narrowed catch list, breaks this test rather than
-     * reaching a user as a crash.
+     * It is deliberately at least as strong as the test it replaces, which was itself written after a
+     * mutation survived (fix round 2, 2026-08-23 — the arm shipped held by nothing and a mutation
+     * persisting a `Free` goal under the `AppNotInstalled` string went unnoticed, so `readShape`
+     * decoded it back as the **wrong shape**). That exact mutation is still red here: the assertion is
+     * on the restored `GoalShape`, so encoding `Free` under the other discriminator fails, and so does
+     * a decode arm that reads `Free` back as `AppNotInstalled`.
+     *
+     * The goal's `text` and the shape's `text` are **different** on purpose. They are independent
+     * fields — today's one construction site (`RouteCommandUseCase` step 2b) sets them equal, but the
+     * type does not — so this pins that `goal_shape_arg` carries the shape's own argument rather than
+     * being reconstructed from `goal_text` on the way back. A mapper that stored the shape empty and
+     * rebuilt it from the goal text passes a same-text round-trip and fails this one.
      */
     @Test
-    fun `saving a free-text goal is a contained Failure that writes no row`() = runTest {
+    fun `a free-text goal round-trips with its own shape and its own text`() = runTest {
         val free = session().copy(
-            goal = AgentGoal(text = "сделай конспект", shape = GoalShape.Free("сделай конспект")),
+            goal = AgentGoal(text = "сделай конспект встречи", shape = GoalShape.Free("сделай конспект")),
         )
+
+        assertTrue(store.save(free) is OperationResult.Success)
+
+        val restored = restored()
+        assertEquals(free, restored)
+        assertEquals(GoalShape.Free("сделай конспект"), restored?.goal?.shape)
+        assertEquals("сделай конспект встречи", restored?.goal?.text)
+    }
+
+    /**
+     * The half of the replaced test that had nothing to do with `Free`, kept alive after its throwing
+     * arm was removed: **`guarded` contains a write failure**, so the hard rule "never throw to UI"
+     * rests on a test and not on a KDoc sentence. A narrowed catch list in `guarded`, or a `save` that
+     * stopped going through it, breaks this test instead of reaching a user as a crash.
+     *
+     * The failure is planted in the clock rather than in the database, and the honest reason is that
+     * an in-memory Room database cannot be taken away: `db.close()` followed by a write simply
+     * recreates it and the save succeeds (measured, not assumed — that was this test's first shape).
+     * A throwing `now()` is a real throw from inside the block `guarded` wraps, and it pins one more
+     * thing besides containment: that `save` reads the clock **inside** `guarded`. A `now()` hoisted
+     * out of the try — the natural refactor when someone wants one stamp for two calls — would throw
+     * straight to the caller, and this test is what says so.
+     */
+    @Test
+    fun `a write that throws is a contained Failure, not a throw to the caller`() = runTest {
+        val toSave = session()
+        val failing = RoomAgentSessionStore(dao, Dispatchers.Unconfined) { error("no clock") }
 
         assertEquals(
             OperationResult.Failure(OperationError.UnknownError("db_agent_session_write_failed")),
-            store.save(free),
+            failing.save(toSave),
         )
-        assertNull("a refused goal must leave no row behind", dao.activeSession())
+        assertNull("a failed write must leave no row behind", dao.activeSession())
     }
 }

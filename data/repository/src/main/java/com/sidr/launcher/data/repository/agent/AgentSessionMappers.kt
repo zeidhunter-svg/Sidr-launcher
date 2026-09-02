@@ -80,6 +80,7 @@ internal object AgentSessionMappers {
     private const val OBSERVATION_FAILED = "Failed"
 
     private const val SHAPE_APP_NOT_INSTALLED = "AppNotInstalled"
+    private const val SHAPE_FREE = "Free"
 
     private val json = Json
     private val argsSerializer = MapSerializer(String.serializer(), ArgSourceDto.serializer())
@@ -88,36 +89,50 @@ internal object AgentSessionMappers {
     // ---------------------------------------------------------------- domain -> rows
 
     /**
-     * Persists only the shapes **this** consumer's planner produces. `TemplatePlanner` answers
-     * `NoPlan` for [GoalShape.Free], so a free-text goal reaching this mapper does not mean the row is
-     * unrepresentable — it means the wrong planner built this session, and writing a row for it would
-     * record a session Android cannot have made.
+     * Persists exactly the shapes **this** consumer's planner produces — a set A1' Task 9 widened, and
+     * this arm is the correction that came with it.
      *
-     * The throw is deliberately not a new persisted shape string. Adding one would extend the
-     * `agent_session.goal_shape` vocabulary for a value this surface cannot construct — the contract
-     * for an absent consumer that Master Plan §3.4 forbids. Because a throwing encode writes no row,
-     * the encode/decode pair cannot fall out of step: there is no row for `readShape` to fail on, which
-     * is why `readShape` is deliberately left alone.
+     * **What changed.** A0 bound `TemplatePlanner` alone, which answers `NoPlan` to [GoalShape.Free],
+     * so no Android session could carry that shape; this arm therefore **threw**, on the argument that
+     * extending the `agent_session.goal_shape` vocabulary for a value this surface cannot construct is
+     * the contract for an absent consumer that Master Plan §3.4 forbids. That argument died with its
+     * premise: `AgentProvidesModule` now binds `CompositePlanner(TemplatePlanner, ToolMatchPlanner)`
+     * and `RouteCommandUseCase` step 2b builds a `GoalShape.Free` goal for every undecided command, so
+     * the Android planner does produce `Free`. The refusal was silently killing the block's headline
+     * capability — `RoomAgentSessionStore.save` contained the throw as a `Failure`, step 2b fails open
+     * on anything that is not `Success`, and a matched tool started no session, ran nothing and
+     * reported nothing. `FreeTextGoalEndToEndTest` reproduces that end to end and now holds it closed;
+     * it exists because every layer of the path had a green test against a *fake* of the next one.
      *
-     * The mirrored symmetry is now present fact, not intent. Task 6 of this block gave `:consumer:jvm`
-     * its own hand-written mapper — `consumer/jvm/src/main/kotlin/com/sidr/launcher/consumer/jvm/store/
-     * SessionMapper.kt` — whose `toDto` throws `IllegalArgumentException` on
-     * [GoalShape.AppNotInstalled] for exactly the reason this one throws on [GoalShape.Free]:
-     * `FilePlanner` never produces that shape, so persisting one would record a session that consumer
-     * cannot have made. Each consumer therefore persists only its own planner's shapes and refuses the
-     * other's, and neither extends its persisted vocabulary for a shape it cannot construct.
+     * **What still holds.** §3.4 is satisfied by whether the shape is produced here, not by the
+     * persisted vocabulary staying at one value — so this is an additive entry in an existing column's
+     * vocabulary, not a schema change: `goal_shape` has been a discriminator `TEXT NOT NULL` column
+     * since schema 4 precisely so a second shape is additive rather than a reinterpretation of rows
+     * already on disk. The mirror in the second consumer is unchanged and still correct:
+     * `consumer/jvm/src/main/kotlin/com/sidr/launcher/consumer/jvm/store/SessionMapper.kt` still throws
+     * `IllegalArgumentException` on [GoalShape.AppNotInstalled], because `FilePlanner` never produces
+     * that shape. Each consumer persists only its own planner's shapes and refuses the other's; what
+     * moved is which shapes the *Android* planner produces, not the rule.
      *
-     * `IllegalArgumentException` rather than [CorruptAgentRowException]: nothing is corrupt and no row
-     * exists — the argument is simply not representable here. `RoomAgentSessionStore.save` contains it
-     * as `OperationResult.Failure`, so this never throws to UI.
+     * **[readShape] learns the same value in the same commit.** The old KDoc argued `readShape` could
+     * be left alone because a throwing encode writes no row for a decode to fail on. Once rows exist
+     * that reasoning inverts: an encode/decode pair out of step is exactly the failure it claimed
+     * impossible.
+     *
+     * **`goal_shape_arg` for `Free` is the shape's own `text`**, duplicated with `goal_text` rather
+     * than stored empty and rebuilt from it on the way back. [AgentGoal] `text` and `GoalShape.Free`
+     * `text` are independent fields: today's one construction site sets them equal, but nothing in the
+     * type says so, and `AgentSessionPresentationTest` deliberately builds them *different* to pin
+     * which of the two the surface reads. Rebuilding the shape from `goal_text` would therefore be a
+     * lossy encode that silently rewrites the shape's text whenever the two differ — the same class of
+     * round-trip defect as the one fix round 2 caught, where a `Free` goal persisted under the
+     * `AppNotInstalled` string decoded back as the wrong shape. The cost is one duplicated column of
+     * text that is already in the row and is deleted with it on any terminal state.
      */
     fun toSessionEntity(session: AgentSession, now: Long): AgentSessionEntity {
         val (shape, arg) = when (val goalShape = session.goal.shape) {
             is GoalShape.AppNotInstalled -> SHAPE_APP_NOT_INSTALLED to goalShape.query
-            is GoalShape.Free -> throw IllegalArgumentException(
-                "the Android session store persists only shapes TemplatePlanner produces, but the " +
-                    "goal of session \"${session.id.value}\" is GoalShape.Free",
-            )
+            is GoalShape.Free -> SHAPE_FREE to goalShape.text
         }
         return AgentSessionEntity(
             id = session.id.value,
@@ -270,8 +285,15 @@ internal object AgentSessionMappers {
         )
     }
 
+    /**
+     * The decode half of [toSessionEntity]'s vocabulary, and it must be edited in the same commit as
+     * that one: a shape this can encode but not read back is an outage one layer later rather than
+     * none. Not exhaustive by compiler — it is a `when` over a `String` — so an unrecognised
+     * discriminator throws rather than falling back to a shape that happens to be constructible.
+     */
     private fun readShape(session: AgentSessionEntity): GoalShape = when (session.goalShape) {
         SHAPE_APP_NOT_INSTALLED -> GoalShape.AppNotInstalled(session.goalShapeArg)
+        SHAPE_FREE -> GoalShape.Free(session.goalShapeArg)
         else -> throw CorruptAgentRowException("unknown goal shape \"${session.goalShape}\"")
     }
 

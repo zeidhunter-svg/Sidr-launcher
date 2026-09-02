@@ -91,9 +91,11 @@ internal object RoomColumnNames {
      * (agentic track A0 Task 10).
      *
      * `goal_shape_arg` holds the single argument of `goal_shape` — for `AppNotInstalled`, the app name
-     * the command named. Named that way so no scoped exemption is needed; do not rename it to anything
-     * containing a forbidden term. `goal_text` holds the raw command and is deleted with the session on
-     * any terminal state.
+     * the command named; for `Free` (A1' Task 9), the raw command text itself, so this column and
+     * `goal_text` hold the same string on a free-text session. Named that way so no scoped exemption is
+     * needed; do not rename it to anything containing a forbidden term. Both columns hold raw command
+     * text and both are deleted with the session on any terminal state — the duplication widens no
+     * retention surface, and `AgentAtRestGuardTest` covers the row, not one column of it.
      */
     val AGENT_SESSION: Set<String> = setOf(
         "id",

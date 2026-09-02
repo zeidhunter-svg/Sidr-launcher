@@ -258,6 +258,7 @@ fun LauncherScreen(
             agentSession?.let { session ->
                 AgentSessionSurface(
                     session = session,
+                    toolProvenance = viewModel.agentToolProvenance,
                     confirming = agentConfirming,
                     onConfirm = viewModel::confirmAgentStep,
                     onDeny = viewModel::denyAgentStep,

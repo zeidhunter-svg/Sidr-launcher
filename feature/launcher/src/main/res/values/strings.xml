@@ -126,6 +126,17 @@
     <string name="launcher_agent_running_title">Working on it</string>
     <string name="launcher_agent_step_launch">Open %1$s</string>
     <string name="launcher_agent_step_store">Find %1$s in the app store</string>
+    <!-- Task 10 / A1': a step names its TOOL, not a launch. `launcher_agent_step_generic` is the
+         fail-soft line for a registered tool this surface has no sentence for. -->
+    <string name="launcher_agent_step_timer">Set a timer for %1$s</string>
+    <string name="launcher_agent_step_settings">Open Android settings</string>
+    <string name="launcher_agent_step_generic">Run this step for %1$s</string>
+    <!-- Task 10 / A1': DOC-ILM-2 disclosure - which source supplied the tool, and that its effect
+         leaves the launcher. `_unknown` is the fail-closed label for an unmapped ToolLevel, which the
+         open value class makes reachable by construction; the raw level string never reaches a user. -->
+    <string name="launcher_tool_level_in_app">SIDR · EXTERNAL</string>
+    <string name="launcher_tool_level_system_intent">SYSTEM INTENT · EXTERNAL</string>
+    <string name="launcher_tool_level_unknown">ANOTHER APP · EXTERNAL</string>
     <string name="launcher_agent_gate_title">Confirm this step</string>
     <string name="launcher_agent_gate_consequence">Sidr will do this next: %1$s. Nothing runs until you confirm.</string>
     <string name="launcher_agent_gate_confirm">Confirm</string>

@@ -179,6 +179,7 @@ class LauncherScreenPrayerStripTest {
             resolveAgentConsent = ResolveConsentUseCase(agentStore, runAgent),
             cancelAgentSession = CancelAgentSessionUseCase(agentStore),
             agentSessionStore = agentStore,
+            toolRegistry = agentRegistry,
             ioDispatcher = dispatcher,
             applicationScope = CoroutineScope(dispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),

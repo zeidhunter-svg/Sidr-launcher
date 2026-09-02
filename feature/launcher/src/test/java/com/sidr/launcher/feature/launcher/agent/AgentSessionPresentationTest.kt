@@ -2,6 +2,7 @@ package com.sidr.launcher.feature.launcher.agent
 
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.core.ui.primitive.SidrStatus
+import com.sidr.launcher.feature.launcher.R
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.AgentSessionId
@@ -13,7 +14,11 @@ import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.TemplatePlanner
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.tool.ObservedFact
+import com.sidr.launcher.domain.tool.ToolEffect
+import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
+import com.sidr.launcher.domain.tool.ToolLevel
+import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.trace.ExecutionTrace
@@ -22,6 +27,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -177,5 +183,52 @@ class AgentSessionPresentationTest {
         )
 
         assertEquals("сделай конспект", free.subject())
+    }
+
+    // ── Task 10 / A1': the step line names its TOOL, and an EXTERNAL tool discloses where it went ──
+    //
+    // These three are unit tests over the two mapping functions. They hold the mapping — including the
+    // open-`ToolLevel` fallback that keeps a raw domain identifier away from a user — and they are NOT
+    // what closes `DOC-ILM-2`: a mapping nothing calls stays green forever. The rule is closed by
+    // [AgentSessionSurfaceProvenanceTest], which renders the real surface and goes red when the
+    // rendering is removed. Keep both; they answer different questions.
+
+    /**
+     * `set_timer` and `open_system_settings` are `Tier0ToolIds` in `:data:repository`, which
+     * `:feature:launcher` must not depend on (no feature -> data edge), so the ids are written out as
+     * literals here exactly as they are in the production mapping. Drift between the two degrades to
+     * the generic step line; it cannot render the wrong sentence.
+     */
+    private val setTimer = ToolId("set_timer")
+
+    @Test
+    fun `a step line names the tool rather than assuming a launch`() {
+        val label = toolLabelFor(setTimer)
+
+        // Before A1' every GOAL_DIRECT step rendered `launcher_agent_step_launch` ("Open %1$s"), so a
+        // timer step would have read "Open set a timer for 10 minutes". The rationale says WHY the step
+        // is in the plan; the tool says WHAT it does, and only the second belongs in this line.
+        assertEquals(R.string.launcher_agent_step_timer, label)
+    }
+
+    @Test
+    fun `an EXTERNAL tool shows provenance and a LOCAL one shows none`() {
+        assertEquals(
+            R.string.launcher_tool_level_system_intent,
+            provenanceLabelFor(ToolLevels.SYSTEM_INTENT, ToolEffect.EXTERNAL),
+        )
+        assertNull(provenanceLabelFor(ToolLevels.SANDBOX, ToolEffect.LOCAL))
+    }
+
+    @Test
+    fun `a level with no string resource falls back to a generic label, never to the raw value`() {
+        // ToolLevel is an OPEN value class, so an unknown level is reachable by construction — that is
+        // the whole point of the type. The surface must never print "mcp" at a user: invisible in
+        // English, untranslated in ru/tr, which is exactly the bug DomainIdentifierLeakGuardTest exists
+        // for. Fail closed to a generic label.
+        assertEquals(
+            R.string.launcher_tool_level_unknown,
+            provenanceLabelFor(ToolLevel("mcp"), ToolEffect.EXTERNAL),
+        )
     }
 }

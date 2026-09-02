@@ -35,9 +35,12 @@ import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.suggestions.Suggestion
 import com.sidr.launcher.domain.suggestions.SuggestionEngine
+import com.sidr.launcher.domain.tool.ToolId
+import com.sidr.launcher.domain.tool.ToolRegistry
 import com.sidr.launcher.domain.voice.SpeechInputSource
 import com.sidr.launcher.domain.voice.SpeechRecognitionError
 import com.sidr.launcher.feature.launcher.agent.LauncherAgentSession
+import com.sidr.launcher.feature.launcher.agent.StepProvenance
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -92,6 +95,12 @@ class LauncherViewModel @Inject constructor(
     private val resolveAgentConsent: ResolveConsentUseCase,
     private val cancelAgentSession: CancelAgentSessionUseCase,
     private val agentSessionStore: AgentSessionStore,
+    // Task 10 / A1': read-only lookup of a registered tool's descriptor, the same shape and the same
+    // reason [actionCatalog] is here. The surface must be able to say where an EXTERNAL tool's effect
+    // goes (`DOC-ILM-2`), and provenance lives on the descriptor — a plan step carries the tool's id
+    // and its risk, not its level or effect. The registry is a domain port, so the VM stays
+    // Android-free and no feature -> data edge appears.
+    private val toolRegistry: ToolRegistry,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     // S2-1 Task 11: fire-and-forget scope for recording a learned choice — survives the launch's own
     // viewModelScope coroutine (Block-F recordUsage precedent) so a quick nav-away never drops it.
@@ -255,6 +264,23 @@ class LauncherViewModel @Inject constructor(
 
     /** Whether a consent decision is in flight — bound to the gate's `confirming`. */
     val agentConfirming: StateFlow<Boolean> get() = agentSession.confirming
+
+    /**
+     * Task 10 / A1'. The registry's provenance, projected to the two fields the surface may see, so the
+     * agent surface renders `DOC-ILM-2`'s disclosure without ever holding a [ToolRegistry] itself. The
+     * VM resolves typed values; the feature layer picks the string — the hard rule's split, unchanged.
+     *
+     * A plain immutable value rather than a second `StateFlow`: [ToolRegistry] is documented read-only
+     * and side-effect free over a federation composed once at graph construction, so there is nothing
+     * to observe — and a separate flow could momentarily disagree with the session snapshot rendered
+     * beside it, which would blank a provenance line for one frame.
+     *
+     * `by lazy`, so nothing walks the federation on the startup path: it is read the first time an
+     * agent session is actually on screen.
+     */
+    internal val agentToolProvenance: Map<ToolId, StepProvenance> by lazy {
+        toolRegistry.all().associate { it.id to StepProvenance(it.level, it.effect) }
+    }
 
     // Task 4 / A0: extracted to LauncherCommandSession — the whole command pipeline (see that class's
     // kdoc). [onNavigate] forwards to this class's own nav Channel, its one piece of retained state.

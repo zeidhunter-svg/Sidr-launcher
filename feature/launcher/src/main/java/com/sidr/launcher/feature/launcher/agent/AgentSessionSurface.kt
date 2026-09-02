@@ -24,6 +24,7 @@ import com.sidr.launcher.core.ui.theme.SidrShapes
 import com.sidr.launcher.core.ui.theme.Spacing
 import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.ExecutionState
+import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.trace.TraceEvent
 import com.sidr.launcher.feature.launcher.R
 
@@ -41,6 +42,7 @@ import com.sidr.launcher.feature.launcher.R
 @Composable
 internal fun AgentSessionSurface(
     session: AgentSession,
+    toolProvenance: Map<ToolId, StepProvenance>,
     confirming: Boolean,
     onConfirm: (Int) -> Unit,
     onDeny: (Int) -> Unit,
@@ -68,7 +70,7 @@ internal fun AgentSessionSurface(
                     progress = (session.cursor.toFloat() / total).coerceIn(0f, 1f),
                 )
             }
-            AgentPlanSteps(session = session, subject = subject)
+            AgentPlanSteps(session = session, subject = subject, toolProvenance = toolProvenance)
             AgentProvenance(session = session)
         }
 
@@ -89,13 +91,19 @@ internal fun AgentSessionSurface(
                     title = title,
                     consequence = sidrString(
                         R.string.launcher_agent_gate_consequence,
-                        step.rationale.label(subject),
+                        step.line(subject),
                     ),
                     confirmLabel = sidrString(R.string.launcher_agent_gate_confirm),
                     onConfirm = { onConfirm(checkpoint.index) },
                     onCancel = { onDeny(checkpoint.index) },
                     modifier = modifier,
-                    provenance = { AgentProvenance(session = session) },
+                    // The plan list is NOT drawn in this state (a named A0 limitation), so the
+                    // card carries the pending step's own provenance: without it the user would be
+                    // asked to approve a step while being told nothing about where its effect goes.
+                    provenance = {
+                        AgentStepProvenance(toolProvenance[step.invocation.id])
+                        AgentProvenance(session = session)
+                    },
                     confirming = confirming,
                 )
             }
@@ -108,7 +116,7 @@ internal fun AgentSessionSurface(
             modifier = modifier,
             body = sidrString(R.string.launcher_agent_paused_body),
             provenance = {
-                AgentPlanSteps(session = session, subject = subject)
+                AgentPlanSteps(session = session, subject = subject, toolProvenance = toolProvenance)
                 AgentProvenance(session = session)
             },
             primaryAction = SidrSurfaceAction(
@@ -129,7 +137,7 @@ internal fun AgentSessionSurface(
                 modifier = modifier,
                 body = if (whole) null else sidrString(R.string.launcher_agent_completed_partial_body),
                 provenance = {
-                    AgentPlanSteps(session = session, subject = subject)
+                    AgentPlanSteps(session = session, subject = subject, toolProvenance = toolProvenance)
                     AgentProvenance(session = session)
                 },
                 primaryAction = dismiss,
@@ -176,13 +184,23 @@ private fun AgentBlock(
 }
 
 /**
- * The plan, one row per step, in plan order. Each row is the step's own typed rationale **and** the
+ * The plan, one row per step, in plan order. Each row names the step's own **tool** (Task 10 / A1' —
+ * it used to name the rationale, which read as a launch for every `GOAL_DIRECT` step) **and** the
  * state the session actually recorded for it, rendered into the current locale — so done, skipped,
  * failed and not-yet-started read differently in greyscale and to TalkBack, not only in the colour of
  * the dot (`R-ADL-2`; review findings F3/F6).
+ *
+ * A step whose tool declares an `EXTERNAL` effect carries a provenance line under its row. This is the
+ * **execution** half of `DOC-ILM-2` (spec §6.3), and for a `SAFE` tool it is the only half there is:
+ * `SAFE` never reaches the consent gate, so nothing else on any surface would say the effect left the
+ * launcher.
  */
 @Composable
-private fun AgentPlanSteps(session: AgentSession, subject: String) {
+private fun AgentPlanSteps(
+    session: AgentSession,
+    subject: String,
+    toolProvenance: Map<ToolId, StepProvenance>,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
         session.plan.steps.forEach { step ->
             val state = session.stateOf(step)
@@ -190,11 +208,28 @@ private fun AgentPlanSteps(session: AgentSession, subject: String) {
                 status = state.marker(),
                 label = sidrString(
                     R.string.launcher_agent_step_line,
-                    step.rationale.label(subject),
+                    step.line(subject),
                     state.word(),
                 ),
             )
+            AgentStepProvenance(toolProvenance[step.invocation.id])
         }
+    }
+}
+
+/**
+ * Where one step's effect goes, or nothing at all when it stays on the device.
+ *
+ * `null` covers two different silences and both are correct: a `LOCAL` tool has nothing to disclose,
+ * and a tool the registry does not know cannot be described — the surface claims less rather than
+ * guessing. The label is a resource, never [com.sidr.launcher.domain.tool.ToolLevel.value]; see
+ * `provenanceLabelFor`.
+ */
+@Composable
+private fun AgentStepProvenance(provenance: StepProvenance?) {
+    val label = provenance?.let { provenanceLabelFor(it.level, it.effect) }
+    if (label != null) {
+        SidrProvenanceLine(source = sidrString(label))
     }
 }
 

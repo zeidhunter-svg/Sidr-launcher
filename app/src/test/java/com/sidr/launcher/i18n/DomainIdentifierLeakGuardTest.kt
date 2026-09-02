@@ -20,9 +20,20 @@ import java.io.File
  * (`"FAJR"`), so every existing barrier - and a human reading the English build - saw nothing wrong;
  * only `ru`/`tr` announced literal, untranslated English. A resource existed and was correctly
  * translated; it just was never called. This barrier's actual target is the *next* occurrence of the
- * same class of bug, not this one specifically (already fixed) - `A1`'s planned `ToolId`/`ToolTier`/
+ * same class of bug, not this one specifically (already fixed) - `A1`'s planned `ToolId`/`ToolLevel`/
  * `ToolEffect`/`ActionCategory` vocabulary are exactly this shape of risk if any of them ever reach a
- * UI sink directly.
+ * UI sink directly. (The forecast said `ToolTier`; the type A1' actually introduced is `ToolLevel` -
+ * the doctrine matrix is the governing text and it says «уровень инструмента», `DOC-HMA-2`.)
+ *
+ * **That forecast is now live.** A1' Task 10 renders a tool's provenance on the agent surface, and
+ * `ToolLevel` is an OPEN value class over `String`, so an unmapped level is reachable by construction
+ * rather than only by mistake. The answer is
+ * [com.sidr.launcher.feature.launcher.agent.provenanceLabelFor], which maps a level to a string
+ * resource and falls back to a generic label - never to `level.value` - for exactly the levels it does
+ * not know; `AgentSessionPresentationTest` holds that fallback. Note what this barrier can and cannot
+ * see: `provenanceLabelFor` returns a `@StringRes Int` and its call site reads
+ * `source = sidrString(label)`, so the leak shape it scans for could not appear there even if the
+ * mapping were wrong. The mapping is held by its own test, not by this scan.
  *
  * **Heuristic, and deliberately narrow.** Like barrier 1, this catches regression, not absence. The
  * identifier-leak pattern must appear as the WHOLE right-hand side immediately after the sink's `=` -

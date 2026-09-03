@@ -2,6 +2,7 @@ package com.sidr.launcher.data.repository.agent
 
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
+import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.data.repository.action.DefaultActionCatalog
 import com.sidr.launcher.domain.intent.ExecuteActionUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
@@ -83,6 +84,30 @@ class SystemIntentToolContractTest {
     @Test
     fun `at least one A0 tool declares an output, so the comparison above is not two empty sets`() {
         assertTrue(source.all().any { it.outputSchema.isNotEmpty() })
+    }
+
+    /**
+     * A second contract this file did not yet hold: `FakeToolRegistry.withA0Tools()` is a hand-written
+     * mirror of what [SystemIntentToolSource] projects, and CLAUDE.md's known-debt list records it as
+     * pinned by nothing — "Not owned by any block." `ToolDescriptor` is a `data class` whose every field
+     * (`id`, `level`, `effect`, `argSchema`, `outputSchema`, `risk`, `durability`, `permissionGate`) is a
+     * constructor property — none is declared in the body — so structural equality on the two `List`s
+     * genuinely compares every field, and `List` equality is order-sensitive, so a reordering, a missing
+     * tool, or an extra one all fail this too.
+     *
+     * If this ever goes red, the fake is what drifted — fix `FakeToolRegistry.withA0Tools()` to match
+     * `SystemIntentToolSource`'s projection; `SystemIntentToolSource` is the production source and is
+     * never the one that moves to satisfy a fake.
+     */
+    @Test
+    fun `FakeToolRegistry withA0Tools() equals the production projection, field for field, in order`() {
+        assertEquals(
+            "FakeToolRegistry.withA0Tools() has drifted from SystemIntentToolSource(DefaultActionCatalog())." +
+                " Fix core/testing/.../FakeToolRegistry.kt to match the production projection — never the" +
+                " other way around.",
+            source.all(),
+            FakeToolRegistry.withA0Tools().all(),
+        )
     }
 
     private fun ToolResult.branch(): String = when (this) {

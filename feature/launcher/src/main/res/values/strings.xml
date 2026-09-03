@@ -131,12 +131,9 @@
     <string name="launcher_agent_step_timer">Set a timer for %1$s</string>
     <string name="launcher_agent_step_settings">Open Android settings</string>
     <string name="launcher_agent_step_generic">Run this step for %1$s</string>
-    <!-- Task 10 / A1': DOC-ILM-2 disclosure - which source supplied the tool, and that its effect
-         leaves the launcher. `_unknown` is the fail-closed label for an unmapped ToolLevel, which the
-         open value class makes reachable by construction; the raw level string never reaches a user. -->
-    <string name="launcher_tool_level_in_app">SIDR · EXTERNAL</string>
-    <string name="launcher_tool_level_system_intent">SYSTEM INTENT · EXTERNAL</string>
-    <string name="launcher_tool_level_unknown">ANOTHER APP · EXTERNAL</string>
+    <!-- Task 10 review, finding 4: the DOC-ILM-2 disclosure tokens (launcher_tool_level_*) moved to
+         Class A in strings_locked.xml - locked English, same family as ui_gate_type_external and
+         launcher_drawer_groups_provenance. See that file for why. -->
     <string name="launcher_agent_gate_title">Confirm this step</string>
     <string name="launcher_agent_gate_consequence">Sidr will do this next: %1$s. Nothing runs until you confirm.</string>
     <string name="launcher_agent_gate_confirm">Confirm</string>

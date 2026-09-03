@@ -98,6 +98,8 @@ import com.sidr.launcher.domain.prayer.PrayerName
 import com.sidr.launcher.domain.prayer.PrayerSetup
 import com.sidr.launcher.domain.prayer.UnavailableReason
 import com.sidr.launcher.domain.result.OperationError
+import com.sidr.launcher.domain.tool.ToolEffect
+import com.sidr.launcher.feature.launcher.agent.StepProvenance
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -2204,5 +2206,42 @@ class LauncherViewModelTest {
             vm.prayerContext.value,
         )
         collector.cancel()
+    }
+
+    /**
+     * Task 10 review, finding 1 — the **projection** half of the provenance supply chain.
+     *
+     * `AgentSessionSurfaceProvenanceTest` holds the rendering from the surface inward and
+     * `LauncherScreenAgentProvenanceTest` holds the whole chain through the screen. This one is
+     * narrower on purpose: it says which link broke. An `agentToolProvenance` that drops a registered
+     * tool, or that loses `level`/`effect` on the way through, fails here by name instead of surfacing
+     * three layers away as "a line did not render".
+     *
+     * Both sides are read off [agentRegistry] rather than written down — the expectation is the
+     * registry's own descriptors, so a registry whose tools changed cannot leave this test agreeing
+     * with a stale constant (the shape of review finding 2).
+     */
+    @Test
+    fun `agentToolProvenance projects every registered tool's level and effect`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+
+        val provenance = vm.agentToolProvenance
+
+        assertEquals(
+            "every registered tool must be projected, or its steps disclose nothing",
+            agentRegistry.all().map { it.id }.toSet(),
+            provenance.keys,
+        )
+        agentRegistry.all().forEach { descriptor ->
+            assertEquals(
+                "provenance for ${descriptor.id.value} must carry the registry's own level/effect",
+                StepProvenance(descriptor.level, descriptor.effect),
+                provenance[descriptor.id],
+            )
+        }
+        assertTrue(
+            "the A0 fixture must declare at least one EXTERNAL tool, or this asserts nothing",
+            agentRegistry.all().any { it.effect == ToolEffect.EXTERNAL },
+        )
     }
 }

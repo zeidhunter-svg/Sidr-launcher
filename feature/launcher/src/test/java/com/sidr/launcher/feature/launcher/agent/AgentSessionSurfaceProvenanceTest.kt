@@ -28,6 +28,7 @@ import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.trace.ExecutionTrace
 import com.sidr.launcher.domain.trace.TraceEvent
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -101,9 +102,15 @@ class AgentSessionSurfaceProvenanceTest {
         )
     }
 
+    /**
+     * The registry the A0 plan is planned against, held as a field so the plan and the provenance map
+     * below are derived from the **same** descriptors — see `both A0 steps disclose…`.
+     */
+    private val a0Registry = FakeToolRegistry.withA0Tools()
+
     private fun a0Session(): AgentSession {
         val goal = AgentGoal("открой убер", GoalShape.AppNotInstalled("убер"))
-        val planned = runBlocking { TemplatePlanner().plan(goal, FakeToolRegistry.withA0Tools()) }
+        val planned = runBlocking { TemplatePlanner().plan(goal, a0Registry) }
         check(planned is PlanningResult.Planned)
         return AgentSession(
             id = AgentSessionId("s1"),
@@ -160,17 +167,37 @@ class AgentSessionSurfaceProvenanceTest {
      * `IN_APP` + `EXTERNAL` (`SystemIntentToolSource`), so the A0 plan list now carries a disclosure
      * line under each of its two rows. The sentences above are unchanged; this is added, not altered,
      * and it is named here rather than left for someone to discover on the phone.
+     *
+     * **The map is derived, not written down** (Task 10 review, finding 2). It used to build
+     * `StepProvenance(IN_APP, EXTERNAL)` by hand while [a0Registry] already declared exactly those two
+     * fields, so a maintainer editing the registry's `level`/`effect` had no reason to notice this test
+     * still asserted a disclosure it had supplied itself, disconnected from the fixture sitting right
+     * next to it. The projection below is the one `LauncherViewModel.agentToolProvenance` performs,
+     * over the same registry the plan came from, so the two cannot drift apart in that specific way.
+     *
+     * **What mutation actually shows** (verified, not asserted): both `provenance` and `expected` below
+     * read [a0Registry], so a registry edit moves them together — changing one tool's `effect` to
+     * `LOCAL` lowers `expected` by one and the render honestly follows it down; the assertion stays
+     * green because it is now telling the truth about a smaller registry, not because it stopped
+     * checking anything. What DOES turn this red is the vacuous collapse: every A0 tool going `LOCAL`
+     * drives `expected` to zero, and the `assertTrue` below refuses to let `assertCountEquals(0)` pass
+     * silently as if the test had verified something.
      */
     @Test
     fun `both A0 steps disclose that the effect leaves the launcher`() {
         val a0 = a0Session()
-        val provenance = a0.plan.steps.associate {
-            it.invocation.id to StepProvenance(ToolLevels.IN_APP, ToolEffect.EXTERNAL)
+        val provenance = a0Registry.all().associate { it.id to StepProvenance(it.level, it.effect) }
+        val expected = a0.plan.steps.count { step ->
+            a0Registry.find(step.invocation.id)?.effect == ToolEffect.EXTERNAL
         }
+        assertTrue(
+            "the A0 registry must declare at least one EXTERNAL tool, or this test asserts nothing",
+            expected > 0,
+        )
 
         render(a0, provenance)
 
-        compose.onAllNodesWithContentDescription("source SIDR · EXTERNAL").assertCountEquals(2)
+        compose.onAllNodesWithContentDescription("source SIDR · EXTERNAL").assertCountEquals(expected)
     }
 
     /**

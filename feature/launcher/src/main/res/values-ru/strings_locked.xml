@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   I18N-1 Task 13 Class B locked, translated vocabulary - see values/strings_locked.xml for the full
-  contract. NO Class A entries here: launcher_prayer_provenance_frame and
-  launcher_drawer_groups_provenance are translatable="false" and must never appear in a translated
-  folder.
+  contract. NO Class A entries here: launcher_prayer_provenance_frame,
+  launcher_drawer_groups_provenance and (since Task 10 review finding 4) launcher_tool_level_in_app /
+  _system_intent / _unknown are translatable="false" and must never appear in a translated folder.
 
   Calculation-method names reuse feature/prayer's existing Russian draft translation verbatim (Task 7)
   for terminology consistency across both screens - both awaiting the same owner sign-off. Madhab

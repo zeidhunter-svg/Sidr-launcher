@@ -11,6 +11,7 @@ import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.NoOpIntentMatcher
 import com.sidr.launcher.core.testing.configuredProvider
+import com.sidr.launcher.data.repository.action.DefaultActionCatalog
 import com.sidr.launcher.data.repository.db.SidrDatabase
 import com.sidr.launcher.data.repository.db.dao.AgentSessionDao
 import com.sidr.launcher.domain.agent.AgentGoal
@@ -67,11 +68,19 @@ private object NeverInvokedWorker : ToolWorker {
  *
  * So everything below the fakes is the production object: the real [ToolVocabulary], the real
  * [ToolMatchPlanner] inside the real [CompositePlanner] that `AgentProvidesModule` builds, the real
- * [Tier0IntentToolSource] seen through the real [ToolFederation], the real
+ * two-adapter [ToolFederation] — [SystemIntentToolSource] over the real [DefaultActionCatalog] AND
+ * [Tier0IntentToolSource], in `AgentProvidesModule.provideToolFederation`'s own order — the real
  * [StartAgentSessionUseCase], and the real [RoomAgentSessionStore] over a real Room database. Only
  * the things a JVM test cannot have — FastPath's matcher, the model planner, the provider config,
  * connectivity — are fakes, and each is set to the state that makes the agent branch the one under
  * test.
+ *
+ * Task 10 review, finding 5: the federation used to carry the `SYSTEM_INTENT` adapter alone, so this
+ * test could not see an `IN_APP` source shadowing a later adapter's tool — exactly the risk
+ * first-adapter-wins ordering exists to guard. Both adapters are now built, `IN_APP` first as
+ * production orders them; `set_timer`/`open_system_settings` and `launch_app`/`play_store_search`
+ * declare disjoint ids today, so no shadowing actually fires here, but the federation this test drives
+ * is now the same shape production composes rather than a one-adapter stand-in for it.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE)
@@ -98,9 +107,17 @@ class FreeTextGoalEndToEndTest {
         db.close()
     }
 
-    /** Exactly what `AgentProvidesModule.provideToolRegistry` builds, minus a worker that can run. */
+    /**
+     * Exactly what `AgentProvidesModule.provideToolFederation` builds — same two adapters, same
+     * order — minus workers that can run: nothing in this test invokes a tool, only plans and persists
+     * one, so [NeverInvokedWorker] stands in for both [SystemIntentToolWorker] and
+     * [Tier0IntentToolWorker].
+     */
     private val registry = ToolFederation(
-        listOf(ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(), NeverInvokedWorker)),
+        listOf(
+            ToolAdapter(ToolLevels.IN_APP, SystemIntentToolSource(DefaultActionCatalog()), NeverInvokedWorker),
+            ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(), NeverInvokedWorker),
+        ),
     ).registry
 
     /** Exactly what `AgentProvidesModule.providePlanner` builds. */

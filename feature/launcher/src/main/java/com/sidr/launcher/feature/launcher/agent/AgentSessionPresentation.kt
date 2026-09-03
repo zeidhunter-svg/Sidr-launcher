@@ -30,8 +30,11 @@ import com.sidr.launcher.feature.launcher.R
  * rather than sentences: a sentence born in the domain cannot be translated, and a sentence born in a
  * ViewModel cannot be tested against a locale.
  *
- * Every `when` here is exhaustive with no `else`, so a new domain constant fails the build at this
- * seam instead of silently rendering as a blank or as English.
+ * Every `when` here is exhaustive with no `else` — **except** [toolLabelFor] and [provenanceLabelFor],
+ * which key on [ToolId]/[ToolLevel]'s open `String` value rather than a closed sum, so a new domain
+ * constant cannot be caught at compile time and the `else` arm is load-bearing: an unrecognised value
+ * falls through to a generic/unknown resource (see each function's own KDoc), never to a build failure
+ * or a blank line.
  */
 
 /**

@@ -15,6 +15,14 @@
     grid - a terminal state/provenance token in the same family as the spec §7.1 examples
     (LOCAL ONLY, LOCAL CALC, etc.), not enumerated verbatim there. Judgment call: flagged in the task
     13 report.
+  - launcher_tool_level_in_app / _system_intent / _unknown: Task 10 (A1') review finding 4
+    (2026-09-03). Moved here from plain strings.xml, where they shipped translated in ru/tr. Same
+    family as launcher_drawer_groups_provenance above and as core/ui's ui_gate_type_external
+    ("EXTERNAL") - a terminal provenance/machine-vocabulary token, not a sentence. Before the move a
+    ru user saw a chip say "EXTERNAL" (ui_gate_type_external, locked English) directly above a line
+    reading "ВНЕ ПРИЛОЖЕНИЯ" (launcher_tool_level_in_app, translated) for the exact same concept - a
+    mixed surface, worse than either pure choice. AgentSessionPresentation.kt's provenanceLabelFor
+    still resolves ToolLevel -> these three resources; only the resource file moved.
 
   Class B - locked, but IS translated (values-ru / values-tr carry the same keys, same as any other
   string): calculation-method names, Asr madhab labels, and the Shahada, because this screen renders
@@ -53,6 +61,13 @@
     <!-- Class A: locked, never translated -->
     <string name="launcher_prayer_provenance_frame" translatable="false">LOCAL CALC · %1$s · %2$s</string>
     <string name="launcher_drawer_groups_provenance" translatable="false">ON-DEVICE · OFFLINE</string>
+    <!-- Task 10 (A1') review finding 4: DOC-ILM-2 disclosure tokens - which source supplied the tool,
+         and that its effect leaves the launcher. `_unknown` is the fail-closed label for an unmapped
+         ToolLevel, which the open value class makes reachable by construction; the raw level string
+         never reaches a user. -->
+    <string name="launcher_tool_level_in_app" translatable="false">SIDR · EXTERNAL</string>
+    <string name="launcher_tool_level_system_intent" translatable="false">SYSTEM INTENT · EXTERNAL</string>
+    <string name="launcher_tool_level_unknown" translatable="false">ANOTHER APP · EXTERNAL</string>
 
     <!-- Class B: calculation-method names (SupportedPrayerMethods.ALL, display order) -->
     <string name="launcher_prayer_method_mwl">Muslim World League</string>

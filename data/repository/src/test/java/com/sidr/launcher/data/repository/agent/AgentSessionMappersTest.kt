@@ -259,6 +259,51 @@ class AgentSessionMappersTest {
         )
     }
 
+    // ------------------------------------------------------------------ GoalShape, driven by the sealed hierarchy
+
+    /**
+     * One instance of every declared [GoalShape] variant — the sample [the sample covers every
+     * GoalShape variant] below pins to the type's real membership, same idiom as [oneOfEachEvent].
+     */
+    private val oneOfEachGoalShape: List<GoalShape> = listOf(
+        GoalShape.AppNotInstalled("убер"),
+        GoalShape.Free("поставь таймер на 10 минут"),
+    )
+
+    @Test
+    fun `every GoalShape variant round-trips`() {
+        oneOfEachGoalShape.forEach { shape ->
+            val original = sessionWith(emptyList()).let { it.copy(goal = AgentGoal(it.goal.text, shape)) }
+
+            val restored = AgentSessionMappers.toDomain(
+                AgentSessionMappers.toSessionEntity(original, now = 1L),
+                AgentSessionMappers.toStepEntities(original),
+                AgentSessionMappers.toTraceEntities(original, now = 1L),
+            )
+
+            assertEquals(shape, restored.goal.shape)
+        }
+    }
+
+    /**
+     * The tripwire for the list above — the identical idiom as "the sample covers every TraceEvent
+     * variant" above, applied to [GoalShape] (Task 10 review, finding 6). `readShape`'s `when` is over
+     * a `String`, not the sealed type (its own KDoc says why: the encode side is exhaustive by
+     * compiler, the decode side cannot be). Nothing else forces a third `GoalShape` to gain a decode
+     * arm: `toSessionEntity` would happily encode it, and the row would come back unreadable as
+     * `CorruptAgentRowException` / `db_agent_session_corrupt` only the first time a real session tried
+     * to resume it. **If this test goes red**, add the matching branch to
+     * `AgentSessionMappers.readShape` in the SAME commit that adds the `GoalShape` subtype — that is
+     * the rule `readShape`'s own KDoc states, not a suggestion.
+     */
+    @Test
+    fun `the sample covers every GoalShape variant`() {
+        assertEquals(
+            GoalShape::class.sealedSubclasses.toSet(),
+            oneOfEachGoalShape.map { it::class }.toSet(),
+        )
+    }
+
     @Test
     fun `a skipped step with no precondition round-trips as None`() {
         val original = sessionWith(listOf(TraceEvent.StepSkipped(0, StepPrecondition.None)))

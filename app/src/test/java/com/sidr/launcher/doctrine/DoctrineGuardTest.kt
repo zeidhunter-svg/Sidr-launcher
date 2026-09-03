@@ -4,9 +4,12 @@ import com.sidr.launcher.agent.stripComments
 import com.sidr.launcher.data.repository.action.DefaultActionCatalog
 import com.sidr.launcher.data.repository.agent.SystemIntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolSource
+import com.sidr.launcher.data.repository.agent.Tier0ToolIds
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolAdapter
 import com.sidr.launcher.domain.tool.ToolFederation
+import com.sidr.launcher.domain.tool.ToolId
+import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.tool.ToolWorker
@@ -30,6 +33,17 @@ import java.io.File
  * call into even though it compiles against them). [stripComments] is reused from
  * `com.sidr.launcher.agent`, the same helper the two call-site guards share, so a KDoc that merely
  * mentions a name in prose cannot satisfy any of these checks.
+ *
+ * **Fix round 1 (mutation-prover, two findings).** Both are the same family this block keeps catching —
+ * an assertion that cannot see the failure it claims to guard:
+ *  1. `no two registered tools share an id` used to read `productionFederation().registry.all()`, the
+ *     federation's own **already-deduplicated** output, so a planted duplicate could never reach it —
+ *     see that test's own KDoc for the fix and why it now reads the adapters directly.
+ *  2. Every test that loops over registered tools shares [productionAdapters], and an adapter that
+ *     silently contributes zero (or fewer) tools used to make all of them pass having checked less than
+ *     the real federation — the same vacuous-loop shape `ToolVocabularyLocaleGuardTest.guardedEntries`
+ *     (`:data:repository`) was already fixed for. [productionAdapters] now asserts the same kind of
+ *     floor that fix uses: *containment* of the ids A1′ shipped, not equality — see its own KDoc.
  */
 class DoctrineGuardTest {
 
@@ -44,17 +58,69 @@ class DoctrineGuardTest {
         override suspend fun invoke(invocation: ResolvedInvocation): ToolResult = ToolResult.Effected()
     }
 
-    private fun productionFederation() = ToolFederation(
-        listOf(
+    /**
+     * The production adapter list, read fresh on every call. **Every test in this class that loops over
+     * registered tools reads from here** — directly (`no two registered tools share an id`) or
+     * transitively through [productionFederation] (the surface-label test) — which is what makes the
+     * floor below load-bearing for both instead of one extra `@Test` bolted on beside them.
+     *
+     * The floor is asserted **here**, in the shared accessor, not in its own test method — same
+     * placement `ToolVocabularyLocaleGuardTest.guardedEntries()` uses and for the same stated reason: a
+     * guard that loops over an empty or shrunk table passes having checked nothing, which is this
+     * repository's own recorded failure mode (that guard's KDoc calls out the identical shape). Proved
+     * directly here: the mutation-prover's M6 zeroed `Tier0IntentToolSource.all()`, and against the old
+     * (floorless) body every test in this class kept passing while `set_timer`/`open_system_settings`
+     * silently stopped being checked by anything.
+     *
+     * The floor is **containment** of the four ids A1′ actually shipped — not equality, and not bare
+     * non-emptiness — mirroring `ToolVocabularyLocaleGuardTest`'s own choice for the same reason: bare
+     * non-emptiness under-pins (an adapter that keeps one tool and silently drops `set_timer` still
+     * passes), while equality would redden the moment a legitimate tool is added, which `A1"` is
+     * expected to do. [REQUIRED_TOOL_IDS] names nothing about a tool beyond its id — not risk, schema,
+     * or label — only that the id is still present somewhere in the federation.
+     */
+    private fun productionAdapters(): List<ToolAdapter> {
+        val adapters = listOf(
             ToolAdapter(ToolLevels.IN_APP, SystemIntentToolSource(DefaultActionCatalog()), NoopWorker),
             ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(), NoopWorker),
-        ),
-    )
+        )
 
-    /** `DOC-ILM-2` half one — no tool is silently shadowed, so provenance names a real supplier. */
+        val ids = adapters.flatMap { it.registry.all() }.map { it.id }
+        val missing = REQUIRED_TOOL_IDS.filterNot { it in ids }
+        assertEquals(
+            "An adapter that contributes fewer tools than it ships makes every test in this class pass " +
+                "having checked less than the real federation. Missing: ${missing.map { it.value }} " +
+                "(adapters currently declare: ${ids.map { it.value }})",
+            emptyList<ToolId>(),
+            missing,
+        )
+
+        return adapters
+    }
+
+    private fun productionFederation() = ToolFederation(productionAdapters())
+
+    /**
+     * `DOC-ILM-2` half one — no tool is silently shadowed, so provenance names a real supplier.
+     *
+     * **Fix round 1 (mutation-prover finding 1).** This used to read
+     * `productionFederation().registry.all()` — the federation's own output — which cannot see this
+     * property: `ToolFederation` resolves a duplicate id first-adapter-wins **before** `.all()` returns
+     * (its own KDoc: "Collision policy: first adapter wins... dropped from the later adapter, in both
+     * faces"), so a planted duplicate is removed by the object under test before the assertion ever
+     * gets a look at it — the very property being checked was guaranteed by construction on the read
+     * path used to check it. Confirmed: the mutation-prover's M1 (`Tier0ToolIds.SET_TIMER` renamed to
+     * claim `"launch_app"`, a projected id already in the registry) left the old body GREEN.
+     *
+     * The fix reads each adapter's own `registry.all()` — what the sources actually **declare**, before
+     * [ToolFederation] ever sees them — via [productionAdapters], and flat-maps across adapters with no
+     * dedup step of its own. A duplicate declared by two adapters now survives into [ids]: under M1,
+     * `"launch_app"` appears twice (once from `SystemIntentToolSource`, once from the mutated
+     * `Tier0IntentToolSource`), `ids.distinct() != ids`, and this assertion goes red.
+     */
     @Test
     fun `no two registered tools share an id`() {
-        val ids = productionFederation().registry.all().map { it.id.value }
+        val ids = productionAdapters().flatMap { it.registry.all() }.map { it.id.value }
 
         assertEquals(
             "A shadowed tool is a capability that exists and can never run. Duplicates: " +
@@ -246,6 +312,16 @@ class DoctrineGuardTest {
                 "must update this list deliberately, the same as a new tool adapter. Found: $declared",
             listOf("TemplatePlanner", "toolMatchPlanner"),
             declared,
+        )
+    }
+
+    private companion object {
+        /** The floor, never the ceiling — see [productionAdapters]. */
+        val REQUIRED_TOOL_IDS: List<ToolId> = listOf(
+            ToolIds.LAUNCH_APP,
+            ToolIds.PLAY_STORE_SEARCH,
+            Tier0ToolIds.SET_TIMER,
+            Tier0ToolIds.OPEN_SYSTEM_SETTINGS,
         )
     }
 }

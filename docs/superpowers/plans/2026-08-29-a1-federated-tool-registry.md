@@ -15,6 +15,7 @@
 - **JDK 17 only.** Every Gradle invocation carries `-Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10`. The machine default is JDK 25 and Gradle cannot parse it.
 - **Never pipe `gradlew` through `tail`.** Read the exit code and the real output. Read test counts from the JUnit XML, not the console.
 - **Block gate (Task 13 runs it in full):** `./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 :domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test`. `:domain:jvmTest` and `:consumer:jvm:test` MUST be listed: `testDebugUnitTest` reaches neither. Baseline to beat: **1219 tests, 0 failures**.
+- **Use `--rerun-tasks`, not the plain `--rerun` this plan originally said.** Every gate invocation below has already been corrected to `--rerun-tasks` — bare `--rerun` is not a valid Gradle 9.5.0 build-level flag (`--help` lists only `--rerun-tasks`), and it silently returns every task `UP-TO-DATE` while still printing `BUILD SUCCESSFUL`; it produced exactly this false green once inside this block's own Task 3 (round 2: 11s, zero of four test tasks executed). Ruling R9 in the block's ledger records the fix. Do not "restore" bare `--rerun` if a future edit of this file reverts it — that is regressing to the flag that produced the false green.
 - **`:domain` is `commonMain` + stdlib + coroutines only.** No Android, no `java.*`, no `core/*`. Production code goes in `domain/src/commonMain/kotlin`, tests in `domain/src/jvmTest/kotlin`.
 - **User-facing text never originates in `:domain` or in a ViewModel.** Typed values only; the feature layer picks the string via `sidrString(R.string.…)`.
 - **`en`/`ru`/`tr` ship in the same commit as the feature.** `LocaleCompletenessGuardTest` enforces it. Files: `feature/launcher/src/main/res/values/strings.xml`, `values-ru/strings.xml`, `values-tr/strings.xml`.
@@ -563,7 +564,7 @@ In `app/build.gradle.kts`, the `Test` task's `inputs.dir(...)` declarations alre
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
-  :app:testDebugUnitTest --tests '*CallSiteGuardTest*' --rerun
+  :app:testDebugUnitTest --tests '*CallSiteGuardTest*' --rerun-tasks
 ```
 Expected: PASS (with `Tier0IntentToolWorker.kt` omitted from the list for now).
 
@@ -584,7 +585,7 @@ open(p,"w").write(s.replace(old,new))
 print("mutation landed")
 PY
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
-  :app:testDebugUnitTest --tests '*ToolWorkerCallSiteGuardTest*' --rerun; echo "EXIT=$?"
+  :app:testDebugUnitTest --tests '*ToolWorkerCallSiteGuardTest*' --rerun-tasks; echo "EXIT=$?"
 ```
 Expected: **RED** — "A ToolWorker may be reached only from the dispatcher. Found: [2 hits]". A green run here means the guard is decorative and must be fixed before proceeding.
 
@@ -774,7 +775,7 @@ fun requiresConsent(risk: ActionRiskLevel): Boolean = risk != ActionRiskLevel.en
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
-  :domain:jvmTest --rerun
+  :domain:jvmTest --rerun-tasks
 ```
 Expected: PASS, no behaviour change — the four rewrites are equivalent at three levels, which is exactly the point being recorded.
 
@@ -1047,7 +1048,7 @@ private class FakeIntentLauncher(private val record: MutableList<Intent>) : Inte
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
-  :data:repository:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug --rerun
+  :data:repository:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug --rerun-tasks
 ```
 Expected: PASS.
 
@@ -1112,7 +1113,7 @@ separable.
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
-  :domain:jvmTest :data:repository:testDebugUnitTest --rerun
+  :domain:jvmTest :data:repository:testDebugUnitTest --rerun-tasks
 git add -A && git commit -m "feat(agentic-5/A1'): a projected tool's id is derived from the action, not copied"
 ```
 
@@ -1477,7 +1478,7 @@ fun `every tool entry carries a non-empty trigger for en, ru and tr`() {
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
-  :domain:jvmTest :data:repository:testDebugUnitTest --rerun
+  :domain:jvmTest :data:repository:testDebugUnitTest --rerun-tasks
 git add -A && git commit -m "feat(agentic-5/A1'): a registered tool is plannable without a goal shape of its own"
 ```
 
@@ -1622,7 +1623,7 @@ editing, the property broke and the branch is in the wrong place.
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
-  :domain:jvmTest --rerun
+  :domain:jvmTest --rerun-tasks
 git add -A && git commit -m "feat(agentic-5/A1'): a FastPath miss may reach a registered tool, and the three local states are unmoved"
 ```
 
@@ -1782,7 +1783,7 @@ where it is answered.
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
-  :feature:launcher:testDebugUnitTest :app:testDebugUnitTest --rerun
+  :feature:launcher:testDebugUnitTest :app:testDebugUnitTest --rerun-tasks
 ```
 Expected: PASS, including `LocaleCompletenessGuardTest`, `HardcodedUiTextGuardTest`,
 `StringSeamGuardTest` and `DomainIdentifierLeakGuardTest`.
@@ -1914,7 +1915,7 @@ class DoctrineGuardTest {
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
-  :app:testDebugUnitTest --tests '*DoctrineGuardTest*' --rerun
+  :app:testDebugUnitTest --tests '*DoctrineGuardTest*' --rerun-tasks
 ```
 
 - [ ] **Step 3: Mutation-prove each assertion separately**
@@ -1936,7 +1937,7 @@ assert s.count(old)==1, f"landing check failed: {s.count(old)}"
 open(p,"w").write(s.replace(old,new)); print("mutation (a) landed")
 PY
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
-  :app:testDebugUnitTest --tests '*DoctrineGuardTest*' --rerun; echo "EXIT=$?"
+  :app:testDebugUnitTest --tests '*DoctrineGuardTest*' --rerun-tasks; echo "EXIT=$?"
 ```
 Expected **RED** on `no two registered tools share an id`.
 
@@ -1975,11 +1976,11 @@ git add -A && git commit -m "test(agentic-5/A1'): ethics in CI — collisions, p
 
 ### Task 13: The gate, the documents, and the device checklist
 
-- [ ] **Step 1: Full gate, with `--rerun` so no suite reports UP-TO-DATE**
+- [ ] **Step 1: Full gate, with `--rerun-tasks` so no suite reports UP-TO-DATE**
 
 ```bash
 ./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
-  :domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test --rerun
+  :domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test --rerun-tasks
 echo "EXIT=$?"
 ```
 Read the counts from the JUnit XML under each module's `build/test-results/`, not from the console. Expected: ≥ 1219 tests, 0 failures.

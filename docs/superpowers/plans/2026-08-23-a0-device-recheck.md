@@ -74,6 +74,38 @@ None is Class B, so the locale signature was neither touched nor re-signed.
 
 - [ ] Read and accepted, or amended.
 
+### A3. New provenance lines on the already-accepted A0 plan (added by Этап 5 / A1′, 2026-09-03)
+
+**Why this item exists here and not only in the A1′ device-acceptance file.** A1′ federated the tool
+registry and gave every registered tool a `level`/`effect` pair (`DOC-ILM-2`); both A0 steps
+(`launch_app`, `play_store_search`) are `EXTERNAL`, so both now render a provenance line the owner had
+never seen when accepting A0 on 2026-08-22. The **step sentences themselves are byte-identical** — this
+is an addition to the surface, not a rewording of it — but Этап 0.5's status vocabulary does not let a
+signature carry across *any* surface change, addition included, so this belongs in the re-check file
+alongside the other two.
+
+Run «открой <не установленное>» again (the same command as A0's §12.1/A1 acceptance item).
+
+| | Accepted 2026-08-22 / re-confirmed 2026-08-23 | Expected now (2026-09-03) |
+|---|---|---|
+| step 0 line | «Открой …» | «Открой …» — **unchanged** |
+| step 0, new second line | *(none)* | **`SIDR · EXTERNAL`** |
+| step 1 line | «Найти … в магазине» | «Найти … в магазине» — **unchanged** |
+| step 1, new second line | *(none)* | **`SIDR · EXTERNAL`** |
+
+- [ ] Both step lines read exactly as before — no wording changed.
+- [ ] A new, smaller line reading **`SIDR · EXTERNAL`** (locked English in every locale —
+      `launcher_tool_level_in_app`, Class A, never translated) now appears beneath **each** step.
+- [ ] The addition reads as informative, not alarming — it is disclosure (`DOC-ILM-2`: this tool's
+      effect leaves the launcher and the source is Sidr's own in-app catalog), not a new warning or a
+      new gate. Nothing about the consent flow changed: the plan still stops at the same risk transition
+      it always did, before the store step (Part B, §12.2 below).
+
+> This is the same disclosure mechanism `set_timer`/`open_system_settings` use on the new
+> `SYSTEM INTENT · EXTERNAL` line — see
+> [2026-08-29-a1-device-acceptance.md](2026-08-29-a1-device-acceptance.md) §A1/A2 for those two new
+> tools. This item is only about the two lines **added** to the plan the owner already accepted.
+
 ---
 
 ## Part B — the owner re-runs to confirm nothing regressed
@@ -144,7 +176,10 @@ pm enable <target package>
 When Parts A and B are signed off by the owner:
 
 1. Record the run in the ADR «2026-08-23 — Сквозное ревью блока A0» — a «Device re-check» section, in
-   the shape Task 15's section takes: what was observed, not what was expected.
+   the shape Task 15's section takes: what was observed, not what was expected. **A3's outcome records
+   into the ADR «2026-09-03 — Этап 5 (A1′)» instead** — that block is where the two `SIDR · EXTERNAL`
+   lines were added, not the 2026-08-23 review round; note the cross-reference in both places so a
+   reader of either ADR finds the device evidence.
 2. Lift the residual from `CLAUDE.md` § Known debt and from `ai-context/current-status.md`; the fix
    round becomes `DEVICE-ACCEPTED` and A0 returns to a clean `CLOSED` with its three standing
    limitations.

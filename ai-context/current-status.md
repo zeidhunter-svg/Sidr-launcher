@@ -5,7 +5,12 @@
 > digest); per-phase plans carry their own checklists.** This file is the status snapshot — if it
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
-> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-08-26
+> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-09-03
+> (**Этап 5 (A1′) — federated `ToolRegistry`: one `ToolRegistry` port now federates N adapters behind one
+> object; a second real Android source (`Tier0IntentToolSource`, level `system_intent`) registers
+> `set_timer`/`open_system_settings` and both are reachable from a typed command via routing step 2b;
+> `requiresConsent` unifies four risk-gate spellings into one; `CODE-GREEN` at 1298 tests, `DEVICE-ACCEPTED`
+> not met — spec §16 criterion 1, the block's one open criterion**); prior 2026-08-26
 > (**A0.5 — second consumer of the portable core: `:consumer:jvm` runs a goal end to end on plain JVM over
 > unchanged engine contracts; `CODE-GREEN` at 1219 tests, device acceptance *not applicable*, all four
 > §3.1a questions answered with addresses**); prior 2026-08-23
@@ -29,6 +34,82 @@
 > acceptance; prior re-base 2026-08-10 DS-10 Assistant Migration CLOSED — device-accepted; same-day
 > DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer
 > Correctness CLOSED — device-accepted by the owner).
+
+## Agentic track — Этап 5 (A1′) — federated `ToolRegistry` — `CODE-GREEN` (2026-09-03)
+
+**`CODE-GREEN`, `DEVICE-ACCEPTED` NOT met — a plain gap, not an inapplicability.** Unlike A0.5, this
+block changes what the user can reach: two new system intents registered and made reachable from a
+typed command, neither run on a phone. Full record: ADR «2026-09-03 — Этап 5 (A1′)» in
+[decisions.md](decisions.md). Range `3bcf0a5..23f9152`, 23 commits, branch `launcher--7`.
+
+**What was built.** The `ToolRegistry` port stopped projecting one catalog and started federating N
+adapters behind one object, `ToolFederation`: its `registry` (`all()`/`find()`) and its `executor` —
+the sole `ToolExecutor` implementation — read the same adapter list by construction, so no wiring path
+can advertise a tool the dispatcher fails to route (the direct fix for A0 review finding F2, where the
+consent gate once read `risk` from the plan and `permissionGate` from a separately-wired registry). A
+**second real Android source**, `Tier0IntentToolSource`/`Tier0IntentToolWorker` (level `system_intent`),
+sits beside the existing `in_app` adapter and registers `set_timer` (arity 1, `SAFE`, `EXTERNAL`) and
+`open_system_settings` (arity 0, `SAFE`, `EXTERNAL`) — zero new Android permissions. Every registered
+tool now carries `level`/`effect`, and an `EXTERNAL` tool's provenance reaches the user
+(`AgentSessionSurfaceProvenanceTest`, `LauncherScreenAgentProvenanceTest` — behavioural, not a
+structural scan, per spec §6.3's own warning against a vacuous guard). `requiresConsent(risk)` in
+`domain/action` replaces four independently-spelled gate checks with one predicate. Reachability needed
+an unplanned addition found while designing (§8.4 of the spec, change-control before code): one generic
+planner arm, `ToolMatchPlanner` + a localized (`en`/`ru`/`tr`) `ToolVocabulary`, composed behind
+`Planner` and reached from a new routing step **2b** in `RouteCommandUseCase` — no new `GoalShape`
+value, honouring `B1`.
+
+**Seven owner forks, decided 2026-08-29 before code.** The headline one, F1: the long-open A1 fork
+(parallel tool vocabulary vs. evolving `ActionCatalog` in place) is resolved — **parallel vocabulary +
+federation, identity C** (a projected tool's `ToolId` is *derived* from its `ActionId`, not hand-copied).
+F2 split the block's scope: **boundaries + exactly one real second source** ship here; tool *mass*
+(`B2`/`B4`) and *selection* (`B3`) move to a new block, **`A1″`**.
+
+**A CRITICAL found by review, not by any task's own tests.** `AgentSessionMappers.toSessionEntity`
+threw on `GoalShape.Free` — correct when written, since A0's planner never produced `Free`, but Task 9
+changed that premise by composing `ToolMatchPlanner`. Live path: a timer command → step 2b builds a
+`Free` goal → a plan is found → `store.save` throws → wrapped as `Failure` → `RouteCommandUseCase`'s
+existing fail-open branch (see residuals) silently falls through to the model path. **No session, no
+timer, no error, and all 1285 tests green at the time**, because every layer was tested in isolation.
+Fixed in `1c4a61e`; no schema change (`identityHash` unchanged). The lesson recorded in the ADR: *if a
+product path has a join no test crosses, that path is unverified* — the same shape A0's own review
+found in `restoreOnStart`.
+
+**Guards, all mutation-proved, none merely green.** `ToolWorkerCallSiteGuardTest` (new) and
+`ToolExecutorCallSiteGuardTest` (re-anchored) both survived W1–W4/E1–E2. `DoctrineGuardTest`'s
+duplicate-`ToolId` assertion did **not** meet spec success criterion 3 on its first draft — it read
+`federation.registry.all()`, which the federation had already de-duplicated, so a planted duplicate
+never reached the assertion meant to catch it. Fixed by reading what the adapters **declare**, before
+dedup; both the collision case and a zero-tool adapter's vacuous-pass case are now held by a shared
+non-vacuous accessor, mutation-proved in two rounds.
+
+**Residual limitations, named rather than implied absent.** `DOC-ADL-1`'s closure rests on the
+**single call site**, not on `ConsentPolicyTest`'s wake-up test, which cannot distinguish
+`risk != entries.first()` from `risk >= CONFIRM` while exactly three risk levels exist. `core/testing/
+src/main/java` is scanned by neither call-site guard (owner-level, the `D1`/`D4` family).
+`RouteCommandUseCase:147-150` still fails open to the model on **any** non-`Success` from the session
+store — the block fixed one instance of that class (the `Free`-encode throw above), not the class
+itself, which stays A4′'s. `DoctrineGuardTest` does not pin a registered tool's declared **risk**;
+Task 12's parity test closes that narrowly for the two A0 in-app tools' descriptors only. The step-line
+rule is keyed on argument **count** — a tool with two or more literal arguments falls back to the goal
+text. `"sayaç ayarla"` (the `tr` timer trigger) is reachable and un-shadowed but needs a native
+speaker's read — `sayaç` reads as counter/meter, not kitchen timer. `docs/governing/
+sidr-doctrine-matrix-v1.0.md`'s `DOC-HMA-2` row is **not** claimed closed — levels now exist, but
+whether a level *change* stops the loop is still A4′'s.
+
+**What it answers of A0.5's four vocabulary findings.** `ObservedFact` stays deliberately untouched
+(owner instruction 2026-08-23). `CommandFailure` is rejected with a measured reason. `StepRationale` is
+replaced — `PlanStep.line`, keyed on `ToolId` (the argument-count limit above is its residual).
+`ArgType` stays at one value, rejected with a measured reason (owner fork F6): a second flag-value is
+still categorically insufficient for an MCP/AppFunctions JSON Schema. Fork F5 (consent fires before
+argument binding) is recorded as an address, `A4′`, not a decision.
+
+**Device-acceptance checklist** — split A/B/C the way the A0 re-check file is:
+[docs/superpowers/plans/2026-08-29-a1-device-acceptance.md](../docs/superpowers/plans/2026-08-29-a1-device-acceptance.md).
+
+**Gate.** `:domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test --rerun-tasks` — BUILD
+SUCCESSFUL, exit 0, **557 actionable tasks: 557 executed**, **1298 tests / 0 failures** (up from the
+1219 baseline); `core/ui` untouched, so `verifyRoborazziDebug` was not part of the closing gate.
 
 ## Agentic track — Этап 4.5 (A0.5) — second consumer — `CODE-GREEN` (2026-08-26)
 

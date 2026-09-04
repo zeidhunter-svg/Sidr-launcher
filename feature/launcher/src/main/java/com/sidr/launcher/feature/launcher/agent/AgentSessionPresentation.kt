@@ -30,11 +30,17 @@ import com.sidr.launcher.feature.launcher.R
  * rather than sentences: a sentence born in the domain cannot be translated, and a sentence born in a
  * ViewModel cannot be tested against a locale.
  *
- * Every `when` here is exhaustive with no `else` — **except** [toolLabelFor] and [provenanceLabelFor],
- * which key on [ToolId]/[ToolLevel]'s open `String` value rather than a closed sum, so a new domain
- * constant cannot be caught at compile time and the `else` arm is load-bearing: an unrecognised value
- * falls through to a generic/unknown resource (see each function's own KDoc), never to a build failure
- * or a blank line.
+ * Every `when` here that dispatches on a **closed sum** is exhaustive with no `else`, so adding a value
+ * to that sum breaks this build rather than silently rendering a blank. Three functions are outside
+ * that rule, and each for a stated reason — the count is deliberate, because the previous wording named
+ * two and `stateOf` made it false (final whole-branch review, finding 5):
+ *  - [toolLabelFor] and [provenanceLabelFor] key on [ToolId]/[ToolLevel]'s open `String` value rather
+ *    than a closed sum, so a new domain constant cannot be caught at compile time and the `else` arm is
+ *    load-bearing: an unrecognised value falls through to a generic/unknown resource (see each
+ *    function's own KDoc), never to a build failure or a blank line.
+ *  - [stateOf] is a **subject-less** `when` over predicates, not a dispatch on a sum at all, so the
+ *    language requires its `else`. It is the "none of the four signals fired" arm and reads
+ *    [AgentStepState.PENDING] — see that function's own KDoc for the signals its four branches read.
  */
 
 /**

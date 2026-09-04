@@ -1,5 +1,6 @@
 package com.sidr.launcher.data.repository.agent
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.provider.AlarmClock
@@ -11,7 +12,15 @@ import com.sidr.launcher.domain.tool.ToolWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 
-/** The one place an intent leaves this worker. Injected so the parse can be tested without Android. */
+/**
+ * The one place an intent leaves this worker. Injected so the parse can be tested without Android.
+ *
+ * **`launch` may throw, and that is deliberate** (final whole-branch review, finding 1). It is the raw
+ * `startActivity` seam: on a device with no activity registered for the intent — an AOSP or ROM build,
+ * or Deskclock disabled — it raises `ActivityNotFoundException`, and a restricted caller raises
+ * `SecurityException`. [Tier0IntentToolWorker] catches both; see its KDoc for why the catch is the
+ * worker's rather than this seam's.
+ */
 interface IntentLauncher {
     fun launch(intent: Intent)
 }
@@ -32,6 +41,32 @@ class ContextIntentLauncher @Inject constructor(
  * **Neither skips the OS's own UI.** `EXTRA_SKIP_UI` stays `false` and settings opens its own screen,
  * so the final act is the user's. That is what makes `SAFE` an honest declaration rather than a
  * convenient one, and it is the "prefilled but not sent" form Master Plan §3.6 `B4` describes.
+ *
+ * **The launch is caught HERE, not in [ContextIntentLauncher]** (final whole-branch review, finding 1,
+ * CRITICAL). `startActivity` was called bare and nothing above it catches — `AgentExecutor.perform`'s
+ * one call site has no `try`, neither does `RunAgentSessionUseCase.run`, and `LauncherAgentSession`
+ * runs on `viewModelScope` with no `CoroutineExceptionHandler` — so an `ActivityNotFoundException`
+ * from a device with no clock app killed the home-screen process. That breaks the hard rule that a
+ * repository/use-case operation never throws to UI, and it was a regression against this repo's own
+ * `AndroidActionExecutor`, which catches the same two exceptions at every one of its `startActivity`
+ * call sites.
+ *
+ * The contract made load-bearing is **[ToolWorker]'s: an invocation always yields a [ToolResult]** —
+ * not the seam's "launching never throws". Catching inside [ContextIntentLauncher] would make a
+ * swallowed failure indistinguishable from a success, because `launch` returns `Unit`: this worker
+ * would answer [ToolResult.Effected] for an intent that never left, and `AgentExecutor` would record
+ * `ToolObserved(Effected)` in a trace that must be 1:1 with reality (`DOC-ILM-3`). A trace that lies is
+ * worse than one that stops. Keeping the seam's contract would therefore mean giving it a *reported*
+ * outcome rather than a swallowed one — a different return type, which buys nothing the worker's own
+ * catch does not already give. It also puts the catch in the object that owns the result type, exactly
+ * where `AndroidActionExecutor` puts its own, and covers every intent this worker issues and every
+ * [IntentLauncher] implementation rather than one of each.
+ *
+ * The failure is [com.sidr.launcher.domain.intent.CommandFailure.Generic], the same value every other
+ * fail-closed path here already uses. A dedicated variant is deliberately not minted: the A1' ADR
+ * records a richer per-tool failure vocabulary as rejected with a measured reason, and a new
+ * `CommandFailure` is a closed-sum widening in `commonMain` plus three locale strings for a state the
+ * user can do nothing about.
  */
 class Tier0IntentToolWorker @Inject constructor(
     private val launcher: IntentLauncher,
@@ -39,10 +74,7 @@ class Tier0IntentToolWorker @Inject constructor(
 
     override suspend fun invoke(invocation: ResolvedInvocation): ToolResult = when (invocation.id) {
         Tier0ToolIds.SET_TIMER -> setTimer(invocation.args["duration"].orEmpty())
-        Tier0ToolIds.OPEN_SYSTEM_SETTINGS -> {
-            launcher.launch(Intent(Settings.ACTION_SETTINGS))
-            ToolResult.Effected()
-        }
+        Tier0ToolIds.OPEN_SYSTEM_SETTINGS -> launch(Intent(Settings.ACTION_SETTINGS))
         // Unreachable in a well-formed graph — the federation routes by the registry this adapter
         // declares. Fail-closed and labelled as such, never named in `CommandFailure` (spec §4.4).
         else -> ToolResult.Failed(CommandFailure.Generic)
@@ -50,12 +82,30 @@ class Tier0IntentToolWorker @Inject constructor(
 
     private fun setTimer(duration: String): ToolResult {
         val seconds = parseSeconds(duration) ?: return ToolResult.Failed(CommandFailure.Generic)
-        launcher.launch(
+        return launch(
             Intent(AlarmClock.ACTION_SET_TIMER)
                 .putExtra(AlarmClock.EXTRA_LENGTH, seconds)
                 .putExtra(AlarmClock.EXTRA_SKIP_UI, false),
         )
-        return ToolResult.Effected()
+    }
+
+    /**
+     * The only place this worker touches the world, and the only place it can fail from the world's
+     * side. Both tools go through it, so the catch cannot be forgotten by whoever adds a third.
+     *
+     * The exception set is `AndroidActionExecutor`'s, deliberately: the two world-facing paths of this
+     * repo should behave alike rather than each inventing its own — `ActivityNotFoundException` for
+     * "nothing on this device handles it", `SecurityException` for "you may not". Nothing broader is
+     * caught: a `RuntimeException` net here would swallow programming errors into a `Failed` step and
+     * hide them from every test.
+     */
+    private fun launch(intent: Intent): ToolResult = try {
+        launcher.launch(intent)
+        ToolResult.Effected()
+    } catch (e: ActivityNotFoundException) {
+        ToolResult.Failed(CommandFailure.Generic)
+    } catch (e: SecurityException) {
+        ToolResult.Failed(CommandFailure.Generic)
     }
 
     /**

@@ -228,12 +228,23 @@ below is recorded in its own ADR.
   another repo-wide `Test`-input snapshot per test task (the `D1`/`D4` family). **(3)**
   `RouteCommandUseCase:147-150` still fails open to the model on **any** non-`Success` from the session
   store — disk-full, a corrupt row, any future store failure falls through silently with no session, no
-  error, no trace. This block found and fixed **one** instance of that class in review (a `GoalShape.Free`
-  encode that threw, silently killing the block's own headline capability in production before the fix);
-  the class itself is untouched, owned by A4′. **(4)** `DoctrineGuardTest` does not pin a registered
-  tool's declared **risk** — a `SAFE → CONFIRM` change on an already-registered tool passes the guard and
-  the whole `:app` suite silently; Task 12's parity test closes this **only** for the two A0 in-app
-  tools' descriptors, not for any tool a future adapter registers. **(5)** the step-line rule
+  error, no trace. **Step 2b changed what that costs, and that consequence is doctrinal.** Under branch
+  (2) the fall-through is benign: that branch fires only when FastPath *decided*, so the command reaches
+  step (4) and the FastPath answer is returned untouched — no model call, nothing leaves the device. 2b
+  fires on the opposite condition (`isUndecided()`), so the same fall-through continues to steps (5)–(7)
+  and **the raw command text is sent to the cloud model** — on a goal a registered tool had already
+  matched deterministically. A store failure therefore bypasses deterministic-first: not a widening of
+  `OutboundContextPolicy` (the same text the model path would have received had nothing matched), but
+  the decision to send it is made by a disk error rather than by the routing rules. This block found and
+  fixed **one** instance of that class in review (a `GoalShape.Free` encode that threw, silently killing
+  the block's own headline capability in production before the fix); the class itself is untouched,
+  owned by A4′. **(4)** `DoctrineGuardTest` does not pin a registered tool's declared **risk** — a
+  `SAFE → CONFIRM` change on an already-registered tool passes the guard and the whole `:app` suite
+  silently. It does **not** pass unnoticed for the four tools shipped today: `Tier0IntentToolSourceTest`'s
+  `none { requiresConsent(it.risk) }` catches it for both Tier-0 tools and Task 12's parity test catches
+  it for the two A0 in-app tools' descriptors — both live in `:data:repository`, which is why the `:app`
+  suite stays green. The real hole is a **future** adapter's tools: the assertion sits in each source's
+  own test rather than in the guard, so a new source ships with no risk pin unless its author writes one. **(5)** the step-line rule
   (`PlanStep.line`) is keyed on argument **count**: a tool with two or more literal arguments falls back
   to the goal text and reproduces the duplication the rule exists to prevent — true for every tool
   shipped so far, named as a limit rather than a general property. **(6)** `"sayaç ayarla"` (the `tr`

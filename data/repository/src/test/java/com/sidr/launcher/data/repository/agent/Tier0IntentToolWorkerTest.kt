@@ -1,7 +1,11 @@
 package com.sidr.launcher.data.repository.agent
 
+import android.app.Application
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.provider.AlarmClock
+import android.provider.Settings
+import androidx.test.core.app.ApplicationProvider
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolResult
@@ -11,6 +15,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
@@ -165,6 +170,81 @@ class Tier0IntentToolWorkerTest {
 
         assertEquals(600, launched.single().getIntExtra(AlarmClock.EXTRA_LENGTH, -1))
     }
+
+    /**
+     * Final whole-branch review, finding 1 (CRITICAL). `ContextIntentLauncher.launch` called
+     * `context.startActivity` bare and **nothing above it catches**: `AgentExecutor.perform`'s one call
+     * site has no `try`, `RunAgentSessionUseCase.run` has none, and `LauncherAgentSession.attach` runs
+     * on `viewModelScope` with no `CoroutineExceptionHandler`. On a device with no activity registered
+     * for `AlarmClock.ACTION_SET_TIMER` — an AOSP or ROM build, or Deskclock disabled — a typed
+     * "set a timer for 10 minutes" reaches a one-step **SAFE** plan, so no consent gate stops it, and
+     * the home-screen process dies.
+     *
+     * This survived because Task 6 tested the worker against a launcher that cannot throw, and
+     * `ContextIntentLauncher` had no tests at all. The catch is [Tier0IntentToolWorker]'s, not the
+     * launcher's — see the class KDoc for which contract that makes load-bearing.
+     */
+    @Test
+    fun `a missing timer activity fails the tool result instead of propagating`() = runTest {
+        val worker = Tier0IntentToolWorker(ThrowingIntentLauncher { ActivityNotFoundException("no timer app") })
+
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 minutes")))
+
+        assertEquals(ToolResult.Failed(CommandFailure.Generic), result)
+    }
+
+    /** `SecurityException` has the same shape and the same fix — the pair `AndroidActionExecutor` catches. */
+    @Test
+    fun `a refused timer launch fails the tool result instead of propagating`() = runTest {
+        val worker = Tier0IntentToolWorker(ThrowingIntentLauncher { SecurityException("not allowed") })
+
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 minutes")))
+
+        assertEquals(ToolResult.Failed(CommandFailure.Generic), result)
+    }
+
+    /**
+     * The zero-argument tool takes the same launch path, so it needs the same proof: the catch has to
+     * cover every intent this worker issues, not only the one whose argument is parsed.
+     */
+    @Test
+    fun `a missing settings activity fails the tool result instead of propagating`() = runTest {
+        val worker = Tier0IntentToolWorker(ThrowingIntentLauncher { ActivityNotFoundException("no settings app") })
+
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.OPEN_SYSTEM_SETTINGS, emptyMap()))
+
+        assertEquals(ToolResult.Failed(CommandFailure.Generic), result)
+    }
+
+    /**
+     * [ContextIntentLauncher]'s first test, and the reason it needed one beyond finding 1's catch:
+     * `startActivity` on an **application** context without `FLAG_ACTIVITY_NEW_TASK` throws
+     * `AndroidRuntimeException` — a third crash mode, and one the worker's catch deliberately does
+     * NOT cover, because it is a wiring error rather than a state of the device. The flag is what makes
+     * that branch unreachable, and until now nothing pinned it: this class was reachable only through
+     * the graph, and every worker test used a fake launcher instead.
+     *
+     * Asserted through the shadow's recorded intent rather than by expecting no throw, so removing the
+     * flag turns this RED on the flag itself rather than on a Robolectric leniency that may change.
+     */
+    @Test
+    fun `the real launcher adds NEW_TASK, without which an application context cannot start an activity`() {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+
+        ContextIntentLauncher(context).launch(Intent(Settings.ACTION_SETTINGS))
+
+        val started = shadowOf(context).nextStartedActivity
+        assertEquals(Settings.ACTION_SETTINGS, started.action)
+        assertEquals(
+            Intent.FLAG_ACTIVITY_NEW_TASK,
+            started.flags and Intent.FLAG_ACTIVITY_NEW_TASK,
+        )
+    }
+}
+
+/** The seam as the world can actually behave: `startActivity` throws and the worker must absorb it. */
+private class ThrowingIntentLauncher(private val thrown: () -> RuntimeException) : IntentLauncher {
+    override fun launch(intent: Intent): Nothing = throw thrown()
 }
 
 private class FakeIntentLauncher(private val record: MutableList<Intent>) : IntentLauncher {

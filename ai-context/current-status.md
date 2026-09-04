@@ -89,8 +89,14 @@ non-vacuous accessor, mutation-proved in two rounds.
 src/main/java` is scanned by neither call-site guard (owner-level, the `D1`/`D4` family).
 `RouteCommandUseCase:147-150` still fails open to the model on **any** non-`Success` from the session
 store — the block fixed one instance of that class (the `Free`-encode throw above), not the class
-itself, which stays A4′'s. `DoctrineGuardTest` does not pin a registered tool's declared **risk**;
-Task 12's parity test closes that narrowly for the two A0 in-app tools' descriptors only. The step-line
+itself, which stays A4′'s. **Step 2b changed what that class costs:** branch (2) fires only when
+FastPath decided, so its fall-through returns the FastPath answer and nothing leaves the device, while
+2b fires on `isUndecided()` — so a store failure sends the **raw command text to the cloud model** on a
+goal a registered tool had already matched. Deterministic-first bypassed by a disk error, silently.
+`DoctrineGuardTest` does not pin a registered tool's declared **risk**, though no tool shipped today is
+actually unpinned: `Tier0IntentToolSourceTest`'s `none { requiresConsent(it.risk) }` covers both Tier-0
+tools and Task 12's parity test covers the two A0 in-app tools' descriptors — both in
+`:data:repository`, which is why the `:app` suite stays green. The hole is a future adapter's tools. The step-line
 rule is keyed on argument **count** — a tool with two or more literal arguments falls back to the goal
 text. `"sayaç ayarla"` (the `tr` timer trigger) is reachable and un-shadowed but needs a native
 speaker's read — `sayaç` reads as counter/meter, not kitchen timer. `docs/governing/

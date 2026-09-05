@@ -47,6 +47,40 @@ import java.io.File
  * The residual hole is one hand-written column, reviewable in the same diff as the tool it describes —
  * which is strictly better than the previous state, where the claim lived in seven prose comments and
  * was reviewable nowhere.
+ *
+ * **Those claims were then measured, not assumed** (independent mutation round, 2026-09-05). Removing
+ * the manifest declaration goes RED naming the missing permission; an unmapped new intent action goes
+ * RED; a legitimate *complete* addition stays GREEN, so the guard does not over-pin; and on an empty
+ * scan 3 of these 4 tests still fire, so it is not vacuous. The hand-written column is exactly as weak
+ * as stated above and no weaker — rewriting [requiredPermissions] to claim `AlarmClock.ACTION_SET_TIMER`
+ * needs nothing leaves all four tests green and the app in its pre-fix broken state.
+ *
+ * **The same round measured two further limits, and neither is a live defect today** — both shipped
+ * workers construct their intents inline and the manifest is correct. They are limits on what this
+ * guard can *see*, and they are written down because the person at risk is the next author, not this
+ * one:
+ *
+ *  1. **An `Intent(…)` moved one file sideways is invisible to the whole guard.** Every assertion here
+ *     starts from [intentIssuingWorkerFiles], which admits a file only when it both declares a
+ *     `ToolWorker` **and** contains `Intent(` itself. A worker that delegates intent construction to a
+ *     plain helper object therefore issues intents this guard never reads, and the coverage pin does
+ *     not help: the helper is not a `ToolWorker`, so it is not in the scanned set either. Measured with
+ *     a `call_number` tool whose worker calls a helper that builds `Intent.ACTION_CALL`, with
+ *     `android.permission.CALL_PHONE` absent from the manifest — **green 4/4**: the same defect shape
+ *     this guard exists for, one refactor away. It matters concretely because A1″'s entire content is
+ *     more Tier-0 intents, and a shared intent-building helper is a natural thing to write when adding
+ *     a dozen of them.
+ *  2. **The guard keys on workers, not on registered tools.** Totality triggers on `Intent(` in a
+ *     worker file, not on the `ToolDescriptor`s a `ToolRegistry` advertises, so a tool registered in a
+ *     source with no corresponding worker branch is invisible to every assertion here. The question
+ *     this class actually answers is *"does every intent a scanned worker issues have a declared
+ *     permission"*, not *"can every registered tool actually run"* — which is the question the
+ *     2026-09-05 defect was an instance of.
+ *
+ * Closing either means keying the scan on what the registry advertises rather than on worker files —
+ * a different guard, not a wider regex. Recorded, not built: `CLAUDE.md`'s Known debt and the track
+ * plan's `§HANDOFF` (its "before you write adapter #3" section) both point here rather than restating
+ * this.
  */
 class ToolPermissionManifestGuardTest {
 

@@ -228,6 +228,19 @@ below is recorded in its own ADR.
   is now declared and the class is held by `ToolPermissionManifestGuardTest` (`:app`), which fails when
   an intent a registered tool issues needs a permission the manifest does not declare — the mapping it
   checks against is hand-written, and that column is the new weak point, stated in the test's own KDoc.
+  **An independent mutation round then measured that guard, and it holds its main directions** (a
+  removed manifest declaration and an unmapped new action both go RED; legitimate complete growth stays
+  GREEN; 3 of its 4 tests still fire on an empty scan; the hand-written column is exactly as weak as
+  declared, no weaker) — **and it measured two further limits, neither of them a live defect today**,
+  because both shipped workers build their intents inline and the manifest is correct: **(a)** an
+  `Intent(…)` moved one file sideways — built in a plain helper the worker calls — is invisible to the
+  *whole* guard, since its scan admits only files that both declare a `ToolWorker` and construct an
+  `Intent`; **(b)** the guard keys on workers, not on registered tools, so a tool registered in a source
+  with no worker branch is unseen — it answers "does every intent a scanned worker issues have a
+  declared permission", not "can every registered tool run". These are limits on what the guard can
+  *see*, and the person at risk is the next author: A1″'s entire content is more Tier-0 intents, where a
+  shared intent-building helper is a natural thing to write. Full statement in the test's own KDoc;
+  address to adapter #3 in the track plan's `§HANDOFF`.
   **`DEVICE-ACCEPTED` remains unmet**: the fix has run on the phone under agent drive only, which this
   project's status vocabulary explicitly does not count as acceptance. **The same run also falsified a
   second claim of the block, and it is left for the owner rather than silently repaired:** the spec and

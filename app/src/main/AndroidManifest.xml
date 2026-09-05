@@ -14,6 +14,18 @@
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- A1' Tier-0 tool `set_timer`. `AlarmClock.ACTION_SET_TIMER` is refused by ActivityTaskManager
+         without this ("Permission Denial: … requires com.android.alarm.permission.SET_ALARM", owner
+         device acceptance 2026-09-05); the block had claimed in eight places that it needed none.
+         What it grants: the ability to start a timer in the device's clock app. Nothing more — it is
+         not read access to alarms or alarm data, and it carries no user content off the device.
+         Observed on the SM-A325F 2026-09-05: with `EXTRA_SKIP_UI=false` the Samsung clock opens AND
+         the timer is already counting down — the flag governs whether the app shows its UI, not
+         whether the timer starts, so this is a real effect and not merely a prefilled form.
+         protectionLevel `normal` (verified: `pm list permissions -f -g` -> `protectionLevel:normal`,
+         `package:android`), so it is granted at install and never prompts.
+         Held by ToolPermissionManifestGuardTest. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
 
     <queries>
         <intent>

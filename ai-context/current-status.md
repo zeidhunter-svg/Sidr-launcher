@@ -50,7 +50,12 @@ can advertise a tool the dispatcher fails to route (the direct fix for A0 review
 consent gate once read `risk` from the plan and `permissionGate` from a separately-wired registry). A
 **second real Android source**, `Tier0IntentToolSource`/`Tier0IntentToolWorker` (level `system_intent`),
 sits beside the existing `in_app` adapter and registers `set_timer` (arity 1, `SAFE`, `EXTERNAL`) and
-`open_system_settings` (arity 0, `SAFE`, `EXTERNAL`) — zero new Android permissions. Every registered
+`open_system_settings` (arity 0, `SAFE`, `EXTERNAL`). `set_timer` needs
+`com.android.alarm.permission.SET_ALARM` (`protectionLevel: normal`, install-time, no prompt);
+`open_system_settings` needs none. **This block claimed "zero new Android permissions" in eight places
+and it was false** — the permission was undeclared, so `ActivityTaskManager` refused every
+`ACTION_SET_TIMER` and the tool could not run once (found by owner device acceptance 2026-09-05, fixed
+the same day, now held by `ToolPermissionManifestGuardTest`). Every registered
 tool now carries `level`/`effect`, and an `EXTERNAL` tool's provenance reaches the user
 (`AgentSessionSurfaceProvenanceTest`, `LauncherScreenAgentProvenanceTest` — behavioural, not a
 structural scan, per spec §6.3's own warning against a vacuous guard). `requiresConsent(risk)` in

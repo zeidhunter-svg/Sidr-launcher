@@ -863,7 +863,16 @@ object Tier0ToolIds {
  * the user where a `SAFE` effect went. Neither skips the OS's own UI — the "prefilled but not sent"
  * shape leaves the final act with the user, which is what makes `SAFE` honest rather than convenient.
  *
- * Zero new permissions: `ACTION_SET_TIMER` and `ACTION_SETTINGS` both need none.
+ * Permissions: `ACTION_SETTINGS` needs none; `ACTION_SET_TIMER` needs
+ * `com.android.alarm.permission.SET_ALARM` (`protectionLevel: normal`, install-time), which must be
+ * declared in `app/src/main/AndroidManifest.xml`.
+ *
+ * [Corrected 2026-09-05. This listing told the implementer to write "Zero new permissions:
+ * `ACTION_SET_TIMER` and `ACTION_SETTINGS` both need none", which is false and was faithfully
+ * implemented, shipping a tool that could never run. The listing is corrected — rather than merely
+ * annotated — because it is an instruction to write code, and anyone re-running this step from the
+ * uncorrected text would reproduce the defect. The plan's *narrative* claims elsewhere are left as
+ * written; see Step 8's commit message.]
  */
 class Tier0IntentToolSource @Inject constructor() : ToolRegistry {
 
@@ -1057,6 +1066,14 @@ Expected: PASS.
 ```bash
 git add -A && git commit -m "feat(agentic-5/A1'): a second source — two Tier-0 intents, zero new permissions"
 ```
+
+> **Historical, deliberately not rewritten (2026-09-05).** "zero new permissions" in the message above
+> is false — `ACTION_SET_TIMER` requires `com.android.alarm.permission.SET_ALARM`. This line is left
+> exactly as it was because the commit **was made with this text** and stands in git history:
+> editing it here would make the plan describe a commit message that never existed, and a document
+> that disagrees with immutable primary evidence is a worse failure than one carrying a marked stale
+> claim. The correction lives where a reader can act on it — the source KDoc, the spec's §8.1 and F3,
+> `CLAUDE.md`, `ai-context/current-status.md` — and is enforced by `ToolPermissionManifestGuardTest`.
 
 ---
 

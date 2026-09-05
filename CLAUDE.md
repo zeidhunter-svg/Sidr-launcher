@@ -139,8 +139,8 @@ status vocabulary).
   list by construction, so no wiring path can advertise a tool the dispatcher cannot route (the direct
   fix for A0 review finding F2). A **second real Android source**, `Tier0IntentToolSource` +
   `Tier0IntentToolWorker` (level `system_intent`), registers two Tier-0 system intents — `set_timer`
-  (arity 1, `SAFE`, `EXTERNAL`) and `open_system_settings` (arity 0, `SAFE`, `EXTERNAL`), zero new
-  Android permissions — beside the existing `in_app` adapter (`SystemIntentToolSource`/
+  (arity 1, `SAFE`, `EXTERNAL`) and `open_system_settings` (arity 0, `SAFE`, `EXTERNAL`) — beside the
+  existing `in_app` adapter (`SystemIntentToolSource`/
   `SystemIntentToolWorker`, still the unchanged `ExecuteActionUseCase → IntentActionResolver →
   ActionExecutor` chain). Every registered tool now declares `level`/`effect`, and an `EXTERNAL` tool's
   provenance reaches the user (`AgentSessionPresentation.toolLabelFor`/`provenanceLabelFor`, rendered on
@@ -219,8 +219,25 @@ below is recorded in its own ADR.
 - **A1′ (federated `ToolRegistry`) is `CODE-GREEN`; `DEVICE-ACCEPTED` is a plain gap, not inapplicable** —
   unlike A0.5, this block changes what the user can reach (two new system intents, `set_timer` and
   `open_system_settings`, now reachable from a typed command), so spec §16 criterion 1 requires an owner
-  device run and it has not happened (full record in the A1′ ADR). What it leaves behind, each named
-  rather than implied absent: **(1)** `DOC-ADL-1`'s closure rests on the **single call site**, not on
+  device run. **A first owner device run happened 2026-09-05 and found the block's headline tool dead:**
+  `set_timer` shipped documented in eight places as needing "zero new permissions", but
+  `AlarmClock.ACTION_SET_TIMER` requires `com.android.alarm.permission.SET_ALARM`, which the manifest
+  did not declare — so `ActivityTaskManager` refused every invocation and the step failed on every
+  device. No test could see it: `Tier0IntentToolWorkerTest` injects a fake `IntentLauncher`, so the real
+  `startActivity` is never reached, and a manifest omission has no unit-test signature. The permission
+  is now declared and the class is held by `ToolPermissionManifestGuardTest` (`:app`), which fails when
+  an intent a registered tool issues needs a permission the manifest does not declare — the mapping it
+  checks against is hand-written, and that column is the new weak point, stated in the test's own KDoc.
+  **`DEVICE-ACCEPTED` remains unmet**: the fix has run on the phone under agent drive only, which this
+  project's status vocabulary explicitly does not count as acceptance. **The same run also falsified a
+  second claim of the block, and it is left for the owner rather than silently repaired:** the spec and
+  the source both justify `set_timer`'s `SAFE` rating with "neither skips the OS's own UI — the final
+  act is the user's", but with `EXTRA_SKIP_UI = false` the Samsung clock opened *with the timer already
+  counting down* (Пауза/Удалить, not a start button). `EXTRA_SKIP_UI` governs whether the responding app
+  shows its UI, not whether it acts. `SAFE` may well still be right — the effect is trivially
+  reversible, immediately visible, and provenance is shown — but the stated *reason* for it does not
+  hold for this tool, and re-deciding a risk level is an owner/spec question. What the block leaves
+  behind, each named rather than implied absent: **(1)** `DOC-ADL-1`'s closure rests on the **single call site**, not on
   `ConsentPolicyTest`'s "wake-up" test — that test cannot distinguish `risk != entries.first()` from
   `risk >= CONFIRM` while exactly three risk levels exist, and only bites the day a fourth level lands
   below `CONFIRM`. **(2)** `core/testing/src/main/java` is scanned by neither call-site guard, so a
@@ -423,7 +440,7 @@ below is recorded in its own ADR.
 | Suggestion + voice contracts; prayer domain (`PrayerContext`, `GetPrayerContextUseCase`) | `domain` |
 | `RuleBasedIntentMatcher`, `InstalledAppsRepository` impl, `AndroidActionExecutor` | `data/repository` |
 | `SystemIntentToolSource` (projects `ActionCatalog` → two `ToolDescriptor`s, level `in_app`) + `SystemIntentToolWorker` (over the **unchanged** action path; renamed from `SystemIntentToolExecutor` when the `ToolWorker` port landed) + `RoomAgentSessionStore` | `data/repository` |
-| `Tier0IntentToolSource`/`Tier0IntentToolWorker` (level `system_intent`: `set_timer`, `open_system_settings`, zero new Android permissions) + `ToolMatchPlanner`/`ToolVocabulary` (localized `en`/`ru`/`tr` reachability feeding `RouteCommandUseCase` step 2b) | `data/repository` |
+| `Tier0IntentToolSource`/`Tier0IntentToolWorker` (level `system_intent`: `set_timer`, needing `com.android.alarm.permission.SET_ALARM` — `normal`, install-time; `open_system_settings`, needing none) + `ToolMatchPlanner`/`ToolVocabulary` (localized `en`/`ru`/`tr` reachability feeding `RouteCommandUseCase` step 2b) | `data/repository` |
 | DataStore impls + `PreferencesMapper`/`PreferencesKeys`; Room entities/DAOs/`SidrDatabase`/migrations/mappers | `data/repository` |
 | Suggestion providers + `SuggestionEngineImpl`; `SecureSecretStore` impl + `KeystoreSecretCipher` | `data/repository` |
 | Cloud AI client (Ktor SSE engine, `LlmCommandPlanner`) | `data/ai-cloud` |

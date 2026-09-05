@@ -345,6 +345,26 @@ tasks.withType<Test>().configureEach {
     inputs.dir(rootProject.file("consumer/jvm/src/main/kotlin"))
         .withPropertyName("consumerJvmSources")
         .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    // A1' device-acceptance fix (2026-09-05). `ToolPermissionManifestGuardTest` reads
+    // `app/src/main/AndroidManifest.xml` as TEXT, and that file is matched by NO tree declared in this
+    // build script: `i18nGuardRepoWideResScan` is `**/src/main/res/**` and
+    // `i18nGuardRepoWideSrcMainScan` is `**/src/main/**/*.kt`, neither of which matches an .xml one
+    // level above `res/`. Nor is it an input by any other route: `:app` does not set
+    // `unitTests.isIncludeAndroidResources`, so the merged manifest is not on the unit-test classpath.
+    //
+    // LOAD-BEARING, and measured rather than assumed — this declaration exists because the first
+    // attempt to prove the guard by mutation produced a FALSE GREEN. With the guard written and the
+    // permission then deleted from the manifest, `:app:testDebugUnitTest` came back UP-TO-DATE at
+    // exit 0, serving the stale pass while the capability was dead again. (The run immediately before
+    // it HAD re-executed on a manifest edit, which is what made the trap convincing: that was only
+    // because the preceding run had failed, and Gradle never treats a failed task as up-to-date.)
+    // With this block in place, the identical mutation goes RED. Same class as the doctrine-matrix and
+    // `res/**` declarations above, and the same lesson: a file read by `java.io.File(...)` is an input
+    // to nothing until it is said to be one.
+    inputs.file(rootProject.file("app/src/main/AndroidManifest.xml"))
+        .withPropertyName("appManifest")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // Fix-privacy-guard, review item IMPORTANT 7 (2026-08-20). Four I18N guards in app/src/test read

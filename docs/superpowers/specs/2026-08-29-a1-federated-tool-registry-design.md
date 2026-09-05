@@ -50,7 +50,7 @@ to do many things.** It makes it able to be *given* many things safely. The doin
 |---|---|---|
 | **F1** | The A1 fork reserved by Master Plan §3.2: parallel tool vocabulary vs. evolving `ActionCatalog` in place | **Parallel vocabulary + federation, with identity C.** `ToolId`/`ToolDescriptor` stay the agent's vocabulary; `ActionCatalog` becomes **one adapter among N** — which it already is, in thirty lines. `ActionIds` is not touched. **Identity C:** a projected tool's `ToolId` is *derived* from its `ActionId` rather than hand-copied |
 | **F2** | Block scope: boundaries, or boundaries + tool mass | **Boundaries + exactly one real second source.** `B2`/`B4` mass and `B3` selection become **`A1″`**, a new block recorded in Master Plan §3.2/§3.6 with an address |
-| **F3** | Which second source proves composition on the phone | **`set_timer` + `open_system_settings`** (one Tier-0 adapter, two tools, arities 1 and 0, zero new permissions). Revised from `set_timer` + `dial` during the second design pass — see §8 |
+| **F3** | Which second source proves composition on the phone | **`set_timer` + `open_system_settings`** (one Tier-0 adapter, two tools, arities 1 and 0). Revised from `set_timer` + `dial` during the second design pass — see §8. **Correction 2026-09-05: this cell read "zero new permissions" and that premise was false** — `AlarmClock.ACTION_SET_TIMER` requires `com.android.alarm.permission.SET_ALARM`, undeclared until the device-acceptance fix, so the tool could never run. **The decision stands; the reasoning that reached it does not.** What "zero permissions" was standing in for — that this pair drags in no consent machinery, no runtime grant flow and no permission-education surface — remains true: `SET_ALARM` is `protectionLevel: normal`, granted at install, never prompted. And the comparison that drove the revision is unchanged in direction: the rejected `dial` needs `CALL_PHONE`, a **dangerous** permission with a runtime grant flow, so `set_timer` is still strictly the cheaper of the two. What does **not** survive is the use the claim was put to: "zero permissions" doubled as grounds for not checking the permission surface at all, and that is precisely how a dead capability shipped. See §8.1 and `ToolPermissionManifestGuardTest` |
 | **F4** | The type of a tool level in `commonMain` | **Open value class over `String`** (`ToolLevel`), applying A0.5's measured contrast directly: an open value type costs zero core edits per addition, a closed sum costs four files in three modules |
 | **F5** | The A0.5 finding "consent fires **before** argument binding", addressed `A1′/A4′` — a slash, i.e. no owner | **A4′.** The order `validate → checkpointFor → resolve` is a property of the **runtime**, deliberately fail-safe, and reordering it changes trace shape on process death — which is A4′'s subject. A1′ records the address as a line, not as a slash |
 | **F6** | `ArgType` — one of the four vocabulary findings A0.5 addressed to A1′ — now that a genuinely non-string argument exists (timer duration) | **Not extended.** Answered with a measured reason rather than deferred — see §10.4 |
@@ -362,12 +362,20 @@ Two tests, and the second is the point:
 
 ### 8.1. What is built
 
-One `Tier0IntentAdapter` at level `system_intent`, zero new permissions:
+One `Tier0IntentAdapter` at level `system_intent`, one new install-time permission:
 
-| Tool | Args | Risk | Effect | Intent |
-|---|---|---|---|---|
-| `set_timer` | `duration` (1, required) | `SAFE` | `EXTERNAL` | `AlarmClock.ACTION_SET_TIMER`, UI **not** skipped |
-| `open_system_settings` | none (0) | `SAFE` | `EXTERNAL` | `ACTION_SETTINGS` |
+| Tool | Args | Risk | Effect | Intent | Permission |
+|---|---|---|---|---|---|
+| `set_timer` | `duration` (1, required) | `SAFE` | `EXTERNAL` | `AlarmClock.ACTION_SET_TIMER`, UI **not** skipped | `com.android.alarm.permission.SET_ALARM` (`normal`, install-time) |
+| `open_system_settings` | none (0) | `SAFE` | `EXTERNAL` | `ACTION_SETTINGS` | none |
+
+**Corrected 2026-09-05.** This section read "zero new permissions" and the table had no permission
+column at all. `ACTION_SET_TIMER` is refused by `ActivityTaskManager` without `SET_ALARM`, so the
+headline tool of this block's second source failed on every invocation until the manifest declared it
+(owner device acceptance). The permission column is now part of the table because *which permission an
+intent requires* turned out to be a property of a Tier-0 tool that a design can silently omit — and
+A1″'s entire content is more Tier-0 intents. `ToolPermissionManifestGuardTest` makes the omission a
+red test rather than a device-day discovery.
 
 Arities 0 and 1 stress the schema at both ends — the shape that already earned its keep in A0.5's
 sandbox trio. Neither skips the OS's own UI: the "prefilled but not sent" form leaves the final act

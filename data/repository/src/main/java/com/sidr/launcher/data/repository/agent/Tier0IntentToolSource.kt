@@ -25,7 +25,30 @@ object Tier0ToolIds {
  * the user where a `SAFE` effect went. Neither skips the OS's own UI — the "prefilled but not sent"
  * shape leaves the final act with the user, which is what makes `SAFE` honest rather than convenient.
  *
- * Zero new permissions: `ACTION_SET_TIMER` and `ACTION_SETTINGS` both need none.
+ * **Permissions.** `ACTION_SETTINGS` needs none. `ACTION_SET_TIMER` needs
+ * `com.android.alarm.permission.SET_ALARM`, declared in `app/src/main/AndroidManifest.xml` — an
+ * install-time (`protectionLevel: normal`) permission, so it is granted without a prompt and needs no
+ * runtime request or education flow.
+ *
+ * **What `EXTRA_SKIP_UI = false` does and does not buy, measured rather than assumed.** The paragraph
+ * above about the "prefilled but not sent" shape is accurate for `open_system_settings` and, on the
+ * evidence, **overstated for `set_timer`**: driven on the SM-A325F 2026-09-05, the Samsung clock opened
+ * *and the timer was already counting down* — `Пауза`/`Удалить`, not a start button. The flag governs
+ * whether the responding app shows its UI, not whether it performs the act, so `set_timer` is a real
+ * effect the user then sees rather than one they complete. That does not by itself make `SAFE` wrong —
+ * the effect is trivially reversible, visible immediately, and the tool is `EXTERNAL` so its provenance
+ * is shown — but the *reason* recorded for `SAFE` ("the final act is the user's") does not hold for
+ * this tool, and re-deciding it is an owner/spec question, not a thing to quietly restate here.
+ *
+ * This KDoc read "Zero new permissions: `ACTION_SET_TIMER` and `ACTION_SETTINGS` both need none" until
+ * 2026-09-05, and that was simply false. It shipped through the whole block — spec, plan, commit
+ * message, `CLAUDE.md`, status — and cost the owner's device acceptance: every `set_timer` invocation
+ * died at `ActivityTaskManager`'s `Permission Denial … requires com.android.alarm.permission.SET_ALARM`,
+ * so a registered, reachable, `SAFE` tool could never once run. No test could see it —
+ * `Tier0IntentToolWorkerTest` injects a fake `IntentLauncher`, so the real `startActivity` is never
+ * reached, and a manifest omission has no unit-test signature. It is now held by
+ * `ToolPermissionManifestGuardTest` (`:app`), which fails when any intent a registered tool issues
+ * needs a permission the manifest does not declare.
  */
 class Tier0IntentToolSource @Inject constructor() : ToolRegistry {
 

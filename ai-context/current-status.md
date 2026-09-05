@@ -98,7 +98,13 @@ actually unpinned: `Tier0IntentToolSourceTest`'s `none { requiresConsent(it.risk
 tools and Task 12's parity test covers the two A0 in-app tools' descriptors — both in
 `:data:repository`, which is why the `:app` suite stays green. The hole is a future adapter's tools. The step-line
 rule is keyed on argument **count** — a tool with two or more literal arguments falls back to the goal
-text. `"sayaç ayarla"` (the `tr` timer trigger) is reachable and un-shadowed but needs a native
+text. **Exception containment is per-worker:** the final review fixed a crash (the Tier-0 intent seam called
+`startActivity` bare, so a typed timer command killed the home-screen process on a device with no clock
+app) by catching inside `Tier0IntentToolWorker`, but `ToolWorker`'s "an invocation always yields a
+`ToolResult`" is still held by convention plus three implementations — `AgentExecutor.perform`'s one
+call site has no `try`, so a future adapter whose worker throws reopens it, and neither call-site guard
+would see that. Repair → A4′; the obligation until then is A1″'s (full argument in the ADR and
+`§HANDOFF`). `"sayaç ayarla"` (the `tr` timer trigger) is reachable and un-shadowed but needs a native
 speaker's read — `sayaç` reads as counter/meter, not kitchen timer. `docs/governing/
 sidr-doctrine-matrix-v1.0.md`'s `DOC-HMA-2` row is **not** claimed closed — levels now exist, but
 whether a level *change* stops the loop is still A4′'s.

@@ -258,7 +258,19 @@ below is recorded in its own ADR.
   reason rather than deferred (owner fork F6) — a second flag-value is still categorically insufficient
   for an MCP/AppFunctions JSON Schema, and widening it would spend work at the model's input boundary
   (`ProposalValidator`) without moving A1′ toward a finished state. The A0.5 finding "consent fires
-  before argument binding" (fork F5) is recorded as an address, not a decision: **A4′**.
+  before argument binding" (fork F5) is recorded as an address, not a decision: **A4′**. **(8)**
+  exception containment is **per-worker**: `ToolWorker`'s "an invocation always yields a `ToolResult`"
+  is held by convention plus three implementations, not by a mechanism — `AgentExecutor.perform`'s one
+  `toolExecutor.invoke` call site still has **no `try`**, so a *future* adapter whose worker throws
+  reopens the crash the final review fixed (`Tier0IntentToolWorker`'s intent seam called `startActivity`
+  bare, and a typed timer command killed the home-screen process on a device with no clock app). **Not a
+  live crash today** — all three shipped workers contain: the Tier-0 one catches
+  `ActivityNotFoundException`/`SecurityException` (the set `AndroidActionExecutor` catches at each of its
+  three `startActivity` sites), `SystemIntentToolWorker` inherits containment from that same unchanged
+  action chain, and `SandboxToolWorker` catches broadly. Neither call-site guard sees it: they hold
+  **where** a tool is invoked from, not **what** comes back out. The repair is the engine's → **A4′**;
+  the obligation until then is **A1″**'s, which ships more workers first (argument and the adapter-#3
+  warning: the A1′ ADR's residuals, and `§HANDOFF` of the track plan).
 - **`CODE-GREEN`, not `DEVICE-ACCEPTED`:** DS-5's own acceptance checklist has never been run
   (since 2026-07-13); I18N-1 was verified only by agent-driven `adb`/`uiautomator` — its offline path, live
   TalkBack, fontScale 2.0, and the system per-app-language picker are untested. DS-6B is `CLOSED` (owner

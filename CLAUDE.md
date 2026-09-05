@@ -383,7 +383,11 @@ below is recorded in its own ADR.
   plus `:core:ui:verifyRoborazziDebug` whenever `core/ui` is touched, and `:app:assembleRelease` for
   release-affecting work. **`:domain:jvmTest` and `:consumer:jvm:test` must be listed explicitly:**
   `testDebugUnitTest` has not reached `:domain` since it went KMP, and it never reaches `:consumer:jvm`
-  at all. Baseline at 2026-09-03: **1298 tests, 0 failures** (434 `:domain:jvmTest` + 56 `:consumer:jvm`).
+  at all. Baseline at 2026-09-04 (`356fe1a`): **1304 tests, 0 failures** (434 `:domain:jvmTest` + 56
+  `:consumer:jvm` + 271 `:data:repository`). A1′ *closed* at 1298 on 2026-09-03; the final-review fix
+  added six tests, all in `:data:repository` (265 → 271) — four in `Tier0IntentToolWorkerTest` (16 total)
+  and the two of the new `Tier0ToolExecutionEndToEndTest`. Compare a fresh gate against **1304**, not
+  against the closing number quoted in the A1′ ADR.
   Read counts from the JUnit XML, not the console. **Use `--rerun-tasks`, never the plan-text `--rerun`**
   — the latter is not a valid Gradle 9.5.0 build-level flag and silently returns everything `UP-TO-DATE`
   while still printing `BUILD SUCCESSFUL` (it produced one false green inside the A1′ block); a genuine

@@ -1035,7 +1035,9 @@ UI: минимальная поверхность выполнения на су
 второй источник — здесь; масса и отбор инструментов ушли в новый блок **A1″** (Master Plan §3.2/§3.6).
 
 Гейт: `:domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test --rerun-tasks` — **557
-actionable tasks: 557 executed**, **1298 тестов, 0 падений** (база 1219); `core/ui` не тронут. Метка —
+actionable tasks: 557 executed**, **1298 тестов, 0 падений** (база 1219); `core/ui` не тронут.
+**Числа закрывающего прогона; действующая база — 1304:** финальное ревью ветки (`356fe1a`, ниже)
+добавило шесть тестов, все в `:data:repository`. Метка —
 `CODE-GREEN`, **не** `CLOSED` и **не** `DEVICE-ACCEPTED`: два новых пользовательски достижимых
 системных интента ни разу не запускались на телефоне (spec §16, критерий 1 из девяти — единственный
 невыполненный). Ревью задачи 10 нашло Critical, принадлежавшую задаче 9 и не закреплённую ни за одной
@@ -1591,8 +1593,12 @@ Tier-0-интента из `B4` (Alarm/Dial/geo) и весь `B2` — ни ст�
   Gradle JDK → 17), не только в дереве.
 - **Гейт блока — одна команда:**
   `./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 :domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test --rerun-tasks`.
-  `:domain:jvmTest` и `:consumer:jvm:test` перечислять **обязательно**. На 2026-09-03 это **1298
-  тестов, 0 падений** (434 в `:domain:jvmTest`, 56 в `:consumer:jvm`, база 1219). Через `tail` —
+  `:domain:jvmTest` и `:consumer:jvm:test` перечислять **обязательно**. На 2026-09-04 (`356fe1a`) это
+  **1304 теста, 0 падений** (434 в `:domain:jvmTest`, 56 в `:consumer:jvm`, 271 в `:data:repository`).
+  Блок A1′ закрывался на 1298 — финальное ревью добавило шесть тестов, все в `:data:repository`
+  (265 → 271): четыре в `Tier0IntentToolWorkerTest` (стало 16) и два новых
+  `Tier0ToolExecutionEndToEndTest`. Свежий гейт сравнивать с **1304**, не с закрывающим числом
+  из ADR. Через `tail` —
   никогда; числа читать из JUnit XML. **`--rerun-tasks`, никогда `--rerun`** (Ruling R9) — оба места,
   где план и спека текстуально требовали `--rerun`, исправлены этой сессией; не «восстанавливать»
   `--rerun`, если будущая правка его вернёт.

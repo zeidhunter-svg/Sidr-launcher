@@ -1,6 +1,7 @@
 # A1′ — device acceptance (federated `ToolRegistry`)
 
-> **Why this file exists.** Block A1′ (Этап 5) is `CODE-GREEN`: gate green at 1298 tests, every new
+> **Why this file exists.** Block A1′ (Этап 5) is `CODE-GREEN`: gate green at 1304 tests (1298 at
+> closing on 2026-09-03, +6 from the final-review fix `356fe1a`), every new
 > guard mutation-proved, ADR written. It is **not** `DEVICE-ACCEPTED`. Unlike A0.5 (whose device
 > acceptance was marked *not applicable*, because that block changed nothing on the phone), A1′ changes
 > exactly what the user can reach: two new system intents — `set_timer` and `open_system_settings` —

@@ -9,7 +9,8 @@
 > (**Этап 5 (A1′) — federated `ToolRegistry`: one `ToolRegistry` port now federates N adapters behind one
 > object; a second real Android source (`Tier0IntentToolSource`, level `system_intent`) registers
 > `set_timer`/`open_system_settings` and both are reachable from a typed command via routing step 2b;
-> `requiresConsent` unifies four risk-gate spellings into one; `CODE-GREEN` at 1298 tests, `DEVICE-ACCEPTED`
+> `requiresConsent` unifies four risk-gate spellings into one; `CODE-GREEN` at **1304** tests — 1298 at
+> closing, +6 from the final-review fix `356fe1a` — `DEVICE-ACCEPTED`
 > not met — spec §16 criterion 1, the block's one open criterion**); prior 2026-08-26
 > (**A0.5 — second consumer of the portable core: `:consumer:jvm` runs a goal end to end on plain JVM over
 > unchanged engine contracts; `CODE-GREEN` at 1219 tests, device acceptance *not applicable*, all four
@@ -121,7 +122,11 @@ argument binding) is recorded as an address, `A4′`, not a decision.
 
 **Gate.** `:domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test --rerun-tasks` — BUILD
 SUCCESSFUL, exit 0, **557 actionable tasks: 557 executed**, **1298 tests / 0 failures** (up from the
-1219 baseline); `core/ui` untouched, so `verifyRoborazziDebug` was not part of the closing gate.
+1219 baseline) at closing; `core/ui` untouched, so `verifyRoborazziDebug` was not part of the closing
+gate. **The current baseline is 1304, not 1298:** the final-review fix (`356fe1a`) added six tests, all
+in `:data:repository` (265 → 271) — four in `Tier0IntentToolWorkerTest` (16 total) and the two of the
+new `Tier0ToolExecutionEndToEndTest`. Every other module is unchanged. The block stays `CODE-GREEN`;
+none of it has run on a phone.
 
 ## Agentic track — Этап 4.5 (A0.5) — second consumer — `CODE-GREEN` (2026-08-26)
 

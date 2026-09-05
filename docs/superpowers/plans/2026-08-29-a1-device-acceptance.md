@@ -32,11 +32,17 @@ accepted:
 - Install the new debug build **over** the existing one — no uninstall. The database stays at
   `user_version = 4`; this block made **no schema change** (`schemas/…/4.json` diff is empty,
   `identityHash` unchanged), so no migration runs and none should.
-- `com.sidr.launcher` is the package. Reading the agent tables after each run:
+- `com.sidr.launcher` is the package. Reading the agent tables after each run — **pull the file and
+  query it on the laptop**, because this device has no `sqlite3` binary reachable through `run-as`
+  (measured 2026-09-05: `run-as: exec failed for sqlite3: No such file or directory`; the SDK ships one
+  at `$ANDROID_HOME/platform-tools/sqlite3`):
   ```
-  adb shell run-as com.sidr.launcher sqlite3 databases/sidr_history.db \
+  adb exec-out run-as com.sidr.launcher cat databases/sidr_history.db > /tmp/sidr.db
+  sqlite3 -header -column /tmp/sidr.db \
     "SELECT seq, type, step_index, detail FROM agent_trace_event ORDER BY seq;"
   ```
+  The pulled copy is a snapshot, so re-pull after each run rather than re-querying the old file. To read
+  `user_version` without `sqlite3` at all, the value is four big-endian bytes at offset 60 of the file.
 - **Both new tools are `SAFE`.** `requiresConsent(SAFE) == false`, so neither plan stops at
   `AwaitingConsent` — the step runs immediately and the session lands on the completed surface without
   a confirm tap. This is expected and is not a missed consent gate; see Part A for what the owner

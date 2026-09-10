@@ -27,9 +27,14 @@ Same starting conditions as Task 15, because the point is to compare against wha
   `user_version = 4`; nothing in this round changed the schema, so no migration runs and none should.
 - `com.sidr.launcher` is the package. Reading the agent tables:
   ```
-  adb shell run-as com.sidr.launcher sqlite3 databases/sidr_history.db \
-    "SELECT seq, type, step_index, detail FROM agent_trace_event ORDER BY seq;"
+  tools/device/pull-agent-db.sh
   ```
+  Two things this file used to get wrong, both measured on this device and both fixed in the script:
+  the SM-A325F exposes **no** `sqlite3` through `run-as` (2026-09-05), and copying
+  `databases/sidr_history.db` alone reads the database **as of the last WAL checkpoint**, not as of the
+  pull — the fault that failed the 2026-09-10 A1′ run on a working product. The pair
+  (`sidr_history.db` **and** `sidr_history.db-wal`) is the database; the main file alone is an
+  arbitrarily stale image of it. Held by `DeviceDatabaseReadGuardTest` (`:app`).
 
 ---
 

@@ -32,17 +32,35 @@ accepted:
 - Install the new debug build **over** the existing one — no uninstall. The database stays at
   `user_version = 4`; this block made **no schema change** (`schemas/…/4.json` diff is empty,
   `identityHash` unchanged), so no migration runs and none should.
-- `com.sidr.launcher` is the package. Reading the agent tables after each run — **pull the file and
-  query it on the laptop**, because this device has no `sqlite3` binary reachable through `run-as`
-  (measured 2026-09-05: `run-as: exec failed for sqlite3: No such file or directory`; the SDK ships one
-  at `$ANDROID_HOME/platform-tools/sqlite3`):
+- `com.sidr.launcher` is the package. Reading the agent tables after each run — **one command**:
   ```
-  adb exec-out run-as com.sidr.launcher cat databases/sidr_history.db > /tmp/sidr.db
-  sqlite3 -header -column /tmp/sidr.db \
+  tools/device/pull-agent-db.sh
+  ```
+  It prints `agent_session`, `agent_plan_step`, `agent_trace_event` and the at-rest row counts.
+  Pass an output directory as `$1` to keep the pulled files, and a query as `$2` to ask something else.
+
+  **Do not read the database by copying `databases/sidr_history.db` on its own** — that is what the
+  2026-09-10 run did, and it is why that run failed on a product that was working. Room opens this
+  database in **WAL mode** (`PRAGMA journal_mode` → `wal`, measured on this device), so a committed
+  write lives in `sidr_history.db-wal` and reaches the main `.db` file only at a *checkpoint*. The main
+  file alone is therefore the database **as of the last checkpoint** — on 2026-09-10 that was three
+  hours and four state transitions stale, and it reported a session the engine had correctly deleted as
+  still present. It fails the other way too: it can show all three `agent_*` tables empty while a row
+  holding `agent_session.goal_text` — the user's raw command — is on disk, which would be a **false
+  green on the privacy guarantee**. Pull the pair, always:
+  ```
+  adb exec-out run-as com.sidr.launcher cat databases/sidr_history.db     > /tmp/sidr/sidr_history.db
+  adb exec-out run-as com.sidr.launcher cat databases/sidr_history.db-wal > /tmp/sidr/sidr_history.db-wal
+  $ANDROID_HOME/platform-tools/sqlite3 -header -column /tmp/sidr/sidr_history.db \
     "SELECT seq, type, step_index, detail FROM agent_trace_event ORDER BY seq;"
   ```
-  The pulled copy is a snapshot, so re-pull after each run rather than re-querying the old file. To read
-  `user_version` without `sqlite3` at all, the value is four big-endian bytes at offset 60 of the file.
+  The SDK's own `sqlite3` is the one to use: this device exposes **no** `sqlite3` binary through
+  `run-as` (measured 2026-09-05: `run-as: exec failed for sqlite3: No such file or directory`).
+  Re-pull after each run rather than re-querying an old copy. To read `user_version` without `sqlite3`
+  at all, the value is four big-endian bytes at offset 60 of the main file.
+
+  `DeviceDatabaseReadGuardTest` (`:app`) holds all of this mechanically, so the next checklist cannot
+  quietly reintroduce the truncated read.
 - **Both new tools are `SAFE`.** `requiresConsent(SAFE) == false`, so neither plan stops at
   `AwaitingConsent` — the step runs immediately and the session lands on the completed surface without
   a confirm tap. This is expected and is not a missed consent gate; see Part A for what the owner
@@ -159,7 +177,11 @@ engine and the surface they run through, and "unchanged" is worth one minute of 
       2026-08-22/23 — **except** for the two added provenance lines, which is A3/§A5 above, not a
       regression.
 - [ ] **Cancelling mid-plan** still runs nothing further, and the three `agent_*` tables are empty
-      afterwards (cascade delete, unaffected by federation).
+      afterwards (cascade delete, unaffected by federation). **Read them with
+      `tools/device/pull-agent-db.sh`, not by copying the `.db`** — this is the exact item the
+      2026-09-10 run failed, and it failed on the read: the engine had deleted the session, the
+      truncated copy still showed it. Same for the item below; a `force-stop` never checkpoints, so a
+      main-file-only copy is guaranteed to still be carrying whatever it was carrying before.
 - [ ] **`adb shell am force-stop com.sidr.launcher`** at any point during either new tool's (near-instant)
       execution, then relaunch — no stuck `AwaitingConsent` or orphaned row; a `SAFE` step either
       completed before the kill or the session offers to resume, matching A0's existing resume shape.

@@ -291,6 +291,15 @@ tasks.withType<Test>().configureEach {
         .withPropertyName("doctrineMatrix")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 
+    // A1' device-acceptance defect, 2026-09-10. `DeviceDatabaseReadGuardTest` scans the fenced code
+    // blocks of every checklist under `docs/superpowers/plans` - same silent-skip trap as the matrix
+    // above, and the same fix. The scan and this declaration are the SAME directory on purpose; a
+    // checklist added outside it is a declared blind spot of the guard (named in its KDoc), not an
+    // undeclared input. Widening one means widening the other in the same commit.
+    inputs.dir(rootProject.file("docs/superpowers/plans"))
+        .withPropertyName("deviceAcceptanceChecklists")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
     // Этап 4 / A0 Task 13. `ToolExecutorCallSiteGuardTest` and `AgentVocabularyGuardTest` scan .kt
     // sources outside :app's source set - the same silent-skip trap as the matrix above.
     //

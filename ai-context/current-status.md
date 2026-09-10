@@ -81,6 +81,26 @@ Fixed in `1c4a61e`; no schema change (`identityHash` unchanged). The lesson reco
 product path has a join no test crosses, that path is unverified* — the same shape A0's own review
 found in `restoreOnStart`.
 
+**Owner device acceptance, round 2 (2026-09-10) — two findings, both addressed, block still
+`CODE-GREEN`.** **(1)** Dismissing the agent surface («закрыть») or refusing its consent gate
+(«Отмена») removed the surface but left the launcher in search-active mode with the typed command
+still in the buffer: no Shahada, no date line, no prayer strip, and only a force-stop restored them.
+`LauncherViewModel.dismissAgentSession` deleted the session and did nothing else, and the refusal path
+ends `Cancelled` — a state the surface draws as nothing at all. "Search overtakes" is a pure function
+of the command buffer, so the buffer *is* the search-active state and clearing it is the whole fix;
+both exits now do it, held by three `LauncherViewModelTest` tests that assert what the user sees after
+the exit and not merely that the session row is gone. **Origin is A0** (`5f04a1d`), not an A1′
+regression — but A1′ is what made it routine: before it only a FastPath "no such app" reached the
+agent surface, and now every recognised tool command does. **(2)** `set_timer`'s `SAFE` rationale was
+falsified on 2026-09-05 (`EXTRA_SKIP_UI = false` did **not** mean "prefilled but not sent" — the
+Samsung clock opened with the timer already counting down). **Owner decision 2026-09-10: the level
+stands, the reason does not.** `SAFE` is unchanged and no behaviour changed; the reason is now
+reversible-in-one-tap + immediately visible + provenance disclosed + nothing leaves the device, and
+the withdrawn sentence was corrected in both Tier-0 sources, spec §8.1 + fork F3, the A1′ acceptance
+checklist and Master Plan §3.6 `B4`. `open_system_settings` is a different case — opening a settings
+screen performs nothing. Both fixes are **agent-driven on the SM-A325F, which this project's
+vocabulary does not count as acceptance**; `DEVICE-ACCEPTED` stays unmet.
+
 **Guards, all mutation-proved, none merely green.** `ToolWorkerCallSiteGuardTest` (new) and
 `ToolExecutorCallSiteGuardTest` (re-anchored) both survived W1–W4/E1–E2. `DoctrineGuardTest`'s
 duplicate-`ToolId` assertion did **not** meet spec success criterion 3 on its first draft — it read

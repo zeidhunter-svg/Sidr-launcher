@@ -38,9 +38,16 @@ class ContextIntentLauncher @Inject constructor(
  * `ActionIds`, so they do not travel the `ExecuteActionUseCase` chain and this class is the whole of
  * their execution.
  *
- * **Neither skips the OS's own UI.** `EXTRA_SKIP_UI` stays `false` and settings opens its own screen,
- * so the final act is the user's. That is what makes `SAFE` an honest declaration rather than a
- * convenient one, and it is the "prefilled but not sent" form Master Plan §3.6 `B4` describes.
+ * **`EXTRA_SKIP_UI = false` is not "prefilled but not sent" — corrected 2026-09-10.** This KDoc used
+ * to read "neither skips the OS's own UI, so the final act is the user's", and to offer that as the
+ * ground for `SAFE` and as Master Plan §3.6 `B4`'s form. Driven on the SM-A325F 2026-09-05 the Samsung
+ * clock opened *with the timer already counting down* (`Пауза`/`Удалить`, no start button): the flag
+ * governs whether the responding app shows **its UI**, not whether it **acts**. It is still set
+ * `false` — a timer the user cannot see start would be worse — but what it buys is visibility, not
+ * consent. `SAFE` stands by owner decision on other grounds (reversible, immediately visible,
+ * provenance disclosed, nothing leaves the device); see [Tier0IntentToolSource]'s KDoc, which carries
+ * the decision. `open_system_settings` is untouched by any of this: opening a settings screen performs
+ * nothing, so for it there was never an act to complete.
  *
  * **The launch is caught HERE, not in [ContextIntentLauncher]** (final whole-branch review, finding 1,
  * CRITICAL). `startActivity` was called bare and nothing above it catches — `AgentExecutor.perform`'s

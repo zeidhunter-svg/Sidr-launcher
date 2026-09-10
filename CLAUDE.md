@@ -243,13 +243,33 @@ below is recorded in its own ADR.
   address to adapter #3 in the track plan's `§HANDOFF`.
   **`DEVICE-ACCEPTED` remains unmet**: the fix has run on the phone under agent drive only, which this
   project's status vocabulary explicitly does not count as acceptance. **The same run also falsified a
-  second claim of the block, and it is left for the owner rather than silently repaired:** the spec and
-  the source both justify `set_timer`'s `SAFE` rating with "neither skips the OS's own UI — the final
-  act is the user's", but with `EXTRA_SKIP_UI = false` the Samsung clock opened *with the timer already
-  counting down* (Пауза/Удалить, not a start button). `EXTRA_SKIP_UI` governs whether the responding app
-  shows its UI, not whether it acts. `SAFE` may well still be right — the effect is trivially
-  reversible, immediately visible, and provenance is shown — but the stated *reason* for it does not
-  hold for this tool, and re-deciding a risk level is an owner/spec question. What the block leaves
+  second claim of the block — and that one is now DECIDED, not open:** the spec and the source both
+  justified `set_timer`'s `SAFE` rating with "neither skips the OS's own UI — the final act is the
+  user's", but with `EXTRA_SKIP_UI = false` the Samsung clock opened *with the timer already counting
+  down* (Пауза/Удалить, not a start button). `EXTRA_SKIP_UI` governs whether the responding app shows
+  its UI, not whether it acts. **Owner decision 2026-09-10: the level stands, the reason does not.**
+  `set_timer` stays `SAFE` — no risk level and no behaviour changed — and what `SAFE` rests on is now
+  stated instead of assumed: the effect is trivially reversible (one tap), immediately visible (the
+  clock opens in front of the user), disclosed (`EXTERNAL` draws a provenance line, the only such
+  mechanism a `SAFE` step gets), and local (nothing leaves the device). `open_system_settings` is a
+  different case, not the same one: opening a settings screen performs nothing at all. The withdrawn
+  sentence was corrected in `Tier0IntentToolSource`, `Tier0IntentToolWorker`, spec §8.1 + fork F3, the
+  A1′ device-acceptance checklist and Master Plan §3.6 `B4` — whose "prefilled but not sent" shape no
+  longer describes this tool and which A1″ must **measure** per intent rather than inherit. The
+  falsification itself is kept on purpose: a rating whose stated reason was measured false is the more
+  useful record.
+  **A second device-found defect from the 2026-09-10 acceptance round is fixed and is `CODE-GREEN`
+  only:** dismissing the agent surface («закрыть») or refusing its consent gate («Отмена») removed the
+  surface and left the launcher in search-active mode with the command still in the buffer, so the home
+  body (Shahada, date line, prayer strip) never came back and only a force-stop restored it.
+  `LauncherViewModel.dismissAgentSession` deleted the session and did nothing else, and the refusal path
+  ends `Cancelled`, which the surface draws as nothing. **Origin is A0, not A1′** (`5f04a1d`) — but A1′
+  is what made it routine, since before it only a FastPath "no such app" reached that surface and now
+  every recognised tool command does. Both exits now clear the command buffer, which is the whole of
+  the search-active state; held by three tests in `LauncherViewModelTest` that assert the *user-visible*
+  state after the exit rather than only that the row was deleted. Agent-driven on the SM-A325F for both
+  plan shapes; the owner re-runs it.
+  What the block leaves
   behind, each named rather than implied absent: **(1)** `DOC-ADL-1`'s closure rests on the **single call site**, not on
   `ConsentPolicyTest`'s "wake-up" test — that test cannot distinguish `risk != entries.first()` from
   `risk >= CONFIRM` while exactly three risk levels exist, and only bites the day a fourth level lands

@@ -860,8 +860,17 @@ object Tier0ToolIds {
  *
  * Both tools are `EXTERNAL` and `SAFE`, and that combination is the one `DOC-ILM-2` is actually about:
  * a `CONFIRM` tool is already stopped by the consent gate, so provenance is the only mechanism telling
- * the user where a `SAFE` effect went. Neither skips the OS's own UI — the "prefilled but not sent"
- * shape leaves the final act with the user, which is what makes `SAFE` honest rather than convenient.
+ * the user where a `SAFE` effect went. `set_timer` is `SAFE` because its effect is trivially
+ * reversible (one tap), immediately visible, disclosed by that provenance line, and local — nothing
+ * about the invocation leaves the device. `open_system_settings` is a different case again: opening a
+ * settings screen performs no act at all.
+ *
+ * [Corrected 2026-09-10, same reasoning as the 2026-09-05 note below — this is an instruction to
+ * write code. It told the implementer to write "Neither skips the OS's own UI — the 'prefilled but not
+ * sent' shape leaves the final act with the user, which is what makes `SAFE` honest rather than
+ * convenient." The owner's device run falsified that for `set_timer`: with `EXTRA_SKIP_UI = false` the
+ * Samsung clock opened with the timer already counting down. Owner decision 2026-09-10 — `SAFE`
+ * stands, the reason is replaced with the one now written above. See spec §8.1.]
  *
  * Permissions: `ACTION_SETTINGS` needs none; `ACTION_SET_TIMER` needs
  * `com.android.alarm.permission.SET_ALARM` (`protectionLevel: normal`, install-time), which must be
@@ -965,9 +974,15 @@ class ContextIntentLauncher @Inject constructor(
  * `ActionIds`, so they do not travel the `ExecuteActionUseCase` chain and this class is the whole of
  * their execution.
  *
- * **Neither skips the OS's own UI.** `EXTRA_SKIP_UI` stays `false` and settings opens its own screen,
- * so the final act is the user's. That is what makes `SAFE` an honest declaration rather than a
- * convenient one, and it is the "prefilled but not sent" form Master Plan §3.6 `B4` describes.
+ * **`EXTRA_SKIP_UI` stays `false`, and what that buys is visibility, not consent.** The responding
+ * app shows its own UI; it does **not** wait for the user to finish the act. `SAFE` rests on the
+ * grounds recorded in [Tier0IntentToolSource]'s KDoc, not on "the final act is the user's".
+ *
+ * [Corrected 2026-09-10, same reasoning as the 2026-09-05 note above — this is an instruction to
+ * write code. It told the implementer to write "Neither skips the OS's own UI … so the final act is
+ * the user's … the 'prefilled but not sent' form Master Plan §3.6 `B4` describes", which the owner's
+ * device run falsified: the Samsung clock opened with the timer already counting down. `B4`'s shape
+ * does not describe this tool.]
  */
 class Tier0IntentToolWorker @Inject constructor(
     private val launcher: IntentLauncher,

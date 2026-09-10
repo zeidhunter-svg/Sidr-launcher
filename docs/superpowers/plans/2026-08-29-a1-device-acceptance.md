@@ -82,11 +82,17 @@ for A0's «открой …» verification), one locale at a time if more than o
 | `tr` | "5 dakika zamanlayıcı ayarla" | 5 minutes |
 | `tr` (owner-level judgment, see below) | "5 dakika sayaç ayarla" | 5 minutes |
 
-- [ ] The system's own **Set Timer** UI opens (`AlarmClock.ACTION_SET_TIMER`, `EXTRA_SKIP_UI=false`) —
-      Sidr never sends the timer itself; the last act is the user's, inside the OS's own screen. This is
-      the "prefilled but not sent" shape Master Plan §3.6 `B4` describes, and it is what makes `SAFE` an
-      honest declaration here rather than a convenient one.
-- [ ] The prefilled duration matches the command (5 minutes for the phrasing above).
+- [ ] The system's own **clock/timer** screen opens (`AlarmClock.ACTION_SET_TIMER`,
+      `EXTRA_SKIP_UI=false`). **Corrected 2026-09-10 — expect the timer to be RUNNING.** This item used
+      to read "Sidr never sends the timer itself; the last act is the user's … the 'prefilled but not
+      sent' shape Master Plan §3.6 `B4` describes". The owner's own run (SM-A325F, 2026-09-05)
+      falsified that: the Samsung clock opened with the timer **already counting down**
+      (`Пауза`/`Удалить`, no start button). `EXTRA_SKIP_UI` governs whether the responding app shows
+      its UI, not whether it acts. A running timer is therefore the **expected** result here, not a
+      defect — and `SAFE` stands on other grounds by owner decision 2026-09-10 (reversible in one tap,
+      immediately visible, provenance disclosed, nothing leaves the device; spec §8.1).
+- [ ] The duration matches the command (5 minutes for the phrasing above), whether the clock shows it
+      counting down or waiting to start — vendor clocks may differ, and only the duration is Sidr's.
 - [ ] The agent surface (reachable from wherever A0's plan surface already showed) displays a
       **one-step, completed** plan whose step line reads (locale-dependent):
       - `ru`: «Поставить таймер на 5 минут»

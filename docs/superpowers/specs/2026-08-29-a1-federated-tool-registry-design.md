@@ -50,7 +50,7 @@ to do many things.** It makes it able to be *given* many things safely. The doin
 |---|---|---|
 | **F1** | The A1 fork reserved by Master Plan §3.2: parallel tool vocabulary vs. evolving `ActionCatalog` in place | **Parallel vocabulary + federation, with identity C.** `ToolId`/`ToolDescriptor` stay the agent's vocabulary; `ActionCatalog` becomes **one adapter among N** — which it already is, in thirty lines. `ActionIds` is not touched. **Identity C:** a projected tool's `ToolId` is *derived* from its `ActionId` rather than hand-copied |
 | **F2** | Block scope: boundaries, or boundaries + tool mass | **Boundaries + exactly one real second source.** `B2`/`B4` mass and `B3` selection become **`A1″`**, a new block recorded in Master Plan §3.2/§3.6 with an address |
-| **F3** | Which second source proves composition on the phone | **`set_timer` + `open_system_settings`** (one Tier-0 adapter, two tools, arities 1 and 0). Revised from `set_timer` + `dial` during the second design pass — see §8. **Correction 2026-09-05: this cell read "zero new permissions" and that premise was false** — `AlarmClock.ACTION_SET_TIMER` requires `com.android.alarm.permission.SET_ALARM`, undeclared until the device-acceptance fix, so the tool could never run. **The decision stands; the reasoning that reached it does not.** What "zero permissions" was standing in for — that this pair drags in no consent machinery, no runtime grant flow and no permission-education surface — remains true: `SET_ALARM` is `protectionLevel: normal`, granted at install, never prompted. And the comparison that drove the revision is unchanged in direction: the rejected `dial` needs `CALL_PHONE`, a **dangerous** permission with a runtime grant flow, so `set_timer` is still strictly the cheaper of the two. What does **not** survive is the use the claim was put to: "zero permissions" doubled as grounds for not checking the permission surface at all, and that is precisely how a dead capability shipped. See §8.1 and `ToolPermissionManifestGuardTest` |
+| **F3** | Which second source proves composition on the phone | **`set_timer` + `open_system_settings`** (one Tier-0 adapter, two tools, arities 1 and 0). Revised from `set_timer` + `dial` during the second design pass — see §8. **Correction 2026-09-05: this cell read "zero new permissions" and that premise was false** — `AlarmClock.ACTION_SET_TIMER` requires `com.android.alarm.permission.SET_ALARM`, undeclared until the device-acceptance fix, so the tool could never run. **The decision stands; the reasoning that reached it does not.** What "zero permissions" was standing in for — that this pair drags in no consent machinery, no runtime grant flow and no permission-education surface — remains true: `SET_ALARM` is `protectionLevel: normal`, granted at install, never prompted. And the comparison that drove the revision is unchanged in direction: the rejected `dial` needs `CALL_PHONE`, a **dangerous** permission with a runtime grant flow, so `set_timer` is still strictly the cheaper of the two. What does **not** survive is the use the claim was put to: "zero permissions" doubled as grounds for not checking the permission surface at all, and that is precisely how a dead capability shipped. See §8.1 and `ToolPermissionManifestGuardTest`. **Second correction 2026-09-10:** the same device run also falsified this pair's *other* stated justification — "neither skips the OS's own UI, the final act is the user's" — for `set_timer`, which starts its timer on invocation. Owner ruling 2026-09-10: **`SAFE` stands, the reason is replaced** (reversible, immediately visible, provenance disclosed, nothing leaves the device). The F3 decision itself is again unaffected; §8.1 carries the corrected reasoning |
 | **F4** | The type of a tool level in `commonMain` | **Open value class over `String`** (`ToolLevel`), applying A0.5's measured contrast directly: an open value type costs zero core edits per addition, a closed sum costs four files in three modules |
 | **F5** | The A0.5 finding "consent fires **before** argument binding", addressed `A1′/A4′` — a slash, i.e. no owner | **A4′.** The order `validate → checkpointFor → resolve` is a property of the **runtime**, deliberately fail-safe, and reordering it changes trace shape on process death — which is A4′'s subject. A1′ records the address as a line, not as a slash |
 | **F6** | `ArgType` — one of the four vocabulary findings A0.5 addressed to A1′ — now that a genuinely non-string argument exists (timer duration) | **Not extended.** Answered with a measured reason rather than deferred — see §10.4 |
@@ -378,8 +378,30 @@ A1″'s entire content is more Tier-0 intents. `ToolPermissionManifestGuardTest`
 red test rather than a device-day discovery.
 
 Arities 0 and 1 stress the schema at both ends — the shape that already earned its keep in A0.5's
-sandbox trio. Neither skips the OS's own UI: the "prefilled but not sent" form leaves the final act
-with the user, which is what makes `SAFE` honest.
+sandbox trio.
+
+**Corrected 2026-09-10 — owner decision on `set_timer`'s `SAFE`.** This paragraph used to end
+"Neither skips the OS's own UI: the 'prefilled but not sent' form leaves the final act with the user,
+which is what makes `SAFE` honest." The owner's device run falsified that for `set_timer`: with
+`EXTRA_SKIP_UI = false` the Samsung clock opened **with the timer already counting down**
+(`Пауза`/`Удалить`, not a start button, SM-A325F 2026-09-05). The flag governs whether the responding
+app shows its UI, not whether it acts.
+
+The owner's ruling, 2026-09-10: **the level stands, the reason does not.** `set_timer` stays `SAFE`,
+and what that now rests on is stated rather than assumed — the effect is trivially reversible (one
+tap), immediately visible (the clock opens in front of the user; nothing happens in the background),
+disclosed (`EXTERNAL` renders a provenance line, the only such mechanism a `SAFE` step gets since the
+consent gate never fires for it), and local (nothing about the invocation leaves the device). No risk
+level changed, and no code changed with this correction — only the claims did.
+
+`open_system_settings` is a **different** case and is not covered by the withdrawal: opening a
+settings screen performs no act, so it has nothing to reverse and "the final act is the user's" is
+literally true of it.
+
+Master Plan §3.6 `B4` is cited in the old sentence as the "prefilled but not sent" shape. That
+citation no longer supports it for `set_timer` — see the note now carried in `B4`'s own cell — and
+A1″ must **measure** the shape for each further Tier-0 intent (`SENDTO`, calendar `INSERT`, `DIAL`)
+instead of inheriting it.
 
 `open_system_settings` is deliberately **not** `ActionIds.OPEN_SETTINGS`: that one opens the launcher's
 own settings and belongs to the `in_app` level. The pair is itself an illustration of why `level` and

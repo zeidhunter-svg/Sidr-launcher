@@ -22,23 +22,33 @@ object Tier0ToolIds {
  *
  * Both tools are `EXTERNAL` and `SAFE`, and that combination is the one `DOC-ILM-2` is actually about:
  * a `CONFIRM` tool is already stopped by the consent gate, so provenance is the only mechanism telling
- * the user where a `SAFE` effect went. Neither skips the OS's own UI — the "prefilled but not sent"
- * shape leaves the final act with the user, which is what makes `SAFE` honest rather than convenient.
+ * the user where a `SAFE` effect went.
  *
  * **Permissions.** `ACTION_SETTINGS` needs none. `ACTION_SET_TIMER` needs
  * `com.android.alarm.permission.SET_ALARM`, declared in `app/src/main/AndroidManifest.xml` — an
  * install-time (`protectionLevel: normal`) permission, so it is granted without a prompt and needs no
  * runtime request or education flow.
  *
- * **What `EXTRA_SKIP_UI = false` does and does not buy, measured rather than assumed.** The paragraph
- * above about the "prefilled but not sent" shape is accurate for `open_system_settings` and, on the
- * evidence, **overstated for `set_timer`**: driven on the SM-A325F 2026-09-05, the Samsung clock opened
- * *and the timer was already counting down* — `Пауза`/`Удалить`, not a start button. The flag governs
- * whether the responding app shows its UI, not whether it performs the act, so `set_timer` is a real
- * effect the user then sees rather than one they complete. That does not by itself make `SAFE` wrong —
- * the effect is trivially reversible, visible immediately, and the tool is `EXTERNAL` so its provenance
- * is shown — but the *reason* recorded for `SAFE` ("the final act is the user's") does not hold for
- * this tool, and re-deciding it is an owner/spec question, not a thing to quietly restate here.
+ * **What `SET_TIMER`'s `SAFE` actually rests on — corrected 2026-09-10 by owner decision.** Until
+ * that date this KDoc, the spec and the plan all justified `SAFE` with *"neither skips the OS's own UI
+ * — the 'prefilled but not sent' shape leaves the final act with the user"*. **That reason was
+ * measured false and is withdrawn** (evidence below). The owner re-decided the level rather than
+ * letting an unsupported sentence stand: **`SAFE` stays, the reasoning is replaced.** What it rests on
+ * now is four properties that were observed rather than assumed — the effect is **trivially
+ * reversible** (one tap: `Удалить` on the timer that just started), **immediately visible** (the
+ * clock opens in front of the user — nothing happens silently or in the background), **disclosed**
+ * (`EXTERNAL` draws a provenance line under the step, which is the only such mechanism a `SAFE` tool
+ * gets, since the consent gate never fires for one), and **local** (the invocation and its argument
+ * never leave the device). `open_system_settings` is a *different* case and must not be folded into
+ * this one: opening a settings screen performs no act at all, so it has nothing to reverse and "the
+ * final act is the user's" is literally true of it.
+ *
+ * **The measurement.** `EXTRA_SKIP_UI = false` was read as Master Plan §3.6 `B4`'s "prefilled but not
+ * sent" form. Driven on the SM-A325F 2026-09-05, the Samsung clock opened *with the timer already
+ * counting down* — `Пауза`/`Удалить`, not a start button. The flag governs whether the responding
+ * app shows its UI, not whether it performs the act. So `B4`'s shape does not describe `set_timer`;
+ * whether it describes the Tier-0 intents A1″ adds next (`SENDTO`, calendar `INSERT`, `DIAL`) is a
+ * thing for that block to **measure on a device**, not to inherit from this one.
  *
  * This KDoc read "Zero new permissions: `ACTION_SET_TIMER` and `ACTION_SETTINGS` both need none" until
  * 2026-09-05, and that was simply false. It shipped through the whole block — spec, plan, commit

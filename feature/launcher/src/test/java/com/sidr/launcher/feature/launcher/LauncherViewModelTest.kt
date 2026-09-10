@@ -24,6 +24,7 @@ import com.sidr.launcher.domain.agent.AgentExecutor
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.AgentSessionIdFactory
 import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
+import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RuntimeBudget
@@ -98,7 +99,10 @@ import com.sidr.launcher.domain.prayer.PrayerName
 import com.sidr.launcher.domain.prayer.PrayerSetup
 import com.sidr.launcher.domain.prayer.UnavailableReason
 import com.sidr.launcher.domain.result.OperationError
+import com.sidr.launcher.domain.tool.ObservedFact
 import com.sidr.launcher.domain.tool.ToolEffect
+import com.sidr.launcher.domain.tool.ToolOutput
+import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.feature.launcher.agent.StepProvenance
 import java.time.Clock
 import java.time.Instant
@@ -121,6 +125,8 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -256,6 +262,10 @@ class LauncherViewModelTest {
         connectivity: FakeConnectivityChecker = FakeConnectivityChecker(),
         resolutionStore: FakeResolutionPreferenceStore = fakeResolutionStore,
         getPrayerContext: GetPrayerContextUseCase = defaultGetPrayerContext,
+        // Defaulted to the shared fixture, so every pre-existing caller is byte-for-byte unchanged.
+        // Only the agent-exit tests below override it, to script what the plan's tools observe and so
+        // decide which surface the user is looking at when they leave it.
+        runAgent: RunAgentSessionUseCase = runAgentSession,
     ) = LauncherViewModel(
         installedAppsRepository = fakeRepo,
         resolveCommand = aliasAwareResolveCommand(
@@ -275,8 +285,8 @@ class LauncherViewModelTest {
         speechInputSource = fakeSpeech,
         connectivityChecker = connectivity,
         getPrayerContext = getPrayerContext,
-        runAgentSession = runAgentSession,
-        resolveAgentConsent = ResolveConsentUseCase(fakeAgentStore, runAgentSession),
+        runAgentSession = runAgent,
+        resolveAgentConsent = ResolveConsentUseCase(fakeAgentStore, runAgent),
         cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
         agentSessionStore = fakeAgentStore,
         toolRegistry = agentRegistry,
@@ -2242,6 +2252,140 @@ class LauncherViewModelTest {
         assertTrue(
             "the A0 fixture must declare at least one EXTERNAL tool, or this asserts nothing",
             agentRegistry.all().any { it.effect == ToolEffect.EXTERNAL },
+        )
+    }
+
+    // ── Leaving the agent surface (owner device acceptance, 2026-09-10) ─────────────────────────
+    //
+    // The defect this section exists for: the surface went away and the launcher did not come back.
+    // `dismissAgentSession` deleted the session and stopped there, so the typed command stayed in the
+    // buffer — and "search overtakes" is a pure function of that buffer (`LauncherCommandSession
+    // .liveResults`), so the home body (Shahada, date line, prayer strip) never returned. Only a
+    // force-stop cleared it. A test that asserted only "the session was deleted" is exactly what let
+    // it ship, so every assertion below is on state a user can see.
+
+    /**
+     * The A0 shape a user actually reaches: FastPath understands «открой убер», finds no such app, and
+     * `RouteCommandUseCase` step (2) starts the two-step plan. [toolResults] scripts what the plan's
+     * tools observe, which is what decides which surface the user is left looking at — a terminal one
+     * carrying «закрыть», or the consent gate carrying «Отмена».
+     */
+    private fun agentViewModel(toolResults: List<ToolResult>): LauncherViewModel {
+        // A non-empty app list keeps uiState Success, so `inputResults.active == false` really does
+        // mean "the home body is what renders" and not "the Empty state is".
+        fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
+        fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent(displayNameQuery = "убер")
+        fakeMatcher.confidenceToReturn = 0.95f
+        return buildViewModel(
+            runAgent = RunAgentSessionUseCase(
+                executor = AgentExecutor(
+                    agentRegistry,
+                    FakeToolExecutor(toolResults),
+                    RuntimeBudget.Default,
+                ),
+                store = fakeAgentStore,
+            ),
+        )
+    }
+
+    /** Types and submits the command, exactly as the screen does. */
+    private fun LauncherViewModel.submitAgentCommand(text: String = "открой убер") {
+        onCommandChanged(text)
+        onCommandSubmitted(text)
+    }
+
+    /**
+     * What the screen actually draws: `AgentSessionSurface` returns before rendering anything when
+     * the state has no title, and `Cancelled` is exactly that state. So "no surface" is two shapes,
+     * not one — a null session (dismiss) and a `Cancelled` one (a refused consent).
+     */
+    private fun LauncherViewModel.agentSurfaceVisible(): Boolean {
+        val session = agentSessionState.value ?: return false
+        return session.state != ExecutionState.Cancelled
+    }
+
+    @Test
+    fun `dismissing the agent surface returns the launcher to its resting home state`() =
+        runTest(testDispatcher) {
+            val vm = agentViewModel(toolResults = emptyList())
+            vm.submitAgentCommand()
+            advanceUntilIdle()
+
+            assertNotNull(
+                "the fixture must reach the agent surface, or this test asserts nothing",
+                vm.agentSessionState.value,
+            )
+            assertTrue("the surface must be on screen before it is dismissed", vm.agentSurfaceVisible())
+            assertTrue(
+                "the typed command stays in the buffer while the surface is up (applyOutcome)",
+                vm.commandInput.value.isNotEmpty(),
+            )
+            assertTrue("home is overtaken while the command stands", vm.inputResults.value.active)
+
+            vm.dismissAgentSession()
+            advanceUntilIdle()
+
+            assertNull("the session is deleted", vm.agentSessionState.value)
+            assertEquals("the command buffer is cleared", "", vm.commandInput.value)
+            assertFalse(
+                "the home body must be drawn again — this is the assertion the defect would have failed",
+                vm.inputResults.value.active,
+            )
+            assertEquals(CommandFeedback.None, vm.commandFeedback.value)
+        }
+
+    @Test
+    fun `dismissing twice leaves the launcher at rest`() = runTest(testDispatcher) {
+        val vm = agentViewModel(toolResults = emptyList())
+        vm.submitAgentCommand()
+        advanceUntilIdle()
+
+        vm.dismissAgentSession()
+        advanceUntilIdle()
+        vm.dismissAgentSession()
+        advanceUntilIdle()
+
+        assertNull(vm.agentSessionState.value)
+        assertEquals("", vm.commandInput.value)
+        assertFalse(vm.inputResults.value.active)
+        assertFalse("a second dismiss must not re-arm the consent spinner", vm.agentConfirming.value)
+    }
+
+    /**
+     * The second way out, and the one the owner reached through «Отмена». A refused consent ends the
+     * session `Cancelled`, which `AgentSessionSurface` renders as nothing at all — so the surface
+     * leaves the screen down this path too, and the launcher owes the user the same return home.
+     */
+    @Test
+    fun `refusing consent returns the launcher to its resting home state`() = runTest(testDispatcher) {
+        val vm = agentViewModel(
+            toolResults = listOf(
+                ToolResult.Observed(
+                    ObservedFact.APP_NOT_INSTALLED,
+                    ToolOutput(mapOf("resolved_query" to "убер")),
+                ),
+            ),
+        )
+        vm.submitAgentCommand()
+        advanceUntilIdle()
+
+        val awaiting = vm.agentSessionState.value
+        assertNotNull("the fixture must reach the consent gate", awaiting)
+        assertEquals(
+            "the fixture must stop at the consent checkpoint, or this test asserts nothing",
+            ExecutionState.AwaitingConsent,
+            awaiting!!.state,
+        )
+        assertTrue(vm.inputResults.value.active)
+
+        vm.denyAgentStep(stepIndex = 1)
+        advanceUntilIdle()
+
+        assertFalse("a refused plan draws no surface", vm.agentSurfaceVisible())
+        assertEquals("the command buffer is cleared", "", vm.commandInput.value)
+        assertFalse(
+            "the home body must be drawn again after «Отмена» too",
+            vm.inputResults.value.active,
         )
     }
 }

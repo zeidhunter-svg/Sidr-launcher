@@ -429,12 +429,23 @@ class LauncherViewModel @Inject constructor(
         agentSession.confirm(stepIndex)
     }
 
-    /** The user refused it. The engine cancels the session; nothing further runs. */
+    /**
+     * The user refused it. The engine cancels the session; nothing further runs — and because
+     * `AgentSessionSurface` draws **nothing at all** for `Cancelled`, the surface leaves the screen
+     * on this path exactly as it does on [dismissAgentSession]. So it owes the same [leaveAgentSurface].
+     */
     fun denyAgentStep(stepIndex: Int) {
         agentSession.deny(stepIndex)
+        leaveAgentSurface()
     }
 
-    /** Pick a paused plan back up. The engine re-evaluates, so a pending checkpoint returns. */
+    /**
+     * Pick a paused plan back up. The engine re-evaluates, so a pending checkpoint returns.
+     *
+     * No [leaveAgentSurface] here, and none in [confirmAgentStep] either: every state either of them
+     * can reach still *draws* a surface, and each of those carries its own «закрыть» — `Cancelled`,
+     * the one invisible state, is reachable only by an explicit cancel or a refusal.
+     */
     fun continueAgentSession() {
         agentSession.continueSession()
     }
@@ -442,6 +453,27 @@ class LauncherViewModel @Inject constructor(
     /** Clear the agent surface and delete the session. */
     fun dismissAgentSession() {
         agentSession.cancel()
+        leaveAgentSurface()
+    }
+
+    /**
+     * Put the launcher back at rest once the agent surface has gone away.
+     *
+     * **Why this is not the same thing as deleting the session** (owner device acceptance,
+     * 2026-09-10). "Search overtakes" is a pure function of the command buffer —
+     * `LauncherCommandSession.liveResults` classifies the typed text and reports `active`, and the
+     * screen hides the Shahada, the date line and the prayer strip while that is true. Deleting the
+     * session removed the surface and left the buffer holding the command, so the home body never came
+     * back and only a force-stop restored it. The buffer is the whole of the search-active state:
+     * there is no second flag to reset, which is why clearing it is sufficient and why the fix is the
+     * same call the input's own ✕ makes (`onCommandChanged("")`).
+     *
+     * It rides the ordinary edit path on purpose: that also drops stale feedback, any pending router
+     * card and the ambiguity learning token, so leaving the agent surface is byte-for-byte the state
+     * a user reaches by clearing the field by hand.
+     */
+    private fun leaveAgentSurface() {
+        commandSession.onChanged("")
     }
 
     /**

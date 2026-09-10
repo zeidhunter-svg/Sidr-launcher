@@ -5,13 +5,19 @@
 > digest); per-phase plans carry their own checklists.** This file is the status snapshot — if it
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
-> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-09-03
+> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-09-10
+> (**Этап 5 (A1′) — owner device acceptance on the SM-A325F, Android 13, `ru-RU`: Parts A and B of the
+> checklist run and signed off, so A1′ is `CLOSED` with its residuals carried forward by owner
+> decision. The run produced three fixes — a missing `SET_ALARM`, a checklist that read the database
+> without its WAL, and an agent-surface exit that left the launcher in search mode — and two owner
+> rulings: `set_timer` keeps `SAFE` on a corrected rationale, and the block closes. `en`/`tr` never ran
+> on the phone; `"sayaç ayarla"` is still unjudged by a native speaker. Gate 1314 tests / 0
+> failures**); prior 2026-09-03
 > (**Этап 5 (A1′) — federated `ToolRegistry`: one `ToolRegistry` port now federates N adapters behind one
 > object; a second real Android source (`Tier0IntentToolSource`, level `system_intent`) registers
 > `set_timer`/`open_system_settings` and both are reachable from a typed command via routing step 2b;
 > `requiresConsent` unifies four risk-gate spellings into one; `CODE-GREEN` at **1304** tests — 1298 at
-> closing, +6 from the final-review fix `356fe1a` — `DEVICE-ACCEPTED`
-> not met — spec §16 criterion 1, the block's one open criterion**); prior 2026-08-26
+> closing, +6 from the final-review fix `356fe1a`**); prior 2026-08-26
 > (**A0.5 — second consumer of the portable core: `:consumer:jvm` runs a goal end to end on plain JVM over
 > unchanged engine contracts; `CODE-GREEN` at 1219 tests, device acceptance *not applicable*, all four
 > §3.1a questions answered with addresses**); prior 2026-08-23
@@ -36,12 +42,17 @@
 > DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer
 > Correctness CLOSED — device-accepted by the owner).
 
-## Agentic track — Этап 5 (A1′) — federated `ToolRegistry` — `CODE-GREEN` (2026-09-03)
+## Agentic track — Этап 5 (A1′) — federated `ToolRegistry` — `CLOSED` (2026-09-10)
 
-**`CODE-GREEN`, `DEVICE-ACCEPTED` NOT met — a plain gap, not an inapplicability.** Unlike A0.5, this
-block changes what the user can reach: two new system intents registered and made reachable from a
-typed command, neither run on a phone. Full record: ADR «2026-09-03 — Этап 5 (A1′)» in
-[decisions.md](decisions.md). Range `3bcf0a5..23f9152`, 23 commits, branch `launcher--7`.
+**`CODE-GREEN` 2026-09-03, `DEVICE-ACCEPTED` 2026-09-10, therefore `CLOSED` — with every residual named
+and carried forward by owner decision, not cleared.** Unlike A0.5, this block changes what the user can
+reach: two new system intents registered and made reachable from a typed command. The owner ran Parts A
+and B of the acceptance checklist on the SM-A325F (Android 13, `ru-RU`) and signed off; see «Owner
+device acceptance» below for what that run did and did not cover. Full record: ADR «2026-09-03 — Этап 5
+(A1′)» in [decisions.md](decisions.md), whose § «Приёмка на устройстве» is the acceptance itself.
+Range `3bcf0a5..23f9152`, 23 commits, branch `launcher--7`; twelve further commits followed
+(`23f9152..1ef158d`, counted with `git rev-list`), of which three are the device-found fixes
+`939d1d7` / `43751f8` / `f228d10` and one is the `SAFE`-rationale ruling `1ef158d`.
 
 **What was built.** The `ToolRegistry` port stopped projecting one catalog and started federating N
 adapters behind one object, `ToolFederation`: its `registry` (`all()`/`find()`) and its `executor` —
@@ -81,8 +92,32 @@ Fixed in `1c4a61e`; no schema change (`identityHash` unchanged). The lesson reco
 product path has a join no test crosses, that path is unverified* — the same shape A0's own review
 found in `restoreOnStart`.
 
-**Owner device acceptance, round 2 (2026-09-10) — two findings, both addressed, block still
-`CODE-GREEN`.** **(1)** Dismissing the agent surface («закрыть») or refusing its consent gate
+**Owner device acceptance (2026-09-10) — Parts A and B passed, the block is `CLOSED`.** SM-A325F,
+Android 13, `ru-RU`; the owner performed the items, the agent prepared the build, drove the
+instrumentation and recorded. **Part A:** «поставь таймер на 5 минут» opened the real Samsung clock on
+a 5-minute timer with the step line «Поставить таймер на 5 минут» and `SYSTEM INTENT · EXTERNAL`
+beneath it (the timer was **already counting down**, which is what falsified the old `SAFE` rationale);
+«системные настройки» opened the real Android Settings, and the negative check «открой настройки
+системы» went to FastPath and A0's two-step plan exactly as designed; the A0 surface's provenance line
+is present and correct, and `АГЕНТ · LAUNCH_APP · PLAY_STORE_SEARCH` was verified as pre-existing A0
+(`a7f4755`), not new here; the six new strings were read and accepted with no amendments. **Part B**
+passed on the final run, on the fixed build: A0's two-step plan ran through the store step
+(`market://search`), untouched FastPath verbs behave as before, Assistant/BYOK streams normally, cancel
+and force-stop both leave the launcher healthy, and the three `agent_*` tables are `0/0/0` at rest.
+**What the acceptance did not cover, stated rather than implied:** `ru` **only** — `en` and `tr` never
+ran on the phone, and `"sayaç ayarla"` was **not judged by a native speaker** (none present); that row
+of the checklist requires saying so rather than skipping it, and "assumed fine" is not an acceptable
+answer. `DOC-HMA-2` is not closed by this block. **The run's own most expensive error was the
+measurement method, not the product:** the checklist's `cat databases/sidr_history.db` omits the WAL
+journal, so it read the database as of the last checkpoint and reported two "defects" — a session
+frozen after `PlanCreated`, and terminal sessions apparently never deleted — that were one fault at two
+checkpoint boundaries. There was no product defect; cascade delete works, re-measured at five points
+with a correct read. The same truncated read can also show the three `agent_*` tables **empty while
+`goal_text` is on disk** — a false green on the privacy guarantee in the opposite direction — so the
+fix is a mechanism, not a note: `tools/device/pull-agent-db.sh` plus `DeviceDatabaseReadGuardTest`
+(`:app`, three tests, scanning `docs/superpowers/plans` only). **Two owner rulings:** `set_timer` keeps
+`SAFE` on a corrected rationale (below), and the block closes with its residuals carried forward.
+**Two defects the run found in the product, both fixed before the final pass.** **(1)** Dismissing the agent surface («закрыть») or refusing its consent gate
 («Отмена») removed the surface but left the launcher in search-active mode with the typed command
 still in the buffer: no Shahada, no date line, no prayer strip, and only a force-stop restored them.
 `LauncherViewModel.dismissAgentSession` deleted the session and did nothing else, and the refusal path
@@ -98,8 +133,12 @@ stands, the reason does not.** `SAFE` is unchanged and no behaviour changed; the
 reversible-in-one-tap + immediately visible + provenance disclosed + nothing leaves the device, and
 the withdrawn sentence was corrected in both Tier-0 sources, spec §8.1 + fork F3, the A1′ acceptance
 checklist and Master Plan §3.6 `B4`. `open_system_settings` is a different case — opening a settings
-screen performs nothing. Both fixes are **agent-driven on the SM-A325F, which this project's
-vocabulary does not count as acceptance**; `DEVICE-ACCEPTED` stays unmet.
+screen performs nothing. **A third, earlier finding of the same acceptance:** `set_timer` needed
+`com.android.alarm.permission.SET_ALARM`, undeclared while eight documents claimed "zero new
+permissions", so the tool could not run on any device (fixed 2026-09-05, `939d1d7`, held by
+`ToolPermissionManifestGuardTest`). Each fix was verified under agent drive first — which this
+project's vocabulary does not count as acceptance — and then carried into the owner's final run on
+`1ef158d`, which **is** the acceptance.
 
 **Guards, all mutation-proved, none merely green.** `ToolWorkerCallSiteGuardTest` (new) and
 `ToolExecutorCallSiteGuardTest` (re-anchored) both survived W1–W4/E1–E2. `DoctrineGuardTest`'s
@@ -133,7 +172,13 @@ would see that. Repair → A4′; the obligation until then is A1″'s (full arg
 `§HANDOFF`). `"sayaç ayarla"` (the `tr` timer trigger) is reachable and un-shadowed but needs a native
 speaker's read — `sayaç` reads as counter/meter, not kitchen timer. `docs/governing/
 sidr-doctrine-matrix-v1.0.md`'s `DOC-HMA-2` row is **not** claimed closed — levels now exist, but
-whether a level *change* stops the loop is still A4′'s.
+whether a level *change* stops the loop is still A4′'s. **All of the above survive the block's
+`CLOSED`:** the owner accepted the block with these named, not with these cleared (`CLOSED` is not a
+zero-debt claim — DS-6B precedent). One more was measured during the acceptance: after a session row is
+deleted, its raw `goal_text` was still readable out of the on-disk file image (SQLite frees pages
+without zeroing them absent `secure_delete`; app-private storage, reachable only via `run-as` on a
+debuggable build). The SQL-level at-rest guarantee holds, re-measured at five points; changing journal
+mode or `secure_delete` on an accepted schema-4 database is an owner decision → owner / A4′.
 
 **What it answers of A0.5's four vocabulary findings.** `ObservedFact` stays deliberately untouched
 (owner instruction 2026-08-23). `CommandFailure` is rejected with a measured reason. `StepRationale` is
@@ -144,14 +189,16 @@ argument binding) is recorded as an address, `A4′`, not a decision.
 
 **Device-acceptance checklist** — split A/B/C the way the A0 re-check file is:
 [docs/superpowers/plans/2026-08-29-a1-device-acceptance.md](../docs/superpowers/plans/2026-08-29-a1-device-acceptance.md).
+**Run 2026-09-10 and kept as the record of the protocol** rather than deleted, per its own «Closing
+this file» section; it carries the run outcome, including the rows that were not run.
 
 **Gate.** `:domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test --rerun-tasks` — BUILD
 SUCCESSFUL, exit 0, **557 actionable tasks: 557 executed**, **1298 tests / 0 failures** (up from the
 1219 baseline) at closing; `core/ui` untouched, so `verifyRoborazziDebug` was not part of the closing
-gate. **The current baseline is 1304, not 1298:** the final-review fix (`356fe1a`) added six tests, all
-in `:data:repository` (265 → 271) — four in `Tier0IntentToolWorkerTest` (16 total) and the two of the
-new `Tier0ToolExecutionEndToEndTest`. Every other module is unchanged. The block stays `CODE-GREEN`;
-none of it has run on a phone.
+gate. **The current baseline is 1314, not 1298, and a fresh gate is compared against that:** the
+final-review fix (`356fe1a`) added six tests, all in `:data:repository`, and the acceptance round added
+six more — three in `DeviceDatabaseReadGuardTest` (`:app`) and three in `LauncherViewModelTest`
+(`:feature:launcher`). Re-measured at `1ef158d` on 2026-09-10: **1314 tests / 0 failures**.
 
 ## Agentic track — Этап 4.5 (A0.5) — second consumer — `CODE-GREEN` (2026-08-26)
 

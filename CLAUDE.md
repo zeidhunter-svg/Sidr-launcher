@@ -53,7 +53,7 @@ in `§HANDOFF`, not built.
 | **4.0** — invert the understanding flag (`llmRouterEnabled` → `localOnlyMode`, ADR 1/4) | ✅ 2026-08-20 code, **`DEVICE-ACCEPTED` 2026-08-22** in the Task 15 session (`ru-RU`, no provider ⇒ «ИИ-провайдер ещё не настроен» + a route to the provider screen, not `Unknown command`); first behavioural change of the track |
 | **4** — A0 thin agentic spike | ✅ **2026-08-22 — `CLOSED`** — all nine work-order items, then Task 15: the owner ran all eight §12 acceptance items on the SM-A325F and signed off. Migration 3→4 executed for real by both routes (instrumented 9/9 on device; and a genuine `user_version` 3→4 upgrade of the owner's own database, `identity_hash` matching `4.json`). Residual limitations named in Known debt — the largest is that §12.8 is unreachable by any path a user can take (an A4′ debt). **Reviewed end-to-end 2026-08-23**: nine findings, eight fixed and mutation-verified (`CODE-GREEN`; two §12 items await a device re-check) |
 | **4.5** — A0.5 second consumer of the portable core (`:consumer:jvm`) | ✅ **2026-08-26 — `CODE-GREEN`**; `DEVICE-ACCEPTED` **not applicable**, not absent — the block changes nothing on the phone. All four §3.1a questions answered with addresses, `B1` answered, the §6.3 divergence recorded and held by a test |
-| **5** — A1′ federated `ToolRegistry` | ✅ **2026-09-03 — `CODE-GREEN`**; `DEVICE-ACCEPTED` **not met** — two new user-reachable system intents (`set_timer`, `open_system_settings`) shipped and made reachable from a typed command, and none of it has run on the phone (spec §16 criterion 1, the one open criterion of nine). Tool *mass* and *selection* split out as a new block, `A1″` |
+| **5** — A1′ federated `ToolRegistry` | ✅ **2026-09-10 — `CLOSED`** — `CODE-GREEN` 2026-09-03, then the owner ran Parts A and B of the acceptance checklist on the SM-A325F in `ru-RU` and signed off (spec §16 criterion 1, the last open criterion of nine). The run itself produced three fixes — a missing `SET_ALARM`, a checklist that read the database without its WAL, and an agent surface whose exit left the launcher in search mode. `en`/`tr` never ran on the phone. Tool *mass* and *selection* split out as a new block, `A1″` |
 | **5.5–7** — A1″ tool mass + selection, A4′ runtime, A2/A3/A5/A6 | each needs its own spec + plan (`brainstorm → spec → plan → build`) |
 
 The four strategic ADRs (all 2026-08-19, in `decisions.md`):
@@ -77,17 +77,19 @@ The four strategic ADRs (all 2026-08-19, in `decisions.md`):
 stay the agent's own vocabulary, `ActionCatalog` becomes one adapter among N, and a projected tool's
 `ToolId` is *derived* from its `ActionId` rather than hand-copied. `ActionIds` is untouched.
 
-## Shipped surface (2026-09-03)
+## Shipped surface (2026-09-10)
 
 Everything below is on `launcher--7` and `CODE-GREEN` (gate green: `:domain:jvmTest testDebugUnitTest
 assembleDebug :consumer:jvm:test` — `:domain:jvmTest` and `:consumer:jvm:test` must both be listed,
 `testDebugUnitTest` reaches neither since `:domain` went KMP; plus `verifyRoborazziDebug` where
 `core/ui` is touched). Most of it is also `DEVICE-ACCEPTED` on SM-A325F / Android 13 — the owner
 personally ran on-device verification and signed off — **except** Action & Safety (DS-5), the i18n
-surface (I18N-1), FastPath's `tr` locale forms, and the whole A1′ federated-tool-registry slice below
-(Этап 5) — all `CODE-GREEN` only; see Known debt. Этап 4.0 and the whole A0 agent slice (Этап 4) became
+surface (I18N-1) and FastPath's `tr` locale forms, which are `CODE-GREEN` only; see Known debt.
+Этап 4.0 and the whole A0 agent slice (Этап 4) became
 `DEVICE-ACCEPTED` on 2026-08-22 in the Task 15 session, which also exercised FastPath's `ru` launch
-verb («открой …») on the phone — `tr` still has not run there. `CLOSED` = both, with any residual limitation named rather than implied absent (Этап 0.5 —
+verb («открой …») on the phone; the A1′ slice (Этап 5) became `DEVICE-ACCEPTED` on 2026-09-10 in the
+same `ru-RU` locale. **No block has ever been accepted on the phone in `tr` or `en`** — every device
+round to date has run `ru-RU` only. `CLOSED` = both, with any residual limitation named rather than implied absent (Этап 0.5 —
 status vocabulary).
 
 - **Launcher core** — home, app drawer, settings, app launch; fully offline.
@@ -133,8 +135,10 @@ status vocabulary).
   too, holders go three → four, and the call-site count stays exactly **one**. The whole block's `commonMain`
   footprint is two edits in two files: the `GoalShape.Free` value and the `NoPlan` arm it forces in
   `TemplatePlanner`.
-- **Federated `ToolRegistry` (A1′, `CODE-GREEN` — `DEVICE-ACCEPTED` not met, spec §16 criterion 1: this
-  block has not run on a phone)** — the one `ToolRegistry` port now federates **N** adapters behind one
+- **Federated `ToolRegistry` (A1′, `CLOSED` — owner-accepted on the SM-A325F 2026-09-10, Parts A and B
+  of the checklist, `ru-RU` only; `en`/`tr` have never run on a phone and the `tr` timer trigger
+  `"sayaç ayarla"` is still unjudged by a native speaker — residual limitations in Known debt)** — the
+  one `ToolRegistry` port now federates **N** adapters behind one
   object, `ToolFederation`, whose `registry` (`all()`/`find()`) and `executor` read the same adapter
   list by construction, so no wiring path can advertise a tool the dispatcher cannot route (the direct
   fix for A0 review finding F2). A **second real Android source**, `Tier0IntentToolSource` +
@@ -216,61 +220,40 @@ below is recorded in its own ADR.
   `LauncherAgentSession.restoreOnStart` has an explicit branch against exactly that; both are defensible
   (a harness restart *is* a process death, an app start is not), so the real gap is that the engine
   never says which the event means. → A4′.
-- **A1′ (federated `ToolRegistry`) is `CODE-GREEN`; `DEVICE-ACCEPTED` is a plain gap, not inapplicable** —
-  unlike A0.5, this block changes what the user can reach (two new system intents, `set_timer` and
-  `open_system_settings`, now reachable from a typed command), so spec §16 criterion 1 requires an owner
-  device run. **A first owner device run happened 2026-09-05 and found the block's headline tool dead:**
-  `set_timer` shipped documented in eight places as needing "zero new permissions", but
-  `AlarmClock.ACTION_SET_TIMER` requires `com.android.alarm.permission.SET_ALARM`, which the manifest
-  did not declare — so `ActivityTaskManager` refused every invocation and the step failed on every
-  device. No test could see it: `Tier0IntentToolWorkerTest` injects a fake `IntentLauncher`, so the real
-  `startActivity` is never reached, and a manifest omission has no unit-test signature. The permission
-  is now declared and the class is held by `ToolPermissionManifestGuardTest` (`:app`), which fails when
-  an intent a registered tool issues needs a permission the manifest does not declare — the mapping it
-  checks against is hand-written, and that column is the new weak point, stated in the test's own KDoc.
-  **An independent mutation round then measured that guard, and it holds its main directions** (a
-  removed manifest declaration and an unmapped new action both go RED; legitimate complete growth stays
-  GREEN; 3 of its 4 tests still fire on an empty scan; the hand-written column is exactly as weak as
-  declared, no weaker) — **and it measured two further limits, neither of them a live defect today**,
-  because both shipped workers build their intents inline and the manifest is correct: **(a)** an
-  `Intent(…)` moved one file sideways — built in a plain helper the worker calls — is invisible to the
-  *whole* guard, since its scan admits only files that both declare a `ToolWorker` and construct an
-  `Intent`; **(b)** the guard keys on workers, not on registered tools, so a tool registered in a source
-  with no worker branch is unseen — it answers "does every intent a scanned worker issues have a
-  declared permission", not "can every registered tool run". These are limits on what the guard can
-  *see*, and the person at risk is the next author: A1″'s entire content is more Tier-0 intents, where a
-  shared intent-building helper is a natural thing to write. Full statement in the test's own KDoc;
-  address to adapter #3 in the track plan's `§HANDOFF`.
-  **`DEVICE-ACCEPTED` remains unmet**: the fix has run on the phone under agent drive only, which this
-  project's status vocabulary explicitly does not count as acceptance. **The same run also falsified a
-  second claim of the block — and that one is now DECIDED, not open:** the spec and the source both
-  justified `set_timer`'s `SAFE` rating with "neither skips the OS's own UI — the final act is the
-  user's", but with `EXTRA_SKIP_UI = false` the Samsung clock opened *with the timer already counting
-  down* (Пауза/Удалить, not a start button). `EXTRA_SKIP_UI` governs whether the responding app shows
-  its UI, not whether it acts. **Owner decision 2026-09-10: the level stands, the reason does not.**
-  `set_timer` stays `SAFE` — no risk level and no behaviour changed — and what `SAFE` rests on is now
-  stated instead of assumed: the effect is trivially reversible (one tap), immediately visible (the
-  clock opens in front of the user), disclosed (`EXTERNAL` draws a provenance line, the only such
-  mechanism a `SAFE` step gets), and local (nothing leaves the device). `open_system_settings` is a
-  different case, not the same one: opening a settings screen performs nothing at all. The withdrawn
-  sentence was corrected in `Tier0IntentToolSource`, `Tier0IntentToolWorker`, spec §8.1 + fork F3, the
-  A1′ device-acceptance checklist and Master Plan §3.6 `B4` — whose "prefilled but not sent" shape no
-  longer describes this tool and which A1″ must **measure** per intent rather than inherit. The
-  falsification itself is kept on purpose: a rating whose stated reason was measured false is the more
-  useful record.
-  **A second device-found defect from the 2026-09-10 acceptance round is fixed and is `CODE-GREEN`
-  only:** dismissing the agent surface («закрыть») or refusing its consent gate («Отмена») removed the
-  surface and left the launcher in search-active mode with the command still in the buffer, so the home
-  body (Shahada, date line, prayer strip) never came back and only a force-stop restored it.
-  `LauncherViewModel.dismissAgentSession` deleted the session and did nothing else, and the refusal path
-  ends `Cancelled`, which the surface draws as nothing. **Origin is A0, not A1′** (`5f04a1d`) — but A1′
-  is what made it routine, since before it only a FastPath "no such app" reached that surface and now
-  every recognised tool command does. Both exits now clear the command buffer, which is the whole of
-  the search-active state; held by three tests in `LauncherViewModelTest` that assert the *user-visible*
-  state after the exit rather than only that the row was deleted. Agent-driven on the SM-A325F for both
-  plan shapes; the owner re-runs it.
-  What the block leaves
-  behind, each named rather than implied absent: **(1)** `DOC-ADL-1`'s closure rests on the **single call site**, not on
+- **A1′ (federated `ToolRegistry`) is `CLOSED` as of 2026-09-10** — gate green plus an owner device
+  run: the owner ran Parts A and B of
+  [the acceptance checklist](docs/superpowers/plans/2026-08-29-a1-device-acceptance.md) on the
+  SM-A325F (Android 13, `ru-RU`) and signed off. **`CLOSED` is not a zero-debt claim** (DS-6B
+  precedent): everything below is carried forward **by owner decision**, named rather than cleared.
+  What was observed, the three findings the run produced and the two owner rulings are in the ADR
+  «2026-09-03 — Этап 5 (A1′)», § «Приёмка на устройстве» — not here.
+  **What the acceptance did not cover, said rather than implied:** it ran **`ru` only**. `en` and `tr`
+  have never run on the phone, and `"sayaç ayarla"` — see (6) — is **not judged by a native speaker**;
+  "assumed fine" is not an acceptable answer to that row of the checklist. `DOC-HMA-2` is **not**
+  closed by this block: tool levels now exist, but whether a level *change* stops the loop is still
+  A4′'s. Part C of the checklist is agent evidence beside the acceptance and clears nothing.
+  **Three things the acceptance found are fixed — two in the product, one in the checklist that
+  measured it — and the owner's final run was on the fixed build (`1ef158d`), so the fixed behaviour
+  is what was accepted:** (a) `set_timer` needed
+  `com.android.alarm.permission.SET_ALARM` and the manifest did not declare it — eight documents
+  claimed "zero new permissions", `ActivityTaskManager` refused every invocation, and no unit test
+  could see it (`Tier0IntentToolWorkerTest` injects a fake `IntentLauncher`); now declared and held by
+  `ToolPermissionManifestGuardTest` (`:app`), whose hand-written permission column is its own weak
+  point, stated in its KDoc. (b) Leaving the agent surface («закрыть», or «Отмена» on the consent
+  gate) left the launcher in search-active mode with the command still in the buffer, so the home body
+  never came back — origin A0 (`5f04a1d`), made routine by A1′ because every recognised tool command
+  now reaches that surface; both exits clear the buffer, held by three `LauncherViewModelTest` tests
+  that assert user-visible state. (c) **The most expensive error of the run was the measurement
+  method, not the product:** the checklist's own `adb exec-out run-as … cat databases/sidr_history.db`
+  omits the WAL journal, so it reads the database as of the last checkpoint and reported as present
+  sessions the engine had correctly deleted — **there was no product defect; cascade delete works**,
+  re-measured at five points with a correct read. **Read the agent tables only with `tools/device/pull-agent-db.sh`** —
+  the same truncated read can also report the three `agent_*` tables **empty while
+  `agent_session.goal_text` is on disk**, a false green on the privacy guarantee in the opposite
+  direction; `DeviceDatabaseReadGuardTest` (`:app`) fails the build on a checklist block that
+  reintroduces it, and scans `docs/superpowers/plans` only.
+  **Residual limitations, carried forward:** **(1)** `DOC-ADL-1`'s closure rests on the **single call
+  site**, not on
   `ConsentPolicyTest`'s "wake-up" test — that test cannot distinguish `risk != entries.first()` from
   `risk >= CONFIRM` while exactly three risk levels exist, and only bites the day a fourth level lands
   below `CONFIRM`. **(2)** `core/testing/src/main/java` is scanned by neither call-site guard, so a
@@ -285,10 +268,9 @@ below is recorded in its own ADR.
   and **the raw command text is sent to the cloud model** — on a goal a registered tool had already
   matched deterministically. A store failure therefore bypasses deterministic-first: not a widening of
   `OutboundContextPolicy` (the same text the model path would have received had nothing matched), but
-  the decision to send it is made by a disk error rather than by the routing rules. This block found and
-  fixed **one** instance of that class in review (a `GoalShape.Free` encode that threw, silently killing
-  the block's own headline capability in production before the fix); the class itself is untouched,
-  owned by A4′. **(4)** `DoctrineGuardTest` does not pin a registered tool's declared **risk** — a
+  the decision to send it is made by a disk error rather than by the routing rules. One instance of that
+  class was found and fixed in review; the class itself is untouched, owned by A4′. **(4)**
+  `DoctrineGuardTest` does not pin a registered tool's declared **risk** — a
   `SAFE → CONFIRM` change on an already-registered tool passes the guard and the whole `:app` suite
   silently. It does **not** pass unnoticed for the four tools shipped today: `Tier0IntentToolSourceTest`'s
   `none { requiresConsent(it.risk) }` catches it for both Tier-0 tools and Task 12's parity test catches
@@ -300,7 +282,8 @@ below is recorded in its own ADR.
   shipped so far, named as a limit rather than a general property. **(6)** `"sayaç ayarla"` (the `tr`
   timer trigger) is proved reachable and un-shadowed by every guard, but reads as counter/meter rather
   than kitchen timer to a native speaker's eye — no guard can catch "reachable but nobody types it";
-  unresolved, owner-level. **(7)** of A0.5's four vocabulary findings addressed to A1′:
+  the 2026-09-10 acceptance did **not** judge it (no Turkish speaker present, `tr` not run on the
+  phone); unresolved, owner-level, addressed to A1″. **(7)** of A0.5's four vocabulary findings addressed to A1′:
   `ObservedFact` stays **deliberately untouched** (owner instruction 2026-08-23, see Do not);
   `CommandFailure` is rejected with a measured reason (a rich per-tool failure vocabulary was judged not
   worth its own type yet); `StepRationale.label` is **deleted**, replaced by a `PlanStep`-level line
@@ -319,8 +302,23 @@ below is recorded in its own ADR.
   three `startActivity` sites), `SystemIntentToolWorker` inherits containment from that same unchanged
   action chain, and `SandboxToolWorker` catches broadly. Neither call-site guard sees it: they hold
   **where** a tool is invoked from, not **what** comes back out. The repair is the engine's → **A4′**;
-  the obligation until then is **A1″**'s, which ships more workers first (argument and the adapter-#3
-  warning: the A1′ ADR's residuals, and `§HANDOFF` of the track plan).
+  the obligation until then is **A1″**'s, which ships more workers first. **(9)**
+  `ToolPermissionManifestGuardTest` has **two measured blind spots**, neither a live defect today
+  (both shipped workers build their intents inline and the manifest is correct): an `Intent(…)` built
+  in a plain helper the worker calls is invisible to the whole guard, since its scan admits only files
+  that both declare a `ToolWorker` and construct an `Intent`; and the guard keys on **workers**, not on
+  registered tools, so a tool registered in a source with no worker branch is unseen. It answers "does
+  every intent a scanned worker issues have a declared permission", not "can every registered tool
+  run" — and the 2026-09-05 defect was an instance of the second. The person at risk is the next
+  author: A1″'s entire content is more Tier-0 intents, where a shared intent-building helper is a
+  natural thing to write. Closing either means keying the scan on what the **registry** declares — a
+  different guard, not a wider regex. Full statement in the test's own KDoc; address to adapter #3 in
+  the track plan's `§HANDOFF`. **(10)** measured during the acceptance and left to the owner: after a
+  session row is deleted, its raw `goal_text` was still **readable out of the on-disk file image** —
+  SQLite frees pages without zeroing them unless `secure_delete` is on, and what this Android build
+  sets was not established. At the SQL level the at-rest guarantee holds (re-measured at five points);
+  the file lives in app-private storage and needed `run-as` on a debuggable build. Changing journal
+  mode or `secure_delete` on an accepted schema-4 database is an owner decision → owner / A4′.
 - **`CODE-GREEN`, not `DEVICE-ACCEPTED`:** DS-5's own acceptance checklist has never been run
   (since 2026-07-13); I18N-1 was verified only by agent-driven `adb`/`uiautomator` — its offline path, live
   TalkBack, fontScale 2.0, and the system per-app-language picker are untested. DS-6B is `CLOSED` (owner
@@ -365,7 +363,8 @@ below is recorded in its own ADR.
   `checkpointFor`'s four consent triggers — `RISK_RAISED`, `MISSING_PERMISSION`, `DURABLE_EFFECT` — have
   **zero** test coverage: the first is unreachable while risk has three levels, the other two because no
   test builds a `ToolDescriptor` with a gate or `DURABLE`. Fail-safe by construction, unproven by test;
-  owned by whoever inserts a risk level below `CONFIRM` (A1′).
+  owned by whoever inserts a risk level below `CONFIRM` — A1′ closed without inserting one, so it falls
+  to whichever block does.
 - **Not owned by any block:** `RoomColumnNames` is a hand-written inventory and its guard scans **it**,
   not the entities or the exported schema — a column added to an `@Entity` and forgotten there passes
   silently, including one with a denylisted term in its name (Block F design). It matters more since A0
@@ -433,11 +432,12 @@ below is recorded in its own ADR.
   plus `:core:ui:verifyRoborazziDebug` whenever `core/ui` is touched, and `:app:assembleRelease` for
   release-affecting work. **`:domain:jvmTest` and `:consumer:jvm:test` must be listed explicitly:**
   `testDebugUnitTest` has not reached `:domain` since it went KMP, and it never reaches `:consumer:jvm`
-  at all. Baseline at 2026-09-04 (`356fe1a`): **1304 tests, 0 failures** (434 `:domain:jvmTest` + 56
-  `:consumer:jvm` + 271 `:data:repository`). A1′ *closed* at 1298 on 2026-09-03; the final-review fix
-  added six tests, all in `:data:repository` (265 → 271) — four in `Tier0IntentToolWorkerTest` (16 total)
-  and the two of the new `Tier0ToolExecutionEndToEndTest`. Compare a fresh gate against **1304**, not
-  against the closing number quoted in the A1′ ADR.
+  at all. Baseline at 2026-09-10 (`1ef158d`, the build the owner accepted): **1314 tests, 0 failures**
+  (434 `:domain:jvmTest` + 56 `:consumer:jvm` + 271 `:data:repository` + 189 `:feature:launcher` + 49
+  `:app`, the rest unchanged). A1′ *closed* at 1298 on 2026-09-03, the final-review fix took it to 1304,
+  and the device-acceptance round added six more — three in `DeviceDatabaseReadGuardTest` (`:app`) and
+  three in `LauncherViewModelTest` (`:feature:launcher`). Compare a fresh gate against **1314**, not
+  against any number quoted in the A1′ ADR.
   Read counts from the JUnit XML, not the console. **Use `--rerun-tasks`, never the plan-text `--rerun`**
   — the latter is not a valid Gradle 9.5.0 build-level flag and silently returns everything `UP-TO-DATE`
   while still printing `BUILD SUCCESSFUL` (it produced one false green inside the A1′ block); a genuine
@@ -531,4 +531,5 @@ below is recorded in its own ADR.
 - Agentic restart: **ADR 1/4 … 4/4**, **Этап 0.2 / 0.3 / 0.4 / 0.5 / 0.6 / 0.7 / 2 / 3** (2026-08-19) ·
   **Этап 4.0** (2026-08-20) · «Развилка агентного трека» — two consumers (2026-08-21) · **Этап 4 (A0)** (2026-08-22) ·
   «Сквозное ревью блока A0» (2026-08-23) · **Этап 4.5 (A0.5)** — second consumer (2026-08-26) ·
-  **Этап 5 (A1′)** — federated `ToolRegistry` (2026-09-03)
+  **Этап 5 (A1′)** — federated `ToolRegistry` (2026-09-03; the owner's device acceptance of
+  2026-09-10 is a section inside that same ADR)

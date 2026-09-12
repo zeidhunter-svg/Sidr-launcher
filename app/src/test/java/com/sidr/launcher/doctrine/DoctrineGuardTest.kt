@@ -267,16 +267,51 @@ class DoctrineGuardTest {
      * The adapter set is a **declared** list, so a source added without an ADR turns this red. This is
      * the change-control §5 line "give a tool a path to the world outside ToolRegistry/ToolExecutor"
      * made mechanical at the composition root.
+     *
+     * **It is also the only thing that couples [productionAdapters] to the real graph**, which is why
+     * the shape below is three assertions rather than one. A mutation round measured the old
+     * single-assertion version going blind: the level regex required `ToolLevels.` immediately after the
+     * open paren, so a third adapter written `ToolAdapter(level = ToolLevels.SANDBOX, …)` — legal,
+     * idiomatic Kotlin, and only positional here by convention — was matched by nothing. With a registry
+     * declaring an `EXTERNAL`/`CONFIRM`/`DURABLE` tool behind it, **all 54 `:app` tests stayed green.**
+     *
+     * So the count is asserted independently of the spelling: any `ToolAdapter(` in this module is
+     * counted, whatever its arguments look like. And [levels] is asserted to be as long as that count,
+     * which is what stops the extraction from silently skipping a construction it cannot parse — a
+     * named-argument order this regex does not anticipate reddens as a mismatch instead of disappearing.
+     * Adding the third assertion is the cheap half of closing that hole; the other half is pinning risk
+     * totality over the graph's own federation rather than over [productionAdapters], which belongs to
+     * the task that adds adapter #3.
      */
     @Test
     fun `the composition root registers exactly the declared adapters`() {
         val module = File(repoRoot, "app/src/main/java/com/sidr/launcher/di/AgentProvidesModule.kt").readText()
-        val declared = Regex("""ToolAdapter\(\s*(ToolLevels\.\w+)""").findAll(module).map { it.groupValues[1] }.toList()
+        val constructions = Regex("""ToolAdapter\(""").findAll(module).count()
+        val levels = Regex("""ToolAdapter\(\s*(?:level\s*=\s*)?(ToolLevels\.\w+)""")
+            .findAll(module)
+            .map { it.groupValues[1] }
+            .toList()
 
         assertEquals(
-            "A new adapter is a new path to the world and needs an ADR, not a line. Found: $declared",
+            "A new adapter is a new path to the world and needs an ADR, not a line. " +
+                "ToolAdapter( constructions found in AgentProvidesModule.kt: $constructions",
+            2,
+            constructions,
+        )
+
+        assertEquals(
+            "A new adapter is a new path to the world and needs an ADR, not a line. Found: $levels",
             listOf("ToolLevels.IN_APP", "ToolLevels.SYSTEM_INTENT"),
-            declared,
+            levels,
+        )
+
+        assertEquals(
+            "This scan read $constructions ToolAdapter( constructions but could only extract " +
+                "${levels.size} levels from them, so at least one adapter is written in a spelling " +
+                "this regex does not parse and the assertion above is blind to it. Widen the regex — " +
+                "do not relax this check: it is what keeps the guard from going silently blind.",
+            constructions,
+            levels.size,
         )
     }
 
@@ -373,6 +408,11 @@ class DoctrineGuardTest {
      *
      * Two assertions, separately load-bearing and separately proved — the mutation round fired them
      * independently: a removed row reddens totality, a changed declaration reddens drift.
+     *
+     * The drift filter deliberately does **not** re-check presence. The totality assertion above throws
+     * unless every registered id is in [declaredRisk], and the map's value type is non-nullable, so a
+     * `!= null` conjunct in that filter would be a branch that cannot fail — the F2/D10 shape this
+     * repository removes rather than keeps as decoration.
      */
     @Test
     fun `every registered tool's declared risk is pinned here`() {
@@ -386,7 +426,7 @@ class DoctrineGuardTest {
         )
 
         val drifted = registered
-            .filter { declaredRisk[it.id] != null && declaredRisk[it.id] != it.risk }
+            .filter { declaredRisk[it.id] != it.risk }
             .map { "${it.id.value}: pinned ${declaredRisk[it.id]}, declared ${it.risk}" }
         assertEquals(
             "Declared risk changed without this pin changing with it: $drifted",

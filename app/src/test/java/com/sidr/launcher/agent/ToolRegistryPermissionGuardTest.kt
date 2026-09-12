@@ -46,6 +46,12 @@ class ToolRegistryPermissionGuardTest {
         Tier0ToolIds.OPEN_SYSTEM_SETTINGS to emptyList(),
     )
 
+    /**
+     * The non-vacuity floor's required ids — the same four ids [toolPermissions] rows, read from there
+     * rather than re-listed, so the floor and the permission map cannot silently drift apart.
+     */
+    private val requiredToolIds: List<ToolId> = toolPermissions.keys.toList()
+
     private object NoopWorker : ToolWorker {
         override suspend fun invoke(invocation: ResolvedInvocation): ToolResult =
             ToolResult.Failed(com.sidr.launcher.domain.intent.CommandFailure.Generic)
@@ -94,13 +100,30 @@ class ToolRegistryPermissionGuardTest {
         )
     }
 
+    /**
+     * Non-vacuity floor — **a floor, not an equality, and not a bare count either.**
+     * `DoctrineGuardTest` (`app/src/test/java/com/sidr/launcher/doctrine/DoctrineGuardTest.kt`) made and
+     * fixed the identical mistake for the identical construction: `registered.size >= N` cannot tell an
+     * adapter that keeps one tool and silently drops another from one that keeps both, because the count
+     * survives either way. It is also about to stop meaning anything at all: a later task in this block
+     * registers a third adapter over app shortcuts read from the device, whose tool count is
+     * device-dependent — different on every phone. A count floor asserts nothing the day that adapter
+     * lands; a named-id floor keeps working unchanged. So this checks that every one of
+     * [requiredToolIds] — the four tools this federation is *known* to ship — is still present, and
+     * names whichever is missing. It must stay containment rather than `assertEquals` on the whole set:
+     * a legitimate fifth tool (A1″'s entire content) must leave this GREEN.
+     */
     @Test
-    fun `the registry this guard reads is not empty`() {
-        val registered = productionFederation().registry.all()
-        assertTrue(
-            "Every assertion here loops over the production registry. If construction ever yields an " +
-                "empty list, those loops pass having checked nothing.",
-            registered.size >= 4,
+    fun `the registry this guard reads contains the tools this federation is known to ship`() {
+        val registered = productionFederation().registry.all().map { it.id }
+        val missing = requiredToolIds.filterNot { it in registered }
+        assertEquals(
+            "Every assertion here loops over the production registry. A tool this federation is known " +
+                "to ship that silently stops being registered must turn this red — a count cannot see " +
+                "that, it can only see the list shrink below some number, which stops meaning anything " +
+                "once the registry has a device-dependent adapter. Missing: ${missing.map { it.value }}",
+            emptyList<ToolId>(),
+            missing,
         )
     }
 

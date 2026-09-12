@@ -275,19 +275,43 @@ class DoctrineGuardTest {
      * idiomatic Kotlin, and only positional here by convention — was matched by nothing. With a registry
      * declaring an `EXTERNAL`/`CONFIRM`/`DURABLE` tool behind it, **all 54 `:app` tests stayed green.**
      *
-     * So the count is asserted independently of the spelling: any `ToolAdapter(` in this module is
-     * counted, whatever its arguments look like. And [levels] is asserted to be as long as that count,
-     * which is what stops the extraction from silently skipping a construction it cannot parse — a
-     * named-argument order this regex does not anticipate reddens as a mismatch instead of disappearing.
-     * Adding the third assertion is the cheap half of closing that hole; the other half is pinning risk
-     * totality over the graph's own federation rather than over [productionAdapters], which belongs to
-     * the task that adds adapter #3.
+     * So the count is asserted independently of the argument spelling: any `ToolAdapter` construction in
+     * this module is counted, whatever its arguments look like. And [levels] is asserted to be as long as
+     * that count, which is what stops the extraction from silently skipping a construction it cannot
+     * parse — a named-argument order this regex does not anticipate reddens as a mismatch instead of
+     * disappearing.
+     *
+     * **The assertion order is load-bearing and must not be rearranged.** The count-equals-levels check
+     * is vacuous over nothing — measured: an emptied production list yields `0 == 0` and satisfies it.
+     * What makes the trio non-vacuous is the count assertion pinning to a literal, which fires on an
+     * empty input before the third is reached.
+     *
+     * **And this scan has a floor it cannot rise above, measured rather than assumed.** A second round
+     * evaded the repaired version with one character — `ToolAdapter (…)`, a space before the argument
+     * list, which Kotlin permits and Hilt accepts — and a third adapter declaring an
+     * `EXTERNAL`/`CONFIRM`/`DURABLE` tool reached the production graph with all of `:app` green. That
+     * spelling is closed now (`ToolAdapter\s*\(`), but the class of evasion is not: a regex over one
+     * hard-coded file cannot see `someAdapter.copy(registry = …)`, a `listOf(…) + adaptersBuiltElsewhere`,
+     * or a second `@Module` in `:app` providing adapters of its own. Nothing couples this path to Hilt's
+     * actual set of `ToolAdapter` providers.
+     *
+     * The real repair is therefore not a wider regex: it is asserting the federation's **own** output —
+     * the distinct `ToolLevel`s reachable through `registry.all()` from the real `provideToolFederation`
+     * — which no spelling can evade. That belongs to the task that adds adapter #3, together with
+     * pinning risk totality over the graph rather than over [productionAdapters].
      */
     @Test
     fun `the composition root registers exactly the declared adapters`() {
-        val module = File(repoRoot, "app/src/main/java/com/sidr/launcher/di/AgentProvidesModule.kt").readText()
-        val constructions = Regex("""ToolAdapter\(""").findAll(module).count()
-        val levels = Regex("""ToolAdapter\(\s*(?:level\s*=\s*)?(ToolLevels\.\w+)""")
+        val moduleFile = File(repoRoot, "app/src/main/java/com/sidr/launcher/di/AgentProvidesModule.kt")
+        assertEquals(
+            "missing composition root: ${moduleFile.canonicalPath} — this guard reads one hard-coded " +
+                "path, so a moved or renamed module makes it blind rather than red",
+            true,
+            moduleFile.isFile,
+        )
+        val module = moduleFile.readText()
+        val constructions = Regex("""ToolAdapter\s*\(""").findAll(module).count()
+        val levels = Regex("""ToolAdapter\s*\(\s*(?:level\s*=\s*)?(ToolLevels\.\w+)""")
             .findAll(module)
             .map { it.groupValues[1] }
             .toList()

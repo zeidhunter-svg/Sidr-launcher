@@ -5,6 +5,7 @@ import com.sidr.launcher.data.repository.action.DefaultActionCatalog
 import com.sidr.launcher.data.repository.agent.SystemIntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0ToolIds
+import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolAdapter
 import com.sidr.launcher.domain.tool.ToolFederation
@@ -312,6 +313,40 @@ class DoctrineGuardTest {
                 "must update this list deliberately, the same as a new tool adapter. Found: $declared",
             listOf("TemplatePlanner", "toolMatchPlanner"),
             declared,
+        )
+    }
+
+    /**
+     * Declared risk, pinned where totality can be asserted. Each source's own test pins its own tools
+     * (`Tier0IntentToolSourceTest`, the task-12 parity test) — which is why a `SAFE → CONFIRM` mutation
+     * on a Tier-0 tool is caught in `:data:repository` and the whole `:app` suite stays green. That
+     * arrangement covers today's four tools and **nothing a future adapter registers**.
+     */
+    private val declaredRisk: Map<ToolId, ActionRiskLevel> = mapOf(
+        ToolIds.LAUNCH_APP to ActionRiskLevel.SAFE,
+        ToolIds.PLAY_STORE_SEARCH to ActionRiskLevel.CONFIRM,
+        Tier0ToolIds.SET_TIMER to ActionRiskLevel.SAFE,
+        Tier0ToolIds.OPEN_SYSTEM_SETTINGS to ActionRiskLevel.SAFE,
+    )
+
+    @Test
+    fun `every registered tool's declared risk is pinned here`() {
+        val registered = productionAdapters().flatMap { it.registry.all() }
+        val unpinned = registered.map { it.id }.filterNot { it in declaredRisk }
+        assertEquals(
+            "A tool whose risk is pinned by nothing can change gate behaviour silently: " +
+                "${unpinned.map { it.value }}",
+            emptyList<ToolId>(),
+            unpinned,
+        )
+
+        val drifted = registered
+            .filter { declaredRisk[it.id] != null && declaredRisk[it.id] != it.risk }
+            .map { "${it.id.value}: pinned ${declaredRisk[it.id]}, declared ${it.risk}" }
+        assertEquals(
+            "Declared risk changed without this pin changing with it: $drifted",
+            emptyList<String>(),
+            drifted,
         )
     }
 

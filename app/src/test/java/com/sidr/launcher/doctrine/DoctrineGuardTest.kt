@@ -19,13 +19,13 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The block's doctrine test. Five properties, each mutation-proved separately — a green run of a new
+ * The block's doctrine test. Six properties, each mutation-proved separately — a green run of a new
  * guard proves nothing on its own.
  *
  * It deliberately builds the **production** federation rather than a fixture: a guard that checks a
  * fixture checks the fixture.
  *
- * Two of the five assertions ([`the composition root registers exactly the declared adapters`] and
+ * Two of the six assertions ([`the composition root registers exactly the declared adapters`] and
  * [`the composition root's planner list matches the declared planners`]) are textual scans of
  * `AgentProvidesModule.kt`, and the surface-label assertion is a textual scan of
  * `AgentSessionPresentation.kt` — the established idiom `ToolExecutorCallSiteGuardTest` /
@@ -61,9 +61,16 @@ class DoctrineGuardTest {
 
     /**
      * The production adapter list, read fresh on every call. **Every test in this class that loops over
-     * registered tools reads from here** — directly (`no two registered tools share an id`) or
-     * transitively through [productionFederation] (the surface-label test) — which is what makes the
-     * floor below load-bearing for both instead of one extra `@Test` bolted on beside them.
+     * registered tools reads from here** — directly (`no two registered tools share an id` and
+     * `every registered tool's declared risk is pinned here`) or transitively through
+     * [productionFederation] (the surface-label test) — which is what makes the floor below
+     * load-bearing for all three instead of one extra `@Test` bolted on beside them.
+     *
+     * Both direct readers want what the adapters **declare**, before [ToolFederation] deduplicates:
+     * the id test because a duplicate is resolved away before `.all()` returns (see its own KDoc), and
+     * the risk test because a second adapter redeclaring an existing id at a different risk would
+     * vanish the same way. Read post-dedup, both would be checks of the federation's own output rather
+     * than of what the sources say.
      *
      * The floor is asserted **here**, in the shared accessor, not in its own test method — same
      * placement `ToolVocabularyLocaleGuardTest.guardedEntries()` uses and for the same stated reason: a
@@ -317,10 +324,38 @@ class DoctrineGuardTest {
     }
 
     /**
-     * Declared risk, pinned where totality can be asserted. Each source's own test pins its own tools
-     * (`Tier0IntentToolSourceTest`, the task-12 parity test) — which is why a `SAFE → CONFIRM` mutation
-     * on a Tier-0 tool is caught in `:data:repository` and the whole `:app` suite stays green. That
-     * arrangement covers today's four tools and **nothing a future adapter registers**.
+     * Declared risk, pinned where totality over the registry can be asserted.
+     *
+     * Each source's own test pins its own tools — `Tier0IntentToolSourceTest`'s
+     * `none { requiresConsent(it.risk) }` for the two Tier-0 tools, and `SystemIntentToolContractTest`'s
+     * field-for-field parity test for the two projected in-app ones — which is why a `SAFE → CONFIRM`
+     * mutation on a Tier-0 tool reddens `:data:repository` while the whole `:app` suite stays green.
+     * That arrangement covers today's four tools and nothing a future adapter registers, which is why
+     * the assertion moved here.
+     *
+     * **This map is hand-written, so a wrong value is exactly as green as a right one** — the same
+     * weakness `ToolRegistryPermissionGuardTest` states about its own column. What it buys is totality
+     * and drift detection, never correctness of the risk decision itself. **The source is
+     * authoritative:** when the drift assertion reddens, the pin is a risk decision to re-make and
+     * re-justify, not a number to copy across from the descriptor. The plan that prescribed this map
+     * got one of its four values wrong — it pinned `PLAY_STORE_SEARCH` at `SAFE` where
+     * `DefaultActionCatalog` declares `CONFIRM` — which is the empirical argument for writing this
+     * paragraph instead of assuming it.
+     *
+     * **Two limits, measured by the mutation round rather than implied absent:**
+     *  1. An adapter whose `registry.all()` returns an **empty** list is invisible here. The assertion
+     *     quantifies over declared tools, so an adapter declaring none has nothing to pin, and the floor
+     *     in [productionAdapters] cannot see it either — that floor is *containment* of
+     *     [REQUIRED_TOOL_IDS], which the other adapters satisfy on their own. This class answers "is
+     *     every tool that **is** registered pinned and un-drifted?", never "did every wired adapter
+     *     register anything?".
+     *  2. **It does not detect a new adapter's arrival at all.** Totality is over [productionAdapters],
+     *     a hand-maintained replica of `AgentProvidesModule.provideToolFederation`; the only coupling
+     *     between the two is the textual scan in
+     *     [`the composition root registers exactly the declared adapters`]. Measured: a third adapter
+     *     added to the real module, declaring an `EXTERNAL`/`CONFIRM`/`DURABLE` tool with no row here,
+     *     left all 54 `:app` tests green. Pinning totality over the graph's own federation instead of
+     *     over a literal is a different guard, and it belongs to the task that actually adds adapter #3.
      */
     private val declaredRisk: Map<ToolId, ActionRiskLevel> = mapOf(
         ToolIds.LAUNCH_APP to ActionRiskLevel.SAFE,
@@ -329,6 +364,16 @@ class DoctrineGuardTest {
         Tier0ToolIds.OPEN_SYSTEM_SETTINGS to ActionRiskLevel.SAFE,
     )
 
+    /**
+     * The input to `DOC-ADL-1`'s one risk-to-gate predicate, pinned.
+     *
+     * "Registered" here means **declared by a registered source**: the read is [productionAdapters],
+     * before [ToolFederation] deduplicates. That is the wider of the two readings and the only one that
+     * can see a second adapter redeclaring an existing id at a different risk.
+     *
+     * Two assertions, separately load-bearing and separately proved — the mutation round fired them
+     * independently: a removed row reddens totality, a changed declaration reddens drift.
+     */
     @Test
     fun `every registered tool's declared risk is pinned here`() {
         val registered = productionAdapters().flatMap { it.registry.all() }
@@ -351,7 +396,15 @@ class DoctrineGuardTest {
     }
 
     private companion object {
-        /** The floor, never the ceiling — see [productionAdapters]. */
+        /**
+         * The floor, never the ceiling — see [productionAdapters].
+         *
+         * **Deliberately a second literal, not `declaredRisk.keys`.** Deriving the floor from the map it
+         * corroborates is what defeated this block's sibling guard on its first pass: a paired "drop the
+         * tool and tidy away its row" edit satisfied both halves at once and passed silently. Keeping
+         * the duplication is the price of the floor meaning anything — do not tidy these two lists into
+         * one, in either direction.
+         */
         val REQUIRED_TOOL_IDS: List<ToolId> = listOf(
             ToolIds.LAUNCH_APP,
             ToolIds.PLAY_STORE_SEARCH,

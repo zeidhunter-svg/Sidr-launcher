@@ -7,6 +7,8 @@ import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ObservedFact
 import com.sidr.launcher.domain.tool.RejectionReason
+import com.sidr.launcher.domain.tool.ResolvedInvocation
+import com.sidr.launcher.domain.tool.ToolExecutor
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
@@ -14,10 +16,12 @@ import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.trace.ExecutionTrace
 import com.sidr.launcher.domain.trace.TraceEvent
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 /**
@@ -240,6 +244,43 @@ class AgentExecutorTest {
 
         assertEquals(0, tools.invocations.size)
         assertEquals(untouched, after)
+    }
+
+    // --- Containment: a throwing worker must not kill the caller --------------------------------
+
+    @Test
+    fun `a worker that throws is observed as Failed rather than killing the caller`() = runTest {
+        val throwing = object : ToolExecutor {
+            override suspend fun invoke(invocation: ResolvedInvocation): ToolResult =
+                throw IllegalStateException("no activity found to handle this intent")
+        }
+        val executor = AgentExecutor(registry, throwing, budget)
+
+        val advanced = executor.advance(session())
+
+        val observed = advanced.observations.getValue(0)
+        assertTrue("expected a Failed observation, got $observed", observed is ToolResult.Failed)
+        assertEquals(1, advanced.cursor)
+        assertTrue(
+            "the throw must still be recorded in the trace",
+            advanced.trace.events.any { it is TraceEvent.ToolObserved && it.index == 0 },
+        )
+    }
+
+    @Test
+    fun `cancellation is never converted into a Failed observation`() = runTest {
+        val cancelling = object : ToolExecutor {
+            override suspend fun invoke(invocation: ResolvedInvocation): ToolResult =
+                throw CancellationException("parent scope cancelled")
+        }
+        val executor = AgentExecutor(registry, cancelling, budget)
+
+        try {
+            executor.advance(session())
+            fail("cancellation must propagate, not become a Failed observation")
+        } catch (expected: CancellationException) {
+            // the contract: parent cancellation is never swallowed
+        }
     }
 
     // --- Fix round 1 regression + coverage tests -----------------------------------------------

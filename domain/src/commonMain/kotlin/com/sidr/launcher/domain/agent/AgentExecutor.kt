@@ -11,6 +11,7 @@ import com.sidr.launcher.domain.tool.ToolExecutor
 import com.sidr.launcher.domain.tool.ToolRegistry
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.trace.TraceEvent
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * The A0 engine: **exactly one transition per [advance]**, never a loop.
@@ -45,6 +46,11 @@ import com.sidr.launcher.domain.trace.TraceEvent
  * The engine knows nothing of `LauncherAction`, `ExecutableAction`, `Intent`, or any store's name — it
  * only knows [ToolExecutor]. `AgentVocabularyGuardTest` pins that, because it is what keeps A1' free to
  * register F-Droid, a vendor site, or an MCP tool without touching a line in here.
+ *
+ * [perform]'s call site now also catches a throwing [ToolExecutor] — the floor every worker relies on,
+ * not a replacement for a worker's own containment. An adapter-level catch stays worth having because
+ * it can report a *specific* [ToolResult.Failed] variant; a throw caught here is always
+ * [CommandFailure.Generic], the same named limitation the persisted-`Failed` gap already carries.
  */
 class AgentExecutor(
     private val registry: ToolRegistry,
@@ -195,9 +201,32 @@ class AgentExecutor(
             }
         }
 
-        // The ONE call site to the world. It is below the checkpoint by construction, and
-        // ToolExecutorCallSiteGuardTest fails the build if a second one ever appears.
-        val result = toolExecutor.invoke(resolved)
+        // The ONE call site to the world — and the floor under every worker's own containment.
+        //
+        // `ToolWorker`'s contract says an invocation always yields a `ToolResult`. Until this `try`
+        // that was held by convention plus three implementations with three different nets: a fourth
+        // adapter whose worker threw took the home-screen process down with it (A1′ final review,
+        // `356fe1a` — a device with no activity for ACTION_SET_TIMER, a SAFE one-step plan the consent
+        // gate does not stop, and no `try` anywhere above here).
+        //
+        // Catching HERE rather than in the launcher is deliberate and was re-reviewed once already:
+        // `ContextIntentLauncher.launch` returns `Unit`, so a swallowed failure there is
+        // indistinguishable from success and the trace would record `Effected` for an effect that never
+        // happened — `DOC-ILM-3` would be lied to. At this call site the result type is already
+        // `ToolResult`, so a caught throw becomes an honest `Failed`.
+        //
+        // `Exception`, not `Throwable`: an `Error` (OOM, stack overflow) is not a tool failure and must
+        // not be reported as one. Same line `SandboxToolWorker` already draws.
+        //
+        // It is below the checkpoint by construction, and ToolExecutorCallSiteGuardTest fails the build
+        // if a second call site ever appears.
+        val result = try {
+            toolExecutor.invoke(resolved)
+        } catch (e: CancellationException) {
+            throw e // never swallow parent cancellation
+        } catch (e: Exception) {
+            ToolResult.Failed(CommandFailure.Generic)
+        }
 
         val observed = session
             .record(TraceEvent.ToolObserved(invoked.index, result))

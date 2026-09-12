@@ -46,12 +46,6 @@ class ToolRegistryPermissionGuardTest {
         Tier0ToolIds.OPEN_SYSTEM_SETTINGS to emptyList(),
     )
 
-    /**
-     * The non-vacuity floor's required ids — the same four ids [toolPermissions] rows, read from there
-     * rather than re-listed, so the floor and the permission map cannot silently drift apart.
-     */
-    private val requiredToolIds: List<ToolId> = toolPermissions.keys.toList()
-
     private object NoopWorker : ToolWorker {
         override suspend fun invoke(invocation: ResolvedInvocation): ToolResult =
             ToolResult.Failed(com.sidr.launcher.domain.intent.CommandFailure.Generic)
@@ -108,15 +102,35 @@ class ToolRegistryPermissionGuardTest {
      * survives either way. It is also about to stop meaning anything at all: a later task in this block
      * registers a third adapter over app shortcuts read from the device, whose tool count is
      * device-dependent — different on every phone. A count floor asserts nothing the day that adapter
-     * lands; a named-id floor keeps working unchanged. So this checks that every one of
-     * [requiredToolIds] — the four tools this federation is *known* to ship — is still present, and
-     * names whichever is missing. It must stay containment rather than `assertEquals` on the whole set:
-     * a legitimate fifth tool (A1″'s entire content) must leave this GREEN.
+     * lands.
+     *
+     * **What this actually buys, stated precisely after a round-1 review finding.** [REQUIRED_TOOL_IDS]
+     * is deliberately its **own literal**, spelled independently of [toolPermissions] rather than
+     * derived from its keys — a first draft of this fix read `toolPermissions.keys`, and the re-review
+     * caught what that does: a developer who drops a tool from its source *and* tidies away its
+     * now-unused row in `toolPermissions` in the same commit — good faith, not adversarial — moves both
+     * lists together, because both were reading one literal. This test would have stayed green through
+     * exactly the drop it exists to catch.
+     *
+     * With the ids spelled separately, dropping a tool from its source **and** tidying away its now-unused
+     * `toolPermissions` row in the same commit is now **two** separately-titled edits to this file
+     * (removing a line from [REQUIRED_TOOL_IDS] and removing a line from `toolPermissions`) rather than
+     * one — this test catches the case where only the source drops (the row is left behind) outright, and
+     * makes the case where both drop together require a second, separate edit to stay silent, rather than
+     * catching that second case via some oracle independent of this file. It is exactly as strong as the
+     * fact that [REQUIRED_TOOL_IDS] and `toolPermissions` are two lists a reader must edit separately, and
+     * no stronger: nothing here re-derives the four ids from anywhere outside this file.
+     * `every registered tool has a permission row` is what keeps `toolPermissions` itself honest against
+     * the registry in the *other* direction (a tool registered with no row at all); this test is not a
+     * substitute for that one, and neither is a substitute for a scan of the real adapter sources.
+     *
+     * Must stay containment rather than `assertEquals` on the whole set: a legitimate fifth tool (A1″'s
+     * entire content) must leave this GREEN.
      */
     @Test
     fun `the registry this guard reads contains the tools this federation is known to ship`() {
         val registered = productionFederation().registry.all().map { it.id }
-        val missing = requiredToolIds.filterNot { it in registered }
+        val missing = REQUIRED_TOOL_IDS.filterNot { it in registered }
         assertEquals(
             "Every assertion here loops over the production registry. A tool this federation is known " +
                 "to ship that silently stops being registered must turn this red — a count cannot see " +
@@ -133,6 +147,22 @@ class ToolRegistryPermissionGuardTest {
             "The scan found no known permission — the manifest moved or the attribute spelling changed, " +
                 "and the totality test above is now vacuous.",
             "android.permission.INTERNET" in declaredPermissions(),
+        )
+    }
+
+    private companion object {
+        /**
+         * The non-vacuity floor, never the ceiling. Spelled as its own literal — **not**
+         * `toolPermissions.keys` — on purpose: see the KDoc on the test below that reads this constant
+         * for the round-1 fix that derived it from [toolPermissions] instead, and the round-2 finding
+         * that reverted it, because deriving the floor from [toolPermissions] means a tidy-up that
+         * deletes a row there deletes the floor's own check of that same id in the same edit.
+         */
+        val REQUIRED_TOOL_IDS: List<ToolId> = listOf(
+            ToolIds.LAUNCH_APP,
+            ToolIds.PLAY_STORE_SEARCH,
+            Tier0ToolIds.SET_TIMER,
+            Tier0ToolIds.OPEN_SYSTEM_SETTINGS,
         )
     }
 }

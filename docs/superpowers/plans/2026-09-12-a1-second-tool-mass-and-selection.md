@@ -143,7 +143,7 @@ fun `a worker that throws is observed as Failed rather than killing the caller`(
         override suspend fun invoke(invocation: ResolvedInvocation): ToolResult =
             throw IllegalStateException("no activity found to handle this intent")
     }
-    val executor = AgentExecutor(toolExecutor = throwing, budget = RuntimeBudget.Default)
+    val executor = executorWith(toolExecutor = throwing)
 
     val advanced = executor.advance(runningSessionWithOneStep())
 
@@ -162,15 +162,31 @@ fun `cancellation is never converted into a Failed observation`() = runTest {
         override suspend fun invoke(invocation: ResolvedInvocation): ToolResult =
             throw CancellationException("parent scope cancelled")
     }
-    val executor = AgentExecutor(toolExecutor = cancelling, budget = RuntimeBudget.Default)
+    val executor = executorWith(toolExecutor = cancelling)
 
-    assertFailsWith<CancellationException> { executor.advance(runningSessionWithOneStep()) }
+    try {
+        executor.advance(runningSessionWithOneStep())
+        fail("cancellation must propagate, not become a Failed observation")
+    } catch (expected: CancellationException) {
+        // the contract: parent cancellation is never swallowed
+    }
 }
 ```
 
-Reuse the file's existing session-building helper rather than inventing a new one; if none is named
-`runningSessionWithOneStep`, rename these calls to whatever the file already uses to build a `Running`
-session whose `prepare` clears step 0. Do not add a second helper for the same shape.
+**Two construction facts, verified against the tree before this plan was dispatched — do not "work them
+out" a second time.**
+
+1. `AgentExecutor`'s constructor is `AgentExecutor(registry: ToolRegistry, toolExecutor: ToolExecutor,
+   budget: RuntimeBudget = RuntimeBudget.Default)` — **three** parameters
+   (`AgentExecutor.kt:49-53`). `executorWith(toolExecutor = …)` above stands for "construct it exactly
+   the way `AgentExecutorTest` already constructs it in its existing tests, substituting only the
+   `toolExecutor`". Read the file and reuse its registry fake and its session builder — including
+   whatever the existing builder for a `Running` session whose `prepare` clears step 0 is actually
+   called. Do not add a second helper for a shape the file already has.
+2. **`kotlin.test` is not on this module's test classpath** — `domain/build.gradle.kts` declares
+   `libs.junit4` and nothing else, and no existing `jvmTest` imports `kotlin.test`. That is why the
+   second test is written with `try`/`fail` instead of `assertFailsWith`. Do not add a test dependency
+   to satisfy one assertion: a toolchain change inside a feature block needs its own mandate.
 
 - [ ] **Step 2: Run it and watch it fail**
 
@@ -1161,7 +1177,7 @@ class ShortcutToolWorker @Inject constructor(
         val parsed = ShortcutToolIds.parse(invocation.id) ?: return ToolResult.Failed(CommandFailure.Generic)
         return runCatching { launcher.start(parsed.first, parsed.second) }
             .fold(
-                onSuccess = { ToolResult.Effected },
+                onSuccess = { ToolResult.Effected() },
                 onFailure = { ToolResult.Failed(CommandFailure.Generic) },
             )
     }
@@ -1173,9 +1189,11 @@ fun interface ShortcutLauncher {
 }
 ```
 
-Check `ToolResult`'s actual success variant name in
-`domain/src/commonMain/kotlin/com/sidr/launcher/domain/tool/ToolResult.kt` and use it — do not assume
-`Effected` without reading the file.
+`ToolResult.Effected` is a **data class** with a defaulted `ToolOutput`
+(`domain/src/commonMain/kotlin/com/sidr/launcher/domain/tool/ToolInvocation.kt:60` — the sealed
+interface lives in that file, not in a `ToolResult.kt`), so the parentheses above are required: without
+them the expression is a type reference, not a value. This tool produces no output, and its descriptor
+declares an empty `outputSchema`, so nothing may bind to it.
 
 The worker keeps its own `runCatching` even though Task 1 added the engine floor: adapter-level catches
 produce specific failures and the floor is a floor. Say that in the KDoc.
@@ -1282,6 +1300,13 @@ internal fun PlanStep.line(subject: String, dynamicNames: Map<ToolId, String>): 
 }
 ```
 
+**`PlanStep.line` has two call sites, and this step changes its signature.** They are
+`AgentSessionSurface.kt:94` and `AgentSessionSurface.kt:211`, both calling `step.line(subject)`. Both
+must pass the map, which the surface receives the same way it already receives `toolProvenance` —
+follow that parameter from `LauncherScreen` down and add `dynamicNames` beside it rather than
+introducing a second plumbing route. Verified against the tree before dispatch; if a third call site
+exists by the time you run, update it too and say so in the report.
+
 `LauncherViewModel` builds `dynamicNames` as
 `dynamicToolNames.names().associate { it.id to "${it.qualifier} — ${it.name}" }` and hands it down
 beside the existing `toolProvenance`. The em-dash join is copy and therefore belongs in the resource if
@@ -1348,7 +1373,7 @@ fun `a shortcut that disappears between planning and invocation fails rather tha
     catalog.refresh()
     val source = ShortcutToolSource(catalog)
     val federation = ToolFederation(
-        listOf(ToolAdapter(ToolLevels.APP_SHORTCUT, source, ShortcutToolWorker { _, _ -> })),
+        listOf(ToolAdapter(ToolLevels.APP_SHORTCUT, source, ShortcutToolWorker(ShortcutLauncher { _, _ -> }))),
     )
 
     val id = federation.registry.all().single().id
@@ -1358,7 +1383,13 @@ fun `a shortcut that disappears between planning and invocation fails rather tha
     // The app is uninstalled while the plan sits paused.
     val emptied = ShortcutCatalog(query = { emptyList() }, ioDispatcher = dispatcher).also { it.refresh() }
     val afterUninstall = ToolFederation(
-        listOf(ToolAdapter(ToolLevels.APP_SHORTCUT, ShortcutToolSource(emptied), ShortcutToolWorker { _, _ -> })),
+        listOf(
+            ToolAdapter(
+                ToolLevels.APP_SHORTCUT,
+                ShortcutToolSource(emptied),
+                ShortcutToolWorker(ShortcutLauncher { _, _ -> }),
+            ),
+        ),
     )
 
     val result = afterUninstall.executor.invoke(ResolvedInvocation(id, emptyMap()))
@@ -1377,12 +1408,14 @@ fun `a worker that throws inside the real federation still yields a Failed obser
             ToolAdapter(
                 ToolLevels.APP_SHORTCUT,
                 ShortcutToolSource(catalog),
-                ShortcutToolWorker { _, _ -> throw IllegalStateException("shortcut is gone") },
+                ShortcutToolWorker(ShortcutLauncher { _, _ -> throw IllegalStateException("shortcut is gone") }),
             ),
         ),
     )
     val id = federation.registry.all().single().id
-    val executor = AgentExecutor(toolExecutor = federation.executor, budget = RuntimeBudget.Default)
+    // Three parameters — registry, toolExecutor, budget. Pass `federation.registry` for the first:
+    // this test is about the real federation on both sides, not a fake registry beside a real executor.
+    val executor = AgentExecutor(federation.registry, federation.executor)
 
     val advanced = executor.advance(runningSessionFor(id))
 
@@ -1392,7 +1425,9 @@ fun `a worker that throws inside the real federation still yields a Failed obser
 ```
 
 `runningSessionFor(id)` builds a one-step `Running` session over that tool the same way the first test
-builds its plan — reuse the helper the first test already needs rather than adding a second. The value
+builds its plan — reuse the helper the first test already needs rather than adding a second.
+`ShortcutToolWorker` is a **class** whose constructor takes a `ShortcutLauncher`, which is the
+`fun interface`; the SAM conversion belongs to the parameter, never to the worker itself. The value
 of this test is that the throw is contained **twice over** (worker `runCatching`, engine `try`) and the
 assertion still reads the engine's output, so removing either containment is visible here.
 
@@ -1613,18 +1648,32 @@ fun `an authored trigger cannot be shadowed by a third-party shortcut name`() {
         vocabulary = ToolVocabulary(),
         dynamicNames = namesOf(DynamicToolName(ToolId("shortcut:com.x/s"), "Timer", "set timer for")),
     )
-    ToolVocabulary().entries.forEach { entry ->
-        val sample = sampleCommandFor(entry)
-        assertEquals(
-            "an authored trigger stopped recognising its own sample once a shortcut claimed it: $sample",
-            entry.id,
-            selector.select(sample)?.id,
-        )
+    val failures = mutableListOf<String>()
+
+    guardedEntries().forEach { entry ->
+        entry.prefixByLocale.values.flatten().forEach { form ->
+            val command = if (entry.argName == null) form else "$form $SAMPLE_ARGUMENT"
+            if (selector.select(command)?.id != entry.id) failures += "prefix: $command"
+        }
+        entry.suffixByLocale.values.flatten().forEach { form ->
+            val command = if (entry.argName == null) form else "$SAMPLE_ARGUMENT $form"
+            if (selector.select(command)?.id != entry.id) failures += "suffix: $command"
+        }
     }
+
+    assertTrue(
+        "an authored trigger stopped recognising its own sample once a shortcut claimed it:\n" +
+            failures.joinToString("\n"),
+        failures.isEmpty(),
+    )
 }
 ```
 
-Reuse the file's existing sample-command builder rather than writing a second one.
+**This file has no `sampleCommandFor` helper** — verified before dispatch. It builds a sample inline,
+two ways, and the test above copies exactly those two: `"$form $SAMPLE_ARGUMENT"` for a prefix form and
+`"$SAMPLE_ARGUMENT $form"` for a suffix form, with the bare form for a zero-argument entry. Its only
+private helper is `guardedEntries()`, which is what carries the non-vacuity floor — use it rather than
+`ToolVocabulary().entries`, or this test passes on a truncated table.
 
 - [ ] **Step 3: Run `:data:repository` and `:app`**
 

@@ -1819,3 +1819,65 @@ git commit -m "docs(agentic-5.5/A1\"): every Tier-0 candidate measured on the ph
 - **Type consistency:** `DynamicToolNames.names()` — the clash with `ToolRegistry.all()` is called out
   in Task 7 Step 4 and the name `names()` is used consistently in Tasks 8, 10 and 11. `ToolResult`'s
   success variant is deliberately named "check the file" rather than assumed.
+
+---
+
+## Execution state — paused 2026-09-12, machine change
+
+> Written into the plan on purpose. The SDD ledger
+> (`.superpowers/sdd/2026-09-12-a1-second-tool-mass-and-selection/progress.md`) is **git-ignored**: it
+> does not survive a move to another machine, a `git clean -fdx`, or a fresh clone. Everything below is
+> the part that must survive. The ledger keeps the rest — briefs, reports, review packages, the full
+> mutation transcripts.
+
+**Branch `launcher--7`, HEAD `4ce4edd`, tree clean, 8 commits ahead of the remote and NOT pushed.**
+The agent does not push; moving machines means the owner moves the repository, and until that happens
+this local git is the only copy of the work.
+
+### Phase 0 — done except the last verification
+
+| Task | State | Commits |
+|---|---|---|
+| 1 — containment at the engine's single call site | **complete**, review clean | `5fba6de` |
+| 2 — permission guard keyed on the registry | **complete**, review clean, mutation-proved 6/6 | `62f5c89`, `4dd4e1d`, `f0e5e83` |
+| 3 — declared risk pinned over the federation | **implemented, gate green — NOT reviewed, NOT mutation-proved** | `4ce4edd` |
+
+**Gate at `4ce4edd`: 1321 tests, 0 failures**, from a run that printed `557 actionable tasks: 557
+executed`. Baseline was 1314; the seven new tests are Task 1's two, Task 2's four and Task 3's one.
+
+### Resume point
+
+1. Task review of `4ce4edd`.
+2. Mutation round for the risk pin — the mutation that matters is `SAFE → CONFIRM` on an already
+   registered Tier-0 tool, which passed the entire `:app` suite silently before this task (the `M9`
+   gap). A removed pin row must also be RED, and a legitimately added fifth tool with its row GREEN.
+3. Task 4, and Phase 1 from there.
+
+### Rulings made during execution, and what each costs if wrong
+
+- **Work on `launcher--7` directly, no worktree.** It is not main (main is `feature/launcher-3`) and is
+  the branch every block of this track has committed to since A0. *Cost if wrong:* the tree is shared
+  with the owner's own builds, so a red gate is visible to him mid-block.
+- **Seven plan defects fixed before/during dispatch, all of the same class** — a name, signature or
+  value my own plan text asserted without checking the tree. Six were caught by the pre-flight scan and
+  committed as `14b5520`; the seventh was found by Task 3's implementer: the plan pinned
+  `ToolIds.PLAY_STORE_SEARCH` at `SAFE` when `DefaultActionCatalog` declares it **`CONFIRM`**. Recorded
+  rather than quietly corrected, because that is the class of error this project has paid for three
+  times. *Cost if wrong:* none — each was compiler- or test-visible.
+- **Task 2's Minor finding elevated and fixed rather than deferred.** The guard's non-vacuity floor was
+  a count (`size >= 4`); Task 7 adds a source whose tool count is device-dependent, at which point a
+  count floor asserts nothing. *Cost if wrong:* two fix rounds spent on a guard that was adequate.
+- **Task 2's floor re-spelled as its own literal** after the first fix derived it from the very map it
+  corroborates — a paired "drop the tool and tidy away its row" commit passed silently. Mutation `M5`
+  is what proves the repair. *Cost if wrong:* a second hand-written list to keep in step; the totality
+  test keeps it honest in the other direction.
+
+### Two measured limitations of Task 2's guard, carried forward rather than implied absent
+
+- The class's **non-vacuity rests on exactly one test** — the `REQUIRED_TOOL_IDS` floor. Both totality
+  tests are vacuously true over an empty registry (mutation `M6`), so deleting the floor test leaves the
+  guard green on a federation that registers nothing.
+- `toolPermissions` is hand-written, so **no guard of this shape can test whether a permission value is
+  the right one** for its tool — only the totality machinery around the map. Writing `emptyList()` for a
+  tool that needs a permission leaves every test green and the app broken. This is the same weakness the
+  sibling guard names about its own column, and it is why §7.2's cells are measured on the device.

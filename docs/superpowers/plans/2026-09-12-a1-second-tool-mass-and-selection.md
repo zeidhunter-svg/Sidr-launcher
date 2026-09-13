@@ -1830,9 +1830,11 @@ git commit -m "docs(agentic-5.5/A1\"): every Tier-0 candidate measured on the ph
 > the part that must survive. The ledger keeps the rest — briefs, reports, review packages, the full
 > mutation transcripts.
 
-**Branch `launcher--7`, HEAD `d391350`, tree clean, 13 commits ahead of the remote and NOT pushed.**
-The agent does not push; moving machines means the owner moves the repository, and until that happens
-this local git is the only copy of the work.
+**Branch `launcher--7`, HEAD `cfe4985`, tree clean, 2 commits ahead of `origin/launcher--7` and NOT
+pushed.** The agent does not push. Unlike at the 2026-09-12 pause, this local git is **no longer the
+only copy**: the owner has pushed through `d391350`, so all of Phase 0 is on the remote and only
+Task 4's two commits are local. (An earlier revision of this line said 13 ahead and unpushed — counted
+from the stale note rather than measured against `@{u}`, and wrong.)
 
 ### Phase 0 — done except the last verification
 

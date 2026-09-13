@@ -436,8 +436,11 @@ below is recorded in its own ADR.
   (434 `:domain:jvmTest` + 56 `:consumer:jvm` + 271 `:data:repository` + 189 `:feature:launcher` + 49
   `:app`, the rest unchanged). A1′ *closed* at 1298 on 2026-09-03, the final-review fix took it to 1304,
   and the device-acceptance round added six more — three in `DeviceDatabaseReadGuardTest` (`:app`) and
-  three in `LauncherViewModelTest` (`:feature:launcher`). Compare a fresh gate against **1314**, not
-  against any number quoted in the A1′ ADR.
+  three in `LauncherViewModelTest` (`:feature:launcher`). **Compare a fresh gate against 1321**, not
+  against 1314 and not against any number quoted in the A1′ ADR: re-measured at `d391350` on
+  2026-09-14 with A1″ in progress, `:domain:jvmTest` went 434 → **436** (`AgentExecutorTest` +2) and
+  `:app` 49 → **54** (`ToolRegistryPermissionGuardTest` +4, `DoctrineGuardTest` +1); the other eleven
+  modules are unchanged from the 1314 row above.
   Read counts from the JUnit XML, not the console. **Use `--rerun-tasks`, never the plan-text `--rerun`**
   — the latter is not a valid Gradle 9.5.0 build-level flag and silently returns everything `UP-TO-DATE`
   while still printing `BUILD SUCCESSFUL` (it produced one false green inside the A1′ block); a genuine

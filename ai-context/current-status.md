@@ -195,10 +195,14 @@ this file» section; it carries the run outcome, including the rows that were no
 **Gate.** `:domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test --rerun-tasks` — BUILD
 SUCCESSFUL, exit 0, **557 actionable tasks: 557 executed**, **1298 tests / 0 failures** (up from the
 1219 baseline) at closing; `core/ui` untouched, so `verifyRoborazziDebug` was not part of the closing
-gate. **The current baseline is 1314, not 1298, and a fresh gate is compared against that:** the
+gate. **At this block's close the baseline had already moved past 1298 twice:** the
 final-review fix (`356fe1a`) added six tests, all in `:data:repository`, and the acceptance round added
 six more — three in `DeviceDatabaseReadGuardTest` (`:app`) and three in `LauncherViewModelTest`
 (`:feature:launcher`). Re-measured at `1ef158d` on 2026-09-10: **1314 tests / 0 failures**.
+**Re-measured again at `d391350` on 2026-09-14, with A1″ in progress: 1321 tests / 0 failures** —
+`:domain:jvmTest` 436 (`AgentExecutorTest` +2) and `:app` 54 (`ToolRegistryPermissionGuardTest` +4,
+`DoctrineGuardTest` +1), the other eleven modules unchanged. **That is the number a fresh gate must
+match today**, and it will move again before A1″ closes.
 
 ## Agentic track — Этап 4.5 (A0.5) — second consumer — `CODE-GREEN` (2026-08-26)
 

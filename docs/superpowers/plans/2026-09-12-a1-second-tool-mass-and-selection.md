@@ -1830,7 +1830,7 @@ git commit -m "docs(agentic-5.5/A1\"): every Tier-0 candidate measured on the ph
 > the part that must survive. The ledger keeps the rest — briefs, reports, review packages, the full
 > mutation transcripts.
 
-**Branch `launcher--7`, HEAD `4ce4edd`, tree clean, 8 commits ahead of the remote and NOT pushed.**
+**Branch `launcher--7`, HEAD `d391350`, tree clean, 13 commits ahead of the remote and NOT pushed.**
 The agent does not push; moving machines means the owner moves the repository, and until that happens
 this local git is the only copy of the work.
 
@@ -1840,18 +1840,32 @@ this local git is the only copy of the work.
 |---|---|---|
 | 1 — containment at the engine's single call site | **complete**, review clean | `5fba6de` |
 | 2 — permission guard keyed on the registry | **complete**, review clean, mutation-proved 6/6 | `62f5c89`, `4dd4e1d`, `f0e5e83` |
-| 3 — declared risk pinned over the federation | **implemented, gate green — NOT reviewed, NOT mutation-proved** | `4ce4edd` |
+| 3 — declared risk pinned over the federation | **complete**, review clean, mutation-proved — two rounds, both found the composition-root scan going blind and both repairs are in the tree | `4ce4edd`, `d9e6fc6`, `03ba941`, `181628a` |
 
 **Gate at `4ce4edd`: 1321 tests, 0 failures**, from a run that printed `557 actionable tasks: 557
 executed`. Baseline was 1314; the seven new tests are Task 1's two, Task 2's four and Task 3's one.
+**Re-run on the new machine at `d391350` on 2026-09-14: 1321 tests, 0 failures**, `557 actionable
+tasks: 557 executed`, tree clean — Task 3's two mutation rounds hardened existing assertions
+without adding test methods, so the count is unmoved. `CLAUDE.md` and `current-status.md` were
+still telling the next session to compare against 1314; both now say 1321.
 
 ### Resume point
 
-1. Task review of `4ce4edd`.
-2. Mutation round for the risk pin — the mutation that matters is `SAFE → CONFIRM` on an already
-   registered Tier-0 tool, which passed the entire `:app` suite silently before this task (the `M9`
-   gap). A removed pin row must also be RED, and a legitimately added fifth tool with its row GREEN.
-3. Task 4, and Phase 1 from there.
+**Updated 2026-09-14, first session on the new machine.** Items 1 and 2 below were done on
+2026-09-13, *after* this section was first written, so the list as committed on `ac67e33` understated
+what is finished. Struck through rather than deleted, because what round 2 found is the reason Task 7
+must not be trusted to a count:
+
+1. ~~Task review of `4ce4edd`.~~ **Done** — `d9e6fc6`. No defect in the assertion; five false or
+   absent prose claims around it, fixed.
+2. ~~Mutation round for the risk pin.~~ **Done, two rounds, both RED-then-repaired** — `03ba941`,
+   `181628a`. The `SAFE → CONFIRM` drift and totality mutations behaved. What the round actually
+   caught was the composition-root **scan** going blind twice: first on argument spelling
+   (`ToolAdapter(level = ToolLevels.SANDBOX, …)` matched the level regex not at all), then on a single
+   space (`ToolAdapter (…)`). Each time a third adapter declaring an `EXTERNAL`/`CONFIRM`/`DURABLE`
+   tool with no risk pin and no surface label reached `provideToolFederation` with all 54 `:app` tests
+   green. Both spellings are now counted, probed against six.
+3. **← resume here. Task 4, and Phase 1 from there.**
 
 ### Rulings made during execution, and what each costs if wrong
 

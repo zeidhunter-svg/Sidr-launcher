@@ -24,6 +24,10 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        // A1″ Task 5 — instrumented measurement of `LauncherApps` must run under THIS package's uid,
+        // because "am I the default home" is a property of the package asking. A library module's
+        // androidTest would answer for its own test package instead.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -105,6 +109,9 @@ dependencies {
     testImplementation(project(":core:testing"))
     testImplementation(libs.junit4)
     testImplementation(libs.coroutines.test)
+
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
 
     baselineProfile(project(":baselineprofile"))
 

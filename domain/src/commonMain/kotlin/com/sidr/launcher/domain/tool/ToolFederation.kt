@@ -75,8 +75,12 @@ class ToolFederation(private val adapters: List<ToolAdapter>) {
      * faces of a single snapshot then disagree about what exists. Static sources cannot show this,
      * which is why it was invisible before A1″.
      *
-     * Cost: one `all()` per adapter plus two maps, per call. Measured rather than assumed — see this
-     * block's ADR.
+     * Cost: one `all()` per adapter plus two maps, per call. The registry is **not** small: measured
+     * on the SM-A325F, `LauncherApps` alone offers **205 shortcuts from 65 packages** before the
+     * `in_app` and `system_intent` adapters are counted, and that figure moves with what the user has
+     * installed. A1″ Task 12 measures this path against that number rather than assuming one — see
+     * `docs/superpowers/plans/2026-09-12-a1-device-measurements.md`, which is the only admissible
+     * source for it.
      */
     private fun snapshot(): Snapshot {
         val declared = adapters.map { adapter -> adapter to adapter.registry.all() }

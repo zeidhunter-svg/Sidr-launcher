@@ -3,7 +3,9 @@ package com.sidr.launcher.domain.tool
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ToolFederationTest {
@@ -20,6 +22,18 @@ class ToolFederationTest {
         override fun all(): List<ToolDescriptor> = items
         override fun find(id: ToolId): ToolDescriptor? = items.firstOrNull { it.id == id }
     }
+
+    /**
+     * A source whose tool set moves after construction — what every source was not until A1″.
+     * [FixedRegistry] cannot express this, which is why it is a second fake rather than a parameter.
+     */
+    private class MutableRegistry(var tools: List<ToolDescriptor>) : ToolRegistry {
+        override fun all(): List<ToolDescriptor> = tools
+        override fun find(id: ToolId): ToolDescriptor? = tools.firstOrNull { it.id == id }
+    }
+
+    /** A level with no `ToolLevels` constant: nothing about dynamism is level-specific. */
+    private val dynamic = ToolLevel("dynamic")
 
     private class NamedWorker(val name: String) : ToolWorker {
         override suspend fun invoke(invocation: ResolvedInvocation): ToolResult =
@@ -93,5 +107,33 @@ class ToolFederationTest {
             ToolOutput(mapOf("worker" to "in_app")),
             (f.executor.invoke(ResolvedInvocation(ToolId("launch_app"))) as ToolResult.Effected).output,
         )
+    }
+
+    @Test
+    fun `a source that gains a tool after construction is visible through both faces`() = runTest {
+        val source = MutableRegistry(listOf(descriptor("first", dynamic)))
+        val f = federation(ToolAdapter(dynamic, source, NamedWorker("dynamic")))
+
+        assertEquals(listOf("first"), f.registry.all().map { it.id.value })
+
+        source.tools = source.tools + descriptor("second", dynamic)
+
+        assertEquals(listOf("first", "second"), f.registry.all().map { it.id.value })
+        assertNotNull(f.registry.find(ToolId("second")))
+
+        // Routing, not just advertising: the dispatcher must see the gain through the same read.
+        val routed = f.executor.invoke(ResolvedInvocation(ToolId("second")))
+        assertEquals(ToolOutput(mapOf("worker" to "dynamic")), (routed as ToolResult.Effected).output)
+    }
+
+    @Test
+    fun `a source that loses a tool stops advertising and stops routing it`() = runTest {
+        val source = MutableRegistry(listOf(descriptor("first", dynamic), descriptor("second", dynamic)))
+        val f = federation(ToolAdapter(dynamic, source, NamedWorker("dynamic")))
+
+        source.tools = source.tools.filter { it.id.value != "second" }
+
+        assertNull(f.registry.find(ToolId("second")))
+        assertTrue(f.executor.invoke(ResolvedInvocation(ToolId("second"))) is ToolResult.Failed)
     }
 }

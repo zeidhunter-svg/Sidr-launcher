@@ -7,9 +7,20 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 
 /**
- * The Android implementation of [ShortcutQuery], and the only place in **production** code that calls
- * `LauncherApps` (the `androidTest` probe `app/src/androidTest/java/com/sidr/launcher/probe/LauncherAppsProbe.kt`
- * also calls it, deliberately, to produce the measurements this class follows).
+ * The Android implementation of [ShortcutQuery]: the **read** seam onto `LauncherApps`.
+ *
+ * **`LauncherApps` has exactly three production callers, and this is one of them.** The earlier wording
+ * here claimed it was the only one; A1″ Task 7 made that false in the same commit that wrote it, so the
+ * three are enumerated instead of counted — each is one verb, behind its own port, so each is testable
+ * and replaceable on its own:
+ *  - **this class** — `hasShortcutHostPermission` + `getShortcuts`, the snapshot [ShortcutCatalog] holds;
+ *  - [AndroidShortcutChangeObserver] — `registerCallback`, the notification that the snapshot is stale;
+ *  - [com.sidr.launcher.data.repository.agent.shortcut.AndroidShortcutLauncher] — `startShortcut`, the
+ *    one act `ShortcutToolWorker` performs.
+ *
+ * Outside production, the `androidTest` probe
+ * `app/src/androidTest/java/com/sidr/launcher/probe/LauncherAppsProbe.kt` also calls it, deliberately,
+ * to produce the measurements all three follow.
  *
  * Shortcut host access is gated by the `android.app.role.HOME` role — held by exactly one package at a
  * time and assigned by the user, not by a manifest permission. What each call actually does across

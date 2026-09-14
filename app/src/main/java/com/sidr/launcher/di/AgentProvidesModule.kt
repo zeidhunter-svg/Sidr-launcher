@@ -8,8 +8,10 @@ import com.sidr.launcher.data.repository.agent.SystemIntentToolWorker
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolWorker
 import com.sidr.launcher.data.repository.agent.ToolMatchPlanner
+import com.sidr.launcher.data.repository.agent.shortcut.AndroidShortcutChangeObserver
 import com.sidr.launcher.data.repository.agent.shortcut.AndroidShortcutLauncher
 import com.sidr.launcher.data.repository.agent.shortcut.AndroidShortcutQuery
+import com.sidr.launcher.data.repository.agent.shortcut.ShortcutChangeObserver
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutLauncher
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutQuery
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolSource
@@ -44,9 +46,17 @@ import javax.inject.Singleton
  * Wires the A0 agentic spike into the graph (Task 11): the two ports the engine talks to, the
  * deterministic planner, the id factory, the engine itself and the four use cases.
  *
- * Everything is a lazy `@Singleton`, so nothing here is on the launcher cold path and the offline
- * launcher core is unaffected. There is no `data -> data` edge: both implementations depend only on
- * `domain` ports.
+ * **Almost everything here is a lazy `@Singleton` — and since A1″ one branch of the graph is not, so
+ * the old flat claim is replaced by a precise one.** `SidrLauncherApp` field-injects
+ * [com.sidr.launcher.data.repository.agent.shortcut.ShortcutRefreshTrigger], which makes
+ * `Application.onCreate` force the construction of that trigger, of its
+ * [com.sidr.launcher.data.repository.agent.shortcut.ShortcutChangeObserver] and of
+ * [com.sidr.launcher.data.repository.agent.shortcut.ShortcutCatalog] — and through the catalog, of
+ * [AndroidShortcutQuery]. That is **construction and nothing else**: each of those constructors only
+ * stores its arguments, and no `LauncherApps` call, binder hop or I/O happens until `start(scope)`
+ * launches onto the application scope's IO dispatcher. Every other binding here stays lazy and off the
+ * cold path, and the offline launcher core is unaffected either way. There is no `data -> data` edge:
+ * every implementation wired here depends only on `domain` ports.
  *
  * Two notes on what is deliberately absent:
  *  - [AgentSessionStore] is **not** bound here. Task 10 already bound it in [AgentBindsModule], and
@@ -106,10 +116,19 @@ object AgentProvidesModule {
     @Singleton
     fun provideIntentLauncher(impl: ContextIntentLauncher): IntentLauncher = impl
 
-    /** The `app_shortcut` adapter's two Android seams, kept behind ports so both are testable. */
+    /**
+     * The `app_shortcut` adapter's **three** Android seams, kept behind ports so everything built on
+     * them is testable without a device: read the shortcut set, be told it changed, start one. They are
+     * also the three — and only three — production callers of `LauncherApps`, enumerated in
+     * [AndroidShortcutQuery]'s KDoc.
+     */
     @Provides
     @Singleton
     fun provideShortcutQuery(impl: AndroidShortcutQuery): ShortcutQuery = impl
+
+    @Provides
+    @Singleton
+    fun provideShortcutChangeObserver(impl: AndroidShortcutChangeObserver): ShortcutChangeObserver = impl
 
     @Provides
     @Singleton
@@ -120,6 +139,9 @@ object AgentProvidesModule {
      * second construction. `ShortcutToolSource` is a `@Singleton`, so `registry.all()` and `names()`
      * read one snapshot; providing them from two instances would let a rendered name disagree with the
      * registered tool it labels, which is the F2 shape in miniature.
+     *
+     * Held by `DynamicToolLabelWiringTest` (`:app`) rather than asserted in prose — fix round 1,
+     * finding 10: this paragraph was a claim nothing tested, over a projection no test exercised.
      */
     @Provides
     @Singleton
@@ -139,6 +161,13 @@ object AgentProvidesModule {
      * The lambda re-reads on every call rather than capturing a map: adapter #3's tool set moves while
      * the process lives (`ToolFederation` re-derives per call for the same reason), and a map captured
      * at graph construction would be the empty one that exists before `ShortcutRefreshTrigger` has run.
+     * `DynamicToolLabelWiringTest` holds that, and the two-halves shape this projection preserves.
+     *
+     * **What re-reading costs, and where that cost is paid.** Each call walks the source's snapshot, so
+     * the surface must not call it per recomposition: `LauncherScreen` wraps both this map and
+     * `agentToolProvenance` in `remember(session)`, which is where the frequency is bounded (fix round
+     * 1, finding 5). Bounding it here instead — by caching — would restore precisely the staleness this
+     * lambda exists to avoid.
      */
     @Provides
     @Singleton

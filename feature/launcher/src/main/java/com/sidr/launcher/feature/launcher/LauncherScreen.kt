@@ -256,10 +256,23 @@ fun LauncherScreen(
             // the two are mutually exclusive in practice: a started session cleared the feedback and
             // the pending card on its way in (see LauncherCommandSession.applyOutcome).
             agentSession?.let { session ->
+                // Fix round 1, finding 5 — both maps are `get()` on the ViewModel, deliberately (a
+                // `by lazy` froze them at the first session ever shown, which silently lost every
+                // shortcut tool discovered afterwards). Read bare, each access walks the whole
+                // federation — one `all()` per adapter over a device's hundreds of shortcut
+                // descriptors, each allocating strings and a parse round-trip, twice over — and this
+                // composable recomposes on EVERY KEYSTROKE in the command field, on the main thread.
+                // `remember(session)` keeps the correct read and pays for it once per session change
+                // instead: the surface only ever renders from the session, so there is nothing it can
+                // show that a change of session would not already have brought. It also restores a
+                // stable map identity, which a bare `get()` destroyed — without it AgentSessionSurface
+                // can never skip recomposition, since every read returns a fresh Map.
+                val toolProvenance = remember(session) { viewModel.agentToolProvenance }
+                val dynamicLabels = remember(session) { viewModel.agentDynamicToolLabels }
                 AgentSessionSurface(
                     session = session,
-                    toolProvenance = viewModel.agentToolProvenance,
-                    dynamicLabels = viewModel.agentDynamicToolLabels,
+                    toolProvenance = toolProvenance,
+                    dynamicLabels = dynamicLabels,
                     confirming = agentConfirming,
                     onConfirm = viewModel::confirmAgentStep,
                     onDeny = viewModel::denyAgentStep,

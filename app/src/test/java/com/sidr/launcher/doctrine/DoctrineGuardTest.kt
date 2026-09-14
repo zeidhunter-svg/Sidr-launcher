@@ -1,20 +1,36 @@
 package com.sidr.launcher.doctrine
 
+import android.content.Intent
 import com.sidr.launcher.agent.stripComments
 import com.sidr.launcher.data.repository.action.DefaultActionCatalog
+import com.sidr.launcher.data.repository.agent.IntentLauncher
 import com.sidr.launcher.data.repository.agent.SystemIntentToolSource
+import com.sidr.launcher.data.repository.agent.SystemIntentToolWorker
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolSource
+import com.sidr.launcher.data.repository.agent.Tier0IntentToolWorker
 import com.sidr.launcher.data.repository.agent.Tier0ToolIds
 import com.sidr.launcher.data.repository.agent.shortcut.AppShortcut
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutCatalog
+import com.sidr.launcher.data.repository.agent.shortcut.ShortcutLauncher
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolIds
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolSource
+import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolWorker
+import com.sidr.launcher.di.AgentProvidesModule
 import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.intent.ActionExecutionResult
+import com.sidr.launcher.domain.intent.ActionExecutor
+import com.sidr.launcher.domain.intent.ExecutableAction
+import com.sidr.launcher.domain.intent.ExecuteActionUseCase
+import com.sidr.launcher.domain.intent.IntentActionResolver
+import com.sidr.launcher.domain.model.InstalledApp
+import com.sidr.launcher.domain.repository.InstalledAppsRepository
+import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolAdapter
 import com.sidr.launcher.domain.tool.ToolFederation
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
+import com.sidr.launcher.domain.tool.ToolLevel
 import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.tool.ToolWorker
@@ -152,6 +168,140 @@ class DoctrineGuardTest {
         )
         runBlocking { catalog.refresh() }
         return ShortcutToolSource(catalog)
+    }
+
+    /**
+     * **The real graph's own federation — `AgentProvidesModule.provideToolFederation` itself, not a
+     * replica of it.**
+     *
+     * This is the repair two KDocs in this file addressed to "the task that adds adapter #3" and that
+     * the adapter-#3 commit did not make (fix round 1, finding 1). [productionAdapters] is a
+     * hand-maintained copy of the composition root's list; the only thing coupling it to the real
+     * module is a **regex over one file**, and that scan was measured evading two different legal
+     * spellings before it was tightened. A regex can always be evaded — by `copy(registry = …)`, by
+     * `listOf(…) + adaptersBuiltElsewhere`, by a second `@Module` in `:app`. Calling the provider
+     * cannot: whatever the module returns is what the graph gets.
+     *
+     * `AgentProvidesModule` is a Kotlin `object`, so the provider is an ordinary function call from
+     * here. Its six parameters are the concrete source and worker types, not ports, so each one is
+     * really constructed — the sources with the same real inputs [productionAdapters] uses, the workers
+     * over trivial leaf fakes ([NoopIntentLauncher] and friends). **The workers are irrelevant to every
+     * assertion below, and that is not a weakness:** what is read is `registry.all()`, whose value is
+     * decided entirely by the three sources. A worker fake cannot make a level appear or a risk change.
+     *
+     * What this reads is the federation's **post-dedup** output, which is the opposite reading from
+     * [productionAdapters] and the reason both survive rather than one replacing the other:
+     *  - post-dedup (here) is the only reading that can see **a whole adapter arriving or vanishing**,
+     *    because it is the graph's own list;
+     *  - pre-dedup ([productionAdapters]) is the only reading that can see **a duplicate id declared by
+     *    two adapters**, because `ToolFederation` resolves those away before `all()` returns.
+     */
+    private fun graphFederation(): ToolFederation = AgentProvidesModule.provideToolFederation(
+        inAppRegistry = SystemIntentToolSource(DefaultActionCatalog()),
+        inAppWorker = SystemIntentToolWorker(
+            ExecuteActionUseCase(
+                resolver = IntentActionResolver(NoAppsRepository),
+                executor = NoopActionExecutor,
+            ),
+        ),
+        tier0Registry = Tier0IntentToolSource(),
+        tier0Worker = Tier0IntentToolWorker(NoopIntentLauncher),
+        shortcutRegistry = shortcutSource(),
+        shortcutWorker = ShortcutToolWorker(ShortcutLauncher { _, _ -> }),
+    )
+
+    private object NoAppsRepository : InstalledAppsRepository {
+        override suspend fun getInstalledApps(): OperationResult<List<InstalledApp>> =
+            OperationResult.Success(emptyList())
+    }
+
+    private object NoopActionExecutor : ActionExecutor {
+        override suspend fun execute(action: ExecutableAction): ActionExecutionResult =
+            ActionExecutionResult.Success
+    }
+
+    private object NoopIntentLauncher : IntentLauncher {
+        override fun launch(intent: Intent) = Unit
+    }
+
+    /**
+     * **Adapter arrival and disappearance, pinned where no spelling can evade it.**
+     *
+     * `the composition root registers exactly the declared adapters` pins the same list textually, and
+     * both are kept because they fail on different things. The scan sees the **order** — first-adapter-
+     * wins precedence is an ordering decision, and a post-dedup set cannot express it — and it sees an
+     * adapter written in a spelling its own regex cannot parse (it reddens on the count mismatch). This
+     * test sees what the graph actually **reaches**: an adapter added, removed, or wired through a
+     * construction no regex anticipates, and an adapter that is wired but whose registry contributes
+     * nothing.
+     *
+     * The distinct-level reading is what makes this assertable at all. A shortcut tool's id is
+     * device-dependent and cannot be written down, so the tools themselves cannot be listed; the
+     * **levels** can, and each adapter contributes exactly one.
+     */
+    @Test
+    fun `the graph's own federation reaches exactly the declared tool levels`() {
+        val levels: List<ToolLevel> = graphFederation().registry.all().map { it.level }.distinct()
+
+        assertEquals(
+            "This reads AgentProvidesModule.provideToolFederation itself, so an adapter that arrives, " +
+                "disappears, or registers nothing shows up here whatever spelling wired it — which a " +
+                "regex over one file cannot promise. A new adapter is a new path to the world and needs " +
+                "an ADR, not a line. Reached: ${levels.map { it.value }}",
+            listOf(ToolLevels.IN_APP, ToolLevels.SYSTEM_INTENT, ToolLevels.APP_SHORTCUT),
+            levels,
+        )
+    }
+
+    /**
+     * Risk totality over **the graph**, which is the half [declaredRisk]'s own KDoc names as missing:
+     * pinning over [productionAdapters] cannot detect a new adapter's arrival at all, because that list
+     * is a literal in this file. Measured before this test existed — a third adapter declaring an
+     * `EXTERNAL`/`CONFIRM`/`DURABLE` tool with no row here left all 54 `:app` tests green.
+     *
+     * Same two pins as the per-adapter test, over the graph's own output: an authored tool must have a
+     * row in [declaredRisk] and must still declare it; a dynamic tool must sit at [DYNAMIC_TOOL_RISK].
+     * The non-vacuity floor is asserted here too rather than borrowed — a federation reaching no
+     * shortcut tool would make the family half of this quantify over nothing.
+     */
+    @Test
+    fun `every tool the graph's own federation reaches has its risk pinned here`() {
+        val reached = graphFederation().registry.all()
+        val (dynamic, authored) = reached.partition { it.id.value.startsWith(ShortcutToolIds.PREFIX) }
+
+        val unpinned = authored.map { it.id }.filterNot { it in declaredRisk }
+        assertEquals(
+            "A tool the REAL graph registers, whose risk is pinned by nothing here, can change gate " +
+                "behaviour silently — and a whole adapter arriving is exactly how that happens without " +
+                "anyone touching this file: ${unpinned.map { it.value }}",
+            emptyList<ToolId>(),
+            unpinned,
+        )
+
+        val drifted = authored
+            .filter { declaredRisk[it.id] != it.risk }
+            .map { "${it.id.value}: pinned ${declaredRisk[it.id]}, declared ${it.risk}" }
+        assertEquals(
+            "Declared risk changed without this pin changing with it: $drifted",
+            emptyList<String>(),
+            drifted,
+        )
+
+        assertEquals(
+            "The graph's federation reached no app_shortcut tool, so the family pin below checked " +
+                "nothing — the same vacuous-loop false GREEN this file has caught twice.",
+            true,
+            dynamic.isNotEmpty(),
+        )
+        val dynamicDrift = dynamic
+            .filterNot { it.risk == DYNAMIC_TOOL_RISK }
+            .map { "${it.id.value}: family-pinned $DYNAMIC_TOOL_RISK, declared ${it.risk}" }
+        assertEquals(
+            "One rating for the whole app_shortcut family, and it must hold for every member the graph " +
+                "actually reaches. Drifted: $dynamicDrift",
+            emptyList<String>(),
+            dynamicDrift,
+        )
     }
 
     private fun productionFederation() = ToolFederation(productionAdapters())
@@ -336,13 +486,24 @@ class DoctrineGuardTest {
             "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/SystemIntentToolWorker.kt",
             "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/Tier0IntentToolSource.kt",
             "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/Tier0IntentToolWorker.kt",
-            // A1″ adapter #3. Four files rather than two: unlike the other adapters, this source
-            // reads its tools from somewhere, and the catalog plus the `LauncherApps` query it reads
-            // them through are as much part of the adapter's reach as the source itself.
+            // A1″ adapter #3. Nine files rather than two: unlike the other adapters, this source reads
+            // its tools from somewhere, so the catalog, the `LauncherApps` seams it reads them through,
+            // the trigger that drives the refresh and the types that carry a shortcut's identity and
+            // name are all as much part of the adapter's reach as the source itself.
+            //
+            // Fix round 1 (finding 9) added the last five. `ShortcutRefreshTrigger.kt` was the glaring
+            // one — at the time it held a `Context` and reached a system service, and it was the only
+            // file of adapter #3 that this scan did not see. Its `Context` has since moved behind
+            // `ShortcutChangeObserver`, which is scanned here for exactly the same reason.
             "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/shortcut/ShortcutToolSource.kt",
             "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/shortcut/ShortcutToolWorker.kt",
             "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/shortcut/ShortcutCatalog.kt",
             "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/shortcut/AndroidShortcutQuery.kt",
+            "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/shortcut/ShortcutChangeObserver.kt",
+            "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/shortcut/ShortcutRefreshTrigger.kt",
+            "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/shortcut/ShortcutToolIds.kt",
+            "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/shortcut/AppShortcut.kt",
+            "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/DynamicToolNames.kt",
         ).map { File(repoRoot, it) }
 
         adapterFiles.forEach { file ->
@@ -392,8 +553,14 @@ class DoctrineGuardTest {
      *
      * The real repair is therefore not a wider regex: it is asserting the federation's **own** output —
      * the distinct `ToolLevel`s reachable through `registry.all()` from the real `provideToolFederation`
-     * — which no spelling can evade. That belongs to the task that adds adapter #3, together with
-     * pinning risk totality over the graph rather than over [productionAdapters].
+     * — which no spelling can evade. **That test now exists**
+     * ([`the graph's own federation reaches exactly the declared tool levels`], added in fix round 1,
+     * together with the risk-totality half [declaredRisk]'s KDoc asked for), and this scan is kept
+     * beside it rather than replaced by it, because the two fail on different things: only the scan can
+     * see the **order**, which is first-adapter-wins collision precedence and is not expressible in a
+     * post-dedup set, and only the scan reddens when an adapter is written in a spelling the regex
+     * cannot parse. What is no longer this scan's burden is being the *only* thing that couples this
+     * file to the real graph.
      */
     @Test
     fun `the composition root registers exactly the declared adapters`() {
@@ -503,13 +670,16 @@ class DoctrineGuardTest {
      *     [REQUIRED_TOOL_IDS], which the other adapters satisfy on their own. This class answers "is
      *     every tool that **is** registered pinned and un-drifted?", never "did every wired adapter
      *     register anything?".
-     *  2. **It does not detect a new adapter's arrival at all.** Totality is over [productionAdapters],
-     *     a hand-maintained replica of `AgentProvidesModule.provideToolFederation`; the only coupling
-     *     between the two is the textual scan in
-     *     [`the composition root registers exactly the declared adapters`]. Measured: a third adapter
-     *     added to the real module, declaring an `EXTERNAL`/`CONFIRM`/`DURABLE` tool with no row here,
-     *     left all 54 `:app` tests green. Pinning totality over the graph's own federation instead of
-     *     over a literal is a different guard, and it belongs to the task that actually adds adapter #3.
+     *  2. **The test below does not detect a new adapter's arrival at all**, because its totality is
+     *     over [productionAdapters] — a hand-maintained replica of
+     *     `AgentProvidesModule.provideToolFederation`. Measured: a third adapter added to the real
+     *     module, declaring an `EXTERNAL`/`CONFIRM`/`DURABLE` tool with no row here, left all 54 `:app`
+     *     tests green. **Fix round 1 closed that half rather than leaving it named:** the same two pins
+     *     are now also asserted over the graph's own federation by
+     *     [`every tool the graph's own federation reaches has its risk pinned here`], which calls the
+     *     provider instead of copying it. The per-adapter test keeps its own reason to exist — it reads
+     *     **pre-dedup**, so it is the only one that can see a second adapter redeclaring an existing id
+     *     at a different risk, which `ToolFederation` resolves away before `all()` returns.
      */
     private val declaredRisk: Map<ToolId, ActionRiskLevel> = mapOf(
         ToolIds.LAUNCH_APP to ActionRiskLevel.SAFE,

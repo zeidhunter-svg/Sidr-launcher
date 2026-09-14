@@ -43,15 +43,26 @@ class ShortcutToolSource @Inject constructor(
 ) : ToolRegistry, DynamicToolNames {
 
     /**
-     * Every shortcut whose derived id reads back, and no others.
+     * Every shortcut whose derived id reads back **as the same pair**, and no others.
      *
-     * The round-trip filter is not decoration: a blank shortcut id produces `shortcut:pkg/`, which
-     * [ShortcutToolIds.parse] refuses, so [ShortcutToolWorker] could never route it. Advertising it
-     * anyway would put a tool in the registry that fails every time it is chosen — the precise failure
-     * `ShortcutCatalog`'s own KDoc refuses, one layer up.
+     * The round-trip filter is not decoration, and it is a round trip rather than a null check — fix
+     * round 1 (finding 8) corrected the second half, which the first version got wrong while its own
+     * KDoc described the right thing. Two distinct defects are caught, and only an equality sees both:
+     *  - a **blank** shortcut id produces `shortcut:pkg/`, which [ShortcutToolIds.parse] refuses
+     *    outright, so [ShortcutToolWorker] could never route it;
+     *  - a `/` anywhere in [AppShortcut.packageName] — a plain `String` with nothing validating it —
+     *    re-parses into a **different** pair (`of("com.a/b", "x")` reads back as `("com.a", "b/x")`).
+     *    That is not `null`, so the old check admitted it, and the worker would have asked
+     *    `LauncherApps` to start some other shortcut.
+     *
+     * Advertising either would put a tool in the registry that fails, or misfires, every time it is
+     * chosen — the precise failure `ShortcutCatalog`'s own KDoc refuses, one layer up.
      */
     private fun usable(): List<AppShortcut> = catalog.current()
-        .filter { ShortcutToolIds.parse(ShortcutToolIds.of(it.packageName, it.shortcutId)) != null }
+        .filter {
+            ShortcutToolIds.parse(ShortcutToolIds.of(it.packageName, it.shortcutId)) ==
+                (it.packageName to it.shortcutId)
+        }
 
     override fun all(): List<ToolDescriptor> = usable().map { shortcut ->
         ToolDescriptor(

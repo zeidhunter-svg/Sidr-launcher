@@ -1904,7 +1904,10 @@ must not be trusted to a count:
    round. The fallback is fail-safe (raw package name), so the cost is a cosmetic qualifier, not a dead
    tool.
 6. ~~Tasks 7 + 8 — the `app_shortcut` adapter, and a dynamic tool's name on the surface.~~
-   **Implemented as ONE commit, `f4b6d88` — but NOT reviewed and NOT mutation-verified.** The two are
+   **Implemented as ONE commit, `f8d0051`; reviewed 2026-09-14 (spec APPROVE / quality FIX REQUIRED)
+   and repaired by fix round 1 in a follow-up commit. Still NOT mutation-verified** — item (a) below
+   stands. The original commit message's own account of what it had not proved is kept below because it
+   is what the fix round was measured against. The two are
    one commit because neither compiles without the other: a third `ToolAdapter` in
    `AgentProvidesModule` breaks `DoctrineGuardTest`'s composition-root count-pin unless the guard moves
    in the same change, and moving it makes the surface-label rule see a tool with no string resource,
@@ -1926,10 +1929,10 @@ must not be trusted to a count:
    `translatable="false"`, and `launcher_agent_step_shortcut` is translatable but not locked. Same
    shape as the A1′ round that added six strings without re-signing.
 7. **← resume here.** In this order, and do not reorder them:
-   **(a)** a `mutation-prover` round on `f4b6d88`'s guard changes — at minimum: the shortcut source
+   **(a)** a `mutation-prover` round on `f8d0051`'s guard changes — at minimum: the shortcut source
    dropped from `productionAdapters()` must go RED (it is the false GREEN above); a shortcut tool's
    declared risk flipped `SAFE → CONFIRM` must go RED; the `_app_shortcut` level resource removed must
-   go RED rather than silently falling back to `_unknown`. **(b)** a task review of `f4b6d88` against
+   go RED rather than silently falling back to `_unknown`. **(b)** a task review of `f8d0051` against
    both briefs. **(c)** Task 9, which is the cross-layer staleness test and the whole reason this block
    does not trust four green layers. **(d)** only then the full block gate, which is Phase 1's boundary.
 

@@ -81,6 +81,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -318,6 +319,98 @@ class LauncherScreenAgentProvenanceTest {
             .assertIsDisplayed()
         compose.onAllNodesWithContentDescription("source APP SHORTCUT · EXTERNAL")
             .assertCountEquals(1)
+    }
+
+    /**
+     * **Fix round 1, finding 5.** The two maps the surface is given are `get()` on the ViewModel — read
+     * bare, each access walks the whole federation (`ToolRegistry.all()`, plus a second full walk for
+     * the names) and allocates a fresh `Map`. `LauncherScreen` recomposes on **every keystroke** in the
+     * command field while a session is on screen, on the main thread, over a device's hundreds of
+     * shortcut descriptors.
+     *
+     * `get()` is nonetheless correct and must stay: the `by lazy` it replaced froze both maps at the
+     * first session ever shown, which silently lost every shortcut discovered afterwards. The fix is
+     * therefore at the **call site** — `remember(session)` — and this test is what holds it: typing must
+     * not re-read either port.
+     *
+     * It counts reads rather than measuring time, because a duration assertion on a Robolectric frame
+     * would be noise. What it cannot see, said rather than implied: it does not prove the map identity
+     * is stable across recompositions (which is what lets `AgentSessionSurface` skip work), only that
+     * the two ports are not consulted again — the same `remember` delivers both, and the read count is
+     * the falsifiable half.
+     */
+    @Test
+    fun `typing does not re-walk the federation behind the agent surface`() {
+        val counting = CountingRegistry(
+            FakeToolRegistry(
+                listOf(
+                    ToolDescriptor(
+                        id = SHORTCUT_TOOL_ID,
+                        level = ToolLevels.APP_SHORTCUT,
+                        effect = ToolEffect.EXTERNAL,
+                        risk = ActionRiskLevel.SAFE,
+                        durability = ToolDurability.TRANSIENT,
+                    ),
+                ),
+            ),
+        )
+        agentRegistry = counting
+        var nameReads = 0
+        agentToolLabels = DynamicToolLabels {
+            nameReads++
+            mapOf(SHORTCUT_TOOL_ID to DynamicToolLabel("Example Chat", "New message"))
+        }
+        runBlocking { seedPausedShortcutSession() }
+        val vm = buildViewModel()
+
+        compose.setContent {
+            SidrTheme(darkTheme = true) {
+                LauncherScreen(viewModel = vm)
+            }
+        }
+        compose.waitForIdle()
+
+        // The surface is really on screen: without this the counts below would be trivially stable.
+        compose.onNodeWithText("Open \u201CExample Chat \u2014 New message\u201D", substring = true)
+            .assertIsDisplayed()
+        val registryReadsAfterFirstFrame = counting.allCalls
+        val nameReadsAfterFirstFrame = nameReads
+        assertTrue(
+            "the surface must have read both ports at least once, or this test cannot see a regression",
+            registryReadsAfterFirstFrame > 0 && nameReadsAfterFirstFrame > 0,
+        )
+
+        "telegram".forEachIndexed { i, _ ->
+            vm.onCommandChanged("telegram".substring(0, i + 1))
+            compose.waitForIdle()
+        }
+
+        assertEquals(
+            "Eight keystrokes re-walked the registry. Each read is one all() per adapter over every " +
+                "shortcut the device publishes, on the main thread, for a map whose value cannot have " +
+                "changed because the session did not.",
+            registryReadsAfterFirstFrame,
+            counting.allCalls,
+        )
+        assertEquals(
+            "Eight keystrokes re-read the dynamic-name port, which walks the same snapshot a second " +
+                "time and allocates two strings per shortcut.",
+            nameReadsAfterFirstFrame,
+            nameReads,
+        )
+    }
+
+    /** Counts only `all()` — `find()` is a single-tool lookup and is not what the surface walks. */
+    private class CountingRegistry(private val delegate: ToolRegistry) : ToolRegistry {
+        var allCalls = 0
+            private set
+
+        override fun all(): List<ToolDescriptor> {
+            allCalls++
+            return delegate.all()
+        }
+
+        override fun find(id: ToolId): ToolDescriptor? = delegate.find(id)
     }
 
     /** A one-step plan over the shortcut tool, already `Paused` — the state that draws the plan list. */

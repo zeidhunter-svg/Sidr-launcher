@@ -119,10 +119,13 @@ data class DynamicToolLabel(val qualifier: String, val name: String)
  *
  * It is declared here, in `:feature:launcher`, and **not** consumed from `:data:repository`'s
  * `DynamicToolNames` — there is no `feature -> data` edge (`:feature:launcher` depends on `:domain`,
- * `:core:ui` and `:core:common` only), so the ViewModel cannot hold that port. `:app` sees both and
- * projects one onto the other, exactly as it already does for nothing else in this file only because
- * nothing else needed it: `StepProvenance` is the same shape of feature-layer mirror, filled by the
- * ViewModel from a `:domain` port it *can* hold.
+ * `:core:ui` and `:core:common` only), so the ViewModel cannot hold that port. `:app` is the one module
+ * that sees both sides, so the projection between them lives there — `AgentProvidesModule
+ * .provideDynamicToolLabels`, held by `DynamicToolLabelWiringTest`.
+ *
+ * This is the first port in this file that needs such a hop. [StepProvenance] below is the same shape
+ * of feature-layer mirror and needs none, because the ViewModel fills it from a `:domain` port it *can*
+ * hold.
  *
  * A function rather than a value: unlike the registry A0 and A1′ wired, this set **moves while the
  * process lives** — an app installed or removed changes it — so a snapshot taken once at graph

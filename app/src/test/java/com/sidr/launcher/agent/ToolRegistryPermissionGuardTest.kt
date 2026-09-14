@@ -32,6 +32,13 @@ import java.io.File
  * every registered tool run at all** — is there a row for it, and is that row's permission in the
  * manifest. Neither subsumes the other, and both are cheap.
  *
+ * **What it says about shortcut tools, and what it cannot.** It has a row for the family
+ * ([shortcutToolPermissions]) rather than per id, because a shortcut id is device-dependent, and a
+ * floor in [productionFederation] keeps that row from being consulted for nothing. What it therefore
+ * answers is "is what we claim the `app_shortcut` family needs actually declared" — not "is the family
+ * available", which is the `android.app.role.HOME` runtime role and is not answerable from a manifest
+ * at all (see that row's own KDoc).
+ *
  * What this class cannot check, said rather than implied: [toolPermissions] is hand-written, so it is
  * exactly as strong as it is honest. Writing `emptyList()` for a tool that needs a permission leaves
  * every test here green and the app broken — the same weakness its sibling names about its own column.
@@ -57,6 +64,15 @@ class ToolRegistryPermissionGuardTest {
      * than an omission.** A shortcut tool's id is device-dependent, so it can carry no per-id row; it is
      * excluded from the totality test above by its `shortcut:` prefix and answered here instead.
      *
+     * **What this row actually holds, stated after fix round 1 found the earlier claim false.** It is
+     * load-bearing in exactly one direction: change this list to name a permission the manifest does not
+     * declare and `every permission a registered tool needs is declared in the manifest` goes red, for
+     * every registered shortcut tool — which the floor in [productionFederation] guarantees is at least
+     * one. It is **not** load-bearing in the other direction: leaving it `emptyList()` while the family
+     * genuinely needed a permission is as green as being right, exactly as this class already says about
+     * its hand-written [toolPermissions] column. Nothing here re-derives the answer from the platform;
+     * the evidence is the measurement file, and the guard's job is to make a change to it visible.
+     *
      * The list is empty because shortcut host access **is not governed by a manifest permission at
      * all**: it is the `android.app.role.HOME` runtime role, held by exactly one package at a time and
      * assigned by the user. `docs/superpowers/plans/2026-09-12-a1-device-measurements.md` §2 is the
@@ -79,17 +95,51 @@ class ToolRegistryPermissionGuardTest {
             ToolResult.Failed(com.sidr.launcher.domain.intent.CommandFailure.Generic)
     }
 
-    private fun productionFederation() = ToolFederation(
-        listOf(
-            ToolAdapter(ToolLevels.IN_APP, SystemIntentToolSource(DefaultActionCatalog()), NoopWorker),
-            ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(), NoopWorker),
-            ToolAdapter(ToolLevels.APP_SHORTCUT, shortcutSource(), NoopWorker),
-        ),
-    )
+    /**
+     * The federation every assertion here loops over, with **the third adapter's floor asserted in the
+     * accessor** rather than in a test of its own — the placement `DoctrineGuardTest.productionAdapters`
+     * uses, and for the same reason: a guard that loops over a list missing an adapter passes having
+     * checked less than it claims.
+     *
+     * **Fix round 1, finding 2. Without this floor the whole third adapter was inert here**, and this
+     * file's own KDoc said the opposite. Measured against the tree at the time: of the four tests,
+     * `every registered tool has a permission row` filtered shortcut ids out explicitly,
+     * `every permission a registered tool needs is declared in the manifest` flat-mapped
+     * [shortcutToolPermissions] — `emptyList()`, so it yielded nothing whatever was registered —
+     * `the registry this guard reads contains the tools this federation is known to ship` reads only
+     * [REQUIRED_TOOL_IDS], and `the manifest scan reads real permissions` reads the manifest. Deleting
+     * the adapter, [shortcutSource] and both prefix filters left every test green.
+     *
+     * The floor is what makes the addition load-bearing: remove the adapter, or leave it registering
+     * nothing, and the three tests that read this accessor go red instead of quietly checking four
+     * tools and calling it totality.
+     */
+    private fun productionFederation(): ToolFederation {
+        val federation = ToolFederation(
+            listOf(
+                ToolAdapter(ToolLevels.IN_APP, SystemIntentToolSource(DefaultActionCatalog()), NoopWorker),
+                ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(), NoopWorker),
+                ToolAdapter(ToolLevels.APP_SHORTCUT, shortcutSource(), NoopWorker),
+            ),
+        )
+
+        val ids = federation.registry.all().map { it.id }
+        assertEquals(
+            "No app_shortcut tool reached this guard, so every assertion below skipped the whole third " +
+                "adapter in silence and [shortcutToolPermissions] was consulted for nothing. " +
+                "[REQUIRED_TOOL_IDS] cannot catch this — a shortcut id is device-dependent and so " +
+                "cannot be written down. Registered: ${ids.map { it.value }}",
+            true,
+            ids.any { it.value.startsWith(ShortcutToolIds.PREFIX) },
+        )
+
+        return federation
+    }
 
     /**
-     * The third adapter, over a **non-empty** fake snapshot — an empty one would let every assertion in
-     * this class skip it in silence, which is the vacuity this file already argues against twice.
+     * The third adapter, over a **non-empty** fake snapshot — an empty one would register no shortcut
+     * tool, which the floor in [productionFederation] now turns red rather than letting it pass in
+     * silence.
      */
     private fun shortcutSource(): ShortcutToolSource {
         val catalog = ShortcutCatalog(

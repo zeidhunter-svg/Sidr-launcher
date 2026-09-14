@@ -40,8 +40,27 @@ class ShortcutToolSourceTest {
         assertEquals(emptyList<ActionArg>(), descriptor.outputSchema)
     }
 
+    /**
+     * **What this proves is id *stability*, and nothing beyond it** (fix round 1, finding 7). The id is
+     * derived from the package and the shortcut id alone, so a refresh that re-labels a shortcut — a
+     * locale change, an app update — leaves it byte-identical. That is the precondition for a persisted
+     * plan resolving after a restart; it is **not** the same statement, and the earlier name of this
+     * test said the stronger thing.
+     *
+     * The gap, named here because this is where its reader will be: [ShortcutCatalog]'s snapshot starts
+     * **empty** and is filled asynchronously by `ShortcutRefreshTrigger`. In the window before the first
+     * refresh lands, `ShortcutToolSource.find` answers `null` for a perfectly valid shortcut id, so a
+     * restored session whose plan names one does not merely degrade: `InvocationValidator` rejects the
+     * invocation, `AgentExecutor` ends the session `Failed`, and the row is cascade-deleted.
+     *
+     * **Not reachable today**, which is why no machinery is built for it here: `ToolMatchPlanner` matches
+     * against `ToolVocabulary`, which has no shortcut entries, so no plan can name a shortcut tool yet.
+     * **Tasks 10 and 11 are what make it reachable** and therefore own it — whoever puts shortcut tools
+     * in front of the planner must decide what a plan restored into an unfilled catalog does (wait for
+     * the first refresh, re-plan, or fail honestly) rather than inheriting this silence.
+     */
     @Test
-    fun `an id survives a refresh so a persisted plan still resolves`() {
+    fun `an id is stable across a refresh that re-labels the same shortcut`() {
         val catalog = fakeCatalogOf(shortcut("com.a", "new_chat", "Telegram", "New message"))
         val before = ShortcutToolSource(catalog.catalog).all().single().id
 
@@ -93,6 +112,27 @@ class ShortcutToolSourceTest {
         val source = ShortcutToolSource(
             fakeCatalogOf(
                 shortcut("com.a", "", "Telegram", "New message"),
+                shortcut("com.a", "new_chat", "Telegram", "New message"),
+            ).catalog,
+        )
+
+        assertEquals(listOf(ToolId("shortcut:com.a/new_chat")), source.all().map { it.id })
+        assertEquals(listOf(ToolId("shortcut:com.a/new_chat")), source.names().map { it.id })
+    }
+
+    /**
+     * The other half of the round-trip filter, and the one a `!= null` check cannot see (fix round 1,
+     * finding 8). [AppShortcut.packageName] is a plain `String` with no validation behind it, so a value
+     * carrying a `/` re-parses into a **different** pair: `of("com.a/b", "x")` is `shortcut:com.a/b/x`,
+     * which [ShortcutToolIds.parse] reads back as `("com.a", "b/x")`. That is not `null`, so a
+     * null-check admits it — and `ShortcutToolWorker` would then ask `LauncherApps` to start shortcut
+     * `b/x` in package `com.a`: a different shortcut, or none.
+     */
+    @Test
+    fun `a shortcut whose id round-trips to a different pair is advertised in neither face`() {
+        val source = ShortcutToolSource(
+            fakeCatalogOf(
+                shortcut("com.a/b", "x", "Telegram", "New message"),
                 shortcut("com.a", "new_chat", "Telegram", "New message"),
             ).catalog,
         )

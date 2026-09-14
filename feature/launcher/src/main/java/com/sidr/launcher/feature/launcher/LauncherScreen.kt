@@ -256,17 +256,38 @@ fun LauncherScreen(
             // the two are mutually exclusive in practice: a started session cleared the feedback and
             // the pending card on its way in (see LauncherCommandSession.applyOutcome).
             agentSession?.let { session ->
-                // Fix round 1, finding 5 — both maps are `get()` on the ViewModel, deliberately (a
-                // `by lazy` froze them at the first session ever shown, which silently lost every
+                // A1″ fix round 1, finding 5 — both maps are `get()` on the ViewModel, deliberately
+                // (a `by lazy` froze them at the first session ever shown, which silently lost every
                 // shortcut tool discovered afterwards). Read bare, each access walks the whole
                 // federation — one `all()` per adapter over a device's hundreds of shortcut
                 // descriptors, each allocating strings and a parse round-trip, twice over — and this
                 // composable recomposes on EVERY KEYSTROKE in the command field, on the main thread.
                 // `remember(session)` keeps the correct read and pays for it once per session change
-                // instead: the surface only ever renders from the session, so there is nothing it can
-                // show that a change of session would not already have brought. It also restores a
-                // stable map identity, which a bare `get()` destroyed — without it AgentSessionSurface
-                // can never skip recomposition, since every read returns a fresh Map.
+                // instead. It also restores a stable map identity, which a bare `get()` destroyed —
+                // without it AgentSessionSurface can never skip recomposition, since every read
+                // returns a fresh Map.
+                //
+                // THE LIMIT THIS KEYING HAS, named here rather than only in a report (fix round 2,
+                // finding B — this comment previously claimed the opposite, that the surface can show
+                // nothing a change of session would not already have brought; that is false for these
+                // two maps). Their CONTENT comes from ShortcutCatalog, which moves independently of
+                // the session: the catalog starts empty and ShortcutRefreshTrigger's first refresh()
+                // is asynchronous on IO. So a session restored at process start can render while the
+                // catalog is still empty; `remember(session)` pins the two empty maps, and when the
+                // refresh lands the session has not changed, so the step keeps rendering with no
+                // dynamic name and no provenance line — a narrowed instance of the DOC-ILM-2 miss the
+                // `by lazy` -> `get()` change existed to prevent.
+                //
+                // NOT REACHABLE TODAY, for the same reason the startup window at ShortcutToolIds is
+                // not: ToolMatchPlanner matches against ToolVocabulary, which carries no shortcut
+                // entries, so no persisted plan can name a shortcut tool yet. Tasks 10 and 11 are what
+                // make it reachable and therefore own it — whoever puts shortcut tools in front of the
+                // planner must decide how this surface learns that the catalog filled (observing the
+                // catalog, or keying on something wider than the session), rather than inherit this
+                // comment's silence.
+                //
+                // Keep `remember(session)`: it is strictly fresher than the `by lazy` it replaced and
+                // strictly cheaper than the bare `get()`. The trade-off is named, not removed.
                 val toolProvenance = remember(session) { viewModel.agentToolProvenance }
                 val dynamicLabels = remember(session) { viewModel.agentDynamicToolLabels }
                 AgentSessionSurface(

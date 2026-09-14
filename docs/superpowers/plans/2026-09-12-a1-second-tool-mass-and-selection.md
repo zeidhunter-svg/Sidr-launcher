@@ -1928,6 +1928,19 @@ must not be trusted to a count:
    base `values/strings_locked.xml`; `launcher_tool_level_app_shortcut` is locked but
    `translatable="false"`, and `launcher_agent_step_shortcut` is translatable but not locked. Same
    shape as the A1′ round that added six strings without re-signing.
+   **One deviation from Task 8 step 3, recorded here the way Tasks 5 and 6 recorded theirs** (the
+   implementing agent left no report; found by the review of `f8d0051` and written down by fix round 2).
+   The brief specified a **ViewModel-side join** — `dynamicToolNames.names().associate { it.id to
+   "${it.qualifier} — ${it.name}" }` — and a **one-argument** resource. The implementation instead
+   passes **both halves through** to `sidrString(R.string.launcher_agent_step_shortcut, qualifier,
+   name)`, with the em-dash living in the resource. **Kept deliberately**: it follows the brief's own
+   reasoning ("the em-dash join is copy and therefore belongs in the resource if it ever varies by
+   locale") and the hard rule that user-facing text never originates in a ViewModel more closely than
+   the brief's literal text does. `DynamicToolName`/`DynamicToolLabel` therefore carry two fields rather
+   than one joined string, all the way from `:data:repository` to the surface.
+   **Fix round 1 (2026-09-14)** addressed all fourteen review findings and took `:app` 54 → **59**,
+   `:data:repository` 290 → **296**, `:feature:launcher` 190 → **191**; **fix round 2** was prose-only
+   and moved no count. Neither is the mutation round: item (a) below still stands.
 7. **← resume here.** In this order, and do not reorder them:
    **(a)** a `mutation-prover` round on `f8d0051`'s guard changes — at minimum: the shortcut source
    dropped from `productionAdapters()` must go RED (it is the false GREEN above); a shortcut tool's

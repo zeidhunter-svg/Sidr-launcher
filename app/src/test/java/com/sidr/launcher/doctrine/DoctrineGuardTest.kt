@@ -41,23 +41,42 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The block's doctrine test. Six properties, each mutation-proved separately — a green run of a new
- * guard proves nothing on its own.
+ * The block's doctrine test. **Eight** properties — six since A1′, two added by A1″'s fix round 1 — and
+ * a green run of a new guard proves nothing on its own, which is why what has and has not been proved
+ * is spelled out below rather than summarised.
+ *
+ * **Verification status, stated per property rather than as a blanket claim** (fix round 2, finding A —
+ * this paragraph replaced a headline that said "each mutation-proved separately" and was, for two of
+ * the eight, false):
+ *  - **The six A1′ properties are mutation-proved by the prover round**, which is what the mutations
+ *    named throughout this file (M1, M6, the two adapter-spelling evasions, the "limit 1" finding) are.
+ *    Each is recorded at the assertion it belongs to.
+ *  - **The two A1″ fix-round-1 properties are not.**
+ *    [`the graph's own federation reaches exactly the declared tool levels`] and
+ *    [`every tool the graph's own federation reaches has its risk pinned here`] were checked by their
+ *    **author**, by removing the third `ToolAdapter` from the real `AgentProvidesModule` and observing
+ *    both go red. That is evidence and it is recorded as such; it is **not** the prover round, which
+ *    plants mutations the author did not think of and is the only thing this repository counts as
+ *    "mutation-proved". It is still outstanding — item 7(a) of
+ *    `docs/superpowers/plans/2026-09-12-a1-second-tool-mass-and-selection.md`.
  *
  * It deliberately builds the **production** federation rather than a fixture: a guard that checks a
- * fixture checks the fixture.
+ * fixture checks the fixture. Two of the eight go further and call the real composition root itself —
+ * see [graphFederation] for why a replica and a regex could not.
  *
- * Two of the six assertions ([`the composition root registers exactly the declared adapters`] and
- * [`the composition root's planner list matches the declared planners`]) are textual scans of
+ * Three of the eight assertions ([`the composition root registers exactly the declared adapters`] and
+ * [`the composition root's planner list matches the declared planners`] are textual scans of
  * `AgentProvidesModule.kt`, and the surface-label assertion is a textual scan of
- * `AgentSessionPresentation.kt` — the established idiom `ToolExecutorCallSiteGuardTest` /
+ * `AgentSessionPresentation.kt`) — the established idiom `ToolExecutorCallSiteGuardTest` /
  * `ToolWorkerCallSiteGuardTest` use for a property one module cannot check by calling into another
  * (Kotlin's `internal` is per-module; both source files sit in modules `:app`'s test source set cannot
  * call into even though it compiles against them). [stripComments] is reused from
  * `com.sidr.launcher.agent`, the same helper the two call-site guards share, so a KDoc that merely
  * mentions a name in prose cannot satisfy any of these checks.
  *
- * **Fix round 1 (mutation-prover, two findings).** Both are the same family this block keeps catching —
+ * **A1′ fix round 1 (mutation-prover, two findings)** — the prover round referred to above; not to be
+ * confused with A1″'s own fix round 1, which added the two graph tests. Both findings are the same
+ * family this block keeps catching —
  * an assertion that cannot see the failure it claims to guard:
  *  1. `no two registered tools share an id` used to read `productionFederation().registry.all()`, the
  *     federation's own **already-deduplicated** output, so a planted duplicate could never reach it —
@@ -231,23 +250,30 @@ class DoctrineGuardTest {
      * both are kept because they fail on different things. The scan sees the **order** — first-adapter-
      * wins precedence is an ordering decision, and a post-dedup set cannot express it — and it sees an
      * adapter written in a spelling its own regex cannot parse (it reddens on the count mismatch). This
-     * test sees what the graph actually **reaches**: an adapter added, removed, or wired through a
-     * construction no regex anticipates, and an adapter that is wired but whose registry contributes
-     * nothing.
+     * test sees what the graph actually **reaches**: a level that arrives or stops arriving, however it
+     * was wired, and an adapter that is wired but whose registry contributes nothing.
      *
-     * The distinct-level reading is what makes this assertable at all. A shortcut tool's id is
+     * The distinct-level reading is what makes this assertable at all — and it is also this test's
+     * boundary, stated rather than implied (fix round 2, finding D). A shortcut tool's id is
      * device-dependent and cannot be written down, so the tools themselves cannot be listed; the
-     * **levels** can, and each adapter contributes exactly one.
+     * **levels** can, and each adapter today contributes exactly one. The cost of reading them
+     * `distinct()` is that **a fourth adapter wired at a level already present is invisible here** —
+     * that case belongs to the count-pin in
+     * [`the composition root registers exactly the declared adapters`], which is one more reason the
+     * two tests are kept side by side rather than one replacing the other.
      */
     @Test
     fun `the graph's own federation reaches exactly the declared tool levels`() {
         val levels: List<ToolLevel> = graphFederation().registry.all().map { it.level }.distinct()
 
         assertEquals(
-            "This reads AgentProvidesModule.provideToolFederation itself, so an adapter that arrives, " +
-                "disappears, or registers nothing shows up here whatever spelling wired it — which a " +
-                "regex over one file cannot promise. A new adapter is a new path to the world and needs " +
-                "an ADR, not a line. Reached: ${levels.map { it.value }}",
+            "This reads AgentProvidesModule.provideToolFederation itself, so an adapter that brings a " +
+                "NEW level, or stops reaching one it used to, shows up here whatever spelling wired it " +
+                "— which a regex over one file cannot promise. What it does NOT see, because the read " +
+                "is distinct levels: a further adapter wired at a level already present. That case is " +
+                "the count-pin's, in `the composition root registers exactly the declared adapters`. " +
+                "A new adapter is a new path to the world and needs an ADR, not a line. " +
+                "Reached: ${levels.map { it.value }}",
             listOf(ToolLevels.IN_APP, ToolLevels.SYSTEM_INTENT, ToolLevels.APP_SHORTCUT),
             levels,
         )

@@ -43,12 +43,15 @@ class SidrLauncherApp : Application(), Configuration.Provider {
 
     // A1″ Task 7: the `app_shortcut` adapter's snapshot. Costs one coroutine launch here — the
     // LauncherApps registration and every refresh happen on [applicationScope], which the graph builds
-    // over the IO dispatcher, and the change callbacks Android delivers arrive on a private
-    // HandlerThread that AndroidShortcutChangeObserver owns. So nothing on this path touches the main
-    // thread or the network. (Field-injecting the trigger does force it, its observer and the catalog
-    // to be CONSTRUCTED during onCreate; all three constructors only store their arguments — see
-    // AgentProvidesModule's KDoc, which says so precisely rather than claiming the whole module is
-    // lazy.)
+    // over the IO dispatcher, so nothing this launcher runs on this path is on the main thread or the
+    // network. The change callbacks Android delivers are REGISTERED against a private HandlerThread
+    // that AndroidShortcutChangeObserver owns rather than the main looper; that they are delivered
+    // there is the Handler/Looper contract and has no row in the measurement file, so it is an intent
+    // rather than a measured fact (fix round 2, finding C — see that observer's KDoc). Either way the
+    // callback arm does nothing on its thread but launch onto the scope above.
+    // (Field-injecting the trigger does force it, its observer and the catalog to be CONSTRUCTED
+    // during onCreate; all three constructors only store their arguments — see AgentProvidesModule's
+    // KDoc, which says so precisely rather than claiming the whole module is lazy.)
     @Inject
     lateinit var shortcutRefreshTrigger: ShortcutRefreshTrigger
 

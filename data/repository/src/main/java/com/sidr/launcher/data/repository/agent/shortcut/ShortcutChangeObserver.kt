@@ -29,8 +29,10 @@ fun interface ShortcutChangeObserver {
      * Register [onChange], to be invoked whenever Android reports a package or shortcut change.
      *
      * [onChange] must be cheap and must not block: it is invoked on whatever thread the implementation
-     * chose for delivery. [AndroidShortcutChangeObserver] delivers on a private [HandlerThread] — never
-     * the main looper — and the trigger's own handler does nothing but launch a coroutine.
+     * chose for delivery. [AndroidShortcutChangeObserver] registers over a [Handler] built on a private
+     * [HandlerThread] rather than on the main looper, **intending** delivery off the main thread — see
+     * that class's KDoc for why that is an intent rather than a measured fact. The trigger's own
+     * handler does nothing on it but launch a coroutine, so the cost is the same either way.
      */
     fun observe(onChange: () -> Unit)
 }
@@ -38,16 +40,29 @@ fun interface ShortcutChangeObserver {
 /**
  * `registerCallback`, delivered on a thread this class owns.
  *
- * **Delivery is on a private [HandlerThread], and that is a correctness decision rather than a
- * preference.** The first version of this code passed `Handler(Looper.getMainLooper())` and the prose
- * around it claimed the path never touched the main thread — false, since every package and shortcut
- * change was then delivered onto the main looper of a launcher whose home screen is the thing being
- * recomposed there. Owning the looper removes the claim instead of documenting it.
+ * **Registration goes through a [Handler] on a private [HandlerThread], and that is a correctness
+ * decision rather than a preference.** The first version of this code passed
+ * `Handler(Looper.getMainLooper())` and the prose around it claimed the path never touched the main
+ * thread — false on its face, since every package and shortcut change was then delivered onto the main
+ * looper of a launcher whose home screen is the thing being recomposed there. Choosing the looper
+ * ourselves removes that contradiction.
  *
- * It also removes an **unmeasured premise**. An earlier KDoc asserted what `registerCallback`'s
- * no-handler overload does with the calling thread's looper; that came from documentation, and the
+ * It also removes one **unmeasured premise**: an earlier KDoc asserted what `registerCallback`'s
+ * no-handler overload does with the calling thread's looper, which came from documentation, and the
  * block's rule (spec §3.1) forbids an Android premise sourced that way. Supplying the handler
- * explicitly means nothing has to be claimed about the overload that is not used.
+ * explicitly means nothing has to be claimed about an overload that is not used.
+ *
+ * **It does not remove the premise entirely, and fix round 2 (finding C) stopped this file from
+ * pretending otherwise.** That a callback registered with this `Handler` is *delivered* on that
+ * `HandlerThread` — and therefore never on the main looper — is the `Handler`/`Looper` contract:
+ * documentation and recall. The measurement file has **no row** for it, and §3.1's preamble forbids
+ * filling a premise from documentation *including when the documented answer seems obvious*. So the
+ * honest statement is: this class **asks** for off-main delivery by the only mechanism the API offers,
+ * and every "nothing on this path touches the main thread" sentence downstream
+ * ([ShortcutRefreshTrigger], `SidrLauncherApp`) rests on that ask being honoured, not on a measured
+ * row. The practical risk is near zero and the rule is the point — the previous round's own headline
+ * error was a claim that looked obviously true. Addressed to the next device round, beside
+ * `registerCallback`'s own missing row below.
  *
  * **What is still unmeasured, contained rather than assumed.**
  * `docs/superpowers/plans/2026-09-12-a1-device-measurements.md` has rows for
@@ -69,6 +84,14 @@ class AndroidShortcutChangeObserver @Inject constructor(
 
         // Started before the registration and stopped again if it fails, so a refused registration
         // does not leave a live thread behind for the life of the process.
+        //
+        // One thread per observe() call, and nothing here refuses a second one: calling observe()
+        // twice would start a second HandlerThread and register a second callback, so every change
+        // would cost two refreshes and one thread would live forever. Not reachable today — this is a
+        // @Singleton with exactly one caller, ShortcutRefreshTrigger.start, which is guarded by an
+        // AtomicBoolean and tested for it. Said here rather than left to be rediscovered by whoever
+        // gives this observer a second caller: that is the commit that must either make observe()
+        // idempotent or hand back something cancellable.
         val thread = HandlerThread(THREAD_NAME).apply { start() }
         val registration = runCatching {
             launcherApps.registerCallback(ShortcutChangeCallback(onChange), Handler(thread.looper))

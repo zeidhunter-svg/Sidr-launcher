@@ -20,13 +20,20 @@ import javax.inject.Singleton
  * exists: `SidrLauncherApp.onCreate`, which already launches one app-scoped job on `@ApplicationScope`
  * (`suggestionsWorkScheduler.ensureScheduled()`). This class is the second.
  *
- * **Nothing on this path runs on the main thread, and since fix round 1 that is true rather than
- * claimed.** This class holds no `Context` and reaches no system service: registration is
- * [ShortcutChangeObserver]'s, and [AndroidShortcutChangeObserver] delivers callbacks on a private
- * `HandlerThread` it owns, never the main looper. Everything here — the registration call, the first
- * refresh, and every refresh a callback asks for — runs on the [CoroutineScope] given to [start], which
- * the composition root builds over the IO dispatcher; the `LauncherApps` query itself is inside
- * [ShortcutCatalog.refresh]'s own `withContext(ioDispatcher)`.
+ * **Nothing this class does runs on the main thread, and unlike the first version of this KDoc that is
+ * now checkable rather than contradicted four lines later.** Everything here — the registration call,
+ * the first refresh, and every refresh a callback asks for — runs on the [CoroutineScope] given to
+ * [start], which the composition root builds over the IO dispatcher; the `LauncherApps` query itself is
+ * inside [ShortcutCatalog.refresh]'s own `withContext(ioDispatcher)`. This class holds no `Context` and
+ * reaches no system service at all: registration is [ShortcutChangeObserver]'s.
+ *
+ * **One link in that sentence is an intent, not a measurement** (fix round 2, finding C).
+ * [AndroidShortcutChangeObserver] registers over a `Handler` on a private `HandlerThread` rather than
+ * on the main looper — but that a callback so registered is *delivered* there is the `Handler`/`Looper`
+ * contract, i.e. documentation, and the measurement file has no row for it. Spec §3.1 forbids filling a
+ * premise from documentation even when the documented answer seems obvious, so the claim is: delivery
+ * off the main thread is **asked for** by the only mechanism the API offers. It is also the cheap half
+ * either way — whatever thread a callback arrives on, the arm below does nothing there but `launch`.
  *
  * **An unmeasured Android premise, contained rather than assumed** (block rule, spec §3.1). The
  * device-measurement file records what `hasShortcutHostPermission`, `getShortcuts` and `startShortcut`

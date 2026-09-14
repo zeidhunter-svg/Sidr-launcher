@@ -7,8 +7,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 
 /**
- * The Android implementation of [ShortcutQuery], and the only place in the codebase that calls
- * `LauncherApps`.
+ * The Android implementation of [ShortcutQuery], and the only place in **production** code that calls
+ * `LauncherApps` (the `androidTest` probe `app/src/androidTest/java/com/sidr/launcher/probe/LauncherAppsProbe.kt`
+ * also calls it, deliberately, to produce the measurements this class follows).
  *
  * Shortcut host access is gated by the `android.app.role.HOME` role — held by exactly one package at a
  * time and assigned by the user, not by a manifest permission. What each call actually does across
@@ -56,8 +57,17 @@ class AndroidShortcutQuery @Inject constructor(
         val labels = mutableMapOf<String, String>()
         return shortcuts.mapNotNull { info ->
             if (!info.isEnabled) return@mapNotNull null
-            val label = (info.longLabel ?: info.shortLabel)?.toString()?.trim().orEmpty()
+            val label = (info.longLabel?.takeIf { it.isNotBlank() } ?: info.shortLabel)
+                ?.toString()?.trim().orEmpty()
             if (label.isEmpty()) return@mapNotNull null
+            // Unmeasured branch (docs/superpowers/plans/2026-09-12-a1-device-measurements.md, row 12):
+            // no device was available to observe whether `getApplicationInfo` throws
+            // `NameNotFoundException` for a shortcut-contributing package with no `LAUNCHER` activity —
+            // `LauncherApps` is exempt from Android 11+ package-visibility filtering for the HOME-role
+            // holder, but `PackageManager` is not known to share that exemption, and this was never
+            // observed either way. The fallback to the raw package name is fail-safe by construction
+            // (it never crashes and never offers a tool that cannot run), but whether it actually fires
+            // on a real device is an open question, not a documented certainty.
             val appLabel = labels.getOrPut(info.`package`) {
                 runCatching {
                     packageManager.getApplicationInfo(info.`package`, 0).loadLabel(packageManager).toString()

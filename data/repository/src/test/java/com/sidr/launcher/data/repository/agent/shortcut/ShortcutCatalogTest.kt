@@ -43,6 +43,25 @@ class ShortcutCatalogTest {
         assertEquals(emptyList<AppShortcut>(), catalog.current())
     }
 
+    @Test
+    fun `a failing refresh discards a previously good snapshot rather than keeping it`() = runTest {
+        var shouldFail = false
+        val catalog = ShortcutCatalog(
+            query = {
+                if (shouldFail) throw SecurityException("caller lost the HOME role") else listOf(shortcut("com.a", "new_chat"))
+            },
+            ioDispatcher = UnconfinedTestDispatcher(),
+        )
+
+        catalog.refresh()
+        assertEquals(listOf("new_chat"), catalog.current().map { it.shortcutId })
+
+        shouldFail = true
+        catalog.refresh()
+
+        assertEquals(emptyList<AppShortcut>(), catalog.current())
+    }
+
     private fun shortcut(packageName: String, shortcutId: String) = AppShortcut(
         packageName = packageName,
         shortcutId = shortcutId,

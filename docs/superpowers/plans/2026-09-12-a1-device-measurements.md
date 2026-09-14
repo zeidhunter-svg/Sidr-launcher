@@ -41,6 +41,18 @@ discrepancy is explained rather than mysterious.
 | 9 | `shortLabel` / `longLabel` populated | Sidr **is** default home | `shortLabel` **205 / 205**; `longLabel` **109 / 205** | 2026-09-14 | `5d44167` + probe |
 | 10 | `LauncherApps.startShortcut(pkg, id, null, null, myUserHandle)` on the first enabled shortcut | Sidr **is** default home | `RETURNED_NORMALLY` — the target app opened; no additional permission, no throw | 2026-09-14 | `5d44167` + probe |
 | 11 | Label language, observed in the returned set | Sidr **is** default home | mixed and **not** the app's own: `Anında Hesap Aç` (tr), `Подписки` (ru) side by side — each declaring app localises its own labels to the device locale | 2026-09-14 | `5d44167` + probe |
+| 12 | `PackageManager.getApplicationInfo(pkg, 0)` for a shortcut-contributing package with no `LAUNCHER` activity | Sidr **is** default home | `<не измерено>` | — | — |
+
+**Row 12 is deliberately empty, per this file's own rule that an unmeasured row stays empty and says
+so.** `LauncherApps` is exempt from Android 11+ package-visibility filtering for the HOME-role holder;
+`PackageManager` carries no such exemption, and `AndroidManifest.xml`'s `<queries>` block declares only a
+MAIN/LAUNCHER intent, which does not necessarily cover every package that publishes a shortcut. No
+device was attached this session (`adb devices -l` empty) to observe whether `getApplicationInfo` throws
+`NameNotFoundException` for such a package, so the row is left empty rather than filled from either
+platform documentation or the `<queries>` declaration's apparent coverage. What depends on it: a shortcut
+tool's `appLabel` (`AndroidShortcutQuery`, which falls back to the raw package name on that exception),
+and, through it, the user-visible qualifier Task 7 renders. Addressed to the next device round with
+`adb` access.
 
 **Row 5 was a bound, and it behaved like one.** `dumpsys` reported 216 across 73 packages where
 `getShortcuts` returns 205 across 65 — close, but not equal, because the service holds state the

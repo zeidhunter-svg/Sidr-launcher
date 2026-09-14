@@ -1977,11 +1977,31 @@ must not be trusted to a count:
    conclusion. Every later multi-module run deletes `build/test-results` first and passes `--continue`.
    This sits beside the `--rerun` / `tail` rules as a third way this project has produced a false
    reading from a green-looking build.
-8. **← resume here.** In this order, and do not reorder them:
-   **(a)** Task 9, the cross-layer staleness test and the whole reason this block does not
-   trust four green layers — note F4 above, which says exactly why a per-module suite is not that test.
-   **(b)** only then the full block gate, which is Phase 1's boundary: compare against **1323 plus
-   Phase 1's additions**, never 1321.
+8. ~~Task 9, then the full block gate.~~ **Both done 2026-09-15 — Phase 1 is CLOSED.**
+   **Task 9** — `743186a`, fix round 1 `09d4322`. The test file is
+   `data/repository/src/test/java/com/sidr/launcher/data/repository/agent/ShortcutStalenessEndToEndTest.kt`,
+   two tests, **no production code touched, and both green on the first run**. The brief named that as
+   the good outcome, and it is: the seam *dynamic registry → federation → validator → worker* was
+   already crossed correctly by Tasks 4/6/7, and Task 9 turns that from four green layers into a
+   measurement of the thing between them — which is exactly what F4 said a per-module suite is not.
+   **What the review round changed, and it is worth reading before writing a test like this one:** the
+   plan's own sketch for test 2 claimed the throw is contained "twice over (worker `runCatching`, engine
+   `try`)... so removing either containment layer would surface here." **That claim is false, and this
+   plan is where it came from.** `ShortcutToolWorker.invoke` turns any throw into
+   `ToolResult.Failed(CommandFailure.Generic)` as a *value*, and `AgentExecutor.perform` catches
+   `Exception` into the **identical** value — so deleting either layer alone leaves the test green, and
+   only deleting both reddens it. No assertion reading only the resulting `ToolResult` can tell which
+   layer caught. The test now says so as a named limitation. The fix was prose; the test's logic and
+   assertions are the sketch's.
+   **Gate at `09d4322`, Phase 1's boundary: 1357 tests, 0 failures, 0 errors**, exit 0, from a run
+   printing `557 actionable tasks: 557 executed`, with every module's `build/test-results` deleted
+   first and `--continue` passed. Per module: `:domain:jvmTest` **438**, `:consumer:jvm` **56**,
+   `:data:repository` **298**, `:feature:launcher` **191**, `:app` **59**, the other eight unchanged.
+   **1357 = 1323 + 34**, and the decomposition was derived *before* the run and matched it: Tasks 6-8
+   contributed 32 (`:data:repository` 271 → 296, `:app` 54 → 59, `:feature:launcher` 189 → 191) and
+   Task 9 the last 2. A predicted total that matches the measured one is how this block checks that
+   nothing quietly stopped running. `CLAUDE.md` and `current-status.md` now say 1357; both previously
+   said 1321 and were older than the tree.
    ~~Two smaller debts are open and neither belongs to Task 9.~~ **Both closed 2026-09-15, documentation
    only, `:app` held at 59/0 and the `.kt` diff verified comment-only by filtering every changed line:**
    row 12's prose in the measurement file now separates what was *observed* from what was *read* — the
@@ -2000,10 +2020,11 @@ in a commit of its own, separately from the task it describes.** It is therefore
 commit as the task from here on, and a session that finds it disagreeing with
 `git log --oneline 181628a..HEAD` must believe git.
 
-**The number a fresh gate compares against is 1323, not 1321.** 1321 was measured at `d391350`, which
-is *before* Task 4; Task 4 added two `:domain:jvmTest` tests. `CLAUDE.md` and `current-status.md` still
-say 1321 and are correct about the commit they name — they are simply older than the tree. Phase 1's
-gate is 1323 plus whatever Tasks 6-9 add.
+**The number a fresh gate compares against is 1357** — measured at `09d4322` on 2026-09-15, the
+Phase 1 boundary, and now written into `CLAUDE.md` and `current-status.md` as well. The chain, each
+number tied to the commit it was measured at: **1321** at `d391350` (before Task 4) → **1323** once
+Task 4 added two `:domain:jvmTest` tests → **1357** at the Phase 1 boundary (Tasks 6-8 +32, Task 9 +2).
+Phase 2's gate is 1357 plus whatever Tasks 10-12 add.
 
 ### Rulings made during execution, and what each costs if wrong
 

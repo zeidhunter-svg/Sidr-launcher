@@ -201,8 +201,11 @@ six more — three in `DeviceDatabaseReadGuardTest` (`:app`) and three in `Launc
 (`:feature:launcher`). Re-measured at `1ef158d` on 2026-09-10: **1314 tests / 0 failures**.
 **Re-measured again at `d391350` on 2026-09-14, with A1″ in progress: 1321 tests / 0 failures** —
 `:domain:jvmTest` 436 (`AgentExecutorTest` +2) and `:app` 54 (`ToolRegistryPermissionGuardTest` +4,
-`DoctrineGuardTest` +1), the other eleven modules unchanged. **That is the number a fresh gate must
-match today**, and it will move again before A1″ closes.
+`DoctrineGuardTest` +1), the other eleven modules unchanged. **A1″'s Phase 1 has since closed and moved
+it again: `09d4322` on 2026-09-15 measured 1357 tests / 0 failures / 0 errors**, `557 actionable tasks:
+557 executed` — `:data:repository` 271 → **298**, `:app` 54 → **59**, `:feature:launcher` 189 → **191**,
+`:domain:jvmTest` 436 → **438**. **1357 is the number a fresh gate must match today**, and it will move
+again before A1″ closes (Phase 2 and Phase 3 are unstarted).
 
 ## Agentic track — Этап 4.5 (A0.5) — second consumer — `CODE-GREEN` (2026-08-26)
 

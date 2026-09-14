@@ -68,19 +68,9 @@ class ShortcutStalenessEndToEndTest {
         )
 
         val id = federation.registry.all().single().id
-        val plan = ExecutionPlan(
-            listOf(
-                PlanStep(
-                    0,
-                    ToolInvocation(id, emptyMap()),
-                    ActionRiskLevel.SAFE,
-                    StepPrecondition.None,
-                    StepRationale.GOAL_DIRECT,
-                ),
-            ),
-        )
 
-        // The app is uninstalled while the plan sits paused.
+        // The app is uninstalled while the plan sits paused: a second federation, over a catalog
+        // that has since gone empty, is what the step actually runs against.
         val emptied = ShortcutCatalog(query = { emptyList() }, ioDispatcher = dispatcher).also { it.refresh() }
         val afterUninstall = ToolFederation(
             listOf(
@@ -99,10 +89,21 @@ class ShortcutStalenessEndToEndTest {
     }
 
     /**
-     * The worker's own `runCatching` and `AgentExecutor.perform`'s call-site `try` both sit between a
-     * throwing [ShortcutLauncher] and the caller. This test crosses both **and** Task 1's engine floor
-     * in one run, over the real federation on both sides of [AgentExecutor] — so removing either
-     * containment layer would surface here, not just in a per-layer unit test.
+     * A throw originating in the real `app_shortcut` worker, run through the real [ToolFederation] and
+     * the real [AgentExecutor], still yields an honest [ToolResult.Failed] observation carrying a
+     * [TraceEvent.ToolObserved] entry — not an uncaught exception reaching the caller.
+     *
+     * **Named limitation, not implied absent: this does not distinguish which containment layer
+     * caught the throw, because both produce the identical value.** `ShortcutToolWorker.invoke` wraps
+     * the call in `runCatching { }.fold(...)` and returns `ToolResult.Failed(CommandFailure.Generic)`
+     * as an ordinary value — no exception ever leaves the worker; `AgentExecutor.perform`'s call site
+     * separately catches `Exception` into the same `ToolResult.Failed(CommandFailure.Generic)`. Delete
+     * either layer alone and this test stays green — the other one still catches the same throw into
+     * the same value. It reddens only if **both** are removed. What this test actually holds is
+     * narrower than "either layer is load-bearing": a throw from the real worker, through the real
+     * federation and the real engine, ends the run as `Failed` rather than killing the process — Task
+     * 1's engine floor and Task 7's adapter catch, exercised together, with no assertion here able to
+     * tell them apart.
      */
     @Test
     fun `a worker that throws inside the real federation still yields a Failed observation`() = runTest {
@@ -129,9 +130,11 @@ class ShortcutStalenessEndToEndTest {
     }
 
     /**
-     * A fresh one-step `Running` session over [id], built the same way the first test builds its plan.
-     * Written once; both tests would need it, so only the second does (the first calls the executor
-     * directly, beneath the engine).
+     * A fresh one-step `Running` session over [id]: the same shape of single-step plan the first test
+     * invokes directly (`PlanStep(0, ToolInvocation(id, emptyMap()), ActionRiskLevel.SAFE,
+     * StepPrecondition.None, StepRationale.GOAL_DIRECT)`), wrapped in a session so [AgentExecutor] has
+     * somewhere to run it. Written once; only the second test calls it — the first calls the executor
+     * directly, beneath the engine, so it never needs a session.
      */
     private fun runningSessionFor(id: ToolId): AgentSession = AgentSession(
         id = AgentSessionId("s1"),

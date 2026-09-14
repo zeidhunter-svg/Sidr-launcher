@@ -1,12 +1,19 @@
 package com.sidr.launcher.di
 
 import com.sidr.launcher.data.repository.agent.ContextIntentLauncher
+import com.sidr.launcher.data.repository.agent.DynamicToolNames
 import com.sidr.launcher.data.repository.agent.IntentLauncher
 import com.sidr.launcher.data.repository.agent.SystemIntentToolSource
 import com.sidr.launcher.data.repository.agent.SystemIntentToolWorker
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolWorker
 import com.sidr.launcher.data.repository.agent.ToolMatchPlanner
+import com.sidr.launcher.data.repository.agent.shortcut.AndroidShortcutLauncher
+import com.sidr.launcher.data.repository.agent.shortcut.AndroidShortcutQuery
+import com.sidr.launcher.data.repository.agent.shortcut.ShortcutLauncher
+import com.sidr.launcher.data.repository.agent.shortcut.ShortcutQuery
+import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolSource
+import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolWorker
 import com.sidr.launcher.domain.agent.AgentExecutor
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.AgentSessionIdFactory
@@ -24,6 +31,8 @@ import com.sidr.launcher.domain.tool.ToolExecutor
 import com.sidr.launcher.domain.tool.ToolFederation
 import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolRegistry
+import com.sidr.launcher.feature.launcher.agent.DynamicToolLabel
+import com.sidr.launcher.feature.launcher.agent.DynamicToolLabels
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -55,9 +64,25 @@ object AgentProvidesModule {
      * source from shadowing a projected family. `DoctrineGuardTest` asserts this list is the declared
      * set and that no adapter in it names a network type.
      *
-     * Two adapters: the `IN_APP` projection of `ActionCatalog`, and Task 6's `Tier0IntentToolSource` /
-     * `Tier0IntentToolWorker` — two Android system intents that are not among the frozen seven
-     * `ActionIds`, so they mint their own ids and never travel `ExecuteActionUseCase`.
+     * Three adapters:
+     *  - the `IN_APP` projection of `ActionCatalog`;
+     *  - A1′'s `Tier0IntentToolSource` / `Tier0IntentToolWorker` — two Android system intents that are
+     *    not among the frozen seven `ActionIds`, so they mint their own ids and never travel
+     *    `ExecuteActionUseCase`;
+     *  - A1″'s `ShortcutToolSource` / `ShortcutToolWorker` — one tool per app shortcut another
+     *    installed app publishes.
+     *
+     * **The shortcut adapter is last, and that placement is the whole of its collision safety.** It is
+     * the first source whose contents are written by third parties, and first-adapter-wins means a
+     * third-party tool can never displace an authored one. (Its ids are additionally prefixed
+     * `shortcut:`, which no authored id contains — two independent reasons, neither relying on the
+     * other.)
+     *
+     * It is also the first adapter whose tool set **moves while the process lives**: it is empty until
+     * `ShortcutRefreshTrigger` has run, empty forever on a device where the user has chosen another
+     * home app, and otherwise as large as the installed apps make it (205 tools from 65 packages on the
+     * measured SM-A325F). Nothing here caches it — `ToolFederation` re-derives per call for exactly
+     * this reason.
      */
     @Provides
     @Singleton
@@ -66,10 +91,13 @@ object AgentProvidesModule {
         inAppWorker: SystemIntentToolWorker,
         tier0Registry: Tier0IntentToolSource,
         tier0Worker: Tier0IntentToolWorker,
+        shortcutRegistry: ShortcutToolSource,
+        shortcutWorker: ShortcutToolWorker,
     ): ToolFederation = ToolFederation(
         listOf(
             ToolAdapter(ToolLevels.IN_APP, inAppRegistry, inAppWorker),
             ToolAdapter(ToolLevels.SYSTEM_INTENT, tier0Registry, tier0Worker),
+            ToolAdapter(ToolLevels.APP_SHORTCUT, shortcutRegistry, shortcutWorker),
         ),
     )
 
@@ -77,6 +105,46 @@ object AgentProvidesModule {
     @Provides
     @Singleton
     fun provideIntentLauncher(impl: ContextIntentLauncher): IntentLauncher = impl
+
+    /** The `app_shortcut` adapter's two Android seams, kept behind ports so both are testable. */
+    @Provides
+    @Singleton
+    fun provideShortcutQuery(impl: AndroidShortcutQuery): ShortcutQuery = impl
+
+    @Provides
+    @Singleton
+    fun provideShortcutLauncher(impl: AndroidShortcutLauncher): ShortcutLauncher = impl
+
+    /**
+     * The names face of the same object that supplies the descriptors — **the same instance**, not a
+     * second construction. `ShortcutToolSource` is a `@Singleton`, so `registry.all()` and `names()`
+     * read one snapshot; providing them from two instances would let a rendered name disagree with the
+     * registered tool it labels, which is the F2 shape in miniature.
+     */
+    @Provides
+    @Singleton
+    fun provideDynamicToolNames(source: ShortcutToolSource): DynamicToolNames = source
+
+    /**
+     * The projection **the composition root exists to make**: `:data:repository`'s [DynamicToolNames]
+     * onto `:feature:launcher`'s [DynamicToolLabels].
+     *
+     * `:feature:launcher` depends on `:domain`, `:core:ui` and `:core:common` — there is no
+     * `feature -> data` edge — so the ViewModel cannot hold the data-layer port, and the data-layer type
+     * cannot move into `:domain` either: a shortcut's name is a **third-party string**, and `:domain`
+     * carries no user-facing copy. `:app` is the only module that sees both sides, so the two-line
+     * mapping lives here. Same shape as `StepProvenance`, which the ViewModel fills from a `:domain`
+     * port it *can* hold.
+     *
+     * The lambda re-reads on every call rather than capturing a map: adapter #3's tool set moves while
+     * the process lives (`ToolFederation` re-derives per call for the same reason), and a map captured
+     * at graph construction would be the empty one that exists before `ShortcutRefreshTrigger` has run.
+     */
+    @Provides
+    @Singleton
+    fun provideDynamicToolLabels(names: DynamicToolNames): DynamicToolLabels = DynamicToolLabels {
+        names.names().associate { it.id to DynamicToolLabel(it.qualifier, it.name) }
+    }
 
     /**
      * Both ports come from the **same** federation object, which is why the registry cannot advertise

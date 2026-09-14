@@ -5,6 +5,10 @@ import com.sidr.launcher.data.repository.action.DefaultActionCatalog
 import com.sidr.launcher.data.repository.agent.SystemIntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0ToolIds
+import com.sidr.launcher.data.repository.agent.shortcut.AppShortcut
+import com.sidr.launcher.data.repository.agent.shortcut.ShortcutCatalog
+import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolIds
+import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolSource
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolAdapter
@@ -14,6 +18,8 @@ import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.tool.ToolWorker
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.io.File
@@ -91,6 +97,7 @@ class DoctrineGuardTest {
         val adapters = listOf(
             ToolAdapter(ToolLevels.IN_APP, SystemIntentToolSource(DefaultActionCatalog()), NoopWorker),
             ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(), NoopWorker),
+            ToolAdapter(ToolLevels.APP_SHORTCUT, shortcutSource(), NoopWorker),
         )
 
         val ids = adapters.flatMap { it.registry.all() }.map { it.id }
@@ -103,7 +110,48 @@ class DoctrineGuardTest {
             missing,
         )
 
+        assertEquals(
+            "The app_shortcut adapter declared no tool, so every loop in this class skipped the whole " +
+                "third adapter in silence — the same vacuous-loop false GREEN [REQUIRED_TOOL_IDS] " +
+                "exists to prevent, which cannot see this one because a shortcut id is device-" +
+                "dependent and therefore un-nameable. Adapters currently declare: ${ids.map { it.value }}",
+            true,
+            ids.any { it.value.startsWith(ShortcutToolIds.PREFIX) },
+        )
+
         return adapters
+    }
+
+    /**
+     * **The third adapter, over a deliberately NON-EMPTY fake snapshot** (controller ruling).
+     *
+     * A shortcut source built over `query = { emptyList() }` advertises zero descriptors, every loop in
+     * this class skips it in silence, and the guard reports GREEN while blind to the entire adapter. That
+     * is the identical false GREEN this file's own mutation rounds caught twice before (see
+     * [productionAdapters] and the risk test's "limit 1"), pointed at a new adapter — and the floor
+     * [REQUIRED_TOOL_IDS] provides for the other two cannot catch it, because a real shortcut id depends
+     * on which apps the device has installed and so cannot be written down.
+     *
+     * The catalog is the **real** [ShortcutCatalog] over a fake [com.sidr.launcher.data.repository.agent.shortcut.ShortcutQuery]
+     * seam, not a stub registry: it is the same object production wires, so the id derivation, the
+     * round-trip filter and the descriptor fields under test here are the production ones.
+     */
+    private fun shortcutSource(): ShortcutToolSource {
+        val catalog = ShortcutCatalog(
+            query = {
+                listOf(
+                    AppShortcut(
+                        packageName = "com.example.chat",
+                        shortcutId = "new_message",
+                        appLabel = "Example Chat",
+                        shortcutLabel = "New message",
+                    ),
+                )
+            },
+            ioDispatcher = Dispatchers.Unconfined,
+        )
+        runBlocking { catalog.refresh() }
+        return ShortcutToolSource(catalog)
     }
 
     private fun productionFederation() = ToolFederation(productionAdapters())
@@ -182,7 +230,15 @@ class DoctrineGuardTest {
      *    the finding names: if `Tier0IntentToolSource` renames `SET_TIMER`'s value, the *old* literal
      *    stranded in `AgentSessionPresentation.kt` no longer matches anything `productionFederation()`
      *    actually returns, and the *new* value appears nowhere in that file — this test goes red.
-     *  - **What it cannot see**, named rather than implied absent: the check is `String.contains`, not
+     *  - **A tool whose id starts with `ShortcutToolIds.PREFIX` is answered by a different rule** (A1″
+ *    Task 8), because its name is **data**: it was authored by another app, in that app's language,
+ *    and no string resource exists or should. The rule is written as a **positive requirement rather
+ *    than an exemption** — such a tool must appear in `DynamicToolNames.names()` with both halves of
+ *    its name non-blank, and the surface must carry a sentence to put that name into
+ *    (`launcher_agent_step_shortcut`). A dynamic tool with no name renders as exactly the same generic
+ *    line this rule exists to catch; filtering it out instead of requiring the name would have made
+ *    the guard blind to the whole third adapter.
+ *  - **What it cannot see**, named rather than implied absent: the check is `String.contains`, not
      *    "is a `when` arm" — a symbol or literal appearing anywhere else in the file (a different
      *    function, or prose a looser comment-stripper would have left behind) would also satisfy it, and
      *    a substring match cannot distinguish `"set_timer"` from a hypothetical `"set_timer_v2"`. Neither
@@ -212,8 +268,40 @@ class DoctrineGuardTest {
             domainIdNames.isNotEmpty(),
         )
 
+        val dynamicNames = shortcutSource().names().associateBy { it.id }
+
         productionFederation().registry.all().forEach { descriptor ->
             val id = descriptor.id.value
+            if (id.startsWith(ShortcutToolIds.PREFIX)) {
+                // The positive requirement, not an exemption (see this test's KDoc). A dynamic tool
+                // must be NAMED by the port that carries data-authored names; one that is registered
+                // and unnamed renders as the same generic line, which is the very defect the authored
+                // half of this rule exists to catch, pointing the other way.
+                val name = dynamicNames[descriptor.id]
+                assertEquals(
+                    "'$id' is registered but absent from DynamicToolNames.names(), so the surface has " +
+                        "no name for it and it will render as the generic step line ('Run this step " +
+                        "for …') forever — the same defect as a missing toolLabelFor arm",
+                    true,
+                    name != null,
+                )
+                assertEquals(
+                    "'$id' is named by DynamicToolNames but one half of that name is blank, so the " +
+                        "rendered line would read as punctuation around nothing",
+                    true,
+                    name != null && name.qualifier.isNotBlank() && name.name.isNotBlank(),
+                )
+                // And the surface must have a sentence to put that name INTO. `:app` cannot call
+                // `line` (it is `internal` to `:feature:launcher`), so this is the same textual scan
+                // the authored half uses.
+                assertEquals(
+                    "AgentSessionPresentation.kt has no launcher_agent_step_shortcut arm, so a tool " +
+                        "whose name is data has nowhere to be rendered",
+                    true,
+                    presentationText.contains("R.string.launcher_agent_step_shortcut"),
+                )
+                return@forEach
+            }
             val symbolicName = domainIdNames[id]
             val handled = if (symbolicName != null) {
                 presentationText.contains("ToolIds.$symbolicName")
@@ -248,6 +336,13 @@ class DoctrineGuardTest {
             "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/SystemIntentToolWorker.kt",
             "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/Tier0IntentToolSource.kt",
             "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/Tier0IntentToolWorker.kt",
+            // A1″ adapter #3. Four files rather than two: unlike the other adapters, this source
+            // reads its tools from somewhere, and the catalog plus the `LauncherApps` query it reads
+            // them through are as much part of the adapter's reach as the source itself.
+            "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/shortcut/ShortcutToolSource.kt",
+            "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/shortcut/ShortcutToolWorker.kt",
+            "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/shortcut/ShortcutCatalog.kt",
+            "data/repository/src/main/java/com/sidr/launcher/data/repository/agent/shortcut/AndroidShortcutQuery.kt",
         ).map { File(repoRoot, it) }
 
         adapterFiles.forEach { file ->
@@ -319,13 +414,13 @@ class DoctrineGuardTest {
         assertEquals(
             "A new adapter is a new path to the world and needs an ADR, not a line. " +
                 "ToolAdapter( constructions found in AgentProvidesModule.kt: $constructions",
-            2,
+            3,
             constructions,
         )
 
         assertEquals(
             "A new adapter is a new path to the world and needs an ADR, not a line. Found: $levels",
-            listOf("ToolLevels.IN_APP", "ToolLevels.SYSTEM_INTENT"),
+            listOf("ToolLevels.IN_APP", "ToolLevels.SYSTEM_INTENT", "ToolLevels.APP_SHORTCUT"),
             levels,
         )
 
@@ -424,6 +519,23 @@ class DoctrineGuardTest {
     )
 
     /**
+     * **A1″ adapter #3 is pinned as a FAMILY, because it cannot be pinned by id.** A shortcut tool's id
+     * is derived from a package and a shortcut another app published, so the set differs on every
+     * device (205 tools from 65 packages on the measured SM-A325F) and no literal can name them. What
+     * *is* fixed is that `ShortcutToolSource` declares one rating for all of them, from a single
+     * expression — so the family is the honest unit of pinning, and the drift assertion over it catches
+     * exactly what the per-id map catches for the authored four: an edit to that expression that no one
+     * re-justified.
+     *
+     * What this does **not** buy, said rather than implied: it cannot see a source that starts varying
+     * risk per shortcut, since such a source would simply have members at more than one level and the
+     * assertion would redden — which is the correct outcome, but as a *failure to parse the new design*,
+     * not as a judgement about it. Whoever introduces per-shortcut risk replaces this pin rather than
+     * widening it.
+     */
+    private val DYNAMIC_TOOL_RISK: ActionRiskLevel = ActionRiskLevel.SAFE
+
+    /**
      * The input to `DOC-ADL-1`'s one risk-to-gate predicate, pinned.
      *
      * "Registered" here means **declared by a registered source**: the read is [productionAdapters],
@@ -441,7 +553,9 @@ class DoctrineGuardTest {
     @Test
     fun `every registered tool's declared risk is pinned here`() {
         val registered = productionAdapters().flatMap { it.registry.all() }
-        val unpinned = registered.map { it.id }.filterNot { it in declaredRisk }
+        val (dynamic, authored) = registered.partition { it.id.value.startsWith(ShortcutToolIds.PREFIX) }
+
+        val unpinned = authored.map { it.id }.filterNot { it in declaredRisk }
         assertEquals(
             "A tool whose risk is pinned by nothing can change gate behaviour silently: " +
                 "${unpinned.map { it.value }}",
@@ -449,13 +563,36 @@ class DoctrineGuardTest {
             unpinned,
         )
 
-        val drifted = registered
+        val drifted = authored
             .filter { declaredRisk[it.id] != it.risk }
             .map { "${it.id.value}: pinned ${declaredRisk[it.id]}, declared ${it.risk}" }
         assertEquals(
             "Declared risk changed without this pin changing with it: $drifted",
             emptyList<String>(),
             drifted,
+        )
+
+        // The dynamic family, pinned as a family — see [DYNAMIC_TOOL_RISK]. Two assertions, and the
+        // first is the one that keeps the second from being vacuous: with no shortcut tool registered
+        // this whole block would quantify over nothing, which is the shape [productionAdapters]'
+        // own floor exists to catch one level up. Asserted again here so the pin is non-vacuous on
+        // its own terms rather than only by that floor's grace.
+        assertEquals(
+            "No app_shortcut tool reached this pin, so the family rule below checked nothing.",
+            true,
+            dynamic.isNotEmpty(),
+        )
+        val dynamicDrift = dynamic
+            .filterNot { it.risk == DYNAMIC_TOOL_RISK }
+            .map { "${it.id.value}: family-pinned $DYNAMIC_TOOL_RISK, declared ${it.risk}" }
+        assertEquals(
+            "A dynamic tool's risk is decided by its adapter, not by a human reading a diff: there is " +
+                "one rating for the whole family and it must hold for every member. A shortcut launch " +
+                "raised above SAFE would put every one of a device's hundreds of shortcuts behind the " +
+                "consent gate; lowering the family rating would take the gate off all of them at once. " +
+                "Drifted: $dynamicDrift",
+            emptyList<String>(),
+            dynamicDrift,
         )
     }
 

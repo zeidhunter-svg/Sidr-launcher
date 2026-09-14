@@ -1903,7 +1903,35 @@ must not be trusted to a count:
    it is **row 12 of the measurement file, deliberately `<не измерено>`**, addressed to the next device
    round. The fallback is fail-safe (raw package name), so the cost is a cosmetic qualifier, not a dead
    tool.
-6. **← resume here. Task 7, and Phase 1 from there.**
+6. ~~Tasks 7 + 8 — the `app_shortcut` adapter, and a dynamic tool's name on the surface.~~
+   **Implemented as ONE commit, `f4b6d88` — but NOT reviewed and NOT mutation-verified.** The two are
+   one commit because neither compiles without the other: a third `ToolAdapter` in
+   `AgentProvidesModule` breaks `DoctrineGuardTest`'s composition-root count-pin unless the guard moves
+   in the same change, and moving it makes the surface-label rule see a tool with no string resource,
+   which is precisely what Task 8 answers.
+   **The implementing agent was terminated by a session rate limit at the exact point it had written
+   "now let me verify the new guard assertions actually bite — three mutations".** That round did not
+   happen, and it is the first thing the next session owes.
+   Verified by the controller instead, from a run printing `289 actionable tasks: 289 executed`, counts
+   read from the JUnit XML: `:data:repository` **290** (275 before), `:app` **54** (54 before),
+   `:feature:launcher` **190** (189 before). Zero failures.
+   **`:app` being unchanged at 54 is the finding, not a footnote.** Every guard change in this commit
+   strengthens the *body* of an existing test rather than adding a method, so the suite cannot tell a
+   guard that now covers three adapters from one that silently skips the third. Task 3 caught that
+   exact false GREEN twice in this same file, both times by mutation and never by the suite. Until the
+   mutation round runs, "green" here means "not obviously broken", not "guarded".
+   The locale signature is **not** invalidated — checked, not assumed:
+   `checkOwnerReviewedLocaleStrings` keys on Class B (locked **and** translated) keys in a module's
+   base `values/strings_locked.xml`; `launcher_tool_level_app_shortcut` is locked but
+   `translatable="false"`, and `launcher_agent_step_shortcut` is translatable but not locked. Same
+   shape as the A1′ round that added six strings without re-signing.
+7. **← resume here.** In this order, and do not reorder them:
+   **(a)** a `mutation-prover` round on `f4b6d88`'s guard changes — at minimum: the shortcut source
+   dropped from `productionAdapters()` must go RED (it is the false GREEN above); a shortcut tool's
+   declared risk flipped `SAFE → CONFIRM` must go RED; the `_app_shortcut` level resource removed must
+   go RED rather than silently falling back to `_unknown`. **(b)** a task review of `f4b6d88` against
+   both briefs. **(c)** Task 9, which is the cross-layer staleness test and the whole reason this block
+   does not trust four green layers. **(d)** only then the full block gate, which is Phase 1's boundary.
 
 **This section has now lagged twice in a row, both times by exactly the same mechanism: it was edited
 in a commit of its own, separately from the task it describes.** It is therefore updated in the *same*

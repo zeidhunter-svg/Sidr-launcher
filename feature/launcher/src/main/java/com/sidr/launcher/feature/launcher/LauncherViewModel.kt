@@ -40,6 +40,8 @@ import com.sidr.launcher.domain.tool.ToolRegistry
 import com.sidr.launcher.domain.voice.SpeechInputSource
 import com.sidr.launcher.domain.voice.SpeechRecognitionError
 import com.sidr.launcher.feature.launcher.agent.LauncherAgentSession
+import com.sidr.launcher.feature.launcher.agent.DynamicToolLabel
+import com.sidr.launcher.feature.launcher.agent.DynamicToolLabels
 import com.sidr.launcher.feature.launcher.agent.StepProvenance
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
@@ -101,6 +103,11 @@ class LauncherViewModel @Inject constructor(
     // and its risk, not its level or effect. The registry is a domain port, so the VM stays
     // Android-free and no feature -> data edge appears.
     private val toolRegistry: ToolRegistry,
+    // A1″ Task 8: the names of tools whose names are DATA — one per app shortcut another installed app
+    // publishes. A separate port from [toolRegistry] because a `ToolDescriptor` carries no user-facing
+    // copy by contract, and because the strings are third-party: they must not cross into `:domain`.
+    // `:app` projects it from `:data:repository`'s `DynamicToolNames` — there is no feature -> data edge.
+    private val dynamicToolLabels: DynamicToolLabels,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     // S2-1 Task 11: fire-and-forget scope for recording a learned choice — survives the launch's own
     // viewModelScope coroutine (Block-F recordUsage precedent) so a quick nav-away never drops it.
@@ -271,16 +278,38 @@ class LauncherViewModel @Inject constructor(
      * VM resolves typed values; the feature layer picks the string — the hard rule's split, unchanged.
      *
      * A plain immutable value rather than a second `StateFlow`: [ToolRegistry] is documented read-only
-     * and side-effect free over a federation composed once at graph construction, so there is nothing
-     * to observe — and a separate flow could momentarily disagree with the session snapshot rendered
-     * beside it, which would blank a provenance line for one frame.
+     * and side-effect free, and a separate flow could momentarily disagree with the session snapshot
+     * rendered beside it, which would blank a provenance line for one frame.
      *
-     * `by lazy`, so nothing walks the federation on the startup path: it is read the first time an
-     * agent session is actually on screen.
+     * **`get()` since A1″, and the change is a correctness fix rather than a style choice.** This was
+     * `by lazy`, justified by "a federation composed once at graph construction, so there is nothing to
+     * observe". That premise died with adapter #3: the `app_shortcut` source's tool set moves while the
+     * process lives (it is empty until `ShortcutRefreshTrigger` has run at all, and changes whenever an
+     * app is installed or removed), and `ToolFederation` stopped deriving its snapshot in the
+     * constructor for exactly that reason. Held once, this map would have been the registry as of the
+     * first agent session ever shown, and every shortcut tool discovered after it would have rendered
+     * with no provenance line at all — a silent `DOC-ILM-2` miss on the one level whose effect goes to
+     * another app.
+     *
+     * Nothing walks the federation on the startup path either way: this is read only while an agent
+     * session is on screen.
      */
-    internal val agentToolProvenance: Map<ToolId, StepProvenance> by lazy {
-        toolRegistry.all().associate { it.id to StepProvenance(it.level, it.effect) }
-    }
+    internal val agentToolProvenance: Map<ToolId, StepProvenance>
+        get() = toolRegistry.all().associate { it.id to StepProvenance(it.level, it.effect) }
+
+    /**
+     * A1″ Task 8. The other half of a step's line, for a tool the surface has no sentence for.
+     *
+     * Read on access for the same reason as [agentToolProvenance], and from a port of its own because
+     * a name that came from data is not a `ToolDescriptor` field: the descriptor carries no user-facing
+     * copy by contract, and these strings belong to the apps that wrote them.
+     *
+     * This ViewModel deliberately does **not** join the two halves into one string. That join is copy,
+     * and the hard rule puts copy in the feature layer's resources, not in a ViewModel — see
+     * `AgentSessionPresentation.line`, which passes both halves to `launcher_agent_step_shortcut`.
+     */
+    internal val agentDynamicToolLabels: Map<ToolId, DynamicToolLabel>
+        get() = dynamicToolLabels.current()
 
     // Task 4 / A0: extracted to LauncherCommandSession — the whole command pipeline (see that class's
     // kdoc). [onNavigate] forwards to this class's own nav Channel, its one piece of retained state.

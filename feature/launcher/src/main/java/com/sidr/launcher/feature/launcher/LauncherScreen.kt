@@ -259,6 +259,7 @@ fun LauncherScreen(
                 AgentSessionSurface(
                     session = session,
                     toolProvenance = viewModel.agentToolProvenance,
+                    dynamicLabels = viewModel.agentDynamicToolLabels,
                     confirming = agentConfirming,
                     onConfirm = viewModel::confirmAgentStep,
                     onDeny = viewModel::denyAgentStep,

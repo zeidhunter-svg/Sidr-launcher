@@ -103,6 +103,7 @@ import com.sidr.launcher.domain.tool.ObservedFact
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
+import com.sidr.launcher.feature.launcher.agent.DynamicToolLabels
 import com.sidr.launcher.feature.launcher.agent.StepProvenance
 import java.time.Clock
 import java.time.Instant
@@ -290,6 +291,9 @@ class LauncherViewModelTest {
         cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
         agentSessionStore = fakeAgentStore,
         toolRegistry = agentRegistry,
+        // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
+        // and every step line renders exactly as it did before the dynamic arm existed.
+        dynamicToolLabels = DynamicToolLabels { emptyMap() },
         ioDispatcher = testDispatcher,
         applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
         savedStateHandle = savedStateHandle,
@@ -352,6 +356,9 @@ class LauncherViewModelTest {
             cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
             agentSessionStore = fakeAgentStore,
             toolRegistry = agentRegistry,
+            // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
+            // and every step line renders exactly as it did before the dynamic arm existed.
+            dynamicToolLabels = DynamicToolLabels { emptyMap() },
             ioDispatcher = testDispatcher,
             applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),
@@ -683,6 +690,9 @@ class LauncherViewModelTest {
             cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
             agentSessionStore = fakeAgentStore,
             toolRegistry = agentRegistry,
+            // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
+            // and every step line renders exactly as it did before the dynamic arm existed.
+            dynamicToolLabels = DynamicToolLabels { emptyMap() },
             ioDispatcher = testDispatcher,
             applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),
@@ -937,6 +947,9 @@ class LauncherViewModelTest {
             cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
             agentSessionStore = fakeAgentStore,
             toolRegistry = agentRegistry,
+            // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
+            // and every step line renders exactly as it did before the dynamic arm existed.
+            dynamicToolLabels = DynamicToolLabels { emptyMap() },
             ioDispatcher = testDispatcher,
             applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),

@@ -20,9 +20,9 @@ import java.io.File
  * and it is closed by construction rather than by a wider regex: the dispatcher holds *workers*, and
  * the map it holds them in is `ToolFederation`'s own.
  *
- * **The holder list is four.** A1′ Task 6 added `Tier0IntentToolWorker.kt` as the fourth registered
- * worker, beside the two this block shipped first (`SandboxToolWorker`, `SystemIntentToolWorker`) and
- * the dispatcher itself.
+ * **The holder list is five.** A1′ Task 6 added `Tier0IntentToolWorker.kt` beside the two this block
+ * shipped first (`SandboxToolWorker`, `SystemIntentToolWorker`) and the dispatcher itself; A1″ Task 7
+ * added `ShortcutToolWorker.kt` as adapter #3's worker.
  *
  * **Named, not closed:** these roots are the same five `ToolExecutorCallSiteGuardTest` walks, and
  * carry the same fail-open direction that guard's own KDoc names — in particular, `core/testing`'s
@@ -89,13 +89,14 @@ class ToolWorkerCallSiteGuardTest {
     }
 
     /**
-     * The four, and why each is legitimate: `SandboxToolWorker.kt` (the second consumer's worker),
+     * The five, and why each is legitimate: `SandboxToolWorker.kt` (the second consumer's worker),
+     * `ShortcutToolWorker.kt` (A1″ Task 7's app-shortcut worker, adapter #3),
      * `SystemIntentToolWorker.kt` (the Android worker), `Tier0IntentToolWorker.kt` (A1′ Task 6's
      * Android system-intent worker) and `ToolFederation.kt` (the adapter type itself,
      * `val worker: ToolWorker` on `ToolAdapter`).
      */
     @Test
-    fun `the declared holders of a ToolWorker are exactly the known four`() {
+    fun `the declared holders of a ToolWorker are exactly the known five`() {
         val files = productionSources()
             .filter { declaresToolWorker.containsMatchIn(stripComments(it.readText())) }
             .map { it.name }
@@ -107,6 +108,7 @@ class ToolWorkerCallSiteGuardTest {
                 "growth rule was bypassed. Found: $files",
             listOf(
                 "SandboxToolWorker.kt",
+                "ShortcutToolWorker.kt",
                 "SystemIntentToolWorker.kt",
                 "Tier0IntentToolWorker.kt",
                 "ToolFederation.kt",

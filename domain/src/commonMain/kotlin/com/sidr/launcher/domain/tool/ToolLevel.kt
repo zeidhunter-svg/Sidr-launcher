@@ -23,6 +23,21 @@ object ToolLevels {
 
     /** `:consumer:jvm`'s sandboxed file tools. */
     val SANDBOX = ToolLevel("sandbox")
+
+    /**
+     * Tools contributed by other apps' shortcuts, read through `LauncherApps`. The third Android
+     * level, and the first whose membership changes while the process lives — see `ToolFederation`'s
+     * [snapshot][ToolFederation] KDoc for why the federation stopped deriving its tool set once in
+     * the constructor.
+     *
+     * Two things this level does **not** say, both deliberate. It carries no name: a shortcut's label
+     * is authored by the declaring app, in whatever language that app chose, and it stays out of
+     * `:domain` entirely (`DynamicToolNames`, `:data:repository`). And it says nothing about whether
+     * the source is available: shortcut host access is the `android.app.role.HOME` runtime role, not
+     * an install-time permission, so an adapter at this level legitimately advertises **nothing** on a
+     * device where the user has chosen another launcher.
+     */
+    val APP_SHORTCUT = ToolLevel("app_shortcut")
 }
 
 /**

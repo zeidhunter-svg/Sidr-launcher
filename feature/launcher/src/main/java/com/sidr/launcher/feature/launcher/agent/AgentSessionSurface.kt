@@ -43,6 +43,7 @@ import com.sidr.launcher.feature.launcher.R
 internal fun AgentSessionSurface(
     session: AgentSession,
     toolProvenance: Map<ToolId, StepProvenance>,
+    dynamicLabels: Map<ToolId, DynamicToolLabel>,
     confirming: Boolean,
     onConfirm: (Int) -> Unit,
     onDeny: (Int) -> Unit,
@@ -70,7 +71,12 @@ internal fun AgentSessionSurface(
                     progress = (session.cursor.toFloat() / total).coerceIn(0f, 1f),
                 )
             }
-            AgentPlanSteps(session = session, subject = subject, toolProvenance = toolProvenance)
+            AgentPlanSteps(
+                session = session,
+                subject = subject,
+                toolProvenance = toolProvenance,
+                dynamicLabels = dynamicLabels,
+            )
             AgentProvenance(session = session)
         }
 
@@ -91,7 +97,7 @@ internal fun AgentSessionSurface(
                     title = title,
                     consequence = sidrString(
                         R.string.launcher_agent_gate_consequence,
-                        step.line(subject),
+                        step.line(subject, dynamicLabels),
                     ),
                     confirmLabel = sidrString(R.string.launcher_agent_gate_confirm),
                     onConfirm = { onConfirm(checkpoint.index) },
@@ -116,7 +122,12 @@ internal fun AgentSessionSurface(
             modifier = modifier,
             body = sidrString(R.string.launcher_agent_paused_body),
             provenance = {
-                AgentPlanSteps(session = session, subject = subject, toolProvenance = toolProvenance)
+                AgentPlanSteps(
+                    session = session,
+                    subject = subject,
+                    toolProvenance = toolProvenance,
+                    dynamicLabels = dynamicLabels,
+                )
                 AgentProvenance(session = session)
             },
             primaryAction = SidrSurfaceAction(
@@ -137,7 +148,12 @@ internal fun AgentSessionSurface(
                 modifier = modifier,
                 body = if (whole) null else sidrString(R.string.launcher_agent_completed_partial_body),
                 provenance = {
-                    AgentPlanSteps(session = session, subject = subject, toolProvenance = toolProvenance)
+                    AgentPlanSteps(
+                        session = session,
+                        subject = subject,
+                        toolProvenance = toolProvenance,
+                        dynamicLabels = dynamicLabels,
+                    )
                     AgentProvenance(session = session)
                 },
                 primaryAction = dismiss,
@@ -200,6 +216,7 @@ private fun AgentPlanSteps(
     session: AgentSession,
     subject: String,
     toolProvenance: Map<ToolId, StepProvenance>,
+    dynamicLabels: Map<ToolId, DynamicToolLabel>,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
         session.plan.steps.forEach { step ->
@@ -208,7 +225,7 @@ private fun AgentPlanSteps(
                 status = state.marker(),
                 label = sidrString(
                     R.string.launcher_agent_step_line,
-                    step.line(subject),
+                    step.line(subject, dynamicLabels),
                     state.word(),
                 ),
             )

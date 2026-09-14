@@ -99,7 +99,42 @@ internal fun toolLabelFor(id: ToolId): Int = when (id.value) {
 }
 
 /**
- * One localized line per step: the tool's own sentence, filled with the value that sentence is about.
+ * One dynamic tool's name, kept in the two halves it was published in: [qualifier] is the app that
+ * published the shortcut, [name] is what the shortcut does.
+ *
+ * **They are not pre-joined, and that is the hard rule rather than a style.** The join is punctuation
+ * between two nouns — copy — and copy is chosen by the feature layer from a resource, never
+ * concatenated by a ViewModel or by `:data:repository`. See [line], which passes both halves to
+ * `launcher_agent_step_shortcut` as two arguments.
+ *
+ * The two strings themselves are **not** copy: they were authored by another app, and the measured
+ * device shows them already localized and mixed (`ru` and `tr` labels side by side in one list —
+ * `docs/superpowers/plans/2026-09-12-a1-device-measurements.md`, row 11). They do not pass through
+ * `sidrString` and they are not ours to translate.
+ */
+data class DynamicToolLabel(val qualifier: String, val name: String)
+
+/**
+ * Port: the tools whose names are **data**.
+ *
+ * It is declared here, in `:feature:launcher`, and **not** consumed from `:data:repository`'s
+ * `DynamicToolNames` — there is no `feature -> data` edge (`:feature:launcher` depends on `:domain`,
+ * `:core:ui` and `:core:common` only), so the ViewModel cannot hold that port. `:app` sees both and
+ * projects one onto the other, exactly as it already does for nothing else in this file only because
+ * nothing else needed it: `StepProvenance` is the same shape of feature-layer mirror, filled by the
+ * ViewModel from a `:domain` port it *can* hold.
+ *
+ * A function rather than a value: unlike the registry A0 and A1′ wired, this set **moves while the
+ * process lives** — an app installed or removed changes it — so a snapshot taken once at graph
+ * construction would be wrong for the rest of the process.
+ */
+fun interface DynamicToolLabels {
+    fun current(): Map<ToolId, DynamicToolLabel>
+}
+
+/**
+ * One localized line per step: the tool's own sentence, filled with the value that sentence is about —
+ * or, for a tool whose name is **data**, that name.
  *
  * [subject] is the goal the plan is serving, which is the right filler only while the step's argument
  * IS the goal — true for every A0 step and false the moment a tool takes an argument of its own. A
@@ -114,11 +149,23 @@ internal fun toolLabelFor(id: ToolId): Int = when (id.value) {
  *
  * Both A0 steps are unaffected, which is why the rendering baseline holds: step 0's single literal IS
  * the goal query, and step 1 binds rather than repeats, so it has no literal at all.
+ *
+ * **[dynamicLabels] is empty for every authored tool** (A1″), so A0's and A1′'s lines are byte-for-byte
+ * what they were. A shortcut has no string resource to map to, and [toolLabelFor] would fall through to
+ * the generic line forever — a tool the user can reach and cannot identify. What IS ours is the sentence
+ * around the name, which is why the resource takes both halves as arguments rather than this function
+ * joining them.
  */
 @Composable
 @ReadOnlyComposable
-internal fun PlanStep.line(subject: String): String =
-    sidrString(toolLabelFor(invocation.id), invocation.literalSubject() ?: subject)
+internal fun PlanStep.line(subject: String, dynamicLabels: Map<ToolId, DynamicToolLabel>): String {
+    val dynamic = dynamicLabels[invocation.id]
+    return if (dynamic != null) {
+        sidrString(R.string.launcher_agent_step_shortcut, dynamic.qualifier, dynamic.name)
+    } else {
+        sidrString(toolLabelFor(invocation.id), invocation.literalSubject() ?: subject)
+    }
+}
 
 private fun ToolInvocation.literalSubject(): String? =
     args.values.filterIsInstance<ArgSource.Literal>().singleOrNull()?.value
@@ -154,6 +201,7 @@ internal fun provenanceLabelFor(level: ToolLevel, effect: ToolEffect): Int? {
     return when (level.value) {
         ToolLevels.IN_APP.value -> R.string.launcher_tool_level_in_app
         ToolLevels.SYSTEM_INTENT.value -> R.string.launcher_tool_level_system_intent
+        ToolLevels.APP_SHORTCUT.value -> R.string.launcher_tool_level_app_shortcut
         else -> R.string.launcher_tool_level_unknown
     }
 }

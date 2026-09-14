@@ -89,6 +89,7 @@
     <string name="launcher_agent_step_timer">%1$s için zamanlayıcı kur</string>
     <string name="launcher_agent_step_settings">Android ayarlarını aç</string>
     <string name="launcher_agent_step_generic">%1$s için bu adımı çalıştır</string>
+    <string name="launcher_agent_step_shortcut">“%1$s — %2$s” aç</string>
     <string name="launcher_agent_gate_title">Bu adımı onaylayın</string>
     <string name="launcher_agent_gate_consequence">Sidr sırada şunu yapacak: %1$s. Siz onaylamadan hiçbir şey çalışmaz.</string>
     <string name="launcher_agent_gate_confirm">Onayla</string>

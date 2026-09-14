@@ -130,6 +130,13 @@ class AgentSessionSurfaceProvenanceTest {
                 AgentSessionSurface(
                     session = session,
                     toolProvenance = provenance,
+                    // A1″ Task 8. Empty on purpose: every tool in this file is an AUTHORED one, and an
+                    // empty map is what makes this file's byte-identity baseline still mean what it
+                    // did — the dynamic arm of `line` is unreachable for a tool that has no data name,
+                    // so A0's and A1′'s rendered lines are unchanged. The populated case is held one
+                    // layer out, by `LauncherScreenAgentProvenanceTest`, which is where the map is
+                    // actually supplied from.
+                    dynamicLabels = emptyMap(),
                     confirming = false,
                     onConfirm = {},
                     onDeny = {},

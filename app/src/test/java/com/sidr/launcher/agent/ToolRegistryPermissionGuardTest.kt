@@ -4,6 +4,10 @@ import com.sidr.launcher.data.repository.action.DefaultActionCatalog
 import com.sidr.launcher.data.repository.agent.SystemIntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0ToolIds
+import com.sidr.launcher.data.repository.agent.shortcut.AppShortcut
+import com.sidr.launcher.data.repository.agent.shortcut.ShortcutCatalog
+import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolIds
+import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolSource
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolAdapter
 import com.sidr.launcher.domain.tool.ToolFederation
@@ -12,6 +16,8 @@ import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.tool.ToolWorker
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -46,6 +52,28 @@ class ToolRegistryPermissionGuardTest {
         Tier0ToolIds.OPEN_SYSTEM_SETTINGS to emptyList(),
     )
 
+    /**
+     * **The `app_shortcut` family needs no manifest permission, and that is a measured decision rather
+     * than an omission.** A shortcut tool's id is device-dependent, so it can carry no per-id row; it is
+     * excluded from the totality test above by its `shortcut:` prefix and answered here instead.
+     *
+     * The list is empty because shortcut host access **is not governed by a manifest permission at
+     * all**: it is the `android.app.role.HOME` runtime role, held by exactly one package at a time and
+     * assigned by the user. `docs/superpowers/plans/2026-09-12-a1-device-measurements.md` §2 is the
+     * evidence — no permission grant moved the answer (rows 3 and 4 could not even give the role from
+     * the shell), the role flip moved it completely (rows 1 → 6), and row 10 shows `startShortcut`
+     * needing nothing `getShortcuts` did not. This is the project's first tool source whose
+     * availability is a role rather than an install-time permission.
+     *
+     * **Nothing here answers "is this source available", and nothing should be added that pretends
+     * to.** This class checks that a registered tool's stated permissions are declared; a runtime role
+     * is neither stated in a manifest nor answerable from one. The adapter answers it at the only place
+     * it can be answered — at read time, by degrading to an empty tool set
+     * (`AndroidShortcutQuery`/`ShortcutCatalog`), so a tool whose role is absent is never registered in
+     * the first place and this guard has nothing to be wrong about.
+     */
+    private val shortcutToolPermissions: List<String> = emptyList()
+
     private object NoopWorker : ToolWorker {
         override suspend fun invoke(invocation: ResolvedInvocation): ToolResult =
             ToolResult.Failed(com.sidr.launcher.domain.intent.CommandFailure.Generic)
@@ -55,8 +83,31 @@ class ToolRegistryPermissionGuardTest {
         listOf(
             ToolAdapter(ToolLevels.IN_APP, SystemIntentToolSource(DefaultActionCatalog()), NoopWorker),
             ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(), NoopWorker),
+            ToolAdapter(ToolLevels.APP_SHORTCUT, shortcutSource(), NoopWorker),
         ),
     )
+
+    /**
+     * The third adapter, over a **non-empty** fake snapshot — an empty one would let every assertion in
+     * this class skip it in silence, which is the vacuity this file already argues against twice.
+     */
+    private fun shortcutSource(): ShortcutToolSource {
+        val catalog = ShortcutCatalog(
+            query = {
+                listOf(
+                    AppShortcut(
+                        packageName = "com.example.chat",
+                        shortcutId = "new_message",
+                        appLabel = "Example Chat",
+                        shortcutLabel = "New message",
+                    ),
+                )
+            },
+            ioDispatcher = Dispatchers.Unconfined,
+        )
+        runBlocking { catalog.refresh() }
+        return ShortcutToolSource(catalog)
+    }
 
     private fun declaredPermissions(): Set<String> {
         assertTrue("missing app manifest: ${manifestFile.canonicalPath}", manifestFile.isFile)
@@ -70,7 +121,9 @@ class ToolRegistryPermissionGuardTest {
     @Test
     fun `every registered tool has a permission row`() {
         val registered = productionFederation().registry.all().map { it.id }
-        val unrowed = registered.filterNot { it in toolPermissions }
+        val unrowed = registered
+            .filterNot { it.value.startsWith(ShortcutToolIds.PREFIX) }
+            .filterNot { it in toolPermissions }
         assertEquals(
             "A registered tool with no row here can ship needing a permission nobody declared — the " +
                 "2026-09-05 defect exactly. Add a row (use emptyList() to mean 'needs none'): " +
@@ -86,7 +139,12 @@ class ToolRegistryPermissionGuardTest {
         val registered = productionFederation().registry.all().map { it.id }.toSet()
         val missing = toolPermissions
             .filterKeys { it in registered }
-            .flatMap { (id, needed) -> needed.filterNot { it in declared }.map { id.value to it } }
+            .flatMap { (id, needed) -> needed.filterNot { it in declared }.map { id.value to it } } +
+            registered
+                .filter { it.value.startsWith(ShortcutToolIds.PREFIX) }
+                .flatMap { id ->
+                    shortcutToolPermissions.filterNot { it in declared }.map { id.value to it }
+                }
         assertEquals(
             "Registered, reachable, and refused by ActivityTaskManager at every invocation: $missing",
             emptyList<Pair<String, String>>(),

@@ -89,6 +89,7 @@
     <string name="launcher_agent_step_timer">Поставить таймер на %1$s</string>
     <string name="launcher_agent_step_settings">Открыть настройки Android</string>
     <string name="launcher_agent_step_generic">Выполнить шаг для %1$s</string>
+    <string name="launcher_agent_step_shortcut">Открыть «%1$s — %2$s»</string>
     <string name="launcher_agent_gate_title">Подтвердите этот шаг</string>
     <string name="launcher_agent_gate_consequence">Следующее действие Sidr: %1$s. Ничего не выполнится, пока вы не подтвердите.</string>
     <string name="launcher_agent_gate_confirm">Подтвердить</string>

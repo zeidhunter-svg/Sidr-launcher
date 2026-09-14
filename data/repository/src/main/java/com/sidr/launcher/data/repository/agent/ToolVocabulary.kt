@@ -114,6 +114,21 @@ class ToolVocabulary internal constructor(val entries: List<Entry>) {
     }
 
     /**
+     * True when more than one entry claims [text] — the same ambiguity [match] already declines by
+     * returning `null`. Exposed so a caller that layers another source underneath this vocabulary (in
+     * particular `ToolSelector`) can tell that refusal apart from "nothing of ours claimed this text"
+     * and decline outright rather than falling through to a lower-priority candidate: without this, an
+     * authored ambiguity would be tie-broken by whatever a third-party label happened to claim, which
+     * inverts the priority `ToolSelector`'s own KDoc states. It answers only that one question — it does
+     * not say which entries collided, and it changes nothing about what [match] itself returns.
+     */
+    fun isAmbiguous(text: String): Boolean {
+        val normalized = CommandNormalizer.normalize(text)
+        if (normalized.isEmpty()) return false
+        return entries.count { entry -> entry.matchIn(normalized) != null } > 1
+    }
+
+    /**
      * A trigger must end on a word boundary — the text either **is** the trigger or continues after a
      * space. A bare `startsWith` reads "timer format" as a timer of duration "mat": recognised, planned,
      * and only failing three layers down in the worker's duration parse. `RuleBasedIntentMatcher`

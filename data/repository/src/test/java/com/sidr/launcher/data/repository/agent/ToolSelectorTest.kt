@@ -64,10 +64,13 @@ class ToolSelectorTest {
     }
 
     /**
-     * Fix round 1, IMPORTANT 2. The blank-name-or-qualifier test above supplies both blank, so the
-     * `qualifierTokens.isEmpty()` half of the guard short-circuits and the load-bearing half —
-     * `normalizedName.isBlank()` — is never actually exercised. This is the case that bites: a qualifier
-     * present but a blank shortcut name.
+     * Fix round 1, IMPORTANT 2 — corrected in fix round 2, item 1. The original KDoc here called
+     * `normalizedName.isBlank()` "the load-bearing half" of a guard that no longer exists: that was true
+     * only of the token-set implementation this class started with. Fix round 1's IMPORTANT 3 replaced
+     * that implementation with a contiguity check in the same round, and contiguity rejects a blank name
+     * on its own, for every possible input — the guard disjunct has since been removed as dead code (see
+     * `DynamicToolName.matches`'s KDoc). This test therefore pins the **behaviour** — a blank shortcut
+     * name never selects, whatever the qualifier — not any particular line of the implementation.
      */
     @Test
     fun `a dynamic name with a blank name but a real qualifier can never match`() {
@@ -98,6 +101,22 @@ class ToolSelectorTest {
             dynamicNames = namesOf(DynamicToolName(ToolId("shortcut:com.a/new_chat"), "Telegram", "new message")),
         )
         assertNull(selector.select("message new telegram"))
+    }
+
+    /**
+     * Fix round 2, item 2. Contiguity requires the name to appear on **word boundaries**, not merely as
+     * a substring — a plain `String.contains` would still find "new message" inside "renew messages"
+     * (via "re**new** **messages**"), which is exactly the kind of false positive that fires an effect
+     * for a reason no user could see. Mutation-verified: replacing the padded contiguity check with a raw
+     * `normalizedText.contains(normalizedName)` turns this test red (see the fix-round-2 report).
+     */
+    @Test
+    fun `the shortcut name must occur as a whole word run, not merely as a substring`() {
+        val selector = ToolSelector(
+            vocabulary = ToolVocabulary(),
+            dynamicNames = namesOf(DynamicToolName(ToolId("shortcut:com.a/new_chat"), "Telegram", "new message")),
+        )
+        assertNull(selector.select("telegram renew messages"))
     }
 
     /**

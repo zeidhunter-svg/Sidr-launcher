@@ -18,6 +18,16 @@ import javax.inject.Inject
  *     still an authored outcome, and it must decline rather than let a dynamic name break the tie.
  *     [ToolVocabulary.isAmbiguous] exists so this class can tell that refusal apart from "nothing of
  *     ours claimed this text" and stop there rather than falling through.
+ *
+ *     **What that check does not cover, named rather than implied fixed.** `ToolVocabulary.match`
+ *     returns `null` for a *third* reason besides "nothing claimed it" and "two entries claimed it": one
+ *     entry claimed a prefix and then **refused** the rest — a leftover-words decline, the
+ *     `"system settings for my car"` case `ToolVocabulary.Entry.toMatch`'s own KDoc argues for.
+ *     [ToolVocabulary.isAmbiguous] is `false` there too (exactly one entry produced a hit before its own
+ *     refusal), so such a text still falls through to the dynamic branch and may select a third-party
+ *     shortcut instead of being declined outright the way a genuine ambiguity now is. This is the same
+ *     leftover-word trade already put to the owner alongside this class's own contiguity limitation
+ *     below, not a new defect — left named, not fixed.
  *  2. **A dynamic candidate must name its app.** "telegram new message" matches; bare "new message"
  *     does not, even with exactly one candidate. A shortcut launch performs an effect, so a false
  *     positive must be structurally unlikely, not statistically unlikely.
@@ -85,11 +95,21 @@ class ToolSelector @Inject constructor(
      * test. The shortcut's own [name] may not: it must appear as a contiguous, word-bounded run inside
      * [normalizedText] — see the class KDoc for why a token-set test is not good enough here, and for
      * the limitation this stricter rule does not close.
+     *
+     * **A blank [name] needs no guard of its own.** `normalizedText` reaches this function already
+     * normalized and non-blank ([select] returns before calling it otherwise), so it never contains a
+     * double space; the contiguity check below therefore already rejects an empty `normalizedName` — its
+     * padded needle is two spaces, which a normalized command can never contain — for every possible
+     * input. Fix round 2 removed a `normalizedName.isBlank()` disjunct that used to sit here for exactly
+     * that reason: it was live under the token-set implementation this method started with, and became
+     * dead the moment contiguity replaced it. `qualifierTokens.isEmpty()` below is separately redundant
+     * with the final `any { it in tokens }` (`any {}` on an empty collection is already `false`) — noted
+     * in the fix-round-1 review and left in place rather than removed there, unchanged again here.
      */
     private fun DynamicToolName.matches(normalizedText: String, tokens: Set<String>): Boolean {
         val qualifierTokens = CommandNormalizer.normalize(qualifier).split(' ').filter { it.isNotBlank() }
         val normalizedName = CommandNormalizer.normalize(name)
-        if (qualifierTokens.isEmpty() || normalizedName.isBlank()) return false
+        if (qualifierTokens.isEmpty()) return false
         if (!" $normalizedText ".contains(" $normalizedName ")) return false
         return qualifierTokens.any { it in tokens }
     }

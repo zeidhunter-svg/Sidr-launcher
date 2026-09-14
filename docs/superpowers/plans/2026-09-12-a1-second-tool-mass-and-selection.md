@@ -1982,9 +1982,18 @@ must not be trusted to a count:
    trust four green layers — note F4 above, which says exactly why a per-module suite is not that test.
    **(b)** only then the full block gate, which is Phase 1's boundary: compare against **1323 plus
    Phase 1's additions**, never 1321.
-   Two smaller debts are open and neither belongs to Task 9: the deferred minor on row 12's prose in the
-   measurement file, and F1 above, which is the one finding of the prover round that names a guard still
-   weaker than the rule it serves.
+   ~~Two smaller debts are open and neither belongs to Task 9.~~ **Both closed 2026-09-15, documentation
+   only, `:app` held at 59/0 and the `.kt` diff verified comment-only by filtering every changed line:**
+   row 12's prose in the measurement file now separates what was *observed* from what was *read* — the
+   `LauncherApps` half is re-grounded as an **inference from rows 7/8** (205 shortcuts from 65 packages
+   returned while `<queries>` declares only a MAIN/LAUNCHER intent, which that declaration alone cannot
+   explain), and the `PackageManager` half is marked unmeasured, since nothing in that file ever called
+   it; and F1 is written into `DoctrineGuardTest`'s own KDoc, moving the limitation from *stated* to
+   *measured* — M13 named, `:app` green at 59/0 while every shortcut step rendered the generic line, the
+   property located in `LauncherScreenAgentProvenanceTest`, and the reason it cannot be closed at `:app`
+   level today (`line`/`toolLabelFor` are `internal` to `:feature:launcher`, not merely unread). The
+   authored-tool branch is explicitly **not** weakened by F1, so the bullet cannot be misread as "this
+   test proves nothing".
 
 **This section has now lagged twice in a row, both times by exactly the same mechanism: it was edited
 in a commit of its own, separately from the task it describes.** It is therefore updated in the *same*

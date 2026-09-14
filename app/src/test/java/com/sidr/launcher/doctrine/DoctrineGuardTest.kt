@@ -407,20 +407,34 @@ class DoctrineGuardTest {
      *    stranded in `AgentSessionPresentation.kt` no longer matches anything `productionFederation()`
      *    actually returns, and the *new* value appears nowhere in that file — this test goes red.
      *  - **A tool whose id starts with `ShortcutToolIds.PREFIX` is answered by a different rule** (A1″
- *    Task 8), because its name is **data**: it was authored by another app, in that app's language,
- *    and no string resource exists or should. The rule is written as a **positive requirement rather
- *    than an exemption** — such a tool must appear in `DynamicToolNames.names()` with both halves of
- *    its name non-blank, and the surface must carry a sentence to put that name into
- *    (`launcher_agent_step_shortcut`). A dynamic tool with no name renders as exactly the same generic
- *    line this rule exists to catch; filtering it out instead of requiring the name would have made
- *    the guard blind to the whole third adapter.
- *  - **What it cannot see**, named rather than implied absent: the check is `String.contains`, not
+     *    Task 8), because its name is **data**: it was authored by another app, in that app's language,
+     *    and no string resource exists or should. The rule is written as a **positive requirement rather
+     *    than an exemption** — such a tool must appear in `DynamicToolNames.names()` with both halves of
+     *    its name non-blank, and the surface must carry a sentence to put that name into
+     *    (`launcher_agent_step_shortcut`). A dynamic tool with no name renders as exactly the same generic
+     *    line this rule exists to catch; filtering it out instead of requiring the name would have made
+     *    the guard blind to the whole third adapter.
+     *  - **What it cannot see**, named rather than implied absent: the check is `String.contains`, not
      *    "is a `when` arm" — a symbol or literal appearing anywhere else in the file (a different
      *    function, or prose a looser comment-stripper would have left behind) would also satisfy it, and
      *    a substring match cannot distinguish `"set_timer"` from a hypothetical `"set_timer_v2"`. Neither
      *    is a real risk against today's small, single-purpose file, but both are named rather than
-     *    implied absent — a sound guarantee needs `toolLabelFor` itself reachable from `:app`, which it
-     *    is not today.
+     *    implied absent.
+     *  - **For the dynamic-label branch specifically, that blindness is measured, not hypothetical**
+     *    (`docs/superpowers/plans/2026-09-12-a1-mutation-round-adapter-3.md`, finding F1, mutation M13):
+     *    making `AgentSessionPresentation`'s `PlanStep.line` ignore `dynamicLabels` entirely — so every
+     *    shortcut step renders the generic line, exactly the defect this bullet exists to catch — left
+     *    `:app` green at 59/0. The `launcher_agent_step_shortcut` resource id is still present in the
+     *    file, in a branch the mutated code can no longer reach, and `String.contains` cannot tell the
+     *    difference. The authored-tool branch above is not weakened by this finding: M16 (a
+     *    registered-but-unnamed dynamic tool) and the shared floor (M1/M2/M3) do turn this test red, so
+     *    the blindness is specific to the dynamic-label check, not to the whole test. For that branch the
+     *    property **is** held — but only in `:feature:launcher`, by
+     *    `LauncherScreenAgentProvenanceTest > a shortcut tool renders its own name and its app_shortcut
+     *    provenance`, which asserts on the rendered text and went red under M13. A sound `:app`-level
+     *    guarantee for the dynamic-label branch needs `line`/`toolLabelFor` themselves reachable from
+     *    `:app` — they are `internal` to `:feature:launcher` today, not merely unread — or this
+     *    assertion relocated beside that behavioural test.
      */
     @Test
     fun `every tool in the production federation has a non-generic label on the surface`() {

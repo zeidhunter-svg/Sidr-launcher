@@ -44,15 +44,28 @@ discrepancy is explained rather than mysterious.
 | 12 | `PackageManager.getApplicationInfo(pkg, 0)` for a shortcut-contributing package with no `LAUNCHER` activity | Sidr **is** default home | `<не измерено>` | — | — |
 
 **Row 12 is deliberately empty, per this file's own rule that an unmeasured row stays empty and says
-so.** `LauncherApps` is exempt from Android 11+ package-visibility filtering for the HOME-role holder;
-`PackageManager` carries no such exemption, and `AndroidManifest.xml`'s `<queries>` block declares only a
-MAIN/LAUNCHER intent, which does not necessarily cover every package that publishes a shortcut. No
-device was attached this session (`adb devices -l` empty) to observe whether `getApplicationInfo` throws
-`NameNotFoundException` for such a package, so the row is left empty rather than filled from either
-platform documentation or the `<queries>` declaration's apparent coverage. What depends on it: a shortcut
-tool's `appLabel` (`AndroidShortcutQuery`, which falls back to the raw package name on that exception),
-and, through it, the user-visible qualifier Task 7 renders. Addressed to the next device round with
-`adb` access.
+so.** The reasoning around it splits into two pieces with very different standing, and blurring them
+together is exactly the failure mode this file exists to prevent.
+
+**Inference, from this file's own rows:** rows 7 and 8 record **205 shortcuts from 65 distinct
+packages** returned through `getShortcuts`, while `AndroidManifest.xml`'s `<queries>` block declares
+only a MAIN/LAUNCHER intent — nowhere near 65 packages' worth of visibility on that declaration alone.
+That gap is what grounds "`LauncherApps` is not filtered for the HOME-role holder the way an ordinary
+caller is" as an **inference from rows 7/8**, not as a fact read anywhere else.
+
+**Unmeasured:** nothing in this file called `PackageManager` at all. Whether it carries the same
+exemption, and whether the `<queries>` block would otherwise cover every package that publishes a
+shortcut, is not observed here — asserting either would be recall or platform-documentation reasoning,
+exactly the kind the preamble rules out, so it is left unmeasured rather than asserted. This asymmetry
+— one half grounded in this file's own measured rows, the other resting on nothing measured here — is
+*why* row 12 exists as an open row, not a footnote to it.
+
+No device was attached this session (`adb devices -l` empty) to observe whether `getApplicationInfo`
+throws `NameNotFoundException` for a shortcut-contributing package with no `LAUNCHER` activity, so the
+row is left empty rather than filled from either platform documentation or the `<queries>` declaration's
+apparent coverage. What depends on it: a shortcut tool's `appLabel` (`AndroidShortcutQuery`, which falls
+back to the raw package name on that exception), and, through it, the user-visible qualifier Task 7
+renders. Addressed to the next device round with `adb` access.
 
 **Row 5 was a bound, and it behaved like one.** `dumpsys` reported 216 across 73 packages where
 `getShortcuts` returns 205 across 65 — close, but not equal, because the service holds state the

@@ -1867,7 +1867,34 @@ must not be trusted to a count:
    space (`ToolAdapter (…)`). Each time a third adapter declaring an `EXTERNAL`/`CONFIRM`/`DURABLE`
    tool with no risk pin and no surface label reached `provideToolFederation` with all 54 `:app` tests
    green. Both spellings are now counted, probed against six.
-3. **← resume here. Task 4, and Phase 1 from there.**
+3. ~~Task 4 — per-call derivation in `ToolFederation`.~~ **Done** — `cfe4985`, with one declared
+   deviation from this plan's own listing: the listing read `adapter.registry.all()` **twice** per
+   adapter, and the implementer collapsed that to one read per adapter with both maps built from it.
+   Retro-verified 2026-09-14 against the tree rather than against the commit message, because Tasks 4
+   and 5 have no report and no review trace in the ledger, and in this project a commit without a
+   report is a reason to check *harder*: the deviation is a strict improvement (under a moving source
+   the two reads can disagree, dropping a tool into `byId` but not `descriptors` — the very
+   two-faces-disagree gap the class exists to close), and the `byId[it.id] === adapter` collision
+   filter is byte-for-byte what the pre-Task-4 constructor used, so first-adapter-wins was not
+   silently altered. **Named gap:** no test exercises the defect the deviation fixes, because with one
+   read per adapter it is unobservable from outside. The deviation is argued, not proved.
+4. ~~Task 5 — measure `LauncherApps` on the SM-A325F.~~ **Done** — `861e9d4`, `0b2fe06`. Eleven rows,
+   both HOME-role states; `docs/superpowers/plans/2026-09-12-a1-device-measurements.md` is now the
+   block's only admissible Android source. Two declared deviations, both accepted: the probe is
+   committed rather than thrown away (costing `:app` a `testInstrumentationRunner` and two androidTest
+   dependencies), and `0b2fe06` corrects Task 4's `snapshot()` KDoc cost line from an assumed ~150
+   descriptors to the measured **205 shortcuts from 65 packages**.
+5. **← resume here. Task 6, and Phase 1 from there.**
+
+**This section has now lagged twice in a row, both times by exactly the same mechanism: it was edited
+in a commit of its own, separately from the task it describes.** It is therefore updated in the *same*
+commit as the task from here on, and a session that finds it disagreeing with
+`git log --oneline 181628a..HEAD` must believe git.
+
+**The number a fresh gate compares against is 1323, not 1321.** 1321 was measured at `d391350`, which
+is *before* Task 4; Task 4 added two `:domain:jvmTest` tests. `CLAUDE.md` and `current-status.md` still
+say 1321 and are correct about the commit they name — they are simply older than the tree. Phase 1's
+gate is 1323 plus whatever Tasks 6-9 add.
 
 ### Rulings made during execution, and what each costs if wrong
 

@@ -995,7 +995,7 @@ git commit -m "feat(agentic-5.5/A1\"): a shortcut snapshot that degrades to empt
   - `object ShortcutToolIds { const val PREFIX = "shortcut:"; fun of(packageName: String, shortcutId: String): ToolId; fun parse(id: ToolId): Pair<String, String>? }`
   - `class ShortcutToolSource : ToolRegistry, DynamicToolNames`
   - `class ShortcutToolWorker : ToolWorker`
-  - `interface DynamicToolNames { fun all(): List<DynamicToolName> }` and
+  - `interface DynamicToolNames { fun names(): List<DynamicToolName> }` and
     `data class DynamicToolName(val id: ToolId, val qualifier: String, val name: String)`
 
 - [ ] **Step 1: Write the failing tests**
@@ -1032,12 +1032,16 @@ fun `no shortcut id can collide with an authored id`() {
     assertTrue(authored.none { it.value.startsWith(ShortcutToolIds.PREFIX) })
 }
 
+// NOTE (pre-flight, 2026-09-14): this test reads `names()`, not `all()`. Three places in an earlier
+// revision of this task spelled the port `all()`, which CANNOT COMPILE on a class that also implements
+// `ToolRegistry` — the prose below Step 4 already ruled for `names()` and gave that reason, and Tasks
+// 8/10/11 are written against it. All three spellings are corrected; do not reintroduce them.
 @Test
 fun `names carry the app as qualifier and the shortcut as name`() {
     val source = ShortcutToolSource(fakeCatalogOf(shortcut("com.a", "new_chat", "Telegram", "New message")))
     assertEquals(
         listOf(DynamicToolName(ToolId("shortcut:com.a/new_chat"), "Telegram", "New message")),
-        source.all(),
+        source.names(),
     )
 }
 
@@ -1121,7 +1125,7 @@ object ShortcutToolIds {
 data class DynamicToolName(val id: ToolId, val qualifier: String, val name: String)
 
 interface DynamicToolNames {
-    fun all(): List<DynamicToolName>
+    fun names(): List<DynamicToolName>
 }
 ```
 
@@ -1884,7 +1888,22 @@ must not be trusted to a count:
    committed rather than thrown away (costing `:app` a `testInstrumentationRunner` and two androidTest
    dependencies), and `0b2fe06` corrects Task 4's `snapshot()` KDoc cost line from an assumed ~150
    descriptors to the measured **205 shortcuts from 65 packages**.
-5. **← resume here. Task 6, and Phase 1 from there.**
+5. ~~Task 6 — `ShortcutCatalog`, the snapshot and its explicit refresh.~~ **Done** — `c6b8c46`, quality
+   round `12f07ec`. Review: spec APPROVE, quality FIX REQUIRED → all seven findings ADDRESSED, no new
+   breakage. `:data:repository` 275 tests / 0 failures. Three rulings are baked into the code and are
+   **not** what this plan's Task 6 listing says, so read the tree rather than the listing: the Android
+   query gates on `hasShortcutHostPermission()` before `getShortcuts` (measurement rows 1/2/6 — the
+   listing gated on nothing and would have crashed on every user's first run); the dispatcher parameter
+   carries `@IoDispatcher`, which the listing omitted against convention in ten existing files; and
+   `AndroidShortcutQuery` is a third production file the listing's Files header did not name but its
+   Step 3 body specified in full.
+   **One premise was closed by naming it rather than measuring it:** `PackageManager.getApplicationInfo`
+   is what supplies a shortcut's `appLabel`, and `PackageManager` — unlike `LauncherApps` — is not known
+   to be exempt from package-visibility filtering for the HOME-role holder. No device was attached, so
+   it is **row 12 of the measurement file, deliberately `<не измерено>`**, addressed to the next device
+   round. The fallback is fail-safe (raw package name), so the cost is a cosmetic qualifier, not a dead
+   tool.
+6. **← resume here. Task 7, and Phase 1 from there.**
 
 **This section has now lagged twice in a row, both times by exactly the same mechanism: it was edited
 in a commit of its own, separately from the task it describes.** It is therefore updated in the *same*

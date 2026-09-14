@@ -121,7 +121,9 @@ class FreeTextGoalEndToEndTest {
     ).registry
 
     /** Exactly what `AgentProvidesModule.providePlanner` builds. */
-    private val planner = CompositePlanner(listOf(TemplatePlanner(), ToolMatchPlanner(ToolVocabulary())))
+    private val planner = CompositePlanner(
+        listOf(TemplatePlanner(), ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()))),
+    )
 
     private val ids = object : AgentSessionIdFactory {
         private var n = 0

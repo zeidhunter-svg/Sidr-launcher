@@ -27,18 +27,24 @@ import javax.inject.Inject
  * plan time, and `AgentExecutor` gates on `maxOf(step.risk, registry.find(...)?.risk ?: DANGEROUS)`
  * (A0 finding F2), so a tool that becomes riskier between planning and execution still stops.
  *
- * **It recognises; it does not validate the value.** [ToolVocabulary] hands the remainder over
- * **normalized** — lower-cased and whitespace-collapsed, never the raw span; see its KDoc for the
- * free-text limitation that implies — and this planner only checks that a required argument is
- * *present*. Whether "10 minutes" is
+ * **It recognises; it does not validate the value.** [ToolSelector] hands the remainder over
+ * **normalized** — lower-cased and whitespace-collapsed, never the raw span; see `ToolVocabulary`'s
+ * KDoc for the free-text limitation that implies — and this planner only checks that a required
+ * argument is *present*. Whether "10 minutes" is
  * a readable duration is the worker's question, and a tool whose value cannot be read fails closed
  * there (`Tier0IntentToolWorker.parseSeconds`). The consequence, named rather than implied: a goal like
  * "timer for the meeting" produces a plan that fails at the worker instead of falling through to the
  * model. Closing that needs an argument type richer than `ArgType.STRING` — the A0.5 finding spec
  * §10.4 already records — not a second parser here.
+ *
+ * **Selection now also covers third-party names.** [ToolSelector] (Task 10) chooses between our
+ * authored, localized vocabulary and a dynamic `app_shortcut` name, declining rather than guessing when
+ * neither or both claim the text. This planner deliberately learns nothing about that distinction: a
+ * [ToolMatch] arrives the same shape whichever source produced it, and the one-step plan built from it
+ * cannot say which kind of tool it names.
  */
 class ToolMatchPlanner @Inject constructor(
-    private val vocabulary: ToolVocabulary,
+    private val selector: ToolSelector,
 ) : Planner {
 
     override suspend fun plan(goal: AgentGoal, registry: ToolRegistry): PlanningResult {
@@ -48,7 +54,7 @@ class ToolMatchPlanner @Inject constructor(
             is GoalShape.AppNotInstalled -> return PlanningResult.NoPlan
         }
 
-        val match = vocabulary.match(text) ?: return PlanningResult.NoPlan
+        val match = selector.select(text) ?: return PlanningResult.NoPlan
         val descriptor = registry.find(match.id) ?: return PlanningResult.NoPlan
 
         // Every required argument must have a non-blank value. Nothing is defaulted or substituted:

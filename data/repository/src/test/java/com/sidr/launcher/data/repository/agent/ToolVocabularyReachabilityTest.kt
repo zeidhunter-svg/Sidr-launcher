@@ -3,6 +3,7 @@ package com.sidr.launcher.data.repository.agent
 import com.sidr.launcher.data.repository.intent.RuleBasedIntentMatcher
 import com.sidr.launcher.domain.intent.CommandNormalizer
 import com.sidr.launcher.domain.intent.LauncherIntent
+import com.sidr.launcher.domain.tool.ToolId
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertTrue
@@ -89,6 +90,32 @@ class ToolVocabularyReachabilityTest {
         }
 
         assertTrue(failures.joinToString("\n"), failures.isEmpty())
+    }
+
+    @Test
+    fun `an authored trigger cannot be shadowed by a third-party shortcut name`() {
+        val selector = ToolSelector(
+            vocabulary = ToolVocabulary(),
+            dynamicNames = namesOf(DynamicToolName(ToolId("shortcut:com.x/s"), "Timer", "set timer for")),
+        )
+        val failures = mutableListOf<String>()
+
+        guardedEntries().forEach { entry ->
+            entry.prefixByLocale.values.flatten().forEach { form ->
+                val command = if (entry.argName == null) form else "$form $SAMPLE_ARGUMENT"
+                if (selector.select(command)?.id != entry.id) failures += "prefix: $command"
+            }
+            entry.suffixByLocale.values.flatten().forEach { form ->
+                val command = if (entry.argName == null) form else "$SAMPLE_ARGUMENT $form"
+                if (selector.select(command)?.id != entry.id) failures += "suffix: $command"
+            }
+        }
+
+        assertTrue(
+            "an authored trigger stopped recognising its own sample once a shortcut claimed it:\n" +
+                failures.joinToString("\n"),
+            failures.isEmpty(),
+        )
     }
 
     /**

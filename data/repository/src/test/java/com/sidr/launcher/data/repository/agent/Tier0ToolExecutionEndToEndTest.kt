@@ -132,7 +132,9 @@ class Tier0ToolExecutionEndToEndTest {
     private suspend fun routeAndRun(command: String, launcher: IntentLauncher): Pair<CommandOutcome, AgentSession?> {
         val federation = federation(launcher)
         val start = StartAgentSessionUseCase(
-            planner = CompositePlanner(listOf(TemplatePlanner(), ToolMatchPlanner(ToolVocabulary()))),
+            planner = CompositePlanner(
+                listOf(TemplatePlanner(), ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()))),
+            ),
             store = store,
             ids = ids,
             registry = federation.registry,

@@ -35,7 +35,7 @@ private object NoopWorker : ToolWorker {
 @OptIn(ExperimentalCoroutinesApi::class)
 class ToolMatchPlannerTest {
 
-    private val planner = ToolMatchPlanner(ToolVocabulary())
+    private val planner = ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()))
 
     /** The production shape: the Tier-0 source seen through the federation, not directly. */
     private val registry = ToolFederation(

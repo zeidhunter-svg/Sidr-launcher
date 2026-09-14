@@ -1941,13 +1941,50 @@ must not be trusted to a count:
    **Fix round 1 (2026-09-14)** addressed all fourteen review findings and took `:app` 54 → **59**,
    `:data:repository` 290 → **296**, `:feature:launcher` 190 → **191**; **fix round 2** was prose-only
    and moved no count. Neither is the mutation round: item (a) below still stands.
-7. **← resume here.** In this order, and do not reorder them:
-   **(a)** a `mutation-prover` round on `f8d0051`'s guard changes — at minimum: the shortcut source
-   dropped from `productionAdapters()` must go RED (it is the false GREEN above); a shortcut tool's
-   declared risk flipped `SAFE → CONFIRM` must go RED; the `_app_shortcut` level resource removed must
-   go RED rather than silently falling back to `_unknown`. **(b)** a task review of `f8d0051` against
-   both briefs. **(c)** Task 9, which is the cross-layer staleness test and the whole reason this block
-   does not trust four green layers. **(d)** only then the full block gate, which is Phase 1's boundary.
+7. ~~Mutation round on `f8d0051`'s guard changes (plan item 7a), and the task review that follows it.~~
+   **Done.** Review of `f8d0051`: spec APPROVE, quality FIX REQUIRED — 7 Important + 7 Minor, the theme
+   being *guards that could not fail*. Two fix rounds: `737f3a5` (all 14 findings; `:app` **54 → 59**,
+   `:data:repository` 290 → 296, `:feature:launcher` 190 → 191) and `c502bea` (prose only, after the
+   re-review found round 1 had replaced two false sentences with two new ones — counts held).
+   **Prover round: 18 mutations planted, 18 behaved as predicted**, tree verified byte-for-byte clean
+   afterwards. Full evidence, one row per mutation with the failing test and its assertion message:
+   [2026-09-12-a1-mutation-round-adapter-3.md](2026-09-12-a1-mutation-round-adapter-3.md) — committed
+   rather than left in `.superpowers/sdd/`, which is git-ignored and would have lost it.
+   **The headline is closed and now measured:** a `ToolFederation` that silently drops the entire third
+   adapter while leaving it registered turns `:app` red in five tests across two files. Before the fix
+   round every floor read `productionAdapters().flatMap { registry.all() }` — the hand-maintained
+   replica — and that mutation passed, which is why `:app` sat at 54 before and 54 after the original
+   commit.
+   **Four things the round could not prove, carried forward rather than implied absent** (all in the
+   report, §Unproved): **(F1)** `DoctrineGuardTest`'s dynamic-label rule is a `String.contains` scan for
+   the resource id, and it is *measurably* blind — making `PlanStep.line` ignore `dynamicLabels`
+   entirely left `:app` green at 59/0 while every shortcut step rendered the generic line. The property
+   is held, but only by `:feature:launcher`'s behavioural screen test; `:app`'s copy is a spelling
+   check. Closing it needs `line`/`toolLabelFor` reachable from `:app` (they are `internal`), or the
+   assertion moved beside the behavioural test. **(F2)** `an id is stable across a refresh…` cannot
+   observe an instability introduced in `ShortcutToolIds.of`, because any such instability also breaks
+   `usable()`'s round-trip filter and the test dies on an empty list before reaching its assertion; the
+   pair of tests is only complete because `ShortcutToolIdsTest` pins `of` against a literal, and that
+   was said nowhere. **(F3)** the literal `"app_shortcut"` is pinned by **no** test — an absence of a
+   claim, not a failed one, and it matters the day a level value is written into a trace row, a session
+   row or an outbound payload. **(F4)** the two halves of `ToolFederation`'s contract are held in
+   different modules: dropping an adapter reddens `:app` and leaves `:domain` green, caching the
+   snapshot reddens `:domain` and leaves `:app` green. Neither module's suite is a sufficient check of
+   that class.
+   **One methodological correction, recorded because it is this round's own failure mode:** a
+   multi-module Gradle run without `--continue` left the second task unexecuted, and stale JUnit XML
+   from the *previous* mutation was read as that run's result — a false RED that would have inverted a
+   conclusion. Every later multi-module run deletes `build/test-results` first and passes `--continue`.
+   This sits beside the `--rerun` / `tail` rules as a third way this project has produced a false
+   reading from a green-looking build.
+8. **← resume here.** In this order, and do not reorder them:
+   **(a)** Task 9, the cross-layer staleness test and the whole reason this block does not
+   trust four green layers — note F4 above, which says exactly why a per-module suite is not that test.
+   **(b)** only then the full block gate, which is Phase 1's boundary: compare against **1323 plus
+   Phase 1's additions**, never 1321.
+   Two smaller debts are open and neither belongs to Task 9: the deferred minor on row 12's prose in the
+   measurement file, and F1 above, which is the one finding of the prover round that names a guard still
+   weaker than the rule it serves.
 
 **This section has now lagged twice in a row, both times by exactly the same mechanism: it was edited
 in a commit of its own, separately from the task it describes.** It is therefore updated in the *same*

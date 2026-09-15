@@ -126,6 +126,66 @@ class ToolSelectorTest {
      * otherwise break the tie. The dynamic candidate below would match if the selector fell through, so
      * this fails red without the [ToolVocabulary.isAmbiguous] check.
      */
+    /**
+     * Task 10b — the leftover-word rule. A sentence that merely *contains* the app token and the
+     * shortcut's contiguous name run used to select regardless of what the surrounding words meant;
+     * "отправь saved messages в telegram" ("send saved messages to telegram") is an intent to *send*,
+     * not to open, yet both requirements the old code checked (contiguous name run, qualifier token
+     * present) were satisfied. Every command token must now be accounted for by the shortcut's own name
+     * or qualifier tokens — "отправь" and "в" are neither, so this must decline.
+     */
+    @Test
+    fun `a command with unaccounted leftover words around a shortcut's name is declined`() {
+        val selector = ToolSelector(
+            vocabulary = ToolVocabulary(),
+            dynamicNames = namesOf(DynamicToolName(ToolId("shortcut:com.a/saved"), "Telegram", "Saved Messages")),
+        )
+        assertNull(selector.select("отправь saved messages в telegram"))
+    }
+
+    /**
+     * Task 10b — the rule must not break the working case: a command that is exactly the app token
+     * followed by the shortcut's own name (nothing left over) still selects.
+     */
+    @Test
+    fun `a command consisting only of the app token and the shortcut name still selects`() {
+        val selector = ToolSelector(
+            vocabulary = ToolVocabulary(),
+            dynamicNames = namesOf(DynamicToolName(ToolId("shortcut:com.a/new_chat"), "Telegram", "new message")),
+        )
+        assertEquals(ToolId("shortcut:com.a/new_chat"), selector.select("telegram new message")?.id)
+    }
+
+    /**
+     * Task 10b — the subset direction is command-into-allowed, not the reverse: a two-token app label
+     * need not be fully used by the command. "whatsapp new chat" never says "business", yet it must
+     * still select, because every one of *its own* tokens ("whatsapp", "new", "chat") is covered by the
+     * union of the qualifier's tokens ("whatsapp", "business") and the name's tokens ("new", "chat").
+     */
+    @Test
+    fun `a two-token app label need not be fully used by the command`() {
+        val selector = ToolSelector(
+            vocabulary = ToolVocabulary(),
+            dynamicNames = namesOf(DynamicToolName(ToolId("shortcut:com.b/new_chat"), "WhatsApp Business", "New chat")),
+        )
+        assertEquals(ToolId("shortcut:com.b/new_chat"), selector.select("whatsapp new chat")?.id)
+    }
+
+    /**
+     * Task 10b — rule 2 (a dynamic candidate must name its app) is unchanged by the new leftover-word
+     * rule: a command that is exactly the shortcut's own name, with no qualifier token anywhere, still
+     * declines. (Every command token is trivially accounted for by the name alone here — this pins that
+     * the qualifier-presence check still fires independently.)
+     */
+    @Test
+    fun `a command that is exactly the name with no qualifier token still declines`() {
+        val selector = ToolSelector(
+            vocabulary = ToolVocabulary(),
+            dynamicNames = namesOf(DynamicToolName(ToolId("shortcut:com.a/new_chat"), "Telegram", "new message")),
+        )
+        assertNull(selector.select("new message"))
+    }
+
     @Test
     fun `a text two authored entries both claim selects nothing even when a dynamic name would match`() {
         val colliding = ToolVocabulary(

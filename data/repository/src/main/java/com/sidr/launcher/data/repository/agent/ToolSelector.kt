@@ -19,15 +19,17 @@ import javax.inject.Inject
  *     [ToolVocabulary.isAmbiguous] exists so this class can tell that refusal apart from "nothing of
  *     ours claimed this text" and stop there rather than falling through.
  *
- *     **What that check does not cover, named rather than implied fixed.** `ToolVocabulary.match`
+ *     **What that check does not cover, narrowed by Task 10b rather than closed.** `ToolVocabulary.match`
  *     returns `null` for a *third* reason besides "nothing claimed it" and "two entries claimed it": one
  *     entry claimed a prefix and then **refused** the rest — a leftover-words decline, the
  *     `"system settings for my car"` case `ToolVocabulary.Entry.toMatch`'s own KDoc argues for.
  *     [ToolVocabulary.isAmbiguous] is `false` there too (exactly one entry produced a hit before its own
- *     refusal), so such a text still falls through to the dynamic branch and may select a third-party
- *     shortcut instead of being declined outright the way a genuine ambiguity now is. This is the same
- *     leftover-word trade already put to the owner alongside this class's own contiguity limitation
- *     below, not a new defect — left named, not fixed.
+ *     refusal), so such a text still falls through to the dynamic branch. What no longer follows from that
+ *     fall-through, since rule 4 below, is a stray match: the dynamic branch now requires its own leftover
+ *     words to be accounted for by the same shortcut's name or qualifier tokens, so "for my car" declines
+ *     there too — unless some shortcut happens to be named, or published by an app named, with tokens that
+ *     cover exactly those leftover words. That residual coincidence is what remains of this gap; it is not
+ *     the general fall-through the previous wording described.
  *  2. **A dynamic candidate must name its app.** "telegram new message" matches; bare "new message"
  *     does not, even with exactly one candidate. A shortcut launch performs an effect, so a false
  *     positive must be structurally unlikely, not statistically unlikely.
@@ -43,6 +45,26 @@ import javax.inject.Inject
  *     match, even though one name is strictly more specific than the other. That is fail-closed and
  *     deliberate (this class is not a ranker), stated here because "equal candidates" undersells what
  *     the code actually does: it declines on ambiguity, not on a tie.
+ *  4. **Every token of the command must be accounted for** (Task 10b, owner-approved fix ahead of Task
+ *     12 — Task 10's review, Important 3). Contiguity (below) bounds the shortcut's own name from below —
+ *     the whole name must appear — but until this rule existed nothing bounded the *command* from above:
+ *     any number of extra words around a matched name-and-qualifier pair were accepted, so
+ *     "отправь saved messages в telegram" ("send saved messages to telegram" — an intent to *send*, not
+ *     to open) selected and would have launched the "Saved Messages" shortcut, because the qualifier
+ *     token and the contiguous name run were both present regardless of what the rest of the sentence
+ *     meant. Formally: every token of the normalized command must be present in the shortcut's own name
+ *     tokens or its qualifier tokens — `commandTokens ⊆ nameTokens ∪ qualifierTokens`. Note the direction:
+ *     it is the *command's* tokens that must all be allowed, not the reverse, so a two-word app label like
+ *     "WhatsApp Business" still matches "whatsapp new message" even though the command never says
+ *     "business" — the shortcut need not use every token it is allowed to use.
+ *
+ *     **Why not strip a launch verb instead** (reusing `RuleBasedIntentMatcher.LAUNCH_VERBS`, stripping a
+ *     leading/trailing verb before matching) **— considered and rejected on evidence, not on cost.**
+ *     `RouteCommandUseCase`'s steps 2 and 2b are disjoint by construction: a verb-led command
+ *     ("открой telegram new message", or the `tr` suffix shape "... aç") is a *decided* outcome and is
+ *     taken by step 2 into the A0 launch→store plan, so it never reaches step 2b and therefore never
+ *     reaches this selector at all. This selector only ever sees commands FastPath could not decide.
+ *     A verb table here would be machinery built for inputs that structurally cannot arrive.
  *
  * **What "naming its app" and "naming itself" actually require.** The app-qualifier check is a loose,
  * order-free membership test: any one word of the qualifier appearing anywhere in the command is enough.
@@ -51,15 +73,6 @@ import javax.inject.Inject
  * the authored half. A token-set test here would let "message new telegram" select the same tool as
  * "telegram new message"; recall bought by treating third-party data as a bag of words is not a trade
  * this repo makes for a match that fires an effect.
- *
- * **Known limitation, left as the owner's to weigh, not fixed here.** Contiguity does not require that
- * every other word in the command be accounted for. A command that merely *contains* the app token and
- * the full shortcut name still selects even when the surrounding words mean something else — e.g.
- * "don't send a telegram new message" selects the "new message" shortcut exactly as "telegram new
- * message" does, because both the qualifier token and the contiguous name run are present either way.
- * Forbidding unaccounted leftover words (the way `ToolVocabulary.Entry.toMatch` refuses them for a
- * zero-argument authored tool) would close this but also decline every natural sentence that happens to
- * carry the shortcut's name inside a longer command with its own verb.
  *
  * **Recall gaps this branch does not attempt to close, named rather than silently accepted.** The
  * app-token match is **exact**: an inflected form of the app's own name — Russian `в телеграме`,
@@ -94,7 +107,8 @@ class ToolSelector @Inject constructor(
      * The app name ([qualifier]) may appear anywhere in the command, in any order — a set-membership
      * test. The shortcut's own [name] may not: it must appear as a contiguous, word-bounded run inside
      * [normalizedText] — see the class KDoc for why a token-set test is not good enough here, and for
-     * the limitation this stricter rule does not close.
+     * rule 4, added by Task 10b: every token of [normalizedText] must belong to [name]'s or [qualifier]'s
+     * own tokens, or this declines.
      *
      * **A blank [name] needs no guard of its own.** `normalizedText` reaches this function already
      * normalized and non-blank ([select] returns before calling it otherwise), so it never contains a
@@ -103,14 +117,18 @@ class ToolSelector @Inject constructor(
      * input. Fix round 2 removed a `normalizedName.isBlank()` disjunct that used to sit here for exactly
      * that reason: it was live under the token-set implementation this method started with, and became
      * dead the moment contiguity replaced it. `qualifierTokens.isEmpty()` below is separately redundant
-     * with the final `any { it in tokens }` (`any {}` on an empty collection is already `false`) — noted
-     * in the fix-round-1 review and left in place rather than removed there, unchanged again here.
+     * with the qualifier-presence check that follows it (`none {}` on an empty collection is already
+     * `true`) — noted in the fix-round-1 review and left in place rather than removed there, unchanged
+     * again here.
      */
     private fun DynamicToolName.matches(normalizedText: String, tokens: Set<String>): Boolean {
         val qualifierTokens = CommandNormalizer.normalize(qualifier).split(' ').filter { it.isNotBlank() }
         val normalizedName = CommandNormalizer.normalize(name)
+        val nameTokens = normalizedName.split(' ').filter { it.isNotBlank() }
         if (qualifierTokens.isEmpty()) return false
         if (!" $normalizedText ".contains(" $normalizedName ")) return false
-        return qualifierTokens.any { it in tokens }
+        if (qualifierTokens.none { it in tokens }) return false
+        val allowed = nameTokens.toSet() + qualifierTokens
+        return tokens.all { it in allowed }
     }
 }

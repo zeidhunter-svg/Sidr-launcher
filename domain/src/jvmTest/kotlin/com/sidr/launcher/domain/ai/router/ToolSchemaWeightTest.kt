@@ -47,8 +47,9 @@ import org.junit.Test
  * sentence there for `set_timer`'s `duration` arg — reused verbatim below as [REALISTIC_ARG_SCHEMA].
  * Descriptions do cross into `:domain`, at the **arg** level, not the tool level.
  *
- * That makes every number below **lighter than a real tool prompt would be**, in three independent
- * ways, none hidden and none invented:
+ * That makes every number below **lighter than a real tool prompt would be**, in four independent
+ * ways, none hidden and none invented — three measured below, the fourth named but deliberately not
+ * modelled:
  * - **ids.** `ToolId("tool_$it")` (6-8 chars) is the sketch's synthetic floor. The ids this block
  *   actually registers for its own subject — `ShortcutToolIds.of(pkg, shortcutId)`, e.g.
  *   `shortcut:com.whatsapp/compose_message` — run roughly 3x longer, because per-descriptor cost
@@ -66,20 +67,32 @@ import org.junit.Test
  *   argument names listed below"), reused here as the only static instruction text `:domain` owns —
  *   it is a proxy, not a tool-router preamble that does not exist yet. A real one would likely be
  *   longer, so even the fixed 562-char term this test pins is itself a **floor**.
+ * - **the tool-level description — named, not modelled (fix round 2).** [CatalogSchemaRenderer.render]
+ *   — the real analog this helper is modelled on — appends `": " + descriptor.description` after
+ *   every id; [ToolDescriptor] has no such field (the KDoc paragraph above this list is about exactly
+ *   that absence), so [renderToolSchema] cannot render one and none of the figures below carry it.
+ *   This is **not** folded into the "pessimistic correction" below: inventing a plausible length for a
+ *   field the type does not have would be measuring a hypothetical rather than the type, which is the
+ *   error this whole test exists to avoid. `CatalogSchemaRenderer.render`'s own per-action description
+ *   tail (e.g. `"Launch an installed app by name"`, `"Open a web address in the browser"`) is the
+ *   closest indication of what it would additionally cost, and it is not small — comparable to or
+ *   larger than the id itself.
  *
  * **The conclusion (the point of this task).** Even on the synthetic-id, no-arg series this test
  * actually measures, 200 descriptors — the exact figure Master Plan `B3` uses to justify selection —
  * render to well under a thousand tokens (see the `n=200, as measured` line printed by the test); the
- * shortcut-shaped, real-arg-schema `n=200, pessimistic correction` line, combining every widening
- * factor named above except a longer preamble, is still in the low thousands of tokens. Both fit any
- * modern context window with room to spare. **This measurement undercuts `B3`'s stated justification
- * for tool selection** ("two hundred descriptors do not fit in a prompt") — they do fit, by a wide
- * margin, even under the pessimistic correction. The honest resolution is not that selection is
- * unjustified, but that its justification does not come from prompt size: selection in this block
- * (spec §6.1) stands on the **deterministic matcher branch**, which is a reachability/precision
- * argument, not a token-budget one — so this measurement confirms the design actually shipped rather
- * than undermining it. This paragraph reports that finding; it does not amend Master Plan `B3` —
- * the Master Plan has its own change-control and is not amended from inside a block.
+ * shortcut-shaped, real-arg-schema `n=200, pessimistic correction` line, combining the id and arg
+ * widening factors named above (**not** the un-modelled tool-level description, and not a longer
+ * preamble), is still in the low thousands of tokens. Both fit any modern context window with room to
+ * spare — and the conclusion below holds at either figure by a wide margin, so it does not turn on
+ * which one a reader picks. **This measurement undercuts `B3`'s stated justification for tool
+ * selection** ("two hundred descriptors do not fit in a prompt") — they do fit, by a wide margin, even
+ * under the pessimistic correction. The honest resolution is not that selection is unjustified, but
+ * that its justification does not come from prompt size: selection in this block (spec §6.1) stands on
+ * the **deterministic matcher branch**, which is a reachability/precision argument, not a
+ * token-budget one — so this measurement confirms the design actually shipped rather than undermining
+ * it. This paragraph reports that finding; it does not amend Master Plan `B3` — the Master Plan has
+ * its own change-control and is not amended from inside a block.
  */
 class ToolSchemaWeightTest {
 

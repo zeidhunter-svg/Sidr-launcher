@@ -40,11 +40,18 @@ import javax.inject.Inject
  *     word alone; the same is true for a real app whose shortcut label repeats its own name, such as
  *     "WhatsApp Web". Rule 2 is real protection only when the shortcut's name and its app's name share
  *     no words.
- *  3. **Equal candidates decline.** `singleOrNull` refuses on *any* two hits, not only on hits of equal
- *     specificity — a shortcut named "New" and one named "New message" are both discarded when both
- *     match, even though one name is strictly more specific than the other. That is fail-closed and
- *     deliberate (this class is not a ranker), stated here because "equal candidates" undersells what
- *     the code actually does: it declines on ambiguity, not on a tie.
+ *  3. **Equal candidates decline.** `singleOrNull` refuses on *any* two hits, not only on hits that are
+ *     equally specific — two shortcuts sharing the same qualifier and the same name are discarded
+ *     together rather than picked by insertion order (`ToolSelectorTest`'s "two dynamic candidates of
+ *     equal strength decline rather than guessing"). That is fail-closed and deliberate (this class is
+ *     not a ranker), stated here because "equal candidates" undersells what the code actually does: it
+ *     declines on ambiguity, not on a tie.
+ *
+ *     **Since rule 4, a genuine ambiguity needs both candidates' name-and-qualifier tokens to
+ *     independently cover every command token.** A strictly-less-specific name (e.g. "New" beside
+ *     "New message") no longer ties for a command that carries the extra word, because rule 4 now
+ *     eliminates it alone rather than leaving both hits standing — `ToolSelectorTest`'s "rule 4 can
+ *     turn a former tie into a single survivor that now selects" pins the resulting behaviour change.
  *  4. **Every token of the command must be accounted for** (Task 10b, owner-approved fix ahead of Task
  *     12 — Task 10's review, Important 3). Contiguity (below) bounds the shortcut's own name from below —
  *     the whole name must appear — but until this rule existed nothing bounded the *command* from above:
@@ -60,11 +67,15 @@ import javax.inject.Inject
  *
  *     **Why not strip a launch verb instead** (reusing `RuleBasedIntentMatcher.LAUNCH_VERBS`, stripping a
  *     leading/trailing verb before matching) **— considered and rejected on evidence, not on cost.**
- *     `RouteCommandUseCase`'s steps 2 and 2b are disjoint by construction: a verb-led command
- *     ("открой telegram new message", or the `tr` suffix shape "... aç") is a *decided* outcome and is
- *     taken by step 2 into the A0 launch→store plan, so it never reaches step 2b and therefore never
- *     reaches this selector at all. This selector only ever sees commands FastPath could not decide.
- *     A verb table here would be machinery built for inputs that structurally cannot arrive.
+ *     `RuleBasedIntentMatcher` returns `LaunchAppIntent` for a verb-led command ("открой telegram new
+ *     message", or the `tr` suffix shape "... aç") at confidence 0.90 — above the 0.85 auto-execute
+ *     threshold — so FastPath always *decides* such a command: it can never come back
+ *     `Unknown`/`LowConfidence`, the two states `RouteCommandUseCase` calls undecided, and step 2b
+ *     runs only on an undecided command. What a decided verb-led command does next depends on whether
+ *     the app resolves: a match just launches, and a miss is `NoAppFound`, which **step 2** (not 2b)
+ *     takes into the A0 launch→store plan. Either way it never reaches step 2b and therefore never
+ *     reaches this selector at all — a verb table here would be machinery built for inputs that
+ *     structurally cannot arrive.
  *
  * **What "naming its app" and "naming itself" actually require.** The app-qualifier check is a loose,
  * order-free membership test: any one word of the qualifier appearing anywhere in the command is enough.
@@ -83,6 +94,15 @@ import javax.inject.Inject
  * labels are unreachable by construction rather than by any rule above: a label ending in an ellipsis
  * ("New message…") normalizes to a token with the ellipsis still attached, and Turkish `İletiler`
  * normalizes to a form a user typing plain `iletiler` never produces.
+ *
+ * **Rule 4 has its own recall cost, real since Task 10b and not merely theoretical.** Any function
+ * word in the command that is neither a name token nor a qualifier token kills an otherwise-good
+ * match: `"new chat in whatsapp"` declines because of `"in"`; `"новое сообщение в телеграм"` declines
+ * because of `"в"`. Both are verbless, so unlike the verb-led case above — which never reaches this
+ * selector at all — these **do** reach step 2b and are declined here. The trade is deliberate: a
+ * decline is free and falls through to the model planner exactly as any other miss, while a false
+ * positive fires an effect. Closing this would need a per-locale stopword set — a scope decision for
+ * the owner, not one this rule takes on its own.
  *
  * It does not learn, rank by usage, or consult a model — those are A2/A3 and A4′'s plan cache, and a
  * selector whose behaviour depends on history is untestable by the guards this block ships.
@@ -108,7 +128,9 @@ class ToolSelector @Inject constructor(
      * test. The shortcut's own [name] may not: it must appear as a contiguous, word-bounded run inside
      * [normalizedText] — see the class KDoc for why a token-set test is not good enough here, and for
      * rule 4, added by Task 10b: every token of [normalizedText] must belong to [name]'s or [qualifier]'s
-     * own tokens, or this declines.
+     * own tokens, or this declines. [tokens] is a `Set`, so rule 4 is about which **distinct** words
+     * the command uses, not how many times each occurs — "telegram new message new message" still
+     * selects.
      *
      * **A blank [name] needs no guard of its own.** `normalizedText` reaches this function already
      * normalized and non-blank ([select] returns before calling it otherwise), so it never contains a

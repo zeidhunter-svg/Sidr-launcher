@@ -120,13 +120,6 @@ class ToolSelectorTest {
     }
 
     /**
-     * Fix round 1, CRITICAL 1. `ToolVocabulary.match` returns `null` for two different reasons — nothing
-     * of ours claimed the text, or two of our own entries claimed it and it refuses to guess — and only
-     * the second must stop the selector outright rather than fall through to a dynamic name that would
-     * otherwise break the tie. The dynamic candidate below would match if the selector fell through, so
-     * this fails red without the [ToolVocabulary.isAmbiguous] check.
-     */
-    /**
      * Task 10b — the leftover-word rule. A sentence that merely *contains* the app token and the
      * shortcut's contiguous name run used to select regardless of what the surrounding words meant;
      * "отправь saved messages в telegram" ("send saved messages to telegram") is an intent to *send*,
@@ -186,6 +179,35 @@ class ToolSelectorTest {
         assertNull(selector.select("new message"))
     }
 
+    /**
+     * Task 10b, fix round 1, item 4 — a behaviour change worth pinning, not just noting in prose.
+     * Before rule 4, "telegram new message" matched **both** a candidate named "New" and one named
+     * "New message" (contiguity plus a qualifier token was enough for either), so `singleOrNull`
+     * declined the ambiguity. Rule 4 removes "New" from the hits — "message" is a command token
+     * neither its name nor its qualifier accounts for — leaving "New message" as the sole survivor,
+     * which now selects rather than declining. This is not a new false-positive risk: the survivor is,
+     * by construction, the one candidate whose name and qualifier between them cover every command
+     * token.
+     */
+    @Test
+    fun `rule 4 can turn a former tie into a single survivor that now selects`() {
+        val selector = ToolSelector(
+            vocabulary = ToolVocabulary(),
+            dynamicNames = namesOf(
+                DynamicToolName(ToolId("shortcut:com.a/new"), "Telegram", "New"),
+                DynamicToolName(ToolId("shortcut:com.a/new_message"), "Telegram", "New message"),
+            ),
+        )
+        assertEquals(ToolId("shortcut:com.a/new_message"), selector.select("telegram new message")?.id)
+    }
+
+    /**
+     * Fix round 1, CRITICAL 1. `ToolVocabulary.match` returns `null` for two different reasons — nothing
+     * of ours claimed the text, or two of our own entries claimed it and it refuses to guess — and only
+     * the second must stop the selector outright rather than fall through to a dynamic name that would
+     * otherwise break the tie. The dynamic candidate below would match if the selector fell through, so
+     * this fails red without the [ToolVocabulary.isAmbiguous] check.
+     */
     @Test
     fun `a text two authored entries both claim selects nothing even when a dynamic name would match`() {
         val colliding = ToolVocabulary(

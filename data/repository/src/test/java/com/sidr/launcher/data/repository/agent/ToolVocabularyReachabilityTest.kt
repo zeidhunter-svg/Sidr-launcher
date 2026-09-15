@@ -34,17 +34,19 @@ import org.junit.Test
  * `RouteCommandUseCase` calls undecided. It does not model the confidence policy, and it says nothing
  * about a trigger's *usefulness* — only that FastPath does not claim it first.
  *
- * **The shadowing guard, narrowed by Task 10b — said here, not just at the point of failure.**
- * `ToolSelector`'s leftover-word rule (Task 10b) requires every token of a command to be accounted for
- * by the matched shortcut's own name or its app's qualifier. An **argument-carrying** entry's sample
- * command always trails a token neither can ever cover — `SAMPLE_ARGUMENT`, standing in for whatever the
- * tool needs — so such an entry is now **structurally unshadowable**: no third-party name, however
- * chosen, can collide with it. That is a strengthening of the product, not a weakening of anything here.
- * The consequence for this file is that `an authored trigger cannot be shadowed by a third-party shortcut
- * name` can only be proved non-vacuous against a **zero-argument** entry — [SHADOW_CANDIDATE] is chosen
- * accordingly, and the guard now exercises one entry shape rather than two, not both as before. It does
- * not mean shadowing itself has weakened; the opposite entry shape is the one that no longer needs
- * guarding, because the product now rules it out by construction.
+ * **The shadowing guard's floor candidate, changed by Task 10b — said here, not just at the point of
+ * failure.** `ToolSelector`'s leftover-word rule (Task 10b) requires every token of a command to be
+ * accounted for by the matched shortcut's own name or its app's qualifier. That means an
+ * **argument-carrying** entry can now only be shadowed by a third-party name that **embeds the argument
+ * text itself** — not structurally, and not "however chosen": a candidate named e.g.
+ * `"set timer for 10 minutes"` still collides with `set_timer`'s sample command byte-for-byte, because
+ * its own name then accounts for every token the command carries. [collisionFloor] could be proved
+ * against `set_timer` with such an embedding candidate. [SHADOW_CANDIDATE] instead targets the
+ * zero-argument `open_system_settings`, so the floor's one collision does not depend on reproducing the
+ * literal `SAMPLE_ARGUMENT` constant inside a planted name — a smaller coupling, not a necessity. The
+ * shadowing assertion itself — `an authored trigger cannot be shadowed by a third-party shortcut name`
+ * — still loops over all 14 commands generated from both entries, in both shapes, unchanged by this
+ * task; only the floor's own choice of collider changed.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ToolVocabularyReachabilityTest {
@@ -109,13 +111,14 @@ class ToolVocabularyReachabilityTest {
      * KDoc blesses rewording, so this test's only real evidence that it tests anything is that
      * [SHADOW_CANDIDATE] actually collides with at least one generated command — today, `"system
      * settings"`, because `en`'s `open_system_settings` prefix form is the literal string `"system
-     * settings"`. It must be a **zero-argument** entry's collider (see the class KDoc, "The shadowing
-     * guard, narrowed by Task 10b"): since Task 10b, `set_timer`'s sample command always trails
-     * `SAMPLE_ARGUMENT`, a token no third-party name or qualifier can ever account for under
-     * `ToolSelector`'s leftover-word rule, so an argument-carrying entry cannot collide with anything
-     * planted here any more. A reword of `open_system_settings`'s colliding form (a "legitimate
-     * rewording", per `guardedEntries()`) would silently drop the collision count to zero and turn this
-     * into a duplicate of `every trigger recognises its own sample command` that stays green even with
+     * settings"`. [SHADOW_CANDIDATE] targets that **zero-argument** entry rather than `set_timer` (see
+     * the class KDoc, "The shadowing guard's floor candidate, changed by Task 10b") so the floor's
+     * collision does not depend on a planted name reproducing the literal `SAMPLE_ARGUMENT` constant —
+     * not because an argument-carrying entry is unshadowable; a name that embeds the argument text
+     * itself (e.g. `"set timer for 10 minutes"`) still collides with `set_timer`'s sample command. A
+     * reword of `open_system_settings`'s colliding form (a "legitimate rewording", per
+     * `guardedEntries()`) would silently drop the collision count to zero and turn this into a
+     * duplicate of `every trigger recognises its own sample command` that stays green even with
      * `ToolSelector`'s rule 1 (authored beats dynamic) deleted — the exact vacuity `guardedEntries()`'s
      * KDoc claims no test in this class can have. [collisionFloor] measures the same commands the
      * shadowing loop below builds, against the dynamic branch alone (an *empty* [ToolVocabulary] so
@@ -153,9 +156,10 @@ class ToolVocabularyReachabilityTest {
     /**
      * Fails loudly, not quietly, the moment [SHADOW_CANDIDATE] stops colliding with anything in
      * [commands] — see the test's own KDoc for why a silent zero would be worse than no test at all.
-     * [SHADOW_CANDIDATE] must collide with a **zero-argument** entry (see the class KDoc, "The
-     * shadowing guard, narrowed by Task 10b"): an argument-carrying entry's sample command always
-     * trails a token nothing planted here can account for, under `ToolSelector`'s leftover-word rule.
+     * A replacement candidate need not target a zero-argument entry — an argument-carrying entry's
+     * sample command can still be collided with by a name that embeds the argument text itself (see
+     * the class KDoc, "The shadowing guard's floor candidate, changed by Task 10b") — it just must
+     * actually collide with *something* in [commands].
      */
     private fun collisionFloor(commands: List<String>) {
         val dynamicOnly = ToolSelector(vocabulary = ToolVocabulary(emptyList()), dynamicNames = namesOf(SHADOW_CANDIDATE))
@@ -164,10 +168,10 @@ class ToolVocabularyReachabilityTest {
             "the planted shadow candidate (qualifier '${SHADOW_CANDIDATE.qualifier}', name " +
                 "'${SHADOW_CANDIDATE.name}') no longer collides with any of the ${commands.size} " +
                 "generated commands — this test is no longer testing shadowing, and the planted name " +
-                "must be re-chosen to collide with a real authored trigger again. It must collide with a " +
-                "zero-argument entry: since Task 10b, an argument-carrying entry's sample command always " +
-                "trails a sample-argument token that ToolSelector's leftover-word rule requires be " +
-                "accounted for, and no shortcut name or qualifier can ever cover it.",
+                "must be re-chosen to collide with a real authored trigger again. It may target either " +
+                "entry: a zero-argument trigger collides on its own trigger text, and an argument-" +
+                "carrying trigger (set_timer) can still be collided with by a name that embeds the " +
+                "sample argument text itself.",
             collisions > 0,
         )
     }
@@ -226,11 +230,12 @@ class ToolVocabularyReachabilityTest {
         /**
          * Chosen to collide with `open_system_settings`'s `en` prefix form `"system settings"`
          * byte-for-byte — see `collisionFloor` for why that collision is verified rather than assumed.
-         * Deliberately a **zero-argument** entry: Task 10b's leftover-word rule means an argument-carrying
-         * entry's sample command always trails a token (`SAMPLE_ARGUMENT`) that no third-party name or
-         * qualifier can account for, so `set_timer` — this candidate's original target — can no longer
-         * collide with anything planted here. See the class KDoc, "The shadowing guard, narrowed by
-         * Task 10b", for what that costs this guard.
+         * Targets that **zero-argument** entry rather than `set_timer` — this candidate's original
+         * target, before Task 10b's leftover-word rule closed the collision that relied on ignoring
+         * `SAMPLE_ARGUMENT` — so the floor's collision does not depend on reproducing that literal
+         * constant inside a planted name. `set_timer` is not unshadowable: a name that embeds the
+         * argument text itself (e.g. `"set timer for 10 minutes"`) still collides with it. See the
+         * class KDoc, "The shadowing guard's floor candidate, changed by Task 10b".
          */
         val SHADOW_CANDIDATE = DynamicToolName(ToolId("shortcut:com.x/s"), "Settings", "system settings")
     }

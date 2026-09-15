@@ -18,6 +18,13 @@ runs under its own test package, which would answer for the wrong one. The probe
 identity first (`context.packageName :: com.sidr.launcher`) so a reading cannot be silently about
 something else.
 
+**Probe (Task 13):** `app/src/androidTest/java/com/sidr/launcher/probe/Tier0IntentProbe.kt` — same
+shape, same tag, same identity-first rule, one `@Test` per spec §7.2 candidate so a single intent can
+be fired and then the device observed. It launches through **production's** shape —
+`context.startActivity(intent.addFlags(FLAG_ACTIVITY_NEW_TASK))` on the application context, what
+`ContextIntentLauncher` does — and **not** `adb shell am start`: that runs as uid 2000 (`shell`), whose
+permission set is not the app's, and row 26 below is the measured proof that the two answers differ.
+
 **How it was run — and how it must be run.** `adb shell am instrument`, against APKs installed by hand
 with `adb install -r`. **Never `./gradlew :app:connectedDebugAndroidTest`:** AGP installs both APKs,
 runs the tests and then **uninstalls both**. On 2026-09-14 that silently removed the owner's install
@@ -42,6 +49,22 @@ discrepancy is explained rather than mysterious.
 | 10 | `LauncherApps.startShortcut(pkg, id, null, null, myUserHandle)` on the first enabled shortcut | Sidr **is** default home | `RETURNED_NORMALLY` — the target app opened; no additional permission, no throw | 2026-09-14 | `5d44167` + probe |
 | 11 | Label language, observed in the returned set | Sidr **is** default home | mixed and **not** the app's own: `Anında Hesap Aç` (tr), `Подписки` (ru) side by side — each declaring app localises its own labels to the device locale | 2026-09-14 | `5d44167` + probe |
 | 12 | `PackageManager.getApplicationInfo(pkg, 0)` for a shortcut-contributing package with no `LAUNCHER` activity | Sidr **is** default home | `<не измерено>` | — | — |
+| 13 | `startActivity(Intent(AlarmClock.ACTION_SET_ALARM).putExtra(EXTRA_HOUR, 4).putExtra(EXTRA_MINUTES, 37).putExtra(EXTRA_MESSAGE, "SIDR PROBE").putExtra(EXTRA_SKIP_UI, false).addFlags(FLAG_ACTIVITY_NEW_TASK))` from `com.sidr.launcher`, uid **10752** | Sidr installed, not default home | **Permission:** `RETURNED_NORMALLY`; **no** `Permission Denial` line, **no** exception. **What it does:** focus → `com.sec.android.app.clockpackage/.alarm.activity.AlarmWidgetListActivity`; the clock's own list showed a **new, already-enabled** alarm «SIDR PROBE / 04:37 / ср, 16 сент.», toggle **on**, header «Будильник через 6 ч. 3 мин.» and toast «Будильник сработает через 6 ч и 3 мин.» — no editor, no confirm button. **It performs the act before any further input.** Alarm created by this probe and **deleted through the clock UI** immediately after; the list returned to the two pre-existing alarms (05:20, 17:40, both off) | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
+| 14 | `startActivity(Intent(AlarmClock.ACTION_SHOW_ALARMS))`, same shape and caller | Sidr installed, not default home | **Permission:** `RETURNED_NORMALLY`; no `Permission Denial`, no exception. **What it does:** focus → `com.sec.android.app.clockpackage/.alarm.activity.AlarmWidgetListActivity`, header «Все будильники отключены» and the device's two existing alarms listed, both off — **opens a screen**; state unchanged | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
+| 15 | `startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(Uri.fromParts("package", pkg, null)))`, run twice: `pkg = com.sidr.launcher`, then `pkg = com.sidr.launcher.data.ailocal.test` (a package with **no** launcher activity, i.e. not covered by the app's `<queries>` MAIN/LAUNCHER entry) | Sidr installed, not default home | **Permission:** both runs `RETURNED_NORMALLY`; no `Permission Denial`, no exception. **What it does:** both → `com.android.settings/.applications.InstalledAppDetails`; run 1 titled «Sidr Launcher», run 2 titled `com.sidr.launcher.data.ailocal.test` with the generic icon — **opens a screen**, and the no-launcher-activity target was **not** filtered out. Both landed screens carry an «Удалить» (uninstall) button, so the screen this tool opens is one tap from an irreversible act | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
+| 16 | `startActivity(Intent(Intent.ACTION_DELETE, Uri.fromParts("package", "com.sidr.launcher.data.ailocal.test", null)))`, same shape and caller | Sidr installed, not default home | **REFUSED, and the refusal names a permission.** `startActivity` `RETURNED_NORMALLY` — **no exception of any kind** — and `grep -i 'Permission Denial'` found **nothing**. The refusal is one line from the responder: `E UninstallerActivity: Uid 10752 does not have android.permission.REQUEST_DELETE_PACKAGES or android.permission.DELETE_PACKAGES`. `ActivityTaskManager` did `START u0 {act=android.intent.action.DELETE … cmp=com.google.android.packageinstaller/com.android.packageinstaller.UninstallerActivity} from uid 10752`; the activity was resumed at 22:36:26.052 and its surface `Destroyed` at 22:36:26.233 — **~180 ms, nothing drawn**. **What it does: nothing, silently.** No dialog, no toast, no result. `android.permission.REQUEST_DELETE_PACKAGES` is **not** in `app/src/main/AndroidManifest.xml` (grep: 0 hits) and not in the app's granted set; `pm list permissions -f` on this device reports it `protectionLevel:normal`. Verified after the run: `pm list packages` still lists `com.sidr.launcher.data.ailocal.test` and all four `sidr` packages | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
+| 17 | `startActivity(Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA))`, same shape and caller | Sidr installed, not default home | **Permission:** `RETURNED_NORMALLY`; no `Permission Denial`, no exception — and the app holds **no** `CAMERA` permission, so none is needed to launch the camera app. **What it does:** focus → `com.sec.android.app.camera/.Camera`, live viewfinder in «ФОТОГРАФИЯ» mode with the shutter button awaiting the user — **opens a screen**; no capture. Side effect worth naming: the camera sensor is live with no user tap | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
+| 18 | `startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))`, same shape and caller | Sidr installed, not default home | **Permission:** `RETURNED_NORMALLY`; no `Permission Denial`, no exception. **What it does:** focus → `com.android.settings/com.samsung.android.settings.wifi.WifiWarning` — the Wi-Fi screen («Wi-Fi», «Выключено») **with a modal already raised**: «Отключить мобильную точку доступа? … Отмена / OK». **Opens a screen — but the screen it opens was a modal that changes device state on one tap**, because this phone had the mobile hotspot on. Dismissed with `KEYCODE_BACK` (= Отмена); hotspot left on, host connectivity re-checked `200` afterwards | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
+| 19 | `startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))`, same shape and caller | Sidr installed, not default home | **Permission:** `RETURNED_NORMALLY`; no `Permission Denial`, no exception — and the app holds no `BLUETOOTH*` permission. **What it does:** focus → `com.android.settings/.Settings$BluetoothSettingsActivity`, «Bluetooth / Выключено» — **opens a screen**; state unchanged | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
+| 20 | `startActivity(Intent(Intent.ACTION_POWER_USAGE_SUMMARY))`, same shape and caller | Sidr installed, not default home | **Permission:** `RETURNED_NORMALLY`; no `Permission Denial`, no exception. **What it does:** focus → `com.samsung.android.lool/com.samsung.android.sm.battery.ui.graph.PowerUsageSummary` — «Действия с аккумулятором», charge-level and consumption graphs. **Opens a screen.** Note the responder is **Samsung Device Care, not `com.android.settings`** | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
+| 21 | `startActivity(Intent(Settings.ACTION_DATA_USAGE_SETTINGS))`, same shape and caller | Sidr installed, not default home | **Permission:** `RETURNED_NORMALLY`; no `Permission Denial`, no exception. **What it does:** focus → `com.android.settings/.Settings$DataUsageSummaryActivity`, «Использование данных», 9,46 ГБ for 1–30 сент. — **opens a screen**; the landed screen carries a «Мобильные данные» toggle (on) | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
+| 22 | `startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS))`, same shape and caller | Sidr installed, not default home | **Permission:** `RETURNED_NORMALLY`; no `Permission Denial`, no exception. **What it does:** focus → `com.android.settings/.Settings$DisplaySettingsActivity`, «Дисплей» with the light/dark selector, brightness slider — **opens a screen**; state unchanged | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
+| 23 | `startActivity(Intent(Settings.ACTION_SOUND_SETTINGS))`, same shape and caller | Sidr installed, not default home | **Permission:** `RETURNED_NORMALLY`; no `Permission Denial`, no exception. **What it does:** focus → `com.android.settings/.Settings$SoundSettingsActivity`, «Звуки и вибрация» (mode «Вибрация» selected) — **opens a screen**; state unchanged | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
+| 24 | `startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))`, same shape and caller | Sidr installed, not default home | **Permission:** `RETURNED_NORMALLY`; no `Permission Denial`, no exception — and no location permission was involved in *opening* it. **What it does:** focus → `com.android.settings/.Settings$LocationSettingsActivity`, «Локация / Включено» plus recent-access list — **opens a screen**; state unchanged | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
+| 25 | `startActivity(Intent("android.settings.NOTIFICATION_SETTINGS"))` — **the action is a string literal because there is no such public constant**: `javap` over `platforms/android-37.0/android.jar` finds no `Settings.ACTION_NOTIFICATION_SETTINGS` field (`ACTION_APP_NOTIFICATION_SETTINGS` and `ACTION_NOTIFICATION_LISTENER_SETTINGS` are present, the bare one is not). Same shape and caller | Sidr installed, not default home | **Permission:** `RETURNED_NORMALLY`; no `Permission Denial`, no exception. **What it does:** focus → `com.android.settings/.Settings$ConfigureNotificationSettingsActivity`, «Уведомления» — **opens a screen**; state unchanged. So the screen is reachable, but only through a hardcoded action string | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
+| 26 | **Same intent from uid 2000 `shell`, for comparison — never the app-facing answer** (controller ruling R13-1): `adb shell am start -a android.intent.action.DELETE -d package:com.sidr.launcher.data.ailocal.test` | same | **Opposite outcome to row 16.** `START … from uid 2000`, the activity **stayed** and drew the OS's own dialog: «com.sidr.launcher.data.ailocal.test / Удалить приложение? / Отмена / OK». Cancelled with `KEYCODE_BACK`; `pm list packages` verified all four `sidr` packages still installed. **This row is why row 16 had to be measured in-process:** taken from the shell, `uninstall_app` would have been recorded as «the OS confirms» and shipped dead, exactly as A1′'s `set_timer` did | 2026-09-15 | — |
+| 27 | Whether `com.android.alarm.permission.SET_ALARM` is **required** for `ACTION_SET_ALARM` (row 13 succeeded **with** it already declared and granted) | — | `<не измерено>` | — | — |
+| 28 | Whether the OS's uninstall dialog appears **for the app** once `android.permission.REQUEST_DELETE_PACKAGES` is declared (row 16's refusal removed) | — | `<не измерено>` | — | — |
 
 **Row 12 is deliberately empty, per this file's own rule that an unmeasured row stays empty and says
 so.** The reasoning around it splits into two pieces with very different standing, and blurring them
@@ -124,3 +147,124 @@ locale. A shortcut tool's user-visible name is therefore **not** ours to transla
 through `sidrString`, and the block's `en`/`ru`/`tr` `ToolVocabulary` cannot cover shortcut names the
 way it covers `set_timer`. Task 7 and Task 10 both need this; it was not anticipated by the spec, and
 it is recorded here rather than discovered later.
+
+---
+
+## Task 13 — spec §7.2's candidate set, measured
+
+Rows 13–26 above. Reproduced here in §7.2's own shape, because that is the table Phase 3's plan is
+written from (controller ruling R13-2: the measurement table keeps this file's five-column form; §7.2's
+form is reproduced here). Both right-hand columns are now filled from rows 13–25 and **nothing in them
+is inherited** — no cell was taken from platform documentation, from an API's name, or from recall.
+
+| Proposed id | Intent | Arg | Permission — MEASURED | What it actually does — MEASURED | Ships in Phase 3 |
+|---|---|---|---|---|---|
+| `set_alarm` | `AlarmClock.ACTION_SET_ALARM` | clock time | **None beyond the app's current set.** Returned normally, no refusal; `SET_ALARM` is already declared and granted, and whether it is *required* is row 27 — unmeasured | **Creates the alarm, already enabled.** No prefilled form, no confirm button; the clock opened on its list showing the armed alarm | **Yes** — but see the §7.2 contradiction below |
+| `show_alarms` | `AlarmClock.ACTION_SHOW_ALARMS` | — | None beyond the app's current set; no refusal | Opens a screen (the clock's alarm list); nothing changes | **Yes** |
+| `open_app_info` | `Settings.ACTION_APPLICATION_DETAILS_SETTINGS` | package | None beyond the app's current set; no refusal, for a launchable target **and** for one with no launcher activity | Opens a screen (`InstalledAppDetails`); the screen carries an «Удалить» button | **Yes** |
+| `uninstall_app` | `Intent.ACTION_DELETE` (package URI) | package | **REFUSED. `android.permission.REQUEST_DELETE_PACKAGES`** (or `DELETE_PACKAGES`), named by the responder, `protectionLevel:normal` on this device, **not declared** by the app | **Nothing, silently.** No dialog, no exception, no result — the uninstaller activity started and died in ~180 ms without drawing | **No** — blocked on an undeclared permission |
+| `open_camera` | `MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA` | — | None beyond the app's current set; no refusal, and the app holds no `CAMERA` permission | Opens a screen (Samsung Camera, live viewfinder, shutter awaiting the user); no capture | **Yes** |
+| `open_wifi_settings` | `Settings.ACTION_WIFI_SETTINGS` | — | None beyond the app's current set; no refusal | Opens a screen — **which on this phone came up with a state-changing modal already raised** («Отключить мобильную точку доступа?») | **Yes**, with the observation named |
+| `open_bluetooth_settings` | `Settings.ACTION_BLUETOOTH_SETTINGS` | — | None beyond the app's current set; no refusal | Opens a screen; nothing changes | **Yes** |
+| `open_battery_settings` | `Intent.ACTION_POWER_USAGE_SUMMARY` | — | None beyond the app's current set; no refusal | Opens a screen — served by **`com.samsung.android.lool`**, not `com.android.settings` | **Yes** |
+| `open_data_usage_settings` | `Settings.ACTION_DATA_USAGE_SETTINGS` | — | None beyond the app's current set; no refusal | Opens a screen; carries a «Мобильные данные» toggle | **Yes** |
+| `open_display_settings` | `Settings.ACTION_DISPLAY_SETTINGS` | — | None beyond the app's current set; no refusal | Opens a screen; nothing changes | **Yes** |
+| `open_sound_settings` | `Settings.ACTION_SOUND_SETTINGS` | — | None beyond the app's current set; no refusal | Opens a screen; nothing changes | **Yes** |
+| `open_location_settings` | `Settings.ACTION_LOCATION_SOURCE_SETTINGS` | — | None beyond the app's current set; no refusal | Opens a screen; nothing changes | **Yes** |
+| `open_notification_settings` | `Settings.ACTION_NOTIFICATION_SETTINGS` | — | None beyond the app's current set; no refusal | Opens a screen — **but only via the literal action string**: there is no such public constant on `compileSdk 37` | **Yes**, with the constant caveat |
+
+**Twelve of thirteen survive; one does not.**
+
+### Where the measurement contradicts §7.2's own proposal
+
+**1. `set_alarm` — «does it create the alarm, or open a prefilled form?» is answered *it creates it*,
+and that is `B4`'s false half measured a third time.** Row 13: with `EXTRA_SKIP_UI = false` the Samsung
+clock opened on its **list**, with the alarm already present and already **on**, and announced when it
+would fire. This is the `set_timer` shape of 2026-09-05 exactly — the flag governs whether the
+responding app shows its UI, not whether it acts — so Master Plan §3.6 `B4`'s «the "prefilled but not
+sent" form yields consent from the OS» is now false for the second intent as well as the first. Nothing
+in `ACTION_SET_ALARM` yields consent from the OS. A Phase 3 `set_alarm` descriptor therefore cannot
+borrow its risk level from the *form* argument; the only justification available to it is the one the
+owner already accepted for `set_timer` (reversible, immediately visible, provenance disclosed, nothing
+leaves the device), and that is an owner-level reading of the same evidence rather than something this
+measurement decides. It is named here so it cannot be «simplified» into a form argument later.
+
+**2. `uninstall_app` — «does the OS confirm, or does it delete?» is answered *neither*.** Row 16: the
+app is refused before any dialog exists. §7.2 offered two branches and the device took a third, and the
+third is the dangerous one, for a reason that is about the engine rather than about this tool:
+**`startActivity` returned normally and threw nothing.** A worker built on the shipped seam
+(`Tier0IntentToolWorker.launch`, whose only failure signals are `ActivityNotFoundException` and
+`SecurityException`) would answer `ToolResult.Effected()` for an invocation that did nothing, and
+`AgentExecutor` would write `ToolObserved(Effected)` into a trace that `DOC-ILM-3` requires to be 1:1
+with reality. That is strictly worse than A1′'s `set_timer`, which at least failed loudly enough for
+`ActivityTaskManager` to log a refusal. **Phase 3 must not ship `uninstall_app` on the current seam**,
+and the two things it needs — the declared permission and a way for the worker to learn that the
+responder refused — are both design work, not a manifest line.
+
+**`uninstall_app` keeps `CONFIRM` regardless**, in §7.3's own terms: the gate's job is that **Sidr**
+does not initiate an irreversible act without the user, so a second confirmation from the OS would not
+be a defect — and here there is no OS confirmation at all for the app, which makes the gate the *only*
+consent in the path rather than a redundant one. The level is not weakened by this measurement; it is
+the one thing about the row that the measurement strengthens.
+
+**3. `open_notification_settings` — the intent named in §7.2 does not exist as a constant.**
+`Settings.ACTION_NOTIFICATION_SETTINGS` is absent from `platforms/android-37.0/android.jar`
+(`javap`); only the literal `"android.settings.NOTIFICATION_SETTINGS"` reaches the screen, and it does
+(row 25). Shippable, but a Phase 3 tool for it must hardcode a string the SDK does not vouch for, and
+that is a different kind of premise from the other eleven.
+
+### Counting honestly: acting versus navigating
+
+Spec §7.2's floor is **eight new authored tools, of which at least four act**. Measured:
+
+- **Twelve** candidates survive the permission half — comfortably over the count floor of eight.
+- **One** of them **acts**: `set_alarm`. The other eleven **navigate** — they open a screen and change
+  nothing.
+- `uninstall_app` would have been the second acting tool and is refused. **Even if its permission were
+  declared, §7.2's candidate set contains at most two acting tools**, because ten of the thirteen are
+  settings or information screens by construction.
+
+**The floor is not reached, and this is a finding for the controller and the owner rather than
+something to make up.** The count half is met (12 ≥ 8); the **«at least four act» half is not, and
+cannot be met by this candidate set at all** — not by measurement error, but because the set was chosen
+by §7.1's rule (an argument that is a bounded token or absent), and the intents that satisfy that rule
+on Android are overwhelmingly navigational. §7.4 already excluded the acting, free-text ones
+(`SENDTO`, calendar `INSERT`, `geo:`) with a measured reason. So the gap is structural: A1″ cannot
+reach «four acting tools» out of §7.2 without either re-opening §7.4 (raw-span capture plus two owner
+decisions) or counting acting tools from `B2`'s shortcut adapter, which is a different section of the
+spec. Deciding which is the controller's, not this file's.
+
+### The two empty rows, and what depends on them
+
+**Row 27 — is `com.android.alarm.permission.SET_ALARM` actually required by `ACTION_SET_ALARM`?**
+Not measured. Row 13 succeeded on a build that already declares and is granted it, which shows the
+permission is *sufficient*, not that it is *necessary*. The negative test means running the same intent
+from a build without the permission, i.e. reinstalling the app package — forbidden this session
+(2026-09-14 destroyed the owner's data and Keystore material that way). **What depends on it:** whether
+a Phase 3 `set_alarm` row belongs in the `toolPermissions` map that Task 2's guard checks. Until it is
+measured, treating `SET_ALARM` as required is the fail-safe reading — the permission is already
+declared, so nothing has to change for `set_alarm` to work — but «required» must not be *written down*
+as measured, which is how A1′ acquired its false sentence in the first place.
+
+**Row 28 — does the uninstall dialog appear for the app once `REQUEST_DELETE_PACKAGES` is declared?**
+Not measured. It needs a manifest edit and a reinstall of the app package, both outside this task
+(Task 13 touches two files and no production code). Row 26 shows the dialog exists and is reachable
+**from uid 2000**; it does **not** show what `com.sidr.launcher` gets once permitted, and assuming the
+two are the same is the inherited-premise move this file forbids. **What depends on it:** whether
+`uninstall_app` is a Phase 3 row at all, and whether its worker can observe a refusal.
+
+### Two findings about the instrument itself
+
+**1. `grep -i 'Permission Denial'` is not sufficient, and on the one refused candidate it returned
+nothing.** The brief's Step 1 proposes exactly that grep as the permission half's instrument. On row 16
+the framework printed **no** `Permission Denial` line; the refusal existed only as the responder's own
+`E UninstallerActivity: Uid 10752 does not have …`. A reading that trusted the grep alone would have
+recorded `uninstall_app` as permission-clean. Whatever runs the next device round must read the
+**whole** log around the invocation, not one string.
+
+**2. The app's `<queries>` block did not gate any of these launches.** It declares MAIN/LAUNCHER, two
+speech actions, `SHOW_ALARMS` and `STILL_IMAGE_CAMERA`. Nine of the thirteen candidates are not covered
+by it, and all nine started their activity normally (rows 18–25 plus row 15's second target, a package
+with no launcher activity at all). So on this device package-visibility filtering is **not** a barrier
+to `startActivity` for these intents. It says nothing about `PackageManager` queries — row 12 is still
+the open row for that, and nothing here fills it.

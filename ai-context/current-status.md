@@ -206,8 +206,10 @@ it again: `09d4322` on 2026-09-15 measured 1357 tests / 0 failures / 0 errors**,
 557 executed` — `:data:repository` 271 → **298**, `:app` 54 → **59**, `:feature:launcher` 189 → **191**,
 `:domain:jvmTest` 436 → **438**. Phase 2 then opened, and Tasks 10-11 moved it again: **`c05fd7a` on 2026-09-15 measured 1369 tests /
 0 failures / 0 errors** (`:data:repository` 298 → **310**) — a mid-phase measurement, not Phase 2's
-boundary gate, which runs after Task 12. **1369 is the number a fresh gate must match today**, and it
-will move again before A1″ closes (Task 12 pending; Phase 3 unstarted).
+boundary gate, which runs after Task 12. Phase 2 then closed: **`1db2cd8` on 2026-09-15, the Phase 2 boundary gate, measured 1375 tests /
+0 failures / 0 errors** (`:data:repository` **315**, `:domain:jvmTest` **439**). **1375 is the number a
+fresh gate must match today.** It will move again before A1″ closes — Task 13 (device measurement of the
+Phase 3 intent table) is untouched and needs a phone, and Phase 3 is not plannable until it lands.
 
 ## Agentic track — Этап 4.5 (A0.5) — second consumer — `CODE-GREEN` (2026-08-26)
 

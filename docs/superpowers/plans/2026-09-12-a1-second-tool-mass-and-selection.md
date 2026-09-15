@@ -2020,12 +2020,12 @@ in a commit of its own, separately from the task it describes.** It is therefore
 commit as the task from here on, and a session that finds it disagreeing with
 `git log --oneline 181628a..HEAD` must believe git.
 
-**The number a fresh gate compares against is 1369** — measured at `c05fd7a` on 2026-09-15, mid-Phase-2 (the
+**The number a fresh gate compares against is 1375** — measured at `1db2cd8` on 2026-09-15, the **Phase 2 boundary** (the
 Phase 1 boundary measured 1357), and now written into `CLAUDE.md` and `current-status.md` as well. The chain, each
 number tied to the commit it was measured at: **1321** at `d391350` (before Task 4) → **1323** once
-Task 4 added two `:domain:jvmTest` tests → **1357** at the Phase 1 boundary (Tasks 6-8 +32, Task 9 +2) → **1369** with Tasks 10-11 done.
-Phase 2's boundary gate, after Task 12, is **1369 plus whatever Task 12 adds** — 1369 having
-been measured mid-phase at `c05fd7a`, with Tasks 10 and 11 done and Task 12 not started.
+Task 4 added two `:domain:jvmTest` tests → **1357** at the Phase 1 boundary (Tasks 6-8 +32, Task 9 +2) → **1369** with Tasks 10-11 done → **1375** at the Phase 2 boundary.
+Phase 2's boundary gate ran at `1db2cd8` and measured **1375**. Phase 3 has no gate yet: it is
+not plannable until Task 13's device measurements land.
 
 9. **Phase 2 opened 2026-09-15 by owner instruction, and Tasks 10 and 11 are done. Task 12 was
    deliberately NOT started** — the owner stopped the session at Task 11's close.
@@ -2084,6 +2084,51 @@ been measured mid-phase at `c05fd7a`, with Tasks 10 and 11 done and Task 12 not 
    mid-phase measurement taken because the session ended here and the next one must not compare
    against a stale number. `1369 = 1357 + 12` (Task 10 `:data:repository` 298 → 309, Task 11 +1),
    derived before the run and matched. `CLAUDE.md` and `current-status.md` now say 1369.
+
+10. **Phase 2 is CLOSED, 2026-09-15.** Tasks 10, 11 and 12 done, plus one owner-approved task that is
+   **not in this plan**. Task 13 (device measurement of the Phase 3 intent table) is untouched and needs
+   a phone; Phase 3 is not plannable until it lands.
+   **Task 10b — the leftover-word rule** (`b35e489`, fix rounds `8b6ea9c`, `9cc9ef0`), owner-approved
+   after Task 10's review, because Task 11 had made it **live**: a sentence that merely *contained* an
+   app-name token and a shortcut's full name launched that shortcut, ungated (`SAFE`), on a device
+   carrying 205 shortcuts. The rule is now `commandTokens ⊆ nameTokens ∪ qualifierTokens`.
+   **A verb-stripping variant was rejected on evidence, and the evidence is worth keeping:**
+   `RouteCommandUseCase`'s steps 2 and 2b are disjoint because `RuleBasedIntentMatcher` returns
+   `LaunchAppIntent` at confidence **0.90**, above the 0.85 auto-execute threshold — so a verb-led
+   command is never `Unknown`/`LowConfidence`, never satisfies `isUndecided()`, and **cannot reach the
+   selector at all**. Verb handling would have been machinery for an input that cannot arrive.
+   **The cost is named, not implied absent:** any function word that is neither a name nor a qualifier
+   token now kills an otherwise-good match — `"new chat in whatsapp"` declines on `"in"`, and
+   `"новое сообщение в телеграм"` on `"в"`. Those *are* verbless, so unlike the verb case they do reach
+   step 2b. Closing that needs a per-locale stopword set, which is an **owner** decision, not this
+   block's. A decline is free; a false positive launches an app.
+   **One sentence in this block was wrong three times, and the fix was to change its form.** "An
+   argument-carrying trigger is structurally unshadowable" (mine) and "can only be shadowed by a name
+   that embeds the argument text" (the implementer's) both compressed a **four-condition conjunction**
+   into one "can only be shadowed by X" claim, and each compression dropped a different term — first the
+   embedding case, then that `allowed` is the **union** of name and qualifier tokens. The KDoc now states
+   the four conditions as a conjunction with one worked instance and no "only". A conjunction cannot lose
+   a term the way a paraphrase can.
+   **Task 12 — what a tool-shaped prompt would weigh** (`171f4b3`, fix rounds `070e841`, `1db2cd8`).
+   Measured: `ROUTER_INSTRUCTION` is exactly **562 chars** and per-descriptor cost is exactly
+   `4 + len(id)` ⇒ **10-12 chars**, so at `n=2` the preamble is **96.6%** of the figure. Both are now
+   *pinned by assertions*, because the original bound (`< 4_000` against a measured 717) could not fail —
+   it first tripped at a 21x rise — and the printed lines appear only under `--info`, so an edit to the
+   live outbound router prompt would have silently falsified every ADR number with nothing going red.
+   **The finding is that `B3` does not survive measurement.** Master Plan §3.6 `B3` justifies selection
+   with «Двести дескрипторов в промпт не кладутся… требование, а не оптимизация». At the measured cost
+   200 descriptors ≈ **713 tokens**; under a pessimistic correction (shortcut-shaped ids + a real
+   declared arg schema) ≈ **6 035 tokens**; and adding a hypothetical per-tool description — which
+   `ToolDescriptor` does not have, so it is named as un-modelled rather than invented — ≈ 8 290. Every
+   one of those fits any modern context window. **The Master Plan was deliberately NOT edited** — it has
+   its own change-control and is not an agent's to amend from inside a block. The honest resolution,
+   which the spec had already made: selection here stands on the **deterministic matcher branch**
+   (spec §6.1), not on prompt size, so the measurement confirms the design rather than undermining it.
+   **Phase 2 boundary gate at `1db2cd8`: 1375 tests, 0 failures, 0 errors**, exit 0,
+   `557 actionable tasks: 557 executed`, every module's `build/test-results` deleted first.
+   `:domain:jvmTest` **439** · `:data:repository` **315** · `:feature:launcher` 191 · `:app` 59 ·
+   `:consumer:jvm` 56. `1375 = 1369 + 6` (Task 10b +5, Task 12 +1) — derived before the run and matched,
+   for the third boundary running.
 
 ### Rulings made during execution, and what each costs if wrong
 

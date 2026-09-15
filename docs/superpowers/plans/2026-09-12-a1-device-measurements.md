@@ -372,3 +372,83 @@ on which of the responding packages are launcher-visible, and this session measu
 named, not used. Either way the conclusion is unchanged and, on the per-action count, understated: it
 says nothing about `PackageManager` queries, so row 12 is still the open row for that and nothing here
 fills it.
+
+---
+
+## Task 13b — a four-observation **smoke round** on the shipped surface (2026-09-16)
+
+**This is not device acceptance, and it must not be read as one.** Spec §14 puts acceptance after Phase
+3, and Phase 3 adds eight-plus tools to this same surface, so accepting it now would accept something
+about to change. Device acceptance remains the **owner's** and remains **unperformed**. What follows is a
+smoke round the owner authorised for one purpose: none of A1″'s shipped surface — `f8d0051` (the
+`app_shortcut` adapter), `c6b8c46` (the per-call snapshot), `de3274a` (`ToolSelector`) — had **ever
+executed on a phone**, and Phase 3 is planned on top of it. Four observations, each de-risking Phase 3.
+Neither the count nor the coverage here is a §7.2 candidate measurement; these are separate rows, in
+their own section, with their own numbering (S1–S6).
+
+Device state for all of it: SM-A325F, Android 13, One UI, **`ru-RU`**, Sidr holding
+`android.app.role.HOME` (the owner set it by hand — rows 3/4 stand, no shell path does it on this build),
+app build `ab2d063` (sha256 `9b7b5a4e…`, the reproducible full-path build), test APK from the same tree
+plus this round's three new probe methods.
+
+| # | What was called | Device state | Observed result, verbatim | Date | Build |
+|---|---|---|---|---|---|
+| S1 | **The shipped `app_shortcut` adapter, wired as `AgentProvidesModule` wires it** — `ShortcutToolSource(ShortcutCatalog(AndroidShortcutQuery(context), Dispatchers.IO))`, `refresh()` then `all()` / `names()`. Probe method `shortcutAdapterSnapshot`. Rows 6–9 measured `LauncherApps` **raw**; these three production classes had never run on a device | Sidr **is** default home | `hasShortcutHostPermission :: true`. `catalog.current.size :: 216`, **`all.size :: 216`**, **`names.size :: 216`**, `distinctPackages :: 65`, `distinctIds :: 216` (**no id collisions**). Every descriptor: `levels :: app_shortcut`, `effects :: EXTERNAL`, `risks :: SAFE`, `durabilities :: TRANSIENT`. `blankLabels :: 0`. `appLabelEqualsPackageName :: 0` — the raw-package-name fallback in `AndroidShortcutQuery` fired for **none** of the 65 packages. Ids have the form `shortcut:<package>/<shortcutId>` | 2026-09-16 | `ab2d063` + probe |
+| S2 | **Raw `LauncherApps` at the same moment**, to tell adapter filtering apart from device drift: `LauncherAppsProbe#measureLauncherApps`, run 39 s after S1 | same | `getShortcuts.total :: 216`, `distinctPackages :: 65`, `isEnabled.true :: 216`. **Identical to S1 in both numbers.** So the adapter drops **nothing** on this device, and the 205 → 216 difference from row 7 (2026-09-14) is **device drift over two days**, not adapter behaviour — measured rather than argued. Side effect to record: this probe method also fires `startShortcut` on the first shortcut (row 10's measurement), so a third-party app was launched; `RETURNED_NORMALLY`, and the phone was returned to home afterwards | 2026-09-16 | `ab2d063` + probe |
+| S3 | **`ToolSelector` over the real 216-descriptor registry**, beside the authored `ToolVocabulary`: `ToolSelector(ToolVocabulary(), ShortcutToolSource(...))`. Probe method `toolSelectorAtScale`, eight texts via `-e texts` | same | `registrySize :: 216`. **It neither collapses nor offers many — it decides.** `«youtube подписки»` → `MATCHED id=shortcut:com.google.android.youtube/subscriptions-shortcut`; `«youtube shorts»` → `MATCHED …/shorts-shortcut`; `«obsidian новая заметка»` → `MATCHED id=shortcut:md.obsidian/app:new` (a **two-word** name matched as a contiguous run). Declines, each for the documented rule: `«подписки»` → `NO_MATCH` (rule 2 — must name its app); `«открой youtube подписки»` → `NO_MATCH` (rule 4 — `открой` unaccounted); `«youtube подписки пожалуйста»` → `NO_MATCH` (rule 4's named recall cost, now observed rather than predicted). **Authored beats dynamic at scale:** `«таймер на 5 минут»` → `MATCHED id=set_timer args={duration=5 минут}` and `«системные настройки»` → `MATCHED id=open_system_settings`, both in ~1 ms | 2026-09-16 | `ab2d063` + probe |
+| S4 | **Cost of one `select` at this scale**, read from the log timestamps of S3's eight calls | same | The two **authored** matches resolved in **≈1 ms** (02:01:04.521 → .522 → .522) — they return before the dynamic branch. The six calls that reached the **dynamic** branch took **≈64–69 ms each** (.193→.262, .262→.326, .326→.392, .392→.455, .455→.521, .522→.586). That is `DynamicToolNames.names()` over 216 shortcuts plus the per-candidate match, **per call**, with no `LauncherApps` call involved (the catalog is a `@Volatile` snapshot). Figure from logcat timestamps around the call, not from an in-process timer — good to ±1 ms, no better | 2026-09-16 | `ab2d063` + probe |
+| S5 | **A command that hits a shortcut, driven through the launcher's own UI** in `ru-RU`: tapped the command field on Sidr's home, typed `youtube shorts`, pressed ENTER. Nothing scripted past the keyboard | same | **It reached the agent surface, ran, and disclosed its provenance.** The shortcut genuinely executed through `LauncherApps.startShortcut`, not as an app launch: `ActivityTaskManager: START u0 {act=com.google.android.youtube.action.open.shorts flg=0x1000c000 cmp=com.google.android.youtube/.app.honeycomb.Shell$HomeActivity (has extras)} from uid 10234` — the **shortcut's own action**, started from **YouTube's** uid, where a plain launch would have been `act=android.intent.action.MAIN cat=[LAUNCHER]` from Sidr's. The surface (screenshot read) showed: «План выполнен» / `COMPLETED`; the step line «Открыть «YouTube — Shorts» — выполнено» — i.e. the **third-party label**, composed qualifier — name; the provenance line **`APP SHORTCUT · EXTERNAL`**; and `АГЕНТ · SHORTCUT:COM.GOOGLE.ANDROID.YOUTUBE/SHORTS-SHORTCUT`. So `DOC-ILM-2` disclosure works for a dynamic third-party tool on a real device with a real label. Tapping «Закрыть» cleared the card **and the command buffer** and brought the home body back (the A1′ acceptance fix (b), smoke-confirmed) | 2026-09-16 | `ab2d063` |
+| S6 | Whether the S5 run stopped for consent | same | **It did not, and that is consistent rather than surprising.** Every shortcut descriptor is `risk = SAFE` (S1), so `requiresConsent(SAFE)` is false and the one-step plan ran to `COMPLETED` with no gate: from ENTER to YouTube in foreground was under 4 s with no user input. Observed, not judged — see the finding below | 2026-09-16 | `ab2d063` |
+
+### What the smoke round found, in order of how much it changes Phase 3
+
+**S-F1 — the registry carries 216 tools, all `EXTERNAL`, all `SAFE`, and therefore all ungated.** S6 is a
+measurement, not a complaint: `ToolSelector` → one-step plan → `ToolFederation` → `startShortcut`, with
+no consent checkpoint, because `ActionRiskLevel.SAFE` is what `ShortcutToolSource` assigns every
+descriptor. The launch itself is benign and reversible for the one shortcut measured. What is
+**owner-level** is that the same path applies unchanged to all 216, and the 216 are not a curated set —
+they are whatever the installed apps happen to publish, changing as apps update. This is not a defect
+against any written rule: `DOC-ADL-1`'s predicate is applied correctly and `DOC-ILM-2`'s disclosure is
+present (S5). It is a scope question A1″ should put to the owner rather than settle.
+
+**S-F2 — shortcut labels contain the owner's personal data, and that is a privacy input nobody had
+measured.** Among the 216 names the adapter returned are WhatsApp conversation shortcuts whose
+`shortcutLabel` is a **contact display name** — in Arabic, Russian and Latin script — and, in at least
+one case, a **bare international phone number**. These are not a special case: they are ordinary
+`FLAG_MATCH_DYNAMIC` shortcuts, and the adapter is correct to return them. The consequences are
+concrete and belong to Phase 3, not here:
+ - such a label is rendered on the agent surface as a tool name (S5 shows the mechanism);
+ - `DynamicToolLabels` holds all of them in memory for the life of the process;
+ - **whether any of them can reach the model** is an `OutboundContextPolicy` question that this round did
+   not measure and must not be guessed at;
+ - and `agent_session.goal_text` already puts raw command text on disk, so a command naming a contact
+   puts that name in the database.
+
+**The verbatim values are deliberately not reproduced in this file**, which is committed to git; they
+are in the round's git-ignored evidence directory. That omission is itself the finding's point.
+
+**S-F3 — the adapter's count is the raw count, so "205" was never an adapter property.** S1 and S2
+together settle something rows 7–9 could not: the adapter's three filters (`isEnabled`, non-blank label,
+id round-trip) removed **zero** entries on this device. Task 12's number to measure against is therefore
+"whatever `getShortcuts` returns today", and the two-day drift from 205 to 216 is the concrete
+demonstration that the file's existing warning — "one device's number, not a constant" — is about days,
+not just about devices.
+
+**S-F4 — one visual anomaly was observed, chased, and turned out not to be ours.** A panel bottom-right
+of Sidr's home screen, overlapping the tab bar and obscuring «агенты» / «активность», appeared after the
+S5 run and its content **changed between frames**. It is **YouTube Shorts in picture-in-picture**,
+playing the video the shortcut opened: the third frame shows the video plainly. Recorded because the
+first two frames read exactly like a launcher layout defect, and the honest trail matters more than the
+tidy conclusion — a smoke round that had stopped at one screenshot would have filed a Sidr bug.
+
+**Limits of the smoke round, stated rather than implied.** (1) S1/S3 wire the production classes
+**by hand**, as `AgentProvidesModule` does; `:app`'s `androidTest` has no Hilt testing dependency and
+adding one would change the build under measurement, so a wiring mistake in the Hilt graph is invisible
+here (it is `DoctrineGuardTest`/`ToolRegistryPermissionGuardTest`'s job on the host). **S5 does** go
+through the real graph, which is why it is the load-bearing one. (2) One locale (`ru-RU`), one device,
+one shortcut actually executed out of 216. (3) Nothing was measured about what happens when a shortcut
+disappears between plan and invocation — `ShortcutStalenessEndToEndTest` covers it on the host; no device
+row exists. (4) Row 12 remains Task 5's and remains empty: S1's `appLabelEqualsPackageName :: 0` shows
+the *fallback* never fired for these 65 packages, which is not the same observation as whether
+`getApplicationInfo` throws for a shortcut-contributing package with **no launcher activity** — no such
+package was known to be in the set.

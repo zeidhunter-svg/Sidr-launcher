@@ -1,6 +1,8 @@
 package com.sidr.launcher.probe
 
+import android.content.Context
 import android.content.Intent
+import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Process
@@ -10,6 +12,13 @@ import android.provider.Settings
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.sidr.launcher.data.repository.agent.ToolSelector
+import com.sidr.launcher.data.repository.agent.ToolVocabulary
+import com.sidr.launcher.data.repository.agent.shortcut.AndroidShortcutQuery
+import com.sidr.launcher.data.repository.agent.shortcut.ShortcutCatalog
+import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolSource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -206,7 +215,93 @@ class Tier0IntentProbe {
     fun openNotificationSettings() =
         fire("open_notification_settings", Intent("android.settings.NOTIFICATION_SETTINGS"))
 
+    /**
+     * **Task 13b, piece 3 (smoke round), observation 1: what the *adapter* produces on this device.**
+     *
+     * Rows 6–9 measured `LauncherApps` directly. `ShortcutToolSource` / `ShortcutCatalog` /
+     * `AndroidShortcutQuery` — the shipped `app_shortcut` adapter — had **never executed on a phone**,
+     * so "the registry carries 205 shortcut descriptors" rested on the raw API's count and on unit
+     * tests over a fake seam. This wires the three production classes exactly as
+     * `AgentProvidesModule` does and logs what the adapter itself returns.
+     *
+     * **What this does and does not measure.** It runs the adapter's own production code over the real
+     * `LauncherApps`; it does **not** run the Hilt graph, because `:app`'s `androidTest` has no Hilt
+     * testing dependency and adding one would change the build under measurement. So a wiring mistake
+     * in `AgentProvidesModule` is invisible here — `DoctrineGuardTest` and `ToolRegistryPermissionGuardTest`
+     * cover that on the host — and what is measured is the adapter's behaviour against the device.
+     */
+    @Test
+    fun shortcutAdapterSnapshot() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+        log("adapter.hasShortcutHostPermission", launcherApps.hasShortcutHostPermission().toString())
+
+        val catalog = ShortcutCatalog(AndroidShortcutQuery(context), Dispatchers.IO)
+        runBlocking { catalog.refresh() }
+        val source = ShortcutToolSource(catalog)
+
+        val raw = catalog.current()
+        val descriptors = source.all()
+        val names = source.names()
+        log("adapter.catalog.current.size", raw.size.toString())
+        log("adapter.all.size", descriptors.size.toString())
+        log("adapter.names.size", names.size.toString())
+        log("adapter.distinctPackages", raw.map { it.packageName }.distinct().size.toString())
+        log("adapter.distinctIds", descriptors.map { it.id }.distinct().size.toString())
+        log("adapter.levels", descriptors.map { it.level.value }.distinct().sorted().joinToString(","))
+        log("adapter.effects", descriptors.map { it.effect.name }.distinct().sorted().joinToString(","))
+        log("adapter.risks", descriptors.map { it.risk.name }.distinct().sorted().joinToString(","))
+        log("adapter.durabilities", descriptors.map { it.durability.name }.distinct().sorted().joinToString(","))
+        log("adapter.idPrefixOk", descriptors.count { it.id.value.startsWith("app_shortcut:") }.toString())
+        // Row 12 is Task 5's and stays theirs; this is only the adapter-visible symptom of that branch
+        // — `AndroidShortcutQuery` falls back to the raw package name when `getApplicationInfo` fails.
+        log(
+            "adapter.appLabelEqualsPackageName",
+            raw.count { it.appLabel == it.packageName }.toString(),
+        )
+        log("adapter.blankLabels", raw.count { it.shortcutLabel.isBlank() || it.appLabel.isBlank() }.toString())
+        names.take(SAMPLE).forEachIndexed { index, name ->
+            log("adapter.name[$index]", "qualifier=«${name.qualifier}» name=«${name.name}» id=${name.id.value}")
+        }
+    }
+
+    /**
+     * **Task 13b, piece 3, observation 3: does `ToolSelector` return one candidate at registry scale?**
+     *
+     * `ToolSelectorTest` exercises this class over a handful of hand-built names. Here it runs over the
+     * device's **real** `app_shortcut` set beside the authored `ToolVocabulary`, which is the only place
+     * the "collapses at scale" and "offers many" failure modes can actually appear. The return type is
+     * `ToolMatch?`, so "offers many" is structurally impossible — the live question is whether, with
+     * hundreds of third-party names in play, a text that *should* select still does and a text that
+     * should not still declines.
+     *
+     * Texts come from `-e texts "a|b|c"` so the exact shortcut labels this device happens to publish can
+     * be supplied after [shortcutAdapterSnapshot] has reported them, without editing this file.
+     */
+    @Test
+    fun toolSelectorAtScale() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val catalog = ShortcutCatalog(AndroidShortcutQuery(context), Dispatchers.IO)
+        runBlocking { catalog.refresh() }
+        val source = ShortcutToolSource(catalog)
+        val selector = ToolSelector(ToolVocabulary(), source)
+        log("selector.registrySize", source.all().size.toString())
+
+        val texts = InstrumentationRegistry.getArguments().getString("texts")
+            ?.split('|')?.map { it.trim() }?.filter { it.isNotEmpty() }
+            ?: emptyList()
+        log("selector.textCount", texts.size.toString())
+        texts.forEach { text ->
+            val match = selector.select(text)
+            log(
+                "selector.select«$text»",
+                match?.let { "MATCHED id=${it.id.value} args=${it.args}" } ?: "NO_MATCH",
+            )
+        }
+    }
+
     private companion object {
+        const val SAMPLE = 30
         const val DEAD_LEFTOVER = "com.sidr.launcher.data.ailocal.test"
         val PROTECTED = setOf("com.sidr.launcher", "com.sidr.launcher.test")
     }

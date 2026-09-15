@@ -399,6 +399,9 @@ plus this round's three new probe methods.
 | S4 | **Cost of one `select` at this scale**, read from the log timestamps of S3's eight calls | same | The two **authored** matches resolved in **≈1 ms** (02:01:04.521 → .522 → .522) — they return before the dynamic branch. The six calls that reached the **dynamic** branch took **≈64–69 ms each** (.193→.262, .262→.326, .326→.392, .392→.455, .455→.521, .522→.586). That is `DynamicToolNames.names()` over 216 shortcuts plus the per-candidate match, **per call**, with no `LauncherApps` call involved (the catalog is a `@Volatile` snapshot). Figure from logcat timestamps around the call, not from an in-process timer — good to ±1 ms, no better | 2026-09-16 | `ab2d063` + probe |
 | S5 | **A command that hits a shortcut, driven through the launcher's own UI** in `ru-RU`: tapped the command field on Sidr's home, typed `youtube shorts`, pressed ENTER. Nothing scripted past the keyboard | same | **It reached the agent surface, ran, and disclosed its provenance.** The shortcut genuinely executed through `LauncherApps.startShortcut`, not as an app launch: `ActivityTaskManager: START u0 {act=com.google.android.youtube.action.open.shorts flg=0x1000c000 cmp=com.google.android.youtube/.app.honeycomb.Shell$HomeActivity (has extras)} from uid 10234` — the **shortcut's own action**, started from **YouTube's** uid, where a plain launch would have been `act=android.intent.action.MAIN cat=[LAUNCHER]` from Sidr's. The surface (screenshot read) showed: «План выполнен» / `COMPLETED`; the step line «Открыть «YouTube — Shorts» — выполнено» — i.e. the **third-party label**, composed qualifier — name; the provenance line **`APP SHORTCUT · EXTERNAL`**; and `АГЕНТ · SHORTCUT:COM.GOOGLE.ANDROID.YOUTUBE/SHORTS-SHORTCUT`. So `DOC-ILM-2` disclosure works for a dynamic third-party tool on a real device with a real label. Tapping «Закрыть» cleared the card **and the command buffer** and brought the home body back (the A1′ acceptance fix (b), smoke-confirmed) | 2026-09-16 | `ab2d063` |
 | S6 | Whether the S5 run stopped for consent | same | **It did not, and that is consistent rather than surprising.** Every shortcut descriptor is `risk = SAFE` (S1), so `requiresConsent(SAFE)` is false and the one-step plan ran to `COMPLETED` with no gate: from ENTER to YouTube in foreground was under 4 s with no user input. Observed, not judged — see the finding below | 2026-09-16 | `ab2d063` |
+| S7 | **The HOME role taken away — the fail-closed path that had never executed.** `cmd package set-home-activity com.sec.android.app.launcher/.activities.LauncherActivity` → `Success` (the permitted direction; rows 3/4 still stand for the other one), then `shortcutAdapterSnapshot` re-run unchanged | Sidr installed, **not** default home | **Degrades to an empty tool set, exactly as Task 5's measurement prescribed, and without a `SecurityException` ever being raised.** `hasShortcutHostPermission :: false`; `catalog.current.size :: 0`, `all.size :: 0`, `names.size :: 0`, `distinctPackages :: 0`; every aggregate line empty. **No crash, no `FATAL EXCEPTION`, no ANR** in the whole capture. The primary gate fired first, so `getShortcuts` — row 2's thrower — was **never called**: the `SecurityException` catch in `AndroidShortcutQuery` remains the untested backstop it is documented to be, and this row does **not** exercise it | 2026-09-16 | `ab2d063` + probe |
+| S8 | `toolSelectorAtScale` re-run with the role gone, four texts | same | `registrySize :: 0`. `«youtube shorts»` and `«youtube подписки»` → `NO_MATCH` — the two texts that selected in S3. The **authored** tools are untouched: `«таймер на 5 минут»` → `MATCHED id=set_timer args={duration=5 минут}`, `«системные настройки»` → `MATCHED id=open_system_settings`. All four in ≈1–2 ms, the dynamic branch now having nothing to walk | 2026-09-16 | `ab2d063` + probe |
+| S9 | **The same UI command as S5, with the role gone**: `am start -n com.sidr.launcher/.LauncherActivity`, tapped the field, typed `youtube shorts`, ENTER | same | **The honest blocked-state statement, and no crash.** The surface showed «ИИ-провайдер ещё не настроен.» with a «Настроить провайдера» affordance — hard rule 5 / ADR 1/4's «never *Unknown command*, which blames the command for the system's state», reached here because step 2b found nothing and the command fell through to the model path with no provider configured. Focus stayed `com.sidr.launcher/.LauncherActivity`; a scan of the whole capture for `FATAL EXCEPTION`, `ANR in com.sidr`, `Process com.sidr.launcher … has died` and `Force finishing` found **nothing**. **Why no provider:** the 2026-09-14 `connectedAndroidTest` uninstall destroyed the Keystore material behind the BYOK key (recorded in this file's own preamble) — a pre-existing state, **not** something this round's `install -r`s caused: uid stayed `10752` and `databases/` survived all five of them | 2026-09-16 | `ab2d063` |
 
 ### What the smoke round found, in order of how much it changes Phase 3
 
@@ -441,6 +444,15 @@ playing the video the shortcut opened: the third frame shows the video plainly. 
 first two frames read exactly like a launcher layout defect, and the honest trail matters more than the
 tidy conclusion — a smoke round that had stopped at one screenshot would have filed a Sidr bug.
 
+**S-F5 — the degradation path is the strongest result of the round, because the same command was run in
+both states.** `youtube shorts` ran a third-party shortcut tool with full provenance disclosure at 02:02
+(S5) and, four minutes later with the HOME role gone, produced «ИИ-провайдер ещё не настроен.» with no
+crash and no offer of a tool that could not run (S9). Nothing had to be rebuilt or reinstalled between
+the two; the only thing that changed was a runtime role. That is spec §5.3's requirement observed
+end-to-end rather than argued from `ShortcutCatalog`'s KDoc — and note which mechanism did the work:
+`hasShortcutHostPermission` gated it (S7), so the `SecurityException` backstop was never reached and is
+still unexercised on a device.
+
 **Limits of the smoke round, stated rather than implied.** (1) S1/S3 wire the production classes
 **by hand**, as `AgentProvidesModule` does; `:app`'s `androidTest` has no Hilt testing dependency and
 adding one would change the build under measurement, so a wiring mistake in the Hilt graph is invisible
@@ -451,4 +463,12 @@ disappears between plan and invocation — `ShortcutStalenessEndToEndTest` cover
 row exists. (4) Row 12 remains Task 5's and remains empty: S1's `appLabelEqualsPackageName :: 0` shows
 the *fallback* never fired for these 65 packages, which is not the same observation as whether
 `getApplicationInfo` throws for a shortcut-contributing package with **no launcher activity** — no such
-package was known to be in the set.
+package was known to be in the set. (5) S7 leaves the `SecurityException` catch unexercised, as that row
+says — closing it needs the role to change *between* the gate check and the call, which no shell command
+can arrange.
+
+**Device left as found**, verified: One UI Home holds `android.app.role.HOME`
+(`resolve-activity` → `com.sec.android.app.launcher`) and is focused; the installed app is the
+HEAD-matching `9b7b5a4e…` build with `SET_ALARM: granted=true` and **no** `REQUEST_DELETE_PACKAGES`; uid
+`10752`; `databases/` intact; all four `sidr` packages installed; `dumpsys alarm` greps **0** for
+`SIDR PROBE`. The manifest edits of rows 27 and 28 exist in no commit.

@@ -60,7 +60,7 @@ discrepancy is explained rather than mysterious.
 | 21 | `startActivity(Intent(Settings.ACTION_DATA_USAGE_SETTINGS))`, same shape and caller | Sidr installed, not default home | **Permission:** `RETURNED_NORMALLY`; no `Permission Denial`, no exception. **What it does:** focus → `com.android.settings/.Settings$DataUsageSummaryActivity`, «Использование данных», 9,46 ГБ for 1–30 сент. — **opens a screen**; the landed screen carries a «Мобильные данные» toggle (on) | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
 | 22 | `startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS))`, same shape and caller | Sidr installed, not default home | **Permission:** `RETURNED_NORMALLY`; no `Permission Denial`, no exception. **What it does:** focus → `com.android.settings/.Settings$DisplaySettingsActivity`, «Дисплей» with the light/dark selector, brightness slider — **opens a screen**; state unchanged | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
 | 23 | `startActivity(Intent(Settings.ACTION_SOUND_SETTINGS))`, same shape and caller | Sidr installed, not default home | **Permission:** `RETURNED_NORMALLY`; no `Permission Denial`, no exception. **What it does:** focus → `com.android.settings/.Settings$SoundSettingsActivity`, «Звуки и вибрация» (mode «Вибрация» selected) — **opens a screen**; state unchanged | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
-| 24 | `startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))`, same shape and caller | Sidr installed, not default home | **Permission:** `RETURNED_NORMALLY`; no `Permission Denial`, no exception — and no location permission was involved in *opening* it. **What it does:** focus → `com.android.settings/.Settings$LocationSettingsActivity`, «Локация / Включено» plus recent-access list — **opens a screen**; state unchanged | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
+| 24 | `startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))`, same shape and caller | Sidr installed, not default home | **Permission:** `RETURNED_NORMALLY`; no `Permission Denial`, no exception — but the app **declares `android.permission.ACCESS_FINE_LOCATION`** (`AndroidManifest.xml:15`, for the prayer feature), so this run shows a location permission is **sufficient**, not that none is needed; whether one is *required* to open this screen is **unmeasured**, exactly as row 27 leaves `SET_ALARM`. Unlike rows 17 and 19, where the app holds no `CAMERA` and no `BLUETOOTH*` at all, the negative cannot be read off this row. **What it does:** focus → `com.android.settings/.Settings$LocationSettingsActivity`, «Локация / Включено» plus recent-access list — **opens a screen**; state unchanged | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
 | 25 | `startActivity(Intent("android.settings.NOTIFICATION_SETTINGS"))` — **the action is a string literal because there is no such public constant**: `javap` over `platforms/android-37.0/android.jar` finds no `Settings.ACTION_NOTIFICATION_SETTINGS` field (`ACTION_APP_NOTIFICATION_SETTINGS` and `ACTION_NOTIFICATION_LISTENER_SETTINGS` are present, the bare one is not). Same shape and caller | Sidr installed, not default home | **Permission:** `RETURNED_NORMALLY`; no `Permission Denial`, no exception. **What it does:** focus → `com.android.settings/.Settings$ConfigureNotificationSettingsActivity`, «Уведомления» — **opens a screen**; state unchanged. So the screen is reachable, but only through a hardcoded action string | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
 | 26 | **Same intent from uid 2000 `shell`, for comparison — never the app-facing answer** (controller ruling R13-1): `adb shell am start -a android.intent.action.DELETE -d package:com.sidr.launcher.data.ailocal.test` | same | **Opposite outcome to row 16.** `START … from uid 2000`, the activity **stayed** and drew the OS's own dialog: «com.sidr.launcher.data.ailocal.test / Удалить приложение? / Отмена / OK». Cancelled with `KEYCODE_BACK`; `pm list packages` verified all four `sidr` packages still installed. **This row is why row 16 had to be measured in-process:** taken from the shell, `uninstall_app` would have been recorded as «the OS confirms» and shipped dead, exactly as A1′'s `set_timer` did | 2026-09-15 | — |
 | 27 | Whether `com.android.alarm.permission.SET_ALARM` is **required** for `ACTION_SET_ALARM` (row 13 succeeded **with** it already declared and granted) | — | `<не измерено>` | — | — |
@@ -263,8 +263,18 @@ recorded `uninstall_app` as permission-clean. Whatever runs the next device roun
 **whole** log around the invocation, not one string.
 
 **2. The app's `<queries>` block did not gate any of these launches.** It declares MAIN/LAUNCHER, two
-speech actions, `SHOW_ALARMS` and `STILL_IMAGE_CAMERA`. Nine of the thirteen candidates are not covered
-by it, and all nine started their activity normally (rows 18–25 plus row 15's second target, a package
-with no launcher activity at all). So on this device package-visibility filtering is **not** a barrier
-to `startActivity` for these intents. It says nothing about `PackageManager` queries — row 12 is still
-the open row for that, and nothing here fills it.
+speech actions, `SHOW_ALARMS` and `STILL_IMAGE_CAMERA`. **Counting per declared action — the reading
+used here, because it is what the block literally states — exactly two candidates are covered
+(`show_alarms`, `open_camera`) and the other eleven are not.** All eleven nevertheless resolved:
+`ActivityTaskManager` logged `START … from uid 10752` for every one, `uninstall_app` included, and ten
+of the eleven went on to draw their screen — the eleventh finished itself for a **permission** reason
+(row 16), not a visibility one. Row 15's second target, a package with no launcher activity at all, was
+not filtered either. So on this device package-visibility filtering is **not** a barrier to
+`startActivity` for these intents.
+
+A **per-package** reading would give a different number — the `SHOW_ALARMS` query makes the clock
+package visible, so `ACTION_SET_ALARM` to that same package would not be gated — but that reading rests
+on which of the responding packages are launcher-visible, and this session measured none of that. It is
+named, not used. Either way the conclusion is unchanged and, on the per-action count, understated: it
+says nothing about `PackageManager` queries, so row 12 is still the open row for that and nothing here
+fills it.

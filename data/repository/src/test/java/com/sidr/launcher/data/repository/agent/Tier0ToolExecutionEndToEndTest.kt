@@ -75,12 +75,15 @@ import org.robolectric.annotation.Config
  * has not had one; a JVM/Robolectric test is what can hold the join in CI.
  *
  * Everything below the four fakes is the production object, wired exactly as `AgentProvidesModule`
- * wires it: the real [ToolVocabulary] inside the real [ToolMatchPlanner] inside the real
- * [CompositePlanner], the real two-adapter [ToolFederation] in production's own `IN_APP`-first order,
- * the real [AgentExecutor] over that federation's own executor, the real [StartAgentSessionUseCase] /
- * [RunAgentSessionUseCase], and the real [RoomAgentSessionStore] over a real Room database. Only what
- * a JVM test cannot have is faked — FastPath's matcher, the model planner, the provider config,
- * connectivity — plus the one seam an intent leaves through, which is the point of the test.
+ * wires it, with one narrowed fidelity: the real [ToolVocabulary] and the real `ToolSelector` inside the
+ * real [ToolMatchPlanner] inside the real [CompositePlanner] — except `ToolSelector`'s
+ * `DynamicToolNames` is `namesOf()`'s empty fake rather than the real `ShortcutToolSource`, since
+ * nothing here plans a dynamic shortcut match — the real two-adapter [ToolFederation] in production's
+ * own `IN_APP`-first order, the real [AgentExecutor] over that federation's own executor, the real
+ * [StartAgentSessionUseCase] / [RunAgentSessionUseCase], and the real [RoomAgentSessionStore] over a
+ * real Room database. Only what a JVM test cannot have is faked — FastPath's matcher, the model
+ * planner, the provider config, connectivity, and (since Task 11) the dynamic shortcut-name source —
+ * plus the one seam an intent leaves through, which is the point of the test.
  *
  * The `IN_APP` adapter keeps a [RefusingInAppWorker]: the timer tool belongs to the `SYSTEM_INTENT`
  * adapter, so the federation routing to the wrong one is a failure, not a silent pass.

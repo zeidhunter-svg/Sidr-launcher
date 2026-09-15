@@ -53,11 +53,12 @@ class ShortcutToolSourceTest {
      * restored session whose plan names one does not merely degrade: `InvocationValidator` rejects the
      * invocation, `AgentExecutor` ends the session `Failed`, and the row is cascade-deleted.
      *
-     * **Not reachable today**, which is why no machinery is built for it here: `ToolMatchPlanner` matches
-     * against `ToolVocabulary`, which has no shortcut entries, so no plan can name a shortcut tool yet.
-     * **Tasks 10 and 11 are what make it reachable** and therefore own it — whoever puts shortcut tools
-     * in front of the planner must decide what a plan restored into an unfilled catalog does (wait for
-     * the first refresh, re-plan, or fail honestly) rather than inheriting this silence.
+     * **Reachable as of A1″ Task 11 (`92e8704`)**, not merely predicted: `ToolMatchPlanner` now selects
+     * through `ToolSelector`, whose dynamic branch returns exactly these ids, so a persisted plan can
+     * name a shortcut tool. Task 11's ruling was fail-closed rather than new machinery — a restore inside
+     * the startup window dies (`Failed` + cascade delete) exactly as described above, rather than pausing
+     * to wait for the refresh it needed. Choosing to wait, or to re-plan, instead of failing is a
+     * deliberate widening this block's DoD does not cover, and stays addressed onward.
      */
     @Test
     fun `an id is stable across a refresh that re-labels the same shortcut`() {

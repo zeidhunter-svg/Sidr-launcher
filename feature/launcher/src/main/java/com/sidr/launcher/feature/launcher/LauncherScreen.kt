@@ -278,13 +278,16 @@ fun LauncherScreen(
                 // dynamic name and no provenance line — a narrowed instance of the DOC-ILM-2 miss the
                 // `by lazy` -> `get()` change existed to prevent.
                 //
-                // NOT REACHABLE TODAY, for the same reason the startup window at ShortcutToolIds is
-                // not: ToolMatchPlanner matches against ToolVocabulary, which carries no shortcut
-                // entries, so no persisted plan can name a shortcut tool yet. Tasks 10 and 11 are what
-                // make it reachable and therefore own it — whoever puts shortcut tools in front of the
-                // planner must decide how this surface learns that the catalog filled (observing the
-                // catalog, or keying on something wider than the session), rather than inherit this
-                // comment's silence.
+                // REACHABLE AS OF A1″ TASK 11 (92e8704), not merely predicted: ToolMatchPlanner now
+                // selects through ToolSelector, whose dynamic branch returns shortcut ToolIds, so a
+                // persisted plan can name a shortcut tool. Task 11's ruling was fail-closed rather than
+                // new machinery: a session restored inside the startup window dies (Failed + cascade
+                // delete, per ShortcutToolIds) rather than pausing, so nothing wrong ever executes. The
+                // residual this keying carries is exactly that window's other half — while it is open,
+                // this surface renders the step with no dynamic name and no provenance line for an
+                // EXTERNAL tool (a narrowed DOC-ILM-2 miss) in the moment before the session dies.
+                // Teaching this surface to observe the catalog filling, or keying on something wider
+                // than the session, stays addressed onward rather than decided here.
                 //
                 // Keep `remember(session)`: it is strictly fresher than the `by lazy` it replaced and
                 // strictly cheaper than the bare `get()`. The trade-off is named, not removed.

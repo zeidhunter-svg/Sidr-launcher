@@ -66,14 +66,16 @@ private object NeverInvokedWorker : ToolWorker {
  * `Free`. The whole block's headline capability was therefore dead in production with 1285 green
  * tests.
  *
- * So everything below the fakes is the production object: the real [ToolVocabulary], the real
- * [ToolMatchPlanner] inside the real [CompositePlanner] that `AgentProvidesModule` builds, the real
+ * So everything below the fakes is the production object: the real [ToolVocabulary] and the real
+ * `ToolSelector` inside the real [ToolMatchPlanner] inside the real [CompositePlanner] that
+ * `AgentProvidesModule` builds — except `ToolSelector`'s `DynamicToolNames` is `namesOf()`'s empty fake
+ * rather than the real `ShortcutToolSource`, since nothing here plans a dynamic shortcut match — the real
  * two-adapter [ToolFederation] — [SystemIntentToolSource] over the real [DefaultActionCatalog] AND
  * [Tier0IntentToolSource], in `AgentProvidesModule.provideToolFederation`'s own order — the real
  * [StartAgentSessionUseCase], and the real [RoomAgentSessionStore] over a real Room database. Only
  * the things a JVM test cannot have — FastPath's matcher, the model planner, the provider config,
- * connectivity — are fakes, and each is set to the state that makes the agent branch the one under
- * test.
+ * connectivity, and (since Task 11) the dynamic shortcut-name source — are fakes, and each is set to
+ * the state that makes the agent branch the one under test.
  *
  * Task 10 review, finding 5: the federation used to carry the `SYSTEM_INTENT` adapter alone, so this
  * test could not see an `IN_APP` source shadowing a later adapter's tool — exactly the risk
@@ -120,7 +122,11 @@ class FreeTextGoalEndToEndTest {
         ),
     ).registry
 
-    /** Exactly what `AgentProvidesModule.providePlanner` builds. */
+    /**
+     * The same shape `AgentProvidesModule.providePlanner` builds, with one narrowed fidelity: production
+     * binds `ToolSelector`'s `DynamicToolNames` to the real `ShortcutToolSource`; this uses `namesOf()`
+     * (empty) because nothing here plans a dynamic shortcut match — see the class KDoc.
+     */
     private val planner = CompositePlanner(
         listOf(TemplatePlanner(), ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()))),
     )

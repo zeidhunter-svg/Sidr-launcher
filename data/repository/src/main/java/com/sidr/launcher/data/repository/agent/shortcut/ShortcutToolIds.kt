@@ -17,11 +17,14 @@ import com.sidr.launcher.domain.tool.ToolId
  * whose plan names one does not degrade gently: `InvocationValidator` rejects the invocation,
  * `AgentExecutor` ends the session `Failed`, and the row is cascade-deleted.
  *
- * **That window is unreachable today and no machinery is built for it here.** `ToolMatchPlanner` matches
- * against `ToolVocabulary`, which carries no shortcut entries, so no plan can name a shortcut tool yet.
- * **Tasks 10 and 11 make it reachable and therefore own it:** whoever puts shortcut tools in front of
- * the planner must decide what a plan restored into an unfilled catalog should do — wait for the first
- * refresh, re-plan, or fail with something the user can act on — rather than inherit this silence.
+ * **That window is reachable now, not merely predicted — A1″ Task 11 (`92e8704`) wired
+ * `ToolMatchPlanner` through `ToolSelector`, whose dynamic branch returns exactly these ids, so a
+ * persisted plan can name a shortcut tool.** The mechanism above is therefore live: a restore inside the
+ * startup window fails closed exactly as described — nothing crashes and nothing wrong executes, but the
+ * session dies rather than pausing for the refresh it needed. That fail-closed outcome is what Task 11
+ * shipped, by ruling rather than by building new machinery: waiting for the first refresh, or re-planning,
+ * instead of failing is a deliberate widening this block's DoD does not cover, and stays addressed onward
+ * rather than decided here.
  *
  * [parse] is the inverse and is **total**: it answers `null` for anything it cannot read back, and every
  * caller fails closed on that rather than guessing. That is what lets [ShortcutToolSource] refuse to

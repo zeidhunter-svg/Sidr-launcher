@@ -92,24 +92,39 @@ class ToolVocabularyReachabilityTest {
         assertTrue(failures.joinToString("\n"), failures.isEmpty())
     }
 
+    /**
+     * **Non-vacuity floor, not just the shadowing assertion.** `guardedEntries()` pins ids and its own
+     * KDoc blesses rewording, so this test's only real evidence that it tests anything is that
+     * [SHADOW_CANDIDATE] actually collides with at least one generated command — today, `"set timer for
+     * 10 minutes"`, because `en`'s `set_timer` prefix form is the literal string `"set timer for"`. A
+     * reword of that form (a "legitimate rewording", per `guardedEntries()`) would silently drop the
+     * collision count to zero and turn this into a duplicate of `every trigger recognises its own sample
+     * command` that stays green even with `ToolSelector`'s rule 1 (authored beats dynamic) deleted — the
+     * exact vacuity `guardedEntries()`'s KDoc claims no test in this class can have. [collisionFloor]
+     * measures the same commands the shadowing loop below builds, against the dynamic branch alone (an
+     * *empty* [ToolVocabulary] so authored priority cannot mask the answer), and fails loudly rather than
+     * passing quietly if the count ever reaches zero.
+     */
     @Test
     fun `an authored trigger cannot be shadowed by a third-party shortcut name`() {
-        val selector = ToolSelector(
-            vocabulary = ToolVocabulary(),
-            dynamicNames = namesOf(DynamicToolName(ToolId("shortcut:com.x/s"), "Timer", "set timer for")),
-        )
+        val selector = ToolSelector(vocabulary = ToolVocabulary(), dynamicNames = namesOf(SHADOW_CANDIDATE))
+        val commands = mutableListOf<String>()
         val failures = mutableListOf<String>()
 
         guardedEntries().forEach { entry ->
             entry.prefixByLocale.values.flatten().forEach { form ->
                 val command = if (entry.argName == null) form else "$form $SAMPLE_ARGUMENT"
+                commands += command
                 if (selector.select(command)?.id != entry.id) failures += "prefix: $command"
             }
             entry.suffixByLocale.values.flatten().forEach { form ->
                 val command = if (entry.argName == null) form else "$SAMPLE_ARGUMENT $form"
+                commands += command
                 if (selector.select(command)?.id != entry.id) failures += "suffix: $command"
             }
         }
+
+        collisionFloor(commands)
 
         assertTrue(
             "an authored trigger stopped recognising its own sample once a shortcut claimed it:\n" +
@@ -119,9 +134,25 @@ class ToolVocabularyReachabilityTest {
     }
 
     /**
+     * Fails loudly, not quietly, the moment [SHADOW_CANDIDATE] stops colliding with anything in
+     * [commands] — see the test's own KDoc for why a silent zero would be worse than no test at all.
+     */
+    private fun collisionFloor(commands: List<String>) {
+        val dynamicOnly = ToolSelector(vocabulary = ToolVocabulary(emptyList()), dynamicNames = namesOf(SHADOW_CANDIDATE))
+        val collisions = commands.count { dynamicOnly.select(it)?.id == SHADOW_CANDIDATE.id }
+        assertTrue(
+            "the planted shadow candidate (qualifier '${SHADOW_CANDIDATE.qualifier}', name " +
+                "'${SHADOW_CANDIDATE.name}') no longer collides with any of the ${commands.size} " +
+                "generated commands — this test is no longer testing shadowing, and the planted name " +
+                "must be re-chosen to collide with a real authored trigger again",
+            collisions > 0,
+        )
+    }
+
+    /**
      * The entry table — returned only **after** proving there is something to loop over.
      *
-     * Both assertions in this class are `forEach`es over the table, so an empty or truncated table
+     * All three tests in this class run `forEach`es over the table, so an empty or truncated table
      * makes this guard pass while checking nothing — and what it would stop checking is the property
      * the whole task turns on: that FastPath does not claim a trigger before the planner is asked.
      * Emptying the vocabulary undoes Task 8 entirely and would leave this green. Asserting the floor
@@ -139,7 +170,7 @@ class ToolVocabularyReachabilityTest {
         assertTrue(
             "ToolVocabulary has no entry for ${missing.joinToString { it.value }} " +
                 "(the table holds ${entries.size} entr${if (entries.size == 1) "y" else "ies"}). " +
-                "Both assertions in this guard loop over that table, so it would otherwise report " +
+                "All three tests in this guard loop over that table, so it would otherwise report " +
                 "'no trigger is claimed by FastPath' after examining no triggers at all.",
             missing.isEmpty(),
         )
@@ -168,5 +199,11 @@ class ToolVocabularyReachabilityTest {
 
         /** The floor, never the ceiling — see [guardedEntries]. */
         val REQUIRED_TOOLS = listOf(Tier0ToolIds.SET_TIMER, Tier0ToolIds.OPEN_SYSTEM_SETTINGS)
+
+        /**
+         * Chosen to collide with `set_timer`'s `en` prefix form `"set timer for"` byte-for-byte — see
+         * `collisionFloor` for why that collision is verified rather than assumed.
+         */
+        val SHADOW_CANDIDATE = DynamicToolName(ToolId("shortcut:com.x/s"), "Timer", "set timer for")
     }
 }

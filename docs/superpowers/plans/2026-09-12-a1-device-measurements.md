@@ -90,22 +90,46 @@ things are worth stating precisely rather than glossing:
   not plausibly upstream of `startActivity` permission checks; it is *not* enough to generalise to any
   row whose outcome could depend on being home.
 
-**A third observation makes the build half of that comparison unusually strong — with a limit that was
-also measured, after the first form of this claim turned out to be too strong.** `app-debug.apk` built
-from `ab2d063` by a **full** task path (`--rerun-tasks`, `299–336 actionable tasks: all executed`) has
-sha256 `9b7b5a4e3e5ff47340cfe11ac78d1de8d4f6d9d4e5bca3a45eb459a60939d44a`, and that is **byte-identical**
-to the APK left on disk by the Task 13 round — reproduced **three** times (the Task 13 build, the
-`--rerun-tasks` build for row 29, and a third full build after row 27's manifest edit had been reverted).
-So the app APK genuinely does not differ between the two trees: the same bytes, not «differs only in ways
-that cannot matter».
+**A third observation about the build, stated only as far as its saved evidence reaches.** This
+paragraph has been corrected twice — once inside Task 13b for over-claiming, and again in its fix round
+for *still* over-claiming — so it is written as an explicit ledger of which hash was observed when.
 
-**The limit:** an *incremental* rebuild of the identical reverted source (`2 executed, 4 from cache, 293
-up-to-date`) produced a **different** sha256, `e3dc8ccd628e537600708e79d03bfd454bf42b5c42a47ded53bb2dbc033f2991`.
-Byte-identity here is therefore a property of the **full** build path, not a certificate the build hands
-out generally, and a future round must not use an sha mismatch alone as evidence that sources differ. The
-`androidTest` APK is not byte-identical across rounds at all, so the property is about the app APK — the
-one whose manifest and permissions every row above depends on. The build that is installed on the phone
-at the end of this round is the reproducible `9b7b5a4e…` one.
+**What is on record: the full build path at `ab2d063` reproduces one sha256.** `app-debug.apk` built by a
+**full** task path (`--rerun-tasks`, all tasks executed) has sha256
+`9b7b5a4e3e5ff47340cfe11ac78d1de8d4f6d9d4e5bca3a45eb459a60939d44a`, observed **four** times:
+
+| When | Build | Where the hash is recorded |
+|---|---|---|
+| 2026-09-16 01:39:56 | `336 actionable tasks: 336 executed` (`p1-build-head-rerun.log`) | **hash output** — `evidence-13b/p1-apk-sha256.log` (01:44) |
+| 2026-09-16 01:48:48 | `299 actionable tasks: 299 executed` (`cellA-build-reverted-rerun.log`) | **hash output** — `evidence-13b/cellA-apk-determinism.log` |
+| 2026-09-16 01:53:21 | `299 actionable tasks: 299 executed` (`cellB-build-reverted.log`) | **prose only** — `evidence-13b/cellB-revert-install-and-state.log:1` names the sha in an echoed line, not as `sha256sum` output |
+| 2026-09-16 ≈02:09 | the verification gate's own `assembleDebug --rerun-tasks` | **hash output, and taken independently of this round** — re-hashed by the Task 13b reviewer |
+
+**What is NOT on record, and what therefore may not be claimed.** The earlier form of this paragraph said
+that hash was «byte-identical to the APK left on disk by the Task 13 round», and concluded that the app
+APK «genuinely does not differ between the two trees». **That comparison is unverifiable and is
+withdrawn.** The pre-round file (mtime 2026-09-15 22:43:48) was hashed once, in-session, before any
+rebuild — but the output was never written to a file, and the 01:39:56 full build **overwrote** the APK,
+so those bytes cannot be re-hashed now. In the one round whose own protocol was "save the evidence",
+that leg was not saved, and a claim resting on it does not meet this file's standard.
+
+So the surviving claim is narrower and deliberately so: **the full build path is reproducible at
+`ab2d063`.** It says nothing about the tree Task 13 built from. A later round must **not** read this
+paragraph as establishing cross-tree APK identity, and must not skip a freshly-built re-measure on its
+authority — which is exactly the argument-instead-of-observation move R13-4 existed to eliminate.
+
+**R13-4's conclusion does not need it.** The observation that answers R13-4 is row 29 itself: four rows
+re-measured on a build made and installed this round, all four agreeing. That stands on the device
+readings, not on any hash.
+
+**The limit on reproducibility, also measured:** an *incremental* rebuild of the identical reverted
+source (01:47:30, `2 executed, 4 from cache, 293 up-to-date`) produced a **different** sha256,
+`e3dc8ccd628e537600708e79d03bfd454bf42b5c42a47ded53bb2dbc033f2991` (hash output, same
+`cellA-apk-determinism.log`). Byte-stability here is therefore a property of the **full** build path, not
+a certificate the build hands out generally, and a future round must not use an sha mismatch alone as
+evidence that sources differ. The `androidTest` APK is not byte-stable across rounds at all, so even this
+narrow property is about the app APK — the one whose manifest and permissions every row above depends on.
+The build installed on the phone at the end of this round is the reproducible `9b7b5a4e…` one.
 
 **Row 12 is deliberately empty, per this file's own rule that an unmeasured row stays empty and says
 so.** The reasoning around it splits into two pieces with very different standing, and blurring them
@@ -384,7 +408,7 @@ smoke round the owner authorised for one purpose: none of A1″'s shipped surfac
 `app_shortcut` adapter), `c6b8c46` (the per-call snapshot), `de3274a` (`ToolSelector`) — had **ever
 executed on a phone**, and Phase 3 is planned on top of it. Four observations, each de-risking Phase 3.
 Neither the count nor the coverage here is a §7.2 candidate measurement; these are separate rows, in
-their own section, with their own numbering (S1–S6).
+their own section, with their own numbering (S1–S9).
 
 Device state for all of it: SM-A325F, Android 13, One UI, **`ru-RU`**, Sidr holding
 `android.app.role.HOME` (the owner set it by hand — rows 3/4 stand, no shell path does it on this build),
@@ -393,7 +417,7 @@ plus this round's three new probe methods.
 
 | # | What was called | Device state | Observed result, verbatim | Date | Build |
 |---|---|---|---|---|---|
-| S1 | **The shipped `app_shortcut` adapter, wired as `AgentProvidesModule` wires it** — `ShortcutToolSource(ShortcutCatalog(AndroidShortcutQuery(context), Dispatchers.IO))`, `refresh()` then `all()` / `names()`. Probe method `shortcutAdapterSnapshot`. Rows 6–9 measured `LauncherApps` **raw**; these three production classes had never run on a device | Sidr **is** default home | `hasShortcutHostPermission :: true`. `catalog.current.size :: 216`, **`all.size :: 216`**, **`names.size :: 216`**, `distinctPackages :: 65`, `distinctIds :: 216` (**no id collisions**). Every descriptor: `levels :: app_shortcut`, `effects :: EXTERNAL`, `risks :: SAFE`, `durabilities :: TRANSIENT`. `blankLabels :: 0`. `appLabelEqualsPackageName :: 0` — the raw-package-name fallback in `AndroidShortcutQuery` fired for **none** of the 65 packages. Ids have the form `shortcut:<package>/<shortcutId>` | 2026-09-16 | `ab2d063` + probe |
+| S1 | **The shipped `app_shortcut` adapter, wired as `AgentProvidesModule` wires it** — `ShortcutToolSource(ShortcutCatalog(AndroidShortcutQuery(context), Dispatchers.IO))`, `refresh()` then `all()` / `names()`. Probe method `shortcutAdapterSnapshot`. Rows 6–9 measured `LauncherApps` **raw**; these three production classes had never run on a device | Sidr **is** default home | `hasShortcutHostPermission :: true`. `catalog.current.size :: 216`, **`all.size :: 216`**, **`names.size :: 216`**, `distinctPackages :: 65`, `distinctIds :: 216` (**no id collisions**). Every descriptor: `levels :: app_shortcut`, `effects :: EXTERNAL`, `risks :: SAFE`, `durabilities :: TRANSIENT`. `blankLabels :: 0`. **One line of the archived log is a probe artifact, not a reading:** `idPrefixOk :: 0` was computed against the literal `"app_shortcut:"`, which is the *level* value, not the id prefix — production's is `ShortcutToolIds.PREFIX = "shortcut:"`. The probe expression was corrected afterwards and the method deliberately **not** re-run (obs1 needs the HOME role, already restored to One UI), so `evidence-13b/p3-obs1-adapter-logcat-full.log` holds a `0` produced by the pre-fix probe; `evidence-13b/README.md` records that. It never affected this row, which states the real id form below from the logged ids themselves. `appLabelEqualsPackageName :: 0` — the raw-package-name fallback in `AndroidShortcutQuery` fired for **none** of the 65 packages. Ids have the form `shortcut:<package>/<shortcutId>` | 2026-09-16 | `ab2d063` + probe |
 | S2 | **Raw `LauncherApps` at the same moment**, to tell adapter filtering apart from device drift: `LauncherAppsProbe#measureLauncherApps`, run 39 s after S1 | same | `getShortcuts.total :: 216`, `distinctPackages :: 65`, `isEnabled.true :: 216`. **Identical to S1 in both numbers.** So the adapter drops **nothing** on this device, and the 205 → 216 difference from row 7 (2026-09-14) is **device drift over two days**, not adapter behaviour — measured rather than argued. Side effect to record: this probe method also fires `startShortcut` on the first shortcut (row 10's measurement), so a third-party app was launched; `RETURNED_NORMALLY`, and the phone was returned to home afterwards | 2026-09-16 | `ab2d063` + probe |
 | S3 | **`ToolSelector` over the real 216-descriptor registry**, beside the authored `ToolVocabulary`: `ToolSelector(ToolVocabulary(), ShortcutToolSource(...))`. Probe method `toolSelectorAtScale`, eight texts via `-e texts` | same | `registrySize :: 216`. **It neither collapses nor offers many — it decides.** `«youtube подписки»` → `MATCHED id=shortcut:com.google.android.youtube/subscriptions-shortcut`; `«youtube shorts»` → `MATCHED …/shorts-shortcut`; `«obsidian новая заметка»` → `MATCHED id=shortcut:md.obsidian/app:new` (a **two-word** name matched as a contiguous run). Declines, each for the documented rule: `«подписки»` → `NO_MATCH` (rule 2 — must name its app); `«открой youtube подписки»` → `NO_MATCH` (rule 4 — `открой` unaccounted); `«youtube подписки пожалуйста»` → `NO_MATCH` (rule 4's named recall cost, now observed rather than predicted). **Authored beats dynamic at scale:** `«таймер на 5 минут»` → `MATCHED id=set_timer args={duration=5 минут}` and `«системные настройки»` → `MATCHED id=open_system_settings`, both in ~1 ms | 2026-09-16 | `ab2d063` + probe |
 | S4 | **Cost of one `select` at this scale**, read from the log timestamps of S3's eight calls | same | The two **authored** matches resolved in **≈1 ms** (02:01:04.521 → .522 → .522) — they return before the dynamic branch. The six calls that reached the **dynamic** branch took **≈64–69 ms each** (.193→.262, .262→.326, .326→.392, .392→.455, .455→.521, .522→.586). That is `DynamicToolNames.names()` over 216 shortcuts plus the per-candidate match, **per call**, with no `LauncherApps` call involved (the catalog is a `@Volatile` snapshot). Figure from logcat timestamps around the call, not from an in-process timer — good to ±1 ms, no better | 2026-09-16 | `ab2d063` + probe |

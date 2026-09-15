@@ -16,6 +16,7 @@ import com.sidr.launcher.data.repository.agent.ToolSelector
 import com.sidr.launcher.data.repository.agent.ToolVocabulary
 import com.sidr.launcher.data.repository.agent.shortcut.AndroidShortcutQuery
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutCatalog
+import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolIds
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -229,6 +230,18 @@ class Tier0IntentProbe {
      * testing dependency and adding one would change the build under measurement. So a wiring mistake
      * in `AgentProvidesModule` is invisible here — `DoctrineGuardTest` and `ToolRegistryPermissionGuardTest`
      * cover that on the host — and what is measured is the adapter's behaviour against the device.
+     *
+     * **This is not the code that produced the archived 2026-09-16 reading, in one line** (Task 13b fix
+     * round, finding M4). `adapter.idPrefixOk` originally counted ids starting with `"app_shortcut:"` —
+     * a **probe bug**: `app_shortcut` is the [com.sidr.launcher.domain.tool.ToolLevels.APP_SHORTCUT]
+     * *level* value, while the id prefix is [ShortcutToolIds.PREFIX] (`"shortcut:"`). It therefore
+     * logged `0` against 216 descriptors whose ids were all well-formed. The expression below now reads
+     * the production constant, so it cannot drift again; the method was deliberately **not** re-run,
+     * because it requires Sidr to hold `android.app.role.HOME` and the phone has been restored to One UI
+     * Home — re-running for one cosmetic line would cost the owner a manual role flip. Consequence:
+     * `evidence-13b/p3-obs1-adapter-logcat-full.log` holds an `idPrefixOk :: 0` that this code would not
+     * produce. `evidence-13b/README.md` says so, and measurements row S1 says so. Nothing else in that
+     * archived run is affected — every other aggregate was read straight from the adapter's output.
      */
     @Test
     fun shortcutAdapterSnapshot() {
@@ -252,7 +265,10 @@ class Tier0IntentProbe {
         log("adapter.effects", descriptors.map { it.effect.name }.distinct().sorted().joinToString(","))
         log("adapter.risks", descriptors.map { it.risk.name }.distinct().sorted().joinToString(","))
         log("adapter.durabilities", descriptors.map { it.durability.name }.distinct().sorted().joinToString(","))
-        log("adapter.idPrefixOk", descriptors.count { it.id.value.startsWith("app_shortcut:") }.toString())
+        log(
+            "adapter.idPrefixOk",
+            descriptors.count { it.id.value.startsWith(ShortcutToolIds.PREFIX) }.toString(),
+        )
         // Row 12 is Task 5's and stays theirs; this is only the adapter-visible symptom of that branch
         // — `AndroidShortcutQuery` falls back to the raw package name when `getApplicationInfo` fails.
         log(

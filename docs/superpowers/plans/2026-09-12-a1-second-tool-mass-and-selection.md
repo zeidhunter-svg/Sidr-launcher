@@ -2020,11 +2020,70 @@ in a commit of its own, separately from the task it describes.** It is therefore
 commit as the task from here on, and a session that finds it disagreeing with
 `git log --oneline 181628a..HEAD` must believe git.
 
-**The number a fresh gate compares against is 1357** — measured at `09d4322` on 2026-09-15, the
-Phase 1 boundary, and now written into `CLAUDE.md` and `current-status.md` as well. The chain, each
+**The number a fresh gate compares against is 1369** — measured at `c05fd7a` on 2026-09-15, mid-Phase-2 (the
+Phase 1 boundary measured 1357), and now written into `CLAUDE.md` and `current-status.md` as well. The chain, each
 number tied to the commit it was measured at: **1321** at `d391350` (before Task 4) → **1323** once
-Task 4 added two `:domain:jvmTest` tests → **1357** at the Phase 1 boundary (Tasks 6-8 +32, Task 9 +2).
-Phase 2's gate is 1357 plus whatever Tasks 10-12 add.
+Task 4 added two `:domain:jvmTest` tests → **1357** at the Phase 1 boundary (Tasks 6-8 +32, Task 9 +2) → **1369** with Tasks 10-11 done.
+Phase 2's boundary gate, after Task 12, is **1369 plus whatever Task 12 adds** — 1369 having
+been measured mid-phase at `c05fd7a`, with Tasks 10 and 11 done and Task 12 not started.
+
+9. **Phase 2 opened 2026-09-15 by owner instruction, and Tasks 10 and 11 are done. Task 12 was
+   deliberately NOT started** — the owner stopped the session at Task 11's close.
+   **Task 10 — `ToolSelector`** (`de3274a`, fix rounds `d1f5349`, `12fb245`). One command, at most one
+   tool, over a registry that is now partly third-party. **Read the tree, not this plan's Task 10
+   listing: the listing shipped a defect and the review caught it.** The sketch's
+   `vocabulary.match(normalized)?.let { return it }` treats `ToolVocabulary.match`'s `null` as one thing
+   when it is two — *nothing of ours claimed this* and *two of ours claimed it and we refuse to guess*.
+   So an ambiguous **authored** command was resolved by a **third-party app label**: rule 1 inverted,
+   rule 3 violated, in the very class whose stated reason to exist is that `singleOrNull` hole. Fixed by
+   a minimal `ToolVocabulary.isAmbiguous(text)` (`match` itself untouched), pinned by a test built
+   through the `internal constructor(entries)` that exists for exactly this. Two further changes the
+   listing does not contain: **contiguity was adopted** — a shortcut's name must appear as a contiguous
+   word-bounded run, so "message new telegram" no longer selects what "telegram new message" selects —
+   and the redundant `normalizedName.isBlank()` disjunct was deleted once contiguity made it provably
+   dead. `:data:repository` 298 → **309**.
+   **Four limitations are named in `ToolSelector`'s own KDoc rather than implied absent**, each verified
+   true against the code: rule 2 is **vacuous** whenever a shortcut's name already contains an app-name
+   token ("Settings"/"system settings", "WhatsApp"/"WhatsApp Web"); the app-token match is **exact**, so
+   every inflected `ru`/`tr` form (`в телеграме`, `telegramda`) declines — recall-only, but it gates the
+   whole third-party branch; `Locale.ROOT` lowercasing plus unstripped punctuation makes a slice of
+   third-party labels unreachable by construction (`"İletiler"` lowercases to `i` + U+0307, which nobody
+   types); and "equal candidates decline" is really "`singleOrNull` declines on **any** two hits", so a
+   strictly more specific candidate is discarded alongside a vaguer one.
+   **Two questions are open and addressed to the owner, not decided by the agent** — both the same root:
+   (a) whether to forbid **unaccounted leftover words**, which would stop "отправь saved messages в
+   telegram" from firing a shortcut but would also decline every natural command carrying a verb, on a
+   device measured at 205 shortcuts with inflected labels; and (b) the third reason `match` returns
+   `null` — *one* entry claimed the text and then refused it on leftover words ("system settings for my
+   car") — which still falls through to the dynamic branch. Named in the KDoc, not fixed.
+   **Task 11 — the planner consumes the selector** (`92e8704`, fix round `c05fd7a`). `ToolMatchPlanner`
+   takes `ToolSelector` instead of `ToolVocabulary`; nothing else in it changed (same argument checks,
+   same one-step plan, risk still from the registry). `RouteCommandUseCase` step 2b untouched.
+   `AgentProvidesModule` needed **no** change — `providePlanner` takes the planner as a Hilt parameter —
+   and the plan's Files list was **incomplete**: three test files construct `ToolMatchPlanner`, not one
+   (`FreeTextGoalEndToEndTest` and `Tier0ToolExecutionEndToEndTest` were ruled into scope).
+   **This is the commit that makes a shortcut tool reachable from a typed command**, which discharged an
+   obligation Tasks 7+8 had registered against it by name: three comments in the tree said the
+   restore-into-an-empty-catalog window was "unreachable today" and that "Tasks 10 and 11 make it
+   reachable and therefore own it". All three now say what is true. **Closed by naming, not by
+   machinery**, because the behaviour is fail-closed: `find` → null → `Rejected(UNKNOWN_TOOL)` →
+   `ended(Failed)` → cascade delete. Nothing crashes. The residual is that a plan restored inside the
+   startup window dies rather than pausing, and while it is open the step renders with no dynamic name
+   and no provenance line for an `EXTERNAL` tool — a narrowed `DOC-ILM-2` miss, addressed onward.
+   **The new shadowing guard is mutation-proved, 5 planted / 5 as predicted, no blind spot** —
+   transcript kept in the tree at
+   [docs/superpowers/plans/2026-09-15-a1-mutation-round-task-11.md](2026-09-15-a1-mutation-round-task-11.md)
+   because `.superpowers/sdd/` is git-ignored. The round's most useful row is **not** the headline:
+   rewording `set_timer`'s `en` form to a legitimate non-colliding string reddens `collisionFloor`, which
+   is the assertion the review forced in because without it that reword would have turned the shadowing
+   test into a silent duplicate of the test above it — green forever, including with the rule it guards
+   deleted. `:data:repository` 309 → **310**, `:app` unchanged at 59 (verified correct, not assumed).
+   **Measured at `c05fd7a` with Tasks 10 and 11 done and Task 12 not started: 1369 tests, 0 failures,
+   0 errors**, exit 0, `557 actionable tasks: 557 executed`, every module's `build/test-results`
+   deleted first. **This is NOT Phase 2's boundary gate** — that one runs after Task 12 — it is a
+   mid-phase measurement taken because the session ended here and the next one must not compare
+   against a stale number. `1369 = 1357 + 12` (Task 10 `:data:repository` 298 → 309, Task 11 +1),
+   derived before the run and matched. `CLAUDE.md` and `current-status.md` now say 1369.
 
 ### Rulings made during execution, and what each costs if wrong
 

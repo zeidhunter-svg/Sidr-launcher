@@ -436,15 +436,16 @@ below is recorded in its own ADR.
   (434 `:domain:jvmTest` + 56 `:consumer:jvm` + 271 `:data:repository` + 189 `:feature:launcher` + 49
   `:app`, the rest unchanged). A1′ *closed* at 1298 on 2026-09-03, the final-review fix took it to 1304,
   and the device-acceptance round added six more — three in `DeviceDatabaseReadGuardTest` (`:app`) and
-  three in `LauncherViewModelTest` (`:feature:launcher`). **Compare a fresh gate against 1357**, not
+  three in `LauncherViewModelTest` (`:feature:launcher`). **Compare a fresh gate against 1369**, not
   against 1314, not against 1321, and not against any number quoted in the A1′ ADR. The intermediate
   numbers, kept because each names the commit it was measured at: `d391350` on 2026-09-14 (Phase 0 of
   A1″ complete) gave **1321** — `:domain:jvmTest` 434 → **436** (`AgentExecutorTest` +2) and
   `:app` 49 → **54** (`ToolRegistryPermissionGuardTest` +4, `DoctrineGuardTest` +1); Task 4 then took
-  `:domain` to 438, i.e. **1323**. **`09d4322` on 2026-09-15 — the A1″ Phase 1 boundary — measured
-  1357 tests / 0 failures / 0 errors**, from a run printing `557 actionable tasks: 557 executed`:
-  `:domain:jvmTest` **438** + `:consumer:jvm` **56** + `:data:repository` **298** +
-  `:feature:launcher` **191** + `:app` **59**; the other eleven
+  `:domain` to 438, i.e. **1323**. `09d4322` — the A1″ Phase 1 boundary — measured 1357 / 0 / 0.
+  **`c05fd7a` on 2026-09-15, with A1″ Tasks 10 and 11 done and Task 12 not started, measured 1369 tests
+  / 0 failures / 0 errors**, from a run printing `557 actionable tasks: 557 executed` — a *mid-phase*
+  measurement, not Phase 2's boundary gate: `:domain:jvmTest` **438** + `:consumer:jvm` **56** +
+  `:data:repository` **310** + `:feature:launcher` **191** + `:app` **59**; the other eleven
   modules are unchanged from the 1314 row above.
   Read counts from the JUnit XML, not the console. **Use `--rerun-tasks`, never the plan-text `--rerun`**
   — the latter is not a valid Gradle 9.5.0 build-level flag and silently returns everything `UP-TO-DATE`

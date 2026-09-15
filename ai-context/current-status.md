@@ -204,8 +204,10 @@ six more — three in `DeviceDatabaseReadGuardTest` (`:app`) and three in `Launc
 `DoctrineGuardTest` +1), the other eleven modules unchanged. **A1″'s Phase 1 has since closed and moved
 it again: `09d4322` on 2026-09-15 measured 1357 tests / 0 failures / 0 errors**, `557 actionable tasks:
 557 executed` — `:data:repository` 271 → **298**, `:app` 54 → **59**, `:feature:launcher` 189 → **191**,
-`:domain:jvmTest` 436 → **438**. **1357 is the number a fresh gate must match today**, and it will move
-again before A1″ closes (Phase 2 and Phase 3 are unstarted).
+`:domain:jvmTest` 436 → **438**. Phase 2 then opened, and Tasks 10-11 moved it again: **`c05fd7a` on 2026-09-15 measured 1369 tests /
+0 failures / 0 errors** (`:data:repository` 298 → **310**) — a mid-phase measurement, not Phase 2's
+boundary gate, which runs after Task 12. **1369 is the number a fresh gate must match today**, and it
+will move again before A1″ closes (Task 12 pending; Phase 3 unstarted).
 
 ## Agentic track — Этап 4.5 (A0.5) — second consumer — `CODE-GREEN` (2026-08-26)
 

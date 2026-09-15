@@ -64,10 +64,12 @@ discrepancy is explained rather than mysterious.
 | 25 | `startActivity(Intent("android.settings.NOTIFICATION_SETTINGS"))` — **the action is a string literal because there is no such public constant**: `javap` over `platforms/android-37.0/android.jar` finds no `Settings.ACTION_NOTIFICATION_SETTINGS` field (`ACTION_APP_NOTIFICATION_SETTINGS` and `ACTION_NOTIFICATION_LISTENER_SETTINGS` are present, the bare one is not). Same shape and caller | Sidr installed, not default home | **Permission:** `RETURNED_NORMALLY`; no `Permission Denial`, no exception. **What it does:** focus → `com.android.settings/.Settings$ConfigureNotificationSettingsActivity`, «Уведомления» — **opens a screen**; state unchanged. So the screen is reachable, but only through a hardcoded action string | 2026-09-15 | installed 2026-09-14 debug + `Tier0IntentProbe` (`0c8faa0`) |
 | 26 | **Same intent from uid 2000 `shell`, for comparison — never the app-facing answer** (controller ruling R13-1): `adb shell am start -a android.intent.action.DELETE -d package:com.sidr.launcher.data.ailocal.test` | same | **Opposite outcome to row 16.** `START … from uid 2000`, the activity **stayed** and drew the OS's own dialog: «com.sidr.launcher.data.ailocal.test / Удалить приложение? / Отмена / OK». Cancelled with `KEYCODE_BACK`; `pm list packages` verified all four `sidr` packages still installed. **This row is why row 16 had to be measured in-process:** taken from the shell, `uninstall_app` would have been recorded as «the OS confirms» and shipped dead, exactly as A1′'s `set_timer` did | 2026-09-15 | — |
 | 27 | Whether `com.android.alarm.permission.SET_ALARM` is **required** for `ACTION_SET_ALARM` — **measured in the required (negative) direction**: the one `<uses-permission>` line was removed from `app/src/main/AndroidManifest.xml`, `:app:assembleDebug` rebuilt, `adb install -r`'d (the merged manifest's only remaining `SET_ALARM` string is inside an XML comment; `dumpsys package` listed **no** `SET_ALARM` in the app's declared set), and the same `setAlarm` probe method re-run | Sidr installed, **is** default home; build **without** `SET_ALARM` | **REQUIRED. The refusal is loud, and it is loud in both channels at once.** `startActivity` **threw**: `java.lang.SecurityException: Permission Denial: starting Intent { act=android.intent.action.SET_ALARM flg=0x10000000 cmp=com.sec.android.app.clockpackage/.alarm.activity.AlarmCTSHandleActivity (has extras) } from ProcessRecord{c3f62fa 31823:com.sidr.launcher/u0a752} (pid=31823, uid=10752) requires com.android.alarm.permission.SET_ALARM`, and the framework **also** printed `W ActivityTaskManager: Permission Denial: …requires com.android.alarm.permission.SET_ALARM` — so on this intent `grep -i 'Permission Denial'` *would* have worked (contrast row 16, where it found nothing). **Nothing happened on the device:** no alarm created (`dumpsys alarm` greps 0 for `SIDR PROBE`), the clock's list still «Все будильники отключены» with only the owner's 05:20/17:40, both off; focus never left the home screen. Reverted immediately: manifest restored (`git status` clean, byte-identical to HEAD's), rebuilt, `install -r`'d, and `dumpsys package` confirms `com.android.alarm.permission.SET_ALARM: granted=true` again; uid **10752** and `databases/` intact across all three installs | 2026-09-16 | `ab2d063` with the one line removed, then `ab2d063` restored |
-| 28 | Whether the OS's uninstall dialog appears **for the app** once `android.permission.REQUEST_DELETE_PACKAGES` is declared (row 16's refusal removed) | — | `<не измерено>` | — | — |
+| 28 | Whether the OS's uninstall dialog appears **for the app** once `android.permission.REQUEST_DELETE_PACKAGES` is declared — **measured**: the line was added to `app/src/main/AndroidManifest.xml`, `:app:assembleDebug` rebuilt, `install -r`'d (`dumpsys package`: `android.permission.REQUEST_DELETE_PACKAGES: granted=true`, install-time, no prompt), and the same `uninstallApp` probe method re-run against `com.sidr.launcher.data.ailocal.test` | Sidr installed, **is** default home; build **with** `REQUEST_DELETE_PACKAGES` | **YES — the dialog appears, and it is the same dialog uid 2000 got in row 26.** `startActivity` `RETURNED_NORMALLY`; **no** `E UninstallerActivity` refusal line, **no** `Permission Denial`, nothing in the wider refusal grep. The uninstaller this time **stayed and took focus** — `mCurrentFocus=Window{ca129eb u0 com.google.android.packageinstaller/com.android.packageinstaller.UninstallerActivity}` — and drew «com.sidr.launcher.data.ailocal.test / Удалить приложение? / Отмена / OK» (screenshot read, not merely captured). **Not confirmed, per R13-3:** dismissed with `KEYCODE_BACK`; `pm list packages` after still lists all four `sidr` packages, and `dumpsys package com.sidr.launcher.data.ailocal.test` still reports its original `firstInstallTime=2026-07-01 21:39:21`, so nothing was removed. Reverted immediately: manifest restored (`git status` clean), rebuilt, `install -r`'d, `dumpsys package` confirms `REQUEST_DELETE_PACKAGES` **absent** again and `SET_ALARM` still `granted=true`; uid **10752**, `databases/` intact | 2026-09-16 | `ab2d063` + one `<uses-permission>` line, then `ab2d063` restored |
 | 29 | **Re-measurement of four of rows 13–26 on a freshly built-and-installed HEAD build** (controller ruling R13-4, because rows 13–26 were taken against the `5d44167` APK installed on 2026-09-14 and "the two builds are equivalent" was an *argument*). `:app:assembleDebug :app:assembleDebugAndroidTest --rerun-tasks` at `ab2d063` (`336 actionable tasks: 336 executed`), then `adb install -r` of both → `Success` / `Success`. Four methods re-run: `uninstallApp`, `setAlarm`, `showAlarms` (its action **is** in the `<queries>` block), `openLocationSettings` (its action is **not**) | Sidr installed **and now default home** (the owner flipped the role by hand between the two rounds — see below) | **No divergence in any behaviour cell.** `uninstallApp`: `RETURNED_NORMALLY`, no exception, `grep -i 'Permission Denial'` → nothing, refusal again only as `E UninstallerActivity: Uid 10752 does not have android.permission.REQUEST_DELETE_PACKAGES or android.permission.DELETE_PACKAGES`, nothing drawn. `setAlarm`: `RETURNED_NORMALLY`, no refusal, the clock's list again showed «SIDR PROBE / 04:37 / ср, 16 сент.» **toggle on** with header «Будильник через 2 ч. 55 мин.» and toast «Будильник сработает через 2 ч и 55 мин.» — it **acts**; alarm deleted through the clock UI immediately after, list back to the owner's 05:20/17:40 both off, `dumpsys alarm` greps 0 for `SIDR PROBE`. `showAlarms`: `RETURNED_NORMALLY`, no refusal, focus `com.sec.android.app.clockpackage/.alarm.activity.AlarmWidgetListActivity`, «Все будильники отключены». `openLocationSettings`: `RETURNED_NORMALLY`, no refusal, focus `com.android.settings/.Settings$LocationSettingsActivity`, «Локация / Включено». Identity on all four runs: `com.sidr.launcher` / uid `10752`. Post-install state: uid **still 10752**, `lastUpdateTime` 2026-09-16 01:40:08, `databases/` **intact** (`sidr_history.db`, `-shm`, `-wal`), `SET_ALARM` still declared and `granted=true`, `REQUEST_DELETE_PACKAGES` still absent, HOME role still `com.sidr.launcher/.LauncherActivity` | 2026-09-16 | `ab2d063`, built and installed this round |
 | 30 | `dumpsys package com.sidr.launcher`, section `runtime permissions:` — read because row 24 deliberately claims only that `ACCESS_FINE_LOCATION` is *declared* | same | **`android.permission.ACCESS_FINE_LOCATION: granted=false`** and **`android.permission.ACCESS_COARSE_LOCATION: granted=false`** (both `USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED`); `READ_CALENDAR` and `RECORD_AUDIO` also `granted=false`. Read **at the moment** row 29's `openLocationSettings` was fired, so it is the grant state that run actually had. So `ACTION_LOCATION_SOURCE_SETTINGS` opened its screen while the app held **no granted location permission** — the *declaration* was present, the *grant* was not. Whether any permission is **required** for that screen is still unmeasured: this removes the grant from the set of possible explanations, not the declaration | 2026-09-16 | `ab2d063` |
 | 31 | Observation about the **instrument**, recorded so a later round is not confused by it: what `am instrument` does to the launcher, and where focus lands afterwards | Sidr is default home | `am instrument` **force-stops the app first** — `I ActivityManager: Force stopping com.sidr.launcher appid=10752 user=0: start instr`, `Killing … (adj 0): stop com.sidr.launcher due to start instr` — then the system relaunches it as home (`START … cat=[HOME] cmp=com.sidr.launcher/.LauncherActivity from uid 0`, `MARsPolicyManager: Current Home Package com.sidr.launcher Resumed`). So **every probe run restarts the launcher process**, and no probe reading says anything about a long-lived Sidr process. Second half: when the started activity finishes, focus returned to **One UI Home's stale home task** (`t11242`) rather than to Sidr, while the platform's own line read `I ActivityUtils: HomePackage : com.sidr.launcher, resumePackageName : com.sec.android.app.launcher` — i.e. the **role** is Sidr's and the **resumed task** was One UI's. A `dumpsys window` focus reading taken after an activity finishes therefore does **not** measure who holds the HOME role; `cmd package resolve-activity -a MAIN -c HOME` and that `HomePackage :` line do | 2026-09-16 | `ab2d063` |
+| 32 | **Row 28's consequential half — is a refusal *detectable by the caller*?** The same `uninstallApp` method was run on both builds (rows 16/29 without the permission, row 28 with it) and everything the caller can see was compared | Sidr installed, is default home | **`startActivity`'s answer is IDENTICAL in both directions: `RETURNED_NORMALLY`, and no exception of any kind is thrown either way.** Refused-and-nothing-happened and dialog-shown-and-the-user-is-deciding are **indistinguishable** to the caller after the fact. The only *post-hoc* difference lives outside the process: the responder's own `E UninstallerActivity: Uid 10752 does not have …` line in logcat, which an app cannot read for another app. So the shipped seam's two failure signals (`ActivityNotFoundException`, `SecurityException`) fire in **neither** direction, and `Tier0IntentToolWorker.launch` would report success for both. **Row 27 is the opposite case on the same device:** `ACTION_SET_ALARM` without its permission is refused by `ActivityTaskManager` *before* dispatch and **does** throw `SecurityException` at the caller. The two Tier-0 refusal modes are therefore structurally different — framework-side enforcement throws, responder-side enforcement does not — and no worker can treat one mechanism as covering both | 2026-09-16 | `ab2d063` ± the one line |
+| 33 | `context.checkSelfPermission(…)` from **inside** the app process (new probe method `permissionSelfCheck`, fires no intent), run once on each of the two builds — the only channel left after row 32, i.e. a **precondition check before firing** | Sidr installed, is default home | **It discriminates the two builds exactly.** With the line declared: `REQUEST_DELETE_PACKAGES :: PERMISSION_GRANTED (raw=0)`. Without it: `REQUEST_DELETE_PACKAGES :: PERMISSION_DENIED (raw=-1)`. `SET_ALARM :: PERMISSION_GRANTED (raw=0)` on both runs (positive control, and consistent with row 27 succeeding only when declared). `ACCESS_FINE_LOCATION :: PERMISSION_DENIED (raw=-1)` on both runs, which **confirms row 30's `dumpsys` reading from inside the process** rather than from the shell. So the refusal is knowable **in advance** even though row 32 shows it is unknowable **afterwards** | 2026-09-16 | `ab2d063` ± the one line |
 
 **Row 29 replaces an argument with an observation, and one input genuinely did change.** Rows 13–26
 were measured against the APK installed on 2026-09-14; the case that it and HEAD were equivalent rested
@@ -198,10 +200,10 @@ is inherited** — no cell was taken from platform documentation, from an API's 
 
 | Proposed id | Intent | Arg | Permission — MEASURED | What it actually does — MEASURED | Ships in Phase 3 |
 |---|---|---|---|---|---|
-| `set_alarm` | `AlarmClock.ACTION_SET_ALARM` | clock time | **None beyond the app's current set.** Returned normally, no refusal; `SET_ALARM` is already declared and granted, and whether it is *required* is row 27 — unmeasured | **Creates the alarm, already enabled.** No prefilled form, no confirm button; the clock opened on its list showing the armed alarm | **Yes** — but see the §7.2 contradiction below |
+| `set_alarm` | `AlarmClock.ACTION_SET_ALARM` | clock time | **`com.android.alarm.permission.SET_ALARM` — REQUIRED, measured in the negative direction** (row 27): on a build without it `startActivity` throws `SecurityException … requires com.android.alarm.permission.SET_ALARM` and no alarm is created. Already declared and granted, so nothing new is needed — but it does belong in `toolPermissions` | **Creates the alarm, already enabled.** No prefilled form, no confirm button; the clock opened on its list showing the armed alarm | **Yes** — but see the §7.2 contradiction below |
 | `show_alarms` | `AlarmClock.ACTION_SHOW_ALARMS` | — | None beyond the app's current set; no refusal | Opens a screen (the clock's alarm list); nothing changes | **Yes** |
 | `open_app_info` | `Settings.ACTION_APPLICATION_DETAILS_SETTINGS` | package | None beyond the app's current set; no refusal, for a launchable target **and** for one with no launcher activity | Opens a screen (`InstalledAppDetails`); the screen carries an «Удалить» button | **Yes** |
-| `uninstall_app` | `Intent.ACTION_DELETE` (package URI) | package | **REFUSED. `android.permission.REQUEST_DELETE_PACKAGES`** (or `DELETE_PACKAGES`), named by the responder, `protectionLevel:normal` on this device, **not declared** by the app | **Nothing, silently.** No dialog, no exception, no result — the uninstaller activity started and died in ~180 ms without drawing | **No** — blocked on an undeclared permission |
+| `uninstall_app` | `Intent.ACTION_DELETE` (package URI) | package | **`android.permission.REQUEST_DELETE_PACKAGES`** (or `DELETE_PACKAGES`), named by the responder, `protectionLevel:normal`, **not declared** by the app today → refused (rows 16, 29). **Declaring it is sufficient and costs no prompt** (row 28): granted at install, and the dialog then appears | **As shipped: nothing, silently** — the uninstaller starts and dies in ~180–190 ms without drawing. **With the permission declared: the OS confirms** — «Удалить приложение? / Отмена / OK» (row 28). Either way `startActivity` returns normally and throws nothing, so the caller cannot tell the two apart afterwards (row 32) | **Not on the current seam.** The permission is one manifest line, but row 32's blind refusal is a seam problem, not a manifest one |
 | `open_camera` | `MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA` | — | None beyond the app's current set; no refusal, and the app holds no `CAMERA` permission | Opens a screen (Samsung Camera, live viewfinder, shutter awaiting the user); no capture | **Yes** |
 | `open_wifi_settings` | `Settings.ACTION_WIFI_SETTINGS` | — | None beyond the app's current set; no refusal | Opens a screen — **which on this phone came up with a state-changing modal already raised** («Отключить мобильную точку доступа?») | **Yes**, with the observation named |
 | `open_bluetooth_settings` | `Settings.ACTION_BLUETOOTH_SETTINGS` | — | None beyond the app's current set; no refusal | Opens a screen; nothing changes | **Yes** |
@@ -212,7 +214,9 @@ is inherited** — no cell was taken from platform documentation, from an API's 
 | `open_location_settings` | `Settings.ACTION_LOCATION_SOURCE_SETTINGS` | — | No refusal — but the app **declares `ACCESS_FINE_LOCATION`**, so this shows a location permission is *sufficient*, not that none is needed; whether one is **required** is unmeasured (row 24). Row 30 narrows it: at the re-measure both `ACCESS_FINE_LOCATION` and `ACCESS_COARSE_LOCATION` read `granted=false` and the screen still opened, so the *grant* is ruled out as the explanation and the *declaration* is not | Opens a screen; nothing changes | **Yes** |
 | `open_notification_settings` | `Settings.ACTION_NOTIFICATION_SETTINGS` | — | None beyond the app's current set; no refusal | Opens a screen — **but only via the literal action string**: there is no such public constant on `compileSdk 37` | **Yes**, with the constant caveat |
 
-**Twelve of thirteen survive; one does not.**
+**Twelve of thirteen survive; one does not** — and the thirteenth's blocker turned out to be two
+blockers with different costs: a manifest line (removable, measured in row 28) and a seam that cannot
+see a refusal (not removable by a manifest line, measured in row 32).
 
 ### Where the measurement contradicts §7.2's own proposal
 
@@ -228,9 +232,10 @@ owner already accepted for `set_timer` (reversible, immediately visible, provena
 leaves the device), and that is an owner-level reading of the same evidence rather than something this
 measurement decides. It is named here so it cannot be «simplified» into a form argument later.
 
-**2. `uninstall_app` — «does the OS confirm, or does it delete?» is answered *neither*.** Row 16: the
-app is refused before any dialog exists. §7.2 offered two branches and the device took a third, and the
-third is the dangerous one, for a reason that is about the engine rather than about this tool:
+**2. `uninstall_app` — «does the OS confirm, or does it delete?» is answered *neither, as the app
+ships*; with the permission declared it is «the OS confirms».** Row 16: the app is refused before any
+dialog exists. §7.2 offered two branches and the device took a third, and the third is the dangerous
+one, for a reason that is about the engine rather than about this tool:
 **`startActivity` returned normally and threw nothing.** A worker built on the shipped seam
 (`Tier0IntentToolWorker.launch`, whose only failure signals are `ActivityNotFoundException` and
 `SecurityException`) would answer `ToolResult.Effected()` for an invocation that did nothing, and
@@ -239,6 +244,15 @@ with reality. That is strictly worse than A1′'s `set_timer`, which at least fa
 `ActivityTaskManager` to log a refusal. **Phase 3 must not ship `uninstall_app` on the current seam**,
 and the two things it needs — the declared permission and a way for the worker to learn that the
 responder refused — are both design work, not a manifest line.
+
+**Task 13b measured both halves of that, and they came out asymmetric.** The permission half is *easier*
+than this paragraph assumed: row 28 shows one `<uses-permission>` line is sufficient, is granted at
+install with no prompt, and makes the OS draw the same dialog uid 2000 got — so «the OS confirms» is
+reachable. The seam half is *exactly* as bad as feared and now measured rather than reasoned: row 32
+shows `startActivity` returns `RETURNED_NORMALLY` with no exception **in both directions**, so the
+refusal is invisible to the caller after the fact. Row 33 shows it is visible **before** the fact via
+`checkSelfPermission`. The conclusion is unchanged — not on the current seam — but the work it implies
+is now specific: a precondition gate, not a better failure signal.
 
 **`uninstall_app` keeps `CONFIRM` regardless**, in §7.3's own terms: the gate's job is that **Sidr**
 does not initiate an irreversible act without the user, so a second confirmation from the OS would not
@@ -273,24 +287,65 @@ reach «four acting tools» out of §7.2 without either re-opening §7.4 (raw-sp
 decisions) or counting acting tools from `B2`'s shortcut adapter, which is a different section of the
 spec. Deciding which is the controller's, not this file's.
 
-### The two empty rows, and what depends on them
+### The two formerly empty rows — both now measured (Task 13b)
 
-**Row 27 — is `com.android.alarm.permission.SET_ALARM` actually required by `ACTION_SET_ALARM`?**
-Not measured. Row 13 succeeded on a build that already declares and is granted it, which shows the
-permission is *sufficient*, not that it is *necessary*. The negative test means running the same intent
-from a build without the permission, i.e. reinstalling the app package — forbidden this session
-(2026-09-14 destroyed the owner's data and Keystore material that way). **What depends on it:** whether
-a Phase 3 `set_alarm` row belongs in the `toolPermissions` map that Task 2's guard checks. Until it is
-measured, treating `SET_ALARM` as required is the fail-safe reading — the permission is already
-declared, so nothing has to change for `set_alarm` to work — but «required» must not be *written down*
-as measured, which is how A1′ acquired its false sentence in the first place.
+**Row 27 — is `com.android.alarm.permission.SET_ALARM` actually required by `ACTION_SET_ALARM`?
+Measured: YES.** This is the sentence whose falsity shipped A1′'s `set_timer` dead, so it was measured
+in the only direction that can answer it — a build **without** the permission. `startActivity` threw
+`SecurityException … requires com.android.alarm.permission.SET_ALARM`, the framework printed a
+`Permission Denial` line, and no alarm was created. **What depended on it:** whether a Phase 3
+`set_alarm` row belongs in the `toolPermissions` map Task 2's guard checks. It does, and that is now a
+measurement rather than the fail-safe reading. Note what the measurement also settles: `SET_ALARM`
+being *declared* is not enough to explain row 13 — it is *required*, so the row-13 launch depended on
+it.
 
-**Row 28 — does the uninstall dialog appear for the app once `REQUEST_DELETE_PACKAGES` is declared?**
-Not measured. It needs a manifest edit and a reinstall of the app package, both outside this task
-(Task 13 touches two files and no production code). Row 26 shows the dialog exists and is reachable
-**from uid 2000**; it does **not** show what `com.sidr.launcher` gets once permitted, and assuming the
-two are the same is the inherited-premise move this file forbids. **What depends on it:** whether
-`uninstall_app` is a Phase 3 row at all, and whether its worker can observe a refusal.
+**Row 28 — does the uninstall dialog appear for the app once `REQUEST_DELETE_PACKAGES` is declared?
+Measured: YES, and it is the same dialog uid 2000 drew in row 26.** The permission is `normal`, so it
+is granted at install with no prompt, and the uninstaller then stays, takes focus and asks. It was
+cancelled with `KEYCODE_BACK` and the target package verified still installed (R13-3 — never confirm an
+uninstall). **What depended on it:** whether `uninstall_app` can be a Phase 3 row at all. On the
+permission question, yes.
+
+### The half of row 28 that actually governs Phase 3: a refusal is invisible *afterwards* and visible *beforehand*
+
+Row 28's permission answer is the easy half. The half Phase 3 has to build on is row 32, and it is
+worth stating without hedging:
+
+**`startActivity` tells the caller nothing.** On this device, for `ACTION_DELETE`, the call returns
+`RETURNED_NORMALLY` and throws nothing **both** when the responder refuses outright (no permission —
+the uninstaller lives ~190 ms and draws nothing) and when it draws the dialog. The two outcomes are
+**indistinguishable from inside the process after the fact**. The only post-hoc evidence is the
+responder's own logcat line, which belongs to another app and is not readable as a signal. A worker
+built on the shipped seam — `Tier0IntentToolWorker.launch`, whose only failure signals are
+`ActivityNotFoundException` and `SecurityException` — therefore answers `ToolResult.Effected()` in
+**both** cases, and `AgentExecutor` writes `ToolObserved(Effected)` into a trace `DOC-ILM-3` requires to
+be 1:1 with reality. **"We could not tell from inside the process" is the measured answer, not a
+guess.**
+
+**But it is knowable in advance.** Row 33: `context.checkSelfPermission("android.permission.REQUEST_DELETE_PACKAGES")`
+returns `PERMISSION_GRANTED (0)` on the declaring build and `PERMISSION_DENIED (-1)` on the build
+without it, from inside the app's own process. So the refusal-detection path Phase 3 needs for this
+class of tool is a **precondition check before dispatch**, not an outcome check after it.
+
+**And the two refusal modes are not the same mechanism, which is the part most likely to be
+over-generalised.** Row 27 and rows 16/28/32 are opposite shapes on the same phone:
+
+| Refusal enforced by | Example measured here | `startActivity` | Exception at the caller | `Permission Denial` log | Detectable after the fact? |
+|---|---|---|---|---|---|
+| **`ActivityTaskManager`**, before dispatch | `ACTION_SET_ALARM` without `SET_ALARM` (row 27) | refused | **`SecurityException`**, naming the permission | **yes** | **yes** |
+| **The responding app**, after dispatch | `ACTION_DELETE` without `REQUEST_DELETE_PACKAGES` (rows 16, 29) | `RETURNED_NORMALLY` | **none** | **no** | **no** |
+
+A worker that treats `SecurityException` as "the way a permission refusal arrives" is correct for the
+first row and silently wrong for the second. This is also why Task 13's finding F5 (that
+`grep -i 'Permission Denial'` is not a sufficient instrument) is a property of the *second* mode only —
+on row 27 that grep would have worked perfectly. Neither the count of declared permissions nor the
+presence of a `Permission Denial` line is a general test for "can this tool actually run".
+
+**Two limits on all of the above, named rather than left implicit.** (1) It is two intents on one ROM;
+which mode a *third* intent takes is not predictable from these two and must be measured per intent —
+which is exactly what §3.1 requires anyway. (2) `checkSelfPermission` was measured as a **read**, not as
+a guard in the shipped path: no production code was changed this round, and whether wiring it into a
+worker actually closes the trace-fidelity gap is Phase 3's to build and prove.
 
 ### Two findings about the instrument itself
 

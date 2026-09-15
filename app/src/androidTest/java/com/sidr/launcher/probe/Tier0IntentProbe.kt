@@ -1,6 +1,7 @@
 package com.sidr.launcher.probe
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Process
 import android.provider.AlarmClock
@@ -132,6 +133,40 @@ class Tier0IntentProbe {
             return
         }
         fire("uninstall_app", Intent(Intent.ACTION_DELETE, Uri.fromParts("package", target, null)))
+    }
+
+    /**
+     * **Task 13b, cell B's consequential half: can the caller detect a refusal at all?**
+     *
+     * [uninstallApp] measured that `startActivity` returns `RETURNED_NORMALLY` **both** when the
+     * responder refuses (no permission — the uninstaller dies without drawing) and when it draws the
+     * OS dialog (permission declared). The return value therefore carries no information, and neither
+     * does an exception, because none is thrown in either direction. So the only channel left to a
+     * worker is an **in-process precondition check before firing**, and this method measures what that
+     * check actually returns on this device — once on a build that declares
+     * `REQUEST_DELETE_PACKAGES` and once on a build that does not. It fires no intent and changes
+     * nothing.
+     *
+     * `SET_ALARM` is read alongside it as a positive control (row 27 proved that one *is* enforced at
+     * `startActivity`), and `ACCESS_FINE_LOCATION` because row 30 read its grant state from
+     * `dumpsys package` — from **outside** the process — and row 24 turns on it.
+     */
+    @Test
+    fun permissionSelfCheck() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        listOf(
+            "android.permission.REQUEST_DELETE_PACKAGES",
+            "com.android.alarm.permission.SET_ALARM",
+            "android.permission.ACCESS_FINE_LOCATION",
+        ).forEach { permission ->
+            val raw = context.checkSelfPermission(permission)
+            val verdict = when (raw) {
+                PackageManager.PERMISSION_GRANTED -> "PERMISSION_GRANTED"
+                PackageManager.PERMISSION_DENIED -> "PERMISSION_DENIED"
+                else -> "UNKNOWN"
+            }
+            log("checkSelfPermission.$permission", "$verdict (raw=$raw)")
+        }
     }
 
     @Test

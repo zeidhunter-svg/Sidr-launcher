@@ -480,6 +480,30 @@ The prover must plant, one at a time, restoring with `trap … EXIT` + `git chec
      facts).
   4. **Legitimate growth:** add a descriptor **with** an `emptyList()` row → both tests stay **GREEN**,
      proving the guard does not over-pin.
+  5. **The blind spot, proved rather than asserted — expected result GREEN.** Give a tool an
+     `emptyList()` catalog row while the tool genuinely needs a permission (use `SET_TIMER`: set its row
+     to `emptyList()` and leave the manifest alone). Both tests stay **GREEN**, because nothing here
+     re-derives from the platform what a tool actually needs. That is **not** a defect to fix in this
+     task: it is the limit this guard's own KDoc already states in prose, and this mutation turns the
+     prose into an observation. The prover reports it as an observed boundary, never as a pass.
+
+**This dispatch runs on `sonnet`, overriding the agent definition's `opus`** — not as an economy but
+because the judgment has been converted into an enumerated procedure: all five mutations and their
+expected colours are written above, including the one that must stay green. Two requirements make that
+conversion real, and without them the override is not justified:
+
+  - **Every RED must be reported with the actual failing assertion message, quoted from the JUnit XML**
+    under `app/build/test-results/`, never as "it failed". This is what mechanically separates "the
+    assertion caught the mutation" from "the module did not compile" — the classic false positive of
+    mutation testing, and the thing an under-powered prover otherwise reports as proof.
+  - **Restoration is `trap … EXIT` + `git checkout --`, never `cp`, and the report ends with the output
+    of `git status --short`.** These mutations touch `AndroidManifest.xml`; this project has already had
+    one agent die mid-edit and leave a dirty tree, and the manifest is not where that should recur.
+
+**What the override gives up, stated so it is a decision rather than an oversight:** a prover on a
+stronger model might invent a sixth mutation nobody listed. Mutation 5 above *is* that invention, made
+by the controller in advance. If the prover's report suggests another, it goes to the controller as a
+finding — the prover does not act on it.
 
 ---
 

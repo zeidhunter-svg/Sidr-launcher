@@ -310,6 +310,13 @@ needs.
 
 ### 7.2. The candidate set
 
+> **Superseded in part, 2026-09-18 — read §7.6 with this section.** The two right-hand columns were
+> filled by Tasks 13/13b and the measured table lives in
+> [the measurements file](../plans/2026-09-12-a1-device-measurements.md). Twelve of these thirteen rows
+> survive and ship as the **navigating** set; the **acting** set below one row (`set_alarm`) was
+> unreachable from this table and is replaced by §7.6's, under an owner change-control ruling. The
+> **floor is unchanged**: eight new authored tools, of which at least four act.
+
 Every cell in the two right-hand columns is **MEASURE ON DEVICE** and must be filled by a task that
 ran it on the SM-A325F. No row ships until both are filled. Ids are proposals; the count floor is
 **eight new authored tools**, of which at least four *act* rather than *navigate*.
@@ -422,6 +429,139 @@ raw-span capture. The "described to the model" / "enforced from the model" unifi
 block, since it is the same structure. Neither is A4′'s: A4′ owns the *runtime* debts (staleness, the
 wall-clock budget, `DURABLE_EFFECT`'s unreachable branch), not the argument vocabulary.
 
+
+### 7.6. The candidate set, repaired — change-control record, 2026-09-18 (owner)
+
+**The floor is unchanged. The candidate set is what was wrong, and this section replaces its acting
+half.** §7.2's thirteen rows were written before any measurement; Task 13/13b measured them and the
+result was twelve survivors of which **one acts**. The previous session read that as a property of
+§7.1's rule and recommended amending the floor. **The owner rejected that reading** («необходимо всё
+дорабатывать»), and the rejection is correct on the merits: §7.1 excludes **free text**, not
+**action**. Eleven navigating rows are what a desk-written table happened to list, not what the rule
+forces.
+
+**The framing this section is written under, also the owner's** («сидр — это не просто ланчер, а
+агентная ос»): a candidate is judged by what an agent should be able to do on this device **under the
+deterministic gates**, never by what launchers conventionally do.
+
+#### The acting set (five, against a floor of four)
+
+| Tool | Level | Arg | Acts on | Risk |
+|---|---|---|---|---|
+| `set_alarm` | `system_intent` | clock time | the device's clock | `SAFE` |
+| `uninstall_app` | `system_intent` | package | installed packages | **`CONFIRM`** |
+| `set_app_alias` | `launcher_memory` | **two** tokens (app, phrase) | the agent's own memory | `SAFE` |
+| `forget_app_alias` | `launcher_memory` | phrase | the agent's own memory | `SAFE` |
+| `forget_learned_choice` | `launcher_memory` | the normalized phrase | the agent's own memory | `SAFE` |
+
+The three memory tools are **thin adapters over contracts that already ship**: `SaveAliasUseCase`,
+`DeleteAliasUseCase` (`domain/memory/alias`) and `DeleteLearnedChoiceUseCase`
+(`domain/memory/resolution`). Their argument shapes are read off those contracts rather than invented:
+an alias is keyed by its **normalized phrase** (`AliasStore.delete(phrase)`), and a learned choice by
+`CapabilityKey(actionId, query)` plus a `ResolutionContext` — so `forget_learned_choice` binds the one
+phrase it is given as `query`, with `ActionIds.LAUNCH_APP` (the only family that learns today) and
+`ResolutionContext.None` (v1's only value). If a second family ever learns, this tool needs a second
+argument, and that is a change to this row rather than a silent widening. They need **no Android permission and no ROM measurement**, which is why
+at least two of the four acting tools are drawn from here: a floor whose satisfaction depends on how
+one Samsung build answers an unmeasured question is a floor that can fail late. `ToolLevel` is an open
+value class over `String`, so `launcher_memory` costs one constant in `ToolLevels`.
+
+**The measurements file's verdict «not on the current seam» stands and is not overruled — §7.7
+changes the seam.** That row rejected shipping `uninstall_app` on a worker whose only failure signals
+are `ActivityNotFoundException` and `SecurityException`, because such a worker reports `Effected` for a
+refusal it cannot see. It ships here on the seam §7.7 builds, not on the one that was measured.
+
+**`uninstall_app` ships, and the manifest line is an owner decision already taken** (2026-09-18,
+«принято, разрешать»): `android.permission.REQUEST_DELETE_PACKAGES` is declared in the release
+manifest. It is `normal` and install-time, grants no data access, and cannot delete anything silently —
+the OS draws its own dialog and the user confirms there, behind our own consent gate. Six conditions
+ship with it, and each is a test, not a sentence: it runs **only** from an explicit user command,
+never from a suggestion or as an unasked second step; the consent card names **both** the app label
+and the package, because resolution is fuzzy and the human must see what will be removed before
+tapping; an unresolved name **declines** and never guesses; **our own package is refused**, since
+uninstalling Sidr mid-session kills the surface running the session; the wording stays "precondition
+checked before the call" and never "refusal is detected" (§7.7); and the manifest line is held by a
+guard rather than by review.
+
+**§7.4 does not apply to `set_app_alias`, and the reason is mechanical rather than an exception.**
+§7.4 excludes free-text arguments because the vocabulary hands the worker a lower-cased,
+whitespace-collapsed remainder, so a message body arrives mangled. An alias phrase's destination,
+`SaveAliasUseCase`, runs that phrase through **`CommandNormalizer.normalize` itself** — the very same
+function — before storing it. For this one argument the normalization is therefore **lossless by
+construction**: what the worker receives is byte-identical to what the use case would have produced
+from the raw text. This is provable by test, and the test belongs in the plan. No other free-text tool
+gains anything from this: it is a property of the destination, not of the argument.
+
+**One new capability is required and is named as such.** `ToolVocabulary.Entry` carries `argName:
+String?` — **zero or one** argument. «называй телеграм телегой» needs two slots, so the vocabulary
+gains a bounded two-slot form. It is new work, it is testable, and it is the only engine-adjacent
+capability the acting set needs. **Fallback if it is judged too expensive:** drop `set_app_alias`, ship
+the two `forget_*` tools, and the floor is met at exactly four acting tools with no margin.
+
+#### Cut, with the reason
+
+**«Add to favourites» is not a tool and is removed from consideration.** Favourites in this product are
+**derived from usage** (`deriveFavorites(usageRecords, …)`, `feature/launcher/LauncherAppList.kt`);
+there is no pinned-favourites store anywhere. A tool for it would require a new persisted concept, its
+migration and its surface — a feature, not a descriptor. Recorded here because the controller proposed
+it in conversation before reading the code, and a proposal withdrawn silently is indistinguishable
+from one never made.
+
+**Torch, volume, media transport and Do-Not-Disturb are not rejected — they are not needed.** With five
+acting tools the floor is met with margin and **no new device measurement round is required**: every
+Android premise Phase 3 rests on is already in rows 13–33. Each of those candidates would have cost a
+measurement round, and DND additionally a new runtime-permission flow (`PermissionFeature` plus an
+education screen). Address: the block that next wants device-state control.
+
+#### The navigating set
+
+**All twelve measured survivors ship**, in 3b (below). They are already measured, and the marginal cost
+of one is a descriptor plus three locale strings. **The risk is selection, not correctness:** twelve
+similar triggers beside A1′'s `open_system_settings`, and `ToolSelector` **declines** on ambiguity, so
+a careless trigger set makes the product *worse* than today. Rule, held by
+`ToolVocabularyReachabilityTest` per trigger rather than by care: **every navigating trigger must carry
+its own distinguishing token** — never a bare "settings" synonym.
+
+#### Phase split
+
+**3a — the acting set, the precondition gate (§7.7), and `uninstall_app` as the first `CONFIRM` tool.**
+At its boundary the product is coherent and the floor is already met: five acting tools, the consent
+gate exercised on a real tool, gate green. The block can close from there if it must.
+**3b — the twelve navigating tools**, their triggers, their locales and their reachability tests.
+Homogeneous, repetitive, subagent-shaped work.
+
+### 7.7. The precondition gate — what row 32 actually requires
+
+Rows 16/28/32 measured that a **responder-side** refusal is invisible to the caller: `startActivity`
+returns normally and throws nothing whether the uninstaller refuses or draws its dialog. Row 27
+measured the opposite shape for **framework-side** enforcement, which throws. Row 33 measured that the
+refusal is knowable **in advance**, from inside the process, via `checkSelfPermission`. So the
+detection path is a **precondition**, never a better failure signal.
+
+1. **`ToolPermissionCatalog` (`:data:repository`)** — one production map from `ToolId` to the manifest
+   permissions that tool needs. It lives in the Android module because `android.permission.*` strings
+   have no business in `:domain`, which is KMP `commonMain`.
+2. **A source does not advertise what it cannot run.** `Tier0IntentToolSource` consults the catalog and
+   omits any tool whose permission is not held. This is the **same shape Phase 1 already measured and
+   shipped** for shortcuts — no `HOME` role, empty tool set, no crash — rather than a new mechanism.
+3. **The worker re-checks immediately before dispatch**, because state can change between the snapshot
+   and the call (the same reasoning that keeps `SecurityException` as a backstop rather than as the
+   mechanism), and returns `Failed` — **never `Effected`** — when the precondition does not hold. That
+   is the whole point: `DOC-ILM-3` requires the trace to be 1:1 with reality, and the shipped seam
+   would have written `Effected` for a no-op.
+4. **`ToolRegistryPermissionGuardTest` reads the production catalog** instead of its own hand-written
+   column. This closes the weakness the guard names in its own KDoc and makes §16 criterion 4 —
+   "keyed on what the registry declares" — literally true rather than nearly true.
+
+**No frozen type is touched.** `ObservedFact`, `CommandFailure`, `ArgType`, `GoalShape`, `ActionIds`,
+`OutboundContextPolicy.ALLOWED` and Room schema 4 stay out of the diff: "do not advertise what cannot
+run" and "return `Failed`, not `Effected`" are both expressible in the vocabulary that ships today.
+
+**The honest limit, stated where it will be read rather than in a footnote.** This closes exactly one
+cause of refusal: a missing permission. A responder that refuses for another reason — device policy, a
+work profile, a package that cannot be removed — remains **undetectable**, because the platform gives
+the caller nothing. The documents say "precondition checked before the call"; they must never say
+"refusals are detected".
 ---
 
 ## 8. Preconditions — what must land before the first new worker (G2)
@@ -594,8 +734,11 @@ phase boundary if it grows beyond one session's reach.
   refresh; `DynamicToolNames`; device measurement of §5.3 **before** the adapter is written.
 - **Phase 2 — selection (§6).** `ToolSelector`, its policy, its guards. Phase 1's hundred descriptors
   are what make this testable against reality rather than against a fixture.
-- **Phase 3 — authored mass (§7).** Device measurement fills §7.2 first; then descriptors, workers,
-  triggers, strings in `en`/`ru`/`tr`, reachability.
+- **Phase 3 — authored mass (§7), split in two (2026-09-18).** The device measurement is **done**
+  (Tasks 13/13b; no further round is needed, §7.6). **3a** — the acting set, the precondition gate
+  (§7.7) and `uninstall_app` as the track's first `CONFIRM` tool; the floor is met at its boundary and
+  the block could close from there. **3b** — the twelve navigating tools, their triggers, their
+  `en`/`ru`/`tr` strings and a reachability test per trigger.
 - **Phase 4 — close.** Owner acceptance checklist, ADR, `CLAUDE.md` + `current-status.md`, track plan
   §HANDOFF rewritten, ledger emptied before it is deleted, commit proposed to the owner.
 

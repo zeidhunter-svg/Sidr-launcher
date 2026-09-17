@@ -23,6 +23,16 @@ untouched), JUnit4 + Robolectric, `kotlinx-coroutines-test`.
 — §7.6 (the repaired candidate set) and §7.7 (the precondition gate) govern this plan; §7.1–§7.5 are
 its context.
 
+**Revision 2 (2026-09-18), after an independent review of revision 1 (`e029c31`).** The review
+returned six Critical and nine Important findings and a verdict of *rework*; the controller verified
+each at the source before accepting it. Four of them were defects of the same class this block exists
+to close — a claim in prose that no test could see. What changed structurally: the three memory tools
+are `TRANSIENT`, not `DURABLE` (the engine treats `DURABLE` as a **consent trigger**, so the plan's own
+"footprint, not danger" reading would have stopped the loop on «называй телеграм телегой»); app-name
+resolution moves **into the planner**, above the consent checkpoint, so the consent card names what will
+actually be removed; and the mutation round no longer contains a mutation that cannot go red. Full
+finding-by-finding record: the block ledger, 2026-09-18.
+
 **Device premise:** every Android fact this plan rests on is already measured in
 [the measurements file](2026-09-12-a1-device-measurements.md) rows 13–33. **No new device measurement
 round is required, and none may be invented:** a task that finds itself wanting an unmeasured Android
@@ -69,6 +79,14 @@ include this section.
 | `:feature:launcher` | `:feature:launcher:testDebugUnitTest` |
 | `:app` | `:app:testDebugUnitTest` |
 
+**`:app` runs in every task that adds or changes a registered tool** — Tasks 2, 3, 5, 7, 8, 10 — and not
+only at the end. (Revision 2 inserts one task as **Task 6b** rather than renumbering — the convention this block
+already used for Task 13b.) Two `:app` guards quantify over the **whole production federation** the moment a tool
+appears: `DoctrineGuardTest`'s risk pin (`every registered tool's declared risk is pinned here`) and its
+surface scan (`every tool … has a non-generic label on the surface`). A task that introduces a tool and
+does not pin its risk, give it a label and run `:app` leaves the module red for every commit that
+follows. Review finding I1.
+
 The **full gate** runs once, at the end (Task 12), not after every task.
 
 ---
@@ -102,7 +120,9 @@ The **full gate** runs once, at the end (Task 12), not after every task.
 | `app/src/test/java/com/sidr/launcher/agent/ToolRegistryPermissionGuardTest.kt` | Reads the production catalog instead of its hand-written column |
 | `app/src/test/java/com/sidr/launcher/doctrine/DoctrineGuardTest.kt` | Risk pin for the new tools |
 | `feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/agent/AgentSessionPresentation.kt` | Labels for the five tools; a two-argument step line |
-| `app/src/main/res/values/strings.xml` + `values-ru` + `values-tr` | New step strings and the `launcher_memory` provenance label |
+| `feature/launcher/src/main/res/values{,-ru,-tr}/strings.xml` | The five new step strings, `en`/`ru`/`tr` — **this module**, not `:app`: the keys resolve through `com.sidr.launcher.feature.launcher.R` |
+| `feature/launcher/src/main/res/values/strings_locked.xml` | The `launcher_memory` provenance label, `translatable="false"` — Class A, so the owner-reviewed locale signature is untouched |
+| `data/repository/src/main/java/com/sidr/launcher/data/repository/agent/ToolMatchPlanner.kt` | Task 6b: resolves an `app` argument to a package **at plan time**, above the consent checkpoint |
 
 ---
 
@@ -207,9 +227,13 @@ class ContextPermissionPresence @Inject constructor(
  * because `ToolRegistryPermissionGuardTest` used to carry this column by hand, and its own KDoc named
  * that as its weak point: a hand-written column is as green when it is wrong as when it is right.
  *
- * **`null` is not `emptyList()`.** An id with no row means nobody has stated an answer, and every
- * consumer must fail closed on it — a source does not advertise it, a worker does not dispatch it, and
- * the guard goes red. An explicit `emptyList()` is the statement "this tool needs no permission".
+ * **`null` is not `emptyList()`.** An id with no row means nobody has stated an answer, and the
+ * **Tier-0 source and its worker** fail closed on it — that source does not advertise it, that worker
+ * does not dispatch it, and the guard goes red. An explicit `emptyList()` is the statement "this tool
+ * needs no permission". Stated no wider than it is true (review finding M1): `SystemIntentToolSource`,
+ * `ShortcutToolSource` and Task 9's `MemoryToolSource` do **not** consult this catalog. No live defect
+ * follows — every row of theirs is `emptyList()` — but a KDoc claiming a property the code does not
+ * have is the exact failure mode this block exists to remove.
  *
  * Shortcut tools (`shortcut:` prefix) carry no row by construction: their ids are device-dependent.
  * That family is answered where it always was — in the guard, against the measured fact that shortcut
@@ -323,13 +347,42 @@ class Tier0IntentToolSource @Inject constructor(
 }
 ```
 
-- [ ] **Step 4: Run and watch pass; then the module suite**
+- [ ] **Step 4: Fix EVERY call site — they are enumerated, not left to be discovered**
 
-Run the `--tests '*Tier0IntentToolSourceTest'` command, then
-`:data:repository:testDebugUnitTest --rerun-tasks`. Expected: PASS, no other test red. If an existing
-test constructed `Tier0IntentToolSource()` with no arguments, update it to pass
-`ToolPermissionCatalog()` and a presence fake granting `com.android.alarm.permission.SET_ALARM` — that
-is the shipped device state (row 29: `granted=true`).
+Changing this constructor breaks **two modules**, and the previous revision of this plan said only "if
+an existing test constructed it" while running `:data:repository` alone (review finding C6). The call
+sites, verified in the tree at `e029c31`:
+
+| Module | File | Occurrences |
+|---|---|---|
+| `:data:repository` | `agent/Tier0IntentToolSourceTest.kt` | 2 |
+| `:data:repository` | `agent/ToolMatchPlannerTest.kt` | 1 |
+| `:data:repository` | `agent/FreeTextGoalEndToEndTest.kt` | 1 |
+| `:app` | `agent/ToolRegistryPermissionGuardTest.kt` | 1 |
+| `:app` | `doctrine/DoctrineGuardTest.kt` | 2 |
+
+Every one gets `Tier0IntentToolSource(ToolPermissionCatalog(), presence)`. **Which presence:** in the
+two `:app` guards and in every test whose subject is the registry's *contents* rather than the filter,
+pass a fixture that grants everything —
+
+```kotlin
+private val grantsEverything = PermissionPresence { true }
+```
+
+— and write **why** beside it: those guards assert over the tools the product ships, and a fixture that
+withheld one would make them vacuous rather than strict (this is the same trap as review finding C5).
+A fixture that grants nothing belongs only in the three tests of Step 1, whose subject **is** the
+filter.
+
+- [ ] **Step 4b: Run both modules**
+
+```bash
+./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
+  :data:repository:testDebugUnitTest :app:testDebugUnitTest --rerun-tasks
+```
+
+Expected: PASS in both. **`:app` is not optional here** — it is where two of the six call sites live, and
+a commit that leaves `:app:compileDebugUnitTestKotlin` broken is a commit nobody can bisect through.
 
 - [ ] **Step 5: Commit**
 
@@ -414,10 +467,23 @@ class Tier0IntentToolWorker @Inject constructor(
 }
 ```
 
-- [ ] **Step 4: Run and watch pass**
+- [ ] **Step 4: Fix EVERY call site, then run both modules**
 
-Both new tests PASS; the existing worker tests must be updated to the new arity, granting
-`com.android.alarm.permission.SET_ALARM`.
+Same rule as Task 2 Step 4, different constructor. Verified call sites at `e029c31`:
+
+| Module | File | Occurrences |
+|---|---|---|
+| `:data:repository` | `agent/Tier0IntentToolWorkerTest.kt` | 15 (12 + 3 throwing-launcher cases) |
+| `:data:repository` | `agent/Tier0ToolExecutionEndToEndTest.kt` | 1 |
+| `:app` | `doctrine/DoctrineGuardTest.kt` | 1 |
+
+Each becomes `Tier0IntentToolWorker(launcher, ToolPermissionCatalog(), grantsEverything)` except the
+three tests of Step 1, whose subject is the precondition itself. Then:
+
+```bash
+./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
+  :data:repository:testDebugUnitTest :app:testDebugUnitTest --rerun-tasks
+```
 
 - [ ] **Step 5: Commit**
 
@@ -468,19 +534,32 @@ git commit -m "test(agentic-5.5/A1\"): the permission guard reads the production
 
 - [ ] **Step 4: Dispatch a `mutation-prover` for this guard**
 
-The prover must plant, one at a time, restoring with `trap … EXIT` + `git checkout --`:
+**Fixture, and it is load-bearing:** the guard builds `Tier0IntentToolSource(ToolPermissionCatalog(),
+PermissionPresence { true })`. With any other fixture the mutations below prove something other than
+what they claim — a tool withheld by the filter leaves `registry.all()`, and a test that quantifies over
+`registry.all()` then passes by **absence**. Review finding C5 caught exactly that in revision 1.
+
+The prover plants these, one at a time, restoring with `trap … EXIT` + `git checkout --`:
   1. Delete `<uses-permission android:name="com.android.alarm.permission.SET_ALARM" />` from
      `app/src/main/AndroidManifest.xml` → `every permission a registered tool needs is declared in the
      manifest` must go **RED**.
   2. Change the catalog's `SET_TIMER` row to `listOf("android.permission.NOT_DECLARED")` → the same
      test must go **RED**.
-  3. Add a descriptor to `Tier0IntentToolSource` with **no** catalog row → `every registered tool has a
-     permission row` must go **RED** (and Task 2's filter means it is not advertised — the prover must
-     report which of the two effects it observed, because both are correct and they are different
-     facts).
+  3. Add a descriptor with **no** catalog row to a source that does **not** filter by the catalog —
+     `SystemIntentToolSource` (or Task 9's `MemoryToolSource`, if it has landed) → `every registered
+     tool has a permission row` must go **RED**.
+     **Why not `Tier0IntentToolSource`, which revision 1 named here:** after Task 2 that source drops an
+     unrowed descriptor before it is ever registered, so "registered without a row" is no longer a
+     reachable state for it and the mutation could only ever be GREEN. A mutation that cannot fail is
+     not a proof — it is the vacuous guard this protocol exists to catch, and revision 1 contained one.
   4. **Legitimate growth:** add a descriptor **with** an `emptyList()` row → both tests stay **GREEN**,
      proving the guard does not over-pin.
-  5. **The blind spot, proved rather than asserted — expected result GREEN.** Give a tool an
+  5. **The silent-disappearance case, which nothing caught before.** Delete the `SET_TIMER` row from the
+     catalog entirely → the tool vanishes from the registry (Task 2's fail-closed filter) and
+     `the registry this guard reads contains the tools this federation is known to ship` must go **RED**
+     via `REQUIRED_TOOL_IDS`. This is what stops a forgotten catalog row from turning a shipped tool
+     silently invisible instead of loudly red — §7.7's own purpose, applied to §7.7's own mechanism.
+  6. **The blind spot, proved rather than asserted — expected result GREEN.** Give a tool an
      `emptyList()` catalog row while the tool genuinely needs a permission (use `SET_TIMER`: set its row
      to `emptyList()` and leave the manifest alone). Both tests stay **GREEN**, because nothing here
      re-derives from the platform what a tool actually needs. That is **not** a defect to fix in this
@@ -488,7 +567,7 @@ The prover must plant, one at a time, restoring with `trap … EXIT` + `git chec
      prose into an observation. The prover reports it as an observed boundary, never as a pass.
 
 **This dispatch runs on `sonnet`, overriding the agent definition's `opus`** — not as an economy but
-because the judgment has been converted into an enumerated procedure: all five mutations and their
+because the judgment has been converted into an enumerated procedure: all six mutations and their
 expected colours are written above, including the one that must stay green. Two requirements make that
 conversion real, and without them the override is not justified:
 
@@ -501,8 +580,8 @@ conversion real, and without them the override is not justified:
     one agent die mid-edit and leave a dirty tree, and the manifest is not where that should recur.
 
 **What the override gives up, stated so it is a decision rather than an oversight:** a prover on a
-stronger model might invent a sixth mutation nobody listed. Mutation 5 above *is* that invention, made
-by the controller in advance. If the prover's report suggests another, it goes to the controller as a
+stronger model might invent a mutation nobody listed. Mutations 5 and 6 above *are* that invention —
+one by the controller, one by the plan's reviewer. If the prover's report suggests another, it goes to the controller as a
 finding — the prover does not act on it.
 
 ---
@@ -593,6 +672,28 @@ private fun parseClockTime(raw: String): Pair<Int, Int>? {
 
 - [ ] **Step 4: Run and watch pass**
 
+- [ ] **Step 4b: Pin the risk and give it a label IN THIS TASK, not later**
+
+Two `:app` guards quantify over the whole federation the moment a tool is registered (review finding
+I1), so a tool introduced without these leaves `:app` red for every commit until Task 11:
+
+1. `app/src/test/java/com/sidr/launcher/doctrine/DoctrineGuardTest.kt` — add `set_alarm` to
+   `declaredRisk` with `ActionRiskLevel.SAFE`.
+2. `feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/agent/AgentSessionPresentation.kt`
+   — add `private const val TIER0_SET_ALARM = "set_alarm"` beside the existing `TIER0_*` literals and a
+   `toolLabelFor` branch to `R.string.launcher_agent_step_alarm`. **A literal, not
+   `Tier0ToolIds.SET_ALARM.value`:** `:feature:launcher` does not depend on `:data:repository` and must
+   not (review finding C2); the existing literals carry a KDoc saying exactly this.
+3. `feature/launcher/src/main/res/values{,-ru,-tr}/strings.xml` — `launcher_agent_step_alarm`, all three
+   locales in this commit.
+
+Then run **both** modules plus `:app`:
+
+```bash
+./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
+  :data:repository:testDebugUnitTest :feature:launcher:testDebugUnitTest :app:testDebugUnitTest --rerun-tasks
+```
+
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -674,10 +775,16 @@ class AppTargetResolver @Inject constructor(
         val normalized = CommandNormalizer.normalize(query)
         if (normalized.isBlank()) return null
 
+        val installed = (apps.getInstalledApps() as? OperationResult.Success)?.value ?: return null
+
+        // An alias outlives its target: the app it named can be uninstalled while the row stays. A
+        // package that resolves from an alias but is not installed would send ACTION_DELETE at nothing,
+        // and row 32 measured that such a refusal is invisible to the caller — so the step would report
+        // Effected over emptiness. Checked here rather than trusted (review finding M3).
         (aliases.find(normalized) as? OperationResult.Success)?.value?.target?.appPackageOrNull()
+            ?.takeIf { pkg -> installed.any { it.packageName == pkg } }
             ?.let { return it }
 
-        val installed = (apps.getInstalledApps() as? OperationResult.Success)?.value ?: return null
         return installed
             .filter { CommandNormalizer.normalize(it.label) == normalized }
             .singleOrNull()
@@ -697,6 +804,105 @@ git commit -m "feat(agentic-5.5/A1\"): a name resolves to one package or to noth
 
 ---
 
+# Task 6b: the planner resolves the app name, ABOVE the consent checkpoint
+
+**Files:**
+- Modify: `data/repository/src/main/java/com/sidr/launcher/data/repository/agent/ToolMatchPlanner.kt`
+- Test: `data/repository/src/test/java/com/sidr/launcher/data/repository/agent/ToolMatchPlannerTest.kt`
+
+**Interfaces:**
+- Consumes: `AppTargetResolver.resolve(query): String?` (Task 6).
+- Produces: `ToolMatchPlanner(selector: ToolSelector, appTargets: AppTargetResolver)`. For a descriptor
+  that declares an argument named **`app`**, the planner resolves the vocabulary's raw value to a
+  package and binds `ArgSource.Literal(package)`; if the descriptor **also** declares `app_label`, the
+  raw text is bound there. **Resolution failure ⇒ `PlanningResult.NoPlan`** — the decline happens
+  before a plan exists, not after the user has consented.
+
+**Why this task exists (review finding C4, owner decision 2026-09-18).** `AgentExecutor` evaluates
+`checkpointFor` at [AgentExecutor.kt:113] and only reaches `toolExecutor.invoke` at [:224]. So anything
+resolved inside a worker is resolved **after** consent. With resolution in the worker, a consent card
+for «удали telegram» could only ever say what the user typed — the package it will actually delete does
+not exist yet at that moment, and on a device with two Telegram-like labels the user would be
+confirming one thing and getting another. That is fork **F5** («consent fires before argument
+binding»), recorded in `CLAUDE.md` and addressed to A4′. This task does **not** close F5 in general: it
+closes it for arguments the planner can resolve deterministically, which is what the owner's condition 2
+requires and what makes that condition a test rather than a sentence.
+
+**The convention, and its named limit.** "An argument called `app` holds an app name" is a string
+convention, not a type. It is pinned by a test here and stated in the planner's KDoc. A typed argument
+kind is the `ArgType` debt (spec §7.5), addressed to the block that first ships MCP/AppFunctions — not
+widened here.
+
+- [ ] **Step 1: Write the failing tests**
+
+```kotlin
+    @Test
+    fun `an app argument is bound as a package, with the raw text kept as the label`() = runTest {
+        val planner = ToolMatchPlanner(selector, FakeTargets(mapOf("telegram" to "org.telegram.messenger")))
+
+        val planned = planner.plan(AgentGoal(GoalShape.Free("удали приложение telegram")), registry)
+
+        val args = (planned as PlanningResult.Planned).plan.steps.single().invocation.args
+        assertEquals(ArgSource.Literal("org.telegram.messenger"), args["app"])
+        assertEquals(ArgSource.Literal("telegram"), args["app_label"])
+    }
+
+    @Test
+    fun `an unresolvable app name yields NoPlan, so nothing is ever consented to`() = runTest {
+        val planner = ToolMatchPlanner(selector, FakeTargets(emptyMap()))
+
+        assertEquals(
+            PlanningResult.NoPlan,
+            planner.plan(AgentGoal(GoalShape.Free("удали приложение нечто")), registry),
+        )
+    }
+
+    @Test
+    fun `a tool with no app argument is untouched by resolution`() = runTest {
+        val planner = ToolMatchPlanner(selector, FakeTargets(emptyMap()))
+
+        val planned = planner.plan(AgentGoal(GoalShape.Free("set a timer for 10 minutes")), registry)
+
+        assertEquals(
+            ArgSource.Literal("10 minutes"),
+            (planned as PlanningResult.Planned).plan.steps.single().invocation.args["duration"],
+        )
+    }
+```
+
+- [ ] **Step 2: Run and watch fail**
+
+Run: `./gradlew … :data:repository:testDebugUnitTest --tests '*ToolMatchPlannerTest' --rerun-tasks`
+
+- [ ] **Step 3: Implement**
+
+Inside `plan`, between the existing required-argument check and the `args` construction:
+
+```kotlin
+        val resolvedArgs = buildMap<String, String> {
+            putAll(match.args)
+            if (descriptor.argSchema.any { it.name == APP_ARG }) {
+                val raw = match.args[APP_ARG].orEmpty()
+                val target = appTargets.resolve(raw) ?: return PlanningResult.NoPlan
+                put(APP_ARG, target)
+                if (descriptor.argSchema.any { it.name == APP_LABEL_ARG }) put(APP_LABEL_ARG, raw)
+            }
+        }
+```
+
+and the existing filter/`mapValues` run over `resolvedArgs` instead of `match.args`. Constants
+`APP_ARG = "app"` and `APP_LABEL_ARG = "app_label"` live in the planner's companion.
+
+- [ ] **Step 4: Run and watch pass, then the module suite**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git commit -am "feat(agentic-5.5/A1\"): the planner resolves an app name, so consent names what will happen"
+```
+
+---
+
 # Task 7: `uninstall_app` — the first `CONFIRM` tool
 
 **Files:**
@@ -707,10 +913,12 @@ git commit -m "feat(agentic-5.5/A1\"): a name resolves to one package or to noth
 
 **Interfaces:**
 - Produces: `Tier0ToolIds.UNINSTALL_APP = ToolId("uninstall_app")`; descriptor with
-  `argSchema = listOf(ActionArg("app", description = "Which app to remove"))`, `risk = ActionRiskLevel.CONFIRM`,
-  `durability = ToolDurability.DURABLE`, `level = SYSTEM_INTENT`, `effect = EXTERNAL`; catalog row
-  `listOf("android.permission.REQUEST_DELETE_PACKAGES")`.
-- Consumes: `AppTargetResolver.resolve` (Task 6).
+  `argSchema = listOf(ActionArg("app", description = "Package of the app to remove"), ActionArg("app_label", description = "What the user called it", required = false))`,
+  `risk = ActionRiskLevel.CONFIRM`, `durability = ToolDurability.DURABLE`, `level = SYSTEM_INTENT`,
+  `effect = EXTERNAL`; catalog row `listOf("android.permission.REQUEST_DELETE_PACKAGES")`.
+- Consumes: the **already-resolved package** in `invocation.args["app"]` (Task 6b). **The worker does
+  not resolve anything** — resolution happens above the consent checkpoint, which is what makes the
+  owner's condition 2 achievable at all.
 
 **Measured basis:** rows 16/26/28/29/32/33. Without the permission the uninstaller starts and dies in
 ~190 ms drawing nothing, and `startActivity` **returns normally**; with it the OS draws
@@ -718,9 +926,17 @@ git commit -m "feat(agentic-5.5/A1\"): a name resolves to one package or to noth
 **The refusal is undetectable afterwards and detectable beforehand** — which Tasks 1–3 already built.
 
 **Owner ruling, 2026-09-18 («принято, разрешать»):** the manifest line ships in the release manifest.
-Six conditions ride with it; three are this task's tests (explicit command only — enforced by there
-being no suggestion path to it, the self-package refusal, and decline-on-unresolved), the consent card
-naming both label and package is Task 11, and the wording rule is documentation.
+Where each of the six conditions is actually enforced, after review finding I9 pointed out that
+"enforced by there being no path" is an assumption until something holds it:
+
+| Condition | Held by |
+|---|---|
+| 1. Explicit user command only | Task 12's one-step-plan test + the outbound sentinel test |
+| 2. The consent card names label **and** package | Task 6b (resolution above the gate) + Task 11's two-argument string + Task 12's `AwaitingConsent` assertion |
+| 3. Exact resolution or decline | Task 6 + Task 6b (`NoPlan` on failure) |
+| 4. Our own package refused | this task, Step 1 |
+| 5. Wording says "precondition checked", never "refusal detected" | documentation, `:app` KDoc |
+| 6. The manifest line held mechanically | Task 4's mutation 1 |
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -728,31 +944,34 @@ naming both label and package is Task 11, and the wording rule is documentation.
     @Test
     fun `uninstalling our own package is refused`() = runTest {
         val launcher = RecordingLauncher()
-        val worker = tier0Worker(launcher, resolver = FakeResolver(mapOf("sidr" to OWN_PACKAGE)))
+        val worker = tier0Worker(launcher)
 
-        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.UNINSTALL_APP, mapOf("app" to "sidr")))
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.UNINSTALL_APP, mapOf("app" to OWN_PACKAGE)))
 
         assertTrue(result is ToolResult.Failed)
         assertEquals("uninstalling the launcher kills the surface running the session", 0, launcher.launched.size)
     }
 
     @Test
-    fun `an unresolved name declines and nothing is dispatched`() = runTest {
+    fun `a blank package declines and nothing is dispatched`() = runTest {
         val launcher = RecordingLauncher()
-        val worker = tier0Worker(launcher, resolver = FakeResolver(emptyMap()))
+        val worker = tier0Worker(launcher)
 
-        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.UNINSTALL_APP, mapOf("app" to "whatever")))
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.UNINSTALL_APP, mapOf("app" to "")))
 
         assertTrue(result is ToolResult.Failed)
         assertEquals(0, launcher.launched.size)
     }
 
     @Test
-    fun `a resolved name dispatches ACTION_DELETE for that package`() = runTest {
+    fun `a package dispatches ACTION_DELETE for exactly that package`() = runTest {
         val launcher = RecordingLauncher()
-        val worker = tier0Worker(launcher, resolver = FakeResolver(mapOf("telegram" to "org.telegram.messenger")))
+        val worker = tier0Worker(launcher)
 
-        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.UNINSTALL_APP, mapOf("app" to "telegram")))
+        val result = worker.invoke(ResolvedInvocation(
+            Tier0ToolIds.UNINSTALL_APP,
+            mapOf("app" to "org.telegram.messenger", "app_label" to "telegram"),
+        ))
 
         assertTrue(result is ToolResult.Effected)
         val intent = launcher.launched.single()
@@ -789,19 +1008,31 @@ Worker:
 ```kotlin
 Tier0ToolIds.UNINSTALL_APP -> uninstallApp(invocation.args["app"].orEmpty())
 
-private suspend fun uninstallApp(query: String): ToolResult {
-    val target = resolver.resolve(query) ?: return ToolResult.Failed(CommandFailure.Generic)
+private fun uninstallApp(target: String): ToolResult {
+    if (target.isBlank()) return ToolResult.Failed(CommandFailure.Generic)
     // Condition 4 of the owner's ruling: the agent never removes the launcher it is running inside.
     if (target == ownPackageName) return ToolResult.Failed(CommandFailure.Generic)
     return launch(Intent(Intent.ACTION_DELETE, Uri.parse("package:$target")))
 }
 ```
 
+The argument is already a package name: Task 6b resolved it at plan time so that the consent card could
+name it. A worker that resolved it again here would be resolving **after** consent — the defect this
+plan's revision 2 exists to remove.
+
 `ownPackageName` is injected as a `String` (a `@Named("appPackageName")` provider in
 `AgentProvidesModule` returning `context.packageName`) rather than read from a `Context` inside the
 worker, so the refusal is testable without Robolectric.
 
 - [ ] **Step 4: Run and watch pass**
+
+- [ ] **Step 4b: Pin the risk and the label in this task (review finding I1)**
+
+`DoctrineGuardTest.declaredRisk` gains `uninstall_app` → `ActionRiskLevel.CONFIRM`;
+`AgentSessionPresentation` gains `private const val TIER0_UNINSTALL_APP = "uninstall_app"` (a literal —
+`:feature:launcher` has no `:data:repository` edge) and its `toolLabelFor` branch; the three
+`feature/launcher` `strings.xml` files gain `launcher_agent_step_uninstall`. Run
+`:data:repository:testDebugUnitTest :feature:launcher:testDebugUnitTest :app:testDebugUnitTest --rerun-tasks`.
 
 - [ ] **Step 5: Commit**
 
@@ -901,6 +1132,23 @@ Run: `./gradlew … :data:repository:testDebugUnitTest --tests '*ToolVocabularyT
 
 - [ ] **Step 4: Run and watch pass**
 
+- [ ] **Step 4b: Teach the two guards about the new shape — HERE, not in Task 10**
+
+`ToolVocabularyReachabilityTest` builds each entry's sample as `"$form $SAMPLE_ARGUMENT"` and branches
+only on `entry.argName == null`. For a two-slot entry that yields `"называй 10 minutes"` — no infix, so
+`twoSlotMatch` returns `null`, and **two** guard tests go red for a reason that has nothing to do with
+the trigger being unreachable (review finding I3). Left to Task 10, its Step 2 would diagnose this as
+"FastPath claimed the trigger" and the implementer would delete a working trigger.
+
+- In `ToolVocabularyReachabilityTest`: when `entry.secondArgName != null`, build
+  `"$form $SAMPLE_ARGUMENT ${entry.infixByLocale.values.first().first()} $SAMPLE_ARGUMENT_2"` with a new
+  `SAMPLE_ARGUMENT_2` constant.
+- In `ToolVocabularyLocaleGuardTest`: include `infixByLocale` in the locale-coverage union, so a
+  two-slot entry that carries `en`/`ru` prefixes but only an `en` infix is red rather than quietly
+  monolingual.
+
+Run: `./gradlew … :data:repository:testDebugUnitTest --tests '*ToolVocabulary*' --rerun-tasks`
+
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -927,8 +1175,25 @@ git commit -am "feat(agentic-5.5/A1\"): a bounded two-slot form in the tool voca
   `MemoryToolWorker @Inject constructor(save: SaveAliasUseCase, deleteAlias: DeleteAliasUseCase, deleteChoice: DeleteLearnedChoiceUseCase, resolver: AppTargetResolver) : ToolWorker`.
 - All three descriptors: `level = LAUNCHER_MEMORY`, `effect = ToolEffect.LOCAL` (nothing leaves the
   device — this is the launcher's own store), `risk = ActionRiskLevel.SAFE`,
-  `durability = ToolDurability.DURABLE` (they write persistent state and `DURABLE` is about footprint,
-  not about danger).
+  **`durability = ToolDurability.TRANSIENT`**.
+- **`argSchema`, written out because a missing one fails silently** (review finding I4 —
+  `ToolMatchPlanner` drops any argument the schema does not declare, the required-check then passes over
+  an empty list, and the worker writes an alias keyed on an empty string):
+  - `SET_APP_ALIAS`: `listOf(ActionArg("app", …), ActionArg("phrase", …))` — names identical to Task 10's
+    `argName` / `secondArgName`. **`app` triggers Task 6b's resolution**, so the worker receives a
+    package; the descriptor also declares `ActionArg("app_label", required = false)`.
+  - `FORGET_APP_ALIAS`: `listOf(ActionArg("phrase", …))`.
+  - `FORGET_LEARNED_CHOICE`: `listOf(ActionArg("phrase", …))`.
+
+**Why `TRANSIENT` and not `DURABLE` — review finding C1, owner decision 2026-09-18.** `DURABLE` is not
+a label in this engine, it is a **consent trigger**: `AgentExecutor.checkpointFor`'s fourth branch
+returns `ConsentCheckpoint(DURABLE_EFFECT)` for any descriptor marked `DURABLE` whose earlier branches
+did not fire — which is exactly the case for a `SAFE` tool. Marked `DURABLE`, «называй телеграм телегой»
+would stop the loop and raise a consent card typed `ExternalHandoff` for an operation that hands nothing
+outside, on a screen that (A0's recorded residual) does not even draw the plan in `AwaitingConsent`.
+`ToolDurability`'s own KDoc defines `DURABLE` as an **irreversible** footprint (`DOC-HMA-3`); a row in
+the launcher's own database, written on an explicit command and removable from Settings in two taps, is
+not that. These three tools therefore behave like `set_timer`: you asked, it happened.
 - Catalog rows: all three `emptyList()`.
 
 **The normalization property this adapter depends on, and which must be held by a test rather than
@@ -1001,6 +1266,40 @@ the way in. Hand the worker raw text and the delete removes nothing and reports 
         val result = worker.invoke(ResolvedInvocation(MemoryToolIds.FORGET_APP_ALIAS, mapOf("phrase" to "телега")))
         assertTrue(result is ToolResult.Failed)
     }
+
+    // Review finding I6: SaveAliasUseCase returns Success(Unit) WITHOUT WRITING for a blank or
+    // over-length phrase (`SaveAliasUseCase.kt:18-21`, MAX_ALIAS_PHRASE_LENGTH = 64). Passing that
+    // through as Effected would put "Выполнено" on the surface and ToolObserved(Effected) in the trace
+    // for an alias that does not exist — the exact class of lie Tasks 1-3 exist to remove, committed by
+    // the block that removes it.
+    @Test
+    fun `an over-length phrase is Failed, not a silent no-op reported as done`() = runTest {
+        val store = RecordingAliasStore()
+        val worker = memoryWorker(store, resolver = FakeResolver(mapOf("телеграм" to "org.telegram.messenger")))
+
+        val result = worker.invoke(ResolvedInvocation(
+            MemoryToolIds.SET_APP_ALIAS,
+            mapOf("app" to "org.telegram.messenger", "phrase" to "x".repeat(65)),
+        ))
+
+        assertTrue(result is ToolResult.Failed)
+        assertEquals(0, store.upserted.size)
+    }
+
+    @Test
+    fun `forgetting a phrase that was never stored is still Effected, and the KDoc says what that means`() = runTest {
+        val store = RecordingAliasStore()
+        val worker = memoryWorker(store)
+
+        val result = worker.invoke(ResolvedInvocation(MemoryToolIds.FORGET_APP_ALIAS, mapOf("phrase" to "никогда")))
+
+        // AliasStore.delete reports no row count, so the worker cannot distinguish "removed one" from
+        // "there was none". Effected here means THE OPERATION RAN, not THAT SOMETHING WAS REMOVED, and
+        // the worker's KDoc must say exactly that sentence. Asserted so the limitation is a test's
+        // subject rather than a reader's inference.
+        assertTrue(result is ToolResult.Effected)
+        assertEquals(listOf("никогда"), store.deleted)
+    }
 ```
 
 - [ ] **Step 2: Run and watch fail**
@@ -1025,6 +1324,18 @@ fun providePermissionPresence(impl: ContextPermissionPresence): PermissionPresen
 The worker maps each id to its use case, converts `OperationResult.Failure` to
 `ToolResult.Failed(CommandFailure.Generic)`, and returns `ToolResult.Effected()` on success. It catches
 nothing broadly: the use cases already map their exceptions to `OperationResult`.
+
+**Two things it must do that the use cases do not** (review finding I6): before calling
+`SaveAliasUseCase`, reject a blank phrase or one longer than `MAX_ALIAS_PHRASE_LENGTH` (64) with
+`Failed`, because that use case answers `Success(Unit)` without writing; and carry a KDoc sentence
+saying that for `forget_*`, `Effected` means **the operation ran**, not that something was removed —
+`AliasStore.delete` reports no row count, so the stronger claim cannot be made and must not be implied.
+
+- [ ] **Step 3b: Pin risk and labels for all three tools in this task (review finding I1)**
+
+`DoctrineGuardTest.declaredRisk` gains three `SAFE` rows; `AgentSessionPresentation` gains three
+`private const val` literals and three `toolLabelFor` branches; `feature/launcher`'s three `strings.xml`
+gain `launcher_agent_step_set_alias`, `_forget_alias`, `_forget_choice`.
 
 - [ ] **Step 4: Run and watch pass; then `:app:testDebugUnitTest`**
 
@@ -1061,7 +1372,11 @@ Entry(
         "en" to setOf("set an alarm for", "set alarm for", "alarm for"),
         "ru" to setOf("поставь будильник на", "заведи будильник на", "будильник на"),
     ),
-    suffixByLocale = mapOf("tr" to setOf("alarm kur")),
+    // NOT "alarm kur": `RuleBasedIntentMatcher.INSTALL_VERBS.suffixByLocale["tr"]` is `setOf("kur")`
+    // and matches on `endsWith(" kur")`, so "07:30 alarm kur" becomes a Play Store search. That is the
+    // documented reason "zamanlayıcı kur" / "sayaç kur" were already deleted from this vocabulary, and
+    // revision 1 of this plan re-proposed the same collision under a different noun (review finding I2).
+    suffixByLocale = mapOf("tr" to setOf("alarm ayarla")),
     argName = "time",
 ),
 Entry(
@@ -1107,9 +1422,15 @@ Entry(
 
 Run: `./gradlew … :data:repository:testDebugUnitTest --tests '*ToolVocabularyReachabilityTest' --rerun-tasks`
 **This is the point of the task.** A trigger FastPath claims must be **removed or reworded**, never
-forced through. Record in the task report which trigger was rejected and by which FastPath verb —
-that record is what stops the next author re-adding it. The `tr` suffix `"kaldır"` and the bare `ru`
-`"удали"` are the two most likely to collide; if they do, keep the longer qualified forms only.
+forced through. Record in the task report which trigger was rejected and by which FastPath verb — that
+record is what stops the next author re-adding it. Known collisions, two of them already paid for:
+`"alarm kur"` is **excluded above** (`INSTALL_VERBS` `tr` suffix `"kur"`, review finding I2); the `tr`
+suffix `"kaldır"` and the bare `ru` `"удали"` are the two most likely remaining, and if they collide,
+keep the longer qualified forms only.
+
+**Before diagnosing a red as a FastPath collision, check the shape.** A two-slot entry that fails its
+own sample is a *generator* problem, fixed in Task 8 Step 4b — not a reachability problem. If Task 8's
+Step 4b was skipped, stop and do it there rather than deleting a trigger here (review finding I3).
 
 - [ ] **Step 3: Run the locale guard**
 
@@ -1133,8 +1454,14 @@ git commit -am "feat(agentic-5.5/A1\"): triggers for the five acting tools, each
 **Files:**
 - Modify: `feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/agent/AgentSessionPresentation.kt:93-99`
   (`toolLabelFor`), `:150-170` (`PlanStep.line`), `:202-212` (`provenanceLabelFor`)
-- Modify: `app/src/main/res/values/strings.xml`, `values-ru/strings.xml`, `values-tr/strings.xml`
-- Test: `feature/launcher/src/test/java/com/sidr/launcher/feature/launcher/agent/AgentSessionPresentationTest.kt`
+- Modify: `feature/launcher/src/main/res/values{,-ru,-tr}/strings.xml` — **this module, not `:app`**
+  (review finding I5: these keys are read through `com.sidr.launcher.feature.launcher.R`; placed under
+  `app/` they resolve to a different `R` and the file does not compile)
+- Modify: `feature/launcher/src/main/res/values/strings_locked.xml` for the provenance label only, with
+  `translatable="false"`, beside its four existing siblings
+- Test: `feature/launcher/src/test/java/…/agent/AgentSessionPresentationTest.kt` (`toolLabelFor` only)
+  and the existing Robolectric render test (`AgentSessionSurfaceProvenanceTest` /
+  `LauncherScreenAgentProvenanceTest`) for anything that calls `PlanStep.line`
 
 **Interfaces:** `PlanStep.line` gains a two-argument branch. The existing `literalSubject()` uses
 `singleOrNull()`, so a two-argument tool falls through to the goal text — that is CLAUDE.md's named
@@ -1145,19 +1472,57 @@ tools by name**, not in general.
 the app label and the package, because resolution is fuzzy and the user must see what will be removed
 before tapping Confirm.
 
-- [ ] **Step 1: Write the failing test**
+**Two constraints that decide where these tests can live at all:**
+
+- **`PlanStep.line` is `@Composable @ReadOnlyComposable`** (`AgentSessionPresentation.kt:162-171`), so it
+  **cannot be called from a plain JUnit `@Test`** — revision 1 of this plan asked for exactly that and
+  the implementer would have hit a compile error on step 2 and "fixed" the test into meaninglessness
+  (review finding C3). `AgentSessionPresentationTest` is plain JUnit and today calls only
+  `toolLabelFor`, which returns an `Int`. Keep it that way; assertions about rendered text go in the
+  existing Robolectric render tests.
+- **No `:data:repository` symbols here.** `:feature:launcher` depends on `:core:common`, `:core:ui`,
+  `:domain` and nothing else (`feature/launcher/build.gradle.kts:43-45`). `MemoryToolIds` and
+  `Tier0ToolIds` are unreachable; use `ToolId("set_app_alias")` in tests and `private const val`
+  literals in production, as the existing `TIER0_*` literals already do and explain (review finding C2).
+  `DoctrineGuardTest`'s surface scan looks for the **literal string** in this file, so a literal is what
+  it needs.
+
+- [ ] **Step 1: Write the failing tests, in the two places they can actually run**
+
+In `AgentSessionPresentationTest` (plain JUnit — ids and resource ids only):
 
 ```kotlin
     @Test
-    fun `a two-argument step names both arguments, not the goal text`() {
-        val step = planStep(MemoryToolIds.SET_APP_ALIAS, mapOf("app" to "телеграм", "phrase" to "телега"))
-        assertEquals("Называть «телеграм» словом «телега»", step.line(subject = "весь текст цели", dynamicLabels = emptyMap()))
+    fun `each new tool maps to its own label, not the generic one`() {
+        listOf("set_alarm", "uninstall_app", "set_app_alias", "forget_app_alias", "forget_learned_choice")
+            .forEach { id ->
+                assertNotEquals(
+                    "a tool without its own label reads as 'Run this step for …' on the gate",
+                    R.string.launcher_agent_step_generic,
+                    toolLabelFor(ToolId(id)),
+                )
+            }
+    }
+```
+
+In the existing Robolectric render test (real composition, real resources):
+
+```kotlin
+    @Test
+    fun `a two-argument alias step names both arguments, not the goal text`() {
+        // set_app_alias binds app_label and phrase; the generic path would print the goal text instead.
+        composeRule.setContent { AgentSessionSurface(state = stateWithAliasStep()) }
+        composeRule.onNodeWithText("telegram", substring = true).assertExists()
+        composeRule.onNodeWithText("телега", substring = true).assertExists()
     }
 
     @Test
-    fun `an uninstall step names the package beside the label`() {
-        val step = planStep(Tier0ToolIds.UNINSTALL_APP, mapOf("app" to "telegram"))
-        assertTrue(step.line(subject = "", dynamicLabels = emptyMap()).contains("telegram"))
+    fun `an uninstall step on the consent gate names BOTH the label and the package`() {
+        // Owner condition 2. Both substrings, because "contains(\"telegram\")" alone passes on a card
+        // that shows only what the user typed - which is what revision 1 asserted (review finding C4).
+        composeRule.setContent { AgentSessionSurface(state = awaitingConsentForUninstall()) }
+        composeRule.onNodeWithText("telegram", substring = true).assertExists()
+        composeRule.onNodeWithText("org.telegram.messenger", substring = true).assertExists()
     }
 ```
 
@@ -1165,16 +1530,26 @@ before tapping Confirm.
 
 - [ ] **Step 3: Add the strings and the branch**
 
-`values/strings.xml` (and the same keys, translated, in `values-ru` and `values-tr`):
+`feature/launcher/src/main/res/values/strings.xml` (and the same keys, translated, in `values-ru` and
+`values-tr` **of the same module**):
 
 ```xml
 <string name="launcher_agent_step_alarm">Set an alarm for %1$s</string>
-<string name="launcher_agent_step_uninstall">Remove %1$s</string>
+<string name="launcher_agent_step_uninstall">Remove %1$s (%2$s)</string>
 <string name="launcher_agent_step_set_alias">Call “%1$s” “%2$s”</string>
 <string name="launcher_agent_step_forget_alias">Forget the name “%1$s”</string>
 <string name="launcher_agent_step_forget_choice">Forget what to open for “%1$s”</string>
-<string name="launcher_tool_level_launcher_memory">Sidr’s own memory</string>
 ```
+
+and, in `feature/launcher/src/main/res/values/strings_locked.xml` beside its four siblings:
+
+```xml
+<string name="launcher_tool_level_launcher_memory" translatable="false">launcher_memory</string>
+```
+
+`launcher_agent_step_uninstall` takes **two** arguments — the label and the package — because that is
+what owner condition 2 requires the consent card to show, and Task 6b is what makes both available at
+gate time.
 
 `toolLabelFor` gains the five ids; `provenanceLabelFor` gains
 `ToolLevels.LAUNCHER_MEMORY.value -> R.string.launcher_tool_level_launcher_memory` — note it is only
@@ -1205,9 +1580,17 @@ Run: `./gradlew … :app:testDebugUnitTest --tests '*LocaleCompletenessGuardTest
 git commit -am "feat(agentic-5.5/A1\"): the five acting tools on the surface, in en/ru/tr"
 ```
 
-The task report **must** state: six new translatable strings landed, so
-`checkOwnerReviewedLocaleStrings`'s signature over Class B keys is invalid until the owner re-reviews
-and re-signs. **Do not compute the digest.**
+**The locale signature is NOT invalidated by this task, and the report must say so rather than the
+opposite** (review finding I5 — revision 1 asserted the reverse and would have cost the owner a review
+cycle for nothing). Verified at `app/build.gradle.kts:218-228`: `checkOwnerReviewedLocaleStrings` walks
+**only** files named `strings_locked.xml` in a `values` directory, and within them only keys **without**
+`translatable="false"`. The five `launcher_agent_step_*` keys live in `strings.xml` — outside the scan
+entirely — and `launcher_tool_level_launcher_memory` is `translatable="false"`, i.e. Class A. This is
+the same precedent `CLAUDE.md` records for the 2026-08-23 A0 fix round.
+
+The report states: **"no new Class B keys; the locale signature is untouched — checked against
+`app/build.gradle.kts:218`"**. If a later task does add a Class B key, the rule stands unchanged: say
+the owner must re-review and re-sign, and **never compute the digest**.
 
 ---
 
@@ -1223,6 +1606,14 @@ and re-signs. **Do not compute the digest.**
 three times now, is that four layers each fully tested in isolation summed to a dead capability. The
 seams here are *vocabulary → selector → planner → federation → worker → store* and *precondition →
 registry → dispatch*.
+
+**The seam must cross `AgentExecutor`, not stop at the federation** (review finding I7). Revision 1
+called `federation.executor.invoke(...)` directly, which skips `prepare`/`checkpointFor` — and that is
+precisely where both of this review's Critical findings lived: a `DURABLE` memory tool silently raising
+a consent card, and a consent card built before the package was resolved. A seam test that cannot see
+the consent decision is not testing this block's seam. Drive it through `AgentExecutor.prepare` /
+`perform` (or the `Start`/`Run` use cases) with a fake `AgentSessionStore`, and assert on
+**`session.state`**.
 
 - [ ] **Step 1: Write the seam test with real objects**
 
@@ -1247,10 +1638,47 @@ registry → dispatch*.
     }
 
     @Test
-    fun `a CONFIRM tool's step carries consent before any dispatch`() = runTest {
-        val planned = planner.plan(AgentGoal(GoalShape.Free("удали приложение telegram")), federation.registry)
-        val step = (planned as PlanningResult.Planned).plan.steps.single()
-        assertTrue(requiresConsent(step.risk))
+    fun `a SAFE memory tool runs without ever raising a checkpoint`() = runTest {
+        // Asserted on the SESSION, not on requiresConsent(step.risk): the latter is true-by-definition
+        // for SAFE and cannot see checkpointFor's DURABLE branch — which is what revision 1 got wrong
+        // (review finding C1).
+        val session = executor.prepare(sessionFor("называй телеграм как телега"))
+
+        assertEquals(ExecutionState.RUNNING, session.state)
+        assertNull("a memory write must not stop the loop", session.consentCheckpoint)
+    }
+
+    @Test
+    fun `uninstall_app stops at AwaitingConsent, and the pending step already carries the package`() = runTest {
+        val session = executor.prepare(sessionFor("удали приложение telegram"))
+
+        assertEquals(ExecutionState.AWAITING_CONSENT, session.state)
+        val pending = session.plan.steps.single()
+        assertEquals(ArgSource.Literal("org.telegram.messenger"), pending.invocation.args["app"])
+        assertEquals(ArgSource.Literal("telegram"), pending.invocation.args["app_label"])
+    }
+
+    @Test
+    fun `the planner never builds more than one step for a recognised tool`() = runTest {
+        // Owner condition 1: uninstall_app is reachable only from an explicit command. Nothing today
+        // can append it as a second step; this is what holds that property when something changes
+        // (review finding I9).
+        listOf("удали приложение telegram", "поставь будильник на 7:30", "называй телеграм как телега")
+            .forEach { text ->
+                val planned = planner.plan(AgentGoal(GoalShape.Free(text)), federation.registry)
+                assertEquals(1, (planned as PlanningResult.Planned).plan.steps.size)
+            }
+    }
+
+    @Test
+    fun `parity - a recognised tool runs with the model planner never consulted`() = runTest {
+        // Review finding I8: five new tools become reachable through routing step 2b, i.e. in
+        // localOnlyMode and offline. Parity means exactly two things — the model planner is not
+        // consulted and nothing leaves the device — and nothing else in this block re-checks it.
+        val countingModelPlanner = CountingCommandPlanner()
+        routeCommand(text = "называй телеграм как телега", planner = countingModelPlanner, localOnly = true)
+
+        assertEquals(0, countingModelPlanner.calls)
     }
 
     @Test
@@ -1268,6 +1696,14 @@ registry → dispatch*.
 Add the five ids with their expected `ActionRiskLevel`, so `SAFE → CONFIRM` (or the reverse, which is
 worse) on any of them is red. This is the `M9`/`(4)` gap of A1′, closed for these tools rather than in
 general.
+
+- [ ] **Step 3b: One sentinel line in the outbound guard (review finding I9)**
+
+Add a planted `ToolId` sentinel to the existing `OutboundContextPolicy` guard test and assert it never
+reaches the outbound payload. It holds by construction today — the model is offered `ActionIds`, and
+`ToolRegistry`/`ToolDescriptor` appear nowhere in `domain/prompt`, `domain/planner` or `data/ai-cloud`,
+which the plan's reviewer verified independently. The test is what keeps it true the day some block
+teaches the planner to offer the registry to a model.
 
 - [ ] **Step 4: Run the full gate**
 
@@ -1304,11 +1740,24 @@ git commit -am "test(agentic-5.5/A1\"): the acting seam end to end, and the new 
 ## Plan self-review
 
 - **Spec coverage:** §7.6's acting set → Tasks 5, 7, 9; its two-slot capability → Task 8; its cut of
-  "favourites" → nothing to build, recorded in the spec; §7.6's navigating set → Phase 3b, out of
-  scope here and named above. §7.7's four numbered items → Tasks 1, 2, 3, 4 in that order. §13's
-  verification list: item 1 (seam-crossing) → Task 12; item 5 (guard mutation-proved, both blind
-  spots) → Task 4 Step 4; item 6 (risk pinned) → Task 12 Step 3; item 8 (reachability per trigger) →
-  Task 10; item 11 (locale completeness) → Task 11.
+  "favourites" → nothing to build, recorded in the spec; §7.6's navigating set → Phase 3b, out of scope
+  here and named above. §7.7's four numbered items → Tasks 1, 2, 3, 4 in that order. §13's verification
+  list: item 1 (seam-crossing) → Task 12, **now through `AgentExecutor`**; item 6 (risk pinned) → **each
+  introducing task**, 5, 7 and 9, rather than deferred to the end; item 8 (reachability per trigger) →
+  Task 10, with Task 8 Step 4b's generator fix as its precondition; item 10 (parity) → Task 12; item 11
+  (locale completeness) → Task 11.
+  **Item 5, stated precisely after review finding I8.** The registry-keyed guard and its two named blind
+  spots — "an intent built in a helper", "a registered tool with no worker branch" — were built and
+  mutation-proved in **Phase 0**, not here. Task 4 is a **re-proof after changing the guard's data
+  source**: a narrower claim, and the only one this plan may make. Whether Phase 0's round actually
+  covered both blind spots is checked against Phase 0's own record before Task 4 reports; if it did not,
+  that is Phase 0's debt carried forward, not this task's to invent.
+- **M4 — a note for whoever reads the spec next:** §7.6 gives the example «называй телеграм телегой»
+  (instrumental case, no separator); the implemented form is «называй X как Y», because a two-slot match
+  needs a separator it can find. The spec's phrasing is illustrative, not a required surface form.
+- **Line references** were re-checked against the tree after review finding M2: `toolLabelFor` is
+  `AgentSessionPresentation.kt:93-99`, `PlanStep.line` is **:162-171**, `provenanceLabelFor` is
+  **:201-210** (revision 1 quoted :150-170 and :202-212).
 - **Placeholders:** none. Task 10 deliberately contains a decision the implementer may not take alone
   (a `tr` form that the two-slot shape cannot express) — that is an escalation instruction with a named
   owner, not a TODO.

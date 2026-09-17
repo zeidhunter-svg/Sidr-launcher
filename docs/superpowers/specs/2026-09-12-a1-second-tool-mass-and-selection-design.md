@@ -370,6 +370,58 @@ ships a free-text tool. The retention question → **A5** (trace/history surface
 obligation *answered* — rejected with a measured reason, re-addressed — which DoD §4 permits and
 silence does not.
 
+### 7.5. Schema-as-data — the shape `ArgType` is missing, its reference design, and where it goes (G6)
+
+**The debt this addresses is already named, in two places.** A1′'s ADR records `ArgType` as rejected
+with a measured reason rather than deferred: it has exactly **one** value (`STRING`), so "typed"
+currently means "named", and a rich MCP / AppFunctions JSON Schema is not expressible. `CLAUDE.md`'s
+Known debt carries the same sentence. What neither states is the *shape* that is missing, and a debt
+whose repair has no named shape tends to be re-discovered rather than paid.
+
+**The second half of the same debt, stated here for the first time.** Today an argument is described
+to the model by one mechanism (`CatalogSchemaRenderer`) and checked coming back by another
+(`ActionArg` + `ProposalValidator`). Two mechanisms over one fact can disagree, and nothing in the
+tree holds them together: what we *tell* the model an argument is, and what we *enforce* when the
+model answers, are separately written. No instance of that divergence is measured today — this is a
+structural statement, not a defect report.
+
+**Reference design, and where it was read.** Clojure's data-driven schema libraries solve exactly this
+by making a schema a **value**: the same object validates data and projects into another schema
+language. Read via Context7 on 2026-09-18 from `metosin/malli`'s own documentation: `m/validate`
+checks a value against a schema, and `malli.json-schema/transform` turns that *same* schema into JSON
+Schema Draft 2020-12. One structure, two projections — instead of two hand-kept mechanisms. That is
+the shape `ArgType` is missing, and it is the shape an MCP tool definition wants.
+
+**The language itself is refused, and the reason is measured, not aesthetic.** Clojure is not a
+candidate implementation language here. Its own README (same Context7 read) names the JVM, the CLR and
+compilation to JavaScript as its platforms; Android is not among them, and its runtime resolves and
+links code dynamically — which lands on the two numbers this project has actually measured as weak:
+**cold start 766 ms** and **55 MB PSS** steady-state Home (Этап 0.6). Independently of that, `:domain`
+is `kotlin.multiplatform` `commonMain`, stdlib + coroutines only, so no JVM-only language can live
+where the schema would have to live. **What is borrowed is the shape, not the runtime**, and it needs
+no new dependency: a data class plus a transform function in Kotlin expresses it.
+
+**One Clojure idea that is already built here and is under-used.** That ecosystem's real instrument is
+the REPL — a fast interactive feedback loop over live code. This project's equivalent exists:
+`:consumer:jvm` runs the portable agent core, its planner and its session store **with no phone
+attached** (A0.5). Planner and selection logic for new tools can be exercised there in seconds rather
+than through `am instrument` in minutes. This costs nothing to adopt and is recorded so it is not
+re-invented.
+
+**Why not in A1″, measured rather than asserted.** Phase 3's tools take zero arguments or one bounded
+token (§7.1), so none of them can exercise a composite schema; the payoff appears where argument
+structure is genuinely nested — MCP / AppFunctions tool definitions (ADR 2/4 makes both first-class
+sources) and the model's input boundary. Against that, `CLAUDE.md` records the measured cost of
+touching a closed sum in `commonMain`: `GoalShape` gained **one** value and cost four files in three
+modules. Widening `ArgType` inside this block would spend that at the model boundary for tools that do
+not use it — which is the same reasoning by which A1′ rejected it, now with the missing shape named.
+
+**Address:** the schema-as-data form for `ArgType` → **the block that first ships an MCP /
+AppFunctions source or the first free-text tool**, whichever lands first, together with §7.4's
+raw-span capture. The "described to the model" / "enforced from the model" unification → the same
+block, since it is the same structure. Neither is A4′'s: A4′ owns the *runtime* debts (staleness, the
+wall-clock budget, `DURABLE_EFFECT`'s unreachable branch), not the argument vocabulary.
+
 ---
 
 ## 8. Preconditions — what must land before the first new worker (G2)

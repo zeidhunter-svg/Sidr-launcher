@@ -312,10 +312,11 @@ needs.
 
 > **Superseded in part, 2026-09-18 — read §7.6 with this section.** The two right-hand columns were
 > filled by Tasks 13/13b and the measured table lives in
-> [the measurements file](../plans/2026-09-12-a1-device-measurements.md). Twelve of these thirteen rows
-> survive and ship as the **navigating** set; the **acting** set below one row (`set_alarm`) was
-> unreachable from this table and is replaced by §7.6's, under an owner change-control ruling. The
-> **floor is unchanged**: eight new authored tools, of which at least four act.
+> [the measurements file](../plans/2026-09-12-a1-device-measurements.md). **Twelve of these thirteen
+> rows survive, and eleven of the twelve navigate** — the twelfth, `set_alarm`, is the one that acts and
+> belongs to §7.6's acting set. The acting half of this table was unreachable from it and is replaced by
+> §7.6, under an owner change-control ruling. The **floor is unchanged**: eight new authored tools, of
+> which at least four act.
 
 Every cell in the two right-hand columns is **MEASURE ON DEVICE** and must be filled by a task that
 ran it on the SM-A325F. No row ships until both are filled. Ids are proposals; the count floor is
@@ -457,7 +458,12 @@ deterministic gates**, never by what launchers conventionally do.
 The three memory tools are **thin adapters over contracts that already ship**: `SaveAliasUseCase`,
 `DeleteAliasUseCase` (`domain/memory/alias`) and `DeleteLearnedChoiceUseCase`
 (`domain/memory/resolution`). Their argument shapes are read off those contracts rather than invented:
-an alias is keyed by its **normalized phrase** (`AliasStore.delete(phrase)`), and a learned choice by
+an alias is stored under a **normalized phrase** — `SaveAliasUseCase` normalizes, while
+`DeleteAliasUseCase` passes its argument to `AliasStore.delete(phrase)` **unchanged**, so
+`forget_app_alias` matches the stored key only because the vocabulary applied the *same*
+`CommandNormalizer.normalize` on the way in. That is a property to be **held by a test**, not assumed:
+hand a worker raw text and the delete misses silently, finding nothing to remove and reporting
+success. A learned choice is keyed by
 `CapabilityKey(actionId, query)` plus a `ResolutionContext` — so `forget_learned_choice` binds the one
 phrase it is given as `query`, with `ActionIds.LAUNCH_APP` (the only family that learns today) and
 `ResolutionContext.None` (v1's only value). If a second family ever learns, this tool needs a second
@@ -515,7 +521,10 @@ education screen). Address: the block that next wants device-state control.
 
 #### The navigating set
 
-**All twelve measured survivors ship**, in 3b (below). They are already measured, and the marginal cost
+**All eleven navigating survivors ship**, in 3b (below) — eleven, not twelve: twelve rows of §7.2
+survive the permission half, and one of them (`set_alarm`) acts and is counted in the acting set above.
+Counting it twice is exactly the arithmetic Этап 0.5 exists to prevent, and this sentence exists because
+an earlier draft of this section did it. They are already measured, and the marginal cost
 of one is a descriptor plus three locale strings. **The risk is selection, not correctness:** twelve
 similar triggers beside A1′'s `open_system_settings`, and `ToolSelector` **declines** on ambiguity, so
 a careless trigger set makes the product *worse* than today. Rule, held by
@@ -527,7 +536,9 @@ its own distinguishing token** — never a bare "settings" synonym.
 **3a — the acting set, the precondition gate (§7.7), and `uninstall_app` as the first `CONFIRM` tool.**
 At its boundary the product is coherent and the floor is already met: five acting tools, the consent
 gate exercised on a real tool, gate green. The block can close from there if it must.
-**3b — the twelve navigating tools**, their triggers, their locales and their reachability tests.
+**3b — the eleven navigating tools**, their triggers, their locales and their reachability tests.
+Total new authored tools across 3a and 3b: **sixteen**, of which **five act** — both numbers reported
+split, never as one figure.
 Homogeneous, repetitive, subagent-shaped work.
 
 ### 7.7. The precondition gate — what row 32 actually requires
@@ -737,7 +748,7 @@ phase boundary if it grows beyond one session's reach.
 - **Phase 3 — authored mass (§7), split in two (2026-09-18).** The device measurement is **done**
   (Tasks 13/13b; no further round is needed, §7.6). **3a** — the acting set, the precondition gate
   (§7.7) and `uninstall_app` as the track's first `CONFIRM` tool; the floor is met at its boundary and
-  the block could close from there. **3b** — the twelve navigating tools, their triggers, their
+  the block could close from there. **3b** — the eleven navigating tools, their triggers, their
   `en`/`ru`/`tr` strings and a reachability test per trigger.
 - **Phase 4 — close.** Owner acceptance checklist, ADR, `CLAUDE.md` + `current-status.md`, track plan
   §HANDOFF rewritten, ledger emptied before it is deleted, commit proposed to the owner.

@@ -128,7 +128,11 @@ class Tier0ToolExecutionEndToEndTest {
     private fun federation(launcher: IntentLauncher) = ToolFederation(
         listOf(
             ToolAdapter(ToolLevels.IN_APP, SystemIntentToolSource(DefaultActionCatalog()), RefusingInAppWorker),
-            ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything), Tier0IntentToolWorker(launcher)),
+            ToolAdapter(
+                ToolLevels.SYSTEM_INTENT,
+                Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything),
+                Tier0IntentToolWorker(launcher, ToolPermissionCatalog(), grantsEverything),
+            ),
         ),
     )
 

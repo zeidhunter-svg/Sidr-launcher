@@ -12,6 +12,7 @@ import com.sidr.launcher.domain.tool.ToolResult
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -31,10 +32,25 @@ import org.robolectric.annotation.Config
 @Config(manifest = Config.NONE)
 class Tier0IntentToolWorkerTest {
 
+    private class FakePresence(private val granted: Set<String>) : PermissionPresence {
+        override fun isGranted(permission: String): Boolean = permission in granted
+    }
+
+    /**
+     * Task 3 made this worker re-check its permissions immediately before dispatch, so every
+     * construction now states which presence it runs under. **This fixture is load-bearing, not a
+     * convenience.** Every test below it is about duration parsing or about the exception backstop,
+     * and a presence that granted nothing would make all of them fail at the new precondition instead
+     * — passing on their `Failed`/`launched.isEmpty()` assertions while proving nothing about the
+     * thing they name. Granting everything keeps the precondition out of their way. A presence that
+     * withholds belongs only to the two tests whose subject *is* the precondition.
+     */
+    private val grantsEverything = PermissionPresence { true }
+
     @Test
     fun `an unparseable duration fails closed and never issues an intent`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "soon")))
 
@@ -45,7 +61,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `ten minutes becomes six hundred seconds and the clock UI is not skipped`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
 
         worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 minutes")))
 
@@ -61,7 +77,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `a duration with a second number-unit pair fails closed rather than reading only the first word`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "1 min 30 sec")))
 
@@ -77,7 +93,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `an unlisted word that merely starts with a unit prefix fails closed rather than matching it`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 minecraft")))
 
@@ -88,7 +104,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `zero with no unit fails closed`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "0")))
 
@@ -99,7 +115,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `zero minutes fails closed`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "0 minutes")))
 
@@ -110,7 +126,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `a five-digit amount fails closed`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "12345")))
 
@@ -121,7 +137,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `a unit word with no leading number fails closed`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "minutes")))
 
@@ -132,7 +148,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `an unrecognised unit fails closed`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 fortnights")))
 
@@ -143,7 +159,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `trailing junk after a valid unit fails closed`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 minutes now")))
 
@@ -154,7 +170,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `an accepted russian minute form resolves to the right number of seconds`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
 
         worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 минут")))
 
@@ -164,7 +180,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `an accepted turkish minute form resolves to the right number of seconds`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched))
+        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
 
         worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 dakika")))
 
@@ -186,7 +202,11 @@ class Tier0IntentToolWorkerTest {
      */
     @Test
     fun `a missing timer activity fails the tool result instead of propagating`() = runTest {
-        val worker = Tier0IntentToolWorker(ThrowingIntentLauncher { ActivityNotFoundException("no timer app") })
+        val worker = Tier0IntentToolWorker(
+            ThrowingIntentLauncher { ActivityNotFoundException("no timer app") },
+            ToolPermissionCatalog(),
+            grantsEverything,
+        )
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 minutes")))
 
@@ -196,7 +216,11 @@ class Tier0IntentToolWorkerTest {
     /** `SecurityException` has the same shape and the same fix — the pair `AndroidActionExecutor` catches. */
     @Test
     fun `a refused timer launch fails the tool result instead of propagating`() = runTest {
-        val worker = Tier0IntentToolWorker(ThrowingIntentLauncher { SecurityException("not allowed") })
+        val worker = Tier0IntentToolWorker(
+            ThrowingIntentLauncher { SecurityException("not allowed") },
+            ToolPermissionCatalog(),
+            grantsEverything,
+        )
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 minutes")))
 
@@ -209,7 +233,11 @@ class Tier0IntentToolWorkerTest {
      */
     @Test
     fun `a missing settings activity fails the tool result instead of propagating`() = runTest {
-        val worker = Tier0IntentToolWorker(ThrowingIntentLauncher { ActivityNotFoundException("no settings app") })
+        val worker = Tier0IntentToolWorker(
+            ThrowingIntentLauncher { ActivityNotFoundException("no settings app") },
+            ToolPermissionCatalog(),
+            grantsEverything,
+        )
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.OPEN_SYSTEM_SETTINGS, emptyMap()))
 
@@ -239,6 +267,45 @@ class Tier0IntentToolWorkerTest {
             Intent.FLAG_ACTIVITY_NEW_TASK,
             started.flags and Intent.FLAG_ACTIVITY_NEW_TASK,
         )
+    }
+
+    /**
+     * The narrower window Task 2's source filter cannot cover: state can move between the snapshot the
+     * source answered from and the call. A refusal is invisible to the caller *afterwards* (measurement
+     * row 32 — `startActivity` returns normally and throws nothing whether the responder refuses or
+     * acts), so the only honest place to learn it is *before*.
+     */
+    @Test
+    fun `an ungranted permission fails the step and never reaches the launcher`() = runTest {
+        val launched = mutableListOf<Intent>()
+        val worker =
+            Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), FakePresence(emptySet()))
+
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "5 minutes")))
+
+        assertTrue(result is ToolResult.Failed)
+        assertEquals(
+            "A refusal is invisible after the fact (row 32), so a step that could not run must not " +
+                "report Effected — DOC-ILM-3 requires the trace to be 1:1 with reality.",
+            0,
+            launched.size,
+        )
+    }
+
+    /** The other half: the precondition declines nothing it should not, so a held permission still runs. */
+    @Test
+    fun `a granted permission still dispatches`() = runTest {
+        val launched = mutableListOf<Intent>()
+        val worker = Tier0IntentToolWorker(
+            FakeIntentLauncher(launched),
+            ToolPermissionCatalog(),
+            FakePresence(setOf("com.android.alarm.permission.SET_ALARM")),
+        )
+
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "5 minutes")))
+
+        assertTrue(result is ToolResult.Effected)
+        assertEquals(1, launched.size)
     }
 }
 

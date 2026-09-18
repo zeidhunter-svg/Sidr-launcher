@@ -69,6 +69,18 @@ class ContextIntentLauncher @Inject constructor(
  * where `AndroidActionExecutor` puts its own, and covers every intent this worker issues and every
  * [IntentLauncher] implementation rather than one of each.
  *
+ * **The Task 3 precondition does not replace that catch, and could not** (A1" Phase 3a). `invoke`
+ * re-checks the tool's permissions against [PermissionPresence] immediately before dispatch, but the
+ * two mechanisms answer different questions and neither subsumes the other. The precondition answers
+ * "may this process do it", which Android will tell us **beforehand** and never afterwards —
+ * `startActivity` returns normally and throws nothing whether the responder refuses or acts
+ * (measurement row 32), so without the check a refused step would be recorded [ToolResult.Effected]
+ * in a trace `DOC-ILM-3` requires to be 1:1 with reality. The catch answers "did the call itself
+ * blow up", which is a different world state — `ActivityNotFoundException` on a device with no clock
+ * app is not a permission at all, and a `SecurityException` can still arrive from a restriction this
+ * catalog does not model. Removing or widening either one on the strength of the other would reopen
+ * the crash the final A1' review fixed.
+ *
  * The failure is [com.sidr.launcher.domain.intent.CommandFailure.Generic], the same value every other
  * fail-closed path here already uses. A dedicated variant is deliberately not minted: the A1' ADR
  * records a richer per-tool failure vocabulary as rejected with a measured reason, and a new
@@ -77,14 +89,34 @@ class ContextIntentLauncher @Inject constructor(
  */
 class Tier0IntentToolWorker @Inject constructor(
     private val launcher: IntentLauncher,
+    private val catalog: ToolPermissionCatalog,
+    private val presence: PermissionPresence,
 ) : ToolWorker {
 
-    override suspend fun invoke(invocation: ResolvedInvocation): ToolResult = when (invocation.id) {
-        Tier0ToolIds.SET_TIMER -> setTimer(invocation.args["duration"].orEmpty())
-        Tier0ToolIds.OPEN_SYSTEM_SETTINGS -> launch(Intent(Settings.ACTION_SETTINGS))
-        // Unreachable in a well-formed graph — the federation routes by the registry this adapter
-        // declares. Fail-closed and labelled as such, never named in `CommandFailure` (spec §4.4).
-        else -> ToolResult.Failed(CommandFailure.Generic)
+    override suspend fun invoke(invocation: ResolvedInvocation): ToolResult {
+        // The source already withheld this tool if its permission was absent (Task 2). This is the
+        // narrower window that check cannot cover — state can move between the snapshot and the call —
+        // and it is the same reasoning that keeps the SecurityException catch below as a backstop
+        // rather than as the mechanism.
+        //
+        // It is a *precondition*, and it replaces nothing. Android gives the caller no post-hoc signal
+        // at all: `startActivity` returns normally and throws nothing whether the responder refuses or
+        // acts (measurement row 32). So "before" is the only place this is knowable, and reporting
+        // `Effected` for a step that could not run would put a lie in a trace that `DOC-ILM-3` requires
+        // to be 1:1 with reality. A missing catalog row fails closed for the reason the catalog's own
+        // KDoc gives: "nobody stated an answer" must never read as "needs nothing".
+        val needed = catalog.permissionsFor(invocation.id) ?: return ToolResult.Failed(CommandFailure.Generic)
+        if (!needed.all(presence::isGranted)) return ToolResult.Failed(CommandFailure.Generic)
+
+        return when (invocation.id) {
+            Tier0ToolIds.SET_TIMER -> setTimer(invocation.args["duration"].orEmpty())
+            Tier0ToolIds.OPEN_SYSTEM_SETTINGS -> launch(Intent(Settings.ACTION_SETTINGS))
+            // Unreachable in a well-formed graph — the federation routes by the registry this adapter
+            // declares. Fail-closed and labelled as such, never named in `CommandFailure` (spec §4.4).
+            // Doubly unreachable since the precondition above: an id this `when` does not know is an id
+            // the catalog has no row for, so it has already returned.
+            else -> ToolResult.Failed(CommandFailure.Generic)
+        }
     }
 
     private fun setTimer(duration: String): ToolResult {

@@ -144,7 +144,11 @@ class DoctrineGuardTest {
     private fun productionAdapters(): List<ToolAdapter> {
         val adapters = listOf(
             ToolAdapter(ToolLevels.IN_APP, SystemIntentToolSource(DefaultActionCatalog()), NoopWorker),
-            ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything), NoopWorker),
+            ToolAdapter(
+                ToolLevels.SYSTEM_INTENT,
+                Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything),
+                NoopWorker,
+            ),
             ToolAdapter(ToolLevels.APP_SHORTCUT, shortcutSource(), NoopWorker),
         )
 
@@ -237,7 +241,7 @@ class DoctrineGuardTest {
             ),
         ),
         tier0Registry = Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything),
-        tier0Worker = Tier0IntentToolWorker(NoopIntentLauncher),
+        tier0Worker = Tier0IntentToolWorker(NoopIntentLauncher, ToolPermissionCatalog(), grantsEverything),
         shortcutRegistry = shortcutSource(),
         shortcutWorker = ShortcutToolWorker(ShortcutLauncher { _, _ -> }),
     )

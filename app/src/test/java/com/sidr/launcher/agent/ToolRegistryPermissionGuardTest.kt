@@ -131,7 +131,11 @@ class ToolRegistryPermissionGuardTest {
         val federation = ToolFederation(
             listOf(
                 ToolAdapter(ToolLevels.IN_APP, SystemIntentToolSource(DefaultActionCatalog()), NoopWorker),
-                ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything), NoopWorker),
+                ToolAdapter(
+                    ToolLevels.SYSTEM_INTENT,
+                    Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything),
+                    NoopWorker,
+                ),
                 ToolAdapter(ToolLevels.APP_SHORTCUT, shortcutSource(), NoopWorker),
             ),
         )

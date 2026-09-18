@@ -128,7 +128,7 @@ class Tier0ToolExecutionEndToEndTest {
             ToolAdapter(
                 ToolLevels.SYSTEM_INTENT,
                 Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything),
-                Tier0IntentToolWorker(launcher, ToolPermissionCatalog(), grantsEverything),
+                Tier0IntentToolWorker(launcher, ToolPermissionCatalog(), grantsEverything, "com.sidr.launcher"),
             ),
         ),
     )

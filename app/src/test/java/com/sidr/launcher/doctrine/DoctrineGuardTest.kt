@@ -241,7 +241,12 @@ class DoctrineGuardTest {
             ),
         ),
         tier0Registry = Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything),
-        tier0Worker = Tier0IntentToolWorker(NoopIntentLauncher, ToolPermissionCatalog(), grantsEverything),
+        tier0Worker = Tier0IntentToolWorker(
+            NoopIntentLauncher,
+            ToolPermissionCatalog(),
+            grantsEverything,
+            "com.sidr.launcher",
+        ),
         shortcutRegistry = shortcutSource(),
         shortcutWorker = ShortcutToolWorker(ShortcutLauncher { _, _ -> }),
     )
@@ -744,6 +749,11 @@ class DoctrineGuardTest {
         Tier0ToolIds.SET_TIMER to ActionRiskLevel.SAFE,
         Tier0ToolIds.OPEN_SYSTEM_SETTINGS to ActionRiskLevel.SAFE,
         Tier0ToolIds.SET_ALARM to ActionRiskLevel.SAFE,
+        // Task 7 (A1" Phase 3a) — the first row in this map that is not SAFE, and the first time the
+        // consent gate is reachable on a real product path. The source is authoritative and this pin
+        // is a decision to re-make if it ever reddens: uninstalling is irreversible, its target is the
+        // product of a fuzzy resolution, and CONFIRM is what puts the user between the two.
+        Tier0ToolIds.UNINSTALL_APP to ActionRiskLevel.CONFIRM,
     )
 
     /**
@@ -840,6 +850,7 @@ class DoctrineGuardTest {
             Tier0ToolIds.SET_TIMER,
             Tier0ToolIds.OPEN_SYSTEM_SETTINGS,
             Tier0ToolIds.SET_ALARM,
+            Tier0ToolIds.UNINSTALL_APP,
         )
     }
 }

@@ -75,6 +75,13 @@ private const val TIER0_OPEN_SYSTEM_SETTINGS = "open_system_settings"
 private const val TIER0_SET_ALARM = "set_alarm"
 
 /**
+ * Task 7. A **string literal**, like its three siblings above and for the same reason: the real
+ * constant is `Tier0ToolIds.UNINSTALL_APP` in `:data:repository`, and `:feature:launcher` has no edge
+ * to that module. `DoctrineGuardTest` is what holds the two spellings together.
+ */
+private const val TIER0_UNINSTALL_APP = "uninstall_app"
+
+/**
  * `ToolId -> string resource`. This is the mapping [com.sidr.launcher.domain.tool.ToolDescriptor]'s own
  * KDoc prescribes ("carries no user-facing copy: the surface maps `id` to a string resource in the
  * feature layer"), and it is what lets a one-step plan for any tool render correctly without
@@ -97,6 +104,7 @@ internal fun toolLabelFor(id: ToolId): Int = when (id.value) {
     TIER0_SET_TIMER -> R.string.launcher_agent_step_timer
     TIER0_OPEN_SYSTEM_SETTINGS -> R.string.launcher_agent_step_settings
     TIER0_SET_ALARM -> R.string.launcher_agent_step_alarm
+    TIER0_UNINSTALL_APP -> R.string.launcher_agent_step_uninstall
     else -> R.string.launcher_agent_step_generic
 }
 

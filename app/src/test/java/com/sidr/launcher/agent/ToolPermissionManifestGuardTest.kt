@@ -103,6 +103,15 @@ class ToolPermissionManifestGuardTest {
         "Settings.ACTION_SETTINGS" to emptyList(),
         // Task 5 (A1″ Phase 3a). Same permission family as ACTION_SET_TIMER (row 27).
         "AlarmClock.ACTION_SET_ALARM" to listOf("com.android.alarm.permission.SET_ALARM"),
+        // Task 7 (A1″ Phase 3a). `android.permission.REQUEST_DELETE_PACKAGES` is `protectionLevel:
+        // normal`, install-time, granted with no prompt (row 28). It is also the one entry in this map
+        // whose absence is **invisible at run time**: rows 16/28/32 measured that without it the
+        // uninstaller starts and dies in ~190 ms drawing nothing while `startActivity` returns
+        // normally, so nothing on the device reports the refusal. For the alarm family a missing line
+        // at least throws `SecurityException` (row 27); here this guard and the precondition check are
+        // the only two things standing between a missing manifest line and a tool that silently
+        // reports `Effected` for an act that never happened.
+        "Intent.ACTION_DELETE" to listOf("android.permission.REQUEST_DELETE_PACKAGES"),
     )
 
     /**
@@ -124,10 +133,31 @@ class ToolPermissionManifestGuardTest {
 
     private val declaresToolWorker = Regex(""":\s*ToolWorker\b""")
 
-    /** `Intent(SomeClass.ACTION_NAME)` — the only intent shape any scanned worker uses today. */
+    /** `Intent(SomeClass.ACTION_NAME)` — an action and nothing else. */
     private val intentWithAction = Regex("""\bIntent\(\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\)""")
 
+    /**
+     * `Intent(SomeClass.ACTION_NAME, Uri.…)` — the action-plus-data shape, added by Task 7 for
+     * `uninstall_app`'s `Intent(Intent.ACTION_DELETE, Uri.fromParts("package", …))`.
+     *
+     * **It is deliberately narrow, and the narrowness is the point.** The obvious widening —
+     * accepting any token followed by a comma — would read `Intent(context, Foo::class.java)` as an
+     * intent action named `context`, i.e. it would *invent* an answer for a shape this guard does not
+     * understand. Requiring the second argument to be a `Uri.` leaves every other two-argument shape
+     * unreadable, which the parse-completeness half of
+     * [`every intent action a scanned worker issues has a permission entry`] turns into a **red test**
+     * rather than a silent mis-read. Teaching the scan one real shape at a time is the only widening
+     * that keeps that property.
+     */
+    private val intentWithActionAndData = Regex("""\bIntent\(\s*([A-Za-z_][A-Za-z0-9_.]*)\s*,\s*Uri\.""")
+
     private val anyIntentConstruction = Regex("""\bIntent\(""")
+
+    /** Every intent action this guard can read out of one worker's source, in either known shape. */
+    private fun actionsIn(text: String): List<String> =
+        (intentWithAction.findAll(text) + intentWithActionAndData.findAll(text))
+            .map { it.groupValues[1] }
+            .toList()
 
     private fun intentIssuingWorkerFiles(): List<File> =
         productionRoots
@@ -203,7 +233,7 @@ class ToolPermissionManifestGuardTest {
     fun `every intent action a scanned worker issues has a permission entry`() {
         intentIssuingWorkerFiles().forEach { file ->
             val text = stripComments(file.readText())
-            val actions = intentWithAction.findAll(text).map { it.groupValues[1] }.toList()
+            val actions = actionsIn(text)
 
             assertEquals(
                 "${file.name} constructs an Intent in a shape this guard cannot read, so its " +
@@ -233,9 +263,8 @@ class ToolPermissionManifestGuardTest {
 
         val missing = intentIssuingWorkerFiles()
             .flatMap { file ->
-                intentWithAction.findAll(stripComments(file.readText()))
-                    .map { it.groupValues[1] }
-                    .flatMap { action -> (requiredPermissions[action] ?: emptyList()).asSequence() }
+                actionsIn(stripComments(file.readText()))
+                    .flatMap { action -> requiredPermissions[action] ?: emptyList() }
                     .map { permission -> "${file.name}: $permission" }
             }
             .filterNot { it.substringAfter(": ") in declared }

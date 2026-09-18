@@ -1,6 +1,8 @@
 package com.sidr.launcher.data.repository.agent
 
+import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.action.requiresConsent
+import com.sidr.launcher.domain.tool.ToolDurability
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolLevels
@@ -37,17 +39,44 @@ class Tier0IntentToolSourceTest {
      */
     private val grantsEverything = PermissionPresence { true }
 
+    /**
+     * **The blanket `none { requiresConsent(it.risk) }` is gone, and its replacement is stronger rather
+     * than weaker** (Task 7, A1″ Phase 3a). Until `uninstall_app` this source declared one risk for
+     * everything it held, so a single quantifier said it all; `DoctrineGuardTest`'s own KDoc cites that
+     * assertion as the reason a `SAFE → CONFIRM` mutation on a Tier-0 tool reddens `:data:repository`.
+     * With two risk levels in one source a quantifier can no longer carry that, and dropping it would
+     * quietly hand the whole pin to `:app`'s hand-written map. The per-id map below keeps the pin here,
+     * and additionally catches the direction a quantifier never could: a tool silently dropping *to*
+     * `SAFE`, which would take the consent gate off an act that cannot be undone.
+     */
     @Test
-    fun `the tier-0 source offers three tools at the system-intent level, all external and safe`() {
+    fun `the tier-0 source offers four tools at the system-intent level, all external, one behind consent`() {
         val source = Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything)
 
         assertEquals(
-            listOf(Tier0ToolIds.SET_TIMER, Tier0ToolIds.OPEN_SYSTEM_SETTINGS, Tier0ToolIds.SET_ALARM),
+            listOf(
+                Tier0ToolIds.SET_TIMER,
+                Tier0ToolIds.OPEN_SYSTEM_SETTINGS,
+                Tier0ToolIds.SET_ALARM,
+                Tier0ToolIds.UNINSTALL_APP,
+            ),
             source.all().map { it.id },
         )
         assertEquals(true, source.all().all { it.level == ToolLevels.SYSTEM_INTENT })
         assertEquals(true, source.all().all { it.effect == ToolEffect.EXTERNAL })
-        assertEquals(true, source.all().none { requiresConsent(it.risk) })
+        assertEquals(
+            mapOf(
+                Tier0ToolIds.SET_TIMER to ActionRiskLevel.SAFE,
+                Tier0ToolIds.OPEN_SYSTEM_SETTINGS to ActionRiskLevel.SAFE,
+                Tier0ToolIds.SET_ALARM to ActionRiskLevel.SAFE,
+                Tier0ToolIds.UNINSTALL_APP to ActionRiskLevel.CONFIRM,
+            ),
+            source.all().associate { it.id to it.risk },
+        )
+        assertEquals(
+            listOf(Tier0ToolIds.UNINSTALL_APP),
+            source.all().filter { requiresConsent(it.risk) }.map { it.id },
+        )
     }
 
     @Test
@@ -63,6 +92,39 @@ class Tier0IntentToolSourceTest {
         val source = Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything)
 
         assertEquals(listOf("time"), source.find(Tier0ToolIds.SET_ALARM)!!.argSchema.map { it.name })
+    }
+
+    /**
+     * Task 7. The first `CONFIRM` tool of the track and the first `DURABLE` one — and the two halves
+     * of that pair are asserted together on purpose: `DURABLE` is what says the effect cannot be
+     * undone, `CONFIRM` is what stops the loop for consent, and a tool that lost either while keeping
+     * the other would read as safer than it is. (`DURABLE_EFFECT` is not what fires the checkpoint at
+     * `CONFIRM` or above — `checkpointFor` takes the `RISK_LEVEL` branch first, the A0.5 finding this
+     * block does not fix — so the user is stopped by `risk`, and `durability` is what the trace says.)
+     *
+     * **`app_label` is `required = false`, and that is load-bearing rather than tidy.**
+     * `ToolMatchPlanner` checks required arguments **before** it resolves, and the vocabulary never
+     * supplies `app_label` — the planner binds it one step later, from the raw text, *after*
+     * resolution. A descriptor declaring it required would therefore return `NoPlan` for every goal
+     * forever, and this tool would ship registered, reachable, matching its trigger and dead on every
+     * invocation with the whole suite green. `ActionArg.required` defaults to `true`, so the
+     * declaration has to be written out; this assertion is what keeps it written.
+     */
+    @Test
+    fun `uninstall_app is CONFIRM and DURABLE, takes a package, and its label argument is not required`() {
+        val source = Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything)
+        val descriptor = source.find(Tier0ToolIds.UNINSTALL_APP)!!
+
+        assertEquals(ActionRiskLevel.CONFIRM, descriptor.risk)
+        assertEquals(ToolDurability.DURABLE, descriptor.durability)
+        assertEquals(true, requiresConsent(descriptor.risk))
+        assertEquals(listOf("app", "app_label"), descriptor.argSchema.map { it.name })
+        assertEquals(
+            "app_label is bound by ToolMatchPlanner AFTER its required-argument check, so declaring " +
+                "it required makes every goal NoPlan and the tool dead on arrival",
+            listOf(true, false),
+            descriptor.argSchema.map { it.required },
+        )
     }
 
     /**
@@ -101,7 +163,12 @@ class Tier0IntentToolSourceTest {
             "A Tier-0 descriptor with no ToolPermissionCatalog row is withheld at runtime and " +
                 "registered nowhere, so no :app guard can see it. This list is where that absence " +
                 "turns red. Adding a tool? Extend this list AND REQUIRED_TOOL_IDS in both :app guards.",
-            listOf(Tier0ToolIds.SET_TIMER, Tier0ToolIds.OPEN_SYSTEM_SETTINGS, Tier0ToolIds.SET_ALARM),
+            listOf(
+                Tier0ToolIds.SET_TIMER,
+                Tier0ToolIds.OPEN_SYSTEM_SETTINGS,
+                Tier0ToolIds.SET_ALARM,
+                Tier0ToolIds.UNINSTALL_APP,
+            ),
             source.all().map { it.id },
         )
     }
@@ -126,7 +193,12 @@ class Tier0IntentToolSourceTest {
         val source = Tier0IntentToolSource(ToolPermissionCatalog(), FakePresence(emptySet()))
         val advertised = source.all().map { it.id }.toSet()
 
-        listOf(Tier0ToolIds.SET_TIMER, Tier0ToolIds.OPEN_SYSTEM_SETTINGS, Tier0ToolIds.SET_ALARM).forEach { id ->
+        listOf(
+            Tier0ToolIds.SET_TIMER,
+            Tier0ToolIds.OPEN_SYSTEM_SETTINGS,
+            Tier0ToolIds.SET_ALARM,
+            Tier0ToolIds.UNINSTALL_APP,
+        ).forEach { id ->
             assertEquals("find/all disagree for ${id.value}", id in advertised, source.find(id) != null)
         }
     }

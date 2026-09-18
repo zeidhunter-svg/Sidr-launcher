@@ -26,6 +26,16 @@
          `package:android`), so it is granted at install and never prompts.
          Held by ToolPermissionManifestGuardTest. -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <!--
+      A1" Phase 3a / `uninstall_app`. `normal`, install-time, granted with no prompt (row 28). It
+      grants no data access and cannot remove anything silently: the OS draws its own dialog and the
+      user confirms there, behind Sidr's own CONFIRM gate. Owner decision 2026-09-18.
+      Without it the uninstaller starts and dies in ~190 ms drawing nothing, while `startActivity`
+      still returns normally (rows 16/28/32) — which is why the check that this is held is a
+      precondition taken BEFORE the call and never a refusal detected afterwards.
+      Held by ToolPermissionManifestGuardTest and ToolRegistryPermissionGuardTest.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
 
     <queries>
         <intent>

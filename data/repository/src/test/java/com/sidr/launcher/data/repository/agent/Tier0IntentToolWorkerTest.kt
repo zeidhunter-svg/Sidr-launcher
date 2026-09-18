@@ -48,10 +48,24 @@ class Tier0IntentToolWorkerTest {
      */
     private val grantsEverything = PermissionPresence { true }
 
+    /**
+     * Task 7 gave this worker a fourth constructor argument — our own package name, for the
+     * self-uninstall refusal — so the construction moved here rather than being repeated at every
+     * call site.
+     *
+     * Two things it deliberately does **not** hide. The presence stays an explicit argument, because
+     * which fixture a test runs under is load-bearing rather than incidental (see [grantsEverything]).
+     * And the catalog is the **production** [ToolPermissionCatalog], not a fake: the permission
+     * precondition these tests exercise is only meaningful against the real rows, and a fake catalog
+     * here would make every one of them agree with itself.
+     */
+    private fun workerWith(launcher: IntentLauncher, presence: PermissionPresence) =
+        Tier0IntentToolWorker(launcher, ToolPermissionCatalog(), presence, OWN_PACKAGE)
+
     @Test
     fun `an unparseable duration fails closed and never issues an intent`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
+        val worker = workerWith(FakeIntentLauncher(launched), grantsEverything)
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "soon")))
 
@@ -62,7 +76,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `ten minutes becomes six hundred seconds and the clock UI is not skipped`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
+        val worker = workerWith(FakeIntentLauncher(launched), grantsEverything)
 
         worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 minutes")))
 
@@ -78,7 +92,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `a duration with a second number-unit pair fails closed rather than reading only the first word`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
+        val worker = workerWith(FakeIntentLauncher(launched), grantsEverything)
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "1 min 30 sec")))
 
@@ -94,7 +108,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `an unlisted word that merely starts with a unit prefix fails closed rather than matching it`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
+        val worker = workerWith(FakeIntentLauncher(launched), grantsEverything)
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 minecraft")))
 
@@ -105,7 +119,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `zero with no unit fails closed`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
+        val worker = workerWith(FakeIntentLauncher(launched), grantsEverything)
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "0")))
 
@@ -116,7 +130,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `zero minutes fails closed`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
+        val worker = workerWith(FakeIntentLauncher(launched), grantsEverything)
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "0 minutes")))
 
@@ -127,7 +141,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `a five-digit amount fails closed`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
+        val worker = workerWith(FakeIntentLauncher(launched), grantsEverything)
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "12345")))
 
@@ -138,7 +152,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `a unit word with no leading number fails closed`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
+        val worker = workerWith(FakeIntentLauncher(launched), grantsEverything)
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "minutes")))
 
@@ -149,7 +163,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `an unrecognised unit fails closed`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
+        val worker = workerWith(FakeIntentLauncher(launched), grantsEverything)
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 fortnights")))
 
@@ -160,7 +174,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `trailing junk after a valid unit fails closed`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
+        val worker = workerWith(FakeIntentLauncher(launched), grantsEverything)
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 minutes now")))
 
@@ -171,7 +185,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `an accepted russian minute form resolves to the right number of seconds`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
+        val worker = workerWith(FakeIntentLauncher(launched), grantsEverything)
 
         worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 минут")))
 
@@ -181,7 +195,7 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `an accepted turkish minute form resolves to the right number of seconds`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), grantsEverything)
+        val worker = workerWith(FakeIntentLauncher(launched), grantsEverything)
 
         worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 dakika")))
 
@@ -203,9 +217,8 @@ class Tier0IntentToolWorkerTest {
      */
     @Test
     fun `a missing timer activity fails the tool result instead of propagating`() = runTest {
-        val worker = Tier0IntentToolWorker(
+        val worker = workerWith(
             ThrowingIntentLauncher { ActivityNotFoundException("no timer app") },
-            ToolPermissionCatalog(),
             grantsEverything,
         )
 
@@ -217,9 +230,8 @@ class Tier0IntentToolWorkerTest {
     /** `SecurityException` has the same shape and the same fix — the pair `AndroidActionExecutor` catches. */
     @Test
     fun `a refused timer launch fails the tool result instead of propagating`() = runTest {
-        val worker = Tier0IntentToolWorker(
+        val worker = workerWith(
             ThrowingIntentLauncher { SecurityException("not allowed") },
-            ToolPermissionCatalog(),
             grantsEverything,
         )
 
@@ -234,9 +246,8 @@ class Tier0IntentToolWorkerTest {
      */
     @Test
     fun `a missing settings activity fails the tool result instead of propagating`() = runTest {
-        val worker = Tier0IntentToolWorker(
+        val worker = workerWith(
             ThrowingIntentLauncher { ActivityNotFoundException("no settings app") },
-            ToolPermissionCatalog(),
             grantsEverything,
         )
 
@@ -286,7 +297,7 @@ class Tier0IntentToolWorkerTest {
     fun `an ungranted permission fails the step and never reaches the launcher`() = runTest {
         val launched = mutableListOf<Intent>()
         val worker =
-            Tier0IntentToolWorker(FakeIntentLauncher(launched), ToolPermissionCatalog(), FakePresence(emptySet()))
+            workerWith(FakeIntentLauncher(launched), FakePresence(emptySet()))
 
         val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "5 minutes")))
 
@@ -307,9 +318,8 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `a granted permission still dispatches`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(
+        val worker = workerWith(
             FakeIntentLauncher(launched),
-            ToolPermissionCatalog(),
             FakePresence(setOf("com.android.alarm.permission.SET_ALARM")),
         )
 
@@ -330,9 +340,8 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `set_alarm sends hour and minutes and does not skip the responder's UI`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(
+        val worker = workerWith(
             FakeIntentLauncher(launched),
-            ToolPermissionCatalog(),
             FakePresence(ALARM_GRANTED),
         )
 
@@ -354,9 +363,8 @@ class Tier0IntentToolWorkerTest {
     @Test
     fun `an unparseable time declines instead of guessing`() = runTest {
         val launched = mutableListOf<Intent>()
-        val worker = Tier0IntentToolWorker(
+        val worker = workerWith(
             FakeIntentLauncher(launched),
-            ToolPermissionCatalog(),
             FakePresence(ALARM_GRANTED),
         )
 
@@ -367,8 +375,92 @@ class Tier0IntentToolWorkerTest {
         assertEquals(0, launched.size)
     }
 
+    /**
+     * Task 7 (A1″ Phase 3a) — the track's first `CONFIRM` tool, and the first one whose argument is a
+     * **package name resolved before the consent gate** rather than text this worker reads.
+     *
+     * The permission is granted by name rather than by [grantsEverything], so the assertion also
+     * covers the catalog row: a tool registered without one is withheld by the source and refused by
+     * the precondition, and a test run under "everything is granted" could not tell that apart.
+     *
+     * `Uri.fromParts` rather than `Uri.parse` is the shape `Tier0IntentProbe` fired on the SM-A325F
+     * when rows 16/28/32 were measured, so what ships is byte-identical to what was measured.
+     */
+    @Test
+    fun `a package dispatches ACTION_DELETE for exactly that package`() = runTest {
+        val launched = mutableListOf<Intent>()
+        val worker = workerWith(FakeIntentLauncher(launched), FakePresence(DELETE_GRANTED))
+
+        val result = worker.invoke(
+            ResolvedInvocation(
+                Tier0ToolIds.UNINSTALL_APP,
+                mapOf("app" to "org.telegram.messenger", "app_label" to "telegram"),
+            ),
+        )
+
+        assertTrue(result is ToolResult.Effected)
+        val intent = launched.single()
+        assertEquals(Intent.ACTION_DELETE, intent.action)
+        assertEquals("package:org.telegram.messenger", intent.data.toString())
+    }
+
+    /**
+     * Condition 4 of the owner's 2026-09-18 ruling: the agent never removes the launcher it is running
+     * inside, because uninstalling Sidr mid-session kills the surface the session is running on.
+     *
+     * The package is **injected** rather than read from a `Context` inside the worker, which is what
+     * makes this refusal assertable here at all instead of behind Robolectric. The presence grants
+     * everything on purpose: the precondition is then out of the way, so the only thing that can
+     * produce `Failed` is the refusal this test is named after.
+     */
+    @Test
+    fun `uninstalling our own package is refused and nothing is dispatched`() = runTest {
+        val launched = mutableListOf<Intent>()
+        val worker = workerWith(FakeIntentLauncher(launched), grantsEverything)
+
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.UNINSTALL_APP, mapOf("app" to OWN_PACKAGE)))
+
+        assertEquals(ToolResult.Failed(CommandFailure.Generic), result)
+        assertEquals(
+            "uninstalling the launcher kills the surface running the session, so this must never " +
+                "reach the launcher seam at all",
+            0,
+            launched.size,
+        )
+    }
+
+    /**
+     * A blank target declines instead of dispatching, the same fail-closed reading [parseSeconds] and
+     * `parseClockTime` already carry: `Intent(ACTION_DELETE, "package:")` names no package, and an
+     * agent that fires an uninstall intent at nothing would report `Effected` over an effect that
+     * cannot have happened — which `DOC-ILM-3` forbids.
+     *
+     * It is a second line of defence rather than the only one: `ToolMatchPlanner` declines with
+     * `NoPlan` when `AppTargetResolver` cannot resolve a name, so a blank should never reach here.
+     */
+    @Test
+    fun `a blank package declines and nothing is dispatched`() = runTest {
+        val launched = mutableListOf<Intent>()
+        val worker = workerWith(FakeIntentLauncher(launched), grantsEverything)
+
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.UNINSTALL_APP, mapOf("app" to "")))
+
+        assertEquals(ToolResult.Failed(CommandFailure.Generic), result)
+        assertEquals(0, launched.size)
+    }
+
     private companion object {
         val ALARM_GRANTED = setOf("com.android.alarm.permission.SET_ALARM")
+
+        /** Task 7: what `uninstall_app`'s catalog row names, granted by name rather than wholesale. */
+        val DELETE_GRANTED = setOf("android.permission.REQUEST_DELETE_PACKAGES")
+
+        /**
+         * Stands in for the real `context.packageName` the graph injects. Its *value* is irrelevant to
+         * every test but the self-uninstall refusal, whose whole subject is that the worker compares
+         * its target against this string and stops.
+         */
+        const val OWN_PACKAGE = "com.sidr.launcher"
     }
 }
 

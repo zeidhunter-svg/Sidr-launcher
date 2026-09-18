@@ -67,6 +67,11 @@ class ToolPermissionCatalog @Inject constructor() {
             Tier0ToolIds.SET_TIMER to listOf("com.android.alarm.permission.SET_ALARM"),
             Tier0ToolIds.OPEN_SYSTEM_SETTINGS to emptyList(),
             Tier0ToolIds.SET_ALARM to listOf("com.android.alarm.permission.SET_ALARM"),
+            // Task 7. `normal`, install-time, granted with no prompt (row 28). Without it the
+            // uninstaller starts and dies in ~190 ms drawing nothing, and `startActivity` still
+            // returns normally — which is the whole reason this is a precondition rather than a
+            // failure signal.
+            Tier0ToolIds.UNINSTALL_APP to listOf("android.permission.REQUEST_DELETE_PACKAGES"),
         )
     }
 }

@@ -3,6 +3,7 @@ package com.sidr.launcher.data.repository.agent
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.provider.AlarmClock
 import android.provider.Settings
 import com.sidr.launcher.domain.intent.CommandFailure
@@ -11,6 +12,7 @@ import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.tool.ToolWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
+import javax.inject.Named
 
 /**
  * The one place an intent leaves this worker. Injected so the parse can be tested without Android.
@@ -25,6 +27,17 @@ interface IntentLauncher {
     fun launch(intent: Intent)
 }
 
+/**
+ * The qualifier under which the composition root supplies **our own** package name.
+ *
+ * It is a shared constant rather than a string spelled twice because the two halves live in different
+ * modules — the consumer is [Tier0IntentToolWorker] here in `:data:repository`, the provider is
+ * `AgentProvidesModule` in `:app`, which is the only module that can reach a `Context`. Injecting the
+ * name instead of reading `context.packageName` inside the worker is what makes the self-uninstall
+ * refusal assertable in a plain unit test rather than behind Robolectric.
+ */
+const val APP_PACKAGE_NAME = "appPackageName"
+
 class ContextIntentLauncher @Inject constructor(
     @ApplicationContext private val context: Context,
 ) : IntentLauncher {
@@ -34,9 +47,10 @@ class ContextIntentLauncher @Inject constructor(
 }
 
 /**
- * The `SYSTEM_INTENT` level's worker: two Android intents that are not among the frozen seven
+ * The `SYSTEM_INTENT` level's worker: four Android intents that are not among the frozen seven
  * `ActionIds`, so they do not travel the `ExecuteActionUseCase` chain and this class is the whole of
- * their execution.
+ * their execution. Three are `SAFE`; `uninstall_app` (Task 7) is the track's first `CONFIRM` tool, and
+ * the consent gate — not anything in this file — is what stops the loop before it runs.
  *
  * **`EXTRA_SKIP_UI = false` is not "prefilled but not sent" — corrected 2026-09-10.** This KDoc used
  * to read "neither skips the OS's own UI, so the final act is the user's", and to offer that as the
@@ -84,13 +98,15 @@ class ContextIntentLauncher @Inject constructor(
  * its own, and the precondition is the earlier, cheaper and more specific of two working signals —
  * not the only one.
  *
- * *Responder-side* enforcement is the opposite mode, and it is what the Tier-0 tools A1" adds next
- * will meet: the responding app refuses **silently**, `startActivity` returns normally and throws
- * nothing, and the caller's answer is byte-identical to the success case (row 32, measured on
- * `ACTION_DELETE`; the refusal appears only in the responder's own logcat, which another app cannot
- * read). There **neither** catch fires in either direction, and the precondition is the **only**
- * signal there is: without it a refused step would be recorded [ToolResult.Effected] in a trace
- * `DOC-ILM-3` requires to be 1:1 with reality.
+ * *Responder-side* enforcement is the opposite mode, and since Task 7 it is no longer hypothetical —
+ * `uninstall_app` is in this `when`: the responding app refuses **silently**, `startActivity` returns
+ * normally and throws nothing, and the caller's answer is byte-identical to the success case (rows
+ * 16/28/32, measured on `ACTION_DELETE` itself; the refusal appears only in the responder's own
+ * logcat, which another app cannot read). There **neither** catch fires in either direction, and the
+ * precondition is the **only** signal there is: without it a refused step would be recorded
+ * [ToolResult.Effected] in a trace `DOC-ILM-3` requires to be 1:1 with reality. Said the way it must
+ * always be said: the precondition is **checked before the call**, and a refusal is never *detected*
+ * afterwards — and it closes one cause of refusal only, a missing permission.
  *
  * Neither may therefore be removed on the strength of the other, and the catch additionally covers a
  * state that is no permission at all — `ActivityNotFoundException` on a device with no clock app,
@@ -106,6 +122,7 @@ class Tier0IntentToolWorker @Inject constructor(
     private val launcher: IntentLauncher,
     private val catalog: ToolPermissionCatalog,
     private val presence: PermissionPresence,
+    @Named(APP_PACKAGE_NAME) private val ownPackageName: String,
 ) : ToolWorker {
 
     override suspend fun invoke(invocation: ResolvedInvocation): ToolResult {
@@ -126,6 +143,7 @@ class Tier0IntentToolWorker @Inject constructor(
             Tier0ToolIds.SET_TIMER -> setTimer(invocation.args["duration"].orEmpty())
             Tier0ToolIds.OPEN_SYSTEM_SETTINGS -> launch(Intent(Settings.ACTION_SETTINGS))
             Tier0ToolIds.SET_ALARM -> setAlarm(invocation.args["time"].orEmpty())
+            Tier0ToolIds.UNINSTALL_APP -> uninstallApp(invocation.args["app"].orEmpty())
             // Unreachable in a well-formed graph — the federation routes by the registry this adapter
             // declares. Fail-closed and labelled as such, never named in `CommandFailure` (spec §4.4).
             // The precondition above does NOT subsume this arm: `ToolIds.LAUNCH_APP` and
@@ -160,6 +178,45 @@ class Tier0IntentToolWorker @Inject constructor(
     }
 
     /**
+     * Task 7 — the track's first `CONFIRM` tool, and the only one so far whose effect cannot be undone.
+     *
+     * **This worker resolves nothing.** [target] is **already a package name**: `ToolMatchPlanner`
+     * resolved it at plan time, above the consent checkpoint, which is what lets the consent card name
+     * the package that will actually be removed. `AgentExecutor` evaluates `checkpointFor` before it
+     * ever reaches `toolExecutor.invoke`, so a name resolved *here* would be resolved **after** the
+     * user said yes — on a device carrying two Telegram-like labels the user would confirm one thing
+     * and get another. Injecting a resolver into this class would reintroduce exactly that defect.
+     *
+     * Two refusals, both before the intent is built:
+     *  - a **blank** target, for the same fail-closed reason `parseSeconds` and `parseClockTime`
+     *    decline what they cannot read: `package:` names no package, and reporting
+     *    [ToolResult.Effected] for an effect that cannot have happened is what `DOC-ILM-3` forbids. It
+     *    is a second line of defence — `ToolMatchPlanner` answers `NoPlan` when resolution fails, so a
+     *    blank should never arrive — and second lines are kept, not argued away;
+     *  - **our own package** (owner condition 4, 2026-09-18): uninstalling Sidr mid-session kills the
+     *    surface the session is running on. [ownPackageName] is injected rather than read from a
+     *    `Context` here, so this is an ordinary equality a unit test can state.
+     *
+     * **What the permission precondition above does and does not buy, in this tool's own terms.** This
+     * is the responder-side family rows 16/28/32 measured: without
+     * `android.permission.REQUEST_DELETE_PACKAGES` the uninstaller starts and dies in ~190 ms drawing
+     * nothing, and `startActivity` **returns normally and throws nothing** — byte-identical to the
+     * success case. So the precondition is **checked before the call**; a refusal is never *detected*
+     * afterwards. It closes exactly one cause of refusal — a missing permission. Device policy, a work
+     * profile and a non-removable package remain undetectable, because the platform gives the caller
+     * nothing to read (spec §7.7).
+     *
+     * `Uri.fromParts` rather than `Uri.parse`: it is the shape `Tier0IntentProbe` fired on the
+     * SM-A325F when those rows were measured, so what ships is what was measured, and it builds the
+     * opaque URI without parsing a string the caller assembled.
+     */
+    private fun uninstallApp(target: String): ToolResult {
+        if (target.isBlank()) return ToolResult.Failed(CommandFailure.Generic)
+        if (target == ownPackageName) return ToolResult.Failed(CommandFailure.Generic)
+        return launch(Intent(Intent.ACTION_DELETE, Uri.fromParts("package", target, null)))
+    }
+
+    /**
      * `H:MM` or `HH:MM` only — a bounded token (spec §7.1), never a guess, never a default. The
      * vocabulary hands this string over unparsed, exactly like [parseSeconds]'s `duration`; there is no
      * free-text reading to normalize away here, only a fixed clock-time shape to accept or decline.
@@ -173,7 +230,7 @@ class Tier0IntentToolWorker @Inject constructor(
 
     /**
      * The only place this worker touches the world, and the only place it can fail from the world's
-     * side. Both tools go through it, so the catch cannot be forgotten by whoever adds a third.
+     * side. All four tools go through it, so the catch cannot be forgotten by whoever adds a fifth.
      *
      * The exception set is `AndroidActionExecutor`'s, deliberately: the two world-facing paths of this
      * repo should behave alike rather than each inventing its own — `ActivityNotFoundException` for

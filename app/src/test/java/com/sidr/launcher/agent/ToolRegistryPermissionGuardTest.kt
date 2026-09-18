@@ -298,6 +298,7 @@ class ToolRegistryPermissionGuardTest {
             Tier0ToolIds.SET_TIMER,
             Tier0ToolIds.OPEN_SYSTEM_SETTINGS,
             Tier0ToolIds.SET_ALARM,
+            Tier0ToolIds.UNINSTALL_APP,
         )
     }
 }

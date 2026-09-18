@@ -10,27 +10,34 @@ import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolRegistry
 import javax.inject.Inject
 
-/** The three Tier-0 ids. Not projections of `ActionIds` — those seven are frozen and contain none of them. */
+/** The four Tier-0 ids. Not projections of `ActionIds` — those seven are frozen and contain none of them. */
 object Tier0ToolIds {
     val SET_TIMER = ToolId("set_timer")
     val OPEN_SYSTEM_SETTINGS = ToolId("open_system_settings")
 
     /** Task 5 (A1″ Phase 3a). See [Tier0IntentToolSource]'s KDoc for what `SAFE` rests on here. */
     val SET_ALARM = ToolId("set_alarm")
+
+    /** Task 7 (A1″ Phase 3a): the track's first `CONFIRM` tool. See its descriptor for the conditions. */
+    val UNINSTALL_APP = ToolId("uninstall_app")
 }
 
 /**
  * A1′'s second source: Android system intents that are **not** among the frozen seven `ActionIds`, so
  * they mint their own ids (spec §5.1 — identity C binds projections only).
  *
- * Both tools are `EXTERNAL` and `SAFE`, and that combination is the one `DOC-ILM-2` is actually about:
- * a `CONFIRM` tool is already stopped by the consent gate, so provenance is the only mechanism telling
- * the user where a `SAFE` effect went.
+ * Every tool here is `EXTERNAL`. Three of the four are `SAFE`, and that combination is the one
+ * `DOC-ILM-2` is actually about: a `CONFIRM` tool is already stopped by the consent gate, so
+ * provenance is the only mechanism telling the user where a `SAFE` effect went. Since Task 7 the
+ * source also holds the other kind — `uninstall_app`, the track's first `CONFIRM` and first `DURABLE`
+ * tool — so "all Tier-0 tools are safe" is no longer true of this file and must not be re-asserted
+ * anywhere as a property of the level.
  *
- * **Permissions.** `ACTION_SETTINGS` needs none. `ACTION_SET_TIMER` needs
- * `com.android.alarm.permission.SET_ALARM`, declared in `app/src/main/AndroidManifest.xml` — an
- * install-time (`protectionLevel: normal`) permission, so it is granted without a prompt and needs no
- * runtime request or education flow.
+ * **Permissions.** `ACTION_SETTINGS` needs none. `ACTION_SET_TIMER` and `ACTION_SET_ALARM` need
+ * `com.android.alarm.permission.SET_ALARM` and `ACTION_DELETE` needs
+ * `android.permission.REQUEST_DELETE_PACKAGES`, all declared in `app/src/main/AndroidManifest.xml` —
+ * install-time (`protectionLevel: normal`) permissions, so they are granted without a prompt and need
+ * no runtime request or education flow.
  *
  * **What `SET_TIMER`'s `SAFE` actually rests on — corrected 2026-09-10 by owner decision.** Until
  * that date this KDoc, the spec and the plan all justified `SAFE` with *"neither skips the OS's own UI
@@ -108,6 +115,44 @@ class Tier0IntentToolSource @Inject constructor(
             effect = ToolEffect.EXTERNAL,
             risk = ActionRiskLevel.SAFE,
             durability = ToolDurability.TRANSIENT,
+        ),
+        // Task 7 — **the first CONFIRM tool of the whole track, and the first DURABLE one.** Every
+        // other tool shipped so far is SAFE, so the consent gate has never once fired on a real path.
+        //
+        // **Why CONFIRM rather than the four properties that carried SAFE for the alarm family.** Not
+        // one of them holds here. The effect is not reversible — a removed app and its data do not
+        // come back with one tap. It is not merely visible-after-the-fact: it has to be stopped
+        // *before* it happens, which is what a gate is. And the target is the product of a **fuzzy**
+        // resolution (`AppTargetResolver`), so the one thing the user must be able to check is which
+        // package this will actually remove — which is why the descriptor declares two arguments and
+        // resolution happens above the gate rather than inside the worker.
+        //
+        // **`app_label` is `required = false`, and that is not tidiness.** `ToolMatchPlanner` runs its
+        // required-argument check BEFORE the resolution block that binds `app_label`; the vocabulary
+        // never supplies that argument, the planner adds it one step later. A descriptor declaring it
+        // required would answer `NoPlan` for every goal forever, and this tool would ship registered,
+        // reachable, matching its trigger and dead on every invocation with the whole suite green.
+        // `ActionArg.required` defaults to `true`, so this has to be — and stays — written out.
+        //
+        // **What the six owner conditions (2026-09-18) rest on, per condition:** (1) explicit user
+        // command only — there is no suggestion path into the planner; (2) the card names label AND
+        // package — the two arguments above, bound by `ToolMatchPlanner` above the checkpoint;
+        // (3) exact resolution or decline — `AppTargetResolver` returns `null` to decline and the
+        // planner turns that into `NoPlan`, so no card is ever drawn for an unresolved name;
+        // (4) our own package is refused — `Tier0IntentToolWorker.uninstallApp`; (5) the wording says
+        // the precondition is CHECKED BEFORE THE CALL and never that a refusal is DETECTED (rows
+        // 16/28/32: `startActivity` returns normally and throws nothing whether the uninstaller
+        // refuses or draws its dialog); (6) the manifest line is held by `ToolPermissionManifestGuardTest`.
+        ToolDescriptor(
+            id = Tier0ToolIds.UNINSTALL_APP,
+            argSchema = listOf(
+                ActionArg("app", description = "Package of the app to remove"),
+                ActionArg("app_label", required = false, description = "What the user called it"),
+            ),
+            level = ToolLevels.SYSTEM_INTENT,
+            effect = ToolEffect.EXTERNAL,
+            risk = ActionRiskLevel.CONFIRM,
+            durability = ToolDurability.DURABLE,
         ),
     )
 

@@ -131,6 +131,11 @@
     <string name="launcher_agent_step_timer">Set a timer for %1$s</string>
     <string name="launcher_agent_step_settings">Open Android settings</string>
     <string name="launcher_agent_step_alarm">Set an alarm for %1$s</string>
+    <!-- A1" Task 7: the first CONFIRM tool. One argument today; `uninstall_app` binds TWO literals
+         (the resolved package and the label the user typed), and `PlanStep.line` fills a one-argument
+         sentence only when a step has exactly ONE literal, so this currently renders with the goal
+         text. The two-argument form that names label AND package is Task 11's. -->
+    <string name="launcher_agent_step_uninstall">Uninstall %1$s</string>
     <string name="launcher_agent_step_generic">Run this step for %1$s</string>
     <!-- A1″ Task 8: a tool whose NAME is data. %1$s is the app that published the shortcut and
          %2$s is the shortcut's own label; both are authored by that app, in whatever language it

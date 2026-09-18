@@ -1,5 +1,7 @@
 package com.sidr.launcher.di
 
+import android.content.Context
+import com.sidr.launcher.data.repository.agent.APP_PACKAGE_NAME
 import com.sidr.launcher.data.repository.agent.ContextIntentLauncher
 import com.sidr.launcher.data.repository.agent.ContextPermissionPresence
 import com.sidr.launcher.data.repository.agent.DynamicToolNames
@@ -40,8 +42,10 @@ import com.sidr.launcher.feature.launcher.agent.DynamicToolLabels
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import java.util.UUID
+import javax.inject.Named
 import javax.inject.Singleton
 
 /**
@@ -122,6 +126,27 @@ object AgentProvidesModule {
     @Provides
     @Singleton
     fun providePermissionPresence(impl: ContextPermissionPresence): PermissionPresence = impl
+
+    /**
+     * Our own package name, for `uninstall_app`'s refusal to remove the launcher it is running inside
+     * (Task 7, owner condition 4 of 2026-09-18).
+     *
+     * **It is injected as a `String` rather than read from a `Context` inside the worker, and that is a
+     * testability decision with a safety consequence.** `Tier0IntentToolWorker` is a plain class in
+     * `:data:repository` with no Android context of its own; giving it one to ask `packageName` would
+     * put the refusal behind Robolectric, where the rest of that worker's fail-closed paths
+     * deliberately are not. As a constructor argument the refusal is an ordinary equality a unit test
+     * can state — which is what `Tier0IntentToolWorkerTest > uninstalling our own package is refused
+     * and nothing is dispatched` does.
+     *
+     * `context.packageName` is the **running** package, so a debug build's `.debug` suffix (or any
+     * future flavour suffix) is carried automatically; a constant spelled here would be wrong for
+     * exactly the build the owner runs.
+     */
+    @Provides
+    @Singleton
+    @Named(APP_PACKAGE_NAME)
+    fun provideAppPackageName(@ApplicationContext context: Context): String = context.packageName
 
     /**
      * The `app_shortcut` adapter's **three** Android seams, kept behind ports so everything built on

@@ -836,6 +836,22 @@ convention, not a type. It is pinned by a test here and stated in the planner's 
 kind is the `ArgType` debt (spec §7.5), addressed to the block that first ships MCP/AppFunctions — not
 widened here.
 
+**Fixture correction, revision 2.2 (ruling R14-34) — read this before writing the tests.** The three
+tests below need a tool whose descriptor declares `app` (and `app_label`) AND a vocabulary entry that
+routes text to it. **Neither ships yet**: `uninstall_app` is Task 7 and its triggers are Task 10, and
+`ToolVocabulary.DEFAULT_ENTRIES` today holds exactly two entries, `set_timer` and
+`open_system_settings`. Written against the default vocabulary these tests fail for the wrong reason —
+the selector never matches, so every case returns `NoPlan` and test 2 passes vacuously while tests 1
+and 3 fail.
+
+Build the fixture instead, in the test file only:
+`ToolVocabulary`'s primary constructor is `internal constructor(val entries: List<Entry>)` and exists
+for exactly this (its KDoc: "so tests can build a vocabulary"). Construct a test-local vocabulary
+carrying one synthetic entry with `argName = "app"`, pair it with `registryWith(...)` for a descriptor
+declaring `app` and `app_label`, and keep the existing `set_timer` entry for test 3.
+**Do NOT add any entry to `DEFAULT_ENTRIES`** — production triggers are Task 10's, they are owner-visible,
+and a trigger invented here could silently capture a verb FastPath already owns.
+
 - [ ] **Step 1: Write the failing tests**
 
 ```kotlin

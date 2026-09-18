@@ -10,10 +10,13 @@ import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolRegistry
 import javax.inject.Inject
 
-/** The two Tier-0 ids. Not projections of `ActionIds` — those seven are frozen and contain neither. */
+/** The three Tier-0 ids. Not projections of `ActionIds` — those seven are frozen and contain none of them. */
 object Tier0ToolIds {
     val SET_TIMER = ToolId("set_timer")
     val OPEN_SYSTEM_SETTINGS = ToolId("open_system_settings")
+
+    /** Task 5 (A1″ Phase 3a). See [Tier0IntentToolSource]'s KDoc for what `SAFE` rests on here. */
+    val SET_ALARM = ToolId("set_alarm")
 }
 
 /**
@@ -78,6 +81,29 @@ class Tier0IntentToolSource @Inject constructor(
         ),
         ToolDescriptor(
             id = Tier0ToolIds.OPEN_SYSTEM_SETTINGS,
+            level = ToolLevels.SYSTEM_INTENT,
+            effect = ToolEffect.EXTERNAL,
+            risk = ActionRiskLevel.SAFE,
+            durability = ToolDurability.TRANSIENT,
+        ),
+        // Task 5. Same permission family as SET_TIMER (com.android.alarm.permission.SET_ALARM, row
+        // 27), a different intent and a different argument shape (a clock time, not a duration).
+        //
+        // **What SAFE rests on here, stated so it cannot later be "simplified" away.** Row 13/29
+        // measured `ACTION_SET_ALARM` on the SM-A325F: it creates the alarm **already enabled** — there
+        // is no prefilled form, and EXTRA_SKIP_UI yields no consent step from the OS either way. So
+        // this is NOT the "prefilled but not sent" shape (Master Plan §3.6 B4) — that reading was
+        // measured false for set_timer's own ACTION_SET_TIMER and the same measurement applies here.
+        // SAFE rests on the same four properties the owner accepted for set_timer instead: the effect
+        // is reversible (one tap deletes the alarm that was just created), immediately visible (the
+        // clock app opens showing it), disclosed (EXTERNAL provenance, this tool's only consent-gate
+        // substitute since a SAFE tool never reaches the gate), and local (the invocation and its
+        // argument never leave the device).
+        ToolDescriptor(
+            id = Tier0ToolIds.SET_ALARM,
+            argSchema = listOf(
+                ActionArg("time", description = "Clock time for the alarm, e.g. 7:30"),
+            ),
             level = ToolLevels.SYSTEM_INTENT,
             effect = ToolEffect.EXTERNAL,
             risk = ActionRiskLevel.SAFE,

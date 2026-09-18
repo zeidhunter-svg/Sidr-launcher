@@ -88,6 +88,7 @@
     <string name="launcher_agent_step_store">Найти %1$s в магазине приложений</string>
     <string name="launcher_agent_step_timer">Поставить таймер на %1$s</string>
     <string name="launcher_agent_step_settings">Открыть настройки Android</string>
+    <string name="launcher_agent_step_alarm">Поставить будильник на %1$s</string>
     <string name="launcher_agent_step_generic">Выполнить шаг для %1$s</string>
     <string name="launcher_agent_step_shortcut">Открыть «%1$s — %2$s»</string>
     <string name="launcher_agent_gate_title">Подтвердите этот шаг</string>

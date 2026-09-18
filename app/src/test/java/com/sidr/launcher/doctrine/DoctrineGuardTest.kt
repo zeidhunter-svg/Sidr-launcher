@@ -743,6 +743,7 @@ class DoctrineGuardTest {
         ToolIds.PLAY_STORE_SEARCH to ActionRiskLevel.CONFIRM,
         Tier0ToolIds.SET_TIMER to ActionRiskLevel.SAFE,
         Tier0ToolIds.OPEN_SYSTEM_SETTINGS to ActionRiskLevel.SAFE,
+        Tier0ToolIds.SET_ALARM to ActionRiskLevel.SAFE,
     )
 
     /**
@@ -838,6 +839,7 @@ class DoctrineGuardTest {
             ToolIds.PLAY_STORE_SEARCH,
             Tier0ToolIds.SET_TIMER,
             Tier0ToolIds.OPEN_SYSTEM_SETTINGS,
+            Tier0ToolIds.SET_ALARM,
         )
     }
 }

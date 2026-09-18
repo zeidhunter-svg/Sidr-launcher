@@ -130,6 +130,7 @@
          fail-soft line for a registered tool this surface has no sentence for. -->
     <string name="launcher_agent_step_timer">Set a timer for %1$s</string>
     <string name="launcher_agent_step_settings">Open Android settings</string>
+    <string name="launcher_agent_step_alarm">Set an alarm for %1$s</string>
     <string name="launcher_agent_step_generic">Run this step for %1$s</string>
     <!-- A1″ Task 8: a tool whose NAME is data. %1$s is the app that published the shortcut and
          %2$s is the shortcut's own label; both are authored by that app, in whatever language it

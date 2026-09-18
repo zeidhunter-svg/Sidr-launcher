@@ -101,6 +101,8 @@ class ToolPermissionManifestGuardTest {
     private val requiredPermissions: Map<String, List<String>> = mapOf(
         "AlarmClock.ACTION_SET_TIMER" to listOf("com.android.alarm.permission.SET_ALARM"),
         "Settings.ACTION_SETTINGS" to emptyList(),
+        // Task 5 (A1″ Phase 3a). Same permission family as ACTION_SET_TIMER (row 27).
+        "AlarmClock.ACTION_SET_ALARM" to listOf("com.android.alarm.permission.SET_ALARM"),
     )
 
     /**

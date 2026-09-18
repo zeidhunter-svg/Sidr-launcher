@@ -66,6 +66,7 @@ class ToolPermissionCatalog @Inject constructor() {
             ToolIds.PLAY_STORE_SEARCH to emptyList(),
             Tier0ToolIds.SET_TIMER to listOf("com.android.alarm.permission.SET_ALARM"),
             Tier0ToolIds.OPEN_SYSTEM_SETTINGS to emptyList(),
+            Tier0ToolIds.SET_ALARM to listOf("com.android.alarm.permission.SET_ALARM"),
         )
     }
 }

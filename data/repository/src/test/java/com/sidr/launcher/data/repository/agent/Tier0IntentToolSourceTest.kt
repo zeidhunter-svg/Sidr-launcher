@@ -38,11 +38,11 @@ class Tier0IntentToolSourceTest {
     private val grantsEverything = PermissionPresence { true }
 
     @Test
-    fun `the tier-0 source offers two tools at the system-intent level, both external and safe`() {
+    fun `the tier-0 source offers three tools at the system-intent level, all external and safe`() {
         val source = Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything)
 
         assertEquals(
-            listOf(Tier0ToolIds.SET_TIMER, Tier0ToolIds.OPEN_SYSTEM_SETTINGS),
+            listOf(Tier0ToolIds.SET_TIMER, Tier0ToolIds.OPEN_SYSTEM_SETTINGS, Tier0ToolIds.SET_ALARM),
             source.all().map { it.id },
         )
         assertEquals(true, source.all().all { it.level == ToolLevels.SYSTEM_INTENT })
@@ -56,6 +56,13 @@ class Tier0IntentToolSourceTest {
 
         assertEquals(listOf("duration"), source.find(Tier0ToolIds.SET_TIMER)!!.argSchema.map { it.name })
         assertEquals(emptyList<String>(), source.find(Tier0ToolIds.OPEN_SYSTEM_SETTINGS)!!.argSchema.map { it.name })
+    }
+
+    @Test
+    fun `set_alarm takes a required time`() {
+        val source = Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything)
+
+        assertEquals(listOf("time"), source.find(Tier0ToolIds.SET_ALARM)!!.argSchema.map { it.name })
     }
 
     /**
@@ -94,7 +101,7 @@ class Tier0IntentToolSourceTest {
             "A Tier-0 descriptor with no ToolPermissionCatalog row is withheld at runtime and " +
                 "registered nowhere, so no :app guard can see it. This list is where that absence " +
                 "turns red. Adding a tool? Extend this list AND REQUIRED_TOOL_IDS in both :app guards.",
-            listOf(Tier0ToolIds.SET_TIMER, Tier0ToolIds.OPEN_SYSTEM_SETTINGS),
+            listOf(Tier0ToolIds.SET_TIMER, Tier0ToolIds.OPEN_SYSTEM_SETTINGS, Tier0ToolIds.SET_ALARM),
             source.all().map { it.id },
         )
     }
@@ -119,7 +126,7 @@ class Tier0IntentToolSourceTest {
         val source = Tier0IntentToolSource(ToolPermissionCatalog(), FakePresence(emptySet()))
         val advertised = source.all().map { it.id }.toSet()
 
-        listOf(Tier0ToolIds.SET_TIMER, Tier0ToolIds.OPEN_SYSTEM_SETTINGS).forEach { id ->
+        listOf(Tier0ToolIds.SET_TIMER, Tier0ToolIds.OPEN_SYSTEM_SETTINGS, Tier0ToolIds.SET_ALARM).forEach { id ->
             assertEquals("find/all disagree for ${id.value}", id in advertised, source.find(id) != null)
         }
     }

@@ -12,6 +12,7 @@ import com.sidr.launcher.domain.tool.ToolResult
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -316,6 +317,58 @@ class Tier0IntentToolWorkerTest {
 
         assertTrue(result is ToolResult.Effected)
         assertEquals(1, launched.size)
+    }
+
+    /**
+     * Task 5. `set_alarm` shares `set_timer`'s permission (`com.android.alarm.permission.SET_ALARM`,
+     * row 27) but a different intent and a different argument shape: a clock time, not a duration.
+     * `EXTRA_SKIP_UI = false` is asserted for the same reason it is on `set_timer` — row 13/29 measured
+     * that `ACTION_SET_ALARM` creates the alarm **already enabled** regardless of this flag, so it is
+     * not "prefilled but not sent"; the flag only governs whether the responder draws its own UI over an
+     * act that has already happened.
+     */
+    @Test
+    fun `set_alarm sends hour and minutes and does not skip the responder's UI`() = runTest {
+        val launched = mutableListOf<Intent>()
+        val worker = Tier0IntentToolWorker(
+            FakeIntentLauncher(launched),
+            ToolPermissionCatalog(),
+            FakePresence(ALARM_GRANTED),
+        )
+
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_ALARM, mapOf("time" to "7:30")))
+
+        assertTrue(result is ToolResult.Effected)
+        val intent = launched.single()
+        assertEquals(AlarmClock.ACTION_SET_ALARM, intent.action)
+        assertEquals(7, intent.getIntExtra(AlarmClock.EXTRA_HOUR, -1))
+        assertEquals(30, intent.getIntExtra(AlarmClock.EXTRA_MINUTES, -1))
+        assertFalse(intent.getBooleanExtra(AlarmClock.EXTRA_SKIP_UI, true))
+    }
+
+    /**
+     * Bounded token, `H:MM`/`HH:MM` only (spec §7.1) — never a guess, never a default. An agent that
+     * silently guesses a clock time is worse than one that declines and says so, the same reasoning
+     * `parseSeconds` already carries for durations.
+     */
+    @Test
+    fun `an unparseable time declines instead of guessing`() = runTest {
+        val launched = mutableListOf<Intent>()
+        val worker = Tier0IntentToolWorker(
+            FakeIntentLauncher(launched),
+            ToolPermissionCatalog(),
+            FakePresence(ALARM_GRANTED),
+        )
+
+        listOf("", "tomorrow", "25:00", "7:75", "7", "7:3o").forEach { raw ->
+            val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_ALARM, mapOf("time" to raw)))
+            assertTrue("accepted a time it should decline: '$raw'", result is ToolResult.Failed)
+        }
+        assertEquals(0, launched.size)
+    }
+
+    private companion object {
+        val ALARM_GRANTED = setOf("com.android.alarm.permission.SET_ALARM")
     }
 }
 

@@ -72,6 +72,7 @@ internal fun AgentGoal.subject(): String = when (val shape = shape) {
  */
 private const val TIER0_SET_TIMER = "set_timer"
 private const val TIER0_OPEN_SYSTEM_SETTINGS = "open_system_settings"
+private const val TIER0_SET_ALARM = "set_alarm"
 
 /**
  * `ToolId -> string resource`. This is the mapping [com.sidr.launcher.domain.tool.ToolDescriptor]'s own
@@ -95,6 +96,7 @@ internal fun toolLabelFor(id: ToolId): Int = when (id.value) {
     ToolIds.PLAY_STORE_SEARCH.value -> R.string.launcher_agent_step_store
     TIER0_SET_TIMER -> R.string.launcher_agent_step_timer
     TIER0_OPEN_SYSTEM_SETTINGS -> R.string.launcher_agent_step_settings
+    TIER0_SET_ALARM -> R.string.launcher_agent_step_alarm
     else -> R.string.launcher_agent_step_generic
 }
 

@@ -125,6 +125,7 @@ class Tier0IntentToolWorker @Inject constructor(
         return when (invocation.id) {
             Tier0ToolIds.SET_TIMER -> setTimer(invocation.args["duration"].orEmpty())
             Tier0ToolIds.OPEN_SYSTEM_SETTINGS -> launch(Intent(Settings.ACTION_SETTINGS))
+            Tier0ToolIds.SET_ALARM -> setAlarm(invocation.args["time"].orEmpty())
             // Unreachable in a well-formed graph — the federation routes by the registry this adapter
             // declares. Fail-closed and labelled as such, never named in `CommandFailure` (spec §4.4).
             // The precondition above does NOT subsume this arm: `ToolIds.LAUNCH_APP` and
@@ -141,6 +142,33 @@ class Tier0IntentToolWorker @Inject constructor(
                 .putExtra(AlarmClock.EXTRA_LENGTH, seconds)
                 .putExtra(AlarmClock.EXTRA_SKIP_UI, false),
         )
+    }
+
+    /**
+     * Task 5. `EXTRA_SKIP_UI = false` is not "prefilled but not sent" here either — [Tier0IntentToolSource]'s
+     * KDoc on the `SET_ALARM` descriptor carries the measurement (row 13/29: `ACTION_SET_ALARM` creates
+     * the alarm already enabled, so the flag governs the responder's own UI, not consent).
+     */
+    private fun setAlarm(raw: String): ToolResult {
+        val at = parseClockTime(raw) ?: return ToolResult.Failed(CommandFailure.Generic)
+        return launch(
+            Intent(AlarmClock.ACTION_SET_ALARM)
+                .putExtra(AlarmClock.EXTRA_HOUR, at.first)
+                .putExtra(AlarmClock.EXTRA_MINUTES, at.second)
+                .putExtra(AlarmClock.EXTRA_SKIP_UI, false),
+        )
+    }
+
+    /**
+     * `H:MM` or `HH:MM` only — a bounded token (spec §7.1), never a guess, never a default. The
+     * vocabulary hands this string over unparsed, exactly like [parseSeconds]'s `duration`; there is no
+     * free-text reading to normalize away here, only a fixed clock-time shape to accept or decline.
+     */
+    private fun parseClockTime(raw: String): Pair<Int, Int>? {
+        val match = Regex("""^(\d{1,2}):(\d{2})$""").find(raw.trim()) ?: return null
+        val hour = match.groupValues[1].toIntOrNull() ?: return null
+        val minute = match.groupValues[2].toIntOrNull() ?: return null
+        return if (hour in 0..23 && minute in 0..59) hour to minute else null
     }
 
     /**

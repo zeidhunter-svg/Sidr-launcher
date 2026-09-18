@@ -174,7 +174,10 @@ class ToolPermissionCatalogTest {
     }
 
     @Test
-    fun `rows are a copy - a caller cannot mutate the catalog`() {
+    fun `rows is stable and non-empty, so a caller reading it twice sees one answer`() {
+        // Controller ruling R14-23: this asserts stability and non-vacuity, NOT immutability.
+        // `rows()` returns the companion's map directly and Kotlin's `Map` is already read-only, so
+        // "a caller cannot mutate the catalog" would be a name promising a property no code holds.
         val first = catalog.rows()
         assertTrue(first.isNotEmpty())
         assertEquals(first, catalog.rows())
@@ -908,7 +911,9 @@ git commit -am "feat(agentic-5.5/A1\"): the planner resolves an app name, so con
 **Files:**
 - Modify: `app/src/main/AndroidManifest.xml` (one `<uses-permission>` line),
   `ToolPermissionCatalog.kt` (row), `Tier0IntentToolSource.kt` (descriptor),
-  `Tier0IntentToolWorker.kt` (branch)
+  `Tier0IntentToolWorker.kt` (branch),
+  `app/src/main/java/com/sidr/launcher/di/AgentProvidesModule.kt` — the `@Named("appPackageName")`
+  provider Step 3 requires (controller ruling R14-22: revision 2's file list omitted it)
 - Test: `Tier0IntentToolWorkerTest.kt`
 
 **Interfaces:**
@@ -1142,7 +1147,15 @@ the trigger being unreachable (review finding I3). Left to Task 10, its Step 2 w
 
 - In `ToolVocabularyReachabilityTest`: when `entry.secondArgName != null`, build
   `"$form $SAMPLE_ARGUMENT ${entry.infixByLocale.values.first().first()} $SAMPLE_ARGUMENT_2"` with a new
-  `SAMPLE_ARGUMENT_2` constant.
+  `SAMPLE_ARGUMENT_2` constant. **Controller ruling R14-21: that file has THREE loops over
+  `guardedEntries()`, not one** — `no vocabulary trigger is claimed by FastPath before the planner is
+  asked`, `every trigger recognises its own sample command`, and `an authored trigger cannot be
+  shadowed by a third-party shortcut name`. Each builds its sample by branching on
+  `entry.argName == null`, so each needs the two-slot arm. Extract one `sampleCommands(entry)` helper
+  and have all three read it, rather than patching the first and leaving two red for a reason that has
+  nothing to do with reachability. The suffix shape of a two-slot entry is
+  `"$SAMPLE_ARGUMENT ${infix} $SAMPLE_ARGUMENT_2 $form"` — the infix sits inside the remainder, which
+  is what makes a Turkish SOV two-slot form expressible at all (see Task 10 Step 3).
 - In `ToolVocabularyLocaleGuardTest`: include `infixByLocale` in the locale-coverage union, so a
   two-slot entry that carries `en`/`ru` prefixes but only an `en` infix is red rather than quietly
   monolingual.
@@ -1161,6 +1174,10 @@ git commit -am "feat(agentic-5.5/A1\"): a bounded two-slot form in the tool voca
 
 **Files:**
 - Modify: `domain/src/commonMain/kotlin/com/sidr/launcher/domain/tool/ToolLevel.kt` (one constant)
+- Modify: `…/agent/ToolPermissionCatalog.kt` — three `emptyList()` rows (controller ruling R14-22).
+  `MemoryToolSource` does not consult the catalog, but `ToolRegistryPermissionGuardTest`'s
+  `every registered tool has a permission row` quantifies over the **whole** federation and goes red
+  the moment these three are registered without rows.
 - Create: `…/agent/memory/MemoryToolIds.kt`, `…/agent/memory/MemoryToolSource.kt`,
   `…/agent/memory/MemoryToolWorker.kt`
 - Modify: `app/src/main/java/com/sidr/launcher/di/AgentProvidesModule.kt` (fourth adapter,
@@ -1172,16 +1189,24 @@ git commit -am "feat(agentic-5.5/A1\"): a bounded two-slot form in the tool voca
   `MemoryToolIds.SET_APP_ALIAS = ToolId("set_app_alias")`, `FORGET_APP_ALIAS = ToolId("forget_app_alias")`,
   `FORGET_LEARNED_CHOICE = ToolId("forget_learned_choice")`;
   `MemoryToolSource @Inject constructor() : ToolRegistry`;
-  `MemoryToolWorker @Inject constructor(save: SaveAliasUseCase, deleteAlias: DeleteAliasUseCase, deleteChoice: DeleteLearnedChoiceUseCase, resolver: AppTargetResolver) : ToolWorker`.
+  `MemoryToolWorker @Inject constructor(save: SaveAliasUseCase, deleteAlias: DeleteAliasUseCase, deleteChoice: DeleteLearnedChoiceUseCase) : ToolWorker`.
+  **Controller ruling R14-17 — the worker resolves NOTHING and takes no `AppTargetResolver`.**
+  Revision 2 moved app-name resolution into the planner (Task 6b, owner decision 2026-09-18) but left
+  this signature and two of the tests below in their revision-1 shape. A worker that resolved again
+  would be handed `"org.telegram.messenger"` by the planner and would try to resolve *that* as a
+  **label**, which fails. `invocation.args["app"]` is already a package here; a **blank** one is
+  `Failed`.
 - All three descriptors: `level = LAUNCHER_MEMORY`, `effect = ToolEffect.LOCAL` (nothing leaves the
   device — this is the launcher's own store), `risk = ActionRiskLevel.SAFE`,
   **`durability = ToolDurability.TRANSIENT`**.
 - **`argSchema`, written out because a missing one fails silently** (review finding I4 —
   `ToolMatchPlanner` drops any argument the schema does not declare, the required-check then passes over
   an empty list, and the worker writes an alias keyed on an empty string):
-  - `SET_APP_ALIAS`: `listOf(ActionArg("app", …), ActionArg("phrase", …))` — names identical to Task 10's
-    `argName` / `secondArgName`. **`app` triggers Task 6b's resolution**, so the worker receives a
-    package; the descriptor also declares `ActionArg("app_label", required = false)`.
+  - `SET_APP_ALIAS`: `listOf(ActionArg("app", …), ActionArg("phrase", …), ActionArg("app_label", …, required = false))`
+    — `app`/`phrase` are identical to Task 10's `argName` / `secondArgName`. **`app` triggers Task 6b's
+    resolution**, so the worker receives a package and `app_label` carries what the user typed. All
+    three must be declared: `ToolMatchPlanner` drops any argument the schema does not name, so an
+    undeclared `app_label` would silently never reach the surface (Task 11).
   - `FORGET_APP_ALIAS`: `listOf(ActionArg("phrase", …))`.
   - `FORGET_LEARNED_CHOICE`: `listOf(ActionArg("phrase", …))`.
 
@@ -1206,27 +1231,34 @@ the way in. Hand the worker raw text and the delete removes nothing and reports 
 
 ```kotlin
     @Test
-    fun `set_app_alias stores the alias against the resolved package`() = runTest {
+    fun `set_app_alias stores the alias against the package the planner resolved`() = runTest {
         val store = RecordingAliasStore()
-        val worker = memoryWorker(store, resolver = FakeResolver(mapOf("телеграм" to "org.telegram.messenger")))
+        val worker = memoryWorker(store)
 
+        // R14-17: `app` arrives ALREADY RESOLVED (Task 6b), and `app_label` carries the raw text for
+        // the surface. The worker never calls AppTargetResolver.
         val result = worker.invoke(ResolvedInvocation(
             MemoryToolIds.SET_APP_ALIAS,
-            mapOf("app" to "телеграм", "phrase" to "телега"),
+            mapOf("app" to "org.telegram.messenger", "app_label" to "телеграм", "phrase" to "телега"),
         ))
 
         assertTrue(result is ToolResult.Effected)
-        assertEquals(Alias("телега", AliasTarget.App("org.telegram.messenger"), any()), store.upserted.single())
+        val stored = store.upserted.single()
+        assertEquals("телега", stored.phrase)
+        assertEquals(AliasTarget.App("org.telegram.messenger"), stored.target)
     }
 
     @Test
-    fun `set_app_alias declines when the app cannot be resolved`() = runTest {
+    fun `set_app_alias declines a blank package instead of storing an alias pointing nowhere`() = runTest {
         val store = RecordingAliasStore()
-        val worker = memoryWorker(store, resolver = FakeResolver(emptyMap()))
+        val worker = memoryWorker(store)
 
+        // R14-17: "the name could not be resolved" is decided ONE LAYER UP and yields PlanningResult
+        // .NoPlan (Task 6b), so it never reaches a worker at all. What this worker still owes is a
+        // refusal to write an alias whose target is empty.
         val result = worker.invoke(ResolvedInvocation(
             MemoryToolIds.SET_APP_ALIAS,
-            mapOf("app" to "нечто", "phrase" to "х"),
+            mapOf("app" to "", "phrase" to "х"),
         ))
 
         assertTrue(result is ToolResult.Failed)
@@ -1287,6 +1319,19 @@ the way in. Hand the worker raw text and the delete removes nothing and reports 
     }
 
     @Test
+    fun `a delete use case that throws is Failed, not an escaped exception`() = runTest {
+        // `DeleteLearnedChoiceUseCase.delete` has NO try/catch — it hands `store.delete` straight
+        // back (`DeleteLearnedChoiceUseCase.kt:5-7`), unlike Save/DeleteAliasUseCase which both map
+        // exceptions to OperationResult. So "the use cases already map their exceptions" is true of
+        // two of the three, and this worker owes the third a net. Controller finding, pre-flight scan.
+        val worker = memoryWorker(preferences = ThrowingPreferenceStore)
+
+        val result = worker.invoke(ResolvedInvocation(MemoryToolIds.FORGET_LEARNED_CHOICE, mapOf("phrase" to "банк")))
+
+        assertTrue(result is ToolResult.Failed)
+    }
+
+    @Test
     fun `forgetting a phrase that was never stored is still Effected, and the KDoc says what that means`() = runTest {
         val store = RecordingAliasStore()
         val worker = memoryWorker(store)
@@ -1322,8 +1367,18 @@ fun providePermissionPresence(impl: ContextPermissionPresence): PermissionPresen
 ```
 
 The worker maps each id to its use case, converts `OperationResult.Failure` to
-`ToolResult.Failed(CommandFailure.Generic)`, and returns `ToolResult.Effected()` on success. It catches
-nothing broadly: the use cases already map their exceptions to `OperationResult`.
+`ToolResult.Failed(CommandFailure.Generic)`, and returns `ToolResult.Effected()` on success.
+
+**It catches, and the reason is measured rather than defensive.** Revision 2 said "the use cases
+already map their exceptions to `OperationResult`" — true of `SaveAliasUseCase` and
+`DeleteAliasUseCase`, **false of `DeleteLearnedChoiceUseCase`**, which is
+`suspend fun delete(key, context) = store.delete(key, context)` with no `try` at all
+(`DeleteLearnedChoiceUseCase.kt:5-7`). A throwing `ResolutionPreferenceStore` would escape into
+`AgentExecutor.perform`'s one un-`try`ed `toolExecutor.invoke` call site — CLAUDE.md's named residual
+(8), the crash A1′'s final review fixed once already. So this worker catches the way
+`Tier0IntentToolWorker` does: rethrow `CancellationException`, map anything else to
+`Failed(CommandFailure.Generic)`. Held by the throwing-store test above. Closing it in the **engine**
+stays A4′'s (spec §8.1).
 
 **Two things it must do that the use cases do not** (review finding I6): before calling
 `SaveAliasUseCase`, reject a blank phrase or one longer than `MAX_ALIAS_PHRASE_LENGTH` (64) with
@@ -1560,15 +1615,45 @@ boundary, and claiming otherwise would be a lie in the opposite direction).
 `PlanStep.line` gains, before the existing fallback:
 
 ```kotlin
-    val literals = invocation.args.values.filterIsInstance<ArgSource.Literal>().map { it.value }
-    if (invocation.id.value == MemoryToolIds.SET_APP_ALIAS.value && literals.size == 2) {
-        return sidrString(R.string.launcher_agent_step_set_alias, literals[0], literals[1])
+    // Controller rulings R14-18 and R14-19. Read the arguments BY NAME, never by position or count,
+    // and compare the id against a literal, never against `MemoryToolIds` — `:feature:launcher` has
+    // no `:data:repository` edge (`feature/launcher/build.gradle.kts:43-45`), which this task's own
+    // constraints section states and revision 2's snippet then violated.
+    val literal = { name: String -> (invocation.args[name] as? ArgSource.Literal)?.value }
+    when (invocation.id.value) {
+        MEMORY_SET_APP_ALIAS -> {
+            val app = literal(ARG_APP_LABEL) ?: literal(ARG_APP)
+            val phrase = literal(ARG_PHRASE)
+            if (app != null && phrase != null) {
+                return sidrString(R.string.launcher_agent_step_set_alias, app, phrase)
+            }
+        }
+        TIER0_UNINSTALL_APP -> {
+            // Owner condition 2: the card names BOTH, because resolution is fuzzy. `app_label` is
+            // `required = false`, so fall back to the package alone rather than to the goal text —
+            // saying less, never something false.
+            val pkg = literal(ARG_APP)
+            val label = literal(ARG_APP_LABEL)
+            if (pkg != null && label != null) {
+                return sidrString(R.string.launcher_agent_step_uninstall, label, pkg)
+            }
+        }
     }
 ```
 
-**Ordering caution:** `args` is a `Map`, so `literals` order follows insertion. `ToolMatchPlanner`
-builds it from `match.args`, which the two-slot form fills as `argName` then `secondArgName`. Assert
-that order in the test rather than trusting it.
+with `private const val ARG_APP = "app"`, `ARG_APP_LABEL = "app_label"`, `ARG_PHRASE = "phrase"`
+beside the existing `TIER0_*` literals.
+
+**Why not `literals.size == 2`, which revision 2 wrote.** After Task 6b a `set_app_alias` step carries
+**three** literal arguments (`app`, `app_label`, `phrase`) and an `uninstall_app` step **two**, so a
+count test selects neither correctly; and reading positionally would print the package where the
+label belongs — which is the defect C4 was raised about, reintroduced at the last layer. Naming the
+arguments also removes the `Map`-ordering caution entirely: nothing here depends on insertion order,
+so there is no order left to assert.
+
+`literalSubject()`'s `singleOrNull()` fallback is **unchanged** and still governs every other tool.
+CLAUDE.md's named limitation (5) is therefore closed **for these two tools by name**, exactly as this
+task's Interfaces section says — not in general.
 
 - [ ] **Step 4: Run and watch pass; run `LocaleCompletenessGuardTest`**
 
@@ -1642,17 +1727,27 @@ the consent decision is not testing this block's seam. Drive it through `AgentEx
         // Asserted on the SESSION, not on requiresConsent(step.risk): the latter is true-by-definition
         // for SAFE and cannot see checkpointFor's DURABLE branch — which is what revision 1 got wrong
         // (review finding C1).
+        //
+        // Controller ruling R14-20: `AgentSession` has NO `consentCheckpoint` property
+        // (`AgentSession.kt:40-49`) and the enum values are `Running`/`AwaitingConsent`, not
+        // SCREAMING_CASE. What is checkable is the state plus the trace. If the trace event's exact
+        // type does not match what is written here, repair this assertion UPWARD — to whatever the
+        // engine really records when `checkpointFor` fires — never downward to something that
+        // compiles and checks nothing.
         val session = executor.prepare(sessionFor("называй телеграм как телега"))
 
-        assertEquals(ExecutionState.RUNNING, session.state)
-        assertNull("a memory write must not stop the loop", session.consentCheckpoint)
+        assertEquals(ExecutionState.Running, session.state)
+        assertTrue(
+            "a memory write must not stop the loop",
+            session.trace.events.none { it is TraceEvent.ConsentRequested },
+        )
     }
 
     @Test
     fun `uninstall_app stops at AwaitingConsent, and the pending step already carries the package`() = runTest {
         val session = executor.prepare(sessionFor("удали приложение telegram"))
 
-        assertEquals(ExecutionState.AWAITING_CONSENT, session.state)
+        assertEquals(ExecutionState.AwaitingConsent, session.state)
         val pending = session.plan.steps.single()
         assertEquals(ArgSource.Literal("org.telegram.messenger"), pending.invocation.args["app"])
         assertEquals(ArgSource.Literal("telegram"), pending.invocation.args["app_label"])

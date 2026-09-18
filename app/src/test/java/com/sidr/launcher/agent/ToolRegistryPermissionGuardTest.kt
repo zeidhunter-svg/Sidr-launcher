@@ -64,13 +64,14 @@ class ToolRegistryPermissionGuardTest {
     private val repoRoot = File("..")
     private val manifestFile = File(repoRoot, "app/src/main/AndroidManifest.xml")
 
-    /** Registered tool → the permissions the platform requires of its caller. */
-    private val toolPermissions: Map<ToolId, List<String>> = mapOf(
-        ToolIds.LAUNCH_APP to emptyList(),
-        ToolIds.PLAY_STORE_SEARCH to emptyList(),
-        Tier0ToolIds.SET_TIMER to listOf("com.android.alarm.permission.SET_ALARM"),
-        Tier0ToolIds.OPEN_SYSTEM_SETTINGS to emptyList(),
-    )
+    /**
+     * Registered tool → the permissions the platform requires of its caller, **read from production**
+     * (`ToolPermissionCatalog`) rather than written out here. The previous hand-written column is what
+     * this class's own KDoc named as its weak point: it was exactly as green when wrong as when right.
+     * Now a tool ships with whatever production declares, and the manifest check below is what makes
+     * that declaration true or red.
+     */
+    private val toolPermissions: Map<ToolId, List<String>> = ToolPermissionCatalog().rows()
 
     /**
      * **The `app_shortcut` family needs no manifest permission, and that is a measured decision rather

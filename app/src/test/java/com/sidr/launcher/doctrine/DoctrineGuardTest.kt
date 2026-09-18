@@ -4,11 +4,13 @@ import android.content.Intent
 import com.sidr.launcher.agent.stripComments
 import com.sidr.launcher.data.repository.action.DefaultActionCatalog
 import com.sidr.launcher.data.repository.agent.IntentLauncher
+import com.sidr.launcher.data.repository.agent.PermissionPresence
 import com.sidr.launcher.data.repository.agent.SystemIntentToolSource
 import com.sidr.launcher.data.repository.agent.SystemIntentToolWorker
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolWorker
 import com.sidr.launcher.data.repository.agent.Tier0ToolIds
+import com.sidr.launcher.data.repository.agent.ToolPermissionCatalog
 import com.sidr.launcher.data.repository.agent.shortcut.AppShortcut
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutCatalog
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutLauncher
@@ -89,6 +91,17 @@ import java.io.File
  */
 class DoctrineGuardTest {
 
+    /**
+     * Task 2 made `Tier0IntentToolSource` filter by held permission, so every construction of it now
+     * states which presence it is read under. **This one is load-bearing, not a convenience.** The
+     * tests in this file quantify over the registry's *contents*; a fixture that withheld a tool would
+     * let them pass by **absence** — they would loop over a list the filter had already emptied and
+     * assert nothing. Granting everything is what keeps them strict. A fixture granting nothing
+     * belongs only where the subject *is* the filter: `Tier0IntentToolSourceTest` and
+     * `Tier0IntentToolWorkerTest`.
+     */
+    private val grantsEverything = PermissionPresence { true }
+
     private val repoRoot = File("..")
 
     /**
@@ -131,7 +144,7 @@ class DoctrineGuardTest {
     private fun productionAdapters(): List<ToolAdapter> {
         val adapters = listOf(
             ToolAdapter(ToolLevels.IN_APP, SystemIntentToolSource(DefaultActionCatalog()), NoopWorker),
-            ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(), NoopWorker),
+            ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything), NoopWorker),
             ToolAdapter(ToolLevels.APP_SHORTCUT, shortcutSource(), NoopWorker),
         )
 
@@ -223,7 +236,7 @@ class DoctrineGuardTest {
                 executor = NoopActionExecutor,
             ),
         ),
-        tier0Registry = Tier0IntentToolSource(),
+        tier0Registry = Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything),
         tier0Worker = Tier0IntentToolWorker(NoopIntentLauncher),
         shortcutRegistry = shortcutSource(),
         shortcutWorker = ShortcutToolWorker(ShortcutLauncher { _, _ -> }),

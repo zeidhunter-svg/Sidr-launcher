@@ -60,7 +60,10 @@ object Tier0ToolIds {
  * `ToolPermissionManifestGuardTest` (`:app`), which fails when any intent a registered tool issues
  * needs a permission the manifest does not declare.
  */
-class Tier0IntentToolSource @Inject constructor() : ToolRegistry {
+class Tier0IntentToolSource @Inject constructor(
+    private val catalog: ToolPermissionCatalog,
+    private val presence: PermissionPresence,
+) : ToolRegistry {
 
     private val descriptors = listOf(
         ToolDescriptor(
@@ -82,7 +85,23 @@ class Tier0IntentToolSource @Inject constructor() : ToolRegistry {
         ),
     )
 
-    override fun all(): List<ToolDescriptor> = descriptors
+    /**
+     * **A source does not advertise a tool it cannot run**, and the shape is not new: this is what
+     * `AndroidShortcutQuery` already does for the `HOME` role — `if (!hasShortcutHostPermission())
+     * return emptyList()`. Measured basis: rows 27 and 32/33. A missing catalog row fails closed
+     * (`?: return@filter false`), because "nobody stated an answer" must never read as "needs nothing".
+     */
+    private fun available(): List<ToolDescriptor> = descriptors.filter { descriptor ->
+        val needed = catalog.permissionsFor(descriptor.id) ?: return@filter false
+        needed.all(presence::isGranted)
+    }
 
-    override fun find(id: ToolId): ToolDescriptor? = descriptors.firstOrNull { it.id == id }
+    override fun all(): List<ToolDescriptor> = available()
+
+    /**
+     * Answers from [available], never from [descriptors]. Reading the unfiltered list here would make
+     * the whole filter cosmetic: `ToolFederation.registry.find` is what the executor routes by, so a
+     * `find` that still answered would hand the dispatcher a tool `all()` had just withheld.
+     */
+    override fun find(id: ToolId): ToolDescriptor? = available().firstOrNull { it.id == id }
 }

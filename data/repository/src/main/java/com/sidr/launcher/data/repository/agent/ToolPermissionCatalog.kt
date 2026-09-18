@@ -15,8 +15,15 @@ import javax.inject.Inject
  * refuses or draws its dialog, row 32) and knowable *beforehand* — `checkSelfPermission` answered
  * `GRANTED(0)` on the declaring build and `DENIED(-1)` without it. So detection is a **precondition**,
  * never a better failure signal.
+ *
+ * **`fun interface` rather than `interface`** (Task 2). Every test fixture in this family is the same
+ * one-line answer — `PermissionPresence { true }` for the tests whose subject is the registry's
+ * *contents*, a set-membership lambda for the tests whose subject is the filter — and a Kotlin
+ * `interface` admits no SAM conversion, so each of those would otherwise be a four-line `object`
+ * expression. One abstract method is all this port will ever have: the question "is this permission
+ * held" has no second form.
  */
-interface PermissionPresence {
+fun interface PermissionPresence {
     fun isGranted(permission: String): Boolean
 }
 

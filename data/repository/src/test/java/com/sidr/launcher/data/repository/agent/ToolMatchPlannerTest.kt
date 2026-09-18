@@ -35,11 +35,22 @@ private object NoopWorker : ToolWorker {
 @OptIn(ExperimentalCoroutinesApi::class)
 class ToolMatchPlannerTest {
 
+    /**
+     * Task 2 made `Tier0IntentToolSource` filter by held permission, so every construction of it now
+     * states which presence it is read under. **This one is load-bearing, not a convenience.** The
+     * tests in this file quantify over the registry's *contents*; a fixture that withheld a tool would
+     * let them pass by **absence** — they would loop over a list the filter had already emptied and
+     * assert nothing. Granting everything is what keeps them strict. A fixture granting nothing
+     * belongs only where the subject *is* the filter: `Tier0IntentToolSourceTest` and
+     * `Tier0IntentToolWorkerTest`.
+     */
+    private val grantsEverything = PermissionPresence { true }
+
     private val planner = ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()))
 
     /** The production shape: the Tier-0 source seen through the federation, not directly. */
     private val registry = ToolFederation(
-        listOf(ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(), NoopWorker)),
+        listOf(ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything), NoopWorker)),
     ).registry
 
     private fun free(text: String) = AgentGoal(text, GoalShape.Free(text))

@@ -88,6 +88,17 @@ private object NeverInvokedWorker : ToolWorker {
 @Config(manifest = Config.NONE)
 class FreeTextGoalEndToEndTest {
 
+    /**
+     * Task 2 made `Tier0IntentToolSource` filter by held permission, so every construction of it now
+     * states which presence it is read under. **This one is load-bearing, not a convenience.** The
+     * tests in this file quantify over the registry's *contents*; a fixture that withheld a tool would
+     * let them pass by **absence** — they would loop over a list the filter had already emptied and
+     * assert nothing. Granting everything is what keeps them strict. A fixture granting nothing
+     * belongs only where the subject *is* the filter: `Tier0IntentToolSourceTest` and
+     * `Tier0IntentToolWorkerTest`.
+     */
+    private val grantsEverything = PermissionPresence { true }
+
     private lateinit var db: SidrDatabase
     private lateinit var dao: AgentSessionDao
     private lateinit var store: RoomAgentSessionStore
@@ -118,7 +129,7 @@ class FreeTextGoalEndToEndTest {
     private val registry = ToolFederation(
         listOf(
             ToolAdapter(ToolLevels.IN_APP, SystemIntentToolSource(DefaultActionCatalog()), NeverInvokedWorker),
-            ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(), NeverInvokedWorker),
+            ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything), NeverInvokedWorker),
         ),
     ).registry
 

@@ -1,8 +1,10 @@
 package com.sidr.launcher.di
 
 import com.sidr.launcher.data.repository.agent.ContextIntentLauncher
+import com.sidr.launcher.data.repository.agent.ContextPermissionPresence
 import com.sidr.launcher.data.repository.agent.DynamicToolNames
 import com.sidr.launcher.data.repository.agent.IntentLauncher
+import com.sidr.launcher.data.repository.agent.PermissionPresence
 import com.sidr.launcher.data.repository.agent.SystemIntentToolSource
 import com.sidr.launcher.data.repository.agent.SystemIntentToolWorker
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolSource
@@ -115,6 +117,11 @@ object AgentProvidesModule {
     @Provides
     @Singleton
     fun provideIntentLauncher(impl: ContextIntentLauncher): IntentLauncher = impl
+
+    /** The Task 1 `PermissionPresence` port's one production implementation. */
+    @Provides
+    @Singleton
+    fun providePermissionPresence(impl: ContextPermissionPresence): PermissionPresence = impl
 
     /**
      * The `app_shortcut` adapter's **three** Android seams, kept behind ports so everything built on

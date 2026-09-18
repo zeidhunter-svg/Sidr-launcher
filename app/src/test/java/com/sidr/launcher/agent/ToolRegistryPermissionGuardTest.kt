@@ -1,9 +1,11 @@
 package com.sidr.launcher.agent
 
 import com.sidr.launcher.data.repository.action.DefaultActionCatalog
+import com.sidr.launcher.data.repository.agent.PermissionPresence
 import com.sidr.launcher.data.repository.agent.SystemIntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0ToolIds
+import com.sidr.launcher.data.repository.agent.ToolPermissionCatalog
 import com.sidr.launcher.data.repository.agent.shortcut.AppShortcut
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutCatalog
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolIds
@@ -47,6 +49,17 @@ import java.io.File
  * someone writes its row.
  */
 class ToolRegistryPermissionGuardTest {
+
+    /**
+     * Task 2 made `Tier0IntentToolSource` filter by held permission, so every construction of it now
+     * states which presence it is read under. **This one is load-bearing, not a convenience.** The
+     * tests in this file quantify over the registry's *contents*; a fixture that withheld a tool would
+     * let them pass by **absence** — they would loop over a list the filter had already emptied and
+     * assert nothing. Granting everything is what keeps them strict. A fixture granting nothing
+     * belongs only where the subject *is* the filter: `Tier0IntentToolSourceTest` and
+     * `Tier0IntentToolWorkerTest`.
+     */
+    private val grantsEverything = PermissionPresence { true }
 
     private val repoRoot = File("..")
     private val manifestFile = File(repoRoot, "app/src/main/AndroidManifest.xml")
@@ -118,7 +131,7 @@ class ToolRegistryPermissionGuardTest {
         val federation = ToolFederation(
             listOf(
                 ToolAdapter(ToolLevels.IN_APP, SystemIntentToolSource(DefaultActionCatalog()), NoopWorker),
-                ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(), NoopWorker),
+                ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything), NoopWorker),
                 ToolAdapter(ToolLevels.APP_SHORTCUT, shortcutSource(), NoopWorker),
             ),
         )

@@ -41,12 +41,20 @@ import java.io.File
  * available", which is the `android.app.role.HOME` runtime role and is not answerable from a manifest
  * at all (see that row's own KDoc).
  *
- * What this class cannot check, said rather than implied: [toolPermissions] is hand-written, so it is
- * exactly as strong as it is honest. Writing `emptyList()` for a tool that needs a permission leaves
- * every test here green and the app broken — the same weakness its sibling names about its own column.
- * What it does buy is **totality over the registry**: a tool registered by any adapter, with or
+ * What this class cannot check, said rather than implied — **and the address moved in Task 4.**
+ * [toolPermissions] is no longer a column written out here; it reads `ToolPermissionCatalog.ROWS` from
+ * production, so the old "this file's hand-written list is as strong as it is honest" no longer names
+ * anything in this file. The weakness itself did not go away, it relocated: a **false `emptyList()`
+ * row in `ToolPermissionCatalog.ROWS`** still leaves every test here green and the app broken, because
+ * the manifest check below can only verify the permissions a row *claims*, never the ones the platform
+ * will actually demand. That is an observed boundary rather than a worry — Task 4's mutation 6
+ * measured exactly it, and the guard stayed green.
+ *
+ * What the class does buy is **totality over the registry**: a tool registered by any adapter, with or
  * without a worker branch, with its intent built inline or in a helper three files away, is red until
- * someone writes its row.
+ * someone writes its row. Since Task 2 that totality has one hole of its own, closed elsewhere: a
+ * tool whose row is *missing* is now withheld by its source and so is registered nowhere, leaving
+ * nothing here to find. `Tier0IntentToolSourceTest`'s per-source floor is what turns that absence red.
  */
 class ToolRegistryPermissionGuardTest {
 

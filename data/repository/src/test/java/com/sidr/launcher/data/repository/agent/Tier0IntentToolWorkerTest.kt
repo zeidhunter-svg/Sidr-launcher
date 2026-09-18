@@ -271,9 +271,15 @@ class Tier0IntentToolWorkerTest {
 
     /**
      * The narrower window Task 2's source filter cannot cover: state can move between the snapshot the
-     * source answered from and the call. A refusal is invisible to the caller *afterwards* (measurement
-     * row 32 — `startActivity` returns normally and throws nothing whether the responder refuses or
-     * acts), so the only honest place to learn it is *before*.
+     * source answered from and the call.
+     *
+     * **What this proves, and for which refusal mode.** `set_timer` is refused *framework-side* —
+     * `ActivityTaskManager` throws `SecurityException` before dispatch (row 27) — so on this tool the
+     * catch would also produce `Failed` and the precondition is the earlier of two working signals.
+     * What the test pins is that the step is `Failed` **and the launcher is never reached at all**,
+     * which the catch alone cannot give. That second half is what a *responder-side* tool will depend
+     * on entirely: there `startActivity` returns normally and throws nothing whether the responder
+     * refuses or acts (row 32, `ACTION_DELETE`), so nothing after the fact can tell the two apart.
      */
     @Test
     fun `an ungranted permission fails the step and never reaches the launcher`() = runTest {
@@ -285,8 +291,12 @@ class Tier0IntentToolWorkerTest {
 
         assertTrue(result is ToolResult.Failed)
         assertEquals(
-            "A refusal is invisible after the fact (row 32), so a step that could not run must not " +
-                "report Effected — DOC-ILM-3 requires the trace to be 1:1 with reality.",
+            "Row 32's invisible-afterwards refusal is ACTION_DELETE's, not this tool's: an " +
+                "alarm-permission intent is refused framework-side and DOES throw SecurityException " +
+                "(row 27), so for set_timer the catch would answer too and this precondition is the " +
+                "earlier of two working signals — while for a responder-side tool it is the only " +
+                "signal there is. Either way a step that could not run must not report Effected, " +
+                "because DOC-ILM-3 requires the trace to be 1:1 with reality.",
             0,
             launched.size,
         )

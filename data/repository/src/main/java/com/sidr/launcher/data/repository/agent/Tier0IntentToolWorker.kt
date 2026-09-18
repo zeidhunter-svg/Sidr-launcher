@@ -70,16 +70,31 @@ class ContextIntentLauncher @Inject constructor(
  * [IntentLauncher] implementation rather than one of each.
  *
  * **The Task 3 precondition does not replace that catch, and could not** (A1" Phase 3a). `invoke`
- * re-checks the tool's permissions against [PermissionPresence] immediately before dispatch, but the
- * two mechanisms answer different questions and neither subsumes the other. The precondition answers
- * "may this process do it", which Android will tell us **beforehand** and never afterwards —
- * `startActivity` returns normally and throws nothing whether the responder refuses or acts
- * (measurement row 32), so without the check a refused step would be recorded [ToolResult.Effected]
- * in a trace `DOC-ILM-3` requires to be 1:1 with reality. The catch answers "did the call itself
- * blow up", which is a different world state — `ActivityNotFoundException` on a device with no clock
- * app is not a permission at all, and a `SecurityException` can still arrive from a restriction this
- * catalog does not model. Removing or widening either one on the strength of the other would reopen
- * the crash the final A1' review fixed.
+ * re-checks the tool's permissions against [PermissionPresence] immediately before dispatch. The two
+ * answer different questions — "may this process do it" versus "did the call itself blow up" — and
+ * **which of them can see a refusal at all depends on where the refusal is enforced.** Row 32 draws
+ * that distinction in its own cell and forbids collapsing the two into one mechanism; spec §7.7 keeps
+ * them apart for the same reason.
+ *
+ * *Framework-side* enforcement is this worker's own alarm-permission family: `ActivityTaskManager`
+ * rejects the intent **before** dispatch and **throws `SecurityException` at the caller** (row 27,
+ * measured on `ACTION_SET_ALARM` with the manifest line removed; A1''s device acceptance saw the same
+ * `Permission Denial … requires com.android.alarm.permission.SET_ALARM` for this worker's own
+ * `ACTION_SET_TIMER`). So for `set_timer` the catch below **already** produces [ToolResult.Failed] on
+ * its own, and the precondition is the earlier, cheaper and more specific of two working signals —
+ * not the only one.
+ *
+ * *Responder-side* enforcement is the opposite mode, and it is what the Tier-0 tools A1" adds next
+ * will meet: the responding app refuses **silently**, `startActivity` returns normally and throws
+ * nothing, and the caller's answer is byte-identical to the success case (row 32, measured on
+ * `ACTION_DELETE`; the refusal appears only in the responder's own logcat, which another app cannot
+ * read). There **neither** catch fires in either direction, and the precondition is the **only**
+ * signal there is: without it a refused step would be recorded [ToolResult.Effected] in a trace
+ * `DOC-ILM-3` requires to be 1:1 with reality.
+ *
+ * Neither may therefore be removed on the strength of the other, and the catch additionally covers a
+ * state that is no permission at all — `ActivityNotFoundException` on a device with no clock app,
+ * which is the crash the final A1' review fixed.
  *
  * The failure is [com.sidr.launcher.domain.intent.CommandFailure.Generic], the same value every other
  * fail-closed path here already uses. A dedicated variant is deliberately not minted: the A1' ADR
@@ -95,15 +110,14 @@ class Tier0IntentToolWorker @Inject constructor(
 
     override suspend fun invoke(invocation: ResolvedInvocation): ToolResult {
         // The source already withheld this tool if its permission was absent (Task 2). This is the
-        // narrower window that check cannot cover — state can move between the snapshot and the call —
-        // and it is the same reasoning that keeps the SecurityException catch below as a backstop
-        // rather than as the mechanism.
+        // narrower window that check cannot cover — state can move between the snapshot and the call.
         //
-        // It is a *precondition*, and it replaces nothing. Android gives the caller no post-hoc signal
-        // at all: `startActivity` returns normally and throws nothing whether the responder refuses or
-        // acts (measurement row 32). So "before" is the only place this is knowable, and reporting
-        // `Effected` for a step that could not run would put a lie in a trace that `DOC-ILM-3` requires
-        // to be 1:1 with reality. A missing catalog row fails closed for the reason the catalog's own
+        // It is a *precondition* and it replaces nothing; the class KDoc has the full reason, which
+        // turns on WHERE a refusal is enforced. Short form: for this worker's alarm-permission family
+        // the framework refuses before dispatch and throws, so the SecurityException catch below would
+        // answer too (row 27) and this check is the earlier of two working signals; for a
+        // responder-side refusal nothing whatever is observable afterwards (row 32) and this check is
+        // the only signal there is. A missing catalog row fails closed for the reason the catalog's own
         // KDoc gives: "nobody stated an answer" must never read as "needs nothing".
         val needed = catalog.permissionsFor(invocation.id) ?: return ToolResult.Failed(CommandFailure.Generic)
         if (!needed.all(presence::isGranted)) return ToolResult.Failed(CommandFailure.Generic)
@@ -113,8 +127,9 @@ class Tier0IntentToolWorker @Inject constructor(
             Tier0ToolIds.OPEN_SYSTEM_SETTINGS -> launch(Intent(Settings.ACTION_SETTINGS))
             // Unreachable in a well-formed graph — the federation routes by the registry this adapter
             // declares. Fail-closed and labelled as such, never named in `CommandFailure` (spec §4.4).
-            // Doubly unreachable since the precondition above: an id this `when` does not know is an id
-            // the catalog has no row for, so it has already returned.
+            // The precondition above does NOT subsume this arm: `ToolIds.LAUNCH_APP` and
+            // `PLAY_STORE_SEARCH` carry `emptyList()` rows in the same catalog and are not in this
+            // `when`, so a misrouted in-app id passes the permission check and lands here.
             else -> ToolResult.Failed(CommandFailure.Generic)
         }
     }

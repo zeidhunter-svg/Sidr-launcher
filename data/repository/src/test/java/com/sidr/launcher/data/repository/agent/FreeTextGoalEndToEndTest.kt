@@ -90,12 +90,9 @@ class FreeTextGoalEndToEndTest {
 
     /**
      * Task 2 made `Tier0IntentToolSource` filter by held permission, so every construction of it now
-     * states which presence it is read under. **This one is load-bearing, not a convenience.** The
-     * tests in this file quantify over the registry's *contents*; a fixture that withheld a tool would
-     * let them pass by **absence** — they would loop over a list the filter had already emptied and
-     * assert nothing. Granting everything is what keeps them strict. A fixture granting nothing
-     * belongs only where the subject *is* the filter: `Tier0IntentToolSourceTest` and
-     * `Tier0IntentToolWorkerTest`.
+     * states which presence it is read under. Grant-everything because **the subject here is not the
+     * filter** — these tests plan and execute specific goals, and the permission gate is only
+     * scenery they must not trip over. The filter's own tests are `Tier0IntentToolSourceTest`'s.
      */
     private val grantsEverything = PermissionPresence { true }
 
@@ -129,7 +126,11 @@ class FreeTextGoalEndToEndTest {
     private val registry = ToolFederation(
         listOf(
             ToolAdapter(ToolLevels.IN_APP, SystemIntentToolSource(DefaultActionCatalog()), NeverInvokedWorker),
-            ToolAdapter(ToolLevels.SYSTEM_INTENT, Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything), NeverInvokedWorker),
+            ToolAdapter(
+                ToolLevels.SYSTEM_INTENT,
+                Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything),
+                NeverInvokedWorker,
+            ),
         ),
     ).registry
 

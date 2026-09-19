@@ -729,12 +729,20 @@ class DoctrineGuardTest {
     /**
      * Declared risk, pinned where totality over the registry can be asserted.
      *
-     * Each source's own test pins its own tools — `Tier0IntentToolSourceTest`'s
-     * `none { requiresConsent(it.risk) }` for the two Tier-0 tools, and `SystemIntentToolContractTest`'s
-     * field-for-field parity test for the two projected in-app ones — which is why a `SAFE → CONFIRM`
-     * mutation on a Tier-0 tool reddens `:data:repository` while the whole `:app` suite stays green.
-     * That arrangement covers today's four tools and nothing a future adapter registers, which is why
-     * the assertion moved here.
+     * Each source's own test pins its own tools — `Tier0IntentToolSourceTest`'s per-id risk map for
+     * the four Tier-0 tools, and `SystemIntentToolContractTest`'s field-for-field parity test for the
+     * two projected in-app ones — which is why a `SAFE → CONFIRM` mutation on a Tier-0 tool reddens
+     * `:data:repository` while the whole `:app` suite stays green. That arrangement covers the tools
+     * each source declares and nothing a future adapter registers, which is why the assertion moved
+     * here.
+     *
+     * **That per-source pin used to be a single quantifier, `none { requiresConsent(it.risk) }`, and
+     * this KDoc used to cite it by name.** Task 7 (A1″ Phase 3a) deleted it: `uninstall_app` is the
+     * track's first `CONFIRM` tool, so the quantifier became false the moment the tool it was meant to
+     * protect arrived, and the obvious repair — deleting the assertion — would have removed a risk pin.
+     * It was replaced by a per-id map, which also catches the direction a quantifier never could (a
+     * tool silently dropping *to* `SAFE`). The sentence is corrected here rather than left dangling
+     * because this is the KDoc an auditor follows to find where risk is actually pinned.
      *
      * **This map is hand-written, so a wrong value is exactly as green as a right one** — the same
      * weakness `ToolRegistryPermissionGuardTest` states about its own column. What it buys is totality

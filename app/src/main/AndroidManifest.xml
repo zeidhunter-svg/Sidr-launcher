@@ -33,6 +33,9 @@
       Without it the uninstaller starts and dies in ~190 ms drawing nothing, while `startActivity`
       still returns normally (rows 16/28/32) — which is why the check that this is held is a
       precondition taken BEFORE the call and never a refusal detected afterwards.
+      The limit that goes with that (spec §7.7): the precondition closes exactly ONE cause of
+      refusal, a missing permission. Device policy, a work profile, or a package that simply cannot
+      be removed still refuse invisibly, because the platform hands the caller nothing to read.
       Held by ToolPermissionManifestGuardTest and ToolRegistryPermissionGuardTest.
     -->
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />

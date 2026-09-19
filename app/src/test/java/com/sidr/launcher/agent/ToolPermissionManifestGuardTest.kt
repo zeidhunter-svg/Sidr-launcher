@@ -111,6 +111,12 @@ class ToolPermissionManifestGuardTest {
         // at least throws `SecurityException` (row 27); here this guard and the precondition check are
         // the only two things standing between a missing manifest line and a tool that silently
         // reports `Effected` for an act that never happened.
+        //
+        // **And the limit that pair carries, per spec §7.7:** between them they close exactly ONE
+        // cause of refusal — a missing permission. A responder that refuses because of device policy,
+        // a work profile, or a package that cannot be removed is still invisible to the caller, and
+        // no entry in this map changes that. This guard answers "is the permission declared", never
+        // "will the act succeed".
         "Intent.ACTION_DELETE" to listOf("android.permission.REQUEST_DELETE_PACKAGES"),
     )
 

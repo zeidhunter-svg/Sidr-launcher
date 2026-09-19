@@ -71,7 +71,9 @@ class ToolPermissionCatalog @Inject constructor() {
             // Task 7. `normal`, install-time, granted with no prompt (row 28). Without it the
             // uninstaller starts and dies in ~190 ms drawing nothing, and `startActivity` still
             // returns normally — which is the whole reason this is a precondition rather than a
-            // failure signal.
+            // failure signal. Its limit, per spec §7.7: a row here closes exactly ONE cause of
+            // refusal, a missing permission. Device policy, a work profile and a package that cannot
+            // be removed refuse for reasons no row in this map can see or predict.
             Tier0ToolIds.UNINSTALL_APP to listOf("android.permission.REQUEST_DELETE_PACKAGES"),
             // Task 9. MemoryToolSource does not consult this catalog (it writes to the launcher's own
             // store, never dispatches an intent), but the totality guard quantifies over the whole

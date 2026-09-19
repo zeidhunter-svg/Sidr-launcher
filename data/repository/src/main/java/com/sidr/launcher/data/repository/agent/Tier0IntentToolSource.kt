@@ -98,7 +98,11 @@ class Tier0IntentToolSource @Inject constructor(
         //
         // **What SAFE rests on here, stated so it cannot later be "simplified" away.** Row 13/29
         // measured `ACTION_SET_ALARM` on the SM-A325F: it creates the alarm **already enabled** — there
-        // is no prefilled form, and EXTRA_SKIP_UI yields no consent step from the OS either way. So
+        // is no prefilled form, and the OS interposed no consent step. Both rows fired with
+        // `EXTRA_SKIP_UI = false`, which is what this tool sends; the `true` case was never measured,
+        // so nothing here claims it behaves the same. (Narrowed by fix round 2, finding #4: the
+        // sentence used to say "either way", which stated as measured fact the one half of the pair
+        // that no row covers.) So
         // this is NOT the "prefilled but not sent" shape (Master Plan §3.6 B4) — that reading was
         // measured false for set_timer's own ACTION_SET_TIMER and the same measurement applies here.
         // SAFE rests on the same four properties the owner accepted for set_timer instead: the effect
@@ -146,7 +150,10 @@ class Tier0IntentToolSource @Inject constructor(
         // (4) our own package is refused — `Tier0IntentToolWorker.uninstallApp`; (5) the wording says
         // the precondition is CHECKED BEFORE THE CALL and never that a refusal is DETECTED (rows
         // 16/28/32: `startActivity` returns normally and throws nothing whether the uninstaller
-        // refuses or draws its dialog); (6) the manifest line is held by `ToolPermissionManifestGuardTest`.
+        // refuses or draws its dialog) — and the limit that belongs with it (spec §7.7): the
+        // precondition closes exactly ONE cause of refusal, a missing permission; device policy, a
+        // work profile or an unremovable package still refuse invisibly; (6) the manifest line is
+        // held by `ToolPermissionManifestGuardTest`.
         ToolDescriptor(
             id = Tier0ToolIds.UNINSTALL_APP,
             argSchema = listOf(

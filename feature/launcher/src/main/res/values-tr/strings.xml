@@ -89,8 +89,8 @@
     <string name="launcher_agent_step_timer">%1$s için zamanlayıcı kur</string>
     <string name="launcher_agent_step_settings">Android ayarlarını aç</string>
     <string name="launcher_agent_step_alarm">%1$s için alarm kur</string>
-    <string name="launcher_agent_step_uninstall">%1$s uygulamasını kaldır</string>
-    <string name="launcher_agent_step_set_alias">%1$s için takma ad kaydet</string>
+    <string name="launcher_agent_step_uninstall">%1$s uygulamasını kaldır (%2$s)</string>
+    <string name="launcher_agent_step_set_alias">“%1$s” uygulamasına “%2$s” de</string>
     <string name="launcher_agent_step_forget_alias">“%1$s” takma adını unut</string>
     <string name="launcher_agent_step_forget_choice">“%1$s” için öğrenilen seçimi unut</string>
     <string name="launcher_agent_step_generic">%1$s için bu adımı çalıştır</string>

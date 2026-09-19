@@ -136,12 +136,11 @@ class Tier0IntentToolSource @Inject constructor(
         //
         // **What the six owner conditions (2026-09-18) rest on, per condition:** (1) explicit user
         // command only — there is no suggestion path into the planner; (2) the card names label AND
-        // package — **half held here, and the other half is NOT yet held**: the two arguments above are
-        // bound by `ToolMatchPlanner` above the checkpoint, so the values exist by the time consent is
-        // asked for, but nothing renders them yet. `AgentSessionPresentation.literalSubject()` takes
-        // `singleOrNull()`, so a step carrying TWO literals yields `null` and the line falls back to the
-        // goal text — today this tool's card would read back what the user typed, naming neither the
-        // label nor the package. Rendering both is Task 11's, and until it lands condition 2 is open;
+        // package — **held, closed by Task 11**: the two arguments above are bound by `ToolMatchPlanner`
+        // above the checkpoint, and `AgentSessionPresentation.line()` now reads `app` and `app_label` BY
+        // NAME for this tool id (a dedicated branch, not the `singleOrNull()` single-literal path, which
+        // cannot render two values), so the consent card reads e.g. "Remove telegram
+        // (org.telegram.messenger)" — both what the user said and what will actually be removed;
         // (3) exact resolution or decline — `AppTargetResolver` returns `null` to decline and the
         // planner turns that into `NoPlan`, so no card is ever drawn for an unresolved name;
         // (4) our own package is refused — `Tier0IntentToolWorker.uninstallApp`; (5) the wording says

@@ -15,7 +15,7 @@
     grid - a terminal state/provenance token in the same family as the spec §7.1 examples
     (LOCAL ONLY, LOCAL CALC, etc.), not enumerated verbatim there. Judgment call: flagged in the task
     13 report.
-  - launcher_tool_level_in_app / _system_intent / _app_shortcut / _unknown: Task 10 (A1') review finding 4
+  - launcher_tool_level_in_app / _system_intent / _app_shortcut / _unknown / _launcher_memory: Task 10 (A1') review finding 4
     (2026-09-03). Moved here from plain strings.xml, where they shipped translated in ru/tr. Same
     family as launcher_drawer_groups_provenance above and as core/ui's ui_gate_type_external
     ("EXTERNAL") - a terminal provenance/machine-vocabulary token, not a sentence. Before the move a
@@ -24,7 +24,10 @@
     mixed surface, worse than either pure choice. AgentSessionPresentation.kt's provenanceLabelFor
     still resolves ToolLevel -> these resources; only the resource file moved. A1" Task 7 added the
     fourth, _app_shortcut, for its third adapter: without it every shortcut tool would disclose through
-    the _unknown fallback ("ANOTHER APP"), which is true but says less than the registry knows.
+    the _unknown fallback ("ANOTHER APP"), which is true but says less than the registry knows. Task 11
+    added the fifth, _launcher_memory, for completeness only - every launcher_memory tool is LOCAL, so
+    provenanceLabelFor's own EXTERNAL guard returns null before this entry is ever reached; see that
+    function's KDoc.
 
   Class B - locked, but IS translated (values-ru / values-tr carry the same keys, same as any other
   string): calculation-method names, Asr madhab labels, and the Shahada, because this screen renders
@@ -71,6 +74,11 @@
     <string name="launcher_tool_level_system_intent" translatable="false">SYSTEM INTENT · EXTERNAL</string>
     <string name="launcher_tool_level_app_shortcut" translatable="false">APP SHORTCUT · EXTERNAL</string>
     <string name="launcher_tool_level_unknown" translatable="false">ANOTHER APP · EXTERNAL</string>
+    <!-- Task 11 (A1″ Phase 3a): completeness only. `provenanceLabelFor` returns null for every LOCAL
+         tool before this `when` runs, and every launcher_memory tool is LOCAL, so this string never
+         reaches a user - see that function's own KDoc. It exists so the mapping stays total over every
+         declared ToolLevel rather than silently omitting one. -->
+    <string name="launcher_tool_level_launcher_memory" translatable="false">LAUNCHER MEMORY · LOCAL</string>
 
     <!-- Class B: calculation-method names (SupportedPrayerMethods.ALL, display order) -->
     <string name="launcher_prayer_method_mwl">Muslim World League</string>

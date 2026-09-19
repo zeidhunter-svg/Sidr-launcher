@@ -252,4 +252,117 @@ class AgentSessionSurfaceProvenanceTest {
 
         compose.onNodeWithContentDescription("source SYSTEM INTENT · EXTERNAL").assertExists()
     }
+
+    // ── Task 11 / A1″ Phase 3a: two-argument step lines, read by argument name ──
+    //
+    // `set_app_alias` and `uninstall_app` are `MemoryToolIds`/`Tier0ToolIds` in `:data:repository`,
+    // which `:feature:launcher` must not depend on, so the ids are written out as literals here exactly
+    // as the production mapping in `AgentSessionPresentation.kt` writes them.
+    private val setAppAlias = ToolId("set_app_alias")
+    private val uninstallApp = ToolId("uninstall_app")
+
+    /**
+     * Task 6b's shape: `ToolMatchPlanner` binds all three of `app` / `app_label` / `phrase` as literals.
+     *
+     * **The goal text deliberately contains neither "telegram" nor "телега".** A goal like "назови
+     * telegram телега" would let this test pass on the OLD, unfixed code too — `literalSubject()` falls
+     * back to the goal text on three literals, and the goal text would already contain both substrings
+     * for the wrong reason (mutation check, see the task report).
+     */
+    private fun stateWithAliasStep(state: ExecutionState = ExecutionState.Running): AgentSession {
+        val goal = AgentGoal("сохрани псевдоним для мессенджера", GoalShape.Free("сохрани псевдоним для мессенджера"))
+        return AgentSession(
+            id = AgentSessionId("s1"),
+            goal = goal,
+            plan = ExecutionPlan(
+                listOf(
+                    PlanStep(
+                        index = 0,
+                        invocation = ToolInvocation(
+                            setAppAlias,
+                            mapOf(
+                                "app" to ArgSource.Literal("com.example.msg"),
+                                "app_label" to ArgSource.Literal("telegram"),
+                                "phrase" to ArgSource.Literal("телега"),
+                            ),
+                        ),
+                        risk = ActionRiskLevel.SAFE,
+                        precondition = StepPrecondition.None,
+                        rationale = StepRationale.GOAL_DIRECT,
+                    ),
+                ),
+            ),
+            cursor = 0,
+            state = state,
+            observations = emptyMap(),
+            consents = emptyMap(),
+            trace = ExecutionTrace(emptyList()),
+        )
+    }
+
+    /**
+     * Owner condition 2's shape: `app` (the resolved package) and `app_label` (what the user said).
+     *
+     * The goal text names neither the label nor the package, for the same non-vacuity reason
+     * [stateWithAliasStep] does: it must be the two-argument branch putting both substrings on screen,
+     * not a goal text that happened to contain one of them already.
+     *
+     * **The package deliberately does NOT contain "telegram" as a substring** (mutation check, task
+     * report). The first fixture used `org.telegram.messenger`, and a mutation that dropped `app_label`
+     * and substituted the package for it *still* passed — `"org.telegram.messenger".contains("telegram")`
+     * is true regardless of which argument actually reached the string, so the assertion was checking
+     * nothing about the label at all. `com.example.msg` shares no substring with either fixture value,
+     * so the two `assertExists` calls below can only both pass if BOTH literals independently reached
+     * the rendered text.
+     */
+    private fun awaitingConsentForUninstall(): AgentSession {
+        val goal = AgentGoal("снеси это", GoalShape.Free("снеси это"))
+        return AgentSession(
+            id = AgentSessionId("s1"),
+            goal = goal,
+            plan = ExecutionPlan(
+                listOf(
+                    PlanStep(
+                        index = 0,
+                        invocation = ToolInvocation(
+                            uninstallApp,
+                            mapOf(
+                                "app" to ArgSource.Literal("com.example.msg"),
+                                "app_label" to ArgSource.Literal("telegram"),
+                            ),
+                        ),
+                        risk = ActionRiskLevel.CONFIRM,
+                        precondition = StepPrecondition.None,
+                        rationale = StepRationale.GOAL_DIRECT,
+                    ),
+                ),
+            ),
+            cursor = 0,
+            state = ExecutionState.AwaitingConsent,
+            observations = emptyMap(),
+            consents = emptyMap(),
+            trace = ExecutionTrace(listOf(TraceEvent.ConsentRequested(0, ConsentReason.RISK_LEVEL))),
+        )
+    }
+
+    @Test
+    fun `a two-argument alias step names both arguments, not the goal text`() {
+        // set_app_alias binds app_label and phrase; the generic single-literal path would fall through
+        // to the goal text ("назови telegram телега") instead, because three literals is not one.
+        render(stateWithAliasStep(), emptyMap())
+
+        compose.onNodeWithText("telegram", substring = true).assertExists()
+        compose.onNodeWithText("телега", substring = true).assertExists()
+    }
+
+    @Test
+    fun `an uninstall step on the consent gate names BOTH the label and the package`() {
+        // Owner condition 2. Both substrings, because "contains(\"telegram\")" alone would also pass on
+        // a card that shows only what the user typed - which is what a positional or single-literal
+        // read would still produce (review finding C4).
+        render(awaitingConsentForUninstall(), emptyMap())
+
+        compose.onNodeWithText("telegram", substring = true).assertExists()
+        compose.onNodeWithText("com.example.msg", substring = true).assertExists()
+    }
 }

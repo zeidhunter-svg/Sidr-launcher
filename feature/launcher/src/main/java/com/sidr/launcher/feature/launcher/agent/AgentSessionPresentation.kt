@@ -99,6 +99,18 @@ private const val MEMORY_FORGET_APP_ALIAS = "forget_app_alias"
 private const val MEMORY_FORGET_LEARNED_CHOICE = "forget_learned_choice"
 
 /**
+ * Task 11 (A1″ Phase 3a). Argument NAMES read by [line]'s two-argument branches — never by position and
+ * never by "the single literal" (controller rulings R14-18/R14-19). `Tier0IntentToolSource`'s
+ * `uninstall_app` declares `app` (the resolved package) and `app_label` (optional — see that
+ * descriptor's KDoc for why); `MemoryToolSource`'s `set_app_alias` declares all three. Written out as
+ * literals for the same reason the ids above are: the real `ActionArg` names live in
+ * `:data:repository`, which this module has no edge to.
+ */
+private const val APP_ARG = "app"
+private const val APP_LABEL_ARG = "app_label"
+private const val PHRASE_ARG = "phrase"
+
+/**
  * `ToolId -> string resource`. This is the mapping [com.sidr.launcher.domain.tool.ToolDescriptor]'s own
  * KDoc prescribes ("carries no user-facing copy: the surface maps `id` to a string resource in the
  * feature layer"), and it is what lets a one-step plan for any tool render correctly without
@@ -188,16 +200,73 @@ fun interface DynamicToolLabels {
  * the generic line forever — a tool the user can reach and cannot identify. What IS ours is the sentence
  * around the name, which is why the resource takes both halves as arguments rather than this function
  * joining them.
+ *
+ * **Two tools are read BY ARGUMENT NAME instead of falling through to [subject]** (owner condition 2 for
+ * `uninstall_app`, controller rulings R14-18/R14-19, Task 11). `uninstall_app`'s target is the product of
+ * a **fuzzy** resolution (`AppTargetResolver`, above the consent checkpoint), so the consent card must
+ * show BOTH the label the user said and the package that will actually be removed — the human has to be
+ * able to check them before tapping Confirm. The single-literal fallback below cannot do this: a step
+ * with two or three literals fails `singleOrNull()` and the line falls back to the raw goal text, which
+ * names neither. `set_app_alias` binds three literals (`app`, `app_label`, `phrase`) for the identical
+ * reason and would fall through the same way.
+ *
+ * Both branches key the tool id against a **string literal** (`TIER0_UNINSTALL_APP` /
+ * `MEMORY_SET_APP_ALIAS` above) — never against `Tier0ToolIds` / `MemoryToolIds`, which live in
+ * `:data:repository` and which this module has no edge to — and read `invocation.args` by the
+ * argument's declared **name** (`APP_ARG` / `APP_LABEL_ARG` / `PHRASE_ARG`), never by position and never
+ * by a literal *count*: after Task 6b `set_app_alias` carries three literals and `uninstall_app` two, so
+ * a count check (`literals.size == 2`) cannot tell them apart, and reading positionally risks printing
+ * the package where the label belongs — the exact defect owner condition 2 was raised about.
+ *
+ * `set_app_alias`'s line names the phrase the user coined for the name they actually said —
+ * `app_label` ("telegram") if it is bound, `app` (the resolved package) only if some future producer
+ * omits it — because `app_label` is what the user typed and `Call "some.arbitrary.package" "телега"`
+ * would be a worse sentence than naming what they said. `uninstall_app`'s line always leads with the
+ * label (what the user said) and follows with the package in parentheses (what will actually be
+ * removed), matching the order `launcher_agent_step_uninstall`'s two placeholders are declared in.
+ *
+ * **Both branches require every one of their own arguments before returning early**, so an
+ * incompletely-bound step (a future producer that leaves `app_label` unset for `uninstall_app`, say)
+ * falls through to the SAME single-literal path every other tool uses — the goal text, not a crash from
+ * calling a two-placeholder resource with one argument. `ToolMatchPlanner` always binds `app_label`
+ * whenever a descriptor declares it and `app` resolves (see its own KDoc), so this fallback is not
+ * reachable via the one producer of these invocations today; it exists so a future one degrades to
+ * "says less" rather than to an unhandled `MissingFormatArgumentException`.
+ *
+ * `literalSubject()`'s `singleOrNull()` fallback is **UNCHANGED** below and still governs every other
+ * tool. CLAUDE.md's named limitation (5) is therefore closed **for these two tools by name**, not in
+ * general.
  */
 @Composable
 @ReadOnlyComposable
 internal fun PlanStep.line(subject: String, dynamicLabels: Map<ToolId, DynamicToolLabel>): String {
     val dynamic = dynamicLabels[invocation.id]
-    return if (dynamic != null) {
-        sidrString(R.string.launcher_agent_step_shortcut, dynamic.qualifier, dynamic.name)
-    } else {
-        sidrString(toolLabelFor(invocation.id), invocation.literalSubject() ?: subject)
+    if (dynamic != null) {
+        return sidrString(R.string.launcher_agent_step_shortcut, dynamic.qualifier, dynamic.name)
     }
+
+    fun literal(name: String): String? = (invocation.args[name] as? ArgSource.Literal)?.value
+
+    when (invocation.id.value) {
+        MEMORY_SET_APP_ALIAS -> {
+            val app = literal(APP_LABEL_ARG) ?: literal(APP_ARG)
+            val phrase = literal(PHRASE_ARG)
+            if (app != null && phrase != null) {
+                return sidrString(R.string.launcher_agent_step_set_alias, app, phrase)
+            }
+        }
+        TIER0_UNINSTALL_APP -> {
+            // Owner condition 2: the card names BOTH the label and the package, because resolution is
+            // fuzzy and the user must see what will actually be removed before tapping Confirm.
+            val pkg = literal(APP_ARG)
+            val label = literal(APP_LABEL_ARG)
+            if (pkg != null && label != null) {
+                return sidrString(R.string.launcher_agent_step_uninstall, label, pkg)
+            }
+        }
+    }
+
+    return sidrString(toolLabelFor(invocation.id), invocation.literalSubject() ?: subject)
 }
 
 private fun ToolInvocation.literalSubject(): String? =
@@ -227,6 +296,13 @@ internal data class StepProvenance(val level: ToolLevel, val effect: ToolEffect)
  *
  * The unit tests over this function hold the mapping; they do **not** close `DOC-ILM-2` — a mapping
  * nothing calls stays green forever (spec §6.3). That is `AgentSessionSurfaceProvenanceTest`'s job.
+ *
+ * **`ToolLevels.LAUNCHER_MEMORY` is mapped for completeness, not because it is ever reached.** Every
+ * `launcher_memory` tool is [ToolEffect.LOCAL] (see that level's own KDoc — the effect never leaves the
+ * device), and the guard clause above returns `null` before this `when` runs for any `LOCAL` tool. A
+ * memory step therefore shows **no** provenance chip, which is the truthful line: claiming a boundary
+ * crossing that did not happen would be `DOC-ILM-2` lying in the opposite direction. The arm exists so
+ * the mapping stays total over every declared [ToolLevels] value rather than silently omitting one.
  */
 @StringRes
 internal fun provenanceLabelFor(level: ToolLevel, effect: ToolEffect): Int? {
@@ -235,6 +311,7 @@ internal fun provenanceLabelFor(level: ToolLevel, effect: ToolEffect): Int? {
         ToolLevels.IN_APP.value -> R.string.launcher_tool_level_in_app
         ToolLevels.SYSTEM_INTENT.value -> R.string.launcher_tool_level_system_intent
         ToolLevels.APP_SHORTCUT.value -> R.string.launcher_tool_level_app_shortcut
+        ToolLevels.LAUNCHER_MEMORY.value -> R.string.launcher_tool_level_launcher_memory
         else -> R.string.launcher_tool_level_unknown
     }
 }

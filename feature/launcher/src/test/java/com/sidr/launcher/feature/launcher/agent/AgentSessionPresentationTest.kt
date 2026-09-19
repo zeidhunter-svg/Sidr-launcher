@@ -27,6 +27,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -225,6 +226,24 @@ class AgentSessionPresentationTest {
             provenanceLabelFor(ToolLevels.SYSTEM_INTENT, ToolEffect.EXTERNAL),
         )
         assertNull(provenanceLabelFor(ToolLevels.SANDBOX, ToolEffect.LOCAL))
+    }
+
+    /**
+     * Task 11 / A1″ Phase 3a. Guards against the generic fallback silently swallowing a new tool — a
+     * plain regression pin over [toolLabelFor], not the property that closes owner condition 2 (that is
+     * the two Robolectric tests in [AgentSessionSurfaceProvenanceTest], which render real text through
+     * the two-argument [PlanStep.line] branches).
+     */
+    @Test
+    fun `each new tool maps to its own label, not the generic one`() {
+        listOf("set_alarm", "uninstall_app", "set_app_alias", "forget_app_alias", "forget_learned_choice")
+            .forEach { id ->
+                assertNotEquals(
+                    "a tool without its own label reads as 'Run this step for …' on the gate",
+                    R.string.launcher_agent_step_generic,
+                    toolLabelFor(ToolId(id)),
+                )
+            }
     }
 
     @Test

@@ -131,15 +131,19 @@
     <string name="launcher_agent_step_timer">Set a timer for %1$s</string>
     <string name="launcher_agent_step_settings">Open Android settings</string>
     <string name="launcher_agent_step_alarm">Set an alarm for %1$s</string>
-    <!-- A1" Task 7: the first CONFIRM tool. One argument today; `uninstall_app` binds TWO literals
-         (the resolved package and the label the user typed), and `PlanStep.line` fills a one-argument
-         sentence only when a step has exactly ONE literal, so this currently renders with the goal
-         text. The two-argument form that names label AND package is Task 11's. -->
-    <string name="launcher_agent_step_uninstall">Uninstall %1$s</string>
-    <!-- Task 9 / A1″ Phase 3a: the three launcher_memory tools. set_app_alias binds two literals
-         (the resolved package and the phrase), so it renders with the goal text today for the same
-         reason uninstall_app does above; the two-argument form is Task 11's. -->
-    <string name="launcher_agent_step_set_alias">Save an alias for %1$s</string>
+    <!-- A1" Task 7: the first CONFIRM tool. Owner condition 2 (2026-09-18): the consent card must name
+         BOTH the app label AND the package, because resolution is fuzzy and the human must see what
+         will be removed before tapping Confirm. Closed by Task 11 - `PlanStep.line` reads `app_label`
+         and `app` BY NAME for this tool id, rather than falling through to the single-literal path
+         (which cannot render two values) or to the raw goal text. %1$s is the label the user said,
+         %2$s is the package that will actually be removed. -->
+    <string name="launcher_agent_step_uninstall">Remove %1$s (%2$s)</string>
+    <!-- Task 9 / A1″ Phase 3a: the three launcher_memory tools. set_app_alias binds THREE literals
+         (the resolved package, the label the user said, and the phrase), which the single-literal
+         fallback path cannot render either. Task 11 closes it the same way as uninstall_app above:
+         `PlanStep.line` reads `app_label` (falling back to `app`) and `phrase` BY NAME. %1$s is the
+         name the user gave the app, %2$s is the phrase they coined for it. -->
+    <string name="launcher_agent_step_set_alias">Call “%1$s” “%2$s”</string>
     <string name="launcher_agent_step_forget_alias">Forget the alias “%1$s”</string>
     <string name="launcher_agent_step_forget_choice">Forget the learned choice for “%1$s”</string>
     <string name="launcher_agent_step_generic">Run this step for %1$s</string>

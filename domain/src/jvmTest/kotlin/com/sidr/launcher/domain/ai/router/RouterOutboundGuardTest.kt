@@ -9,6 +9,11 @@ import com.sidr.launcher.domain.action.ActionIds
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.ai.OutboundContextPolicy
 import com.sidr.launcher.domain.ai.OutboundContextPolicy.AllowedContext
+import com.sidr.launcher.domain.tool.ToolDescriptor
+import com.sidr.launcher.domain.tool.ToolDurability
+import com.sidr.launcher.domain.tool.ToolEffect
+import com.sidr.launcher.domain.tool.ToolId
+import com.sidr.launcher.domain.tool.ToolLevels
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -92,6 +97,58 @@ class RouterOutboundGuardTest {
         val rendered = CatalogSchemaRenderer.render(representativeCatalog)
         assertFalse(rendered.contains(sentinel))
         assertTrue(rendered.startsWith(CatalogSchemaRenderer.ROUTER_INSTRUCTION))
+    }
+
+    /**
+     * **A1″ Phase 3a, Task 12 — the tool registry is not an outbound context source.**
+     *
+     * `OutboundContextPolicy.ALLOWED` is a **positive allow-list**, and the category the router adds is
+     * `ACTION_CATALOG_SCHEMA` — the seven frozen `ActionIds` and nothing else (pinned exactly, by the
+     * first test in this class). Since A1′ the agent has a *second*, much larger vocabulary the model is
+     * **not** offered: `ToolId` / `ToolDescriptor`, which now name a tool that can uninstall an app.
+     * Nothing widens the allow-list to include it, and `ToolRegistry`/`ToolDescriptor` appear nowhere in
+     * the prompt or planner packages — so today this holds **by construction**. This test is what keeps
+     * it true on the day some block teaches the router to offer the registry to a model: that change
+     * needs an ADR and a widened `ALLOWED`, not a quiet extra line in the renderer.
+     *
+     * **Non-vacuity is the second assertion, and it is the load-bearing one.** A sentinel that appears
+     * in no input would be absent from any string, including an empty one — an assertion that cannot
+     * fail. So the same `contains` check is made against a value that *is* allowed out and *does*
+     * appear: `ActionIds.LAUNCH_APP`. If the renderer ever produced nothing, that control reddens and
+     * the sentinel check is exposed as the tautology it would have become.
+     *
+     * **What it does not hold, said rather than implied:** it watches the router's one outbound payload
+     * builder. A future *second* egress seam would need its own guard —
+     * `AgentEgressSentinelGuardTest` is the runtime companion that watches whether the model planner is
+     * called at all, and `AgentActingSeamTest` (`:data:repository`) asserts the same for the five
+     * acting tools over the real vocabulary.
+     */
+    @Test
+    fun `a planted tool id never reaches the rendered schema, though an allowed action id does`() {
+        // A descriptor of the shape a registered tool really has — the `uninstall_app` shape, CONFIRM
+        // and DURABLE — so the sentinel is a value that lives in the tool vocabulary rather than a
+        // string invented for this test.
+        val sentinel = ToolId("SIDR-TOOL-EGRESS-SENTINEL-A1PP")
+        val toolDescriptor = ToolDescriptor(
+            id = sentinel,
+            level = ToolLevels.SYSTEM_INTENT,
+            effect = ToolEffect.EXTERNAL,
+            risk = ActionRiskLevel.CONFIRM,
+            durability = ToolDurability.DURABLE,
+        )
+        assertEquals("the sentinel must really be this descriptor's id", sentinel, toolDescriptor.id)
+
+        val rendered = CatalogSchemaRenderer.render(representativeCatalog)
+
+        assertFalse(
+            "a ToolId reached the outbound schema — OutboundContextPolicy.ALLOWED does not admit the " +
+                "tool registry, and widening it needs an ADR plus this guard changing with it",
+            rendered.contains(sentinel.value),
+        )
+        assertTrue(
+            "the control: an allow-listed ActionId must appear, or the assertion above is a tautology",
+            rendered.contains(ActionIds.LAUNCH_APP.value),
+        )
     }
 
     private val representativeCatalog = catalogOf(

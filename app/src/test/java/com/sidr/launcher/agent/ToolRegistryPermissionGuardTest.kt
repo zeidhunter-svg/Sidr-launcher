@@ -6,6 +6,8 @@ import com.sidr.launcher.data.repository.agent.SystemIntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0ToolIds
 import com.sidr.launcher.data.repository.agent.ToolPermissionCatalog
+import com.sidr.launcher.data.repository.agent.memory.MemoryToolIds
+import com.sidr.launcher.data.repository.agent.memory.MemoryToolSource
 import com.sidr.launcher.data.repository.agent.shortcut.AppShortcut
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutCatalog
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolIds
@@ -146,6 +148,7 @@ class ToolRegistryPermissionGuardTest {
                     NoopWorker,
                 ),
                 ToolAdapter(ToolLevels.APP_SHORTCUT, shortcutSource(), NoopWorker),
+                ToolAdapter(ToolLevels.LAUNCHER_MEMORY, MemoryToolSource(), NoopWorker),
             ),
         )
 
@@ -299,6 +302,10 @@ class ToolRegistryPermissionGuardTest {
             Tier0ToolIds.OPEN_SYSTEM_SETTINGS,
             Tier0ToolIds.SET_ALARM,
             Tier0ToolIds.UNINSTALL_APP,
+            // Task 9, A1″ Phase 3a.
+            MemoryToolIds.SET_APP_ALIAS,
+            MemoryToolIds.FORGET_APP_ALIAS,
+            MemoryToolIds.FORGET_LEARNED_CHOICE,
         )
     }
 }

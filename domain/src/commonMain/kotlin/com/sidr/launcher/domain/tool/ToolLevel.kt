@@ -38,6 +38,13 @@ object ToolLevels {
      * device where the user has chosen another launcher.
      */
     val APP_SHORTCUT = ToolLevel("app_shortcut")
+
+    /**
+     * The launcher's own memory, acted on by explicit command: aliases and learned launch-app choices.
+     * Not a projection of `ActionCatalog` and not an Android intent — the effect never leaves the
+     * device, so every tool at this level is [ToolEffect.LOCAL] (Task 9, A1″ Phase 3a).
+     */
+    val LAUNCHER_MEMORY = ToolLevel("launcher_memory")
 }
 
 /**

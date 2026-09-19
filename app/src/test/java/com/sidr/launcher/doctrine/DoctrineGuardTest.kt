@@ -11,6 +11,9 @@ import com.sidr.launcher.data.repository.agent.Tier0IntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolWorker
 import com.sidr.launcher.data.repository.agent.Tier0ToolIds
 import com.sidr.launcher.data.repository.agent.ToolPermissionCatalog
+import com.sidr.launcher.data.repository.agent.memory.MemoryToolIds
+import com.sidr.launcher.data.repository.agent.memory.MemoryToolSource
+import com.sidr.launcher.data.repository.agent.memory.MemoryToolWorker
 import com.sidr.launcher.data.repository.agent.shortcut.AppShortcut
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutCatalog
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutLauncher
@@ -18,12 +21,17 @@ import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolIds
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolSource
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolWorker
 import com.sidr.launcher.di.AgentProvidesModule
+import com.sidr.launcher.core.testing.FakeAliasStore
+import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.intent.ActionExecutionResult
 import com.sidr.launcher.domain.intent.ActionExecutor
 import com.sidr.launcher.domain.intent.ExecutableAction
 import com.sidr.launcher.domain.intent.ExecuteActionUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
+import com.sidr.launcher.domain.memory.alias.DeleteAliasUseCase
+import com.sidr.launcher.domain.memory.alias.SaveAliasUseCase
+import com.sidr.launcher.domain.memory.resolution.DeleteLearnedChoiceUseCase
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.domain.result.OperationResult
@@ -150,6 +158,7 @@ class DoctrineGuardTest {
                 NoopWorker,
             ),
             ToolAdapter(ToolLevels.APP_SHORTCUT, shortcutSource(), NoopWorker),
+            ToolAdapter(ToolLevels.LAUNCHER_MEMORY, MemoryToolSource(), NoopWorker),
         )
 
         val ids = adapters.flatMap { it.registry.all() }.map { it.id }
@@ -249,6 +258,12 @@ class DoctrineGuardTest {
         ),
         shortcutRegistry = shortcutSource(),
         shortcutWorker = ShortcutToolWorker(ShortcutLauncher { _, _ -> }),
+        memoryRegistry = MemoryToolSource(),
+        memoryWorker = MemoryToolWorker(
+            save = SaveAliasUseCase(FakeAliasStore()),
+            deleteAlias = DeleteAliasUseCase(FakeAliasStore()),
+            deleteChoice = DeleteLearnedChoiceUseCase(FakeResolutionPreferenceStore()),
+        ),
     )
 
     private object NoAppsRepository : InstalledAppsRepository {
@@ -296,7 +311,7 @@ class DoctrineGuardTest {
                 "the count-pin's, in `the composition root registers exactly the declared adapters`. " +
                 "A new adapter is a new path to the world and needs an ADR, not a line. " +
                 "Reached: ${levels.map { it.value }}",
-            listOf(ToolLevels.IN_APP, ToolLevels.SYSTEM_INTENT, ToolLevels.APP_SHORTCUT),
+            listOf(ToolLevels.IN_APP, ToolLevels.SYSTEM_INTENT, ToolLevels.APP_SHORTCUT, ToolLevels.LAUNCHER_MEMORY),
             levels,
         )
     }
@@ -643,13 +658,18 @@ class DoctrineGuardTest {
         assertEquals(
             "A new adapter is a new path to the world and needs an ADR, not a line. " +
                 "ToolAdapter( constructions found in AgentProvidesModule.kt: $constructions",
-            3,
+            4,
             constructions,
         )
 
         assertEquals(
             "A new adapter is a new path to the world and needs an ADR, not a line. Found: $levels",
-            listOf("ToolLevels.IN_APP", "ToolLevels.SYSTEM_INTENT", "ToolLevels.APP_SHORTCUT"),
+            listOf(
+                "ToolLevels.IN_APP",
+                "ToolLevels.SYSTEM_INTENT",
+                "ToolLevels.APP_SHORTCUT",
+                "ToolLevels.LAUNCHER_MEMORY",
+            ),
             levels,
         )
 
@@ -754,6 +774,11 @@ class DoctrineGuardTest {
         // is a decision to re-make if it ever reddens: uninstalling is irreversible, its target is the
         // product of a fuzzy resolution, and CONFIRM is what puts the user between the two.
         Tier0ToolIds.UNINSTALL_APP to ActionRiskLevel.CONFIRM,
+        // Task 9 — the launcher's own memory, acted on by explicit command. All three are SAFE and
+        // LOCAL: nothing leaves the launcher's own store, and the effect is undone from Settings.
+        MemoryToolIds.SET_APP_ALIAS to ActionRiskLevel.SAFE,
+        MemoryToolIds.FORGET_APP_ALIAS to ActionRiskLevel.SAFE,
+        MemoryToolIds.FORGET_LEARNED_CHOICE to ActionRiskLevel.SAFE,
     )
 
     /**
@@ -851,6 +876,10 @@ class DoctrineGuardTest {
             Tier0ToolIds.OPEN_SYSTEM_SETTINGS,
             Tier0ToolIds.SET_ALARM,
             Tier0ToolIds.UNINSTALL_APP,
+            // Task 9, A1″ Phase 3a.
+            MemoryToolIds.SET_APP_ALIAS,
+            MemoryToolIds.FORGET_APP_ALIAS,
+            MemoryToolIds.FORGET_LEARNED_CHOICE,
         )
     }
 }

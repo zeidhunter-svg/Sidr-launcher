@@ -136,6 +136,12 @@
          sentence only when a step has exactly ONE literal, so this currently renders with the goal
          text. The two-argument form that names label AND package is Task 11's. -->
     <string name="launcher_agent_step_uninstall">Uninstall %1$s</string>
+    <!-- Task 9 / A1″ Phase 3a: the three launcher_memory tools. set_app_alias binds two literals
+         (the resolved package and the phrase), so it renders with the goal text today for the same
+         reason uninstall_app does above; the two-argument form is Task 11's. -->
+    <string name="launcher_agent_step_set_alias">Save an alias for %1$s</string>
+    <string name="launcher_agent_step_forget_alias">Forget the alias “%1$s”</string>
+    <string name="launcher_agent_step_forget_choice">Forget the learned choice for “%1$s”</string>
     <string name="launcher_agent_step_generic">Run this step for %1$s</string>
     <!-- A1″ Task 8: a tool whose NAME is data. %1$s is the app that published the shortcut and
          %2$s is the shortcut's own label; both are authored by that app, in whatever language it

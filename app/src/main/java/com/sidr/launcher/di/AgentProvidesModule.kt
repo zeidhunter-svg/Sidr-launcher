@@ -12,6 +12,8 @@ import com.sidr.launcher.data.repository.agent.SystemIntentToolWorker
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolWorker
 import com.sidr.launcher.data.repository.agent.ToolMatchPlanner
+import com.sidr.launcher.data.repository.agent.memory.MemoryToolSource
+import com.sidr.launcher.data.repository.agent.memory.MemoryToolWorker
 import com.sidr.launcher.data.repository.agent.shortcut.AndroidShortcutChangeObserver
 import com.sidr.launcher.data.repository.agent.shortcut.AndroidShortcutLauncher
 import com.sidr.launcher.data.repository.agent.shortcut.AndroidShortcutQuery
@@ -80,7 +82,7 @@ object AgentProvidesModule {
      * source from shadowing a projected family. `DoctrineGuardTest` asserts this list is the declared
      * set and that no adapter in it names a network type.
      *
-     * Three adapters:
+     * Four adapters:
      *  - the `IN_APP` projection of `ActionCatalog`;
      *  - A1′'s `Tier0IntentToolSource` / `Tier0IntentToolWorker` — **four** Android system intents
      *    (`set_timer`, `open_system_settings`, and A1″ Phase 3a's `set_alarm` and `uninstall_app`) that
@@ -89,19 +91,26 @@ object AgentProvidesModule {
      *    adapter is no longer uniformly `SAFE` — a reader sizing up the federation's risk profile from
      *    this list must not infer otherwise;
      *  - A1″'s `ShortcutToolSource` / `ShortcutToolWorker` — one tool per app shortcut another
-     *    installed app publishes.
+     *    installed app publishes;
+     *  - Task 9's `MemoryToolSource` / `MemoryToolWorker` — `set_app_alias`, `forget_app_alias`,
+     *    `forget_learned_choice`, three thin adapters over contracts that already ship
+     *    (`SaveAliasUseCase`, `DeleteAliasUseCase`, `DeleteLearnedChoiceUseCase`). All three are `SAFE`
+     *    and `LOCAL`: the effect never leaves the launcher's own store, so there is no permission to
+     *    gate on and no provenance line to draw.
      *
-     * **The shortcut adapter is last, and that placement is the whole of its collision safety.** It is
-     * the first source whose contents are written by third parties, and first-adapter-wins means a
-     * third-party tool can never displace an authored one. (Its ids are additionally prefixed
-     * `shortcut:`, which no authored id contains — two independent reasons, neither relying on the
-     * other.)
+     * **The shortcut adapter is not last any more, and `launcher_memory` is placed after it
+     * deliberately** (Task 9): first-adapter-wins collision precedence must never let a memory tool
+     * shadow an authored one, and placing it after `app_shortcut` keeps that guarantee for both of the
+     * other adapters without relying on the memory ids being disjoint from theirs (they are, but this
+     * does not depend on it). Its ids are additionally prefixed by neither `shortcut:` nor any Tier-0
+     * spelling, so no collision is expected in practice; the ordering is defence in depth, the same
+     * shape the shortcut adapter's own KDoc already argues for its own placement.
      *
-     * It is also the first adapter whose tool set **moves while the process lives**: it is empty until
-     * `ShortcutRefreshTrigger` has run, empty forever on a device where the user has chosen another
-     * home app, and otherwise as large as the installed apps make it (205 tools from 65 packages on the
-     * measured SM-A325F). Nothing here caches it — `ToolFederation` re-derives per call for exactly
-     * this reason.
+     * The shortcut adapter is still the only one whose tool set **moves while the process lives**: it
+     * is empty until `ShortcutRefreshTrigger` has run, empty forever on a device where the user has
+     * chosen another home app, and otherwise as large as the installed apps make it (205 tools from 65
+     * packages on the measured SM-A325F). Nothing here caches it — `ToolFederation` re-derives per call
+     * for exactly this reason.
      */
     @Provides
     @Singleton
@@ -112,11 +121,14 @@ object AgentProvidesModule {
         tier0Worker: Tier0IntentToolWorker,
         shortcutRegistry: ShortcutToolSource,
         shortcutWorker: ShortcutToolWorker,
+        memoryRegistry: MemoryToolSource,
+        memoryWorker: MemoryToolWorker,
     ): ToolFederation = ToolFederation(
         listOf(
             ToolAdapter(ToolLevels.IN_APP, inAppRegistry, inAppWorker),
             ToolAdapter(ToolLevels.SYSTEM_INTENT, tier0Registry, tier0Worker),
             ToolAdapter(ToolLevels.APP_SHORTCUT, shortcutRegistry, shortcutWorker),
+            ToolAdapter(ToolLevels.LAUNCHER_MEMORY, memoryRegistry, memoryWorker),
         ),
     )
 

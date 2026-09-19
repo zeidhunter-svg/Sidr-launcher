@@ -90,6 +90,9 @@
     <string name="launcher_agent_step_settings">Открыть настройки Android</string>
     <string name="launcher_agent_step_alarm">Поставить будильник на %1$s</string>
     <string name="launcher_agent_step_uninstall">Удалить %1$s</string>
+    <string name="launcher_agent_step_set_alias">Сохранить алиас для %1$s</string>
+    <string name="launcher_agent_step_forget_alias">Забыть алиас «%1$s»</string>
+    <string name="launcher_agent_step_forget_choice">Забыть выученный выбор для «%1$s»</string>
     <string name="launcher_agent_step_generic">Выполнить шаг для %1$s</string>
     <string name="launcher_agent_step_shortcut">Открыть «%1$s — %2$s»</string>
     <string name="launcher_agent_gate_title">Подтвердите этот шаг</string>

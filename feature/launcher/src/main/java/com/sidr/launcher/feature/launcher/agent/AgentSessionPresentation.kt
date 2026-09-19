@@ -89,6 +89,16 @@ private const val TIER0_SET_ALARM = "set_alarm"
 private const val TIER0_UNINSTALL_APP = "uninstall_app"
 
 /**
+ * Task 9, A1″ Phase 3a. Three more string literals, same reason as the Tier-0 ones above: the real
+ * constants are `MemoryToolIds.*` in `:data:repository`'s `agent/memory` package, and `:feature:launcher`
+ * has no edge to that module. `DoctrineGuardTest` holds the two spellings together the same way it does
+ * for the Tier-0 four.
+ */
+private const val MEMORY_SET_APP_ALIAS = "set_app_alias"
+private const val MEMORY_FORGET_APP_ALIAS = "forget_app_alias"
+private const val MEMORY_FORGET_LEARNED_CHOICE = "forget_learned_choice"
+
+/**
  * `ToolId -> string resource`. This is the mapping [com.sidr.launcher.domain.tool.ToolDescriptor]'s own
  * KDoc prescribes ("carries no user-facing copy: the surface maps `id` to a string resource in the
  * feature layer"), and it is what lets a one-step plan for any tool render correctly without
@@ -112,6 +122,9 @@ internal fun toolLabelFor(id: ToolId): Int = when (id.value) {
     TIER0_OPEN_SYSTEM_SETTINGS -> R.string.launcher_agent_step_settings
     TIER0_SET_ALARM -> R.string.launcher_agent_step_alarm
     TIER0_UNINSTALL_APP -> R.string.launcher_agent_step_uninstall
+    MEMORY_SET_APP_ALIAS -> R.string.launcher_agent_step_set_alias
+    MEMORY_FORGET_APP_ALIAS -> R.string.launcher_agent_step_forget_alias
+    MEMORY_FORGET_LEARNED_CHOICE -> R.string.launcher_agent_step_forget_choice
     else -> R.string.launcher_agent_step_generic
 }
 

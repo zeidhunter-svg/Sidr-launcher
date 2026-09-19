@@ -2,6 +2,7 @@ package com.sidr.launcher.data.repository.agent
 
 import android.content.Context
 import android.content.pm.PackageManager
+import com.sidr.launcher.data.repository.agent.memory.MemoryToolIds
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -72,6 +73,13 @@ class ToolPermissionCatalog @Inject constructor() {
             // returns normally — which is the whole reason this is a precondition rather than a
             // failure signal.
             Tier0ToolIds.UNINSTALL_APP to listOf("android.permission.REQUEST_DELETE_PACKAGES"),
+            // Task 9. MemoryToolSource does not consult this catalog (it writes to the launcher's own
+            // store, never dispatches an intent), but the totality guard quantifies over the whole
+            // federation regardless of which sources filter on it. emptyList() states "needs no
+            // permission" — the true answer here — never "nobody has stated an answer".
+            MemoryToolIds.SET_APP_ALIAS to emptyList(),
+            MemoryToolIds.FORGET_APP_ALIAS to emptyList(),
+            MemoryToolIds.FORGET_LEARNED_CHOICE to emptyList(),
         )
     }
 }

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.AlarmClock
+import android.provider.MediaStore
 import android.provider.Settings
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.tool.ResolvedInvocation
@@ -47,10 +48,36 @@ class ContextIntentLauncher @Inject constructor(
 }
 
 /**
- * The `SYSTEM_INTENT` level's worker: four Android intents that are not among the frozen seven
+ * **This action string is OURS, not the platform's** (A1″ Phase 3b, Task 4, finding P1).
+ *
+ * Row 25 of the device-measurement file records that `javap` over
+ * `platforms/android-37.0/android.jar` finds **no** `Settings.ACTION_NOTIFICATION_SETTINGS` field:
+ * `ACTION_APP_NOTIFICATION_SETTINGS` and `ACTION_NOTIFICATION_LISTENER_SETTINGS` exist, the bare one
+ * does not. The screen is reachable only through a hardcoded action string, so this constant is a
+ * claim about the platform that nothing on any classpath verifies — unlike every other action this
+ * worker sends, which is a real `Settings`/`AlarmClock`/`Intent` field the compiler resolves. It is
+ * named `ACTION_NOTIFICATION_SETTINGS` so the constant reads at the call site exactly like its
+ * platform-owned neighbours; this comment is the only thing that says it is not one, which is why it
+ * must not be deleted.
+ *
+ * It is also **why the string is bound to a name instead of written inline**:
+ * `ToolPermissionManifestGuardTest`'s parse-completeness assertion counts every `Intent(` and requires
+ * its action regex to have accounted for all of them, and that regex's capture group is
+ * `[A-Za-z_][A-Za-z0-9_.]*` — which a quoted literal does not match. `Intent("android.settings.…")`
+ * would therefore turn that guard RED on a count mismatch. That is the guard working as designed
+ * ("teaching the scan one real shape at a time"), and the answer is this constant, **not** a wider
+ * regex.
+ */
+private const val ACTION_NOTIFICATION_SETTINGS = "android.settings.NOTIFICATION_SETTINGS"
+
+/**
+ * The `SYSTEM_INTENT` level's worker: the Android intents that are not among the frozen seven
  * `ActionIds`, so they do not travel the `ExecuteActionUseCase` chain and this class is the whole of
- * their execution. Three are `SAFE`; `uninstall_app` (Task 7) is the track's first `CONFIRM` tool, and
- * the consent gate — not anything in this file — is what stops the loop before it runs.
+ * their execution. Most are `SAFE`; `uninstall_app` (Task 7) is the track's first `CONFIRM` tool, and
+ * the consent gate — not anything in this file — is what stops the loop before it runs. (Neither the
+ * tools nor the safe ones are counted here: this KDoc said "four" and "three" until A1″ Phase 3b, and
+ * a count in prose beside a `when` that grows is a claim nobody re-reads — the same correction
+ * `Tier0IntentToolSource`'s KDoc already carries.)
  *
  * **`EXTRA_SKIP_UI = false` is not "prefilled but not sent" — corrected 2026-09-10.** This KDoc used
  * to read "neither skips the OS's own UI, so the final act is the user's", and to offer that as the
@@ -144,6 +171,29 @@ class Tier0IntentToolWorker @Inject constructor(
             Tier0ToolIds.OPEN_SYSTEM_SETTINGS -> launch(Intent(Settings.ACTION_SETTINGS))
             Tier0ToolIds.SET_ALARM -> setAlarm(invocation.args["time"].orEmpty())
             Tier0ToolIds.UNINSTALL_APP -> uninstallApp(invocation.args["app"].orEmpty())
+            // A1″ Phase 3b, Task 2 (Slice A). Each `Intent(...)` is built INLINE in its own arm
+            // (finding P9): `ToolPermissionManifestGuardTest` admits a file only when it both
+            // declares `: ToolWorker` and contains `Intent(` itself, so a shared intent-building
+            // helper would take every intent it built out from under that guard's totality check
+            // entirely. No such helper exists here or anywhere in this file.
+            Tier0ToolIds.SHOW_ALARMS -> launch(Intent(AlarmClock.ACTION_SHOW_ALARMS))
+            Tier0ToolIds.OPEN_CAMERA -> launch(Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA))
+            Tier0ToolIds.OPEN_WIFI_SETTINGS -> launch(Intent(Settings.ACTION_WIFI_SETTINGS))
+            Tier0ToolIds.OPEN_BLUETOOTH_SETTINGS -> launch(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+            // A1″ Phase 3b, Task 3 (Slice B). Same inline-per-arm shape as Slice A (P9); no helper.
+            // Row 20, finding P4: `Intent.ACTION_POWER_USAGE_SUMMARY` resolves to Samsung Device Care
+            // on the measured device, not `com.android.settings` — a ROM-dependent premise, named on
+            // the descriptor, not fixed here; `launch()` already fails closed on `ActivityNotFoundException`.
+            Tier0ToolIds.OPEN_BATTERY_SETTINGS -> launch(Intent(Intent.ACTION_POWER_USAGE_SUMMARY))
+            Tier0ToolIds.OPEN_DATA_USAGE_SETTINGS -> launch(Intent(Settings.ACTION_DATA_USAGE_SETTINGS))
+            Tier0ToolIds.OPEN_DISPLAY_SETTINGS -> launch(Intent(Settings.ACTION_DISPLAY_SETTINGS))
+            Tier0ToolIds.OPEN_SOUND_SETTINGS -> launch(Intent(Settings.ACTION_SOUND_SETTINGS))
+            // A1″ Phase 3b, Task 4 (Slice C). Same inline-per-arm shape (P9); no helper, no new file.
+            Tier0ToolIds.OPEN_LOCATION_SETTINGS -> launch(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+            // Finding P1: `ACTION_NOTIFICATION_SETTINGS` is the file-level constant above, NOT a
+            // platform field — read its KDoc before touching this line.
+            Tier0ToolIds.OPEN_NOTIFICATION_SETTINGS -> launch(Intent(ACTION_NOTIFICATION_SETTINGS))
+            Tier0ToolIds.OPEN_APP_INFO -> openAppInfo(invocation.args["app"].orEmpty())
             // Unreachable in a well-formed graph — the federation routes by the registry this adapter
             // declares. Fail-closed and labelled as such, never named in `CommandFailure` (spec §4.4).
             // The precondition above does NOT subsume this arm: `ToolIds.LAUNCH_APP` and
@@ -217,6 +267,39 @@ class Tier0IntentToolWorker @Inject constructor(
     }
 
     /**
+     * A1″ Phase 3b, Task 4 — the only argument-carrying tool of the eleven navigating ones.
+     *
+     * **This is a per-tool private function, not the shared intent helper finding P9 forbids.** P9's
+     * measured risk is an `Intent(…)` built in a file that is not a `ToolWorker`:
+     * `ToolPermissionManifestGuardTest` admits a file only when it both declares `: ToolWorker` **and**
+     * contains `Intent(`, and a `call_number` probe whose worker delegated construction to a plain
+     * helper object went **green 4/4** with `CALL_PHONE` absent from the manifest. The `Intent(…)`
+     * below is in this file, which declares the worker, so the scan reads it exactly as it reads the
+     * inline arms — the same reason [uninstallApp], [setTimer] and [setAlarm] are allowed to be
+     * functions. It is one because it needs a statement before the launch, like [uninstallApp]:
+     *
+     *  - **a blank target is refused**, for the fail-closed reason [uninstallApp] gives — `package:`
+     *    names no package, and answering [ToolResult.Effected] for an effect that cannot have happened
+     *    is what `DOC-ILM-3` forbids. Second line of defence: `ToolMatchPlanner` answers `NoPlan` when
+     *    resolution fails, so a blank should never arrive.
+     *
+     * **Our own package is deliberately NOT refused here, unlike [uninstallApp]** — and the asymmetry
+     * is the reason, not an oversight. That refusal exists because uninstalling Sidr mid-session kills
+     * the surface the session is running on. Opening Sidr's own app-info screen does nothing of the
+     * kind, and row 15 run 1 measured exactly that call succeeding. Adding the refusal here would
+     * remove a capability for a danger that was measured not to exist.
+     *
+     * [target] is **already a package name** for the same reason [uninstallApp]'s is: `ToolMatchPlanner`
+     * resolved it at plan time. This worker resolves nothing.
+     */
+    private fun openAppInfo(target: String): ToolResult {
+        if (target.isBlank()) return ToolResult.Failed(CommandFailure.Generic)
+        return launch(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", target, null)),
+        )
+    }
+
+    /**
      * `H:MM` or `HH:MM` only — a bounded token (spec §7.1), never a guess, never a default. The
      * vocabulary hands this string over unparsed, exactly like [parseSeconds]'s `duration`; there is no
      * free-text reading to normalize away here, only a fixed clock-time shape to accept or decline.
@@ -230,7 +313,10 @@ class Tier0IntentToolWorker @Inject constructor(
 
     /**
      * The only place this worker touches the world, and the only place it can fail from the world's
-     * side. All four tools go through it, so the catch cannot be forgotten by whoever adds a fifth.
+     * side. **Every** tool in the `when` above goes through it, so the catch cannot be forgotten by
+     * whoever adds the next one. (It said "all four … whoever adds a fifth" until A1″ Phase 3b, which
+     * was false from the moment the fifth landed — the property is "every", and it does not need a
+     * number to be checkable.)
      *
      * The exception set is `AndroidActionExecutor`'s, deliberately: the two world-facing paths of this
      * repo should behave alike rather than each inventing its own — `ActivityNotFoundException` for

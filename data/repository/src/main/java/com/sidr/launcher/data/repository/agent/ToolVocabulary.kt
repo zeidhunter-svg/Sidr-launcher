@@ -292,6 +292,136 @@ class ToolVocabulary internal constructor(val entries: List<Entry>) {
                 suffixByLocale = mapOf("tr" to setOf("için seçimi unut")),
                 argName = "phrase",
             ),
+            // A1″ Phase 3b, Task 2 (Slice A) — the first four of the eleven navigating tools. All four
+            // are zero-argument, so per the class KDoc every form goes in `prefixByLocale` in every
+            // locale (a zero-argument entry's two maps are interchangeable: the text must equal the
+            // trigger either way). Every `en` form avoids the `open`/`launch`/`start` prefixes
+            // `LAUNCH_VERBS` claims, every `tr` form avoids the ` aç`/` kur` suffixes `LAUNCH_VERBS`/
+            // `INSTALL_VERBS` claim, and none is a bare `settings`/`настройки`/`ayarlar` form
+            // `SETTINGS_KEYWORDS` claims (§7.6: never a bare settings synonym).
+            Entry(
+                id = Tier0ToolIds.SHOW_ALARMS,
+                prefixByLocale = mapOf(
+                    "en" to setOf("alarms", "my alarms"),
+                    "ru" to setOf("будильники", "мои будильники"),
+                    "tr" to setOf("alarmlar", "alarmlarım"),
+                ),
+            ),
+            // `camera app` / `приложение камеры` / `kamera uygulaması` carry a distinguishing token on
+            // purpose (see the task report): a bare `camera`/`камера`/`kamera` is what a user types
+            // when an installed app IS labelled exactly that, and FastPath's own app-name resolution
+            // answering first for that case is correct behaviour, not a defect this tool needs to
+            // pre-empt. The bare nouns are included for ru/tr, where the installed label is unlikely
+            // to match exactly.
+            Entry(
+                id = Tier0ToolIds.OPEN_CAMERA,
+                prefixByLocale = mapOf(
+                    "en" to setOf("camera app", "photo camera"),
+                    "ru" to setOf("камера", "приложение камеры"),
+                    "tr" to setOf("kamera", "kamera uygulaması"),
+                ),
+            ),
+            // Finding P3 lives on the descriptor, not here: this entry only recognises the command,
+            // and the SAFETY note about the landed screen belongs where the tool actually runs.
+            Entry(
+                id = Tier0ToolIds.OPEN_WIFI_SETTINGS,
+                prefixByLocale = mapOf(
+                    "en" to setOf("wifi settings", "wi-fi settings"),
+                    "ru" to setOf("настройки wi-fi", "настройки вайфая"),
+                    "tr" to setOf("wi-fi ayarları", "kablosuz ayarları"),
+                ),
+            ),
+            Entry(
+                id = Tier0ToolIds.OPEN_BLUETOOTH_SETTINGS,
+                prefixByLocale = mapOf(
+                    "en" to setOf("bluetooth settings"),
+                    "ru" to setOf("настройки bluetooth", "настройки блютуз"),
+                    "tr" to setOf("bluetooth ayarları"),
+                ),
+            ),
+            // A1″ Phase 3b, Task 3 (Slice B) — the next four navigating tools. Same zero-argument shape
+            // and the same three exclusions as Slice A: no `open`/`launch`/`start` prefix, no ` aç`/
+            // ` kur` `tr` suffix, no bare settings synonym.
+            //
+            // **Two of the three least-confident `tr` forms named in the plan's §0.3 are here, and
+            // neither is judged by a native speaker:** `pil ayarları` (battery — `pil` is the everyday
+            // word, but Samsung's own screen is «Действия с аккумулятором» / One UI's own Turkish
+            // wording may differ) and `veri kullanımı` (data usage). Named, not resolved — owner-level,
+            // per §0.3.
+            Entry(
+                id = Tier0ToolIds.OPEN_BATTERY_SETTINGS,
+                prefixByLocale = mapOf(
+                    "en" to setOf("battery settings", "battery usage"),
+                    "ru" to setOf("настройки батареи", "расход батареи"),
+                    "tr" to setOf("pil ayarları", "pil kullanımı"),
+                ),
+            ),
+            Entry(
+                id = Tier0ToolIds.OPEN_DATA_USAGE_SETTINGS,
+                prefixByLocale = mapOf(
+                    "en" to setOf("data usage", "mobile data settings"),
+                    "ru" to setOf("расход трафика", "настройки мобильных данных"),
+                    "tr" to setOf("veri kullanımı", "mobil veri ayarları"),
+                ),
+            ),
+            Entry(
+                id = Tier0ToolIds.OPEN_DISPLAY_SETTINGS,
+                prefixByLocale = mapOf(
+                    "en" to setOf("display settings", "screen settings"),
+                    "ru" to setOf("настройки экрана", "настройки дисплея"),
+                    "tr" to setOf("ekran ayarları"),
+                ),
+            ),
+            Entry(
+                id = Tier0ToolIds.OPEN_SOUND_SETTINGS,
+                prefixByLocale = mapOf(
+                    "en" to setOf("sound settings", "volume settings"),
+                    "ru" to setOf("настройки звука", "настройки громкости"),
+                    "tr" to setOf("ses ayarları"),
+                ),
+            ),
+            // A1″ Phase 3b, Task 4 (Slice C) — the last three navigating tools. The first two are
+            // zero-argument and follow Slices A and B exactly: every form in `prefixByLocale` in every
+            // locale, no `open`/`launch`/`start` `en` prefix, no ` aç`/` kur` `tr` suffix, and no bare
+            // `settings`/`настройки`/`ayarlar` form — which is not a style rule but a
+            // FastPath-collision rule: a bare settings synonym does not risk colliding with
+            // `SETTINGS_KEYWORDS`, it **is** one.
+            Entry(
+                id = Tier0ToolIds.OPEN_LOCATION_SETTINGS,
+                prefixByLocale = mapOf(
+                    "en" to setOf("location settings", "gps settings"),
+                    "ru" to setOf("настройки геолокации", "настройки локации"),
+                    "tr" to setOf("konum ayarları"),
+                ),
+            ),
+            // **`bildirim ayarları` is the third of the three least-confident Turkish forms the plan
+            // named in advance** (§0.3), after Slice B's `pil ayarları` and `veri kullanımı`: it is the
+            // literal rendering, but whether One UI's own Turkish labels the screen that way is
+            // exactly the question no guard and no agent can answer. Named, not resolved — owner-level,
+            // and «assumed fine» is not an acceptable answer to it.
+            Entry(
+                id = Tier0ToolIds.OPEN_NOTIFICATION_SETTINGS,
+                prefixByLocale = mapOf(
+                    "en" to setOf("notification settings"),
+                    "ru" to setOf("настройки уведомлений"),
+                    "tr" to setOf("bildirim ayarları"),
+                ),
+            ),
+            // The only ARGUMENT-CARRYING entry of the eleven navigating tools, so it is the only one
+            // whose `tr` form is a **suffix**: Turkish is SOV and the argument precedes, exactly as
+            // `uninstall_app` above declares `uygulamasını kaldır`. `argName = "app"` opts the
+            // descriptor into `ToolMatchPlanner`'s resolution branch — which keys on this NAME and not
+            // on `required`, the reason that descriptor's `required = true` is written out and pinned
+            // by its own test (R14-37).
+            Entry(
+                id = Tier0ToolIds.OPEN_APP_INFO,
+                prefixByLocale = mapOf(
+                    "en" to setOf("app info", "app details"),
+                    "ru" to setOf("сведения о приложении", "информация о приложении"),
+                ),
+                suffixByLocale = mapOf("tr" to setOf("uygulama bilgisi")),
+                argName = "app",
+            ),
         )
     }
 }

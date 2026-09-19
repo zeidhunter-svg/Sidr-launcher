@@ -50,7 +50,7 @@ class Tier0IntentToolSourceTest {
      * `SAFE`, which would take the consent gate off an act that cannot be undone.
      */
     @Test
-    fun `the tier-0 source offers four tools at the system-intent level, all external, one behind consent`() {
+    fun `the tier-0 source offers fifteen tools at the system-intent level, all external, one behind consent`() {
         val source = Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything)
 
         assertEquals(
@@ -59,6 +59,24 @@ class Tier0IntentToolSourceTest {
                 Tier0ToolIds.OPEN_SYSTEM_SETTINGS,
                 Tier0ToolIds.SET_ALARM,
                 Tier0ToolIds.UNINSTALL_APP,
+                // A1″ Phase 3b, Task 2 (Slice A) — four navigating tools, all SAFE, none behind
+                // consent. The "one behind consent" clause below stays true: uninstall_app remains
+                // the only CONFIRM tool this source declares.
+                Tier0ToolIds.SHOW_ALARMS,
+                Tier0ToolIds.OPEN_CAMERA,
+                Tier0ToolIds.OPEN_WIFI_SETTINGS,
+                Tier0ToolIds.OPEN_BLUETOOTH_SETTINGS,
+                // A1″ Phase 3b, Task 3 (Slice B) — four more navigating tools, all SAFE.
+                Tier0ToolIds.OPEN_BATTERY_SETTINGS,
+                Tier0ToolIds.OPEN_DATA_USAGE_SETTINGS,
+                Tier0ToolIds.OPEN_DISPLAY_SETTINGS,
+                Tier0ToolIds.OPEN_SOUND_SETTINGS,
+                // A1″ Phase 3b, Task 4 (Slice C) — the last three navigating tools. Two are
+                // zero-argument; `open_app_info` is the only argument-carrying one of the eleven.
+                // All three SAFE, so the "one behind consent" clause stays true.
+                Tier0ToolIds.OPEN_LOCATION_SETTINGS,
+                Tier0ToolIds.OPEN_NOTIFICATION_SETTINGS,
+                Tier0ToolIds.OPEN_APP_INFO,
             ),
             source.all().map { it.id },
         )
@@ -70,6 +88,17 @@ class Tier0IntentToolSourceTest {
                 Tier0ToolIds.OPEN_SYSTEM_SETTINGS to ActionRiskLevel.SAFE,
                 Tier0ToolIds.SET_ALARM to ActionRiskLevel.SAFE,
                 Tier0ToolIds.UNINSTALL_APP to ActionRiskLevel.CONFIRM,
+                Tier0ToolIds.SHOW_ALARMS to ActionRiskLevel.SAFE,
+                Tier0ToolIds.OPEN_CAMERA to ActionRiskLevel.SAFE,
+                Tier0ToolIds.OPEN_WIFI_SETTINGS to ActionRiskLevel.SAFE,
+                Tier0ToolIds.OPEN_BLUETOOTH_SETTINGS to ActionRiskLevel.SAFE,
+                Tier0ToolIds.OPEN_BATTERY_SETTINGS to ActionRiskLevel.SAFE,
+                Tier0ToolIds.OPEN_DATA_USAGE_SETTINGS to ActionRiskLevel.SAFE,
+                Tier0ToolIds.OPEN_DISPLAY_SETTINGS to ActionRiskLevel.SAFE,
+                Tier0ToolIds.OPEN_SOUND_SETTINGS to ActionRiskLevel.SAFE,
+                Tier0ToolIds.OPEN_LOCATION_SETTINGS to ActionRiskLevel.SAFE,
+                Tier0ToolIds.OPEN_NOTIFICATION_SETTINGS to ActionRiskLevel.SAFE,
+                Tier0ToolIds.OPEN_APP_INFO to ActionRiskLevel.SAFE,
             ),
             source.all().associate { it.id to it.risk },
         )
@@ -128,6 +157,55 @@ class Tier0IntentToolSourceTest {
     }
 
     /**
+     * A1″ Phase 3b, Task 4 — **the SECOND consecutive per-descriptor `required` pin, and there is
+     * still no generalisation.**
+     *
+     * The pin above holds `uninstall_app`'s `app_label` OPTIONAL (R14-35); this one holds
+     * `open_app_info`'s `app` REQUIRED. They are opposite directions of the same gap, and the gap is
+     * that `ToolMatchPlanner`'s resolution branch keys on the argument being **named** `app`, never on
+     * whether it is `required`. So a descriptor declaring `app` optional supplies no value, `raw`
+     * becomes `""`, `AppTargetResolver.resolve("")` declines, and the planner answers `NoPlan` — for
+     * every goal, forever, with the whole suite green and the tool registered, reachable by its
+     * trigger, and dead. Nothing in the type system holds either direction; these two tests are the
+     * whole of the enforcement, and the generalisation is the `ArgType` debt (spec §7.5), owned by A4′.
+     * Two instances is the evidence that block needs — the accumulation is deliberate, not an
+     * omission.
+     *
+     * **`app_label` is deliberately absent**, which is why the schema is asserted by equality rather
+     * than by containment: `uninstall_app` needs both arguments because its `CONFIRM` card must name
+     * what the user said and what will be removed. `open_app_info` is `SAFE` and draws no card, so a
+     * second argument would only route it down `uninstall_app`'s by-name branch in
+     * `AgentSessionPresentation.line()` and hit the argument-**count** step-line limit.
+     */
+    @Test
+    fun `open_app_info takes exactly one app argument and it is required`() {
+        val source = Tier0IntentToolSource(ToolPermissionCatalog(), grantsEverything)
+        val descriptor = source.find(Tier0ToolIds.OPEN_APP_INFO)!!
+
+        assertEquals(
+            "open_app_info declares exactly one argument. Adding app_label would take it down " +
+                "uninstall_app's by-name rendering branch for no gain (it is SAFE and draws no " +
+                "consent card) and into the argument-count step-line limit",
+            listOf("app"),
+            descriptor.argSchema.map { it.name },
+        )
+        assertEquals(
+            "ToolMatchPlanner resolves an argument NAMED app regardless of `required` (R14-37). " +
+                "MEASURED 2026-09-20 (phase 3b mutation M3b), stated no wider than it is true: with " +
+                "required=false planted, this tool still PLANS correctly, because its vocabulary " +
+                "entry declares argName=\"app\" and refuses a bare trigger -- match(\"app info\") " +
+                "is null, so `raw` is never empty and the flag only changes WHICH line returns " +
+                "NoPlan. The pin is therefore against the WIRING changing, not against today's " +
+                "behaviour: R14-37's failure mode (raw=\"\" -> resolve(\"\") -> null -> NoPlan for " +
+                "every goal forever, suite green) arises for any descriptor whose vocabulary does " +
+                "NOT supply `app` -- one vocabulary edit away. Keep it required and keep this " +
+                "sentence honest.",
+            listOf(true),
+            descriptor.argSchema.map { it.required },
+        )
+    }
+
+    /**
      * **The floor Task 2's own filter made necessary** (fix round 1, finding I1).
      *
      * Before Task 2, a Tier-0 tool with no [ToolPermissionCatalog] row was still *registered*, so
@@ -168,6 +246,17 @@ class Tier0IntentToolSourceTest {
                 Tier0ToolIds.OPEN_SYSTEM_SETTINGS,
                 Tier0ToolIds.SET_ALARM,
                 Tier0ToolIds.UNINSTALL_APP,
+                Tier0ToolIds.SHOW_ALARMS,
+                Tier0ToolIds.OPEN_CAMERA,
+                Tier0ToolIds.OPEN_WIFI_SETTINGS,
+                Tier0ToolIds.OPEN_BLUETOOTH_SETTINGS,
+                Tier0ToolIds.OPEN_BATTERY_SETTINGS,
+                Tier0ToolIds.OPEN_DATA_USAGE_SETTINGS,
+                Tier0ToolIds.OPEN_DISPLAY_SETTINGS,
+                Tier0ToolIds.OPEN_SOUND_SETTINGS,
+                Tier0ToolIds.OPEN_LOCATION_SETTINGS,
+                Tier0ToolIds.OPEN_NOTIFICATION_SETTINGS,
+                Tier0ToolIds.OPEN_APP_INFO,
             ),
             source.all().map { it.id },
         )
@@ -198,6 +287,17 @@ class Tier0IntentToolSourceTest {
             Tier0ToolIds.OPEN_SYSTEM_SETTINGS,
             Tier0ToolIds.SET_ALARM,
             Tier0ToolIds.UNINSTALL_APP,
+            Tier0ToolIds.SHOW_ALARMS,
+            Tier0ToolIds.OPEN_CAMERA,
+            Tier0ToolIds.OPEN_WIFI_SETTINGS,
+            Tier0ToolIds.OPEN_BLUETOOTH_SETTINGS,
+            Tier0ToolIds.OPEN_BATTERY_SETTINGS,
+            Tier0ToolIds.OPEN_DATA_USAGE_SETTINGS,
+            Tier0ToolIds.OPEN_DISPLAY_SETTINGS,
+            Tier0ToolIds.OPEN_SOUND_SETTINGS,
+            Tier0ToolIds.OPEN_LOCATION_SETTINGS,
+            Tier0ToolIds.OPEN_NOTIFICATION_SETTINGS,
+            Tier0ToolIds.OPEN_APP_INFO,
         ).forEach { id ->
             assertEquals("find/all disagree for ${id.value}", id in advertised, source.find(id) != null)
         }

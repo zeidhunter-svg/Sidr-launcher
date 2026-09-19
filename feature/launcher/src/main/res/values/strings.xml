@@ -147,6 +147,25 @@
     <string name="launcher_agent_step_forget_alias">Forget the alias “%1$s”</string>
     <string name="launcher_agent_step_forget_choice">Forget the learned choice for “%1$s”</string>
     <string name="launcher_agent_step_generic">Run this step for %1$s</string>
+    <!-- A1″ Phase 3b, Task 2 (Slice A): four zero-argument navigating tools. No placeholder, exactly
+         like launcher_agent_step_settings above - the caller passes a subject the formatter ignores. -->
+    <string name="launcher_agent_step_show_alarms">Show alarms</string>
+    <string name="launcher_agent_step_open_camera">Open the camera</string>
+    <string name="launcher_agent_step_open_wifi_settings">Open Wi-Fi settings</string>
+    <string name="launcher_agent_step_open_bluetooth_settings">Open Bluetooth settings</string>
+    <!-- A1″ Phase 3b, Task 3 (Slice B): four more zero-argument navigating tools. No placeholder, same
+         shape as the four above. -->
+    <string name="launcher_agent_step_open_battery_settings">Open battery settings</string>
+    <string name="launcher_agent_step_open_data_usage_settings">Open data usage settings</string>
+    <string name="launcher_agent_step_open_display_settings">Open display settings</string>
+    <string name="launcher_agent_step_open_sound_settings">Open sound settings</string>
+    <!-- A1″ Phase 3b, Task 4 (Slice C): two zero-argument navigating tools, then the one that takes
+         an argument. launcher_agent_step_open_app_info DOES carry %1$s - it is the only one of the
+         eleven that does - and what fills it is the RESOLVED package, not the word the user typed,
+         because resolution happens above the consent gate. -->
+    <string name="launcher_agent_step_open_location_settings">Open location settings</string>
+    <string name="launcher_agent_step_open_notification_settings">Open notification settings</string>
+    <string name="launcher_agent_step_open_app_info">App info for %1$s</string>
     <!-- A1″ Task 8: a tool whose NAME is data. %1$s is the app that published the shortcut and
          %2$s is the shortcut's own label; both are authored by that app, in whatever language it
          chose, and neither is ours to translate (measured: values-ru and values-tr labels arrive

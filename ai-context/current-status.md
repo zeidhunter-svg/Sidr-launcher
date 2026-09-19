@@ -5,15 +5,25 @@
 > digest); per-phase plans carry their own checklists.** This file is the status snapshot — if it
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
-> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-09-19
+> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-09-20
+> (**Этап 5.5 (A1″) phase 3b — the eleven navigating tools: `show_alarms`, `open_camera` and nine
+> settings/app-info screens, all `system_intent` / `SAFE` / `EXTERNAL`, registered, permitted,
+> dispatched, reachable in `en`/`ru`/`tr` and rendered. `CODE-GREEN` at **1439** tests / 0 failures —
+> +1, the `open_app_info` `required` pin, the phase's only new `@Test`. The count is reported
+> **split**: A1″ built **sixteen authored tools, of which five act**, and the federation now holds
+> **twenty** authored tools plus the dynamic `app_shortcut` family. **`DEVICE-ACCEPTED` is ABSENT, not
+> inapplicable**, said exactly: phases 1–2 got a device reading in the Task 13b **smoke round**
+> (`ab2d063`, which is not an acceptance); **phase 3a — the entire acting set, the `CONFIRM` card, the
+> `launcher_memory` adapter and every `tr`/`en` trigger — has not run on a phone at all, and neither
+> has phase 3b**. Unjudged Turkish triggers went seven → **23**. Ten pre-flight findings and three
+> mutation findings, one of them the **eighth** case of the block's own pattern**); prior 2026-09-19
 > (**Этап 5.5 (A1″) — tool mass + selection, phases 0–3a: five acting tools against a floor of four, a
 > fourth adapter (`launcher_memory`), a third adapter whose tool names are data (`app_shortcut`),
 > selection over a dynamic registry, and the track's first `CONFIRM` tool (`uninstall_app`). Three
 > engine preconditions landed first and closed two A1′ residuals. `CODE-GREEN` at **1438** tests /
-> 0 failures; **`DEVICE-ACCEPTED` is ABSENT, not inapplicable — nothing this block built has run on a
-> phone**, and phase 3b (the eleven navigating tools) is not started. The block's most valuable output
+> 0 failures; **`DEVICE-ACCEPTED` ABSENT**. The block's most valuable output
 > is arguably not a tool but a named pattern: seven demonstrated cases of *evidence that does not
-> describe the thing it is believed to describe***); prior 2026-09-10
+> describe the thing it is believed to describe* — eight after phase 3b**); prior 2026-09-10
 > (**Этап 5 (A1′) — owner device acceptance on the SM-A325F, Android 13, `ru-RU`: Parts A and B of the
 > checklist run and signed off, so A1′ is `CLOSED` with its residuals carried forward by owner
 > decision. The run produced three fixes — a missing `SET_ALARM`, a checklist that read the database
@@ -50,33 +60,45 @@
 > DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer
 > Correctness CLOSED — device-accepted by the owner).
 
-## Agentic track — Этап 5.5 (A1″) — tool mass + selection (phases 0–3a) — `CODE-GREEN` (2026-09-19)
+## Agentic track — Этап 5.5 (A1″) — tool mass + selection (phases 0–3b) — `CODE-GREEN` (2026-09-20)
 
-**`CODE-GREEN` 2026-09-19. `DEVICE-ACCEPTED` is ABSENT — not "not applicable".** Nothing this block
-built has run on a phone. The block did use a phone (the Task 13/13b measurement round on the
-SM-A325F), but that round measured **Android premises**, not the product: not one of the five acting
-tools, not the consent card of the first `CONFIRM` tool, not one of the six new `tr` triggers has been
-observed on a device. Unlike A0.5 — where `DEVICE-ACCEPTED: not applicable` was honest because that
-block changed nothing on the phone — this block changes exactly what the user can reach, and adds an
-irreversible act to the surface. Ordinary deficit, not inapplicability. Full record: ADR
-«2026-09-19 — Этап 5.5 (A1″)» in [decisions.md](decisions.md). Acceptance checklist written and waiting
+**`CODE-GREEN`: phases 0–3a 2026-09-19, phase 3b 2026-09-20. `DEVICE-ACCEPTED` is ABSENT — not "not
+applicable".** Said exactly, because the previous wording was **wider than the truth** and an
+under-claimed deficit is the same class of error as an over-claimed success: **phases 1–2 received a
+device reading in the Task 13b smoke round (`ab2d063`, 2026-09-16 — authorised by the owner and
+explicitly *not* an acceptance): 216 shortcut descriptors from 65 packages, `ToolSelector` over that
+real registry (authored ≈1 ms, dynamic ≈64–69 ms, three documented declines), one command driven
+through the launcher's own UI in `ru-RU` with provenance rendering `APP SHORTCUT · EXTERNAL`, and
+fail-closed behaviour with the HOME role removed. Phase 3a — the entire acting set, the `CONFIRM` card,
+the `launcher_memory` adapter and every `tr`/`en` trigger — has not run on a phone at all, and neither
+has phase 3b.** The Task 13/13b measurement round measured **Android premises**, not the product.
+Unlike A0.5 — where `DEVICE-ACCEPTED: not applicable` was honest because that block changed nothing on
+the phone — this block changes exactly what the user can reach, and adds an irreversible act to the
+surface. Ordinary deficit, not inapplicability. Full record: ADR
+«2026-09-19 — Этап 5.5 (A1″)» in [decisions.md](decisions.md), whose last section is phase 3b's.
+Acceptance checklist written, extended with 3b's eleven rows, and waiting
 for the owner: [2026-09-19-a1-second-device-acceptance.md](../docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md).
-Range `a6d9130..ea9c528`, **76 commits**, branch `launcher--7`.
+Range for phases 0–3a `a6d9130..ea9c528`, **76 commits**, branch `launcher--7`; phase 3b is one further
+commit on the same branch.
 
-**The block closes NOT fully executed, and that is a decision rather than an omission.** Spec §7.6 split
-the work into 3a (the acting set) and 3b (eleven navigating tools) and explicitly permitted closing from
-the 3a boundary: "at its boundary the product is coherent and the floor is already met". The floor is met
-with margin — **five** acting tools against four. **Phase 3b is not started**, so spec §16 criterion 1
-(≥15 tools from ≥3 levels, reachable on the owner's phone, accepted by the owner) is **not** met by this
-block. Report the count split into *acting* and *navigating*, never as one figure — §7.6 already caught
-one double-count of `set_alarm` doing exactly that.
+**The count, split — never one figure** (§7.6 already caught one double-count of `set_alarm` doing
+exactly that): **A1″ built sixteen authored tools, of which five act** — five in 3a (`set_alarm`,
+`uninstall_app`, three `launcher_memory` tools) and eleven navigating in 3b. **The federation now holds
+twenty authored tools**, because four predate the block (`launch_app`, `play_store_search`,
+`set_timer`, `open_system_settings`), on three levels, plus the dynamic `app_shortcut` family on a
+fourth; eighteen
+of the twenty are reachable from typed text in `en`/`ru`/`tr`. **Spec §16 criterion 1** (≥15 tools from
+≥3 levels, reachable on the owner's phone, accepted by the owner) is **still not met** — but now for
+exactly one reason: there has been no owner device round. Tools and levels suffice.
 
 **Gate.** `:domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test --rerun-tasks` under
-JDK 17, `build/test-results` cleared first: exit 0, `557 actionable tasks: 557 executed`, **1438 tests /
+JDK 17, `build/test-results` cleared first: exit 0, `557 actionable tasks: 557 executed`, **1439 tests /
 0 failures / 0 errors** read from the JUnit XML — `:domain` 440 · `:consumer:jvm` 56 ·
-`:data:repository` 374 · `:feature:launcher` 194 · `:app` 59 · the other eight modules 315. Four phase
-boundaries (1321 → 1357 → 1375 → 1438), and on each the decomposition was derived **before** the run and
-matched it.
+`:data:repository` **375** · `:feature:launcher` 194 · `:app` 59 · the other eight modules 315. Five
+phase boundaries (1321 → 1357 → 1375 → 1438 → 1439), and on each the decomposition was derived
+**before** the run and matched it. The +1 is the `open_app_info` `required` pin — phase 3b's only new
+`@Test`: eleven tools widen the *inputs* of guards that are equalities over lists and folds over the
+production federation, they do not add methods.
 
 **What was built.**
 - **Phase 0 — engine preconditions, before the first new worker.** A throw from any worker is contained
@@ -118,9 +140,43 @@ matched it.
   `:domain` grew by one constant on an open value class.
 - **No Class B key was added and nothing was re-signed** — verified at the gate's own logic
   (`app/build.gradle.kts:186`: a key is Class B only if `translatable != "false"`), not at the file.
+  Phase 3b re-verified the same way: the eleven step strings live in `values/strings.xml`, outside the
+  signature's scope (`grep -c launcher_agent_step …/values/strings_locked.xml` → 0).
+- **Phase 3b — the eleven navigating tools** (`show_alarms`, `open_camera`, `open_wifi_settings`,
+  `open_bluetooth_settings`, `open_battery_settings`, `open_data_usage_settings`,
+  `open_display_settings`, `open_sound_settings`, `open_location_settings`,
+  `open_notification_settings`, `open_app_info`), all `system_intent` / `EXTERNAL` / `SAFE` /
+  `TRANSIENT`, each `Intent` built **inline in its own `when` arm** of `Tier0IntentToolWorker` — no
+  shared helper, because one would take all eleven out from under `ToolPermissionManifestGuardTest`
+  entirely (its own KDoc measured that: a `call_number` probe went green 4/4 with `CALL_PHONE` absent
+  from the manifest). Their `SAFE` is justified positively: they perform **no act at all**, so there is
+  nothing to reverse. Ten pre-flight findings, of which the ones with teeth: no
+  `Settings.ACTION_NOTIFICATION_SETTINGS` constant exists (a private const, and the guard's regex was
+  deliberately **not** widened); `open_location_settings`' permission is measured **sufficient, never
+  necessary**, and ships `emptyList()` because declaring `ACCESS_FINE_LOCATION` would withhold the tool
+  **on the owner's own phone**; `open_battery_settings` resolves to Samsung Device Care, a ROM-dependent
+  premise; `open_app_info` lands one tap from «Удалить» and `open_wifi_settings` opened with a
+  state-changing modal already raised — both named on the descriptors and on the checklist, neither
+  weakening `SAFE`. **Unjudged Turkish triggers: seven → 23** (24 as raw strings; the table holds 27
+  `tr` forms, three predating the accounting). The plan's own §0.3 first said "eighteen" — an
+  **undercount**, corrected after the build for the same reason Task 6 exists.
+- **Phase 3b's mutation round produced three findings, and they outlast the eleven tools.** (1) The
+  `open_app_info` `required = true` pin **is** falsifiable, but its stated justification was not what
+  the code does — with `required = false` planted the planner still plans correctly, because the
+  vocabulary declares `argName = "app"` and refuses a bare trigger; the assertion message is corrected
+  in the tree to the true, narrower property. **Eighth case of the block's own pattern.** (2)
+  `DoctrineGuardTest`'s **authored**-tool branch carries the same `String.contains` blindness
+  previously measured only for the dynamic branch: deleting a `toolLabelFor` arm while leaving its
+  `private const val` in place left `:app` GREEN at 59/0. The KDoc sentence claiming the authored
+  branch was unaffected is measured false and corrected; **not repaired** → A4′. (3) A timing-sensitive
+  `:data:ai-cloud` test reddened one boundary run for a reason unrelated to the diff (and that run also
+  aborted at 407/557 tasks) — same class as R14-44. **The guard-list surface stayed at fourteen**, which
+  is not evidence it is enumerable: 3b added no tool *shape* the surface had not already learned.
 
-**The pattern the block produced, and it outlasts any of the tools.** Seven demonstrated cases of one
-disease — **evidence that does not describe the thing it is believed to describe**. Four times,
+**The pattern the block produced, and it outlasts any of the tools.** **Eight** demonstrated cases of
+one disease — **evidence that does not describe the thing it is believed to describe** (seven through
+phase 3a; the eighth is phase 3b's `open_app_info` `required` pin, falsifiable but justified by a
+property the code does not have). Four times,
 strengthening a runtime invariant made the guard protecting it **unfalsifiable** (R14-15; R14-28, where
 a fail-closed filter made "registered without a permission row" unreachable so the guard could no longer
 fail; R14-31, the floor that closes it *procedurally* and ships with its third case honestly still
@@ -133,8 +189,9 @@ matched). And R14-44, the same disease at **gate** level: stale XML left by a mu
 final gate is indistinguishable from a red gate and misleads in both directions. Two binding rules came
 out: **realistic fixtures are the dangerous ones**, and **a mutation-proving task ends with a gate re-run
 from a cleared `build/test-results`**. Beside it: the number of guard lists that must move together when
-a tool is added went **five → six → seven → eight** in two sessions, and no KDoc states the true number
-because it keeps moving — the method rule is that **this surface cannot be enumerated from a document,
+a tool is added went **five → six → seven → eight** in two sessions (phase 3b's pre-flight enumerated
+**fourteen** lists and the count stayed there, which shows only that 3b added no new tool *shape*), and
+no KDoc states the true number because it keeps moving — the method rule is that **this surface cannot be enumerated from a document,
 only discovered by running the gate**. Real closure is spec §8.2's registry-keyed guard extended to
 workers; explicitly not this block's.
 
@@ -158,9 +215,13 @@ its target did not resolve" — and `NoPlan` at 2b falls through to the cloud mo
 &lt;неизвестное&gt;» sends raw command text off-device on a goal a registered tool matched
 deterministically. Not an `OutboundContextPolicy` widening, but the decision to send is made by an
 unresolved name rather than by the routing rules; the pinning test's **first** assertion is the
-load-bearing one, proving the vocabulary really did claim the text. → A4′. (4) **Six `tr` triggers, none
-judged by a native speaker** (`alarm ayarla`, `uygulamasını kaldır`, `kaldır`, `için`/`kullan`,
-`adını unut`, `için seçimi unut`), beside A1′'s inherited `sayaç ayarla` — seven in total, up from one.
+load-bearing one, proving the vocabulary really did claim the text. → A4′. (4) **Twenty-three `tr`
+triggers, none judged by a native speaker** — phase 3a's six (`alarm ayarla`, `uygulamasını kaldır`,
+`kaldır`, `için`/`kullan`, `adını unut`, `için seçimi unut`) beside A1′'s inherited `sayaç ayarla` made
+seven, and **phase 3b added sixteen more `tr` forms across eleven tools** (23 by this list's own
+convention, 24 as raw distinct strings, 27 forms in the table of which three predate the accounting);
+before A1″ it was one. 3b's least-confident forms, named in advance: `pil ayarları`, `veri kullanımı`,
+`bildirim ayarları`, `konum ayarları`, `uygulama bilgisi`.
 R14-42 ships `için`/`kullan` with the limitation named rather than blocking the phase on a question no
 agent and no guard can answer; the linguistic finding behind it is real (`olarak`/`diye` are
 postpositions attaching to the **second** argument and cannot occupy a slot *between* the two, while
@@ -316,7 +377,7 @@ app) by catching inside `Tier0IntentToolWorker`, but `ToolWorker`'s "an invocati
 per-worker nets stay, because they produce *specific* failures; this is the floor under them.
 `"sayaç ayarla"` (the `tr` timer trigger) is reachable and un-shadowed but needs a native
 speaker's read — `sayaç` reads as counter/meter, not kitchen timer. **A1″ took the unjudged `tr` set
-from one trigger to seven** — see its own section above. `docs/governing/
+from one trigger to 23** (24 as raw strings) — see its own section above. `docs/governing/
 sidr-doctrine-matrix-v1.0.md`'s `DOC-HMA-2` row is **not** claimed closed — levels now exist, but
 whether a level *change* stops the loop is still A4′'s. **All of the above survive the block's
 `CLOSED`:** the owner accepted the block with these named, not with these cleared (`CLOSED` is not a

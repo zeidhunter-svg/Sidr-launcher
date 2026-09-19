@@ -64,6 +64,25 @@ import org.junit.Test
  * `an authored trigger cannot be shadowed by a third-party shortcut name` — still loops over all 14
  * commands generated from both entries, in both shapes, unchanged by Task 10b; only the floor's own
  * choice of collider changed.
+ *
+ * **The escalation protocol — the one part of the trigger rule no guard here mechanises.** This class
+ * catches the mechanical half: a trigger that collides with FastPath leaves `RuleBasedIntentMatcher`
+ * at something other than `UnknownIntent`, and the relevant test above reddens on that trigger's own
+ * sample command. What happens *next* is not mechanical — it is a **protocol**, and it binds whoever
+ * is adding the trigger, not this class: a trigger that takes a FastPath verb is **escalated to the
+ * owner, with the verb named**, and it is **never** worked around by reshaping the trigger until this
+ * guard goes quiet. Reshaping a trigger until the collision disappears does not remove the collision —
+ * it silently trades away a capability the user would have reached (the reshaped trigger) for one they
+ * would not have typed, and the guard cannot tell the two apart; only a human deciding which capability
+ * the user actually wanted can. The claimants a new trigger must be checked against, read from
+ * `RuleBasedIntentMatcher` at the time this was written (verify against that file before relying on
+ * this list — it is prose, and prose drifts): `LAUNCH_VERBS` — `en` prefixes `"open"` / `"launch"` /
+ * `"start"`, `ru` prefixes `"открой"` / `"открыть"` / `"запусти"` / `"запустить"`, `tr` suffix `"aç"`;
+ * `INSTALL_VERBS` — `tr` suffix `"kur"`; and the bare `SETTINGS_KEYWORDS` forms `"settings"` /
+ * `"настройки"` / `"ayarlar"`. That last one is why §7.6's rule — "every navigating trigger must carry
+ * its own distinguishing token, never a bare settings synonym" — is simultaneously a FastPath-collision
+ * rule and not merely a style preference: a bare settings synonym does not risk colliding with
+ * `SETTINGS_KEYWORDS`, it **is** one.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ToolVocabularyReachabilityTest {

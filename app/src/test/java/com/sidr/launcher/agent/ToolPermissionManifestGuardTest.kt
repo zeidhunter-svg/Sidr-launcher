@@ -118,6 +118,39 @@ class ToolPermissionManifestGuardTest {
         // no entry in this map changes that. This guard answers "is the permission declared", never
         // "will the act succeed".
         "Intent.ACTION_DELETE" to listOf("android.permission.REQUEST_DELETE_PACKAGES"),
+        // A1″ Phase 3b, Task 2 (Slice A). Four navigating tools, all measured needing no permission
+        // (rows 14/29, 17, 18, 19 of the device-measurements file).
+        "AlarmClock.ACTION_SHOW_ALARMS" to emptyList(),
+        "MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA" to emptyList(),
+        "Settings.ACTION_WIFI_SETTINGS" to emptyList(),
+        "Settings.ACTION_BLUETOOTH_SETTINGS" to emptyList(),
+        // A1″ Phase 3b, Task 3 (Slice B). Four more navigating tools, all measured needing no
+        // permission (rows 20, 21, 22, 23 of the device-measurements file). Row 20's
+        // ROM-dependent-responder note (P4) lives on the descriptor, not here — this map answers only
+        // "is a permission declared".
+        "Intent.ACTION_POWER_USAGE_SUMMARY" to emptyList(),
+        "Settings.ACTION_DATA_USAGE_SETTINGS" to emptyList(),
+        "Settings.ACTION_DISPLAY_SETTINGS" to emptyList(),
+        "Settings.ACTION_SOUND_SETTINGS" to emptyList(),
+        // A1″ Phase 3b, Task 4 (Slice C). Three more navigating tools, all measured needing no
+        // permission (rows 24/29/30/33, 25, 15).
+        //
+        // **`Settings.ACTION_LOCATION_SOURCE_SETTINGS`'s `emptyList()` is the weakest claim in this
+        // map, and the weakness is this map's own stated one** (finding P2). Rows 30 and 33 exclude
+        // the *grant* — the screen opened with `ACCESS_FINE_LOCATION` denied, measured in-process —
+        // but not this app's *declaration* of it, which the prayer feature carries. This map answers
+        // "is the permission a row claims declared", never "will the act succeed", so an `emptyList()`
+        // that is wrong is exactly as green here as one that is right. Named limit, open question,
+        // numbered on the acceptance checklist — see the descriptor in `Tier0IntentToolSource`.
+        "Settings.ACTION_LOCATION_SOURCE_SETTINGS" to emptyList(),
+        // Keyed on the BARE token because that is what the worker writes: `ACTION_NOTIFICATION_SETTINGS`
+        // is a file-level constant in `Tier0IntentToolWorker`, not a platform field — the platform has
+        // no such constant at all (finding P1, row 25). The scan reads the token either way; this
+        // comment is what keeps the key from reading as a platform constant that was moved.
+        "ACTION_NOTIFICATION_SETTINGS" to emptyList(),
+        // Row 15. Read by [intentWithActionAndData], not [intentWithAction]: `open_app_info` sends the
+        // action-plus-`Uri` shape, the same one `uninstall_app` already taught this scan.
+        "Settings.ACTION_APPLICATION_DETAILS_SETTINGS" to emptyList(),
     )
 
     /**

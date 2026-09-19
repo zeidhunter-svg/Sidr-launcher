@@ -15,7 +15,9 @@ import javax.inject.Inject
 
 /**
  * **One generic arm, not a taxonomy** (spec §8.4). A recognised tool becomes a one-step plan, whatever
- * the tool is — so `A1"`'s twelve tools cost twelve vocabulary entries and **zero** planner branches.
+ * the tool is — so every tool `A1"` added cost one vocabulary entry and **zero** planner branches.
+ * (The number is deliberately not written: this line said "twelve tools" and was already false when
+ * phase 3b shipped the eleven navigating ones — R14-41.)
  * The rejected alternative was one `GoalShape` value and one arm per tool, which is linear per tool
  * and contradicts in code the claim this whole block exists to establish.
  *
@@ -94,6 +96,24 @@ class ToolMatchPlanner @Inject constructor(
         // naming a target that was not resolved.
         val resolvedArgs = buildMap<String, String> {
             putAll(match.args)
+            // R14-37: this line keys on the argument being NAMED `app`, not on whether it is
+            // `required` — the class KDoc above ("`app` / `app_label` is a string convention, not a
+            // type") already says the spelling carries no enforcement; this is the specific failure
+            // mode that gap produces. A descriptor that declares `app` as OPTIONAL still enters this
+            // branch, so `match.args[APP_ARG]` is missing, `raw` becomes `""` via `.orEmpty()`,
+            // `appTargets.resolve("")` returns `null` (the resolver's considered refusal, never a
+            // guess — see the class KDoc), and the elvis on the `appTargets.resolve(raw)` line below
+            // returns `PlanningResult.NoPlan`. Nothing upstream forces `app` to be required, so a
+            // future descriptor that gets this wrong ships a tool that is registered, reachable by
+            // its trigger, and produces `NoPlan`
+            // for EVERY goal, forever — with the whole suite green, because nothing here asserts a
+            // *correct* plan is ever reachable, only that a resolved one is well-formed. The
+            // mitigation shipped so far is a PER-DESCRIPTOR pin — `uninstall_app`
+            // (A1″ phase 3a, Task 7, R14-35) and `open_app_info` (A1″ phase 3b, Task 4), each a test
+            // in `Tier0IntentToolSourceTest` asserting that tool's `app` argument is declared
+            // `required = true`. Two instances, and there is still no generalisation: the
+            // generalisation is A4′'s, and it is the same `ArgType` debt (spec §7.5) this class's KDoc
+            // already names, restated at the planner level rather than the schema level.
             if (descriptor.argSchema.any { it.name == APP_ARG }) {
                 val raw = match.args[APP_ARG].orEmpty()
                 val target = appTargets.resolve(raw) ?: return PlanningResult.NoPlan

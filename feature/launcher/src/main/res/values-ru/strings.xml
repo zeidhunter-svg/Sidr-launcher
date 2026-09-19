@@ -94,6 +94,20 @@
     <string name="launcher_agent_step_forget_alias">Забыть алиас «%1$s»</string>
     <string name="launcher_agent_step_forget_choice">Забыть выученный выбор для «%1$s»</string>
     <string name="launcher_agent_step_generic">Выполнить шаг для %1$s</string>
+    <!-- A1″ Phase 3b, Task 2 (Slice A): четыре команды без аргументов. -->
+    <string name="launcher_agent_step_show_alarms">Показать будильники</string>
+    <string name="launcher_agent_step_open_camera">Открыть камеру</string>
+    <string name="launcher_agent_step_open_wifi_settings">Открыть настройки Wi-Fi</string>
+    <string name="launcher_agent_step_open_bluetooth_settings">Открыть настройки Bluetooth</string>
+    <!-- A1″ Phase 3b, Task 3 (Slice B): четыре ещё команды без аргументов. -->
+    <string name="launcher_agent_step_open_battery_settings">Открыть настройки батареи</string>
+    <string name="launcher_agent_step_open_data_usage_settings">Открыть настройки расхода трафика</string>
+    <string name="launcher_agent_step_open_display_settings">Открыть настройки экрана</string>
+    <string name="launcher_agent_step_open_sound_settings">Открыть настройки звука</string>
+    <!-- A1″ Phase 3b, Task 4 (Slice C): две команды без аргументов и одна с аргументом. -->
+    <string name="launcher_agent_step_open_location_settings">Открыть настройки геолокации</string>
+    <string name="launcher_agent_step_open_notification_settings">Открыть настройки уведомлений</string>
+    <string name="launcher_agent_step_open_app_info">Сведения о приложении %1$s</string>
     <string name="launcher_agent_step_shortcut">Открыть «%1$s — %2$s»</string>
     <string name="launcher_agent_gate_title">Подтвердите этот шаг</string>
     <string name="launcher_agent_gate_consequence">Следующее действие Sidr: %1$s. Ничего не выполнится, пока вы не подтвердите.</string>

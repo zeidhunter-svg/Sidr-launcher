@@ -10,7 +10,15 @@ import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolRegistry
 import javax.inject.Inject
 
-/** The four Tier-0 ids. Not projections of `ActionIds` — those seven are frozen and contain none of them. */
+/**
+ * The Tier-0 ids. Not projections of `ActionIds` — those seven are frozen and contain none of them.
+ *
+ * **Deliberately not counted here.** This KDoc read "The four Tier-0 ids" from A1′ until A1″ phase 3b
+ * added eleven more, and it was wrong the moment `set_alarm` landed. A count in prose beside a list
+ * that grows is a claim nobody re-reads; the authoritative count is the list below, and the equality
+ * assertions in `Tier0IntentToolSourceTest` are what hold it (finding R14-41: the numbers in this
+ * family have moved every session, and no comment has ever kept up).
+ */
 object Tier0ToolIds {
     val SET_TIMER = ToolId("set_timer")
     val OPEN_SYSTEM_SETTINGS = ToolId("open_system_settings")
@@ -20,18 +28,76 @@ object Tier0ToolIds {
 
     /** Task 7 (A1″ Phase 3a): the track's first `CONFIRM` tool. See its descriptor for the conditions. */
     val UNINSTALL_APP = ToolId("uninstall_app")
+
+    /** A1″ Phase 3b, Task 2 (Slice A). Opens the clock's alarm list; state unchanged (rows 14, 29). */
+    val SHOW_ALARMS = ToolId("show_alarms")
+
+    /**
+     * A1″ Phase 3b, Task 2 (Slice A). Opens the viewfinder; the sensor goes live with no user tap
+     * (row 17). See its descriptor for why `SAFE` still holds.
+     */
+    val OPEN_CAMERA = ToolId("open_camera")
+
+    /**
+     * A1″ Phase 3b, Task 2 (Slice A). Row 18: opened with a state-changing modal already raised
+     * (finding P3). See its descriptor for the full reasoning.
+     */
+    val OPEN_WIFI_SETTINGS = ToolId("open_wifi_settings")
+
+    /** A1″ Phase 3b, Task 2 (Slice A). Opens the screen; state unchanged (row 19). */
+    val OPEN_BLUETOOTH_SETTINGS = ToolId("open_bluetooth_settings")
+
+    /**
+     * A1″ Phase 3b, Task 3 (Slice B). Row 20 — resolves to Samsung Device Care
+     * (`com.samsung.android.lool/…PowerUsageSummary`), not `com.android.settings` (finding P4). See
+     * its descriptor for why that is a named, ROM-dependent premise rather than a fixed one.
+     */
+    val OPEN_BATTERY_SETTINGS = ToolId("open_battery_settings")
+
+    /** A1″ Phase 3b, Task 3 (Slice B). Opens the screen; the landed screen carries a mobile-data toggle (row 21). */
+    val OPEN_DATA_USAGE_SETTINGS = ToolId("open_data_usage_settings")
+
+    /** A1″ Phase 3b, Task 3 (Slice B). Opens the screen; state unchanged (row 22). */
+    val OPEN_DISPLAY_SETTINGS = ToolId("open_display_settings")
+
+    /** A1″ Phase 3b, Task 3 (Slice B). Opens the screen; state unchanged (row 23). */
+    val OPEN_SOUND_SETTINGS = ToolId("open_sound_settings")
+
+    /**
+     * A1″ Phase 3b, Task 4 (Slice C). Opens the screen; state unchanged (rows 24, 29). Its catalog
+     * row claims no permission, and **that claim is sufficiency, never proved necessity** — see the
+     * descriptor and `ToolPermissionCatalog`'s row for what rows 30 and 33 did and did not exclude.
+     */
+    val OPEN_LOCATION_SETTINGS = ToolId("open_location_settings")
+
+    /**
+     * A1″ Phase 3b, Task 4 (Slice C). Opens the screen; state unchanged (row 25). The platform has
+     * **no** public constant for this action — see [Tier0IntentToolWorker]'s own file-level constant
+     * and the comment on it (finding P1).
+     */
+    val OPEN_NOTIFICATION_SETTINGS = ToolId("open_notification_settings")
+
+    /**
+     * A1″ Phase 3b, Task 4 (Slice C). The only argument-carrying tool of the eleven navigating ones.
+     * Row 15: the landed screen is **one tap from «Удалить»**, and a target package with no launcher
+     * activity was **not** filtered out. See its descriptor for why `SAFE` still holds and for the
+     * `required = true` pin its single argument carries.
+     */
+    val OPEN_APP_INFO = ToolId("open_app_info")
 }
 
 /**
  * A1′'s second source: Android system intents that are **not** among the frozen seven `ActionIds`, so
  * they mint their own ids (spec §5.1 — identity C binds projections only).
  *
- * Every tool here is `EXTERNAL`. Three of the four are `SAFE`, and that combination is the one
+ * Every tool here is `EXTERNAL`. **Most, but not all, are `SAFE`** — and that combination is the one
  * `DOC-ILM-2` is actually about: a `CONFIRM` tool is already stopped by the consent gate, so
  * provenance is the only mechanism telling the user where a `SAFE` effect went. Since Task 7 the
  * source also holds the other kind — `uninstall_app`, the track's first `CONFIRM` and first `DURABLE`
  * tool — so "all Tier-0 tools are safe" is no longer true of this file and must not be re-asserted
- * anywhere as a property of the level.
+ * anywhere as a property of the level. The proportion is deliberately not written as a ratio: it was
+ * "three of the four" until phase 3b, and a ratio in prose beside a growing list goes stale silently.
+ * `DoctrineGuardTest.declaredRisk` is where each tool's risk is actually pinned.
  *
  * **Permissions.** `ACTION_SETTINGS` needs none. `ACTION_SET_TIMER` and `ACTION_SET_ALARM` need
  * `com.android.alarm.permission.SET_ALARM` and `ACTION_DELETE` needs
@@ -164,6 +230,193 @@ class Tier0IntentToolSource @Inject constructor(
             effect = ToolEffect.EXTERNAL,
             risk = ActionRiskLevel.CONFIRM,
             durability = ToolDurability.DURABLE,
+        ),
+        // A1″ Phase 3b, Task 2 (Slice A) — the first four of the eleven navigating tools (spec §7.6,
+        // plan §0.1). All four are SAFE, and the justification is positive rather than "it is only a
+        // settings screen": each performs no act at all, so there is nothing to reverse, and "the
+        // final act is the user's" is literally true of them — the same reasoning this file's KDoc
+        // already isolates for `open_system_settings`, deliberately not folded into `set_timer`'s
+        // four-property argument (that argument is for a tool that DOES perform an act).
+        //
+        // Row 14, re-run 29: `AlarmClock.ACTION_SHOW_ALARMS` opens the clock's own alarm list; state
+        // unchanged.
+        ToolDescriptor(
+            id = Tier0ToolIds.SHOW_ALARMS,
+            level = ToolLevels.SYSTEM_INTENT,
+            effect = ToolEffect.EXTERNAL,
+            risk = ActionRiskLevel.SAFE,
+            durability = ToolDurability.TRANSIENT,
+        ),
+        // Row 17: `MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA` opens the viewfinder. The app holds
+        // NO `CAMERA` permission, so the negative ("this needs none") is readable here, unlike
+        // `open_location_settings` (Task 4's P2). Row 17 also names a side effect worth stating
+        // plainly rather than softening: **the camera sensor goes live with no user tap.** SAFE still
+        // holds on the same positive ground as the rest of this slice — opening the app performs no
+        // act the tool itself is responsible for; whatever the camera app then does with its own UI
+        // is that app's act, not this one's.
+        ToolDescriptor(
+            id = Tier0ToolIds.OPEN_CAMERA,
+            level = ToolLevels.SYSTEM_INTENT,
+            effect = ToolEffect.EXTERNAL,
+            risk = ActionRiskLevel.SAFE,
+            durability = ToolDurability.TRANSIENT,
+        ),
+        // Row 18, finding P3. `Settings.ACTION_WIFI_SETTINGS` measured on the SM-A325F opened WITH A
+        // MODAL ALREADY RAISED — «Отключить мобильную точку доступа? … Отмена / OK» — because that
+        // phone's mobile hotspot was on, and that phone is the owner's own tether (the laptop reaches
+        // the internet through it). This tool stays SAFE because IT performed no act: it opened a
+        // screen, and the modal belongs to the responder, the tap belongs to the user. Both halves of
+        // that must be said and neither softened: this is also the ONE navigating tool of the eleven
+        // whose landed screen can change device state on a single tap once it is on screen — a
+        // property of what the screen offers, not of anything this tool did.
+        ToolDescriptor(
+            id = Tier0ToolIds.OPEN_WIFI_SETTINGS,
+            level = ToolLevels.SYSTEM_INTENT,
+            effect = ToolEffect.EXTERNAL,
+            risk = ActionRiskLevel.SAFE,
+            durability = ToolDurability.TRANSIENT,
+        ),
+        // Row 19: `Settings.ACTION_BLUETOOTH_SETTINGS` opens the screen; state unchanged. The app
+        // holds no `BLUETOOTH*` permission at all.
+        ToolDescriptor(
+            id = Tier0ToolIds.OPEN_BLUETOOTH_SETTINGS,
+            level = ToolLevels.SYSTEM_INTENT,
+            effect = ToolEffect.EXTERNAL,
+            risk = ActionRiskLevel.SAFE,
+            durability = ToolDurability.TRANSIENT,
+        ),
+        // A1″ Phase 3b, Task 3 (Slice B) — the next four of the eleven navigating tools. Same positive
+        // SAFE reasoning as Slice A: each performs no act at all, so there is nothing to reverse, and
+        // "the final act is the user's" is literally true of them.
+        //
+        // Row 20, finding P4. `Intent.ACTION_POWER_USAGE_SUMMARY` measured on the SM-A325F resolved to
+        // **Samsung Device Care** (`com.samsung.android.lool/com.samsung.android.sm.battery.ui.graph.
+        // PowerUsageSummary`), NOT `com.android.settings`. That it resolves at all is a **ROM-dependent
+        // premise measured on one device** — named, not fixed. `launch()` already returns `Failed` on
+        // `ActivityNotFoundException` if a ROM does not answer this action.
+        ToolDescriptor(
+            id = Tier0ToolIds.OPEN_BATTERY_SETTINGS,
+            level = ToolLevels.SYSTEM_INTENT,
+            effect = ToolEffect.EXTERNAL,
+            risk = ActionRiskLevel.SAFE,
+            durability = ToolDurability.TRANSIENT,
+        ),
+        // Row 21: `Settings.ACTION_DATA_USAGE_SETTINGS` opens the screen. The landed screen carries a
+        // mobile-data toggle — the same "what the landed screen offers is not an act this tool
+        // performed" reasoning as `open_wifi_settings` (P3), but without P3's already-raised modal; not
+        // overstated here because none was measured.
+        ToolDescriptor(
+            id = Tier0ToolIds.OPEN_DATA_USAGE_SETTINGS,
+            level = ToolLevels.SYSTEM_INTENT,
+            effect = ToolEffect.EXTERNAL,
+            risk = ActionRiskLevel.SAFE,
+            durability = ToolDurability.TRANSIENT,
+        ),
+        // Row 22: `Settings.ACTION_DISPLAY_SETTINGS` opens the screen; state unchanged.
+        ToolDescriptor(
+            id = Tier0ToolIds.OPEN_DISPLAY_SETTINGS,
+            level = ToolLevels.SYSTEM_INTENT,
+            effect = ToolEffect.EXTERNAL,
+            risk = ActionRiskLevel.SAFE,
+            durability = ToolDurability.TRANSIENT,
+        ),
+        // Row 23: `Settings.ACTION_SOUND_SETTINGS` opens the screen; state unchanged.
+        ToolDescriptor(
+            id = Tier0ToolIds.OPEN_SOUND_SETTINGS,
+            level = ToolLevels.SYSTEM_INTENT,
+            effect = ToolEffect.EXTERNAL,
+            risk = ActionRiskLevel.SAFE,
+            durability = ToolDurability.TRANSIENT,
+        ),
+        // A1″ Phase 3b, Task 4 (Slice C) — the last three navigating tools. Same positive SAFE
+        // reasoning as Slices A and B, and it is worth restating rather than referring to, because two
+        // of these three have a landed screen that offers the user something: each of these tools
+        // performs no act at all, so there is nothing to reverse, and "the final act is the user's" is
+        // literally true of them. What the LANDED SCREEN offers is not an act this tool performed.
+        //
+        // Rows 24 and 29: `Settings.ACTION_LOCATION_SOURCE_SETTINGS` opens the screen; state unchanged.
+        //
+        // **Its permission requirement is measured SUFFICIENT and never proved NECESSARY** (finding
+        // P2), and the catalog row says `emptyList()` for a reason that is decisive rather than a
+        // preference. Row 24 states the requirement is unmeasured. Row 30 removes the *grant* from the
+        // explanations — `ACCESS_FINE_LOCATION: granted=false` at the very moment the screen opened —
+        // row 33 confirms that reading from inside the process, and row 29 re-ran it on a fresh build.
+        // What remains unexcluded is this app's *declaration* of `ACCESS_FINE_LOCATION`, present for
+        // the prayer feature. A row NAMING that permission would be worse than an unproven
+        // `emptyList()`: `available()` below filters on `presence::isGranted`, and row 33 measured
+        // that permission `PERMISSION_DENIED (raw=-1)` in-process, so the source would withhold this
+        // tool **on the owner's own phone** — registered nowhere, reachable never, and every equality
+        // assertion green. That is this block's own "shipped invisible" failure.
+        //
+        // So `emptyList()` here means **"no permission we must add"**, and the necessity question is
+        // OPEN. `ToolRegistryPermissionGuardTest` can only verify the permissions a row *claims*, never
+        // the ones the platform will actually demand — the boundary that guard's own KDoc states. This
+        // is a **named limit, not a closed question**, and it is a numbered item on the acceptance
+        // checklist: if the screen fails to open on a build where the prayer feature's declaration is
+        // absent, this row is wrong.
+        ToolDescriptor(
+            id = Tier0ToolIds.OPEN_LOCATION_SETTINGS,
+            level = ToolLevels.SYSTEM_INTENT,
+            effect = ToolEffect.EXTERNAL,
+            risk = ActionRiskLevel.SAFE,
+            durability = ToolDurability.TRANSIENT,
+        ),
+        // Row 25: the notification-settings screen opens; state unchanged. **The platform has no public
+        // constant for this action** (finding P1): `javap` over `platforms/android-37.0/android.jar`
+        // finds `ACTION_APP_NOTIFICATION_SETTINGS` and `ACTION_NOTIFICATION_LISTENER_SETTINGS`, but no
+        // bare `Settings.ACTION_NOTIFICATION_SETTINGS`. The action string this tool sends is therefore
+        // OURS, not the platform's — see the file-level constant in `Tier0IntentToolWorker`, which
+        // carries the same warning at the site where it is spelled.
+        ToolDescriptor(
+            id = Tier0ToolIds.OPEN_NOTIFICATION_SETTINGS,
+            level = ToolLevels.SYSTEM_INTENT,
+            effect = ToolEffect.EXTERNAL,
+            risk = ActionRiskLevel.SAFE,
+            durability = ToolDurability.TRANSIENT,
+        ),
+        // Row 15: `Settings.ACTION_APPLICATION_DETAILS_SETTINGS` with a package `Uri` opens that app's
+        // info screen. Two things that row measured, both named rather than softened: the landed screen
+        // is **one tap from «Удалить»**, and run 2 measured that a target package with **no launcher
+        // activity was NOT filtered out** — the platform opened the screen for it just the same.
+        // Neither changes `SAFE`, on the reasoning above: this tool opened a screen and performed
+        // nothing; the uninstall on that screen is an act the user performs, and it is the same act
+        // `uninstall_app` exists to put behind a `CONFIRM` gate when WE perform it.
+        //
+        // **`app` is `required = true`, written out although that is the default, and the reason is not
+        // tidiness** (R14-37). `ToolMatchPlanner` resolves an argument named `app` **regardless of
+        // `required`**: the branch keys on the NAME. A descriptor declaring `app` optional would
+        // therefore give `raw = ""`, `AppTargetResolver.resolve("")` returns `null` (its considered
+        // refusal, never a guess), and the planner answers `NoPlan` — for EVERY goal, forever, with the
+        // whole suite green and the tool registered, reachable by its trigger and dead. The planner
+        // carries the same warning at the code site that causes it.
+        //
+        // **This is the SECOND consecutive per-descriptor pin, and there is still no generalisation.**
+        // `uninstall_app` above pins the opposite direction (`app_label` must stay OPTIONAL, R14-35);
+        // this one pins `app` REQUIRED. Neither direction is generalised, nothing in the type system
+        // holds either, and the pins are two tests in `Tier0IntentToolSourceTest`. The generalisation
+        // is the `ArgType` debt (spec §7.5) and it is A4′'s — the accumulation of instances is the
+        // evidence that block needs, and it is recorded here rather than repaired.
+        //
+        // **`app_label` is deliberately NOT declared**, unlike `uninstall_app`. That tool needs both
+        // because its `CONFIRM` card must name what the user said AND what will be removed. This tool
+        // is `SAFE`, draws no card, and a second argument would route it down `uninstall_app`'s
+        // by-name branch in `AgentSessionPresentation.line()` for no gain, while hitting the
+        // argument-**count** step-line limit (A1′ residual (5) / A1″ residual (7)).
+        //
+        // **The legibility limit that follows, named rather than worked around:** resolution happens
+        // above the consent gate, so the plan carries the RESOLVED package and the step line reads
+        // e.g. "App info for com.example.app" rather than the word the user typed. For a `SAFE` tool
+        // that is a legibility limit, not a safety one — nothing is gated on that line — and it is
+        // not to be softened by adding `app_label`.
+        ToolDescriptor(
+            id = Tier0ToolIds.OPEN_APP_INFO,
+            argSchema = listOf(
+                ActionArg("app", required = true, description = "Package of the app to show info for"),
+            ),
+            level = ToolLevels.SYSTEM_INTENT,
+            effect = ToolEffect.EXTERNAL,
+            risk = ActionRiskLevel.SAFE,
+            durability = ToolDurability.TRANSIENT,
         ),
     )
 

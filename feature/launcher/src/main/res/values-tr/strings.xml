@@ -94,6 +94,20 @@
     <string name="launcher_agent_step_forget_alias">“%1$s” takma adını unut</string>
     <string name="launcher_agent_step_forget_choice">“%1$s” için öğrenilen seçimi unut</string>
     <string name="launcher_agent_step_generic">%1$s için bu adımı çalıştır</string>
+    <!-- A1″ Phase 3b, Task 2 (Slice A): dört argümansız araç. -->
+    <string name="launcher_agent_step_show_alarms">Alarmları göster</string>
+    <string name="launcher_agent_step_open_camera">Kamerayı aç</string>
+    <string name="launcher_agent_step_open_wifi_settings">Wi-Fi ayarlarını aç</string>
+    <string name="launcher_agent_step_open_bluetooth_settings">Bluetooth ayarlarını aç</string>
+    <!-- A1″ Phase 3b, Task 3 (Slice B): dört argümansız araç daha. -->
+    <string name="launcher_agent_step_open_battery_settings">Pil ayarlarını aç</string>
+    <string name="launcher_agent_step_open_data_usage_settings">Veri kullanımı ayarlarını aç</string>
+    <string name="launcher_agent_step_open_display_settings">Ekran ayarlarını aç</string>
+    <string name="launcher_agent_step_open_sound_settings">Ses ayarlarını aç</string>
+    <!-- A1″ Phase 3b, Task 4 (Slice C): iki argümansız araç ve argüman alan tek araç. -->
+    <string name="launcher_agent_step_open_location_settings">Konum ayarlarını aç</string>
+    <string name="launcher_agent_step_open_notification_settings">Bildirim ayarlarını aç</string>
+    <string name="launcher_agent_step_open_app_info">%1$s uygulama bilgisi</string>
     <string name="launcher_agent_step_shortcut">“%1$s — %2$s” aç</string>
     <string name="launcher_agent_gate_title">Bu adımı onaylayın</string>
     <string name="launcher_agent_gate_consequence">Sidr sırada şunu yapacak: %1$s. Siz onaylamadan hiçbir şey çalışmaz.</string>

@@ -44,13 +44,17 @@ tools return values and steps bind to them, landing **before** the Room 3→4 mi
 "2026-08-21 — Развилка агентного трека" in `decisions.md`. Everything else the revision found is parked
 in `§HANDOFF`, not built.
 
-**Where the active block stands (2026-09-19).** A1″ (Этап 5.5) closed phases 0–3a at `CODE-GREEN`.
-Two things are open and both are named rather than implied absent: **owner device acceptance** — the
-checklist is written and waiting at
-[docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md](docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md)
-— and **phase 3b**, the eleven navigating tools, which spec §7.6 already describes as homogeneous,
-repetitive, subagent-shaped work. Spec:
-[docs/superpowers/specs/2026-09-12-a1-second-tool-mass-and-selection-design.md](docs/superpowers/specs/2026-09-12-a1-second-tool-mass-and-selection-design.md).
+**Where the active block stands (2026-09-20).** A1″ (Этап 5.5) closed phases 0–3a on 2026-09-19 and
+**phase 3b — the eleven navigating tools — on 2026-09-20**, both at `CODE-GREEN`, gate **1439**. One
+thing is open and it is named rather than implied absent: **owner device acceptance**, whose checklist
+is written, extended with 3b's eleven rows, and waiting at
+[docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md](docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md);
+until it is run, spec §16 criterion 1 stays open. Spec:
+[docs/superpowers/specs/2026-09-12-a1-second-tool-mass-and-selection-design.md](docs/superpowers/specs/2026-09-12-a1-second-tool-mass-and-selection-design.md);
+3b plan: [2026-09-19-a1-phase3b-navigating-tools.md](docs/superpowers/plans/2026-09-19-a1-phase3b-navigating-tools.md).
+**The count is reported split, always: A1″ built sixteen authored tools, of which five act** (five in
+3a, eleven navigating in 3b) — and the federation now holds **twenty** authored tools in all, because
+four predate the block (`launch_app`, `play_store_search`, `set_timer`, `open_system_settings`).
 
 | Stage | State |
 |---|---|
@@ -62,8 +66,9 @@ repetitive, subagent-shaped work. Spec:
 | **4** — A0 thin agentic spike | ✅ **2026-08-22 — `CLOSED`** — all nine work-order items, then Task 15: the owner ran all eight §12 acceptance items on the SM-A325F and signed off. Migration 3→4 executed for real by both routes (instrumented 9/9 on device; and a genuine `user_version` 3→4 upgrade of the owner's own database, `identity_hash` matching `4.json`). Residual limitations named in Known debt — the largest is that §12.8 is unreachable by any path a user can take (an A4′ debt). **Reviewed end-to-end 2026-08-23**: nine findings, eight fixed and mutation-verified (`CODE-GREEN`; two §12 items await a device re-check) |
 | **4.5** — A0.5 second consumer of the portable core (`:consumer:jvm`) | ✅ **2026-08-26 — `CODE-GREEN`**; `DEVICE-ACCEPTED` **not applicable**, not absent — the block changes nothing on the phone. All four §3.1a questions answered with addresses, `B1` answered, the §6.3 divergence recorded and held by a test |
 | **5** — A1′ federated `ToolRegistry` | ✅ **2026-09-10 — `CLOSED`** — `CODE-GREEN` 2026-09-03, then the owner ran Parts A and B of the acceptance checklist on the SM-A325F in `ru-RU` and signed off (spec §16 criterion 1, the last open criterion of nine). The run itself produced three fixes — a missing `SET_ALARM`, a checklist that read the database without its WAL, and an agent surface whose exit left the launcher in search mode. `en`/`tr` never ran on the phone. Tool *mass* and *selection* split out as a new block, `A1″` |
-| **5.5** — A1″ tool mass + selection (phases 0–3a) | ✅ **2026-09-19 — `CODE-GREEN`**; `DEVICE-ACCEPTED` **absent, not inapplicable** — nothing this block built has run on a phone, and the block changes exactly what the user can reach. Five acting tools against a floor of four, a fourth adapter, selection over a dynamic registry, and the track's first `CONFIRM` tool. Gate 1438. **Phase 3b — the eleven navigating tools — is not started**, so spec §16 criterion 1 is open. Acceptance checklist written, owner runs it: [2026-09-19-a1-second-device-acceptance.md](docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md) |
-| **5.6–7** — A1″ phase 3b, A4′ runtime, A2/A3/A5/A6 | 3b is planned work inside a written spec (§7.6); the rest each needs its own spec + plan (`brainstorm → spec → plan → build`) |
+| **5.5** — A1″ tool mass + selection (phases 0–3a) | ✅ **2026-09-19 — `CODE-GREEN`**; `DEVICE-ACCEPTED` **absent, not inapplicable**. Corrected 2026-09-20: phases 1–2 *did* get a device reading in the Task 13b **smoke round** (`ab2d063`, not an acceptance); **phase 3a — the entire acting set, the `CONFIRM` card, the `launcher_memory` adapter and every `tr`/`en` trigger — has not run on a phone at all**. Five acting tools against a floor of four, a fourth adapter, selection over a dynamic registry, and the track's first `CONFIRM` tool. Gate 1438. Acceptance checklist written, owner runs it: [2026-09-19-a1-second-device-acceptance.md](docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md) |
+| **5.5b** — A1″ phase 3b, the eleven navigating tools | ✅ **2026-09-20 — `CODE-GREEN`**; `DEVICE-ACCEPTED` **absent** — nothing in 3b has run on a phone either. Eleven `system_intent` / `SAFE` / `EXTERNAL` tools (`show_alarms`, `open_camera`, and nine `open_*_settings`/`open_app_info` screens), registered, permitted, dispatched, reachable in `en`/`ru`/`tr` and rendered. Gate **1439** (+1: the `open_app_info` `required` pin, the phase's only new `@Test`). Ten pre-flight findings, three mutation findings. **Spec §16 criterion 1 stays open until the owner's Phase 4 acceptance** — tools and levels now suffice, the device round does not exist. Plan: [2026-09-19-a1-phase3b-navigating-tools.md](docs/superpowers/plans/2026-09-19-a1-phase3b-navigating-tools.md) |
+| **5.6–7** — A4′ runtime, A2/A3/A5/A6 | each needs its own spec + plan (`brainstorm → spec → plan → build`) |
 
 The four strategic ADRs (all 2026-08-19, in `decisions.md`):
 
@@ -97,12 +102,16 @@ surface (I18N-1) and FastPath's `tr` locale forms, which are `CODE-GREEN` only; 
 Этап 4.0 and the whole A0 agent slice (Этап 4) became
 `DEVICE-ACCEPTED` on 2026-08-22 in the Task 15 session, which also exercised FastPath's `ru` launch
 verb («открой …») on the phone; the A1′ slice (Этап 5) became `DEVICE-ACCEPTED` on 2026-09-10 in the
-same `ru-RU` locale. **The A1″ slice (Этап 5.5) is `CODE-GREEN` only — nothing it built has run on a
-phone at all**, and it is the block that adds an irreversible act (`uninstall_app`) to the surface.
+same `ru-RU` locale. **The A1″ slice (Этап 5.5, phases 0–3b) is `CODE-GREEN` only.** Said exactly
+(corrected 2026-09-20): **phases 1–2 received a device reading in the Task 13b smoke round
+(`ab2d063`, 2026-09-16), which is not an acceptance; phase 3a — the entire acting set, the `CONFIRM`
+card, the `launcher_memory` adapter and every `tr`/`en` trigger — has not run on a phone at all, and
+neither has phase 3b.** It is the block that adds an irreversible act (`uninstall_app`) to the surface.
 **No block has ever been accepted on the phone in `tr` or `en`** — every device
 round to date has run `ru-RU` only, and A1″ raised the count of unjudged `tr` triggers from one to
-**seven**. `CLOSED` = both, with any residual limitation named rather than implied absent (Этап 0.5 —
-status vocabulary).
+**twenty-three** (24 counted as raw distinct trigger strings; the vocabulary table holds 27 `tr` forms,
+three of which predate the unjudged accounting). `CLOSED` = both, with any residual limitation named
+rather than implied absent (Этап 0.5 — status vocabulary).
 
 - **Launcher core** — home, app drawer, settings, app launch; fully offline.
 - **FastPath routing** — `RuleBasedIntentMatcher`, verb/keyword vocabulary in `en`/`ru`/`tr`
@@ -172,15 +181,30 @@ status vocabulary).
   `ToolExecutorCallSiteGuardTest` (re-anchored, not weakened) holds the first. Tool *mass* beyond these
   two tools (`LauncherApps`/shortcuts, ~10 more Tier-0 intents) and tool *selection* before the planner
   are **not** in this block — split out as **A1″**, owner fork F2.
-- **Tool mass + selection (A1″ phases 0–3a, `CODE-GREEN` — `DEVICE-ACCEPTED` **absent**, nothing the
-  block built has run on a phone; residual limitations in Known debt)** — **nine authored tools on four
-  levels**, plus one dynamic family. **Five of them act**, against a floor of four:
+- **Tool mass + selection (A1″ phases 0–3b, `CODE-GREEN` — `DEVICE-ACCEPTED` **absent**: phases 1–2 got
+  a device reading in the Task 13b **smoke round**, which is not an acceptance, while **phase 3a — the
+  whole acting set, the `CONFIRM` card, the `launcher_memory` adapter and every `tr`/`en` trigger — has
+  not run on a phone at all, and neither has phase 3b**; residual limitations in Known debt)** —
+  **twenty authored tools on three levels** (sixteen of them built by this block, of which five act),
+  plus one dynamic family on a fourth. **Five of the sixteen act**, against a floor of four:
   `set_alarm` (`system_intent`, `SAFE`), **`uninstall_app` (`system_intent`, `CONFIRM`/`DURABLE` — the
   track's first `CONFIRM` tool)**, and `set_app_alias` / `forget_app_alias` / `forget_learned_choice`
   on a fourth adapter, `MemoryToolSource` at the new level `ToolLevels.LAUNCHER_MEMORY` (the agent
   changes its **own** memory on explicit command; all three `SAFE` and `LOCAL`, thin adapters over
   `SaveAliasUseCase` / `DeleteAliasUseCase` / `DeleteLearnedChoiceUseCase`, undoable from Settings).
-  All seven registered tools that carry a trigger are reachable from typed text in `en`/`ru`/`tr`.
+  **Phase 3b added the eleven navigating tools** — `show_alarms`, `open_camera`,
+  `open_wifi_settings`, `open_bluetooth_settings`, `open_battery_settings`,
+  `open_data_usage_settings`, `open_display_settings`, `open_sound_settings`,
+  `open_location_settings`, `open_notification_settings` and `open_app_info` — all `system_intent` /
+  `EXTERNAL` / `SAFE` / `TRANSIENT`, each an `Intent` built **inline in its own `when` arm** of
+  `Tier0IntentToolWorker` (no shared helper: one would take all eleven out from under
+  `ToolPermissionManifestGuardTest` entirely). Their `SAFE` rests on one positive reason and not on
+  "it is only a settings screen": they perform **no act at all**, so there is nothing to reverse — what
+  the *landed* screen then offers the user (`open_app_info` lands one tap from «Удалить»;
+  `open_wifi_settings` opened with a state-changing modal already raised on the measured device) is not
+  an act the tool performed, and both are named on their descriptors and on the acceptance checklist.
+  All eighteen registered tools that carry a trigger are reachable from typed text in `en`/`ru`/`tr`
+  (`launch_app`/`play_store_search` are reached by A0's plan, not by a trigger of their own).
   A third adapter, `ShortcutToolSource` (`app_shortcut`), turns every Android app shortcut into a tool
   **whose name is data** — 205 tools from 65 packages measured on the SM-A325F — and is the first source
   whose availability is a runtime **role** (`android.app.role.HOME`) rather than a permission: without
@@ -202,7 +226,9 @@ status vocabulary).
   (`<A> <infix> <B> <suffix>`). **No frozen type moved:** `GoalShape` still has two values, and
   `ActionIds` / `OutboundContextPolicy.ALLOWED` / `ObservedFact` / `CommandFailure` / `ArgType` are not
   in the diff — `:domain` grew by **one constant** on an open value class.
-  **Phase 3b — the eleven navigating tools — is not started.**
+  **Phase 3b changed no frozen type either** and added **one** new `@Test` in all: eleven tools cost
+  eleven vocabulary entries and **zero** planner branches, because the existing guards are equalities
+  over lists and folds over the production federation — eleven tools widen their *inputs*.
 - **PREVIEW surfaces** — Tasks / Agents / Activity / Terminal: non-functional badged mock-ups, zero
   fabricated data (owner decision 2026-08-18: they stay).
 
@@ -361,19 +387,36 @@ below is recorded in its own ADR.
   sets was not established. At the SQL level the at-rest guarantee holds (re-measured at five points);
   the file lives in app-private storage and needed `run-as` on a debuggable build. Changing journal
   mode or `secure_delete` on an accepted schema-4 database is an owner decision → owner / A4′.
-- **A1″ (tool mass + selection, phases 0–3a) is `CODE-GREEN` as of 2026-09-19 — `DEVICE-ACCEPTED` is
-  ABSENT, not inapplicable.** Nothing the block built has run on a phone. The Task 13/13b device round
-  measured **Android premises**, not the product: not one of the five acting tools, not the `CONFIRM`
-  card, not one `tr` trigger has been observed on a device. Checklist written and waiting for the owner:
+- **A1″ (tool mass + selection, phases 0–3b) is `CODE-GREEN` — phases 0–3a as of 2026-09-19, phase 3b
+  as of 2026-09-20 at gate 1439 — and `DEVICE-ACCEPTED` is ABSENT, not inapplicable** (unlike A0.5,
+  where "not applicable" was honest because that block changed nothing on the phone).
+  **Corrected 2026-09-20:** four documents used to say that *nothing* the block built had run on a
+  phone, and that is **wider than the truth**. Verified against git: `ab2d063` (2026-09-16), the Task
+  13b **smoke round** the owner authorised and which is explicitly **not** an acceptance, ran the
+  shipped phase-1/2 code on the SM-A325F — 216 shortcut descriptors from 65 packages with no id
+  collisions, `ToolSelector` over that real registry (authored ≈1 ms, dynamic ≈64–69 ms, three
+  documented declines), one command driven through the launcher's own UI in `ru-RU` with provenance
+  rendering `APP SHORTCUT · EXTERNAL`, and fail-closed behaviour with the HOME role removed.
+  **The exact standing claim: phases 1–2 received a device reading in a smoke round that is not an
+  acceptance; phase 3a — the entire acting set, the `CONFIRM` card, the `launcher_memory` adapter and
+  every `tr`/`en` trigger — has not run on a phone at all, and neither has phase 3b.** The Task 13/13b
+  measurement round measured **Android premises**, not the product. Checklist written, extended with
+  3b's eleven rows, and waiting for the owner:
   [2026-09-19-a1-second-device-acceptance.md](docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md).
-  Full record: ADR «2026-09-19 — Этап 5.5 (A1″)».
+  Full record: ADR «2026-09-19 — Этап 5.5 (A1″)», whose last section is phase 3b's.
   **Residual limitations, named rather than implied absent:**
   **(1) `ToolMatchPlanner` resolves an argument named `app` regardless of `required`** (R14-37). A
   future descriptor declaring `app` as **optional** (e.g. `share_to(app, text)`) gets `raw = ""` →
   `resolve("")` → `null` → **`NoPlan` for every goal, forever, with the suite green** — the block's own
   failure mode (a tool registered and dead) recurring for the next author. R14-35 closed the opposite
-  direction with a **per-descriptor pin for `uninstall_app`**; **neither direction is generalised.** The
-  `ArgType` debt restated at planner level → A4′ / A1″ phase 3b.
+  direction with a **per-descriptor pin for `uninstall_app`**, and phase 3b added a **second** such pin
+  for `open_app_info`; **two instances, still no generalisation** — the accumulation is itself the
+  evidence A4′ needs. Phase 3b's mutation round also narrowed what such a pin proves: with
+  `required = false` planted, `open_app_info` still **plans correctly**, because its vocabulary declares
+  `argName = "app"` and refuses a bare trigger, so the flag only changes *which line* returns `NoPlan`
+  — the pin stands against the **wiring** changing, and R14-37's failure mode arises for any descriptor
+  whose vocabulary does **not** supply `app`, one vocabulary edit away. The `ArgType` debt restated at
+  planner level → A4′.
   **(2) the self-uninstall refusal fires AFTER consent** (R14-38). «удали sidr» resolves to our own
   package, draws a `CONFIRM` card **naming it**, and only then the worker returns `Failed(Generic)` —
   the user consents to something that cannot happen. **Spec-compliant** (condition 4 sits exactly
@@ -387,9 +430,15 @@ below is recorded in its own ADR.
   the decision to send is made by an **unresolved name** rather than by the routing rules. This is the
   same class as A1′ residual (3), now with a non-store cause. A test pins it, and its **first** assertion
   is the load-bearing one: it proves the vocabulary really did claim the text. → **A4′**.
-  **(4) SIX `tr` triggers, none judged by a native speaker** — `alarm ayarla`, `uygulamasını kaldır`,
-  `kaldır`, `için`/`kullan`, `adını unut`, `için seçimi unut`, beside A1′'s inherited `sayaç ayarla`
-  (seven in total; before this block it was one). R14-42 records the decision to ship `için`/`kullan`
+  **(4) TWENTY-THREE `tr` triggers, none judged by a native speaker** — phase 3a's six
+  (`alarm ayarla`, `uygulamasını kaldır`, `kaldır`, `için`/`kullan`, `adını unut`,
+  `için seçimi unut`) beside A1′'s inherited `sayaç ayarla` made seven; **phase 3b added sixteen more
+  `tr` forms across eleven tools** (most of the new entries declare two), so the count by this list's
+  own convention (`için`/`kullan` as one item) is **23**, and **24** counted as raw distinct trigger
+  strings. The vocabulary table holds **27** `tr` forms in all, three of which (`zamanlayıcı ayarla`,
+  `sistem ayarları`, `android ayarları`) predate the unjudged accounting. Before A1″ it was **one**.
+  3b's least-confident forms, named in advance: `pil ayarları`, `veri kullanımı`, `bildirim ayarları`,
+  `konum ayarları`, `uygulama bilgisi`. R14-42 records the decision to ship `için`/`kullan`
   with the limitation **named** rather than block the phase on a question no agent and no guard can
   answer. The linguistic finding is real and is the useful half: `olarak`/`diye` (the literal renderings
   of "as") are **postpositions attaching to the second argument**, so they cannot occupy a slot
@@ -405,18 +454,53 @@ below is recorded in its own ADR.
   and found only by running the gate. **The method rule this block paid for: the guard surface for
   "add a tool" cannot be enumerated in advance from a document; it can only be discovered by running the
   gate.** Real closure = spec §8.2's registry-keyed guard applied to workers as well as permissions —
-  explicitly not this block's.
+  explicitly not this block's. **Phase 3b's pre-flight enumerated fourteen such lists and the count
+  stayed at fourteen** — which is **not** evidence that the set is enumerable, only that eleven tools of
+  a *shape the surface had already learned* (same level, same worker file, no new worker) added no new
+  list; item 12 of that enumeration (`ToolWorkerCallSiteGuardTest`) never fired because no worker file
+  was created.
   **(6) the two-slot vocabulary form is bounded by ORDER**, not just by arity: `<A> <infix> <B>
   <suffix>` excludes any language whose connective does not sit between the arguments — discovered on
   Turkish, named as a limit rather than a property.
   **(7) limitation (5) of the A1′ row is narrowed, not cleared:** `uninstall_app` got its own
   two-argument branch reading arguments **by name**, but the argument-**count** rule still governs every
   other tool, so the next two-literal tool without its own branch still falls back to the goal text.
-- **The A1″ block's own recurring finding, which is a method debt rather than a code debt:** **seven
+  **(8) `DoctrineGuardTest`'s AUTHORED-tool branch carries the same `String.contains` blindness
+  previously measured only for the dynamic branch** (phase 3b mutation finding 2). Deleting a
+  `toolLabelFor` `when` arm while leaving its `private const val` in place left `:app` **GREEN** at
+  59/0 — that tool would render the generic step line forever; deleting arm *and* const goes red. The
+  guard's KDoc used to say "the authored-tool branch above is not weakened by this finding"; that
+  sentence is measured **false** and has been corrected in the tree. Realistic rather than exotic: an
+  orphaned `const` is a Kotlin warning and this build sets no `allWarningsAsErrors`. **Not repaired** —
+  closing it means reading the arms rather than the file text. → A4′ / whichever block next touches
+  that guard.
+  **(9) a timing-sensitive test in the gate can redden a boundary run for a reason unrelated to the
+  diff** (phase 3b mutation finding 3). `:data:ai-cloud`'s `first token arriving just under the
+  deadline still completes normally` failed once under back-to-back Gradle load and passed on an
+  immediate re-run from a cleared tree; that failing run also aborted at 407/557 tasks, so it was
+  incomplete as well as red. **Same class as R14-44** — a gate signal that does not describe what it is
+  believed to describe. Recorded, not repaired.
+  **(10) `open_app_info`'s step line renders the RESOLVED package, not the word the user typed**,
+  because resolution happens above the consent gate and the descriptor declares `app` without the
+  optional `app_label`. For a `SAFE` tool this is a **legibility** limit, not a safety one; it is on the
+  acceptance checklist and was deliberately not softened by adding `app_label`.
+  **(11) `open_location_settings` ships with `emptyList()` on a necessity that is UNMEASURED** (P2).
+  Row 24 declines to claim the tool needs no permission; rows 29/30/33 only exclude the *grant*. The
+  alternative — declaring `ACCESS_FINE_LOCATION` — would make `Tier0IntentToolSource.available()`
+  withhold the tool **on the owner's own phone**, since row 33 measured that permission DENIED
+  in-process, and every equality list would stay green. A named limit, a numbered checklist item: if
+  that screen fails to open on a build without the prayer feature's declaration, the row is wrong.
+  **(12) `open_battery_settings` rests on a ROM-dependent premise** — `ACTION_POWER_USAGE_SUMMARY`
+  resolved to **Samsung Device Care**, not `com.android.settings`, and resolving at all was measured on
+  one device. `launch()` already returns `Failed` on `ActivityNotFoundException`; named, not fixed.
+- **The A1″ block's own recurring finding, which is a method debt rather than a code debt:** **eight
   demonstrated cases of "evidence that does not describe the thing it is believed to describe"** — four
   where strengthening a runtime invariant made its guard **unfalsifiable** (R14-15, R14-28, R14-31,
   R14-36), three where a guard was **never** falsifiable and only mutation revealed it (R14-40, R14-43
-  ×2), plus R14-44, the same disease at **gate** level. Two rules came out of it and both are binding
+  ×2), **an eighth from phase 3b — `open_app_info`'s `required = true` pin, which is falsifiable but
+  whose stated justification was not what the code does** — plus R14-44, the same disease at **gate**
+  level (and phase 3b's third mutation finding is a second instance at that level: a timing-sensitive
+  test reddening a boundary run for a reason unrelated to the diff). Two rules came out of it and both are binding
   from here on: **(a)** a rendering assertion whose expected values share substrings with each other or
   with the fallback cannot distinguish correct output from several wrong ones — **realistic fixtures are
   the dangerous ones, because a real package name usually contains the real label**; **(b)** the last
@@ -536,19 +620,27 @@ below is recorded in its own ADR.
   plus `:core:ui:verifyRoborazziDebug` whenever `core/ui` is touched, and `:app:assembleRelease` for
   release-affecting work. **`:domain:jvmTest` and `:consumer:jvm:test` must be listed explicitly:**
   `testDebugUnitTest` has not reached `:domain` since it went KMP, and it never reaches `:consumer:jvm`
-  at all. **Baseline at 2026-09-19 (`ea9c528`, the A1″ phase-3a boundary and block close): 1438 tests,
-  0 failures, 0 errors**, from a run printing `557 actionable tasks: 557 executed` with
+  at all. **Baseline at 2026-09-20 (the A1″ phase-3b boundary): 1439 tests, 0 failures, 0 errors**,
+  from a run printing `557 actionable tasks: 557 executed` with
   `build/test-results` cleared first — `:domain:jvmTest` **440** + `:consumer:jvm` **56** +
-  `:data:repository` **374** + `:feature:launcher` **194** + `:app` **59** + the other eight modules
+  `:data:repository` **375** + `:feature:launcher` **194** + `:app` **59** + the other eight modules
   **315** (`core/ui` 128, `data/ai-cloud` 32, `data/prayer` 38, `feature/assistant` 38,
   `feature/settings` 33, `feature/prayer` 19, `feature/permission_education` 15, `core/android` 12).
-  **Compare a fresh gate against 1438** — not against 1375, not against 1314, and not against any number
-  quoted in the A1′ ADR. Prior baseline for reference: 2026-09-10 (`1ef158d`, the build the owner
+  **Compare a fresh gate against 1439** — not against 1438, not against 1375, not against 1314, and not
+  against any number quoted in the A1′ ADR. The single test phase 3b added is the `open_app_info`
+  `required` pin in `:data:repository` (374 → 375); eleven tools added no other `@Test`, because the
+  guards they touch are equalities over lists and folds over the production federation.
+  Prior baseline for reference: 2026-09-10 (`1ef158d`, the build the owner
   accepted) was **1314** (434 + 56 + 271 + 189 + 49, the rest unchanged). The A1″ phase boundaries, each
   named with the commit it was measured at: `d391350` **1321** → Task 4 **1323** → `09d4322` (Phase 1)
-  **1357** → `c05fd7a` **1369** → `1db2cd8` (Phase 2) **1375** → `ea9c528` (Phase 3a) **1438**. On every
-  one of those four boundaries the decomposition was derived **before** the run and matched it, which is
+  **1357** → `c05fd7a` **1369** → `1db2cd8` (Phase 2) **1375** → `ea9c528` (Phase 3a) **1438** → phase 3b
+  **1439**. On every
+  one of those boundaries the decomposition was derived **before** the run and matched it, which is
   the check a total alone cannot make: a sum cannot tell "two added" from "two added and two lost".
+  **One caveat measured at the 3b boundary and worth knowing before a red gate is believed:**
+  `:data:ai-cloud`'s `first token arriving just under the deadline still completes normally` is
+  timing-sensitive — it failed once under back-to-back Gradle load (on a run that also aborted at
+  407/557 tasks) and passed on an immediate re-run from a cleared tree.
   **Clear `build/test-results` before a boundary gate.** A1″ paid for this rule (R14-44): stale XML left
   by a mutation run after the final gate is indistinguishable from a red gate, and it misleads in both
   directions — a controller either disbelieves a correct report, or a later reader takes a leftover green
@@ -589,7 +681,7 @@ below is recorded in its own ADR.
 | Suggestion + voice contracts; prayer domain (`PrayerContext`, `GetPrayerContextUseCase`) | `domain` |
 | `RuleBasedIntentMatcher`, `InstalledAppsRepository` impl, `AndroidActionExecutor` | `data/repository` |
 | `SystemIntentToolSource` (projects `ActionCatalog` → two `ToolDescriptor`s, level `in_app`) + `SystemIntentToolWorker` (over the **unchanged** action path; renamed from `SystemIntentToolExecutor` when the `ToolWorker` port landed) + `RoomAgentSessionStore` | `data/repository` |
-| `Tier0IntentToolSource`/`Tier0IntentToolWorker` (level `system_intent`, **four tools**: `set_timer` and `set_alarm`, both needing `com.android.alarm.permission.SET_ALARM`; `open_system_settings`, needing none; **`uninstall_app`** — the track's first `CONFIRM`/`DURABLE` tool, needing `android.permission.REQUEST_DELETE_PACKAGES`, refusing our own package) + `ToolMatchPlanner`/`ToolVocabulary` (localized `en`/`ru`/`tr` reachability feeding `RouteCommandUseCase` step 2b; **bounded two-slot form** `<A> <infix> <B> <suffix>` since A1″) | `data/repository` |
+| `Tier0IntentToolSource`/`Tier0IntentToolWorker` (level `system_intent`, **fifteen tools in four families**: the two alarm-clock tools `set_timer`/`set_alarm`, both needing `com.android.alarm.permission.SET_ALARM`; **`uninstall_app`** — the track's first `CONFIRM`/`DURABLE` tool, needing `android.permission.REQUEST_DELETE_PACKAGES`, refusing our own package; `show_alarms` + `open_camera`, zero-argument screens needing none; and the settings-screen family `open_system_settings` / `open_wifi_settings` / `open_bluetooth_settings` / `open_battery_settings` / `open_data_usage_settings` / `open_display_settings` / `open_sound_settings` / `open_location_settings` / `open_notification_settings` / `open_app_info` — all `SAFE`, all needing none declared, `open_app_info` the only argument-carrying one. Every `Intent` is built **inline in its own `when` arm**: a shared helper would take the whole worker out from under `ToolPermissionManifestGuardTest`) + `ToolMatchPlanner`/`ToolVocabulary` (localized `en`/`ru`/`tr` reachability feeding `RouteCommandUseCase` step 2b; **bounded two-slot form** `<A> <infix> <B> <suffix>` since A1″) | `data/repository` |
 | `MemoryToolSource`/`MemoryToolWorker`/`MemoryToolIds` (level `launcher_memory`, all `SAFE`+`LOCAL`+`TRANSIENT`: `set_app_alias`, `forget_app_alias`, `forget_learned_choice` — thin adapters over `SaveAliasUseCase`/`DeleteAliasUseCase`/`DeleteLearnedChoiceUseCase`; the worker resolves nothing and catches for the use case that carries no `try` of its own) | `data/repository` |
 | `ShortcutToolSource`/`ShortcutToolWorker`/`ShortcutToolIds`/`ShortcutCatalog` (level `app_shortcut`; one tool per Android app shortcut, **name is data not a literal**; availability is the `android.app.role.HOME` **role**, and without it the catalog is empty and the source advertises nothing) + `DynamicToolNames`/`DynamicToolName` | `data/repository` |
 | `ToolSelector` (one command → at most one tool over a partly third-party registry: authored beats dynamic, a dynamic candidate must name its app, equal candidates **decline**, every command token must be accounted for) + `AppTargetResolver` (a name → one package or nothing, never a guess; consulted by the planner **above** the consent gate) + `ToolPermissionCatalog` (production `ToolId` → manifest permissions; a missing row is **not** consent) | `data/repository` |
@@ -652,5 +744,6 @@ below is recorded in its own ADR.
   «Сквозное ревью блока A0» (2026-08-23) · **Этап 4.5 (A0.5)** — second consumer (2026-08-26) ·
   **Этап 5 (A1′)** — federated `ToolRegistry` (2026-09-03; the owner's device acceptance of
   2026-09-10 is a section inside that same ADR) · **Этап 5.5 (A1″)** — tool mass + selection,
-  phases 0–3a (2026-09-19; `CODE-GREEN`, no device acceptance yet — when it happens it becomes a
-  section inside that same ADR, as A1′'s did)
+  phases 0–3a (2026-09-19) **and phase 3b, the eleven navigating tools, as a section inside that same
+  ADR** (2026-09-20; `CODE-GREEN`, no device acceptance yet — when it happens it becomes another
+  section there, as A1′'s did)

@@ -463,9 +463,21 @@ class DoctrineGuardTest {
      *    shortcut step renders the generic line, exactly the defect this bullet exists to catch — left
      *    `:app` green at 59/0. The `launcher_agent_step_shortcut` resource id is still present in the
      *    file, in a branch the mutated code can no longer reach, and `String.contains` cannot tell the
-     *    difference. The authored-tool branch above is not weakened by this finding: M16 (a
-     *    registered-but-unnamed dynamic tool) and the shared floor (M1/M2/M3) do turn this test red, so
-     *    the blindness is specific to the dynamic-label check, not to the whole test. For that branch the
+     *    difference.
+     *  - **CORRECTED 2026-09-20 (A1″ phase 3b, mutation M6a). This bullet used to continue "The
+     *    authored-tool branch above is not weakened by this finding", and that sentence is now
+     *    measured FALSE.** Deleting one tool's `toolLabelFor` `when` arm while leaving its
+     *    `private const val TIER0_… = "open_sound_settings"` in place — the tool then renders the
+     *    generic step line forever, exactly the defect this test exists to catch — left `:app`
+     *    **GREEN** at 59/0. Deleting the arm *and* the const goes red. So the authored branch holds
+     *    "the literal appears somewhere in the file", **not** "the tool has a `when` arm", and it
+     *    carries the same `String.contains` blindness previously measured only for the dynamic branch.
+     *    The shape is realistic rather than exotic: an orphaned `private const val` left behind by a
+     *    refactor is a Kotlin *warning*, and this build sets no `allWarningsAsErrors`, so nothing else
+     *    stops it either. Closing it means reading the arms rather than the file text, or relocating
+     *    the assertion beside a behavioural test — not this block's work, recorded rather than built.
+     *    M16 (a registered-but-unnamed dynamic tool) and the shared floor (M1/M2/M3) do still turn
+     *    this test red, so it is not vacuous. For the dynamic branch the
      *    property **is** held — but only in `:feature:launcher`, by
      *    `LauncherScreenAgentProvenanceTest > a shortcut tool renders its own name and its app_shortcut
      *    provenance`, which asserts on the rendered text and went red under M13. A sound `:app`-level
@@ -787,6 +799,28 @@ class DoctrineGuardTest {
         MemoryToolIds.SET_APP_ALIAS to ActionRiskLevel.SAFE,
         MemoryToolIds.FORGET_APP_ALIAS to ActionRiskLevel.SAFE,
         MemoryToolIds.FORGET_LEARNED_CHOICE to ActionRiskLevel.SAFE,
+        // A1″ Phase 3b, Task 2 (Slice A) — four navigating tools. Each performs no act at all (it
+        // opens a screen or a list), so there is nothing to reverse and SAFE is positively justified
+        // rather than argued from "it is only a settings screen" — see Tier0IntentToolSource's KDoc
+        // on each descriptor for the per-tool reasoning (rows 14/29, 17, 18, 19).
+        Tier0ToolIds.SHOW_ALARMS to ActionRiskLevel.SAFE,
+        Tier0ToolIds.OPEN_CAMERA to ActionRiskLevel.SAFE,
+        Tier0ToolIds.OPEN_WIFI_SETTINGS to ActionRiskLevel.SAFE,
+        Tier0ToolIds.OPEN_BLUETOOTH_SETTINGS to ActionRiskLevel.SAFE,
+        // A1″ Phase 3b, Task 3 (Slice B) — four more navigating tools, same positive SAFE reasoning
+        // (rows 20, 21, 22, 23). See Tier0IntentToolSource's KDoc on each descriptor for P4's
+        // ROM-dependent-responder note on open_battery_settings.
+        Tier0ToolIds.OPEN_BATTERY_SETTINGS to ActionRiskLevel.SAFE,
+        Tier0ToolIds.OPEN_DATA_USAGE_SETTINGS to ActionRiskLevel.SAFE,
+        Tier0ToolIds.OPEN_DISPLAY_SETTINGS to ActionRiskLevel.SAFE,
+        Tier0ToolIds.OPEN_SOUND_SETTINGS to ActionRiskLevel.SAFE,
+        // A1″ Phase 3b, Task 4 (Slice C) — the last three navigating tools, same positive SAFE
+        // reasoning (rows 24/29/30/33, 25, 15): each performs no act at all. `open_app_info` is the
+        // only argument-carrying one of the eleven and is SAFE for the same positive reason — it
+        // opens a screen; what that screen then offers the user is not an act this tool performed.
+        Tier0ToolIds.OPEN_LOCATION_SETTINGS to ActionRiskLevel.SAFE,
+        Tier0ToolIds.OPEN_NOTIFICATION_SETTINGS to ActionRiskLevel.SAFE,
+        Tier0ToolIds.OPEN_APP_INFO to ActionRiskLevel.SAFE,
     )
 
     /**
@@ -876,6 +910,19 @@ class DoctrineGuardTest {
          * tool and tidy away its row" edit satisfied both halves at once and passed silently. Keeping
          * the duplication is the price of the floor meaning anything — do not tidy these two lists into
          * one, in either direction.
+         *
+         * **The set of lists that must change together when a tool is added is not enumerable from
+         * any document — it is incomplete by construction.** This list is one of them, and it is not
+         * the only one, and no document — not this comment, not the spec, not the plan — can name the
+         * complete set in advance. Measured, not asserted: it has been five, then six, then seven,
+         * then eight within two sessions (R14-32/33/36/41), and no KDoc anywhere states the true
+         * number, because the number keeps moving out from under whatever last stated it. The count
+         * known at 2026-09-19 is **fourteen**. The only reliable enumeration is running the full gate
+         * — a list you did not know to update turns red there, not in a document you could have read
+         * first. Real closure is spec §8.2 of
+         * `docs/superpowers/specs/2026-09-12-a1-second-tool-mass-and-selection-design.md` — the
+         * registry-keyed guard applied to workers the same way `ToolRegistryPermissionGuardTest`
+         * already applies it to permissions — explicitly not this block's (A1″ phase 3b) work.
          */
         val REQUIRED_TOOL_IDS: List<ToolId> = listOf(
             ToolIds.LAUNCH_APP,
@@ -888,6 +935,20 @@ class DoctrineGuardTest {
             MemoryToolIds.SET_APP_ALIAS,
             MemoryToolIds.FORGET_APP_ALIAS,
             MemoryToolIds.FORGET_LEARNED_CHOICE,
+            // A1″ Phase 3b, Task 2 (Slice A) — four navigating tools, all SAFE.
+            Tier0ToolIds.SHOW_ALARMS,
+            Tier0ToolIds.OPEN_CAMERA,
+            Tier0ToolIds.OPEN_WIFI_SETTINGS,
+            Tier0ToolIds.OPEN_BLUETOOTH_SETTINGS,
+            // A1″ Phase 3b, Task 3 (Slice B) — four more navigating tools, all SAFE.
+            Tier0ToolIds.OPEN_BATTERY_SETTINGS,
+            Tier0ToolIds.OPEN_DATA_USAGE_SETTINGS,
+            Tier0ToolIds.OPEN_DISPLAY_SETTINGS,
+            Tier0ToolIds.OPEN_SOUND_SETTINGS,
+            // A1″ Phase 3b, Task 4 (Slice C) — the last three navigating tools, all SAFE.
+            Tier0ToolIds.OPEN_LOCATION_SETTINGS,
+            Tier0ToolIds.OPEN_NOTIFICATION_SETTINGS,
+            Tier0ToolIds.OPEN_APP_INFO,
         )
     }
 }

@@ -63,9 +63,12 @@ internal fun AgentGoal.subject(): String = when (val shape = shape) {
 
 /*
  * Task 10 / A1'. `Tier0ToolIds` lives in `:data:repository`, which `:feature:launcher` must not depend
- * on (no feature -> data edge), so its ids are written out here as literals — **four** of them since
- * A1″ Phase 3a added `set_alarm` and `uninstall_app`, the same shape of duplication `ToolIds`' own KDoc
- * records for `SystemIntentToolSource`.
+ * on (no feature -> data edge), so its ids are written out here as literals — the same shape of
+ * duplication `ToolIds`' own KDoc records for `SystemIntentToolSource`. **Deliberately not counted:**
+ * this comment read "**four** of them since A1″ Phase 3a" and was false from the first tool of phase
+ * 3b onward. A count in prose beside a list that grows is a claim nobody re-reads (R14-41); the
+ * authoritative set is the `toolLabelFor` arms below, and `DoctrineGuardTest`'s literal scan is what
+ * holds them against the registry.
  *
  * **Corrected 2026-09-19 (fix round 2, finding 3).** This comment used to say that nothing pinned these
  * strings to their declaration and that drift was merely *fail-soft*. That is no longer true and had
@@ -87,6 +90,36 @@ private const val TIER0_SET_ALARM = "set_alarm"
  * to that module. `DoctrineGuardTest` is what holds the two spellings together.
  */
 private const val TIER0_UNINSTALL_APP = "uninstall_app"
+
+/**
+ * A1″ Phase 3b, Task 2 (Slice A). More string literals, same reason and the same idiom as those above:
+ * the real constants are `Tier0ToolIds.*` in `:data:repository`, and `:feature:launcher` has no edge
+ * to that module. `DoctrineGuardTest` holds the two spellings together.
+ */
+private const val TIER0_SHOW_ALARMS = "show_alarms"
+private const val TIER0_OPEN_CAMERA = "open_camera"
+private const val TIER0_OPEN_WIFI_SETTINGS = "open_wifi_settings"
+private const val TIER0_OPEN_BLUETOOTH_SETTINGS = "open_bluetooth_settings"
+
+/**
+ * A1″ Phase 3b, Task 3 (Slice B). More string literals, same reason and the same idiom as those above:
+ * the real constants are `Tier0ToolIds.*` in `:data:repository`, and `:feature:launcher` has no edge
+ * to that module. `DoctrineGuardTest` holds the two spellings together.
+ */
+private const val TIER0_OPEN_BATTERY_SETTINGS = "open_battery_settings"
+private const val TIER0_OPEN_DATA_USAGE_SETTINGS = "open_data_usage_settings"
+private const val TIER0_OPEN_DISPLAY_SETTINGS = "open_display_settings"
+private const val TIER0_OPEN_SOUND_SETTINGS = "open_sound_settings"
+
+/**
+ * A1″ Phase 3b, Task 4 (Slice C). The last three string literals of the eleven, same reason and the
+ * same idiom as the eight above: the real constants are `Tier0ToolIds.*` in `:data:repository`, and
+ * `:feature:launcher` has no edge to that module. `DoctrineGuardTest` holds the two spellings
+ * together, over a scan that strips comments — so only the declarations below satisfy it.
+ */
+private const val TIER0_OPEN_LOCATION_SETTINGS = "open_location_settings"
+private const val TIER0_OPEN_NOTIFICATION_SETTINGS = "open_notification_settings"
+private const val TIER0_OPEN_APP_INFO = "open_app_info"
 
 /**
  * Task 9, A1″ Phase 3a. Three more string literals, same reason as the Tier-0 ones above: the real
@@ -137,6 +170,21 @@ internal fun toolLabelFor(id: ToolId): Int = when (id.value) {
     MEMORY_SET_APP_ALIAS -> R.string.launcher_agent_step_set_alias
     MEMORY_FORGET_APP_ALIAS -> R.string.launcher_agent_step_forget_alias
     MEMORY_FORGET_LEARNED_CHOICE -> R.string.launcher_agent_step_forget_choice
+    TIER0_SHOW_ALARMS -> R.string.launcher_agent_step_show_alarms
+    TIER0_OPEN_CAMERA -> R.string.launcher_agent_step_open_camera
+    TIER0_OPEN_WIFI_SETTINGS -> R.string.launcher_agent_step_open_wifi_settings
+    TIER0_OPEN_BLUETOOTH_SETTINGS -> R.string.launcher_agent_step_open_bluetooth_settings
+    TIER0_OPEN_BATTERY_SETTINGS -> R.string.launcher_agent_step_open_battery_settings
+    TIER0_OPEN_DATA_USAGE_SETTINGS -> R.string.launcher_agent_step_open_data_usage_settings
+    TIER0_OPEN_DISPLAY_SETTINGS -> R.string.launcher_agent_step_open_display_settings
+    TIER0_OPEN_SOUND_SETTINGS -> R.string.launcher_agent_step_open_sound_settings
+    TIER0_OPEN_LOCATION_SETTINGS -> R.string.launcher_agent_step_open_location_settings
+    TIER0_OPEN_NOTIFICATION_SETTINGS -> R.string.launcher_agent_step_open_notification_settings
+    // The only one of the eleven whose resource takes a placeholder: `open_app_info` carries exactly
+    // one literal argument, so `line()`'s single-literal path fills it — with the RESOLVED package,
+    // because resolution happens above the consent gate. See that descriptor's KDoc: for a `SAFE`
+    // tool that is a legibility limit, not a safety one, and it is not softened by adding `app_label`.
+    TIER0_OPEN_APP_INFO -> R.string.launcher_agent_step_open_app_info
     else -> R.string.launcher_agent_step_generic
 }
 

@@ -2,17 +2,32 @@
 
 > **NOT RUN. Written 2026-09-19 at block close; the owner runs it, not an agent.**
 >
-> **Why this file exists.** Block A1″ (Этап 5.5) is `CODE-GREEN`: gate green at **1438 tests / 0
-> failures / 0 errors** from a run printing `557 actionable tasks: 557 executed`, every new guard
-> mutation-proved, ADR written («2026-09-19 — Этап 5.5 (A1″)» in `ai-context/decisions.md`). It is
-> **not** `DEVICE-ACCEPTED`, and nothing this block built has run on a phone. The block *did* use a
-> phone — the Task 13/13b measurement round on the SM-A325F — but that round measured **Android
-> premises**, not the product. Not one of the five acting tools, not the consent card of the track's
-> first `CONFIRM` tool, not one of the six Turkish triggers has ever been observed on a device.
+> **Why this file exists.** Block A1″ (Этап 5.5) is `CODE-GREEN` through **phase 3b**: gate green at
+> **1439 tests / 0 failures / 0 errors** from a run printing `557 actionable tasks: 557 executed`,
+> every new guard mutation-proved, ADR written («2026-09-19 — Этап 5.5 (A1″)» in
+> `ai-context/decisions.md`, with phase 3b as its last section). It is **not** `DEVICE-ACCEPTED`.
+>
+> **Said exactly — corrected 2026-09-20, because the earlier wording here ("nothing this block built
+> has run on a phone") was wider than the truth, and an under-claimed deficit is the same class of
+> error as an over-claimed success.** Verified against git: `ab2d063` (2026-09-16), the Task 13b
+> **smoke round** the owner authorised and which is explicitly **not** an acceptance, ran the shipped
+> phase-1/2 code on the SM-A325F — 216 shortcut descriptors from 65 packages with no id collisions,
+> `ToolSelector` over that real registry (authored beats dynamic in ≈1 ms, dynamic candidates ≈64–69
+> ms, three documented declines), one command driven through the launcher's own UI in `ru-RU` where the
+> shortcut executed via `LauncherApps.startShortcut`, the step line carried the third-party label,
+> provenance rendered `APP SHORTCUT · EXTERNAL` and «Закрыть» cleared the command buffer, and
+> fail-closed behaviour with the HOME role removed. So: **phases 1–2 received a device reading in a
+> smoke round that is not an acceptance; phase 3a — the entire acting set, the `CONFIRM` card, the
+> `launcher_memory` adapter and every `tr`/`en` trigger — has not run on a phone at all, and neither
+> has phase 3b.** The Task 13/13b measurement round measured **Android premises**, not the product.
 >
 > Unlike A0.5 (whose device acceptance was marked *not applicable*, because that block changed nothing
-> on the phone), A1″ changes exactly what the user can reach. This is an ordinary deficit, not an
-> inapplicability.
+> on the phone), A1″ changes exactly what the user can reach. `DEVICE-ACCEPTED` here is **ABSENT, not
+> inapplicable** — an ordinary deficit.
+>
+> **Extended 2026-09-20 with phase 3b:** §A9 adds eleven numbered rows, one per navigating tool; the
+> SAFETY section gains a fourth rule for `open_wifi_settings`; and §A6's Turkish row went from six
+> forms to **23**. Spec §14 has this round cover **all** the block's tools in one pass.
 >
 > **Owner-run means owner-run.** An `adb`/`uiautomator` pass driven by an agent is evidence, not
 > acceptance (Этап 0.5's status vocabulary). Part C below is exactly that kind of evidence and clears
@@ -40,6 +55,13 @@ app**. Three rules, and they are not advisory:
    APKs and destroys the app's data, which is the accepted schema-4 database. Drive `am`/`adb shell`
    by hand if anything instrumental is needed.
 3. **NEVER `adb uninstall com.sidr.launcher`.** Install the new debug build **over** the existing one.
+4. **`open_wifi_settings` — DO NOT TAP OK ON THE MODAL.** Measured on this phone (row 18 of the
+   measurements file): the Wi-Fi screen opened **with «Отключить мобильную точку доступа? … Отмена /
+   OK» already raised**, because the hotspot was on — **and the owner's laptop is tethered through this
+   phone.** Tapping OK cuts the laptop's internet. The item in §A9 is satisfied when the screen
+   **appears**; dismiss with **Отмена**. The tool itself is `SAFE` and performed no act: the modal is
+   the responder's and the tap would be the user's — which is exactly why this is a SAFETY rule and not
+   an ordinary numbered item.
 
 ---
 
@@ -77,11 +99,16 @@ accepted:
   cannot quietly reintroduce the truncated read. This device also exposes **no** `sqlite3` through
   `run-as` (measured 2026-09-05), so the script's own copy of the SDK binary is the one to use.
 
-**Risk levels in this build, so nothing below reads as a missed gate.** Eight of the nine authored
-tools are `SAFE` — `requiresConsent(SAFE) == false`, so their plans do **not** stop at
-`AwaitingConsent`; the step runs immediately and the session lands on the completed surface with no
-confirm tap. That is expected. **`uninstall_app` is `CONFIRM`** and is the first tool in the track's
-history that stops the loop on a real product path.
+**Risk levels in this build, so nothing below reads as a missed gate.** Updated 2026-09-20 for phase
+3b and read off `DoctrineGuardTest.declaredRisk`, which pins risk over the production federation:
+**eighteen of the twenty authored tools are `SAFE`** — `requiresConsent(SAFE) == false`, so their plans
+do **not** stop at `AwaitingConsent`; the step runs immediately and the session lands on the completed
+surface with no confirm tap. That is expected, and it covers all eleven navigating tools of §A9.
+**Two are `CONFIRM`: `uninstall_app`** — the first tool the agent's own vocabulary mints at that level,
+and the first to stop the loop on a real product path — **and `play_store_search`**, projected from
+`ActionCatalog` and `CONFIRM` since A0, which is the consent stop in A0's launch→store plan. (This
+paragraph previously read "eight of the nine authored tools are `SAFE`"; with `play_store_search`
+pinned `CONFIRM`, that was seven of nine even before phase 3b.)
 
 ---
 
@@ -202,12 +229,15 @@ launcher, and everything it does is undoable from Settings → Память.
 - [ ] After creating the alias, **«открой телега» opens Telegram** — the alias is not just a row, it
       changes resolution.
 
-### A6. THE SIX TURKISH TRIGGERS — none has ever been judged by a native speaker
+### A6. THE TWENTY-THREE TURKISH TRIGGERS — none has ever been judged by a native speaker
 
 **This is a numbered acceptance item, not a sentence in an ADR, and "assumed fine" is not an acceptable
 answer to it** (precedent: §15 of the A1′ checklist, where exactly this row was answered honestly as
-"not judged"). Before this block the unjudged set was **one** trigger inherited from A1′. It is now
-**seven**.
+"not judged"). Before this block the unjudged set was **one** trigger inherited from A1′. After phase
+3a it was **seven**; **phase 3b added sixteen more `tr` forms across eleven tools**, so it is now
+**23** by this table's convention (`için` … `kullan` counted as one item) and **24** counted as raw
+distinct trigger strings. The vocabulary table holds **27** `tr` forms in all — the other three
+(`zamanlayıcı ayarla`, `sistem ayarları`, `android ayarları`) predate this accounting.
 
 | # | `tr` trigger | Tool | Shape | Judged? |
 |---|---|---|---|---|
@@ -218,7 +248,29 @@ answer to it** (precedent: §15 of the A1′ checklist, where exactly this row w
 | 5 | `adını unut` | `forget_app_alias` | suffix | [ ] |
 | 6 | `için seçimi unut` | `forget_learned_choice` | suffix | [ ] |
 | 7 | `sayaç ayarla` | `set_timer` | suffix (inherited from A1′, still open) | [ ] |
+| 8 | `alarmlar` | `show_alarms` | prefix | [ ] |
+| 9 | `alarmlarım` | `show_alarms` | prefix | [ ] |
+| 10 | `kamera` | `open_camera` | prefix | [ ] |
+| 11 | `kamera uygulaması` | `open_camera` | prefix | [ ] |
+| 12 | `wi-fi ayarları` | `open_wifi_settings` | prefix | [ ] |
+| 13 | `kablosuz ayarları` | `open_wifi_settings` | prefix | [ ] |
+| 14 | `bluetooth ayarları` | `open_bluetooth_settings` | prefix | [ ] |
+| 15 | **`pil ayarları`** | `open_battery_settings` | prefix — **least confident** | [ ] |
+| 16 | `pil kullanımı` | `open_battery_settings` | prefix | [ ] |
+| 17 | **`veri kullanımı`** | `open_data_usage_settings` | prefix — **least confident** | [ ] |
+| 18 | `mobil veri ayarları` | `open_data_usage_settings` | prefix | [ ] |
+| 19 | `ekran ayarları` | `open_display_settings` | prefix | [ ] |
+| 20 | `ses ayarları` | `open_sound_settings` | prefix | [ ] |
+| 21 | **`konum ayarları`** | `open_location_settings` | prefix — **least confident** | [ ] |
+| 22 | **`bildirim ayarları`** | `open_notification_settings` | prefix — **least confident** | [ ] |
+| 23 | **`uygulama bilgisi`** | `open_app_info` | suffix (the only argument-carrying one of the eleven) — **least confident** | [ ] |
 
+- [ ] **The five forms marked least-confident were named in advance, before the build** (same
+      discipline R14-42 used for `için`/`kullan`): `pil ayarları`, `veri kullanımı`,
+      `bildirim ayarları`, `konum ayarları`, `uygulama bilgisi`. They are literal renderings; whether
+      One UI's own Turkish labels those screens that way is exactly the question no guard and no agent
+      can answer. `pil` is the everyday word for battery, but Samsung's own screen on this device is
+      «Действия с аккумулятором» in `ru`.
 - [ ] **Switch the device to `tr` and type each one.** No `tr` trigger in this project has *ever* run
       on a phone; every device round to date has been `ru-RU` only.
 - [ ] **#4 (`için`/`kullan`) is the least confident form, and its limitation is recorded rather than
@@ -235,8 +287,8 @@ answer to it** (precedent: §15 of the A1′ checklist, where exactly this row w
 - [ ] **Record the verdict per row.** "Not judged, no Turkish speaker available" is an honest answer and
       the one A1′ gave. "Assumed fine" is not. If any verdict is "drop it", that is a code change in
       `ToolVocabulary.kt`'s `tr` sets, not a documentation edit.
-- [ ] While in `tr`, also read the six `tr` step lines from §A1/§A4/§A5 above — they ship in the same
-      commit and have never been read on a device either.
+- [ ] While in `tr`, also read the step lines from §A1/§A4/§A5 and the eleven from §A9 — they ship in
+      the same commits and have never been read on a device either.
 - [ ] Repeat the same pass in `en`. `en` has never run on a phone either.
 
 ### A7. The `app_shortcut` adapter — a tool whose name is data
@@ -275,6 +327,94 @@ the shortcut step line, and the `LAUNCHER MEMORY · LOCAL` / `APP SHORTCUT · EX
       gate's own logic (`app/build.gradle.kts:186` — a key is Class B only if `translatable != "false"`),
       not at the file. If the owner is asked to re-sign anything during this round, that is a defect to
       report, not a step to perform.
+
+### A9. The eleven navigating tools (phase 3b) — each opens a screen and performs no act
+
+Added 2026-09-20 when phase 3b closed `CODE-GREEN`. Spec §14 has this round cover **all** the block's
+tools in one pass, so these rows sit beside §A1–§A8 rather than in a round of their own. All eleven are
+`system_intent` / `EXTERNAL` / `SAFE` / `TRANSIENT`: `requiresConsent(SAFE) == false`, so **no confirm
+card appears** — the step runs immediately and the session lands on the completed surface. That is
+expected, and it is the whole of their `SAFE`: these tools perform **no act at all**, so there is
+nothing to reverse. What the *landed screen* then offers is the user's business, not the tool's — which
+is why two of the rows below carry warnings that do **not** change the risk level.
+
+Type each command in `ru-RU` first (the locale every previous round used). Each row is satisfied when
+the named screen opens, the step line reads as a sentence, and the provenance line under the step reads
+**`SYSTEM INTENT · EXTERNAL`**.
+
+- [ ] **1. `show_alarms`** — «будильники» / «мои будильники». The clock's **alarm list** opens; no alarm
+      is created, changed or deleted. Step line: «Показать будильники».
+- [ ] **2. `open_camera`** — «камера» / «приложение камеры». The viewfinder opens. **Known and named:
+      the sensor goes live with no further tap** (measured, row 17) — the app holds **no** `CAMERA`
+      permission, so this is the camera app's own session, not ours. Step line: «Открыть камеру».
+      If an installed app is labelled exactly «Камера», FastPath answering first is **correct**
+      behaviour, not a defect.
+- [ ] **3. `open_wifi_settings`** — «настройки wi-fi» / «настройки вайфая». **READ SAFETY RULE 4 FIRST.**
+      On this phone the screen opened with «Отключить мобильную точку доступа? … Отмена / OK» **already
+      raised**, because the hotspot was on, and the laptop is tethered through this phone. **The row is
+      satisfied when the screen appears; dismiss with Отмена. Do not tap OK.**
+- [ ] **4. `open_bluetooth_settings`** — «настройки bluetooth» / «настройки блютуз». The screen opens;
+      nothing is paired, unpaired or toggled. The app holds no `BLUETOOTH*` permission at all.
+- [ ] **5. `open_battery_settings`** — «настройки батареи» / «расход батареи». The screen opens — and on
+      this device the responder is **Samsung Device Care** (`com.samsung.android.lool/…
+      PowerUsageSummary`), not `com.android.settings`. **That is a ROM-dependent premise measured on one
+      phone**: on a device where `ACTION_POWER_USAGE_SUMMARY` resolves to nothing, the tool returns
+      `Failed` (`ActivityNotFoundException` is already handled) rather than crashing. If it fails here,
+      say so — the premise, not the code, is what would be wrong.
+- [ ] **6. `open_data_usage_settings`** — «расход трафика» / «настройки мобильных данных». The screen
+      opens. The landed screen carries a **mobile-data toggle**; the tool did not touch it.
+- [ ] **7. `open_display_settings`** — «настройки экрана» / «настройки дисплея». The screen opens; state
+      unchanged.
+- [ ] **8. `open_sound_settings`** — «настройки звука» / «настройки громкости». The screen opens; state
+      unchanged.
+- [ ] **9. `open_location_settings`** — «настройки геолокации» / «настройки локации». The screen opens.
+      **This row is also the P2 item below — read it before ticking.**
+- [ ] **10. `open_notification_settings`** — «настройки уведомлений». The screen opens. Note for the
+      record: **the platform has no `Settings.ACTION_NOTIFICATION_SETTINGS` constant** (verified with
+      `javap` over `android.jar`), so the action string is ours, declared as a private constant with the
+      measurement row named beside it. If this one screen fails to open while the other ten work, that
+      string is the first suspect.
+- [ ] **11. `open_app_info`** — «сведения о приложении telegram» / «информация о приложении <app>». The
+      **App info** screen of that app opens. This is the only argument-carrying tool of the eleven —
+      see the two notes below.
+
+**Numbered item — P2: `open_location_settings` ships claiming NO permission, on a necessity that is
+UNMEASURED.** The measurements exclude only the *grant*: `ACCESS_FINE_LOCATION` was `granted=false`
+when the screen opened (rows 29/30) and the process confirmed it from inside (row 33). What is **not**
+excluded is the *declaration* — the prayer feature already declares that permission in the same
+manifest, so this build cannot tell "needs nothing" from "needs a declaration that happens to be
+there". The row ships `emptyList()` deliberately: declaring `ACCESS_FINE_LOCATION` would make
+`Tier0IntentToolSource.available()` **withhold the tool on this very phone** (it filters on
+`isGranted`, and row 33 measured DENIED), registering it nowhere while every equality test stayed
+green.
+
+- [ ] **If the location screen fails to open, the row is wrong** — report it rather than retrying. On a
+      build where the prayer feature's declaration is absent, this is the tool that would break first.
+      **This is a named limit, not a closed question.**
+
+**Note — `open_app_info` lands one tap from «Удалить».** Measured, row 15. The tool is still `SAFE`: it
+opened a screen and performed no act, exactly like the other ten; the uninstall button belongs to the
+system screen and the tap would be the user's. It is written here so that a reviewer who sees it does
+not read it as a missed gate. Also measured: a package with **no launcher activity** is not filtered
+out, so the screen can open for something the user cannot launch.
+
+- [ ] **Its step line renders the RESOLVED PACKAGE, not the word typed** — «Сведения о приложении
+      org.telegram.messenger», not «…telegram». Resolution happens **above** the consent gate (fork
+      F5), and this descriptor declares `app` without the optional `app_label`. For a `SAFE` tool this
+      is a **legibility** limit, not a safety one, and it was deliberately not softened. Judge whether
+      it reads acceptably; if it does not, that is a real finding.
+- [ ] **A name that resolves to nothing plans nothing** — «сведения о приложении <бессмыслица>» must
+      not open App info for something else. Note that this is the same path as §A3: an unresolved name
+      produces `NoPlan` at routing step 2b, and `NoPlan` there **falls through to the cloud model**, so
+      the typed text leaves the device if a provider is configured and the device is online.
+
+**After the eleven, one look at the whole surface:**
+
+- [ ] **No tool was shadowed by another.** Each of the eleven reached its **own** tool — nothing landed
+      on `open_system_settings` instead. Every trigger deliberately carries a distinguishing token and
+      none is a bare settings synonym, but a device is where a mistyped expectation actually shows.
+- [ ] **The step lines and provenance read correctly in `en` and `tr` too** (§A6, §A8) — neither locale
+      has ever run on a phone.
 
 ---
 
@@ -368,6 +508,9 @@ When the run is done:
 3. **§A6's verdicts are the row this file exists for.** Whatever they are, write them down per trigger.
 4. **§A2 needs an owner ruling**, not just an observation.
 5. **Part C cleared nothing** — say so explicitly in whatever is written.
-6. **Phase 3b is still ahead** — the eleven navigating tools. §16 criterion 1 (≥15 tools, ≥3 levels,
-   accepted on the phone) is **not** closed by this round; this round accepts the acting set. Report the
-   count split into *acting* and *navigating*, never as one figure.
+6. **Updated 2026-09-20 — phase 3b is no longer ahead; it is in this file.** The eleven navigating
+   tools shipped `CODE-GREEN` at gate 1439 and are §A9 above, so **this round is the whole block**:
+   §16 criterion 1 (≥15 tools, ≥3 levels, reachable on the owner's phone, accepted by the owner) is
+   now open for **exactly one** reason — this run has not happened. Report the count split, never as
+   one figure: **A1″ built sixteen authored tools, of which five act**, and the federation holds
+   **twenty** authored tools on three levels plus the dynamic `app_shortcut` family on a fourth.

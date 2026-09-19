@@ -306,6 +306,20 @@ class ToolRegistryPermissionGuardTest {
             MemoryToolIds.SET_APP_ALIAS,
             MemoryToolIds.FORGET_APP_ALIAS,
             MemoryToolIds.FORGET_LEARNED_CHOICE,
+            // A1″ Phase 3b, Task 2 (Slice A) — four navigating tools, all SAFE.
+            Tier0ToolIds.SHOW_ALARMS,
+            Tier0ToolIds.OPEN_CAMERA,
+            Tier0ToolIds.OPEN_WIFI_SETTINGS,
+            Tier0ToolIds.OPEN_BLUETOOTH_SETTINGS,
+            // A1″ Phase 3b, Task 3 (Slice B) — four more navigating tools, all SAFE.
+            Tier0ToolIds.OPEN_BATTERY_SETTINGS,
+            Tier0ToolIds.OPEN_DATA_USAGE_SETTINGS,
+            Tier0ToolIds.OPEN_DISPLAY_SETTINGS,
+            Tier0ToolIds.OPEN_SOUND_SETTINGS,
+            // A1″ Phase 3b, Task 4 (Slice C) — the last three navigating tools, all SAFE.
+            Tier0ToolIds.OPEN_LOCATION_SETTINGS,
+            Tier0ToolIds.OPEN_NOTIFICATION_SETTINGS,
+            Tier0ToolIds.OPEN_APP_INFO,
         )
     }
 }

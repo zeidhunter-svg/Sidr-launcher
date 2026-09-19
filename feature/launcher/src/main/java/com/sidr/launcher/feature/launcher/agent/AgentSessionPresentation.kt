@@ -63,11 +63,18 @@ internal fun AgentGoal.subject(): String = when (val shape = shape) {
 
 /*
  * Task 10 / A1'. `Tier0ToolIds` lives in `:data:repository`, which `:feature:launcher` must not depend
- * on (no feature -> data edge), so its two ids are written out here as literals. Nothing pins these
- * two strings to their declaration — the same shape of duplication `ToolIds`' own KDoc records for
- * `SystemIntentToolSource`, and the same one `CLAUDE.md` names for `FakeToolRegistry.withA0Tools()`.
- * What keeps it honest is that drift is **fail-soft**: an id this file does not recognise falls
- * through to [R.string.launcher_agent_step_generic], so the surface says less, never something false.
+ * on (no feature -> data edge), so its ids are written out here as literals — **four** of them since
+ * A1″ Phase 3a added `set_alarm` and `uninstall_app`, the same shape of duplication `ToolIds`' own KDoc
+ * records for `SystemIntentToolSource`.
+ *
+ * **Corrected 2026-09-19 (fix round 2, finding 3).** This comment used to say that nothing pinned these
+ * strings to their declaration and that drift was merely *fail-soft*. That is no longer true and had
+ * already stopped being true when `uninstall_app` landed: `DoctrineGuardTest > every tool in the
+ * production federation has a non-generic label on the surface` textually scans **this file** for each
+ * registered id's literal and goes RED on drift, so a renamed id is a build failure rather than a
+ * quietly generic line. The fail-soft fallback below is still the runtime behaviour — an unrecognised id
+ * reaches [R.string.launcher_agent_step_generic], so the surface says less and never something false —
+ * but it is now the second line of defence, not the only one.
  * `launch_app` / `play_store_search` need no literal — they are `ToolIds` in `:domain`.
  */
 private const val TIER0_SET_TIMER = "set_timer"

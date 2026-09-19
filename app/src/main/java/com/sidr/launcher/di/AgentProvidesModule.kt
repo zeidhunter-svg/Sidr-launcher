@@ -82,9 +82,12 @@ object AgentProvidesModule {
      *
      * Three adapters:
      *  - the `IN_APP` projection of `ActionCatalog`;
-     *  - A1′'s `Tier0IntentToolSource` / `Tier0IntentToolWorker` — two Android system intents that are
-     *    not among the frozen seven `ActionIds`, so they mint their own ids and never travel
-     *    `ExecuteActionUseCase`;
+     *  - A1′'s `Tier0IntentToolSource` / `Tier0IntentToolWorker` — **four** Android system intents
+     *    (`set_timer`, `open_system_settings`, and A1″ Phase 3a's `set_alarm` and `uninstall_app`) that
+     *    are not among the frozen seven `ActionIds`, so they mint their own ids and never travel
+     *    `ExecuteActionUseCase`. `uninstall_app` is the track's first `CONFIRM`/`DURABLE` tool, so this
+     *    adapter is no longer uniformly `SAFE` — a reader sizing up the federation's risk profile from
+     *    this list must not infer otherwise;
      *  - A1″'s `ShortcutToolSource` / `ShortcutToolWorker` — one tool per app shortcut another
      *    installed app publishes.
      *

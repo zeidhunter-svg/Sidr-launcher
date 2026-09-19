@@ -165,4 +165,51 @@ class ToolVocabularyTest {
 
         assertEquals(null, bothShapes.match("set timer"))
     }
+
+    private fun twoSlot() = ToolVocabulary(listOf(
+        ToolVocabulary.Entry(
+            id = ToolId("t"),
+            prefixByLocale = mapOf("ru" to setOf("называй")),
+            infixByLocale = mapOf("ru" to setOf("как")),
+            argName = "app",
+            secondArgName = "phrase",
+        ),
+    ))
+
+    @Test
+    fun `both slots are captured`() {
+        assertEquals(
+            ToolMatch(ToolId("t"), mapOf("app" to "телеграм", "phrase" to "телега")),
+            twoSlot().match("называй телеграм как телега"),
+        )
+    }
+
+    @Test
+    fun `a missing second slot is a miss, not a half-filled match`() {
+        assertEquals(null, twoSlot().match("называй телеграм как"))
+        assertEquals(null, twoSlot().match("называй как телега"))
+        assertEquals(null, twoSlot().match("называй телеграм"))
+    }
+
+    /**
+     * "какао" alone does not discriminate a whole-word match from a bare substring one: "как" sits at
+     * index 0 of "какао", so a substring search finds it there too and the left slot is blank either
+     * way — both implementations decline, for different reasons. "текак телега" is the case that
+     * actually pins the property: a bare `indexOf("как")` finds it at index 2, splitting into a
+     * non-blank "те" / "телега" pair — a **wrong match**, not a decline. Only requiring " как " (spaces
+     * on both sides) rejects it, because "текак" has no space before "как".
+     */
+    @Test
+    fun `the infix is matched as a whole word, not inside one`() {
+        assertEquals(null, twoSlot().match("называй какао какао"))
+        assertEquals(null, twoSlot().match("называй текак телега"))
+    }
+
+    @Test
+    fun `a one-slot entry is unchanged by the new field`() {
+        assertEquals(
+            ToolMatch(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 minutes")),
+            ToolVocabulary().match("set a timer for 10 minutes"),
+        )
+    }
 }

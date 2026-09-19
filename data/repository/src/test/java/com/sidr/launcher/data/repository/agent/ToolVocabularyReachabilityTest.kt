@@ -75,17 +75,8 @@ class ToolVocabularyReachabilityTest {
         val failures = mutableListOf<String>()
 
         guardedEntries().forEach { entry ->
-            entry.prefixByLocale.forEach { (locale, forms) ->
-                forms.forEach { form ->
-                    val command = if (entry.argName == null) form else "$form $SAMPLE_ARGUMENT"
-                    failures += fastPathClaim(entry, locale, command)
-                }
-            }
-            entry.suffixByLocale.forEach { (locale, forms) ->
-                forms.forEach { form ->
-                    val command = if (entry.argName == null) form else "$SAMPLE_ARGUMENT $form"
-                    failures += fastPathClaim(entry, locale, command)
-                }
+            sampleCommands(entry).forEach { (locale, _, command) ->
+                failures += fastPathClaim(entry, locale, command)
             }
         }
 
@@ -102,20 +93,9 @@ class ToolVocabularyReachabilityTest {
         val failures = mutableListOf<String>()
 
         guardedEntries().forEach { entry ->
-            entry.prefixByLocale.forEach { (locale, forms) ->
-                forms.forEach { form ->
-                    val command = if (entry.argName == null) form else "$form $SAMPLE_ARGUMENT"
-                    if (vocabulary.match(command)?.id != entry.id) {
-                        failures += "'$command' (${entry.id.value}/$locale, prefix) is not recognised by the vocabulary"
-                    }
-                }
-            }
-            entry.suffixByLocale.forEach { (locale, forms) ->
-                forms.forEach { form ->
-                    val command = if (entry.argName == null) form else "$SAMPLE_ARGUMENT $form"
-                    if (vocabulary.match(command)?.id != entry.id) {
-                        failures += "'$command' (${entry.id.value}/$locale, suffix) is not recognised by the vocabulary"
-                    }
+            sampleCommands(entry).forEach { (locale, shape, command) ->
+                if (vocabulary.match(command)?.id != entry.id) {
+                    failures += "'$command' (${entry.id.value}/$locale, $shape) is not recognised by the vocabulary"
                 }
             }
         }
@@ -149,15 +129,9 @@ class ToolVocabularyReachabilityTest {
         val failures = mutableListOf<String>()
 
         guardedEntries().forEach { entry ->
-            entry.prefixByLocale.values.flatten().forEach { form ->
-                val command = if (entry.argName == null) form else "$form $SAMPLE_ARGUMENT"
+            sampleCommands(entry).forEach { (_, shape, command) ->
                 commands += command
-                if (selector.select(command)?.id != entry.id) failures += "prefix: $command"
-            }
-            entry.suffixByLocale.values.flatten().forEach { form ->
-                val command = if (entry.argName == null) form else "$SAMPLE_ARGUMENT $form"
-                commands += command
-                if (selector.select(command)?.id != entry.id) failures += "suffix: $command"
+                if (selector.select(command)?.id != entry.id) failures += "$shape: $command"
             }
         }
 
@@ -189,6 +163,49 @@ class ToolVocabularyReachabilityTest {
                 "must satisfy all four.",
             collisions > 0,
         )
+    }
+
+    /**
+     * One sample command per declared form of [entry], shared by all three tests in this class
+     * (controller ruling R14-21) so a two-slot arm is written once rather than three times.
+     *
+     * A zero-argument trigger is the bare form. A one-slot trigger appends (prefix) or prepends
+     * (suffix) [SAMPLE_ARGUMENT]. A **two-slot** trigger (`entry.secondArgName != null`) needs the
+     * infix inside the remainder for [ToolVocabulary.match] to recognise it at all — building
+     * `"$form $SAMPLE_ARGUMENT"` for such an entry would leave the sample with no infix, and
+     * `twoSlotMatch` would correctly refuse it for a reason that has nothing to do with reachability
+     * (review finding I3, task-8-brief.md Step 4b). The suffix shape puts the infix inside the
+     * remainder the same way, which is what makes a Turkish SOV two-slot form expressible at all.
+     */
+    private fun sampleCommands(entry: ToolVocabulary.Entry): List<Triple<String, String, String>> {
+        val commands = mutableListOf<Triple<String, String, String>>()
+        entry.prefixByLocale.forEach { (locale, forms) ->
+            forms.forEach { form ->
+                val command = when {
+                    entry.secondArgName != null -> {
+                        val infix = entry.infixByLocale.values.first().first()
+                        "$form $SAMPLE_ARGUMENT $infix $SAMPLE_ARGUMENT_2"
+                    }
+                    entry.argName == null -> form
+                    else -> "$form $SAMPLE_ARGUMENT"
+                }
+                commands += Triple(locale, "prefix", command)
+            }
+        }
+        entry.suffixByLocale.forEach { (locale, forms) ->
+            forms.forEach { form ->
+                val command = when {
+                    entry.secondArgName != null -> {
+                        val infix = entry.infixByLocale.values.first().first()
+                        "$SAMPLE_ARGUMENT $infix $SAMPLE_ARGUMENT_2 $form"
+                    }
+                    entry.argName == null -> form
+                    else -> "$SAMPLE_ARGUMENT $form"
+                }
+                commands += Triple(locale, "suffix", command)
+            }
+        }
+        return commands
     }
 
     /**
@@ -238,6 +255,9 @@ class ToolVocabularyReachabilityTest {
     private companion object {
         /** Stands in for whatever an argument-carrying tool needs; FastPath's rules do not read it. */
         const val SAMPLE_ARGUMENT = "10 minutes"
+
+        /** The second slot of a two-slot entry's sample command — see [sampleCommands]. */
+        const val SAMPLE_ARGUMENT_2 = "20 minutes"
 
         /** The floor, never the ceiling — see [guardedEntries]. */
         val REQUIRED_TOOLS = listOf(Tier0ToolIds.SET_TIMER, Tier0ToolIds.OPEN_SYSTEM_SETTINGS)

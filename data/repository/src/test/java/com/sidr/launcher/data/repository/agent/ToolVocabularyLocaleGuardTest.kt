@@ -19,6 +19,12 @@ import org.junit.Test
  *
  * It checks *coverage*, not position: a locale may carry its forms as prefixes (English/Russian SVO, and
  * verbless noun phrases in any language) or as suffixes (Turkish SOV), and either satisfies the locale.
+ *
+ * Task 8 adds `infixByLocale` (the bounded two-slot form). It joins the locale-coverage union in the
+ * two structural checks below, and the first check additionally requires a two-slot entry
+ * (`secondArgName != null`) to carry an infix in a locale before that locale counts as covered — a
+ * `set_app_alias`-shaped entry with `en`/`ru` prefixes but only an `en` infix is red rather than
+ * quietly monolingual in `ru`.
  */
 class ToolVocabularyLocaleGuardTest {
 
@@ -30,9 +36,14 @@ class ToolVocabularyLocaleGuardTest {
 
         guardedEntries().forEach { entry ->
             supportedLocales.forEach { locale ->
-                val covered = entry.prefixByLocale[locale].orEmpty().isNotEmpty() ||
+                val hasForm = entry.prefixByLocale[locale].orEmpty().isNotEmpty() ||
                     entry.suffixByLocale[locale].orEmpty().isNotEmpty()
-                if (!covered) {
+                // A two-slot entry (Task 8) needs its infix in the same locale too — a `set_app_alias`
+                // with en/ru prefixes but only an en infix is unreachable in ru even though its prefix
+                // table looks fully covered.
+                val hasInfixIfTwoSlot = entry.secondArgName == null ||
+                    entry.infixByLocale[locale].orEmpty().isNotEmpty()
+                if (!hasForm || !hasInfixIfTwoSlot) {
                     failures += "tool '${entry.id.value}' has no trigger for locale '$locale': a tool " +
                         "recognised only in some locales is a capability the others silently lack"
                 }
@@ -51,7 +62,7 @@ class ToolVocabularyLocaleGuardTest {
         val failures = mutableListOf<String>()
 
         guardedEntries().forEach { entry ->
-            (entry.prefixByLocale + entry.suffixByLocale).forEach { (locale, forms) ->
+            (entry.prefixByLocale + entry.suffixByLocale + entry.infixByLocale).forEach { (locale, forms) ->
                 if (forms.isEmpty()) failures += "tool '${entry.id.value}' declares locale '$locale' with no forms"
             }
         }
@@ -69,7 +80,7 @@ class ToolVocabularyLocaleGuardTest {
         val failures = mutableListOf<String>()
 
         guardedEntries().forEach { entry ->
-            (entry.prefixByLocale + entry.suffixByLocale).forEach { (locale, forms) ->
+            (entry.prefixByLocale + entry.suffixByLocale + entry.infixByLocale).forEach { (locale, forms) ->
                 forms.forEach { form ->
                     if (form.isBlank() || form != CommandNormalizer.normalize(form)) {
                         failures += "tool '${entry.id.value}' locale '$locale' has a trigger '$form' that " +

@@ -85,12 +85,20 @@ class ToolVocabulary internal constructor(val entries: List<Entry>) {
      *
      * For a **zero-argument** entry the two maps are interchangeable — the text must equal the trigger
      * either way — so such an entry declares all its forms, in every locale, as prefixes.
+     *
+     * [infixByLocale] and [secondArgName] together declare a **bounded two-slot** entry —
+     * `<prefix> A <infix> B` — the one capability §7.6 of the second-tool-mass design names beyond a
+     * single trailing argument ("называй телеграм как телега"). Both default to empty/`null`, and an
+     * entry that leaves them at their defaults is a one-slot entry whose match path is entirely
+     * unaffected — see [twoSlotMatch].
      */
     data class Entry(
         val id: ToolId,
         val prefixByLocale: Map<String, Set<String>>,
         val suffixByLocale: Map<String, Set<String>> = emptyMap(),
         val argName: String? = null,
+        val infixByLocale: Map<String, Set<String>> = emptyMap(),
+        val secondArgName: String? = null,
     )
 
     /**
@@ -177,9 +185,28 @@ class ToolVocabulary internal constructor(val entries: List<Entry>) {
      * "system settings for my car" — the broadest possible reading of a command, chosen in silence.
      */
     private fun Entry.toMatch(remainder: String): ToolMatch? = when {
+        secondArgName != null -> twoSlotMatch(remainder)
         argName == null -> if (remainder.isBlank()) ToolMatch(id, emptyMap()) else null
         remainder.isBlank() -> null
         else -> ToolMatch(id, mapOf(argName to remainder))
+    }
+
+    /**
+     * `<prefix> A <infix> B`. The infix is matched **surrounded by spaces** so "какао" cannot serve as
+     * "как", and the **first** occurrence wins so a phrase containing the infix cannot silently move
+     * the boundary. Either side blank is a miss: a half-filled invocation is worse than none, which is
+     * the same rule [toMatch] already applies to one-slot entries.
+     */
+    private fun Entry.twoSlotMatch(remainder: String): ToolMatch? {
+        val first = argName ?: return null
+        val second = secondArgName ?: return null
+        val infix = infixByLocale.values.flatten()
+            .mapNotNull { form -> remainder.indexOf(" $form ").takeIf { it >= 0 }?.let { it to form } }
+            .minByOrNull { it.first } ?: return null
+        val left = remainder.take(infix.first).trim()
+        val right = remainder.drop(infix.first + infix.second.length + 2).trim()
+        if (left.isBlank() || right.isBlank()) return null
+        return ToolMatch(id, mapOf(first to left, second to right))
     }
 
     private companion object {

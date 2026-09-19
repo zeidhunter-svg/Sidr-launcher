@@ -1,5 +1,6 @@
 package com.sidr.launcher.data.repository.agent
 
+import com.sidr.launcher.data.repository.agent.memory.MemoryToolIds
 import com.sidr.launcher.domain.intent.CommandNormalizer
 import com.sidr.launcher.domain.tool.ToolId
 import javax.inject.Inject
@@ -227,6 +228,69 @@ class ToolVocabulary internal constructor(val entries: List<Entry>) {
                     "ru" to setOf("системные настройки", "настройки андроид"),
                     "tr" to setOf("sistem ayarları", "android ayarları"),
                 ),
+            ),
+            // Task 10 (A1″ Phase 3a) — the five acting tools' triggers. See §7.6 of the second-tool-mass
+            // design and this task's report for which candidates were rejected as FastPath collisions.
+            Entry(
+                id = Tier0ToolIds.SET_ALARM,
+                prefixByLocale = mapOf(
+                    "en" to setOf("set an alarm for", "set alarm for", "alarm for"),
+                    "ru" to setOf("поставь будильник на", "заведи будильник на", "будильник на"),
+                ),
+                // NOT "alarm kur": `INSTALL_VERBS.suffixByLocale["tr"]` is `setOf("kur")` and matches on
+                // `endsWith(" kur")`, so "07:30 alarm kur" would become a Play Store search — the same
+                // collision that already deleted "zamanlayıcı kur" / "sayaç kur" from this vocabulary
+                // (review finding I2).
+                suffixByLocale = mapOf("tr" to setOf("alarm ayarla")),
+                argName = "time",
+            ),
+            Entry(
+                id = Tier0ToolIds.UNINSTALL_APP,
+                prefixByLocale = mapOf(
+                    "en" to setOf("uninstall", "remove app"),
+                    "ru" to setOf("удали приложение", "удали"),
+                ),
+                suffixByLocale = mapOf("tr" to setOf("uygulamasını kaldır", "kaldır")),
+                argName = "app",
+            ),
+            // Two slots: `SaveAliasUseCase` runs its own `CommandNormalizer.normalize` on the phrase it
+            // stores, so what this vocabulary hands the worker is byte-identical to what the use case
+            // would have produced from the raw text (spec §7.6). `tr`'s infix "için" ("for") is a
+            // postposition that follows the noun it governs, which is exactly A's position in
+            // `<A> <infix> <B> <suffix>` — see the task report for why "olarak"/"diye" (the more literal
+            // renderings of "as") do not fit this slot order and for the confidence caveat on this form.
+            Entry(
+                id = MemoryToolIds.SET_APP_ALIAS,
+                prefixByLocale = mapOf(
+                    "en" to setOf("call"),
+                    "ru" to setOf("называй"),
+                ),
+                suffixByLocale = mapOf("tr" to setOf("kullan")),
+                infixByLocale = mapOf(
+                    "en" to setOf("as"),
+                    "ru" to setOf("как"),
+                    "tr" to setOf("için"),
+                ),
+                argName = "app",
+                secondArgName = "phrase",
+            ),
+            Entry(
+                id = MemoryToolIds.FORGET_APP_ALIAS,
+                prefixByLocale = mapOf(
+                    "en" to setOf("forget the name", "forget name"),
+                    "ru" to setOf("забудь название", "забудь имя"),
+                ),
+                suffixByLocale = mapOf("tr" to setOf("adını unut")),
+                argName = "phrase",
+            ),
+            Entry(
+                id = MemoryToolIds.FORGET_LEARNED_CHOICE,
+                prefixByLocale = mapOf(
+                    "en" to setOf("forget what to open for"),
+                    "ru" to setOf("забудь что открывать по слову", "забудь выбор для"),
+                ),
+                suffixByLocale = mapOf("tr" to setOf("için seçimi unut")),
+                argName = "phrase",
             ),
         )
     }

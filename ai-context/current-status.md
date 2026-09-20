@@ -771,9 +771,14 @@ of imported inputs.
   in place stays open for A1′.
 - **[`sidr-doctrine-matrix-v1.0.md`](../docs/governing/sidr-doctrine-matrix-v1.0.md)** — Master Plan
   §5/§5.1/§5.2/§20.1 extracted out of a design-track document, because half the matrix pointed at
-  engineering layers. 28 `DOC-*` rules, four columns: stable ID, rule, verification type from the
-  closed vocabulary, and **a real test name or an honest `<нет>` with the debt's address** (12 of 28
-  are empty today: A1′ ×2, A2 ×1, A4′ ×5, manual-by-nature ×3, design-track ×1). The philosophy —
+  engineering layers. **30** `DOC-*` rules, four columns: stable ID, rule, verification type from
+  the closed vocabulary, and **a real test name or an honest `<нет>` with the debt's address**.
+  **Recounted from the file 2026-09-20, because the previous breakdown here had rotted — it still
+  claimed `A1′ ×2` after A1′ closed those debts:** **10 of 30** cells are fully empty — A4′ ×3
+  (`NYH-3`, `HMA-3`, `HMA-4`), A2 ×1 (`AML-6`), **A6 ×1 (`HMA-5`, new)**, «whichever block first
+  shows fetched content» ×1 (`ILM-5`, new), manual-by-nature ×3, design-track ×1 — plus **two
+  half-closed** cells that name real tests and still carry `← долг A4′` (`ILM-3`, `HMA-2`), which
+  `grep '← долг'` finds and a `<нет>`-only sweep does not (matrix §5). The philosophy —
   the eight principles in prose — deliberately stayed in the design Master Plan §4.
 - **`DoctrineMatrixGuardTest`** (`app/src/test/java/com/sidr/launcher/doctrine/`, 8 tests) fails on a
   false claim: a named test that exists in no source set, a type outside the vocabulary, a vocabulary

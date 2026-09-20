@@ -30,7 +30,7 @@ milestones, and the `Agentic Shell v1 = DONE` definition:
 Different layer, not a replacement: the restart plan keeps the owner's four decisions, the §0 session
 protocol and `§HANDOFF`; the Master Plan governs how blocks are run from Этап 4 on. The eight Islamic
 principles' **checkable** part now lives in
-[docs/governing/sidr-doctrine-matrix-v1.0.md](docs/governing/sidr-doctrine-matrix-v1.0.md) as 28
+[docs/governing/sidr-doctrine-matrix-v1.0.md](docs/governing/sidr-doctrine-matrix-v1.0.md) as 30
 `DOC-*` rules — cite a rule by ID, never paraphrase it; a rule's third column is a real test name or
 an honest `<нет>`, and `DoctrineMatrixGuardTest` fails the build on a false claim.
 
@@ -797,4 +797,7 @@ below is recorded in its own ADR.
   2026-09-10 is a section inside that same ADR) · **Этап 5.5 (A1″)** — tool mass + selection,
   phases 0–3a (2026-09-19), **phase 3b, the eleven navigating tools, as a section inside that same
   ADR** (2026-09-20), **and the owner's device acceptance as the last section of it** (2026-09-20 —
-  the block becomes `CLOSED`, exactly as A1′'s acceptance became a section inside its own ADR)
+  the block becomes `CLOSED`, exactly as A1′'s acceptance became a section inside its own ADR) ·
+  **«Две строки доктрины»** — `DOC-HMA-5` (a grant widens reach, never removes a gate) and
+  `DOC-ILM-5` (canonical / curated / generated) (2026-09-20; docs only, both arrive as declared
+  debts with `<нет>`, addressed to A6 and to whichever block first shows fetched content)

@@ -663,15 +663,18 @@ below is recorded in its own ADR.
   plus `:core:ui:verifyRoborazziDebug` whenever `core/ui` is touched, and `:app:assembleRelease` for
   release-affecting work. **`:domain:jvmTest` and `:consumer:jvm:test` must be listed explicitly:**
   `testDebugUnitTest` has not reached `:domain` since it went KMP, and it never reaches `:consumer:jvm`
-  at all. **Baseline at 2026-09-20 (the A1″ phase-3b boundary): 1439 tests, 0 failures, 0 errors**,
+  at all. **Baseline at 2026-09-20 (Этап 6 Трек 1, the B15 harness): 1440 tests, 0 failures, 0 errors**,
   from a run printing `557 actionable tasks: 557 executed` with
   `build/test-results` cleared first — `:domain:jvmTest` **440** + `:consumer:jvm` **56** +
-  `:data:repository` **375** + `:feature:launcher` **194** + `:app` **59** + the other eight modules
+  `:data:repository` **376** + `:feature:launcher` **194** + `:app` **59** + the other eight modules
   **315** (`core/ui` 128, `data/ai-cloud` 32, `data/prayer` 38, `feature/assistant` 38,
   `feature/settings` 33, `feature/prayer` 19, `feature/permission_education` 15, `core/android` 12).
-  **Compare a fresh gate against 1439** — not against 1438, not against 1375, not against 1314, and not
-  against any number quoted in the A1′ ADR. The single test phase 3b added is the `open_app_info`
-  `required` pin in `:data:repository` (374 → 375); eleven tools added no other `@Test`, because the
+  **Compare a fresh gate against 1440** — not against 1439, not against 1438, not against 1375, not
+  against 1314, and not against any number quoted in the A1′ ADR. The single test added since the
+  A1″ phase-3b boundary (**1439**) is `SelectionDeclineMeasurement` in `:data:repository` (375 → 376) —
+  the `B15` measurement harness, **not a guard**: with its git-ignored inputs absent it prints
+  `B15 :: SKIPPED` and passes, so a fresh clone stays green. The single test phase 3b itself added was
+  the `open_app_info` `required` pin (374 → 375); eleven tools added no other `@Test`, because the
   guards they touch are equalities over lists and folds over the production federation.
   Prior baseline for reference: 2026-09-10 (`1ef158d`, the build the owner
   accepted) was **1314** (434 + 56 + 271 + 189 + 49, the rest unchanged). The A1″ phase boundaries, each

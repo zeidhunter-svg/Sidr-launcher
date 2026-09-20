@@ -1,0 +1,17 @@
+# B15 measurement inputs — deliberately NOT committed.
+#
+# `shortcuts.jsonl` and `apps.jsonl` are a dump of the owner's phone: every installed app's label and
+# every shortcut its apps publish. That is an inventory of what a person has and uses, and the review
+# of the idea corpus already named the class ("the installed-app list is sensitive — it profiles the
+# user"). Committing it would put that inventory in git history permanently, where deleting it later
+# does not remove it.
+#
+# `corpus.txt` is the owner's own phrasings — what they would actually ask their phone to do. Same
+# argument, and additionally B15's methodology requires it be written blind, so it is an input to one
+# measurement rather than a fixture the project maintains.
+#
+# What IS committed is the REPORT: counts per decline category, with no labels. See README.md for how
+# to regenerate these three files.
+shortcuts.jsonl
+apps.jsonl
+corpus.txt

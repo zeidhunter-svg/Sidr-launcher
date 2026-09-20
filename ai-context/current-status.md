@@ -77,11 +77,16 @@
 > DS-7 Memory Surfaces + S2-2 Explicit Aliases CLOSED; prior re-base 2026-08-08 DS-6B Prayer
 > Correctness CLOSED — device-accepted by the owner).
 
-## Agentic track — Этап 5.5 (A1″) — tool mass + selection (phases 0–3b) — `CODE-GREEN` (2026-09-20)
+## Agentic track — Этап 5.5 (A1″) — tool mass + selection (phases 0–3b) — `CLOSED` (2026-09-20)
 
-**`CODE-GREEN`: phases 0–3a 2026-09-19, phase 3b 2026-09-20. `DEVICE-ACCEPTED` is ABSENT — not "not
-applicable".** Said exactly, because the previous wording was **wider than the truth** and an
-under-claimed deficit is the same class of error as an over-claimed success: **phases 1–2 received a
+**`CLOSED` 2026-09-20: `CODE-GREEN` (phases 0–3a 2026-09-19, phase 3b 2026-09-20) plus the owner's
+device acceptance the same day** — Parts A and B in full on the SM-A325F, in `ru-RU` and, for the first
+time in the project, in `tr` and `en`; spec §16 criterion 1, the last open one of nine, closed with it.
+The signed build is `db1e75d` **unfixed**, by owner ruling on the one product defect the round found.
+Seven findings, four checklist defects, none repaired — record: the section «Приёмка на устройстве» at
+the end of the A1″ ADR. *The paragraph below is the pre-acceptance state, kept because its accounting
+of what had and had not touched a phone is what the acceptance was measured against:* **phases 1–2
+received a
 device reading in the Task 13b smoke round (`ab2d063`, 2026-09-16 — authorised by the owner and
 explicitly *not* an acceptance): 216 shortcut descriptors from 65 packages, `ToolSelector` over that
 real registry (authored ≈1 ms, dynamic ≈64–69 ms, three documented declines), one command driven
@@ -1517,16 +1522,48 @@ See [`device-acceptance-brief.md`](device-acceptance-brief.md).
 
 ## Not claimed done
 
-The `<400ms` cold-start number remains aspirational (final release median 766ms, ship-band PASS).
-Still not claimed: Android 9/11/14 and real LOW_END hardware validation; OQ#1–OQ#4 real models/vocab/
-embedder + on-device NLU acceptance; voice `Ready`/`Partial` intermediate states (OQ#4); boot-warmup
-after reboot (C.5); **`Migration3To4` has never been executed** — its `MigrationTest` cases are
-`androidTest` and no device has run them, so schema v4 is proven only against the generated `4.json`.
-*(Real assistant streaming against a live provider — done Round 3.)*
+> **Re-based 2026-09-20.** This section had rotted: it still claimed «`Migration3To4` has never been
+> executed», which A0's device acceptance disproved on 2026-08-22 — the migration ran instrumented
+> (9/9) **and** as a genuine `user_version` 3→4 upgrade of the owner's own database with a matching
+> `identity_hash`. That claim is deleted, not softened. **Syncing this file means syncing its tail as
+> well as its header**; see the note under «Source of truth».
+
+The `<400ms` cold-start number remains aspirational (release median 766 ms, ship-band PASS); heap is
+55 MB PSS steady-state Home (measured 2026-08-19). Still not claimed: **Android 9 / 11 / 14 and real
+LOW_END hardware**; a local-inference runtime at all (the ONNX stack was deleted in Этап 0.3 and its
+replacement on LiteRT/LiteRT-LM is a new design, ADR 2/4); voice `Ready`/`Partial` intermediate states
+(OQ#4); boot-warmup after a physical reboot (C.5); `baselineprofile/` still carries no
+`StartupTimingMetric`/`MemoryUsageMetric`. **DS-5's own acceptance checklist has never been run**
+(since 2026-07-13) and **I18N-1 was verified only by agent-driven `adb`/`uiautomator`** — its offline
+path, live TalkBack, fontScale 2.0 and the system per-app-language picker are untested.
+*(Real assistant streaming against a live provider — done Round 3, and re-confirmed 2026-09-20 during
+the A1″ acceptance, which also exercised the model **planner** path end to end.)*
 
 ## Source of truth
 
-- Session digest + hard rules: `CLAUDE.md`
-- Decisions log (latest: ADR 2026-07-11 — S2-1 Learned Resolutions device accepted + closed): `ai-context/decisions.md`
-- Architecture (in sync): `docs/architecture.md` · Roadmap: `docs/roadmap.md`
-- Active/last plan: `docs/superpowers/plans/2026-07-06-learned-resolutions.md` (S2-1, CLOSED)
+> **Re-based 2026-09-20 — this list had been stale since 2026-07-11 and pointed two tracks back.**
+
+- Current state + hard rules + gate (NOT a session digest since Этап 0.4): `CLAUDE.md`
+- Decisions log — **latest ADR: «2026-09-19 — Этап 5.5 (A1″)», whose last section is the owner's
+  device acceptance of 2026-09-20**: `ai-context/decisions.md`
+- Architecture: `docs/architecture.md` · Roadmap: `docs/roadmap.md`
+- **Governing**: agentic Master Plan `docs/governing/sidr-agentic-master-plan-v1.0.md` · doctrine
+  matrix (rules `DOC-*`) `docs/governing/sidr-doctrine-matrix-v1.0.md`
+- **Active track plan** (stages, §0 protocol, `§HANDOFF` written for the next session):
+  `docs/superpowers/plans/2026-08-18-agentic-track-restart.md`
+- Last closed block: **A1″ (Этап 5.5), `CLOSED` 2026-09-20**; its spec
+  `docs/superpowers/specs/2026-09-12-a1-second-tool-mass-and-selection-design.md`, its acceptance
+  checklist `docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md` (run, with four of its
+  own lines corrected in place). Next: **A4′ runtime**, which now carries four findings from that
+  acceptance.
+
+## Keeping this file honest
+
+**Rule, made explicit 2026-09-20 after the tail was found rotted by two months.** `CLAUDE.md`'s closing
+checklist says a block is not closed until `CLAUDE.md` **and this file** are synced. «Synced» has been
+read as «add an entry to the header», and the tail was left to decay until it asserted something
+measurably false. At every block close, **after** writing the new header entry, re-read the last three
+sections of this file — «Not claimed done», «Source of truth» and this one — and correct anything the
+closed block falsified. A status snapshot that carries a false claim is worse than one that carries
+none, for the same reason an over-claimed success and an under-claimed deficit are the same class of
+error (Этап 0.5).

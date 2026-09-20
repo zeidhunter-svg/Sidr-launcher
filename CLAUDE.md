@@ -698,6 +698,14 @@ below is recorded in its own ADR.
 - A stage/block is not closed until the gate is green, an ADR is written, `CLAUDE.md` +
   `ai-context/current-status.md` are synced, and a commit is **proposed to the owner**. The agent
   commits; the agent never pushes.
+- **"Synced" includes the TAIL, not just the header** (rule added 2026-09-20, after A1″'s acceptance
+  found `current-status.md` asserting that `Migration3To4` had never run — disproved on device on
+  2026-08-22, two months and five blocks earlier). Each close adds a header entry, which is the easy
+  half; the standing sections rot silently because nobody re-reads them. So at every close, **after**
+  the header entry, re-read that file's last three sections — «Not claimed done», «Source of truth»
+  and «Keeping this file honest» — and correct whatever the closed block falsified. A status snapshot
+  carrying a false claim is worse than one carrying none: an under-claimed deficit and an over-claimed
+  success are the same class of error (Этап 0.5).
 
 ## Contract → Owner module
 

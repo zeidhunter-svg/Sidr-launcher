@@ -44,12 +44,16 @@ tools return values and steps bind to them, landing **before** the Room 3→4 mi
 "2026-08-21 — Развилка агентного трека" in `decisions.md`. Everything else the revision found is parked
 in `§HANDOFF`, not built.
 
-**Where the active block stands (2026-09-20).** A1″ (Этап 5.5) closed phases 0–3a on 2026-09-19 and
-**phase 3b — the eleven navigating tools — on 2026-09-20**, both at `CODE-GREEN`, gate **1439**. One
-thing is open and it is named rather than implied absent: **owner device acceptance**, whose checklist
-is written, extended with 3b's eleven rows, and waiting at
-[docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md](docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md);
-until it is run, spec §16 criterion 1 stays open. Spec:
+**Where the active block stands (2026-09-20).** A1″ (Этап 5.5) is **`CLOSED`** — phases 0–3a closed
+2026-09-19, phase 3b 2026-09-20, both at `CODE-GREEN` at gate **1439**, and the owner ran the device
+acceptance the same day on the SM-A325F: Parts A and B in full, in `ru-RU` **and, for the first time in
+the project, `tr` and `en`**. **Spec §16 criterion 1 — the last open one of nine — is closed.** The
+round produced seven findings and **no fix**: the owner ruled that the one product defect it found
+(a cancelled uninstall renders as «выполнено» — `Effected` is returned for the OS dialog merely being
+raised) is carried to A4′ rather than repaired here, so **the signed build is `db1e75d` unfixed** —
+unlike A1′, where the owner signed the repaired build. Four of the five discrepancies the run exposed
+were defects **of the checklist, not of the code**. Full record: the section «Приёмка на устройстве» at
+the end of the A1″ ADR. Spec:
 [docs/superpowers/specs/2026-09-12-a1-second-tool-mass-and-selection-design.md](docs/superpowers/specs/2026-09-12-a1-second-tool-mass-and-selection-design.md);
 3b plan: [2026-09-19-a1-phase3b-navigating-tools.md](docs/superpowers/plans/2026-09-19-a1-phase3b-navigating-tools.md).
 **The count is reported split, always: A1″ built sixteen authored tools, of which five act** (five in
@@ -66,8 +70,8 @@ four predate the block (`launch_app`, `play_store_search`, `set_timer`, `open_sy
 | **4** — A0 thin agentic spike | ✅ **2026-08-22 — `CLOSED`** — all nine work-order items, then Task 15: the owner ran all eight §12 acceptance items on the SM-A325F and signed off. Migration 3→4 executed for real by both routes (instrumented 9/9 on device; and a genuine `user_version` 3→4 upgrade of the owner's own database, `identity_hash` matching `4.json`). Residual limitations named in Known debt — the largest is that §12.8 is unreachable by any path a user can take (an A4′ debt). **Reviewed end-to-end 2026-08-23**: nine findings, eight fixed and mutation-verified (`CODE-GREEN`; two §12 items await a device re-check) |
 | **4.5** — A0.5 second consumer of the portable core (`:consumer:jvm`) | ✅ **2026-08-26 — `CODE-GREEN`**; `DEVICE-ACCEPTED` **not applicable**, not absent — the block changes nothing on the phone. All four §3.1a questions answered with addresses, `B1` answered, the §6.3 divergence recorded and held by a test |
 | **5** — A1′ federated `ToolRegistry` | ✅ **2026-09-10 — `CLOSED`** — `CODE-GREEN` 2026-09-03, then the owner ran Parts A and B of the acceptance checklist on the SM-A325F in `ru-RU` and signed off (spec §16 criterion 1, the last open criterion of nine). The run itself produced three fixes — a missing `SET_ALARM`, a checklist that read the database without its WAL, and an agent surface whose exit left the launcher in search mode. `en`/`tr` never ran on the phone. Tool *mass* and *selection* split out as a new block, `A1″` |
-| **5.5** — A1″ tool mass + selection (phases 0–3a) | ✅ **2026-09-19 — `CODE-GREEN`**; `DEVICE-ACCEPTED` **absent, not inapplicable**. Corrected 2026-09-20: phases 1–2 *did* get a device reading in the Task 13b **smoke round** (`ab2d063`, not an acceptance); **phase 3a — the entire acting set, the `CONFIRM` card, the `launcher_memory` adapter and every `tr`/`en` trigger — has not run on a phone at all**. Five acting tools against a floor of four, a fourth adapter, selection over a dynamic registry, and the track's first `CONFIRM` tool. Gate 1438. Acceptance checklist written, owner runs it: [2026-09-19-a1-second-device-acceptance.md](docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md) |
-| **5.5b** — A1″ phase 3b, the eleven navigating tools | ✅ **2026-09-20 — `CODE-GREEN`**; `DEVICE-ACCEPTED` **absent** — nothing in 3b has run on a phone either. Eleven `system_intent` / `SAFE` / `EXTERNAL` tools (`show_alarms`, `open_camera`, and nine `open_*_settings`/`open_app_info` screens), registered, permitted, dispatched, reachable in `en`/`ru`/`tr` and rendered. Gate **1439** (+1: the `open_app_info` `required` pin, the phase's only new `@Test`). Ten pre-flight findings, three mutation findings. **Spec §16 criterion 1 stays open until the owner's Phase 4 acceptance** — tools and levels now suffice, the device round does not exist. Plan: [2026-09-19-a1-phase3b-navigating-tools.md](docs/superpowers/plans/2026-09-19-a1-phase3b-navigating-tools.md) |
+| **5.5** — A1″ tool mass + selection (phases 0–3a) | ✅ **`CLOSED` 2026-09-20** — `CODE-GREEN` 2026-09-19, then the owner ran Parts A and B on the SM-A325F and signed off. Five acting tools against a floor of four, a fourth adapter, selection over a dynamic registry, and the track's first `CONFIRM` tool. Gate 1438. Before the round, phases 1–2 had only a device *reading* from the Task 13b **smoke round** (`ab2d063`, explicitly not an acceptance) and phase 3a had none at all. **Accepted on device 2026-09-20** together with 3b, in one round, on build `db1e75d`: [checklist](docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md) |
+| **5.5b** — A1″ phase 3b, the eleven navigating tools | ✅ **`CLOSED` 2026-09-20** — `CODE-GREEN` and owner device acceptance the same day; all eleven opened their screens on the SM-A325F, none shadowed by another. Eleven `system_intent` / `SAFE` / `EXTERNAL` tools (`show_alarms`, `open_camera`, and nine `open_*_settings`/`open_app_info` screens), registered, permitted, dispatched, reachable in `en`/`ru`/`tr` and rendered. Gate **1439** (+1: the `open_app_info` `required` pin, the phase's only new `@Test`). Ten pre-flight findings, three mutation findings. **Spec §16 criterion 1 is CLOSED** — tools and levels sufficed, and the owner's Phase 4 device round ran on 2026-09-20. Plan: [2026-09-19-a1-phase3b-navigating-tools.md](docs/superpowers/plans/2026-09-19-a1-phase3b-navigating-tools.md) |
 | **5.6–7** — A4′ runtime, A2/A3/A5/A6 | each needs its own spec + plan (`brainstorm → spec → plan → build`) |
 
 The four strategic ADRs (all 2026-08-19, in `decisions.md`):
@@ -102,16 +106,18 @@ surface (I18N-1) and FastPath's `tr` locale forms, which are `CODE-GREEN` only; 
 Этап 4.0 and the whole A0 agent slice (Этап 4) became
 `DEVICE-ACCEPTED` on 2026-08-22 in the Task 15 session, which also exercised FastPath's `ru` launch
 verb («открой …») on the phone; the A1′ slice (Этап 5) became `DEVICE-ACCEPTED` on 2026-09-10 in the
-same `ru-RU` locale. **The A1″ slice (Этап 5.5, phases 0–3b) is `CODE-GREEN` only.** Said exactly
-(corrected 2026-09-20): **phases 1–2 received a device reading in the Task 13b smoke round
-(`ab2d063`, 2026-09-16), which is not an acceptance; phase 3a — the entire acting set, the `CONFIRM`
-card, the `launcher_memory` adapter and every `tr`/`en` trigger — has not run on a phone at all, and
-neither has phase 3b.** It is the block that adds an irreversible act (`uninstall_app`) to the surface.
-**No block has ever been accepted on the phone in `tr` or `en`** — every device
-round to date has run `ru-RU` only, and A1″ raised the count of unjudged `tr` triggers from one to
-**twenty-three** (24 counted as raw distinct trigger strings; the vocabulary table holds 27 `tr` forms,
-three of which predate the unjudged accounting). `CLOSED` = both, with any residual limitation named
-rather than implied absent (Этап 0.5 — status vocabulary).
+same `ru-RU` locale. **The A1″ slice (Этап 5.5, phases 0–3b) became `DEVICE-ACCEPTED` on 2026-09-20**,
+in one round covering both phase boundaries on build `db1e75d` — the block that adds an irreversible
+act (`uninstall_app`) to the surface. **That round also ended two standing deficits of the whole
+project.** First: `tr` and `en` had **never** run on a phone — every device round to date was `ru-RU`
+only — and this one ran both. Second: the **twenty-three unjudged `tr` triggers** (24 as raw distinct
+strings; the vocabulary table holds 27 `tr` forms, three predating the accounting) were **judged by the
+owner and accepted in full**, including `sayaç ayarla`, which A1′ had honestly left open since
+2026-09-10. The count of unjudged `tr` triggers is therefore **zero**. A useful mechanical fact came
+out of it: `ToolVocabulary.matchIn` flattens `prefixByLocale`/`suffixByLocale` across locales, so
+**trigger matching is locale-blind** — every locale's forms are live at once, and only rendered
+*strings* need a locale switch. `CLOSED` = both, with any residual limitation named rather than implied
+absent (Этап 0.5 — status vocabulary).
 
 - **Launcher core** — home, app drawer, settings, app launch; fully offline.
 - **FastPath routing** — `RuleBasedIntentMatcher`, verb/keyword vocabulary in `en`/`ru`/`tr`
@@ -181,10 +187,10 @@ rather than implied absent (Этап 0.5 — status vocabulary).
   `ToolExecutorCallSiteGuardTest` (re-anchored, not weakened) holds the first. Tool *mass* beyond these
   two tools (`LauncherApps`/shortcuts, ~10 more Tier-0 intents) and tool *selection* before the planner
   are **not** in this block — split out as **A1″**, owner fork F2.
-- **Tool mass + selection (A1″ phases 0–3b, `CODE-GREEN` — `DEVICE-ACCEPTED` **absent**: phases 1–2 got
-  a device reading in the Task 13b **smoke round**, which is not an acceptance, while **phase 3a — the
-  whole acting set, the `CONFIRM` card, the `launcher_memory` adapter and every `tr`/`en` trigger — has
-  not run on a phone at all, and neither has phase 3b**; residual limitations in Known debt)** —
+- **Tool mass + selection (A1″ phases 0–3b, `CLOSED` — owner-accepted on the SM-A325F 2026-09-20,
+  Parts A and B, in `ru-RU` **and, first in the project, `tr` and `en`**; the signed build is
+  `db1e75d` **unfixed**, because the owner ruled the round's one product defect over to A4′ rather
+  than repairing it here; residual limitations in Known debt)** —
   **twenty authored tools on three levels** (sixteen of them built by this block, of which five act),
   plus one dynamic family on a fourth. **Five of the sixteen act**, against a floor of four:
   `set_alarm` (`system_intent`, `SAFE`), **`uninstall_app` (`system_intent`, `CONFIRM`/`DURABLE` — the
@@ -387,24 +393,58 @@ below is recorded in its own ADR.
   sets was not established. At the SQL level the at-rest guarantee holds (re-measured at five points);
   the file lives in app-private storage and needed `run-as` on a debuggable build. Changing journal
   mode or `secure_delete` on an accepted schema-4 database is an owner decision → owner / A4′.
-- **A1″ (tool mass + selection, phases 0–3b) is `CODE-GREEN` — phases 0–3a as of 2026-09-19, phase 3b
-  as of 2026-09-20 at gate 1439 — and `DEVICE-ACCEPTED` is ABSENT, not inapplicable** (unlike A0.5,
-  where "not applicable" was honest because that block changed nothing on the phone).
-  **Corrected 2026-09-20:** four documents used to say that *nothing* the block built had run on a
-  phone, and that is **wider than the truth**. Verified against git: `ab2d063` (2026-09-16), the Task
-  13b **smoke round** the owner authorised and which is explicitly **not** an acceptance, ran the
-  shipped phase-1/2 code on the SM-A325F — 216 shortcut descriptors from 65 packages with no id
-  collisions, `ToolSelector` over that real registry (authored ≈1 ms, dynamic ≈64–69 ms, three
-  documented declines), one command driven through the launcher's own UI in `ru-RU` with provenance
-  rendering `APP SHORTCUT · EXTERNAL`, and fail-closed behaviour with the HOME role removed.
-  **The exact standing claim: phases 1–2 received a device reading in a smoke round that is not an
-  acceptance; phase 3a — the entire acting set, the `CONFIRM` card, the `launcher_memory` adapter and
-  every `tr`/`en` trigger — has not run on a phone at all, and neither has phase 3b.** The Task 13/13b
-  measurement round measured **Android premises**, not the product. Checklist written, extended with
-  3b's eleven rows, and waiting for the owner:
-  [2026-09-19-a1-second-device-acceptance.md](docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md).
-  Full record: ADR «2026-09-19 — Этап 5.5 (A1″)», whose last section is phase 3b's.
-  **Residual limitations, named rather than implied absent:**
+- **A1″ (tool mass + selection, phases 0–3b) is `CLOSED` as of 2026-09-20** — `CODE-GREEN` at gate
+  **1439** (phases 0–3a 2026-09-19, phase 3b 2026-09-20), plus an owner device round the same day on
+  the SM-A325F: Parts A and B in full, `ru-RU` **and, for the first time in the project, `tr` and
+  `en`**. **`CLOSED` is not a zero-debt claim** (DS-6B precedent) — everything below is carried
+  forward by owner decision, named rather than cleared, and the round **added four items** to it.
+  **The signed build is `db1e75d`, UNFIXED**, which diverges from the A1′ precedent where the owner
+  signed a repaired build: this round found a product defect and the owner ruled it over to A4′
+  instead of repairing it mid-acceptance. Install was over the existing app — `uid` 10752 unchanged,
+  schema-4 database intact, no migration. Full record: the section «Приёмка на устройстве» at the end
+  of ADR «2026-09-19 — Этап 5.5 (A1″)».
+  **What the round closed:** spec §16 criterion 1, the last open one of nine; the twenty-three
+  unjudged `tr` triggers, **judged by the owner and accepted in full** (including `sayaç ayarla`,
+  open since 2026-09-10 — the unjudged count is now **zero**); and R14-38/R14-39, both observed on a
+  phone for the first time.
+  **What the round did NOT cover, said rather than implied:** §A8 was read as a **sample** in `tr`/`en`,
+  not a full second pass over every command; **the wire was never captured**, so egress is established
+  by a live-path argument rather than by interception; Part C was not run as a section, and what
+  exists of it clears nothing; and P2 below is **not** narrowed, because location permission happened
+  to be granted on the device that day.
+  **Four findings the round ADDED, none repaired:** **(a)** a **cancelled** uninstall renders as
+  «выполнено» — `Tier0IntentToolWorker.launch()` returns `ToolResult.Effected()` for the OS dialog
+  merely being **raised**, so `uninstall_app` is the first tool whose `Effected` can be false, and it
+  is the only irreversible one; `DOC-ILM-3`/`DOC-ILM-4` both bite, and the same file's `openAppInfo`
+  KDoc cites the rule verbatim. No honest "handed off, outcome unknown" value exists — `ToolResult` is
+  `Effected | Observed(ObservedFact) | Failed` and `ObservedFact` is frozen — so this is A0.5's
+  "a whole class of reality unsayable" coming due. Owner ruling: **name it, fix in A4′**. **(b)** a
+  **`HOME`-role grant is not seen by a live process**: `ShortcutRefreshTrigger.start()` runs once per
+  process and observes **shortcut** changes, and a role change is not one, so the catalog stays empty
+  until a restart — measured by the agent (`youtube shorts` dead, then alive after `force-stop`).
+  This **narrows spec §16 criterion 2**, which is true of the federation but not of the source beneath
+  it; the smoke round missed it because S7/S8 tested the role-**removed** direction in a **fresh**
+  process. **(c)** **BYOK misconfiguration is silent on the command path** — a wrong key, wrong model
+  id, dead endpoint and "the model answered prose" all fold into one `NoPlan` and one «Неизвестная
+  команда»; the owner ran part of this very acceptance believing a provider was configured when it was
+  not. The Assistant surface *does* show transport errors, so the two surfaces disagree. Same fail-open
+  family as A1′ residual (3), with a **third** cause. **(d)** the command bar **cannot answer a
+  question** — the model maps it to `ActionIds.WEB_SEARCH` and the launcher googles, because the
+  catalog has no "answer" action; this is the unbuilt half of **ADR 4/4** («a 0-step plan *is* a spoken
+  reply»), visible to the user. All four → A4′.
+  **One platform property, not a defect:** exiting an app lands on Samsung's Recents
+  (`com.sec.android.app.launcher/com.android.quickstep.RecentsActivity`), because on One UI a
+  third-party home app does not supply overview; `HOME` itself resolves to Sidr and holds.
+  **Four defects of the CHECKLIST, not of the code** — and this is its own result: the acceptance
+  document, written at block close, erred **more often than the code it checked**, and three of the
+  four were claims about what the user would *see*, written without a device run. They were: a target
+  named «sidr» when the app's label is «Sidr Launcher»; a two-slot alias form missing its infix in
+  `ru` **and** `en` while the `tr` row had it; a demand to see `LAUNCHER MEMORY · LOCAL`, which
+  `provenanceLabelFor` deliberately never draws for a `LOCAL` tool; and a promise that «открой телега»
+  would open the app, when an alias by contract «fills only gaps» and answers to the **bare** phrase.
+  Rule taken from it: **a checklist line predicting a specific visible rendering is a hypothesis until
+  it has been run once, and must be written in that tone.**
+  **Residual limitations from the `CODE-GREEN` close, carried forward unchanged:**
   **(1) `ToolMatchPlanner` resolves an argument named `app` regardless of `required`** (R14-37). A
   future descriptor declaring `app` as **optional** (e.g. `share_to(app, text)`) gets `raw = ""` →
   `resolve("")` → `null` → **`NoPlan` for every goal, forever, with the suite green** — the block's own
@@ -430,21 +470,24 @@ below is recorded in its own ADR.
   the decision to send is made by an **unresolved name** rather than by the routing rules. This is the
   same class as A1′ residual (3), now with a non-store cause. A test pins it, and its **first** assertion
   is the load-bearing one: it proves the vocabulary really did claim the text. → **A4′**.
-  **(4) TWENTY-THREE `tr` triggers, none judged by a native speaker** — phase 3a's six
-  (`alarm ayarla`, `uygulamasını kaldır`, `kaldır`, `için`/`kullan`, `adını unut`,
-  `için seçimi unut`) beside A1′'s inherited `sayaç ayarla` made seven; **phase 3b added sixteen more
-  `tr` forms across eleven tools** (most of the new entries declare two), so the count by this list's
-  own convention (`için`/`kullan` as one item) is **23**, and **24** counted as raw distinct trigger
-  strings. The vocabulary table holds **27** `tr` forms in all, three of which (`zamanlayıcı ayarla`,
-  `sistem ayarları`, `android ayarları`) predate the unjudged accounting. Before A1″ it was **one**.
-  3b's least-confident forms, named in advance: `pil ayarları`, `veri kullanımı`, `bildirim ayarları`,
-  `konum ayarları`, `uygulama bilgisi`. R14-42 records the decision to ship `için`/`kullan`
-  with the limitation **named** rather than block the phase on a question no agent and no guard can
-  answer. The linguistic finding is real and is the useful half: `olarak`/`diye` (the literal renderings
-  of "as") are **postpositions attaching to the second argument**, so they cannot occupy a slot
-  *between* the two and do not fit `<A> <infix> <B> <suffix>`; `için` does. Least-confident form:
-  `için`/`kullan`. Owner-level, a numbered checklist item, and "assumed fine" is not an acceptable
-  answer to it.
+  **(4) CLOSED 2026-09-20 by the owner's device round — the twenty-three `tr` triggers are JUDGED and
+  ACCEPTED, and the unjudged count is now ZERO.** It stood at **one** before A1″ (A1′'s inherited
+  `sayaç ayarla`), rose to seven after phase 3a (`alarm ayarla`, `uygulamasını kaldır`, `kaldır`,
+  `için`/`kullan`, `adını unut`, `için seçimi unut`) and to **23** after 3b added sixteen more across
+  eleven tools — **24** counted as raw distinct strings, against 27 `tr` forms in the vocabulary table
+  (three of which predate the accounting). The owner ran every one of them, including the five named
+  least-confident **in advance** (`pil ayarları`, `veri kullanımı`, `bildirim ayarları`,
+  `konum ayarları`, `uygulama bilgisi`), the bare `kaldır` — the shortest trigger in the vocabulary and
+  the only bare one on a `CONFIRM` tool — and `için`/`kullan`, and judged them himself: «все работает,
+  значения перевода верные». **No `ToolVocabulary.kt` change was required**, since a "drop it" verdict
+  would have been a code change rather than a documentation edit. R14-42's decision to ship
+  `için`/`kullan` with the limitation **named** rather than block the phase is thereby vindicated, and
+  its linguistic finding stands on its own: `olarak`/`diye` (the literal renderings of "as") are
+  **postpositions attaching to the second argument**, so they cannot occupy a slot *between* the two
+  and do not fit `<A> <infix> <B> <suffix>`; `için` does. **What made the round cheap enough to do at
+  all** is worth keeping: `ToolVocabulary.matchIn` flattens `prefixByLocale`/`suffixByLocale` across
+  locales, so **trigger matching is locale-blind** — the `tr` forms were exercised from a `ru-RU`
+  device, and a locale switch is needed only to read rendered *strings*.
   **(5) the `ToolWorker` holder list is still keyed on FILES, not on the registry.** Phase 0 moved
   *permission* totality onto the registry; the holder floor in `ToolWorkerCallSiteGuardTest` and the
   `ToolId`-keyed floors in `DoctrineGuardTest` / `Tier0IntentToolSourceTest` did not move. **The measured
@@ -744,6 +787,6 @@ below is recorded in its own ADR.
   «Сквозное ревью блока A0» (2026-08-23) · **Этап 4.5 (A0.5)** — second consumer (2026-08-26) ·
   **Этап 5 (A1′)** — federated `ToolRegistry` (2026-09-03; the owner's device acceptance of
   2026-09-10 is a section inside that same ADR) · **Этап 5.5 (A1″)** — tool mass + selection,
-  phases 0–3a (2026-09-19) **and phase 3b, the eleven navigating tools, as a section inside that same
-  ADR** (2026-09-20; `CODE-GREEN`, no device acceptance yet — when it happens it becomes another
-  section there, as A1′'s did)
+  phases 0–3a (2026-09-19), **phase 3b, the eleven navigating tools, as a section inside that same
+  ADR** (2026-09-20), **and the owner's device acceptance as the last section of it** (2026-09-20 —
+  the block becomes `CLOSED`, exactly as A1′'s acceptance became a section inside its own ADR)

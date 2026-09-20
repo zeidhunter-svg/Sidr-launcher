@@ -6,6 +6,23 @@
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
 > / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-09-20
+> (**Этап 5.5 (A1″) — OWNER DEVICE ACCEPTANCE on the SM-A325F / Android 13: Parts A and B of the
+> checklist run in full, in `ru-RU` **and, for the first time in the project, `tr` and `en`**. The
+> block is **`CLOSED`**, and spec §16 criterion 1 — the last open one of nine — is closed with it.
+> The signed build is `db1e75d` **unfixed**: the round found one product defect (a **cancelled**
+> uninstall renders as «выполнено», because `Effected` is returned for the OS dialog merely being
+> raised) and the owner ruled it over to A4′ rather than repairing it mid-acceptance — a deliberate
+> divergence from A1′, where the owner signed the repaired build. **The twenty-three unjudged `tr`
+> triggers were judged by the owner and accepted in full**, including `sayaç ayarla`, open since
+> 2026-09-10; the unjudged count is now **zero**. R14-38 and R14-39 were both observed on a phone for
+> the first time. Three further findings, none repaired, all → A4′: a **`HOME`-role grant is invisible
+> to a live process** (narrows §16 criterion 2 — true of the federation, not of the source beneath
+> it); **BYOK misconfiguration is silent on the command path** (wrong key, wrong model id, dead
+> endpoint and prose all fold into one «Неизвестная команда»); and **the command bar cannot answer a
+> question** — it maps to `WEB_SEARCH`, which is the unbuilt half of ADR 4/4. **Four of the five
+> discrepancies the run exposed were defects of the CHECKLIST, not of the code** — the acceptance
+> document erred more often than the code it checked. Gate unchanged at **1439** / 0 failures; the
+> agent changed no repository file during the round**); prior 2026-09-20
 > (**Этап 5.5 (A1″) phase 3b — the eleven navigating tools: `show_alarms`, `open_camera` and nine
 > settings/app-info screens, all `system_intent` / `SAFE` / `EXTERNAL`, registered, permitted,
 > dispatched, reachable in `en`/`ru`/`tr` and rendered. `CODE-GREEN` at **1439** tests / 0 failures —

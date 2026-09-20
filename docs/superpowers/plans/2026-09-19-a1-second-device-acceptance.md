@@ -1,6 +1,19 @@
 # A1″ — device acceptance (tool mass, selection, and the first `CONFIRM` tool)
 
-> **NOT RUN. Written 2026-09-19 at block close; the owner runs it, not an agent.**
+> **RUN 2026-09-20 by the owner on the SM-A325F (build `db1e75d`). Parts A and B passed in full, in
+> `ru-RU` and — for the first time in this project — in `tr` and `en`. The block is `CLOSED`; spec §16
+> criterion 1, the last open one of nine, is closed. What was actually observed, the seven findings,
+> the owner's rulings and what the round did NOT cover are recorded in the section «Приёмка на
+> устройстве» at the end of ADR «2026-09-19 — Этап 5.5 (A1″)» in `ai-context/decisions.md` — not here.**
+>
+> **Four lines of this file were WRONG and are corrected below where they stand (§A2, §A5 ×3).** The
+> document erred more often than the code it checked, and three of the four were predictions about what
+> the user would *see*, written without a device run. **Rule taken from it: a checklist line predicting
+> a specific visible rendering is a hypothesis until it has been run once, and must be written in that
+> tone.**
+>
+> *Original header, kept as the record of what this file claimed before the round:* **NOT RUN. Written
+> 2026-09-19 at block close; the owner runs it, not an agent.**
 >
 > **Why this file exists.** Block A1″ (Этап 5.5) is `CODE-GREEN` through **phase 3b**: gate green at
 > **1439 tests / 0 failures / 0 errors** from a run printing `557 actionable tasks: 557 executed`,
@@ -155,7 +168,11 @@ that is actually installed:
 
 ### A2. `uninstall_app` refuses to remove Sidr, and the refusal arrives AFTER consent — look at this deliberately
 
-Type «удали sidr» (or "uninstall sidr" / "sidr kaldır").
+Type «удали приложение sidr launcher». **CORRECTED 2026-09-20 during the run:** this line used to
+read «удали sidr», which resolves to **nothing** — the app's label is «Sidr Launcher»
+(`strings_locked.xml`, `translatable="false"`) and `AppTargetResolver` matches the **exact**
+normalized label and never guesses. The original line therefore tested the fall-through, not the
+refusal. The product was right; the checklist named a target that does not exist on the phone.
 
 - [ ] The name resolves to **our own package**, a `CONFIRM` card is drawn **naming it**, and only after
       confirming does the step fail. **This is spec-compliant, not a defect** — condition 4 sits exactly
@@ -209,8 +226,8 @@ launcher, and everything it does is undoable from Settings → Память.
 
 | # | Locale | Command | Expected |
 |---|---|---|---|
-| 1 | `ru` | «называй telegram телега» | alias created |
-| 1 | `en` | "call telegram tg" | alias created |
+| 1 | `ru` | «называй telegram **как** телега» | alias created |
+| 1 | `en` | "call telegram **as** tg" | alias created |
 | 1 | `tr` | "telegram için tg kullan" | alias created |
 | 2 | `ru` | «забудь название телега» | alias removed |
 | 2 | `tr` | "telega adını unut" | alias removed |
@@ -220,14 +237,23 @@ launcher, and everything it does is undoable from Settings → Память.
 - [ ] Each runs **without a consent card** (all three are `SAFE`) and lands on a completed one-step plan.
 - [ ] The step line names the arguments, not the typed text: «Называть «telegram» «телега»» / «Забыть
       алиас «телега»» / «Забыть выученный выбор для «телега»».
-- [ ] The provenance line beneath reads **`LAUNCHER MEMORY · LOCAL`** — locked English, and the `LOCAL`
-      half is the point: this is the only shipped level that does **not** cross the app boundary.
+- [x] **CORRECTED 2026-09-20: there is NO provenance line for these three, and that is correct.**
+      `provenanceLabelFor` opens with `if (effect != ToolEffect.EXTERNAL) return null`, and every
+      `launcher_memory` tool is `LOCAL`, so no chip is drawn — its KDoc argues that claiming a
+      boundary crossing that did not happen would be `DOC-ILM-2` lying in the opposite direction.
+      The string `launcher_tool_level_launcher_memory` («LAUNCHER MEMORY · LOCAL») ships **locked and
+      unreachable**, mapped only for totality — which is where this line's mistaken demand came from.
 - [ ] **Open Settings → Память and confirm the effect is really there** — the alias appears in
       «Псевдонимы» after command 1 and is gone after command 2. A memory tool that reports success
       while storing nothing is the specific silent failure this set was written against (an alias
       stored under a normalized phrase, deleted with a raw one, finds nothing and reports success).
-- [ ] After creating the alias, **«открой телега» opens Telegram** — the alias is not just a row, it
-      changes resolution.
+- [x] **CORRECTED 2026-09-20: the bare phrase «телега» opens it; «открой телега» does NOT, and that
+      is the contract, not a defect.** `ResolveCommandWithAliasUseCase` fires only on
+      `CommandOutcome.Unknown` and looks up `store.find(normalize(rawInput))` over the **whole**
+      input — «псевдонимы заполняют только пробелы», as the Settings copy already says. «открой
+      телега» is *decided* by FastPath (verb understood, no such app) → `NoAppFound` → A0's
+      launch→store plan. Verified on device: bare «телега» opened the app, and «забудь название
+      телега» then stopped it opening.
 
 ### A6. THE TWENTY-THREE TURKISH TRIGGERS — none has ever been judged by a native speaker
 

@@ -17,6 +17,7 @@ import com.sidr.launcher.domain.intent.CommandNormalizer
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
+import com.sidr.launcher.domain.intent.ExecutableAction
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.tool.ToolAdapter
 import com.sidr.launcher.domain.tool.ToolFederation
@@ -107,6 +108,21 @@ class SelectionDeclineMeasurement {
         DECLINE_MISSING_ARG,
     }
 
+    private data class Row(val phrase: String, val outcome: Outcome, val acted: String, val verdict: String)
+
+    /** Enough to judge "did it do what was asked", not more: the action family and its target. */
+    /** Enough to judge "did it do what was asked", not more: the action family and its target. */
+    private fun ExecutableAction.describeForReport(): String = when (this) {
+        is ExecutableAction.LaunchAppAction -> "LAUNCH $packageName"
+        is ExecutableAction.OpenSearchAction -> "SEARCH[$target] $query"
+        is ExecutableAction.OpenUrlAction -> "OPEN_URL $url"
+        is ExecutableAction.PlayStoreSearchAction -> "PLAY_STORE $query"
+        is ExecutableAction.AmbiguousAppAction -> "AMBIGUOUS_APP $query -> ${candidates.size} candidates"
+        is ExecutableAction.ShowMessageAction -> "MESSAGE ${message::class.java.simpleName}"
+        ExecutableAction.OpenLauncherSettingsAction -> "LAUNCHER_SETTINGS"
+        ExecutableAction.NoOpAction -> "NOOP"
+    }
+
     @Test
     fun measure_selection_decline_rate() {
         val shortcuts = readLines("b15/shortcuts.jsonl")
@@ -147,22 +163,44 @@ class SelectionDeclineMeasurement {
         val appTargets = AppTargetResolver(appsRepo, FakeAliasStore())
         val planner = ToolMatchPlanner(selector, appTargets)
         val registry = federation(shortcutSource).registry
-        val fastPath = HandleUserCommandUseCase(
-            matcher = RuleBasedIntentMatcher(),
-            resolver = IntentActionResolver(appsRepo),
-            executor = FakeActionExecutor(),
-            confidencePolicy = DefaultIntentConfidencePolicy(),
-            recordingScope = CoroutineScope(SupervisorJob()),
-        )
-
         val rows = corpus.map { phrase ->
-            phrase to classify(phrase, fastPath, selector, vocabulary, dynamicNames, planner, registry)
+            val executor = FakeActionExecutor()
+            val perPhrase = HandleUserCommandUseCase(
+                matcher = RuleBasedIntentMatcher(),
+                resolver = IntentActionResolver(appsRepo),
+                executor = executor,
+                confidencePolicy = DefaultIntentConfidencePolicy(),
+                recordingScope = CoroutineScope(SupervisorJob()),
+            )
+            val outcome = classify(phrase, perPhrase, selector, vocabulary, dynamicNames, planner, registry)
+            // What FastPath actually DID, not what the category name suggests. `HANDLED_BY_FASTPATH`
+            // reads as success and may be a silent truncation - "открой X и сделай Y" launching X and
+            // discarding Y. Only the owner can judge which, and only if the report SHOWS the action.
+            Row(
+                phrase = phrase,
+                outcome = outcome,
+                acted = executor.executedActions.joinToString(", ") { it.describeForReport() },
+                verdict = lastFastPathVerdict,
+            )
         }
 
         report(rows, corpusSize = corpus.size, tools = registry.all().size, shortcuts = dynamicNames.size)
 
         assertEquals("every corpus line must land in exactly one category", corpus.size, rows.size)
         assertTrue("the fixture must not be empty, or the measurement is vacuous", dynamicNames.isNotEmpty())
+    }
+
+    private var lastFastPathVerdict: String = ""
+
+    /** How FastPath closed the line. `HANDLED_BY_FASTPATH` covers several very different answers. */
+    private fun CommandOutcome.describeForReport(): String = when (this) {
+        is CommandOutcome.Message -> "Message(${message::class.java.simpleName})"
+        is CommandOutcome.NeedsConfirmation -> "NeedsConfirmation(${candidates.size})"
+        is CommandOutcome.Suggest -> "Suggest(${intent::class.java.simpleName}, $confidence)"
+        is CommandOutcome.Unknown -> "Unknown"
+        // `else` rather than the full list on purpose: this is a report renderer, and a new
+        // CommandOutcome variant must not break the measurement - it must show up by its own name.
+        else -> this::class.java.simpleName
     }
 
     private fun classify(
@@ -175,6 +213,7 @@ class SelectionDeclineMeasurement {
         registry: ToolRegistry,
     ): Outcome = runBlocking {
         val fastPathOutcome = fastPath.handle(phrase)
+        lastFastPathVerdict = fastPathOutcome.describeForReport()
         val fastPathDecided = !isUndecided(fastPathOutcome)
 
         val match = selector.select(phrase)
@@ -275,13 +314,13 @@ class SelectionDeclineMeasurement {
         javaClass.classLoader?.getResourceAsStream(resource)?.bufferedReader()?.readLines()
 
     private fun report(
-        rows: List<Pair<String, Outcome>>,
+        rows: List<Row>,
         corpusSize: Int,
         tools: Int,
         shortcuts: Int,
     ) {
-        val byOutcome = rows.groupingBy { it.second }.eachCount()
-        val declines = rows.count { it.second.name.startsWith("DECLINE_") }
+        val byOutcome = rows.groupingBy { it.outcome }.eachCount()
+        val declines = rows.count { it.outcome.name.startsWith("DECLINE_") }
         val ambiguity = byOutcome.filterKeys {
             it == Outcome.DECLINE_AMBIGUOUS_AUTHORED ||
                 it == Outcome.DECLINE_DYNAMIC_TIE ||
@@ -303,7 +342,16 @@ class SelectionDeclineMeasurement {
         out.appendLine("AMBIGUITY is the share that a multi-turn clarification protocol could convert;")
         out.appendLine("DECLINE_NO_MATCH is a vocabulary gap and a protocol would not help it.")
         out.appendLine()
-        rows.forEach { (phrase, o) -> out.appendLine("  ${o.name.padEnd(30)} $phrase") }
+        out.appendLine("PER LINE. `acted` is what FastPath actually DID. A single LAUNCH beside a")
+        out.appendLine("two-clause request is a SILENT TRUNCATION, not a success - the category name")
+        out.appendLine("cannot tell those apart, and only the owner can. That is the judgement this")
+        out.appendLine("report exists to enable rather than to make.")
+        out.appendLine()
+        rows.forEach { r ->
+            out.appendLine("  ${r.outcome.name.padEnd(29)} ${r.phrase}")
+            out.appendLine("  ${"".padEnd(29)} -> fastpath: ${r.verdict}")
+            if (r.acted.isNotBlank()) out.appendLine("  ${"".padEnd(29)} -> acted:    ${r.acted}")
+        }
 
         println(out)
         runCatching {

@@ -659,7 +659,7 @@ below is recorded in its own ADR.
 
 - **JDK 17.** The machine's default JDK is newer and Gradle cannot parse it; run with the Temurin 17
   toolchain (`-Porg.gradle.java.installations.paths`, `local.properties` is git-ignored).
-- Gate: `./gradlew --no-daemon :domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test` —
+- Gate: `./gradlew :domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test` —
   plus `:core:ui:verifyRoborazziDebug` whenever `core/ui` is touched, and `:app:assembleRelease` for
   release-affecting work. **`:domain:jvmTest` and `:consumer:jvm:test` must be listed explicitly:**
   `testDebugUnitTest` has not reached `:domain` since it went KMP, and it never reaches `:consumer:jvm`
@@ -696,6 +696,14 @@ below is recorded in its own ADR.
   — the latter is not a valid Gradle 9.5.0 build-level flag and silently returns everything `UP-TO-DATE`
   while still printing `BUILD SUCCESSFUL` (it produced one false green inside the A1′ block); a genuine
   run prints `N actionable tasks: N executed`.
+- **The Gradle daemon is ON** (owner decision 2026-09-25). The former `--no-daemon` in the gate
+  command was retired as no longer current: `gradle.properties` sets no `org.gradle.daemon` line, so
+  the daemon is Gradle's default and nothing is passed. It was costing a JVM startup and a full
+  configuration per invocation, and a mutation-heavy block pays that ten or more times. The two
+  properties it could have threatened are held elsewhere: a **boundary** run passes `--rerun-tasks`,
+  so it cannot inherit a stale up-to-date verdict, and a **scoped** run (see `tools/gate.sh`) prints
+  how many tasks Gradle actually executed and warns when that is zero — so a change Gradle did not
+  notice cannot read as a pass.
 - **Never pipe `gradlew` through `tail`** — that masked a red gate as exit 0 on 2026-07-13. Check the
   exit code and read the real output.
 - A stage/block is not closed until the gate is green, an ADR is written, `CLAUDE.md` +

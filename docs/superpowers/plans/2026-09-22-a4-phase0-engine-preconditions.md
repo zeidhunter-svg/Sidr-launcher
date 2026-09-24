@@ -46,9 +46,21 @@ Every task's requirements implicitly include this section. Values are copied ver
 and from `CLAUDE.md`.
 
 - **Gate command, both KMP modules listed explicitly:**
-  `./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 :domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test --rerun-tasks`
+  `./gradlew -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 :domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test --rerun-tasks`
   (verified 2026-09-22: that JDK path exists; `local.properties` carries no `java` line, so the `-P`
   flag is **required** — the machine's default JDK is 25 and Gradle cannot parse it).
+- **The Gradle daemon is ON.** The former `--no-daemon` rule was retired by the owner on 2026-09-25 as
+  no longer current; `gradle.properties` sets no `org.gradle.daemon` line, so the daemon is Gradle's
+  default and nothing is passed. It matters here because this phase runs **eleven mutations**, each of
+  which is its own Gradle invocation, and JVM startup plus configuration was being paid eleven times.
+  `CLAUDE.md`'s gate section was corrected in the same commit as this line, so the two cannot diverge.
+- **Two gate modes, labelled differently on purpose** (Task 1). `tools/gate.sh` **boundary** — the
+  default — clears `build/test-results` everywhere, passes `--rerun-tasks`, compares against 1440 and
+  prints `GATE GREEN`/`GATE RED`. `tools/gate.sh --scoped :module:task …` clears only the named
+  modules' results, does **not** pass `--rerun-tasks`, prints no baseline comparison, and labels
+  itself `SCOPED GREEN … — NOT a boundary gate`. Intermediate TDD steps and every mutation run
+  **scoped**; the run that closes a task is always **boundary**. A scoped run that printed
+  `GATE GREEN` would be a new false-green generator, which is why the labels differ.
 - **Baseline is 1440.** Not 1439, not 1438, not 1375, not 1314, not any number in the A1″ ADR.
 - **`--rerun-tasks`, never `--rerun`** (§9.1, R9). The latter is not a Gradle 9.5.0 build-level flag:
   it returns everything `UP-TO-DATE` and still prints `BUILD SUCCESSFUL`. A genuine run prints
@@ -263,9 +275,21 @@ in the very paragraph that demanded R14-43 be checked. A plan is not exempt from
 - Create: `app/src/test/java/com/sidr/launcher/agent/RegistryCensusMeasurement.kt`
 
 **Interfaces:**
-- Produces: `tools/gate.sh [<gradle task>…]`, exit 0 only when every parsed JUnit XML reports zero
-  failures and zero errors; prints a per-module decomposition, a total, and the authored registry
-  census. Every later task's verification step calls it.
+- Produces: `tools/gate.sh [--boundary|--scoped] [<gradle task>…]`, exit 0 only when every parsed
+  JUnit XML reports zero failures and zero errors; prints a per-module decomposition, a total, and
+  the authored registry census. Every later task's verification step calls it — **scoped** for TDD
+  steps and mutations, **boundary** (no arguments) for the run that closes a task.
+
+**What is already verified about the script text below, and what is not** — said so the implementer
+knows which half is still theirs. On 2026-09-25, before this plan was committed, the shipped text was
+extracted verbatim and checked: `bash -n` passes, and the three argument paths that need no Gradle
+were **executed** — `--help` prints the usage and exits 0; `--scoped testDebugUnitTest` refuses an
+unqualified task and exits 2; `--scoped` with no task refuses and exits 2. The module-path derivation
+was run against all four shapes this plan uses (`:data:repository:…` → `data/repository`,
+`:app:…` → `app`, `:consumer:jvm:test` → `consumer/jvm`, `:domain:jvmTest` → `domain`).
+**Not verified, and therefore step 4's and step 5's job:** the Gradle invocation itself, the XML
+counter against real `build/test-results` paths, whether `println` reaches `<system-out>` in `:app`,
+and the RED summary.
 
 - [ ] **Step 1: write the registry census measurement**
 
@@ -340,7 +364,7 @@ makes that copy safe: a copy that drifts goes red.
 
 ```bash
 cd /home/Suleiman/Sidr-launcher
-./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
+./gradlew -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
   :app:testDebugUnitTest --tests '*RegistryCensusMeasurement*' --rerun-tasks
 grep -rho "REGISTRY :: .*" app/build/test-results/testDebugUnitTest/
 ```
@@ -359,13 +383,25 @@ captured, say so in the log and have `gate.sh` print `REGISTRY :: not captured` 
 # It replaces three of the seven rules of §9.1 — each paid for by a concrete false green — with
 # something that cannot forget them:
 #   * `build/test-results` is cleared before the run            (R14-44: stale XML lies both ways)
-#   * `--rerun-tasks` is always passed, `--rerun` never is       (R9: a false green inside A1′)
+#   * `--rerun-tasks` is passed on a boundary run, `--rerun` never (R9: a false green inside A1′)
 #   * counts come from the JUnit XML, never from the console     (2026-07-13: `tail` hid a red gate)
 #
 # It does NOT replace the other four: predicting the decomposition before the run, proving a new
 # guard by mutation, fixture substrings, and re-running from a cleared tree after a mutation are
-# judgements, and a script that pretended to make them would be the eighth instance of "evidence
-# that does not describe the thing it is believed to describe".
+# judgements, and a script that pretended to make them would be one more instance of "evidence that
+# does not describe the thing it is believed to describe".
+#
+# TWO MODES, AND THEIR LABELS DIFFER ON PURPOSE.
+#   boundary (default) — the run that closes a task. Clears every module's results, passes
+#                        `--rerun-tasks`, compares the total against the 1440 baseline, and says
+#                        `GATE GREEN` / `GATE RED`.
+#   --scoped           — a run inside a task: a TDD step or a mutation. Clears only the named
+#                        modules, does NOT pass `--rerun-tasks`, prints NO baseline comparison, and
+#                        says `SCOPED GREEN … — NOT a boundary gate`.
+# The phase runs eleven mutations; as one mode they were eleven full `--rerun-tasks` sweeps. But the
+# saving is not why the labels differ: a cheap run that printed `GATE GREEN` would be a false-green
+# generator of exactly the kind this file exists to remove, and a scoped table compared against 1440
+# would be a number describing five missing modules.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -374,34 +410,78 @@ cd "$REPO_ROOT"
 JDK17="${SIDR_JDK17:-/home/Suleiman/jdks/jdk-17.0.19+10}"
 [ -d "$JDK17" ] || { echo "FATAL: JDK 17 not found at $JDK17 (set SIDR_JDK17)" >&2; exit 2; }
 
-GRADLE_TASKS=(:domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test)
-[ "$#" -gt 0 ] && GRADLE_TASKS=("$@")
+MODE=boundary
+case "${1:-}" in
+  --boundary) MODE=boundary; shift ;;
+  --scoped)   MODE=scoped;   shift ;;
+  -h|--help)  echo "usage: tools/gate.sh [--boundary|--scoped] [gradle tasks…]"; exit 0 ;;
+esac
 
-echo "== clearing build/test-results (R14-44) =="
-find . -path ./build -prune -o -type d -name test-results -print0 2>/dev/null \
-  | xargs -0 -r rm -rf
+DEFAULT_TASKS=(:domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test)
+TASKS=("$@")
+[ "${#TASKS[@]}" -eq 0 ] && TASKS=("${DEFAULT_TASKS[@]}")
+
+# A scoped run must name modules, because "which results may I clear" and "what may I leave
+# up-to-date" are both answered from the task path. An unqualified task (`testDebugUnitTest`) runs in
+# every module, which IS a boundary run — so it is refused here rather than silently mislabelled.
+if [ "$MODE" = scoped ]; then
+  [ "$#" -gt 0 ] || { echo "FATAL: --scoped needs at least one :module:task" >&2; exit 2; }
+  for t in "${TASKS[@]}"; do
+    case "$t" in
+      :*:*) ;;
+      *) echo "FATAL: --scoped takes only fully-qualified :module:task (got '$t'). An unqualified task runs every module — that is a boundary run." >&2; exit 2 ;;
+    esac
+  done
+fi
+
+if [ "$MODE" = boundary ]; then
+  echo "== boundary: clearing build/test-results EVERYWHERE (R14-44) =="
+  find . -path ./build -prune -o -type d -name test-results -print0 2>/dev/null \
+    | xargs -0 -r rm -rf
+else
+  echo "== scoped: clearing build/test-results for the named modules only =="
+  for t in "${TASKS[@]}"; do
+    m="${t#:}"; m="${m%:*}"; m="${m//://}"     # :data:repository:testDebugUnitTest -> data/repository
+    [ -d "$m" ] && rm -rf "$m/build/test-results"
+  done
+fi
+
+# The daemon is ON in both modes (owner decision, 2026-09-25: the former --no-daemon rule is no
+# longer current). Gradle uses it by default and `gradle.properties` sets no `org.gradle.daemon`
+# line, so nothing is passed and the first invocation's JVM startup is amortised over the rest.
+#
+# Why that is safe in each mode, said rather than assumed: a boundary run passes `--rerun-tasks`, so
+# it cannot inherit a stale up-to-date verdict from anything the daemon remembers. A scoped run
+# deliberately relies on up-to-date checks, so it prints what Gradle actually executed and shouts
+# when that number is zero — see below.
+GRADLE_ARGS=("-Porg.gradle.java.installations.paths=$JDK17")
+[ "$MODE" = boundary ] && GRADLE_ARGS+=(--rerun-tasks)
 
 LOG="$(mktemp -t sidr-gate-XXXXXX.log)"
 echo "== log: $LOG =="
-echo "== running: ${GRADLE_TASKS[*]} --rerun-tasks =="
+echo "== $MODE: ${TASKS[*]} ${GRADLE_ARGS[*]} =="
 # `set +e` around BOTH long-running steps. Without it `set -e` aborts the script the moment the
 # counter exits non-zero — which is exactly the run this script exists to report — and the RED
 # summary, the census line and the log path are never printed.
 set +e
-./gradlew --no-daemon "-Porg.gradle.java.installations.paths=$JDK17" \
-  "${GRADLE_TASKS[@]}" --rerun-tasks > "$LOG" 2>&1
+./gradlew "${GRADLE_ARGS[@]}" "${TASKS[@]}" > "$LOG" 2>&1
 GRADLE_EXIT=$?
 set -e
 # Never piped through `tail`: the whole log is kept and the exit code is the exit code.
-grep -E "actionable tasks:" "$LOG" || echo "WARNING: no 'actionable tasks' line — was anything executed?"
+ACTIONABLE="$(grep -E "actionable tasks:" "$LOG" || true)"
+echo "${ACTIONABLE:-WARNING: no 'actionable tasks' line — was anything executed?}"
+if [ "$MODE" = scoped ] && printf '%s' "$ACTIONABLE" | grep -q ": 0 executed"; then
+  echo "WARNING: this scoped run executed ZERO tasks — up-to-date checks decided nothing changed."
+  echo "         If you just edited a file (a mutation, a fix), that is a FINDING, not a pass."
+fi
 
 echo "== counts, from the JUnit XML =="
 set +e
-python3 - "$REPO_ROOT" <<'PY'
+python3 - "$REPO_ROOT" "$MODE" <<'PY'
 import sys, glob, os
 from xml.etree import ElementTree as ET
 
-root = sys.argv[1]
+root, mode = sys.argv[1], sys.argv[2]
 per_module = {}
 for path in glob.glob(os.path.join(root, "**", "build", "test-results", "**", "*.xml"),
                       recursive=True):
@@ -428,7 +508,12 @@ for module in sorted(per_module):
 print("-" * 64)
 print(f"{'TOTAL':<28} tests={total[0]:<5} failures={total[1]:<3} errors={total[2]:<3} "
       f"skipped={total[3]}")
-print("BASELINE at 2026-09-22 (074e4ce): tests=1440 failures=0 errors=0")
+# The baseline belongs to a boundary run ONLY. Printing it under a scoped run would invite comparing
+# one module's count with a whole-tree number — a table describing five absent modules.
+if mode == "boundary":
+    print("BASELINE at 2026-09-22 (074e4ce): tests=1440 failures=0 errors=0")
+else:
+    print("SCOPED: this table covers the named modules only — NOT comparable with 1440")
 sys.exit(1 if (total[1] or total[2]) else 0)
 PY
 COUNT_EXIT=$?
@@ -440,21 +525,31 @@ grep -rho "REGISTRY :: .*" app/build/test-results/ 2>/dev/null | head -1 \
 
 echo "== log kept at: $LOG =="
 if [ "$GRADLE_EXIT" -ne 0 ] || [ "$COUNT_EXIT" -ne 0 ]; then
-  echo "GATE RED (gradle=$GRADLE_EXIT counts=$COUNT_EXIT)"
+  if [ "$MODE" = boundary ]; then
+    echo "GATE RED (gradle=$GRADLE_EXIT counts=$COUNT_EXIT)"
+  else
+    echo "SCOPED RED (${TASKS[*]}) (gradle=$GRADLE_EXIT counts=$COUNT_EXIT)"
+  fi
   exit 1
 fi
-echo "GATE GREEN"
+if [ "$MODE" = boundary ]; then
+  echo "GATE GREEN"
+else
+  echo "SCOPED GREEN (${TASKS[*]}) — NOT a boundary gate"
+fi
 ```
 
 - [ ] **Step 4: make it executable and run the full gate through it**
 
 ```bash
 chmod +x tools/gate.sh
-tools/gate.sh
+tools/gate.sh            # no arguments = --boundary, the full task list
+tools/gate.sh --help     # the two modes, for the next reader
 ```
 
 Expected: `GATE GREEN`, `TOTAL tests=1441` (1440 + the census measurement), `failures=0 errors=0`,
-an `N actionable tasks: N executed` line, and a `REGISTRY :: authored=…` line.
+an `N actionable tasks: N executed` line, the `BASELINE at 2026-09-22 … tests=1440` line, and a
+`REGISTRY :: authored=…` line.
 
 **Predicted decomposition before this run** (compare it, do not skip it): `:domain` 440 ·
 `:consumer:jvm` 56 · `:data:repository` 376 · `:feature:launcher` 194 · **`:app` 60** (59 + 1) ·
@@ -464,41 +559,87 @@ If the script reports a different module breakdown from those six lines, the scr
 the tree is: check its module derivation (`rel.split("/build/")`) against the real paths — `:domain`
 is KMP and writes under `domain/build/test-results/jvmTest/` — before believing any number it prints.
 
-- [ ] **Step 5: prove the script can go red — both halves of the summary**
+- [ ] **Step 5: prove the script can go red, and prove the two modes are distinguishable**
+
+The red path is proved **scoped**, which is cheap, and that is enough for the RED path itself:
+both modes call the *same* counter and the same `set +e` wrapper, so the only thing the boundary
+label adds is a literal string. What must be checked separately is that the labels and the baseline
+line really do differ — otherwise the whole two-mode split is decoration.
 
 ```bash
-# plant a failure in a cheap module, run, expect the RED summary, revert
+# plant a failure in a cheap module, run scoped, expect the RED summary, revert
 sed -i 's/    fun `print the authored registry census`() {/    fun `print the authored registry census`() {\n        org.junit.Assert.fail("planted")/' \
   app/src/test/java/com/sidr/launcher/agent/RegistryCensusMeasurement.kt
-tools/gate.sh :app:testDebugUnitTest; echo "exit=$?"
+tools/gate.sh --scoped :app:testDebugUnitTest; echo "exit=$?"
 ```
-Expected, and **all four things must appear**: the per-module table, `GATE RED (gradle=1 counts=1)`,
-the `== log kept at: …` line, and `exit=1`. A run that exits 1 while printing no `GATE RED` is the
-`set -e` defect this step exists to catch (§0.5 finding 5).
+Expected, and **all four things must appear**: the per-module table, `SCOPED RED (:app:testDebugUnitTest)
+(gradle=1 counts=1)`, the `== log kept at: …` line, and `exit=1`. A run that exits 1 while printing no
+RED line at all is the `set -e` defect this step exists to catch (§0.5 finding 5).
 
 ```bash
 git checkout app/src/test/java/com/sidr/launcher/agent/RegistryCensusMeasurement.kt
-tools/gate.sh :app:testDebugUnitTest; echo "exit=$?"   # expect: GATE GREEN, exit=0
+tools/gate.sh --scoped :app:testDebugUnitTest; echo "exit=$?"
 ```
+Expected: `SCOPED GREEN (:app:testDebugUnitTest) — NOT a boundary gate`, the line
+`SCOPED: this table covers the named modules only — NOT comparable with 1440`, **no** `BASELINE`
+line, and `exit=0`.
 
-Record both exit codes and the presence of the `GATE RED` line in the task log.
+Then three refusals and one warning, none of which needs a build:
+
+```bash
+tools/gate.sh --scoped testDebugUnitTest; echo "exit=$?"   # expect FATAL + exit=2: unqualified task
+tools/gate.sh --scoped; echo "exit=$?"                     # expect FATAL + exit=2: no task named
+tools/gate.sh --scoped :app:testDebugUnitTest              # run twice in a row; the SECOND must print
+                                                           # the ZERO-tasks WARNING, because nothing changed
+```
+That last one is the honest half of relying on up-to-date checks: a scoped run which executed nothing
+must say so, so a mutation that Gradle did not notice can never read as a pass.
+
+**Record in the task log:** both exit codes, the exact RED line, the absence of `BASELINE` under
+scoped, the two `exit=2` refusals, and the zero-tasks warning.
 
 - [ ] **Step 6: commit**
 
 ```bash
 git add tools/gate.sh app/src/test/java/com/sidr/launcher/agent/RegistryCensusMeasurement.kt
 git commit -m "$(cat <<'EOF'
-build(agentic-6/A4' ф0): tools/gate.sh — гейт машиной, а не памятью
+build(agentic-6/A4' ф0): tools/gate.sh — гейт машиной, а не памятью, в двух режимах
 
 Спека §9.2, предложение 4+9 §4, форк владельца F0-4.
 Скрипт заменяет три правила §9.1, каждое оплаченное конкретным ложным
-зелёным: чистит build/test-results (R14-44), всегда --rerun-tasks и
-никогда --rerun (R9), числа из JUnit XML и никогда через tail.
-Остальные четыре правила — суждения, и скрипт их не изображает.
+зелёным: чистит build/test-results (R14-44), на граничном прогоне всегда
+--rerun-tasks и никогда --rerun (R9), числа из JUnit XML и никогда через
+tail. Остальные четыре правила — суждения, и скрипт их не изображает.
+
+ДВА РЕЖИМА, И МЕТКИ У НИХ РАЗНЫЕ НАМЕРЕННО. boundary (по умолчанию) —
+прогон, закрывающий задачу: чистит результаты везде, --rerun-tasks,
+сверка с 1440, GATE GREEN/RED. --scoped :module:task — прогон ВНУТРИ
+задачи (шаг TDD или мутация): чистит только названные модули, без
+--rerun-tasks, БЕЗ сверки с базой, и печатает
+«SCOPED GREEN … — NOT a boundary gate».
+
+В фазе одиннадцать мутаций, и одним режимом это были бы одиннадцать
+полных развёрток --rerun-tasks. Но метки разошлись не ради экономии:
+дешёвый прогон, печатающий GATE GREEN, был бы генератором ложного
+зелёного ровно того рода, ради устранения которого этот файл написан, а
+scoped-таблица, сверенная с 1440, — числом, описывающим пять
+отсутствующих модулей. Неполноквалифицированную задачу scoped ОТКАЗЫВАЕТ
+(exit 2): она идёт по всем модулям, то есть это граничный прогон.
+
+Демон ВКЛЮЧЁН в обоих режимах (решение владельца 2026-09-25: прежнее
+ограничение --no-daemon перестало быть актуальным; gradle.properties не
+задаёт org.gradle.daemon, значит демон — умолчание Gradle, и флаг не
+передаётся). Почему это безопасно в каждом режиме, сказано, а не
+подразумевается: граничный несёт --rerun-tasks и не может унаследовать
+устаревший вердикт up-to-date; scoped на up-to-date опирается сознательно
+— и поэтому печатает, сколько задач Gradle РЕАЛЬНО исполнил, и кричит,
+когда это ноль. Мутация, которой Gradle не заметил, не прочтётся как
+успех. CLAUDE.md исправлен тем же коммитом, чтобы два документа не
+разошлись молча.
 
 Обе долгие команды обёрнуты в set +e: без этого set -e убивал бы скрипт
-ровно на том прогоне, ради которого он написан, и сводка GATE RED,
-перепись и путь к логу не печатались бы никогда.
+ровно на том прогоне, ради которого он написан, и сводка RED, перепись
+и путь к логу не печатались бы никогда.
 
 RegistryCensusMeasurement — замер, не гвард (прецедент
 SelectionDeclineMeasurement): печатает перепись АВТОРСКИХ инструментов
@@ -628,7 +769,7 @@ sealed interface PlanningResult {
 cd /home/Suleiman/Sidr-launcher
 sed -i 's/^    data object NoPlan : PlanningResult$/    data object NoPlan : PlanningResult\n    data object Clarify : PlanningResult/' \
   domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/ExecutionPlan.kt
-./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
+./gradlew -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
   :domain:compileKotlinJvm 2>&1 | grep -E "e: .*(CompositePlanner|StartAgentSessionUseCase)"
 ```
 
@@ -772,7 +913,7 @@ Fixture note (R14-43): `"зефир"` appears nowhere else in that file; check b
 - [ ] **Step 3: run, expect a compile failure**
 
 ```bash
-./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
+./gradlew -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
   :domain:jvmTest --tests '*CompositePlannerTest*' --rerun-tasks 2>&1 | grep -E "^e: " | head
 ```
 Expected: `Unresolved reference 'PlanningRequest'`.
@@ -844,7 +985,7 @@ Task 1. A module other than `:domain` moving means a test was lost in the sweep,
 # M3 — rebuild the request per planner, which is exactly what phase 2 must not inherit
 sed -i 's/when (val result = planner.plan(request, registry)) {/when (val result = planner.plan(PlanningRequest(request.goal), registry)) {/' \
   domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/CompositePlanner.kt
-tools/gate.sh :domain:jvmTest   # expect RED on `every planner is asked with the same request instance`
+tools/gate.sh --scoped :domain:jvmTest   # expect RED on `every planner is asked with the same request instance`
 git checkout domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/CompositePlanner.kt
 # the checkout also reverts Task 2's exhaustive `when` in this file — re-apply it and confirm with
 # `git diff` before moving on
@@ -955,7 +1096,7 @@ file; verify before committing to it.
 - [ ] **Step 2: run it and watch it fail to COMPILE, not to assert**
 
 ```bash
-./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
+./gradlew -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
   :data:repository:testDebugUnitTest --tests '*AgentSessionMappersTest*' --rerun-tasks 2>&1 \
   | grep -E "^e: " | head
 ```
@@ -998,7 +1139,7 @@ The first draft of this plan ran only the three production compile tasks and exp
 Four more live in test sources (P3, sites 5–8) and no `compileKotlin` task reaches them:
 
 ```bash
-./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
+./gradlew -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
   :domain:compileKotlinJvm :domain:compileTestKotlinJvm \
   :data:repository:compileDebugKotlin :data:repository:compileDebugUnitTestKotlin \
   :consumer:jvm:compileKotlin :consumer:jvm:compileTestKotlin 2>&1 \
@@ -1092,9 +1233,10 @@ contains it. Verify before committing to it.
 - [ ] **Step 9: run the three tests, expect PASS**
 
 ```bash
-tools/gate.sh :domain:jvmTest :data:repository:testDebugUnitTest :consumer:jvm:test
+tools/gate.sh --scoped :domain:jvmTest :data:repository:testDebugUnitTest :consumer:jvm:test
 ```
-Expected: `GATE GREEN`. `:domain` 442, `:data:repository` 377, `:consumer:jvm` 57.
+Expected: `SCOPED GREEN`, and no baseline line. `:domain` 442, `:data:repository` 377,
+`:consumer:jvm` 57 — the three modules named, and nothing else in the table.
 
 - [ ] **Step 10: mutation — prove each decode branch is load-bearing**
 
@@ -1102,7 +1244,7 @@ Expected: `GATE GREEN`. `:domain` 442, `:data:repository` 377, `:consumer:jvm` 5
 # M4a — Android decode returns the wrong kind
 sed -i 's/OBSERVATION_HANDED_OFF -> ToolResult.HandedOff(readOutput(row))/OBSERVATION_HANDED_OFF -> ToolResult.Effected(readOutput(row))/' \
   data/repository/src/main/java/com/sidr/launcher/data/repository/agent/AgentSessionMappers.kt
-tools/gate.sh :data:repository:testDebugUnitTest   # expect RED on
+tools/gate.sh --scoped :data:repository:testDebugUnitTest   # expect RED on
                                                    # "a HandedOff must not come back as some other kind"
 git checkout data/repository/src/main/java/com/sidr/launcher/data/repository/agent/AgentSessionMappers.kt
 # the checkout reverts steps 5 and 7 in this file — re-apply them and confirm with `git diff`
@@ -1110,7 +1252,7 @@ git checkout data/repository/src/main/java/com/sidr/launcher/data/repository/age
 # M4b — JVM decode drops the output
 sed -i 's/"HandedOff" -> ToolResult.HandedOff(ToolOutput(dto.output))/"HandedOff" -> ToolResult.HandedOff(ToolOutput(emptyMap()))/' \
   consumer/jvm/src/main/kotlin/com/sidr/launcher/consumer/jvm/store/SessionMapper.kt
-tools/gate.sh :consumer:jvm:test                   # expect RED on the output assertEquals
+tools/gate.sh --scoped :consumer:jvm:test                   # expect RED on the output assertEquals
 git checkout consumer/jvm/src/main/kotlin/com/sidr/launcher/consumer/jvm/store/SessionMapper.kt
 # re-apply steps 5 and 7 in this file too
 ```
@@ -1250,7 +1392,7 @@ and shares no substring with any label in that file, nor with this phase's other
 - [ ] **Step 2: run, expect the first to FAIL and the others to PASS**
 
 ```bash
-./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
+./gradlew -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
   :data:repository:testDebugUnitTest --tests '*Tier0IntentToolWorkerTest*' --rerun-tasks
 ```
 Expected: `uninstall_app hands off` fails with `Effected` ≠ `HandedOff`; the other two pass already.
@@ -1291,7 +1433,7 @@ from it and must match what is there, not replace it.
 # M5 — convert the wrong branch, losing the Effected/Failed distinction in both directions
 sed -i 's/is ToolResult.Effected -> ToolResult.HandedOff()/is ToolResult.Failed -> ToolResult.HandedOff()/' \
   data/repository/src/main/java/com/sidr/launcher/data/repository/agent/Tier0IntentToolWorker.kt
-tools/gate.sh :data:repository:testDebugUnitTest
+tools/gate.sh --scoped :data:repository:testDebugUnitTest
 git checkout data/repository/src/main/java/com/sidr/launcher/data/repository/agent/Tier0IntentToolWorker.kt
 ```
 Expected RED on **both** `uninstall_app hands off — it does not claim the app was removed` (the
@@ -1424,7 +1566,7 @@ EOF
 - [ ] **Step 2: run, expect compile failure then assertion failures**
 
 ```bash
-./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
+./gradlew -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
   :feature:launcher:testDebugUnitTest --tests '*AgentSessionPresentationTest*' --rerun-tasks
 ```
 
@@ -1688,7 +1830,7 @@ they do share one, assert on the `Partial` body string instead and say so in the
 - [ ] **Step 9: run, expect all green**
 
 ```bash
-tools/gate.sh :feature:launcher:testDebugUnitTest :app:testDebugUnitTest
+tools/gate.sh --scoped :feature:launcher:testDebugUnitTest :app:testDebugUnitTest
 ```
 
 - [ ] **Step 10: four mutations, each on a named assert**
@@ -1697,27 +1839,27 @@ tools/gate.sh :feature:launcher:testDebugUnitTest :app:testDebugUnitTest
 # M6a — restore the catch-all that made Observed a success
 sed -i 's/    is ToolResult.Observed -> AgentStepState.OBSERVED/    is ToolResult.Observed -> AgentStepState.DONE/' \
   feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/agent/AgentSessionPresentation.kt
-tools/gate.sh :feature:launcher:testDebugUnitTest   # expect RED on `an observation is not an execution`
+tools/gate.sh --scoped :feature:launcher:testDebugUnitTest   # expect RED on `an observation is not an execution`
 git checkout feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/agent/AgentSessionPresentation.kt
 
 # M6b — stop consulting the session state
 sed -i 's/            state == ExecutionState.Running -> AgentStepState.CURRENT/            true -> AgentStepState.CURRENT/' \
   feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/agent/AgentSessionPresentation.kt
-tools/gate.sh :feature:launcher:testDebugUnitTest   # expect RED on `a step the engine stopped on…`
+tools/gate.sh --scoped :feature:launcher:testDebugUnitTest   # expect RED on `a step the engine stopped on…`
                                                     # AND on `a terminal session has nothing in progress`
 git checkout feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/agent/AgentSessionPresentation.kt
 
 # M6c — let a handed-off plan call itself whole (the mutation the first draft could not catch)
 sed -i 's/session.everyStepExecuted() \&\& !session.anyStepHandedOff()/session.everyStepExecuted()/' \
   feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/agent/AgentSessionSurface.kt
-tools/gate.sh :feature:launcher:testDebugUnitTest   # expect RED on
+tools/gate.sh --scoped :feature:launcher:testDebugUnitTest   # expect RED on
                                                     # `a completed plan with a handed-off step is shown as partial…`
 git checkout feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/agent/AgentSessionSurface.kt
 
 # M6d — collide two words in one locale
 sed -i 's|<string name="launcher_agent_step_state_waiting">ждёт вас</string>|<string name="launcher_agent_step_state_waiting">без изменений</string>|' \
   feature/launcher/src/main/res/values-ru/strings.xml
-tools/gate.sh :app:testDebugUnitTest                # expect RED on
+tools/gate.sh --scoped :app:testDebugUnitTest                # expect RED on
                                                     # `every step state reads differently in every locale`
 git checkout feature/launcher/src/main/res/values-ru/strings.xml
 ```
@@ -1932,7 +2074,7 @@ The literal `toolExecutor.invoke(` still occurs exactly once in this file, so
 - [ ] **Step 5: run, expect both green**
 
 ```bash
-tools/gate.sh :domain:jvmTest
+tools/gate.sh --scoped :domain:jvmTest
 ```
 
 - [ ] **Step 6: two mutations**
@@ -1943,7 +2085,7 @@ tools/gate.sh :domain:jvmTest
 #       two catches in the wrong order (P6): the timeout leaves as parent cancellation and kills the
 #       session instead of bounding the step.
 git diff domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/AgentExecutor.kt   # eyeball it
-tools/gate.sh :domain:jvmTest   # expect RED on
+tools/gate.sh --scoped :domain:jvmTest   # expect RED on
                                 # `a tool that never returns is cut at the wall-clock budget…`
 git checkout domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/AgentExecutor.kt
 # re-apply step 4 and confirm with `git diff` before moving on
@@ -1951,7 +2093,7 @@ git checkout domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/AgentEx
 # M7b — raise the budget so nothing is ever cut
 sed -i 's/val maxStepWallClockMs: Long = 10_000,/val maxStepWallClockMs: Long = Long.MAX_VALUE,/' \
   domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/AgentSession.kt
-tools/gate.sh :domain:jvmTest   # expect RED on the FIRST test only — the second must stay green,
+tools/gate.sh --scoped :domain:jvmTest   # expect RED on the FIRST test only — the second must stay green,
                                 # which is what proves the second is a non-vacuity check
 git checkout domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/AgentSession.kt
 ```
@@ -2343,7 +2485,7 @@ for a tool that declares its sort, and an assertion that must move is a finding 
 - [ ] **Step 6: run, expect green**
 
 ```bash
-tools/gate.sh :data:repository:testDebugUnitTest
+tools/gate.sh --scoped :data:repository:testDebugUnitTest
 ```
 
 - [ ] **Step 7: three mutations, each on a named assert**
@@ -2352,20 +2494,20 @@ tools/gate.sh :data:repository:testDebugUnitTest
 # M8a — delete a row: totality must bite
 sed -i '/Tier0ToolIds.OPEN_APP_INFO to AppArgumentBinding/d' \
   data/repository/src/main/java/com/sidr/launcher/data/repository/agent/ToolArgumentSorts.kt
-tools/gate.sh :data:repository:testDebugUnitTest  # expect RED on
+tools/gate.sh --scoped :data:repository:testDebugUnitTest  # expect RED on
                                                   # `every production tool declaring an app argument has a sort row`
 git checkout data/repository/src/main/java/com/sidr/launcher/data/repository/agent/ToolArgumentSorts.kt
 
 # M8b — misname a row's argument: the orphan check must bite
 sed -i 's/Tier0ToolIds.UNINSTALL_APP to AppArgumentBinding(arg = "app"/Tier0ToolIds.UNINSTALL_APP to AppArgumentBinding(arg = "package"/' \
   data/repository/src/main/java/com/sidr/launcher/data/repository/agent/ToolArgumentSorts.kt
-tools/gate.sh :data:repository:testDebugUnitTest  # expect RED on `no sort row names an argument its tool does not declare`
+tools/gate.sh --scoped :data:repository:testDebugUnitTest  # expect RED on `no sort row names an argument its tool does not declare`
 git checkout data/repository/src/main/java/com/sidr/launcher/data/repository/agent/ToolArgumentSorts.kt
 
 # M8c — stop reading `required`: R14-37 must come back
 sed -i 's/if (raw.isBlank() \&\& !appArg.required) {/if (false) {/' \
   data/repository/src/main/java/com/sidr/launcher/data/repository/agent/ToolMatchPlanner.kt
-tools/gate.sh :data:repository:testDebugUnitTest  # expect RED on
+tools/gate.sh --scoped :data:repository:testDebugUnitTest  # expect RED on
                                                   # `an optional app argument the vocabulary did not supply does not kill the plan`
 git checkout data/repository/src/main/java/com/sidr/launcher/data/repository/agent/ToolMatchPlanner.kt
 ```
@@ -2473,7 +2615,7 @@ checkout.
 
 ```bash
 cd /home/Suleiman/Sidr-launcher
-./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
+./gradlew -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
   :app:assembleDebug --rerun-tasks
 find app/build/intermediates -name AndroidManifest.xml -path "*debug*" \
   -exec grep -ho 'versionName="[^"]*"' {} + | sort -u
@@ -2652,7 +2794,7 @@ A mismatch is a finding to run down before anything is committed, in either dire
 - [ ] **Step 2: `:app:assembleRelease`, because Task 9 touched `defaultConfig`**
 
 ```bash
-./gradlew --no-daemon -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
+./gradlew -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
   :app:assembleRelease --rerun-tasks
 ```
 Expected: `BUILD SUCCESSFUL`, and `checkOwnerReviewedLocaleStrings` green — this phase adds **four
@@ -2682,7 +2824,7 @@ claim, which is the point of the table.
 - [ ] **Step 4: run the doctrine guards specifically**
 
 ```bash
-tools/gate.sh :app:testDebugUnitTest
+tools/gate.sh --scoped :app:testDebugUnitTest
 ```
 Expected green, `DoctrineMatrixGuardTest` included.
 

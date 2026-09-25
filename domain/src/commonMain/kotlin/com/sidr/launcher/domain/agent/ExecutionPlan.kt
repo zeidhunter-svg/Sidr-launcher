@@ -3,6 +3,7 @@ package com.sidr.launcher.domain.agent
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.tool.ObservedFact
 import com.sidr.launcher.domain.tool.ToolInvocation
+import com.sidr.launcher.domain.tool.ToolResult
 
 /** What must hold before a step may run. Evaluated fresh on every attempt, including after a resume. */
 sealed interface StepPrecondition {
@@ -85,7 +86,30 @@ sealed interface PlanningResult {
     data object NoPlan : PlanningResult
 }
 
+/**
+ * Everything the planner is allowed to see about **this** planning attempt.
+ *
+ * **One parameter now so that later ones are a default, not a sweep** (spec §3 0.4).
+ * `agentic-os-architecture.md:104` asks for `plan(goal, ContextSnapshot, ToolRegistry, UserMemory)`,
+ * and the A2/A3 types in that signature do not exist. Introducing them empty would be literally the
+ * `:data:ai-local` mistake Master Plan §3.4 turned into a rule. Introducing nothing would mean that
+ * the first real addition edits the signature of four production implementations in three modules,
+ * both consumers, and every test fake — which is the cost this type is here to not pay twice.
+ *
+ * [priorObservations] is **not speculative**: its consumer is named and dated — re-planning after a
+ * partial failure, phase 2 (§6.4), which cannot work without what the first attempt observed. It is
+ * empty at every call site phase 0 ships, and that is the honest state rather than a placeholder: a
+ * first attempt has observed nothing.
+ *
+ * The tool registry stays a separate parameter. It is not context about the attempt; it is the world
+ * the plan is written against, and it is read by the engine as well as by the planner.
+ */
+data class PlanningRequest(
+    val goal: AgentGoal,
+    val priorObservations: Map<Int, ToolResult> = emptyMap(),
+)
+
 /** Port. A0 binds the deterministic `TemplatePlanner`; A4' binds a model planner behind the same seam. */
 interface Planner {
-    suspend fun plan(goal: AgentGoal, registry: com.sidr.launcher.domain.tool.ToolRegistry): PlanningResult
+    suspend fun plan(request: PlanningRequest, registry: com.sidr.launcher.domain.tool.ToolRegistry): PlanningResult
 }

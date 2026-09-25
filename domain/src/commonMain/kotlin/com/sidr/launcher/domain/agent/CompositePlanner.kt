@@ -14,7 +14,7 @@ import com.sidr.launcher.domain.tool.ToolRegistry
  * thing belongs here at all.
  */
 class CompositePlanner(private val planners: List<Planner>) : Planner {
-    override suspend fun plan(goal: AgentGoal, registry: ToolRegistry): PlanningResult {
+    override suspend fun plan(request: PlanningRequest, registry: ToolRegistry): PlanningResult {
         planners.forEach { planner ->
             // Exhaustive with no `else`, and that is this function's whole safety property (spec
             // §3 0.0). The previous shape — `if (result is Planned) return result` — did not
@@ -25,7 +25,7 @@ class CompositePlanner(private val planners: List<Planner>) : Planner {
             // already matched — R14-39 with a third cause, and with the whole suite green. A
             // third variant must now be a compile error HERE, at the address where the decision
             // belongs.
-            when (val result = planner.plan(goal, registry)) {
+            when (val result = planner.plan(request, registry)) {
                 is PlanningResult.Planned -> return result
                 PlanningResult.NoPlan -> Unit // ask the next planner
             }

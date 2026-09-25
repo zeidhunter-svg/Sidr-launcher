@@ -9,6 +9,7 @@ import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanningRequest
 import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.TemplatePlanner
@@ -55,7 +56,7 @@ class AgentSessionPresentationTest {
     private val goal = AgentGoal("открой убер", GoalShape.AppNotInstalled("убер"))
 
     private suspend fun plan(): ExecutionPlan {
-        val planned = TemplatePlanner().plan(goal, FakeToolRegistry.withA0Tools())
+        val planned = TemplatePlanner().plan(PlanningRequest(goal), FakeToolRegistry.withA0Tools())
         check(planned is PlanningResult.Planned)
         return planned.plan
     }

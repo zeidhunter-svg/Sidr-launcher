@@ -24,6 +24,7 @@ import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.Planner
+import com.sidr.launcher.domain.agent.PlanningRequest
 import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StepPrecondition
@@ -156,7 +157,7 @@ class RouteCommandUseCaseTest {
 
     /** An A0 planner that plans nothing, so the cut has to fail open to the FastPath outcome. */
     private fun neverPlans(): Planner = object : Planner {
-        override suspend fun plan(goal: AgentGoal, registry: ToolRegistry): PlanningResult =
+        override suspend fun plan(request: PlanningRequest, registry: ToolRegistry): PlanningResult =
             PlanningResult.NoPlan
     }
 
@@ -442,7 +443,7 @@ class RouteCommandUseCaseTest {
      * fills exactly the declared args) and keeps it correct for whatever the fixture holds.
      */
     private fun plansOneStep(): Planner = object : Planner {
-        override suspend fun plan(goal: AgentGoal, registry: ToolRegistry): PlanningResult {
+        override suspend fun plan(request: PlanningRequest, registry: ToolRegistry): PlanningResult {
             val tool = registry.all().firstOrNull() ?: return PlanningResult.NoPlan
             val args = tool.argSchema
                 .filter { it.required }

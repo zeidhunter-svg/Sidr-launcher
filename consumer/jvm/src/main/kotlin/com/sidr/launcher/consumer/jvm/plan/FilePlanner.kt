@@ -7,6 +7,7 @@ import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.Planner
+import com.sidr.launcher.domain.agent.PlanningRequest
 import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.StepRationale
@@ -34,8 +35,8 @@ import com.sidr.launcher.domain.tool.ToolRegistry
  */
 class FilePlanner : Planner {
 
-    override suspend fun plan(goal: AgentGoal, registry: ToolRegistry): PlanningResult {
-        val target = targetOf(goal) ?: return PlanningResult.NoPlan
+    override suspend fun plan(request: PlanningRequest, registry: ToolRegistry): PlanningResult {
+        val target = targetOf(request.goal) ?: return PlanningResult.NoPlan
 
         val info = registry.find(SandboxToolIds.WORKSPACE_INFO) ?: return PlanningResult.NoPlan
         val find = registry.find(SandboxToolIds.FIND_FILE) ?: return PlanningResult.NoPlan

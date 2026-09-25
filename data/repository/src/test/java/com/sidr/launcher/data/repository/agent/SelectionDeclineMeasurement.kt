@@ -11,6 +11,7 @@ import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolSource
 import com.sidr.launcher.data.repository.intent.RuleBasedIntentMatcher
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanningRequest
 import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.CommandNormalizer
@@ -228,7 +229,7 @@ class SelectionDeclineMeasurement {
             }
         }
 
-        val planned = planner.plan(AgentGoal(phrase, GoalShape.Free(phrase)), registry)
+        val planned = planner.plan(PlanningRequest(AgentGoal(phrase, GoalShape.Free(phrase))), registry)
         if (planned is PlanningResult.Planned) {
             return@runBlocking if (fastPathDecided) Outcome.SHADOWED_BY_FASTPATH else Outcome.PLANNED
         }

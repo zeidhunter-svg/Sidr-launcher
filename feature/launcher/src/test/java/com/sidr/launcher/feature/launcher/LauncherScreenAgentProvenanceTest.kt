@@ -39,6 +39,7 @@ import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.PlanStep
+import com.sidr.launcher.domain.agent.PlanningRequest
 import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
@@ -144,7 +145,7 @@ class LauncherScreenAgentProvenanceTest {
     /** The A0 two-step plan, already `Paused`, exactly as a session that outlived its process reads. */
     private suspend fun seedPausedA0Session(): AgentSession {
         val goal = AgentGoal("открой убер", GoalShape.AppNotInstalled("убер"))
-        val planned = TemplatePlanner().plan(goal, agentRegistry)
+        val planned = TemplatePlanner().plan(PlanningRequest(goal), agentRegistry)
         check(planned is PlanningResult.Planned)
         val session = AgentSession(
             id = AgentSessionId("restored-1"),

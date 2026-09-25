@@ -16,6 +16,7 @@ import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.PlanStep
+import com.sidr.launcher.domain.agent.PlanningRequest
 import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.StepRationale
@@ -110,7 +111,7 @@ class AgentSessionSurfaceProvenanceTest {
 
     private fun a0Session(): AgentSession {
         val goal = AgentGoal("открой убер", GoalShape.AppNotInstalled("убер"))
-        val planned = runBlocking { TemplatePlanner().plan(goal, a0Registry) }
+        val planned = runBlocking { TemplatePlanner().plan(PlanningRequest(goal), a0Registry) }
         check(planned is PlanningResult.Planned)
         return AgentSession(
             id = AgentSessionId("s1"),

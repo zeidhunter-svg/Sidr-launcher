@@ -41,8 +41,8 @@ import com.sidr.launcher.domain.tool.ToolRegistry
  */
 class TemplatePlanner : Planner {
 
-    override suspend fun plan(goal: AgentGoal, registry: ToolRegistry): PlanningResult =
-        when (val shape = goal.shape) {
+    override suspend fun plan(request: PlanningRequest, registry: ToolRegistry): PlanningResult =
+        when (val shape = request.goal.shape) {
             is GoalShape.AppNotInstalled -> planMissingApp(shape, registry)
             // THIS planner does not plan free-text goals — reading raw text is not its job.
             // Answering `NoPlan` here is the honest "I recognise nothing", not a stub. It is no

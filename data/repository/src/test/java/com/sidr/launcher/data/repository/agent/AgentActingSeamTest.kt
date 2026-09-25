@@ -34,6 +34,7 @@ import com.sidr.launcher.domain.agent.CompositePlanner
 import com.sidr.launcher.domain.agent.ConsentReason
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanningRequest
 import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
@@ -466,7 +467,7 @@ class AgentActingSeamTest {
         val registry = federation().registry
 
         listOf(GOAL_UNINSTALL, GOAL_ALARM, GOAL_ALIAS).forEach { text ->
-            val planned = planner().plan(goal(text), registry)
+            val planned = planner().plan(PlanningRequest(goal(text)), registry)
             assertTrue("\"$text\" must plan, was $planned", planned is PlanningResult.Planned)
             assertEquals("\"$text\"", 1, (planned as PlanningResult.Planned).plan.steps.size)
         }
@@ -603,10 +604,10 @@ class AgentActingSeamTest {
     fun `a tool whose permission is absent is unreachable from text`() = runTest {
         val denied = federation(presence = PermissionPresence { false })
 
-        val withheld = planner().plan(goal(GOAL_ALARM), denied.registry)
+        val withheld = planner().plan(PlanningRequest(goal(GOAL_ALARM)), denied.registry)
         assertTrue("the registry withheld it, so the planner must find nothing: $withheld", withheld is PlanningResult.NoPlan)
 
-        val available = planner().plan(goal(GOAL_ALARM), federation().registry)
+        val available = planner().plan(PlanningRequest(goal(GOAL_ALARM)), federation().registry)
         assertTrue("the same text must plan when the permission is held: $available", available is PlanningResult.Planned)
     }
 

@@ -6,6 +6,7 @@ import com.sidr.launcher.consumer.jvm.tool.SandboxToolSource
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanningRequest
 import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.StepRationale
@@ -27,7 +28,7 @@ class FilePlannerTest {
 
     @Test
     fun `a recognised goal plans three steps with two step-to-step bindings`() = runTest {
-        val planned = planner.plan(goal("remove stale.lock"), registry) as PlanningResult.Planned
+        val planned = planner.plan(PlanningRequest(goal("remove stale.lock")), registry) as PlanningResult.Planned
         val steps = planned.plan.steps
 
         assertEquals(3, steps.size)
@@ -54,7 +55,7 @@ class FilePlannerTest {
 
     @Test
     fun `risk comes from the registry and rises only at the last step`() = runTest {
-        val planned = planner.plan(goal("remove stale.lock"), registry) as PlanningResult.Planned
+        val planned = planner.plan(PlanningRequest(goal("remove stale.lock")), registry) as PlanningResult.Planned
         assertEquals(
             listOf(ActionRiskLevel.SAFE, ActionRiskLevel.SAFE, ActionRiskLevel.DANGEROUS),
             planned.plan.steps.map { it.risk },
@@ -68,23 +69,23 @@ class FilePlannerTest {
      */
     @Test
     fun `every step is GOAL_DIRECT and unconditional`() = runTest {
-        val planned = planner.plan(goal("remove stale.lock"), registry) as PlanningResult.Planned
+        val planned = planner.plan(PlanningRequest(goal("remove stale.lock")), registry) as PlanningResult.Planned
         assertTrue(planned.plan.steps.all { it.rationale == StepRationale.GOAL_DIRECT })
         assertTrue(planned.plan.steps.all { it.precondition == StepPrecondition.None })
     }
 
     @Test
     fun `an unreadable goal is NoPlan, not a guess`() = runTest {
-        assertEquals(PlanningResult.NoPlan, planner.plan(goal("what is the weather"), registry))
-        assertEquals(PlanningResult.NoPlan, planner.plan(goal("remove"), registry))
-        assertEquals(PlanningResult.NoPlan, planner.plan(goal("remove   "), registry))
-        assertEquals(PlanningResult.NoPlan, planner.plan(goal("removestale.lock"), registry))
+        assertEquals(PlanningResult.NoPlan, planner.plan(PlanningRequest(goal("what is the weather")), registry))
+        assertEquals(PlanningResult.NoPlan, planner.plan(PlanningRequest(goal("remove")), registry))
+        assertEquals(PlanningResult.NoPlan, planner.plan(PlanningRequest(goal("remove   ")), registry))
+        assertEquals(PlanningResult.NoPlan, planner.plan(PlanningRequest(goal("removestale.lock")), registry))
     }
 
     @Test
     fun `the Android goal shape is not this planner's business`() = runTest {
         val android = AgentGoal(text = "открой убер", shape = GoalShape.AppNotInstalled("убер"))
-        assertEquals(PlanningResult.NoPlan, planner.plan(android, registry))
+        assertEquals(PlanningResult.NoPlan, planner.plan(PlanningRequest(android), registry))
     }
 
     @Test
@@ -94,6 +95,6 @@ class FilePlannerTest {
             override fun all(): List<ToolDescriptor> = kept
             override fun find(id: ToolId): ToolDescriptor? = kept.firstOrNull { it.id == id }
         }
-        assertEquals(PlanningResult.NoPlan, planner.plan(goal("remove stale.lock"), partial))
+        assertEquals(PlanningResult.NoPlan, planner.plan(PlanningRequest(goal("remove stale.lock")), partial))
     }
 }

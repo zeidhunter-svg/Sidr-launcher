@@ -24,7 +24,7 @@ class TemplatePlannerTest {
 
     @Test
     fun `a missing app plans launch then store, in that order`() = runTest {
-        val result = TemplatePlanner().plan(goal, registry)
+        val result = TemplatePlanner().plan(PlanningRequest(goal), registry)
 
         val plan = (result as PlanningResult.Planned).plan
         assertEquals(listOf(ToolIds.LAUNCH_APP, ToolIds.PLAY_STORE_SEARCH), plan.steps.map { it.invocation.id })
@@ -33,7 +33,7 @@ class TemplatePlannerTest {
 
     @Test
     fun `the goal's query is a literal on the first step only`() = runTest {
-        val plan = (TemplatePlanner().plan(goal, registry) as PlanningResult.Planned).plan
+        val plan = (TemplatePlanner().plan(PlanningRequest(goal), registry) as PlanningResult.Planned).plan
 
         assertEquals(mapOf("query" to ArgSource.Literal("убер")), plan.steps[0].invocation.args)
     }
@@ -45,7 +45,7 @@ class TemplatePlannerTest {
      */
     @Test
     fun `the second step binds to what the first step resolved, rather than repeating the literal`() = runTest {
-        val plan = (TemplatePlanner().plan(goal, registry) as PlanningResult.Planned).plan
+        val plan = (TemplatePlanner().plan(PlanningRequest(goal), registry) as PlanningResult.Planned).plan
 
         assertEquals(
             mapOf("query" to ArgSource.FromStep(0, "resolved_query")),
@@ -56,7 +56,7 @@ class TemplatePlannerTest {
     /** The binding the planner writes must survive the validator it will meet on every step. */
     @Test
     fun `the plan the planner produces validates against the registry it planned over`() = runTest {
-        val plan = (TemplatePlanner().plan(goal, registry) as PlanningResult.Planned).plan
+        val plan = (TemplatePlanner().plan(PlanningRequest(goal), registry) as PlanningResult.Planned).plan
 
         plan.steps.forEach { step ->
             val preceding = plan.steps.filter { it.index < step.index }.map { it.invocation.id }
@@ -70,7 +70,7 @@ class TemplatePlannerTest {
 
     @Test
     fun `the second step is gated on the first having observed that the app is missing`() = runTest {
-        val plan = (TemplatePlanner().plan(goal, registry) as PlanningResult.Planned).plan
+        val plan = (TemplatePlanner().plan(PlanningRequest(goal), registry) as PlanningResult.Planned).plan
 
         assertEquals(StepPrecondition.None, plan.steps[0].precondition)
         assertEquals(
@@ -81,7 +81,7 @@ class TemplatePlannerTest {
 
     @Test
     fun `risk is copied from the registry, never invented by the planner`() = runTest {
-        val plan = (TemplatePlanner().plan(goal, registry) as PlanningResult.Planned).plan
+        val plan = (TemplatePlanner().plan(PlanningRequest(goal), registry) as PlanningResult.Planned).plan
 
         assertEquals(ActionRiskLevel.SAFE, plan.steps[0].risk)
         assertEquals(ActionRiskLevel.CONFIRM, plan.steps[1].risk)
@@ -89,7 +89,7 @@ class TemplatePlannerTest {
 
     @Test
     fun `each step carries typed provenance rather than a sentence`() = runTest {
-        val plan = (TemplatePlanner().plan(goal, registry) as PlanningResult.Planned).plan
+        val plan = (TemplatePlanner().plan(PlanningRequest(goal), registry) as PlanningResult.Planned).plan
 
         assertEquals(StepRationale.GOAL_DIRECT, plan.steps[0].rationale)
         assertEquals(StepRationale.APP_NOT_INSTALLED_FALLBACK, plan.steps[1].rationale)
@@ -101,14 +101,14 @@ class TemplatePlannerTest {
             FakeToolRegistry.withA0Tools().all().filter { it.id == ToolIds.LAUNCH_APP },
         )
 
-        assertEquals(PlanningResult.NoPlan, TemplatePlanner().plan(goal, launchOnly))
+        assertEquals(PlanningResult.NoPlan, TemplatePlanner().plan(PlanningRequest(goal), launchOnly))
     }
 
     @Test
     fun `a blank query yields NoPlan`() = runTest {
         val blank = AgentGoal(text = "открой", shape = GoalShape.AppNotInstalled("   "))
 
-        assertEquals(PlanningResult.NoPlan, TemplatePlanner().plan(blank, registry))
+        assertEquals(PlanningResult.NoPlan, TemplatePlanner().plan(PlanningRequest(blank), registry))
     }
 
     /**
@@ -123,6 +123,6 @@ class TemplatePlannerTest {
     fun `a free-text goal yields NoPlan, because this planner does not read raw text`() = runTest {
         val free = AgentGoal(text = "сделай конспект", shape = GoalShape.Free("сделай конспект"))
 
-        assertEquals(PlanningResult.NoPlan, TemplatePlanner().plan(free, registry))
+        assertEquals(PlanningResult.NoPlan, TemplatePlanner().plan(PlanningRequest(free), registry))
     }
 }

@@ -5,6 +5,7 @@ import com.sidr.launcher.domain.action.ActionArg
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanningRequest
 import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.StepRationale
@@ -70,7 +71,7 @@ class ToolMatchPlannerTest {
 
     @Test
     fun `a matched tool becomes a one-step plan whose risk comes from the registry`() = runTest {
-        val result = planner.plan(free("set a timer for 10 minutes"), registry)
+        val result = planner.plan(PlanningRequest(free("set a timer for 10 minutes")), registry)
 
         val plan = (result as PlanningResult.Planned).plan
         assertEquals(1, plan.steps.size)
@@ -83,7 +84,7 @@ class ToolMatchPlannerTest {
 
     @Test
     fun `a zero-argument tool plans a step that carries no arguments`() = runTest {
-        val result = planner.plan(free("system settings"), registry)
+        val result = planner.plan(PlanningRequest(free("system settings")), registry)
 
         val plan = (result as PlanningResult.Planned).plan
         assertEquals(1, plan.steps.size)
@@ -93,14 +94,14 @@ class ToolMatchPlannerTest {
 
     @Test
     fun `an unmatched goal is NoPlan, so routing falls through exactly as before`() = runTest {
-        assertEquals(PlanningResult.NoPlan, planner.plan(free("what is the weather"), registry))
+        assertEquals(PlanningResult.NoPlan, planner.plan(PlanningRequest(free("what is the weather")), registry))
     }
 
     @Test
     fun `a tool the registry does not have is NoPlan even when the words match`() = runTest {
         assertEquals(
             PlanningResult.NoPlan,
-            planner.plan(free("set a timer for 10 minutes"), FakeToolRegistry(emptyList())),
+            planner.plan(PlanningRequest(free("set a timer for 10 minutes")), FakeToolRegistry(emptyList())),
         )
     }
 
@@ -114,7 +115,7 @@ class ToolMatchPlannerTest {
     @Test
     fun `words that complete no trigger are not recognised at all`() = runTest {
         assertEquals(null, ToolVocabulary().match("set a timer"))
-        assertEquals(PlanningResult.NoPlan, planner.plan(free("set a timer"), registry))
+        assertEquals(PlanningResult.NoPlan, planner.plan(PlanningRequest(free("set a timer")), registry))
     }
 
     /**
@@ -125,8 +126,8 @@ class ToolMatchPlannerTest {
      */
     @Test
     fun `a trigger with nothing after it is NoPlan, never a blank argument`() = runTest {
-        assertEquals(PlanningResult.NoPlan, planner.plan(free("set a timer for"), registry))
-        assertEquals(PlanningResult.NoPlan, planner.plan(free("  set a timer for   "), registry))
+        assertEquals(PlanningResult.NoPlan, planner.plan(PlanningRequest(free("set a timer for")), registry))
+        assertEquals(PlanningResult.NoPlan, planner.plan(PlanningRequest(free("  set a timer for   ")), registry))
     }
 
     /**
@@ -149,7 +150,7 @@ class ToolMatchPlannerTest {
 
         assertEquals(
             PlanningResult.NoPlan,
-            planner.plan(free("set a timer for 10 minutes"), renamed),
+            planner.plan(PlanningRequest(free("set a timer for 10 minutes")), renamed),
         )
     }
 
@@ -170,7 +171,7 @@ class ToolMatchPlannerTest {
             ),
         )
 
-        val result = planner.plan(free("set a timer for 10 minutes"), argless)
+        val result = planner.plan(PlanningRequest(free("set a timer for 10 minutes")), argless)
 
         val plan = (result as PlanningResult.Planned).plan
         assertEquals(emptyMap<String, ArgSource>(), plan.steps[0].invocation.args)
@@ -185,7 +186,7 @@ class ToolMatchPlannerTest {
     fun `the app-not-installed shape is not this planner's business`() = runTest {
         val goal = AgentGoal("set a timer for 10 minutes", GoalShape.AppNotInstalled("timer"))
 
-        assertEquals(PlanningResult.NoPlan, planner.plan(goal, registry))
+        assertEquals(PlanningResult.NoPlan, planner.plan(PlanningRequest(goal), registry))
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -244,7 +245,7 @@ class ToolMatchPlannerTest {
         val planner = ToolMatchPlanner(appSelector, appTargetsOf("Telegram" to "org.telegram.messenger"))
 
         val planned = planner.plan(
-            free("удали приложение telegram"),
+            PlanningRequest(free("удали приложение telegram")),
             registryWith(appToolDescriptor("app", "app_label")),
         )
 
@@ -269,12 +270,12 @@ class ToolMatchPlannerTest {
 
         assertEquals(
             PlanningResult.NoPlan,
-            ToolMatchPlanner(appSelector, appTargetsOf()).plan(free("удали приложение нечто"), registry),
+            ToolMatchPlanner(appSelector, appTargetsOf()).plan(PlanningRequest(free("удали приложение нечто")), registry),
         )
 
         assertTrue(
             ToolMatchPlanner(appSelector, appTargetsOf("Нечто" to "com.example.nechto"))
-                .plan(free("удали приложение нечто"), registry) is PlanningResult.Planned,
+                .plan(PlanningRequest(free("удали приложение нечто")), registry) is PlanningResult.Planned,
         )
     }
 
@@ -283,7 +284,7 @@ class ToolMatchPlannerTest {
     fun `a descriptor that declares only app gets the package and no label`() = runTest {
         val planner = ToolMatchPlanner(appSelector, appTargetsOf("Telegram" to "org.telegram.messenger"))
 
-        val planned = planner.plan(free("удали приложение telegram"), registryWith(appToolDescriptor("app")))
+        val planned = planner.plan(PlanningRequest(free("удали приложение telegram")), registryWith(appToolDescriptor("app")))
 
         val args = (planned as PlanningResult.Planned).plan.steps.single().invocation.args
         assertEquals(ArgSource.Literal("org.telegram.messenger"), args["app"])
@@ -297,7 +298,7 @@ class ToolMatchPlannerTest {
      */
     @Test
     fun `a tool with no app argument is untouched by resolution`() = runTest {
-        val planned = planner.plan(free("set a timer for 10 minutes"), registry)
+        val planned = planner.plan(PlanningRequest(free("set a timer for 10 minutes")), registry)
 
         assertEquals(
             ArgSource.Literal("10 minutes"),

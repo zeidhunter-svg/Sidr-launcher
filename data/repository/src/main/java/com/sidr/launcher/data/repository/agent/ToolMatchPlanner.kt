@@ -5,6 +5,7 @@ import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.Planner
+import com.sidr.launcher.domain.agent.PlanningRequest
 import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.StepRationale
@@ -73,9 +74,9 @@ class ToolMatchPlanner @Inject constructor(
     private val appTargets: AppTargetResolver,
 ) : Planner {
 
-    override suspend fun plan(goal: AgentGoal, registry: ToolRegistry): PlanningResult {
+    override suspend fun plan(request: PlanningRequest, registry: ToolRegistry): PlanningResult {
         // Exhaustive with no `else`: a third GoalShape must make a deliberate decision here.
-        val text = when (val shape = goal.shape) {
+        val text = when (val shape = request.goal.shape) {
             is GoalShape.Free -> shape.text
             is GoalShape.AppNotInstalled -> return PlanningResult.NoPlan
         }

@@ -342,7 +342,7 @@ class AgentSessionUseCasesTest {
     @Test
     fun `a runnable plan handed through the same port is persisted`() = runTest {
         val good = plannerOf(
-            (TemplatePlanner().plan(goal, registry) as PlanningResult.Planned).plan,
+            (TemplatePlanner().plan(PlanningRequest(goal), registry) as PlanningResult.Planned).plan,
         )
 
         val started = StartAgentSessionUseCase(good, store, ids, registry).start(goal)
@@ -352,6 +352,6 @@ class AgentSessionUseCasesTest {
     }
 
     private fun plannerOf(plan: ExecutionPlan) = object : Planner {
-        override suspend fun plan(goal: AgentGoal, registry: ToolRegistry) = PlanningResult.Planned(plan)
+        override suspend fun plan(request: PlanningRequest, registry: ToolRegistry) = PlanningResult.Planned(plan)
     }
 }

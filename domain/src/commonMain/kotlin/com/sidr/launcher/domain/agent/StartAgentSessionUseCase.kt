@@ -28,12 +28,16 @@ class StartAgentSessionUseCase(
     private val ids: AgentSessionIdFactory,
     private val registry: ToolRegistry,
 ) {
+    /**
+     * The request carries no prior observations: a first attempt has observed nothing, and
+     * re-planning (phase 2) does not start here.
+     */
     suspend fun start(goal: AgentGoal): OperationResult<AgentSessionId?> {
         // Exhaustive with no `else` (spec §3 0.0). `!is Planned -> Success(null)` answered for a
         // variant that did not exist yet, and answered it with silence. Whoever adds the third
         // variant must decide here what a session-less answer means for it, and the compiler is
         // what makes them.
-        val plan = when (val planned = planner.plan(goal, registry)) {
+        val plan = when (val planned = planner.plan(PlanningRequest(goal), registry)) {
             is PlanningResult.Planned -> planned.plan
             PlanningResult.NoPlan -> return OperationResult.Success(null)
         }

@@ -12,6 +12,7 @@ import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.ConsentReason
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanningRequest
 import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
@@ -102,7 +103,7 @@ class AgentLoopTest {
      */
     @Test
     fun `the planner's risk for every step is the registry's risk`() = runTest {
-        val planned = FilePlanner().plan(goal(), registry)
+        val planned = FilePlanner().plan(PlanningRequest(goal()), registry)
         assertTrue("expected a plan", planned is PlanningResult.Planned)
 
         (planned as PlanningResult.Planned).plan.steps.forEach { step ->

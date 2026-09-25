@@ -14,6 +14,7 @@ import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.ConsentReason
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanningRequest
 import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.TemplatePlanner
 import com.sidr.launcher.domain.intent.CommandFailure
@@ -96,7 +97,7 @@ class RoomAgentSessionStoreTest {
             TraceEvent.ConsentRequested(1, ConsentReason.RISK_LEVEL),
         ),
     ): AgentSession {
-        val planned = TemplatePlanner().plan(goal, FakeToolRegistry.withA0Tools())
+        val planned = TemplatePlanner().plan(PlanningRequest(goal), FakeToolRegistry.withA0Tools())
         check(planned is PlanningResult.Planned)
         return AgentSession(
             id = AgentSessionId(id),

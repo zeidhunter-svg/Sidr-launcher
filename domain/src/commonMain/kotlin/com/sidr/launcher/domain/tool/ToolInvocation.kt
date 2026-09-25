@@ -82,7 +82,12 @@ sealed interface ToolResult {
      * execution rather than of the world. The seam is therefore here.
      *
      * [output] is carried for the same reason [Effected] carries one: a tool that declares an
-     * `outputSchema` must honour it on **every** result, not on the branch it happened to take.
+     * `outputSchema` should honour it on **every** result it can, not only the branch it happened to
+     * take. The wall-clock producer cannot: the engine writes `HandedOff()` with an **empty** output,
+     * because there is nothing to report from a call that never returned — so a later `FromStep`
+     * binding that reaches back to a cut step is rejected as `UNRESOLVED_ARG_SOURCE`. Fail-closed, not
+     * a violation of the sentence above: the honouring the sentence asks for is only possible when the
+     * tool actually ran to completion.
      */
     data class HandedOff(val output: ToolOutput = ToolOutput()) : ToolResult
 

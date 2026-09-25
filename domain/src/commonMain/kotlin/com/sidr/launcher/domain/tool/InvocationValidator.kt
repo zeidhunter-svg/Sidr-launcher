@@ -138,9 +138,13 @@ object InvocationValidator {
     private fun ToolResult.output(): ToolOutput? = when (this) {
         is ToolResult.Effected -> output
         is ToolResult.Observed -> output
-        // A handed-off step DID produce whatever its tool declared before handing over; what it
-        // cannot promise is the outcome. Binding to it is therefore legal and stays governed by the
-        // declared `outputSchema`, exactly as for the two above.
+        // Binding to a handed-off step is legal and stays governed by the declared `outputSchema`,
+        // exactly as for the two above — but the two producers differ on what `output` actually
+        // holds. `uninstall_app` handing over after the OS dialog is raised carries whatever it
+        // declared up to that point; the wall-clock cut ([RuntimeBudget.maxStepWallClockMs]) carries
+        // an EMPTY output by construction, because the call never returned and there is nothing to
+        // report. A `FromStep` binding that reaches into a cut step's output therefore fails closed
+        // here as `UNRESOLVED_ARG_SOURCE` below, not because binding to `HandedOff` is illegal.
         is ToolResult.HandedOff -> output
         is ToolResult.Failed -> null
     }

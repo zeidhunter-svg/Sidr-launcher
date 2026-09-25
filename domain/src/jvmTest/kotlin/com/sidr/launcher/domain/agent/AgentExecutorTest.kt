@@ -287,9 +287,15 @@ class AgentExecutorTest {
     // --- The wall-clock budget (A4' phase 0, Task 7) ---------------------------------------------
 
     /**
-     * The A0 debt, closed: "a hanging tool is bounded by nothing" (`RuntimeBudget` bounded steps and
-     * consecutive failures only, and the domain is deliberately clock-free). A tool that never
-     * returns used to hold the session open forever with no trace event and no way out.
+     * The A0 debt narrowed, not closed: "a hanging tool is bounded by nothing" (`RuntimeBudget`
+     * bounded steps and consecutive failures only, and the domain is deliberately clock-free). What
+     * this test proves is the **cooperative** half — a tool suspended at a cancellable point (`delay`
+     * here; a future network or MCP call in production) used to hold the session open forever with no
+     * trace event and no way out, and is now cut. It does **not** prove a bound on a tool blocked in
+     * non-suspending code: `withTimeout` only cancels at a suspension point, and today's shipped
+     * Android workers and the JVM sandbox reach the world synchronously or via `withContext` around a
+     * blocking body, so for them this budget is latent rather than enforced (see
+     * `RuntimeBudget`'s KDoc for the full account).
      *
      * The result recorded is `HandedOff` and not `Failed`, and the difference is the honest one: the
      * call WAS made, we stopped waiting, and the side effect may well have happened. Recording a

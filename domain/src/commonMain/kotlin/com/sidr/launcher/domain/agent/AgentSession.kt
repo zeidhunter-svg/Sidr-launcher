@@ -23,13 +23,31 @@ data class ConsentCheckpoint(val stepIndex: Int, val reason: ConsentReason)
 /**
  * Loop bounds — and, since A4' phase 0, a **wall-clock** bound too.
  *
- * [maxStepWallClockMs] closes the A0 debt this KDoc used to name as deferred ("a wall-clock limit
+ * [maxStepWallClockMs] narrows the A0 debt this KDoc used to name as deferred ("a wall-clock limit
  * needs a clock port and is honestly deferred to A4'"). It needed no port: `withTimeout` reads the
  * dispatcher's clock, which `runTest` makes virtual, so the domain stays clock-free in the sense
  * that mattered — nothing here calls `System.currentTimeMillis()` and no test depends on real time.
  *
- * The default is an order of magnitude above the slowest path measured on the SM-A325F (an intent
- * dispatch is milliseconds; `launch_app` resolves through `PackageManager`). It is a bound on a
+ * **The cut is COOPERATIVE, not preemptive — say this plainly, because "closed" would overclaim
+ * it.** `withTimeout` cancels only at a *cancellable suspension point* inside the block; it interrupts
+ * a tool suspended on `delay`, a future network call, or a future MCP call — the shape
+ * `AgentExecutorTest`'s wall-clock tests model. A tool blocked in **non-suspending** code is not
+ * interrupted, and the budget only bounds it once it returns. Every shipped Android world call is
+ * exactly that shape today: `ContextIntentLauncher.launch` calls `startActivity` synchronously (a
+ * plain `fun`, no suspension point), and the other workers — `SystemIntentToolWorker`,
+ * `AndroidActionExecutor`, and the `:consumer:jvm` sandbox — reach the world through
+ * `withContext(ioDispatcher)` around a **blocking** body, and `withContext` itself waits for that
+ * body to return before the coroutine has anywhere to suspend. So a `set_timer` whose binder call
+ * hangs, or a sandbox file read stuck on I/O, is bounded by nothing today, and a blocking call that
+ * finishes after the deadline without ever suspending keeps its real result — not [ToolResult.HandedOff].
+ * The A0 debt ("a hanging tool is bounded by nothing") is therefore **narrowed, not closed**: closed
+ * for a suspending hang, latent for a synchronous one. Extending interruption to synchronous world
+ * calls (a dedicated thread plus `Thread.interrupt`/cancellation, or a cooperative check inside each
+ * worker) is an owner question at phase close (controller ruling R14), not decided by this task.
+ *
+ * The default is an order of magnitude above the slowest path measured on the SM-A325F: the A0 ADR
+ * (`ai-context/decisions.md`, the Task 15 device-acceptance section) measured the `launch_app`
+ * `ToolInvoked` → `ToolObserved` window at **157–170 ms warm and 1033 ms cold**. It is a bound on a
  * **hang**, not a latency policy: a tool that takes 9 seconds is not the failure this exists to
  * catch, and tightening it toward the measured numbers would start failing correct work on a cold
  * or loaded device.

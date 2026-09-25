@@ -699,11 +699,15 @@ below is recorded in its own ADR.
 - **The Gradle daemon is ON** (owner decision 2026-09-25). The former `--no-daemon` in the gate
   command was retired as no longer current: `gradle.properties` sets no `org.gradle.daemon` line, so
   the daemon is Gradle's default and nothing is passed. It was costing a JVM startup and a full
-  configuration per invocation, and a mutation-heavy block pays that ten or more times. The two
-  properties it could have threatened are held elsewhere: a **boundary** run passes `--rerun-tasks`,
-  so it cannot inherit a stale up-to-date verdict, and a **scoped** run (see `tools/gate.sh`) prints
-  how many tasks Gradle actually executed and warns when that is zero — so a change Gradle did not
-  notice cannot read as a pass.
+  configuration per invocation, and a mutation-heavy block pays that ten or more times. What makes
+  it safe is two flags, not the daemon: this repo sets `org.gradle.caching=true`, and the daemon
+  keeps a watched file-system state between builds, so a run that passed neither could be served a
+  test task's pre-change XML `FROM-CACHE`. A **boundary** run passes `--rerun-tasks`, so every task
+  executes; a **scoped** run of `tools/gate.sh` (lands in A4′ phase 0, Task 1 — until then it does
+  not exist) passes `--no-build-cache --no-watch-fs`, reads from Gradle's log how **each named task**
+  ran, and fails as `SCOPED NOT RUN` when a named test task did not execute. An earlier version of
+  this line said a scoped run "warns when zero tasks executed": Gradle 9.5.0 never prints a zero
+  count, so that warning could not fire (plan §0.6, finding 3).
 - **Never pipe `gradlew` through `tail`** — that masked a red gate as exit 0 on 2026-07-13. Check the
   exit code and read the real output.
 - A stage/block is not closed until the gate is green, an ADR is written, `CLAUDE.md` +

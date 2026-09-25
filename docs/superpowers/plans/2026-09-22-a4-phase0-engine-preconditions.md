@@ -5,7 +5,7 @@
 > checkbox (`- [ ]`) syntax for tracking.
 
 > **Status: written and reviewed 2026-09-22; corrected on the review's findings and committed
-> 2026-09-25. Not started.** Branch `launcher--7`, base `074e4ce`, gate baseline **1440 / 0 / 0**.
+> 2026-09-25 (`0fe16b1`); reviewed a second time and corrected again 2026-09-25 (§0.6). Not started.** Branch `launcher--7`, base `074e4ce`, gate baseline **1440 / 0 / 0**.
 > Spec: [§3 (0.0…0.4), §4, §9, §10 of
 > 2026-09-21-a4-runtime-design.md](../specs/2026-09-21-a4-runtime-design.md) — the block's governing
 > document, `ПОЛНА`, §0–§11 owner-approved 2026-09-21. Template: [A1″ phase
@@ -16,6 +16,14 @@
 > What changed is §0.5, and it is written down because a plan that erred is worth more as a record
 > than as a clean-looking document: the review found sixteen defects, three of them blocking, and one
 > of the three was a whole half of a spec item dropped silently.
+>
+> **It was then reviewed a second time on 2026-09-25, on the delta the first review never saw**
+> (Task 3, the rewritten Task 8, the two-mode `tools/gate.sh`, and the parts of Tasks 1/4/6/9 added
+> after it). That review found fifteen more, and — the part worth keeping — the two worst were in the
+> **evidence machinery itself**: the script counted other modules' leftover XML, and the mutation
+> blocks undid their own task's edits with `git checkout`. Both would have produced a mutation
+> "proved RED" by something other than the named test. §0.6 records them; every fix below that
+> could be run was run on a copy of the tree before it was written in.
 >
 > Phases 1–4 get their own plans, by the A1″ precedent (0–2 one plan, 3a its own, 3b its own).
 
@@ -51,16 +59,38 @@ and from `CLAUDE.md`.
   flag is **required** — the machine's default JDK is 25 and Gradle cannot parse it).
 - **The Gradle daemon is ON.** The former `--no-daemon` rule was retired by the owner on 2026-09-25 as
   no longer current; `gradle.properties` sets no `org.gradle.daemon` line, so the daemon is Gradle's
-  default and nothing is passed. It matters here because this phase runs **eleven mutations**, each of
-  which is its own Gradle invocation, and JVM startup plus configuration was being paid eleven times.
+  default and nothing is passed. It matters here because this phase runs **fourteen mutations** (M3,
+  M4a–c, M5, M6a–d, M7a–b, M8a–c), each its own Gradle invocation, and JVM startup plus configuration
+  was being paid fourteen times.
   `CLAUDE.md`'s gate section was corrected in the same commit as this line, so the two cannot diverge.
+  **What makes it safe is not the daemon's absence of state but two flags** — see the next bullet:
+  `org.gradle.caching=true` is on in this repo, and the daemon keeps a watched file-system state
+  between builds, so a scoped run that passed neither flag could be served a test task's
+  pre-mutation XML `FROM-CACHE`.
 - **Two gate modes, labelled differently on purpose** (Task 1). `tools/gate.sh` **boundary** — the
   default — clears `build/test-results` everywhere, passes `--rerun-tasks`, compares against 1440 and
-  prints `GATE GREEN`/`GATE RED`. `tools/gate.sh --scoped :module:task …` clears only the named
-  modules' results, does **not** pass `--rerun-tasks`, prints no baseline comparison, and labels
-  itself `SCOPED GREEN … — NOT a boundary gate`. Intermediate TDD steps and every mutation run
-  **scoped**; the run that closes a task is always **boundary**. A scoped run that printed
-  `GATE GREEN` would be a new false-green generator, which is why the labels differ.
+  prints `GATE GREEN`/`GATE RED`. `tools/gate.sh --scoped :module:task …` clears, **counts and
+  reports the named modules only** (another module's leftover XML is not this run's evidence), passes
+  `--no-build-cache --no-watch-fs` instead of `--rerun-tasks`, reports how Gradle ran **each named
+  task**, fails as `SCOPED NOT RUN` when a named test task did not execute, prints no baseline
+  comparison, and labels itself `SCOPED GREEN … — NOT a boundary gate`. Both modes print one
+  `FAILED :: <module> :: <class> > <test>` line per failing test. Intermediate TDD steps and every
+  mutation run **scoped**; the run that closes a task is always **boundary**. A scoped run that
+  printed `GATE GREEN` would be a new false-green generator, which is why the labels differ.
+- **The mutation protocol — one shape for every mutation in this plan, and never `git checkout`**
+  (§0.6 finding 2). A task is uncommitted while its mutations run, so `git checkout <file>` returns
+  the file to HEAD and **erases the task's own edits in it**; on a file the task *created*, it fails
+  with exit 1 and **leaves the mutation in place**. Both happened on paper in this plan. Instead:
+  ```bash
+  MUT="$(mktemp -d -t sidr-mut-XXXXXX)"   # once per task
+  cp "$F" "$MUT/m6a"                      # the file as the task has it NOW — not HEAD
+  sed -i '…' "$F"                         # plant
+  tools/gate.sh --scoped …                # read the FAILED :: lines, not the label
+  cp "$MUT/m6a" "$F"                      # restore exactly what was there
+  ```
+  **A mutation is proved by WHICH tests failed, not by `SCOPED RED`.** Each mutation below states
+  its predicted `FAILED ::` set. A red whose set differs, or a `gradle=1` with **no** `FAILED ::`
+  lines (a compile error), proves nothing: restore, find out why, and run it again.
 - **Baseline is 1440.** Not 1439, not 1438, not 1375, not 1314, not any number in the A1″ ADR.
 - **`--rerun-tasks`, never `--rerun`** (§9.1, R9). The latter is not a Gradle 9.5.0 build-level flag:
   it returns everything `UP-TO-DATE` and still prints `BUILD SUCCESSFUL`. A genuine run prints
@@ -73,11 +103,17 @@ and from `CLAUDE.md`.
   expected to redden `when` sites, the verification command must also name the **unit-test** compile
   tasks — `:data:repository:compileDebugUnitTestKotlin`, `:consumer:jvm:compileTestKotlin`,
   `:domain:compileTestKotlinJvm` — or half the sites stay invisible until the gate. This rule was
-  bought by this plan's own review (§0.5, finding 2).
+  bought by this plan's own review (§0.5, finding 2). **And naming them is not enough: a module never
+  compiles while a module it depends on is red.** `:data:repository` and `:consumer:jvm` both depend
+  on `:domain`, so one invocation over all six compile tasks reports `:domain`'s sites and nothing
+  else — measured 2026-09-25: **2 lines, both the same `:domain` site**, not 8. A cross-module cost
+  count is therefore taken **in stages, one dependency layer at a time, fixing between stages**, with
+  `--continue` so independent modules in the same layer all report (§0.6 finding 6; Task 4 step 4).
 - **Predict the per-module decomposition BEFORE each run and compare** (§9.3). A total cannot tell
   "two added" from "two added and two lost".
-- **Every new guard is proved by a mutation on a named assert**, not by a green run. **The last
-  action of any mutation-proving task is a gate re-run from a cleared tree.**
+- **Every new guard is proved by a mutation on a named assert**, not by a green run — and "on a named
+  assert" is read off the `FAILED ::` lines, per the mutation protocol above. **The last action of
+  any mutation-proving task is a gate re-run from a cleared tree.**
 - **Fixtures: no two expected values may share a substring** (R14-43). A realistic fixture is the
   dangerous one — a real package name usually contains the real label.
 - **Frozen, not touched by this phase:** `ActionIds`, `ObservedFact`, `CommandFailure`, `GoalShape`,
@@ -153,9 +189,10 @@ four, because it counted production source sets only. Four more live in test sou
 | 10 | `result(dto)` | `SessionMapper.kt:133-141` | production, **same** — `else -> throw` |
 
 Sites 9 and 10 are the ones a green suite would let through: a value written and never read back is a
-session that decodes as corrupt. **No Room migration** — `observation_kind` is a string column, so
-schema 4 is unchanged; what a *new* value costs is forward compatibility only (an older build reading
-a newer row throws `CorruptAgentRowException`, which is the existing, correct behaviour).
+session that decodes as corrupt. **No Room migration** — `observation_type`
+(`AgentPlanStepEntity.kt:45`) is a string column, so schema 4 is unchanged; what a *new* value costs
+is forward compatibility only (an older build reading a newer row throws `CorruptAgentRowException`,
+which is the existing, correct behaviour).
 
 **(P4) The surface's lie is wider than D1/D2 — there is a third instance, and no document names it.**
 `AgentSessionPresentation.stateOf` (`:417-423`) reads `step.index == cursor -> CURRENT` **without a
@@ -165,13 +202,22 @@ advanced its cursor past the failing step (`AgentExecutor.perform` writes `curso
 before `ended(Failed)`), so the next step reads `CURRENT` on a session that will never run again.
 Task 6 closes all three with one rule, not three branches.
 
-**(P5) Two existing tests pin the lie, and the plan must say which assertions change.**
+**(P5) Three existing tests pin the lie, and the plan must say which assertions change.** (The first
+two drafts said two; the third is in a different file and was found by the second review, §0.6.)
 - `AgentSessionPresentationTest:145-150` — `a plan whose every step ran is whole` asserts
   `AgentStepState.DONE` for `notInstalled`, an `Observed`. **Becomes `OBSERVED`**, and
   `everyStepExecuted()` stays `true` (the step did run).
 - `AgentSessionPresentationTest:121-125` — `the step at the cursor is current…` builds a session with
   `state = ExecutionState.AwaitingConsent` and asserts `CURRENT`. **Becomes `WAITING`**, and its
   first assertion (step 0 is `DONE` for an `Observed`) **becomes `OBSERVED`**.
+- `AgentSessionSurfaceProvenanceTest:164-170` — `the A0 two-step plan renders the two sentences it
+  always has` renders `a0Session()` (`:111-125`: `state = ExecutionState.Paused`, `cursor = 0`) and
+  asserts `"Open убер — in progress"` — D2's lie, rendered. **Becomes `"Open убер — waiting for
+  you"`.** Its KDoc (`:150-162`) calls these two sentences **"the byte-identity baseline"** — what
+  the surface the owner accepted on 2026-08-22 renders, pinned so A1′'s move of the step line could
+  not change them. D2's fix changes one word of that accepted rendering **on purpose**: the subject
+  (`Open убер`, `Find убер in the app store — not started`) stays byte-identical, the state word of a
+  paused step does not. That is an owner-visible change and goes to the acceptance checklist as one.
 
 **(P6) The wall-clock budget has a mechanically exact insertion point, and the catch ORDER is the
 behaviour.** `AgentExecutor.perform` already wraps the one call site (`:223-229`) with
@@ -208,6 +254,15 @@ tests will break.** Read before writing Task 8:
   is a **one-entry real `ToolVocabulary`** whose only trigger is `prefixByLocale = mapOf("ru" to
   setOf("удали приложение"))` with `argName = "app"`. Any goal text that is not «удали приложение …»
   matches nothing, and a test using one would decline for a reason unrelated to its subject.
+  **«удали приложение» with nothing after it matches nothing either**: an entry that declares an
+  `argName` refuses a bare trigger (`ToolVocabulary.kt:191`, `remainder.isBlank() -> null`).
+  Measured 2026-09-25 on a copy of the tree: `appSelector.select("удали приложение")` is `null`. So
+  **R14-37's shape — the vocabulary supplying no `app` — cannot be reached through `appSelector` at
+  all**; Task 8 adds a second, bare-trigger selector for exactly that (§0.6 finding 5).
+- **`ToolMatchPlanner(` is constructed at NINE sites in five files**, not three: `ToolMatchPlannerTest`
+  `:54` (the class-level `planner`), `:244`, `:272`, `:276`, `:284`; `SelectionDeclineMeasurement:164`;
+  `Tier0ToolExecutionEndToEndTest:151`; `FreeTextGoalEndToEndTest:143`; `AgentActingSeamTest:224`.
+  A third constructor parameter breaks every one of them.
 - `appToolDescriptor(vararg argNames)` (`:224`) hardcodes `required = name == "app"`, so an
   **optional** `app` cannot be expressed through it as written.
 - three tests bind through the current literal and will break the moment the literal stops deciding:
@@ -264,6 +319,42 @@ plan claimed a test asserted something it does not assert.* That is the same fai
 R14-28 / R14-40 — evidence that does not describe the thing it is believed to describe — committed
 in the very paragraph that demanded R14-43 be checked. A plan is not exempt from the rule it carries.
 
+### 0.6 · What the second plan review of 2026-09-25 changed
+
+The first review read a nine-task draft; about a third of this document was written after it. The
+second review took **only that delta** (Task 3 whole, Task 8 rewritten, Task 1's two-mode script,
+Task 4 steps 4/6, Task 6 steps 6–8, Task 9 step 3, P3/P10/P11, §0.5, the new Global Constraints,
+Task 10's arithmetic) and was told to hunt one class: *the plan says a test or file holds a
+property it does not hold* — the only class that executing the plan does not catch. It found
+fifteen defects. **The first three are in the machinery that produces the evidence**, and none of
+them could have been found by reading: each was found by **running** the script's text or the
+plan's own commands on a copy of the tree.
+
+| # | Finding | How it was established | Fixed where |
+|---|---|---|---|
+| **1** | **The scoped counter summed every module's XML.** It cleared the named modules, then counted `**/test-results` repo-wide — so M4a's red XML in `:data:repository` turned M4b's `--scoped :consumer:jvm:test` into `SCOPED RED (gradle=0 counts=1)` whether or not M4b's assert bit (same for M6c → M6d). Its own line «covers the named modules only» was false after the first boundary run | ran the script text on a fake tree and on a copy of the tree | Task 1 script; Global Constraints |
+| **2** | **`git checkout` undid the task, not the mutation.** Task 3's note named the wrong casualty (Task 2 is committed by then; the loss is Task 3's own step 5). Unnamed in Tasks 1, 5, 6, 7, 8. Two were false proofs: after M6a's checkout, M6b's `sed` matched nothing and M6b/M6c went red on a **compile error**; `ToolArgumentSorts.kt` is untracked, so checkout failed (exit 1), M8a's deleted row stayed, and M8b/M8c went red because of it | `git checkout` on an untracked file tried in a scratch repo; file contents and step order read | the mutation protocol (Global Constraints) in every mutation block, each with a **predicted `FAILED ::` set** |
+| **3** | **The zero-tasks warning could never fire, and `CLAUDE.md` already cited it as a held property.** Gradle 9.5.0 omits zero counts, so `: 0 executed` is never printed; and with `org.gradle.caching=true` a cleared test task is restored `FROM-CACHE` rather than run | `javap` of `TaskExecutionStatisticsReporter`; two consecutive scoped runs on the copy printed `1 executed, 1 from cache, 5 up-to-date` and no warning | scoped runs pass `--no-build-cache --no-watch-fs`; per-named-task check, `SCOPED NOT RUN`; `CLAUDE.md` in the same commit |
+| 4 | Task 9's `orElse("unknown")` does not catch a non-zero `git` exit — the build fails outside a checkout, while the KDoc said it "must still assemble"; the happy-path check of step 2 could never see it | probe build on Gradle 9.5.0 outside git: `exit value 128`, build failed; the `runCatching` form printed `unknown`, exit 0 | Task 9 step 1 |
+| 5 | Task 8's first new test could not pass on correct code: `appSelector` refuses a bare trigger, so the goal declined in the selector, before the block under test. M8c "proved" nothing through it | on the copy: `appSelector.select("удали приложение") = null`; a bare-trigger selector gives `ToolMatch(args={})` and today's planner then returns `NoPlan` — R14-37 itself | P11; Task 8 step 2 |
+| 6 | Task 4 step 4 expected eight errors from one invocation; `:domain` fails first and dependents never compile. Its reading rule would have logged seven false "already non-exhaustive" findings | on the copy: **2 lines, both site 1**. Staged: **1 → 3 → 4** | Global Constraints; Task 4 step 4 |
+| 7 | A third test pins D2's lie and P5 said two: `AgentSessionSurfaceProvenanceTest:164-170` (`Paused`, «in progress») | read | P5; Task 6 step 6 |
+| 8 | Task 4 step 1 pointed at a **decode-only** test as "the round trip" to copy; both mutations were decode-side, so an encode bug would pass | read `AgentSessionMappersTest:143-156` against `:231-241` | Task 4 step 1 (concrete snippet), new mutation M4c |
+| 9 | `JvmAgentSessionStoreTest:99` is named «…every ToolResult»; after Task 4 that name is false and stays green — `:consumer:jvm` has no `kotlin-reflect`, so no `sealedSubclasses` tripwire is possible there | read; build file checked | Task 4 step 8 (rename, and say what holds "every") |
+| 10 | Task 3's grep excluded `CommandPlanner` by **file name**, so `RouteCommandUseCase.kt:172` (a `CommandPlanner` call through a field named `planner`) leaked into the list the plan said excluded it | ran the grep | Task 3 step 1 |
+| 11 | `ToolMatchPlanner(` is built at nine sites in five files; Task 8 named three tests | grep | P11; Task 8 step 5 |
+| 12 | Snippets using API that does not exist or is not imported: Task 3's test (`assertTrue`, `ToolResult`, `ObservedFact`), Task 4 step 8 (`store.load` — the store has `active()`, and it is `suspend`) | read | Task 3 step 2; Task 4 step 8 |
+| 13 | Task 6 step 8's R14-43 fallback was aimed at the wrong risk: `onNodeWithText` matches the **whole** text by default, so shared substrings do not blind it; and the neighbour test does not resolve resources, it hardcodes English | `javap` of Compose `ui-test` 1.12.0: `substring` defaults to `false`, compared with `equals` | Task 6 step 8 |
+| 14 | "`internal` primary + `@Inject` secondary is `RoomAgentSessionStore`'s pattern" — its primary is **public** (`:36`) | read | Task 8 |
+| 15 | P3 named a column `observation_kind`; it is `observation_type` | read | P3 |
+
+**The rule this review bought:** *the machine that produces the evidence is itself a claim, and it
+is proved the way a guard is — by making it lie on purpose and watching it refuse.* The first
+script was syntax-checked and its argument paths executed, and it still had findings 1 and 3,
+because neither shows on a green tree: they need a stale red XML in another module, or a second
+identical run. §0.5's rule said a plan is not exempt from the rule it carries; neither is its
+tooling.
+
 ---
 
 ## Task 1: `tools/gate.sh` — the gate as a machine instead of a memory
@@ -275,21 +366,32 @@ in the very paragraph that demanded R14-43 be checked. A plan is not exempt from
 - Create: `app/src/test/java/com/sidr/launcher/agent/RegistryCensusMeasurement.kt`
 
 **Interfaces:**
-- Produces: `tools/gate.sh [--boundary|--scoped] [<gradle task>…]`, exit 0 only when every parsed
-  JUnit XML reports zero failures and zero errors; prints a per-module decomposition, a total, and
-  the authored registry census. Every later task's verification step calls it — **scoped** for TDD
-  steps and mutations, **boundary** (no arguments) for the run that closes a task.
+- Produces: `tools/gate.sh [--boundary|--scoped] [<gradle task>…]`, exit 0 only when Gradle exits 0,
+  every **counted** JUnit XML reports zero failures and zero errors, and — scoped — every named test
+  task actually executed; prints a per-module decomposition, a total, one `FAILED ::` line per
+  failing test, and the authored registry census. Every later task's verification step calls it —
+  **scoped** for TDD steps and mutations, **boundary** (no arguments) for the run that closes a task.
 
 **What is already verified about the script text below, and what is not** — said so the implementer
-knows which half is still theirs. On 2026-09-25, before this plan was committed, the shipped text was
-extracted verbatim and checked: `bash -n` passes, and the three argument paths that need no Gradle
-were **executed** — `--help` prints the usage and exits 0; `--scoped testDebugUnitTest` refuses an
-unqualified task and exits 2; `--scoped` with no task refuses and exits 2. The module-path derivation
-was run against all four shapes this plan uses (`:data:repository:…` → `data/repository`,
-`:app:…` → `app`, `:consumer:jvm:test` → `consumer/jvm`, `:domain:jvmTest` → `domain`).
-**Not verified, and therefore step 4's and step 5's job:** the Gradle invocation itself, the XML
-counter against real `build/test-results` paths, whether `println` reaches `<system-out>` in `:app`,
-and the RED summary.
+knows which half is still theirs. The first version of this script (committed in `0fe16b1`) was
+syntax-checked and its argument paths executed, and it still carried two defects that only a run on a
+real tree could show (§0.6 findings 1 and 3). So the text below was **run**, on 2026-09-25, on a copy
+of the tree at `0fe16b1` in a scratch directory (source only, no `.git`, same JDK 17, same Gradle
+9.5.0 wrapper):
+
+| Path | What was run | Observed |
+|---|---|---|
+| arguments | `--help`; `--scoped testDebugUnitTest`; `--scoped`; `--scoped :nosuch:mod:test` | exit 0; FATAL + exit 2; FATAL + exit 2; FATAL + exit 2 |
+| RED, named | a `fail("planted")` in one `:consumer:jvm` test, planted and restored by the `cp` protocol | `:consumer:jvm:test: executed, FAILED`; `FAILED :: consumer/jvm :: …JvmAgentSessionStoreTest > an empty store has no active session`; `SCOPED RED (gradle=1 counts=1)`; exit 1 |
+| **isolation** | the planted file restored but `:consumer:jvm` **not** re-run, so its red XML stays on disk; then `--scoped :domain:jvmTest` | the table lists `domain tests=440` **only**; `SCOPED GREEN`; exit 0 — the version in `0fe16b1` went red here |
+| **no cache serving** | `--scoped :consumer:jvm:test` twice in a row, nothing changed | both runs: `:consumer:jvm:test: executed` |
+| **NOT RUN** | `--scoped :feature:suggestions:testDebugUnitTest` (a module with no tests) | `NO-SOURCE`; `SCOPED NOT RUN …`; exit 1 |
+| flags | `--console=plain --no-build-cache --no-watch-fs` on Gradle 9.5.0 | accepted; `> Task :x:y` lines as the named-task check expects |
+
+**Not verified, and therefore step 4's and step 5's job:** a **boundary** run over the whole tree
+(the copy was never given one), the census line — whether `println` reaches `<system-out>` in
+`:app` (it does in `:data:repository`, seen in XML) — and anything about the real repository's
+own build directories.
 
 - [ ] **Step 1: write the registry census measurement**
 
@@ -395,13 +497,27 @@ captured, say so in the log and have `gate.sh` print `REGISTRY :: not captured` 
 #   boundary (default) — the run that closes a task. Clears every module's results, passes
 #                        `--rerun-tasks`, compares the total against the 1440 baseline, and says
 #                        `GATE GREEN` / `GATE RED`.
-#   --scoped           — a run inside a task: a TDD step or a mutation. Clears only the named
-#                        modules, does NOT pass `--rerun-tasks`, prints NO baseline comparison, and
-#                        says `SCOPED GREEN … — NOT a boundary gate`.
-# The phase runs eleven mutations; as one mode they were eleven full `--rerun-tasks` sweeps. But the
-# saving is not why the labels differ: a cheap run that printed `GATE GREEN` would be a false-green
-# generator of exactly the kind this file exists to remove, and a scoped table compared against 1440
-# would be a number describing five missing modules.
+#   --scoped           — a run inside a task: a TDD step or a mutation. Clears, COUNTS and reports
+#                        the named modules only, passes `--no-build-cache --no-watch-fs` instead of
+#                        `--rerun-tasks`, prints NO baseline comparison, and says
+#                        `SCOPED GREEN … — NOT a boundary gate`.
+# The phase runs a dozen mutations; as one mode they were a dozen full `--rerun-tasks` sweeps. But
+# the saving is not why the labels differ: a cheap run that printed `GATE GREEN` would be a
+# false-green generator of exactly the kind this file exists to remove, and a scoped table compared
+# against 1440 would be a number describing five missing modules.
+#
+# THREE THINGS A SCOPED RUN MUST NOT DO, each found by the second plan review (§0.6) and each
+# demonstrated by running the first version of this file rather than by reading it:
+#   * count another module's leftover XML. The first version cleared the named modules and then
+#     summed `**/test-results` across the whole tree — so a red XML left by the previous mutation in
+#     module A turned a scoped run of module B red with `gradle=0`, and B's mutation "proved" itself.
+#   * let a named test task be served instead of run. `org.gradle.caching=true` is on in this repo
+#     and the daemon keeps a watched file-system state between builds; together they can restore a
+#     test task's pre-mutation green XML FROM-CACHE. The first version tried to catch that with
+#     `grep ': 0 executed'`, a line Gradle 9.5.0 never prints: its statistics reporter omits every
+#     zero count (`TaskExecutionStatisticsReporter.formatDetail`, read with `javap`).
+#   * leave "RED on <named test>" unverifiable. A mutation is proved by WHICH test went red, so every
+#     failing testcase is printed as a `FAILED ::` line.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -421,9 +537,10 @@ DEFAULT_TASKS=(:domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:tes
 TASKS=("$@")
 [ "${#TASKS[@]}" -eq 0 ] && TASKS=("${DEFAULT_TASKS[@]}")
 
-# A scoped run must name modules, because "which results may I clear" and "what may I leave
-# up-to-date" are both answered from the task path. An unqualified task (`testDebugUnitTest`) runs in
-# every module, which IS a boundary run — so it is refused here rather than silently mislabelled.
+# A scoped run must name modules, because "which results may I clear", "which results may I count"
+# and "what may I leave up-to-date" are all answered from the task path. An unqualified task
+# (`testDebugUnitTest`) runs in every module, which IS a boundary run — so it is refused here rather
+# than silently mislabelled.
 if [ "$MODE" = scoped ]; then
   [ "$#" -gt 0 ] || { echo "FATAL: --scoped needs at least one :module:task" >&2; exit 2; }
   for t in "${TASKS[@]}"; do
@@ -434,6 +551,10 @@ if [ "$MODE" = scoped ]; then
   done
 fi
 
+# :data:repository:testDebugUnitTest -> data/repository ; :consumer:jvm:test -> consumer/jvm
+module_of() { local m="${1#:}"; m="${m%:*}"; printf '%s' "${m//://}"; }
+
+MODULES=()
 if [ "$MODE" = boundary ]; then
   echo "== boundary: clearing build/test-results EVERYWHERE (R14-44) =="
   find . -path ./build -prune -o -type d -name test-results -print0 2>/dev/null \
@@ -441,8 +562,10 @@ if [ "$MODE" = boundary ]; then
 else
   echo "== scoped: clearing build/test-results for the named modules only =="
   for t in "${TASKS[@]}"; do
-    m="${t#:}"; m="${m%:*}"; m="${m//://}"     # :data:repository:testDebugUnitTest -> data/repository
-    [ -d "$m" ] && rm -rf "$m/build/test-results"
+    m="$(module_of "$t")"
+    [ -d "$m" ] || { echo "FATAL: no module directory '$m' for task '$t'" >&2; exit 2; }
+    rm -rf "$m/build/test-results"
+    MODULES+=("$m")
   done
 fi
 
@@ -450,12 +573,19 @@ fi
 # longer current). Gradle uses it by default and `gradle.properties` sets no `org.gradle.daemon`
 # line, so nothing is passed and the first invocation's JVM startup is amortised over the rest.
 #
-# Why that is safe in each mode, said rather than assumed: a boundary run passes `--rerun-tasks`, so
-# it cannot inherit a stale up-to-date verdict from anything the daemon remembers. A scoped run
-# deliberately relies on up-to-date checks, so it prints what Gradle actually executed and shouts
-# when that number is zero — see below.
-GRADLE_ARGS=("-Porg.gradle.java.installations.paths=$JDK17")
-[ "$MODE" = boundary ] && GRADLE_ARGS+=(--rerun-tasks)
+# Why that is safe in each mode, said rather than assumed. A boundary run passes `--rerun-tasks`, so
+# every task executes and nothing is taken from a remembered up-to-date verdict or from the cache. A
+# scoped run keeps up-to-date checks for compilation (that is its whole saving) but passes
+# `--no-watch-fs`, so no file-system state survives from the previous build and every input is
+# re-read, and `--no-build-cache`, so a test task whose results were just cleared has to EXECUTE —
+# it cannot be restored from the cache. The named-task check below then says so from Gradle's own
+# log, per task, and a named test task that did not execute fails the run as `SCOPED NOT RUN`.
+GRADLE_ARGS=("-Porg.gradle.java.installations.paths=$JDK17" --console=plain)
+if [ "$MODE" = boundary ]; then
+  GRADLE_ARGS+=(--rerun-tasks)
+else
+  GRADLE_ARGS+=(--no-build-cache --no-watch-fs)
+fi
 
 LOG="$(mktemp -t sidr-gate-XXXXXX.log)"
 echo "== log: $LOG =="
@@ -468,25 +598,44 @@ set +e
 GRADLE_EXIT=$?
 set -e
 # Never piped through `tail`: the whole log is kept and the exit code is the exit code.
-ACTIONABLE="$(grep -E "actionable tasks:" "$LOG" || true)"
+ACTIONABLE="$(grep -E "actionable tasks?:" "$LOG" || true)"
 echo "${ACTIONABLE:-WARNING: no 'actionable tasks' line — was anything executed?}"
-if [ "$MODE" = scoped ] && printf '%s' "$ACTIONABLE" | grep -q ": 0 executed"; then
-  echo "WARNING: this scoped run executed ZERO tasks — up-to-date checks decided nothing changed."
-  echo "         If you just edited a file (a mutation, a fix), that is a FINDING, not a pass."
+
+NOT_RUN=0
+if [ "$MODE" = scoped ]; then
+  echo "== named tasks, as Gradle's plain console reported them =="
+  for t in "${TASKS[@]}"; do
+    line="$(grep -E "^> Task ${t}( |$)" "$LOG" | tail -n 1 || true)"
+    case "$line" in
+      "> Task $t")        status="executed" ;;
+      "> Task $t FAILED") status="executed, FAILED" ;;
+      "")                 status="ABSENT from the log" ;;
+      *)                  status="${line#"> Task $t "}" ;;
+    esac
+    echo "  $t: $status"
+    # A test task in a scoped run must EXECUTE: its results were cleared and the cache is off, so
+    # UP-TO-DATE, FROM-CACHE, NO-SOURCE or absence means this run proved nothing about it.
+    case "$t" in
+      *[Tt]est) case "$status" in executed*) ;; *) NOT_RUN=1 ;; esac ;;
+    esac
+  done
 fi
 
 echo "== counts, from the JUnit XML =="
 set +e
-python3 - "$REPO_ROOT" "$MODE" <<'PY'
+python3 - "$REPO_ROOT" "$MODE" "${MODULES[@]}" <<'PY'
 import sys, glob, os
 from xml.etree import ElementTree as ET
 
 root, mode = sys.argv[1], sys.argv[2]
-per_module = {}
+named = list(dict.fromkeys(sys.argv[3:]))
+per_module, failed = {}, []
 for path in glob.glob(os.path.join(root, "**", "build", "test-results", "**", "*.xml"),
                       recursive=True):
     rel = os.path.relpath(path, root)
     module = rel.split(os.sep + "build" + os.sep)[0]
+    if mode == "scoped" and module not in named:
+        continue  # another module's leftover XML is not this run's evidence
     try:
         suite = ET.parse(path).getroot()
     except ET.ParseError:
@@ -499,29 +648,51 @@ for path in glob.glob(os.path.join(root, "**", "build", "test-results", "**", "*
     acc[1] += int(suite.get("failures", 0))
     acc[2] += int(suite.get("errors", 0))
     acc[3] += int(suite.get("skipped", 0))
+    for case in suite.iter("testcase"):
+        if case.find("failure") is not None or case.find("error") is not None:
+            failed.append(f"{module} :: {case.get('classname')} > {case.get('name')}")
 
 total = [0, 0, 0, 0]
 for module in sorted(per_module):
     t, f, e, s = per_module[module]
     total = [a + b for a, b in zip(total, [t, f, e, s])]
     print(f"{module:<28} tests={t:<5} failures={f:<3} errors={e:<3} skipped={s}")
+for module in named:
+    if module not in per_module:
+        print(f"{module:<28} NO RESULTS — this named module wrote no XML in this run")
 print("-" * 64)
 print(f"{'TOTAL':<28} tests={total[0]:<5} failures={total[1]:<3} errors={total[2]:<3} "
       f"skipped={total[3]}")
+for line in failed:
+    print(f"FAILED :: {line}")
 # The baseline belongs to a boundary run ONLY. Printing it under a scoped run would invite comparing
 # one module's count with a whole-tree number — a table describing five absent modules.
 if mode == "boundary":
     print("BASELINE at 2026-09-22 (074e4ce): tests=1440 failures=0 errors=0")
 else:
-    print("SCOPED: this table covers the named modules only — NOT comparable with 1440")
+    print("SCOPED: this table counts the named modules only — NOT comparable with 1440")
 sys.exit(1 if (total[1] or total[2]) else 0)
 PY
 COUNT_EXIT=$?
 set -e
 
 echo "== registry census, from the federation =="
-grep -rho "REGISTRY :: .*" app/build/test-results/ 2>/dev/null | head -1 \
-  || echo "REGISTRY :: not in this run (task set did not include :app tests)"
+CENSUS_IN_RUN=no
+if [ "$MODE" = boundary ]; then
+  CENSUS_IN_RUN=yes
+else
+  for t in "${TASKS[@]}"; do case "$t" in :app:*) CENSUS_IN_RUN=yes ;; esac; done
+fi
+if [ "$CENSUS_IN_RUN" = yes ]; then
+  CENSUS="$(grep -rhoE --include='*.xml' 'REGISTRY :: .*' app/build/test-results/ 2>/dev/null || true)"
+  if [ -n "$CENSUS" ]; then
+    printf '%s\n' "${CENSUS%%$'\n'*}"
+  else
+    echo "REGISTRY :: not captured — :app ran but printed no census (Task 1 step 2)"
+  fi
+else
+  echo "REGISTRY :: not in this run (no :app task named)"
+fi
 
 echo "== log kept at: $LOG =="
 if [ "$GRADLE_EXIT" -ne 0 ] || [ "$COUNT_EXIT" -ne 0 ]; then
@@ -530,6 +701,10 @@ if [ "$GRADLE_EXIT" -ne 0 ] || [ "$COUNT_EXIT" -ne 0 ]; then
   else
     echo "SCOPED RED (${TASKS[*]}) (gradle=$GRADLE_EXIT counts=$COUNT_EXIT)"
   fi
+  exit 1
+fi
+if [ "$NOT_RUN" -ne 0 ]; then
+  echo "SCOPED NOT RUN (${TASKS[*]}) — a named test task did not execute; this run proved nothing about it"
   exit 1
 fi
 if [ "$MODE" = boundary ]; then
@@ -548,8 +723,8 @@ tools/gate.sh --help     # the two modes, for the next reader
 ```
 
 Expected: `GATE GREEN`, `TOTAL tests=1441` (1440 + the census measurement), `failures=0 errors=0`,
-an `N actionable tasks: N executed` line, the `BASELINE at 2026-09-22 … tests=1440` line, and a
-`REGISTRY :: authored=…` line.
+**no** `FAILED ::` line, an `N actionable tasks: N executed` line, the `BASELINE at 2026-09-22 …
+tests=1440` line, and a `REGISTRY :: authored=…` line.
 
 **Predicted decomposition before this run** (compare it, do not skip it): `:domain` 440 ·
 `:consumer:jvm` 56 · `:data:repository` 376 · `:feature:launcher` 194 · **`:app` 60** (59 + 1) ·
@@ -559,44 +734,60 @@ If the script reports a different module breakdown from those six lines, the scr
 the tree is: check its module derivation (`rel.split("/build/")`) against the real paths — `:domain`
 is KMP and writes under `domain/build/test-results/jvmTest/` — before believing any number it prints.
 
-- [ ] **Step 5: prove the script can go red, and prove the two modes are distinguishable**
+- [ ] **Step 5: prove the script goes red on a NAMED test, ignores other modules' leftovers, and refuses a test task it did not see run**
 
-The red path is proved **scoped**, which is cheap, and that is enough for the RED path itself:
-both modes call the *same* counter and the same `set +e` wrapper, so the only thing the boundary
-label adds is a literal string. What must be checked separately is that the labels and the baseline
-line really do differ — otherwise the whole two-mode split is decoration.
+Everything here is scoped and cheap. The boundary label adds only a literal string to the same
+counter and the same `set +e` wrapper; what must be checked on the real tree is what §0.6 found the
+first version getting wrong — that a scoped run **counts the named modules only** and **cannot be
+served from the cache** — plus the refusals. This step also runs the mutation protocol once (Global
+Constraints), on a file this task created: `git checkout` could not have undone it at all.
 
 ```bash
-# plant a failure in a cheap module, run scoped, expect the RED summary, revert
-sed -i 's/    fun `print the authored registry census`() {/    fun `print the authored registry census`() {\n        org.junit.Assert.fail("planted")/' \
-  app/src/test/java/com/sidr/launcher/agent/RegistryCensusMeasurement.kt
+MUT="$(mktemp -d -t sidr-mut-XXXXXX)"
+F=app/src/test/java/com/sidr/launcher/agent/RegistryCensusMeasurement.kt
+cp "$F" "$MUT/t1"
+sed -i 's/    fun `print the authored registry census`() {/    fun `print the authored registry census`() {\n        org.junit.Assert.fail("planted")/' "$F"
 tools/gate.sh --scoped :app:testDebugUnitTest; echo "exit=$?"
 ```
-Expected, and **all four things must appear**: the per-module table, `SCOPED RED (:app:testDebugUnitTest)
-(gradle=1 counts=1)`, the `== log kept at: …` line, and `exit=1`. A run that exits 1 while printing no
-RED line at all is the `set -e` defect this step exists to catch (§0.5 finding 5).
+Expected, **all five**: `:app:testDebugUnitTest: executed, FAILED`;
+`FAILED :: app :: com.sidr.launcher.agent.RegistryCensusMeasurement > print the authored registry census`;
+`SCOPED RED (:app:testDebugUnitTest) (gradle=1 counts=1)`; the `== log kept at: …` line; `exit=1`. A
+run that exits 1 while printing no RED line at all is the `set -e` defect (§0.5 finding 5).
+
+**Isolation — the case the first version of this script got wrong** (§0.6 finding 1):
 
 ```bash
-git checkout app/src/test/java/com/sidr/launcher/agent/RegistryCensusMeasurement.kt
+cp "$MUT/t1" "$F"                                          # restore — and do NOT re-run :app yet
+tools/gate.sh --scoped :consumer:jvm:test; echo "exit=$?"  # :app's red XML is still on disk
+```
+Expected: the table lists `consumer/jvm` **and nothing else**, no `FAILED ::` line,
+`SCOPED GREEN (:consumer:jvm:test) — NOT a boundary gate`, `exit=0`. Red here means the counter is
+reading `:app`'s leftover, and every mutation proof in this plan is suspect until it is fixed.
+
+**No cache serving — the check that replaced the dead zero-tasks warning** (§0.6 finding 3):
+
+```bash
+tools/gate.sh --scoped :app:testDebugUnitTest; echo "exit=$?"   # twice in a row, nothing changed
 tools/gate.sh --scoped :app:testDebugUnitTest; echo "exit=$?"
 ```
-Expected: `SCOPED GREEN (:app:testDebugUnitTest) — NOT a boundary gate`, the line
-`SCOPED: this table covers the named modules only — NOT comparable with 1440`, **no** `BASELINE`
-line, and `exit=0`.
+Expected, **both** runs: `:app:testDebugUnitTest: executed`, `SCOPED GREEN (:app:testDebugUnitTest)
+— NOT a boundary gate`, the line `SCOPED: this table counts the named modules only — NOT comparable
+with 1440`, **no** `BASELINE` line, `exit=0`. `FROM-CACHE` or `UP-TO-DATE` on the second run would
+mean `--no-build-cache` did not reach Gradle.
 
-Then three refusals and one warning, none of which needs a build:
+Then the refusals — two need no build, the third builds one small module:
 
 ```bash
-tools/gate.sh --scoped testDebugUnitTest; echo "exit=$?"   # expect FATAL + exit=2: unqualified task
-tools/gate.sh --scoped; echo "exit=$?"                     # expect FATAL + exit=2: no task named
-tools/gate.sh --scoped :app:testDebugUnitTest              # run twice in a row; the SECOND must print
-                                                           # the ZERO-tasks WARNING, because nothing changed
+tools/gate.sh --scoped testDebugUnitTest; echo "exit=$?"                     # FATAL + exit=2: unqualified task
+tools/gate.sh --scoped; echo "exit=$?"                                       # FATAL + exit=2: no task named
+tools/gate.sh --scoped :feature:suggestions:testDebugUnitTest; echo "exit=$?" # NO-SOURCE -> SCOPED NOT RUN, exit=1
 ```
-That last one is the honest half of relying on up-to-date checks: a scoped run which executed nothing
-must say so, so a mutation that Gradle did not notice can never read as a pass.
+`:feature:suggestions` has no tests, so its test task is `NO-SOURCE`: a named test task that ran
+nothing must not read as green.
 
-**Record in the task log:** both exit codes, the exact RED line, the absence of `BASELINE` under
-scoped, the two `exit=2` refusals, and the zero-tasks warning.
+**Record in the task log:** the exact `FAILED ::` and RED lines, the isolation run's one-module
+table, both `executed` lines of the repeat, the absence of `BASELINE` under scoped, the two
+`exit=2` refusals and the `SCOPED NOT RUN` line.
 
 - [ ] **Step 6: commit**
 
@@ -614,11 +805,13 @@ tail. Остальные четыре правила — суждения, и с
 ДВА РЕЖИМА, И МЕТКИ У НИХ РАЗНЫЕ НАМЕРЕННО. boundary (по умолчанию) —
 прогон, закрывающий задачу: чистит результаты везде, --rerun-tasks,
 сверка с 1440, GATE GREEN/RED. --scoped :module:task — прогон ВНУТРИ
-задачи (шаг TDD или мутация): чистит только названные модули, без
---rerun-tasks, БЕЗ сверки с базой, и печатает
-«SCOPED GREEN … — NOT a boundary gate».
+задачи (шаг TDD или мутация): чистит, СЧИТАЕТ и показывает только
+названные модули, без --rerun-tasks, БЕЗ сверки с базой, и печатает
+«SCOPED GREEN … — NOT a boundary gate». Оба режима печатают строку
+FAILED :: на каждый упавший тест: мутация доказывается тем, КАКОЙ тест
+покраснел, а не меткой RED.
 
-В фазе одиннадцать мутаций, и одним режимом это были бы одиннадцать
+В фазе четырнадцать мутаций, и одним режимом это были бы четырнадцать
 полных развёрток --rerun-tasks. Но метки разошлись не ради экономии:
 дешёвый прогон, печатающий GATE GREEN, был бы генератором ложного
 зелёного ровно того рода, ради устранения которого этот файл написан, а
@@ -631,11 +824,20 @@ scoped-таблица, сверенная с 1440, — числом, описы�
 задаёт org.gradle.daemon, значит демон — умолчание Gradle, и флаг не
 передаётся). Почему это безопасно в каждом режиме, сказано, а не
 подразумевается: граничный несёт --rerun-tasks и не может унаследовать
-устаревший вердикт up-to-date; scoped на up-to-date опирается сознательно
-— и поэтому печатает, сколько задач Gradle РЕАЛЬНО исполнил, и кричит,
-когда это ноль. Мутация, которой Gradle не заметил, не прочтётся как
-успех. CLAUDE.md исправлен тем же коммитом, чтобы два документа не
-разошлись молча.
+устаревший вердикт; scoped несёт --no-build-cache --no-watch-fs, поэтому
+тестовая задача, чьи результаты только что стёрты, обязана ИСПОЛНИТЬСЯ —
+восстановить её из кеша нельзя (org.gradle.caching=true в этом репо), а
+состояние файловой системы из прошлой сборки не переживает. Скрипт
+читает исход КАЖДОЙ названной задачи из лога Gradle, и названная
+тестовая задача, которая не исполнилась, валит прогон как SCOPED NOT RUN.
+
+Первая версия (0fe16b1) вместо этого грепала «: 0 executed» — строку,
+которую Gradle 9.5.0 не печатает никогда (нулевые счётчики опускаются,
+javap TaskExecutionStatisticsReporter), — и считала XML всех модулей
+разом, так что красный XML прошлой мутации в модуле A красил scoped-
+прогон модуля B при gradle=0. Оба дефекта найдены только ПРОГОНОМ
+текста на копии дерева, не чтением (§0.6 плана, находки 1 и 3).
+CLAUDE.md описывает именно эту версию с момента правки плана.
 
 Обе долгие команды обёрнуты в set +e: без этого set -e убивал бы скрипт
 ровно на том прогоне, ради которого он написан, и сводка RED, перепись
@@ -650,7 +852,11 @@ SelectionDeclineMeasurement): печатает перепись АВТОРСКИ
 зелена и когда забыла адаптер; сверка с независимым production-
 утверждением краснеет вместо того, чтобы напечатать 18.
 
-Красный путь пройден: посаженный fail -> GATE RED + exit=1, откат -> GREEN.
+Пройдено на настоящем дереве: посаженный fail -> FAILED :: с именем
+теста + SCOPED RED + exit=1; откат без перезапуска :app, затем scoped
+:consumer:jvm:test -> GREEN с одним модулем в таблице (изоляция); два
+scoped-прогона подряд -> оба executed (кеш не подаёт); модуль без тестов
+-> SCOPED NOT RUN.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 EOF
@@ -839,7 +1045,11 @@ opens phase 2 by consuming its second field. **Owner fork F0-5.**
   `AgentSessionUseCasesTest.kt:355`, plus every direct call site (`TemplatePlannerTest`,
   `ToolMatchPlannerTest`, `FilePlannerTest`, `AgentSessionPresentationTest:58`,
   `AgentSessionSurfaceProvenanceTest`, `LauncherScreenAgentProvenanceTest`, `AgentLoopTest`,
-  `AgentActingSeamTest`, `SelectionDeclineMeasurement`)
+  `AgentActingSeamTest`, `SelectionDeclineMeasurement`, `CompositePlannerTest:41`/`:55`,
+  `AgentSessionUseCasesTest:345`, `RoomAgentSessionStoreTest:99`). Counted 2026-09-25 by running
+  step 1's grep: four fakes in three files, and direct calls in twelve test files across `:domain`,
+  `:data:repository`, `:consumer:jvm` and `:feature:launcher`. **`:app` has none that change** —
+  `AgentProvidesModule:255`/`:279` only name the type.
 - Test: `domain/src/jvmTest/kotlin/com/sidr/launcher/domain/agent/CompositePlannerTest.kt`
 
 **Interfaces:**
@@ -869,12 +1079,26 @@ grep -rn "\.plan(\|override suspend fun plan(\|: Planner" --include=*.kt . | gre
   | grep -v "CommandPlanner\|LlmCommandPlanner\|FakeCommandPlanner"
 ```
 `CommandPlanner` is a **different port** (`plan(command: String, catalog: ActionCatalog)`, the LLM
-action router) and must not be touched — the grep above excludes it, and the exclusion is the point:
-two ports in this repo spell a method `plan`. **Write the site list into the task log before editing.**
+action router) and must not be touched. **The grep above does NOT fully exclude it, and why is worth
+knowing:** `grep -v` filters the whole output line *including its path*, so `FakeCommandPlanner`
+and `LlmCommandPlanner` drop out only because their **file names** contain the word. The one
+production call of that port sits in a file whose name does not:
+`RouteCommandUseCase.kt:172` — `planner.plan(rawInput.trim(), catalog)`, where `planner` is the
+`CommandPlanner` field declared at `:101`. **It is in the list and must be left alone** (an edit
+there fails to compile — `PlanningRequest` wants an `AgentGoal`, not a `String` — but it is cheaper
+to know than to find out). Two ports in this repo spell a method `plan`, and the filter tells them
+apart by accident. **Write the site list into the task log before editing, with that line struck.**
 
 - [ ] **Step 2: write the failing test**
 
-In `CompositePlannerTest`:
+In `CompositePlannerTest`. That file imports only `FakeToolRegistry`, `ToolRegistry`,
+`ExperimentalCoroutinesApi`, `runTest`, `assertEquals` and `Test` (`:3-8`), so add:
+
+```kotlin
+import com.sidr.launcher.domain.tool.ObservedFact
+import com.sidr.launcher.domain.tool.ToolResult
+import org.junit.Assert.assertTrue
+```
 
 ```kotlin
     /**
@@ -916,7 +1140,9 @@ Fixture note (R14-43): `"зефир"` appears nowhere else in that file; check b
 ./gradlew -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
   :domain:jvmTest --tests '*CompositePlannerTest*' --rerun-tasks 2>&1 | grep -E "^e: " | head
 ```
-Expected: `Unresolved reference 'PlanningRequest'`.
+Expected: `Unresolved reference 'PlanningRequest'` — the first of several; the recording planner's
+`'plan' overrides nothing` and its companions follow from the same missing type. Any **other**
+unresolved name means step 2's imports were not added.
 
 - [ ] **Step 4: add the type and change the port**
 
@@ -983,15 +1209,22 @@ Task 1. A module other than `:domain` moving means a test was lost in the sweep,
 
 ```bash
 # M3 — rebuild the request per planner, which is exactly what phase 2 must not inherit
-sed -i 's/when (val result = planner.plan(request, registry)) {/when (val result = planner.plan(PlanningRequest(request.goal), registry)) {/' \
-  domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/CompositePlanner.kt
-tools/gate.sh --scoped :domain:jvmTest   # expect RED on `every planner is asked with the same request instance`
-git checkout domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/CompositePlanner.kt
-# the checkout also reverts Task 2's exhaustive `when` in this file — re-apply it and confirm with
-# `git diff` before moving on
+MUT="$(mktemp -d -t sidr-mut-XXXXXX)"
+F=domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/CompositePlanner.kt
+cp "$F" "$MUT/m3"
+sed -i 's/when (val result = planner.plan(request, registry)) {/when (val result = planner.plan(PlanningRequest(request.goal), registry)) {/' "$F"
+tools/gate.sh --scoped :domain:jvmTest
+cp "$MUT/m3" "$F"
 ```
-Note that this mutation compiles and preserves every existing behaviour — that is why it is the right
-one: it is the mistake a future editor would actually make.
+Predicted `FAILED ::` set — exactly one: `CompositePlannerTest > every planner is asked with the same
+request instance`. The other two tests in that file read the order of questions, not the request's
+identity, and must stay green.
+
+Restored with `cp`, not `git checkout`: Task 2 is committed by now, so a checkout would have kept
+Task 2's `when` and erased **this** task's step 5 — the `plan(request, …)` signature — leaving a file
+that no longer implements the port (the first version of this note named Task 2 as the casualty;
+§0.6 finding 2). Note that this mutation compiles and preserves every existing behaviour — that is
+why it is the right one: it is the mistake a future editor would actually make.
 
 - [ ] **Step 9: gate from a cleared tree, then commit**
 
@@ -1060,10 +1293,14 @@ is `ToolResult`, which no freeze guard pins (P2).
 
 - [ ] **Step 1: write the failing round-trip test on the Android mapper**
 
-Read `AgentSessionMappersTest.kt` first — its helpers are `sessionRow(...)` (`:45`) and
-`sessionWith(events: List<TraceEvent>)` (`:199`), **neither of which is a "session with an
-observation" builder**. Copy the shape of its nearest existing `Observed` round-trip test and follow
-whatever construction that test uses. Then add beside it:
+**Copy the right neighbour — there are two, and only one is a round trip** (§0.6 finding 8).
+`every ObservedFact round-trips as a precondition and as an observation` (`:143-156`) is
+**decode-only**: it writes a row by hand with `stepRow(observationType = "Observed", …)` and reads it
+through `read(...)`. A test in that shape would be named "round trip" and never execute
+`observationType` / `observationOutputJson` — the two encode sites this task adds arms to — so an
+encode arm writing the wrong discriminator would pass it. The real round trip is
+`every TraceEvent variant round-trips` (`:231-241`): a domain session through
+`toSessionEntity` / `toStepEntities` / `toTraceEntities` and back through `toDomain`. Use that:
 
 ```kotlin
     /**
@@ -1073,13 +1310,22 @@ whatever construction that test uses. Then add beside it:
      * not occur; `Observed` needs a frozen `ObservedFact` that has no value for this. The fourth
      * value says exactly what is true — the act left the launcher and the outcome is not ours to
      * see — and it must survive the disk, or the trace goes on lying one save later.
+     *
+     * **Encode AND decode.** It goes out through the three `to…Entities` mappers and back through
+     * `toDomain`, like `every TraceEvent variant round-trips` — not a hand-written row, which would
+     * hold the reader only. M4a (decode) and M4c (encode) each redden it on its own.
      */
     @Test
     fun `a HandedOff observation survives a round trip with its output`() {
-        // …build a session whose step 0 observation is
-        //   ToolResult.HandedOff(ToolOutput(mapOf("dispatched_to" to "os-uninstaller")))
-        // exactly the way the neighbouring Observed round-trip test builds its session, then map
-        // out and back through the same entry points that test uses.
+        val original = sessionWith(emptyList()).copy(
+            observations = mapOf(0 to ToolResult.HandedOff(ToolOutput(mapOf("dispatched_to" to "os-uninstaller")))),
+        )
+
+        val restored = AgentSessionMappers.toDomain(
+            AgentSessionMappers.toSessionEntity(original, now = 1L),
+            AgentSessionMappers.toStepEntities(original),
+            AgentSessionMappers.toTraceEntities(original, now = 1L),
+        )
 
         val observation = restored.observations[0]
         assertTrue("a HandedOff must not come back as some other kind", observation is ToolResult.HandedOff)
@@ -1089,6 +1335,10 @@ whatever construction that test uses. Then add beside it:
         )
     }
 ```
+`sessionWith(emptyList())` rather than `sessionWith(oneOfEachEvent)`: that list carries
+`TraceEvent.ToolObserved(0, observed)`, and the reader rebuilds a `ToolObserved` event from the
+step's own observation (`AgentSessionMappers.kt:366-370`), so a session whose step 0 holds a
+`HandedOff` under a trace that says `Observed` would be a fixture contradicting itself.
 
 Fixture note (R14-43): `"os-uninstaller"` shares no substring with any other expected value in that
 file; verify before committing to it.
@@ -1133,23 +1383,40 @@ In `ToolInvocation.kt`, after `Observed`:
     data class HandedOff(val output: ToolOutput = ToolOutput()) : ToolResult
 ```
 
-- [ ] **Step 4: take ALL EIGHT compile errors — production AND test source sets**
+- [ ] **Step 4: take ALL EIGHT compile errors — in three stages, because a module never compiles while its dependency is red**
 
-The first draft of this plan ran only the three production compile tasks and expected four errors.
-Four more live in test sources (P3, sites 5–8) and no `compileKotlin` task reaches them:
+The first draft ran only the production compile tasks and expected four errors; four more live in
+test sources (P3, sites 5–8). The second draft named all six compile tasks in **one** invocation and
+expected eight — and would have got **two**: `:data:repository` and `:consumer:jvm` depend on
+`:domain`, site 1 is in `:domain`, so `:domain` fails first and nothing downstream ever compiles
+(measured 2026-09-25 on a copy of the tree: 2 lines, both `InvocationValidator.kt:138`, one per KMP
+compilation — §0.6 finding 6). The count is taken layer by layer, fixing between layers with the
+code from steps 5 and 6. **The three stages below were run on that copy, with exactly these
+commands, and gave exactly these counts.**
 
 ```bash
-./gradlew -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10 \
-  :domain:compileKotlinJvm :domain:compileTestKotlinJvm \
-  :data:repository:compileDebugKotlin :data:repository:compileDebugUnitTestKotlin \
-  :consumer:jvm:compileKotlin :consumer:jvm:compileTestKotlin 2>&1 \
-  | grep -E "^e: " | tee /tmp/handedoff-errors.txt
-wc -l /tmp/handedoff-errors.txt
+G="./gradlew -Porg.gradle.java.installations.paths=/home/Suleiman/jdks/jdk-17.0.19+10"
+
+# stage 1 — :domain production. Expect 1: site 1 (InvocationValidator.kt:138).
+$G :domain:compileKotlinJvm 2>&1 | grep -E "^e: " | tee /tmp/handedoff-1.txt
+# -> apply step 5's InvocationValidator arm
+
+# stage 2 — every production consumer, plus :domain's own tests. Expect 3: sites 2, 3 (AgentSessionMappers.kt:162, :171) and 4 (SessionMapper.kt:127).
+$G --continue :domain:compileTestKotlinJvm :data:repository:compileDebugKotlin :consumer:jvm:compileKotlin 2>&1 \
+  | grep -E "^e: " | tee /tmp/handedoff-2.txt
+# -> apply the rest of step 5
+
+# stage 3 — the test source sets no compileKotlin task reaches. Expect 4: sites 5–8.
+$G --continue :domain:compileTestKotlinJvm :data:repository:compileDebugUnitTestKotlin :consumer:jvm:compileTestKotlin 2>&1 \
+  | grep -E "^e: " | tee /tmp/handedoff-3.txt
+# -> apply step 6
 ```
-Expected: **eight** `'when' expression must be exhaustive` errors, at the eight addresses of P3
-(rows 1–8). **Record all of them.** Fewer than eight means a site was already non-exhaustive — a
-finding to write down. More than eight means the plan's census of this type is incomplete, which is
-also a finding, and a more interesting one.
+`--continue` matters in stages 2 and 3: the modules inside one stage do not depend on each other,
+and without it Gradle stops scheduling at the first failure, so one module's errors would hide the
+other's. **Record all three files: 1 + 3 + 4 = 8.** A stage that shows fewer than predicted is read
+against the **stage**, not against eight — fewer in stage 2 or 3 with a green previous stage means a
+site was already non-exhaustive, a finding. More than predicted means P3's census of this type is
+incomplete, which is also a finding, and a more interesting one.
 
 - [ ] **Step 5: fix the four production sites the compiler caught**
 
@@ -1195,23 +1462,34 @@ corruption.
 
 - [ ] **Step 8: add the JVM-side round trip and the validator test**
 
-`JvmAgentSessionStoreTest.kt` — **its `store` is a function `store()` (`:45`) and its session builder
-is `session(observations = mapOf(0 to …))` (`:49-52`); use those, not a `sessionWith`:**
+`JvmAgentSessionStoreTest.kt` — **its `store` is a function `store()` (`:45`), its session builder is
+`session(observations = mapOf(0 to …))` (`:49-90`), the store has no `load`: the read is
+`active()`, it is `suspend`, and the file unwraps results with its own `value()` (`:92`) inside
+`runTest`** — exactly as its round-trip test at `:99-140` does:
 
 ```kotlin
     @Test
-    fun `a HandedOff observation survives this consumer's disk too`() {
-        val store = store()
-        val saved = session(observations = mapOf(0 to ToolResult.HandedOff(ToolOutput(mapOf("ticket" to "sandbox-42")))))
+    fun `a HandedOff observation survives this consumer's disk too`() = runTest {
+        val s = store()
+        s.save(session(observations = mapOf(0 to ToolResult.HandedOff(ToolOutput(mapOf("ticket" to "sandbox-42"))))))
 
-        store.save(saved)
-
-        val observation = (store.load(saved.id) as OperationResult.Success).value?.observations?.get(0)
-        assertTrue(observation is ToolResult.HandedOff)
+        val observation = s.active().value()!!.observations[0]
+        assertTrue("a HandedOff must not come back as some other kind", observation is ToolResult.HandedOff)
         assertEquals(mapOf("ticket" to "sandbox-42"), (observation as ToolResult.HandedOff).output.values)
     }
 ```
-Adapt the save/load entry points to whatever that file already calls; the assertions are the point.
+
+**And rename the neighbour whose name this task makes false** (§0.6 finding 9). `:99` is
+`a saved session round-trips - every TraceEvent variant and every ToolResult`, and its fixture holds
+`Effected`, `Observed` and `Failed` — three values. After this task there are four, the test stays
+green, and its name becomes a claim nothing holds: `:consumer:jvm` has **no `kotlin-reflect`** on
+its test classpath (only `:data:repository` declares it, `build.gradle.kts:77`), so the
+`sealedSubclasses` tripwire `AgentSessionMappersTest` uses for `TraceEvent` is not available here,
+and its three-step fixture has no fourth slot. Rename it to
+`a saved session round-trips - every TraceEvent variant and the Effected, Observed and Failed results`
+and add one KDoc line: *"`HandedOff` has its own test below. Nothing here holds 'every': encode is
+held by the compiler (`resultDto` is an `else`-free `when`), decode by one test per value."* A rename
+changes no count.
 
 `InvocationValidatorTest.kt`:
 ```kotlin
@@ -1235,27 +1513,45 @@ contains it. Verify before committing to it.
 ```bash
 tools/gate.sh --scoped :domain:jvmTest :data:repository:testDebugUnitTest :consumer:jvm:test
 ```
-Expected: `SCOPED GREEN`, and no baseline line. `:domain` 442, `:data:repository` 377,
-`:consumer:jvm` 57 — the three modules named, and nothing else in the table.
+Expected: `SCOPED GREEN`, all three named tasks `executed`, no baseline line, no `FAILED ::` line.
+`:domain` 442, `:data:repository` 377, `:consumer:jvm` 57 — the three modules named, and nothing
+else in the table (the script counts named modules only, §0.6 finding 1).
 
-- [ ] **Step 10: mutation — prove each decode branch is load-bearing**
+- [ ] **Step 10: mutation — prove each persistence branch is load-bearing, decode AND encode**
 
 ```bash
-# M4a — Android decode returns the wrong kind
-sed -i 's/OBSERVATION_HANDED_OFF -> ToolResult.HandedOff(readOutput(row))/OBSERVATION_HANDED_OFF -> ToolResult.Effected(readOutput(row))/' \
-  data/repository/src/main/java/com/sidr/launcher/data/repository/agent/AgentSessionMappers.kt
-tools/gate.sh --scoped :data:repository:testDebugUnitTest   # expect RED on
-                                                   # "a HandedOff must not come back as some other kind"
-git checkout data/repository/src/main/java/com/sidr/launcher/data/repository/agent/AgentSessionMappers.kt
-# the checkout reverts steps 5 and 7 in this file — re-apply them and confirm with `git diff`
+MUT="$(mktemp -d -t sidr-mut-XXXXXX)"
+A=data/repository/src/main/java/com/sidr/launcher/data/repository/agent/AgentSessionMappers.kt
+J=consumer/jvm/src/main/kotlin/com/sidr/launcher/consumer/jvm/store/SessionMapper.kt
+
+# M4a — Android DECODE returns the wrong kind
+cp "$A" "$MUT/m4a"
+sed -i 's/OBSERVATION_HANDED_OFF -> ToolResult.HandedOff(readOutput(row))/OBSERVATION_HANDED_OFF -> ToolResult.Effected(readOutput(row))/' "$A"
+tools/gate.sh --scoped :data:repository:testDebugUnitTest
+cp "$MUT/m4a" "$A"
+
+# M4c — Android ENCODE writes the wrong discriminator (the half a decode-only test could not see)
+cp "$A" "$MUT/m4c"
+sed -i 's/is ToolResult.HandedOff -> OBSERVATION_HANDED_OFF/is ToolResult.HandedOff -> OBSERVATION_EFFECTED/' "$A"
+tools/gate.sh --scoped :data:repository:testDebugUnitTest
+cp "$MUT/m4c" "$A"
 
 # M4b — JVM decode drops the output
-sed -i 's/"HandedOff" -> ToolResult.HandedOff(ToolOutput(dto.output))/"HandedOff" -> ToolResult.HandedOff(ToolOutput(emptyMap()))/' \
-  consumer/jvm/src/main/kotlin/com/sidr/launcher/consumer/jvm/store/SessionMapper.kt
-tools/gate.sh --scoped :consumer:jvm:test                   # expect RED on the output assertEquals
-git checkout consumer/jvm/src/main/kotlin/com/sidr/launcher/consumer/jvm/store/SessionMapper.kt
-# re-apply steps 5 and 7 in this file too
+cp "$J" "$MUT/m4b"
+sed -i 's/"HandedOff" -> ToolResult.HandedOff(ToolOutput(dto.output))/"HandedOff" -> ToolResult.HandedOff(ToolOutput(emptyMap()))/' "$J"
+tools/gate.sh --scoped :consumer:jvm:test
+cp "$MUT/m4b" "$J"
 ```
+Predicted `FAILED ::` sets — **one test each**:
+- M4a → `AgentSessionMappersTest > a HandedOff observation survives a round trip with its output`
+  (the kind assertion);
+- M4c → the **same** test, the same assertion — which is the proof that step 1's test goes through
+  the encoder, not only the reader;
+- M4b → `JvmAgentSessionStoreTest > a HandedOff observation survives this consumer's disk too` (the
+  output `assertEquals`).
+
+Under the first version of this plan M4b would have "passed" regardless: M4a's red XML was still in
+`data/repository/build/test-results` when M4b ran, and the old script counted it (§0.6 finding 1).
 
 - [ ] **Step 11: gate from a cleared tree (the last action of a mutation task)**
 
@@ -1294,10 +1590,21 @@ SandboxToolContractTest — по паре branch()/outputKeys()), куда ни 
 то, что зелёный прогон пропустил бы: значение, записанное и никогда не
 прочитанное, декодируется как повреждение.
 
-Room-миграции нет: observation_kind — строковая колонка, схема 4 цела.
+Цена снята поэтапно, а не одним вызовом: модуль не компилируется, пока
+красен модуль, от которого он зависит, поэтому один вызов по шести
+задачам показал бы две строки про один сайт :domain. Стадии 1 -> 3 -> 4.
 
-Мутации: M4a (Android-декод отдаёт не тот сорт) -> RED, M4b (JVM-декод
-теряет output) -> RED.
+Room-миграции нет: observation_type — строковая колонка, схема 4 цела.
+
+Тест на Android — настоящий round trip (to…Entities -> toDomain), а не
+чтение руками написанной строки: иначе кодирование не держал бы никто.
+Тест JVM-стора с именем «…every ToolResult» переименован — после этого
+коммита значений четыре, а kotlin-reflect в :consumer:jvm нет, так что
+«every» там не держит ни один tripwire.
+
+Мутации: M4a (Android-декод отдаёт не тот сорт) -> RED, M4c (Android-
+кодирование пишет не тот дискриминатор) -> RED в том же тесте, M4b
+(JVM-декод теряет output) -> RED. Каждая — ровно один FAILED ::.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 EOF
@@ -1431,11 +1738,15 @@ from it and must match what is there, not replace it.
 
 ```bash
 # M5 — convert the wrong branch, losing the Effected/Failed distinction in both directions
-sed -i 's/is ToolResult.Effected -> ToolResult.HandedOff()/is ToolResult.Failed -> ToolResult.HandedOff()/' \
-  data/repository/src/main/java/com/sidr/launcher/data/repository/agent/Tier0IntentToolWorker.kt
+MUT="$(mktemp -d -t sidr-mut-XXXXXX)"
+F=data/repository/src/main/java/com/sidr/launcher/data/repository/agent/Tier0IntentToolWorker.kt
+cp "$F" "$MUT/m5"
+sed -i 's/is ToolResult.Effected -> ToolResult.HandedOff()/is ToolResult.Failed -> ToolResult.HandedOff()/' "$F"
 tools/gate.sh --scoped :data:repository:testDebugUnitTest
-git checkout data/repository/src/main/java/com/sidr/launcher/data/repository/agent/Tier0IntentToolWorker.kt
+cp "$MUT/m5" "$F"
 ```
+Restored with `cp`: a `git checkout` here would have erased this task's fix itself — Task 5 is not
+committed yet (§0.6 finding 2).
 Expected RED on **both** `uninstall_app hands off — it does not claim the app was removed` (the
 success case falls to `else` and returns `Effected` again) **and** `an uninstall that could not be
 dispatched is Failed, not handed off` (the failure case is now converted). Two reds is the correct
@@ -1620,6 +1931,12 @@ internal fun AgentSession.stateOf(step: PlanStep): AgentStepState =
         }
 ```
 
+**And correct the file-level KDoc at `:41-43`, which this step falsifies.** It says `stateOf` "is a
+subject-less `when` over predicates, not a dispatch on a sum at all … the 'none of the four signals
+fired' arm and reads [AgentStepState.PENDING]". After this step the recorded-observation half **is**
+a dispatch on a sum (`ToolResult.stepState()`, `else`-free), and the subject-less `when` that remains
+reads the session only for a step with no record, with `else -> WAITING`. Say that.
+
 Extend `marker()` and `word()` with the three new values:
 
 ```kotlin
@@ -1702,8 +2019,16 @@ three locales, are a hypothesis until a device round has shown them.* Nobody has
 a screen. The A1″ round found the checklist erring more often than the code, and three of its four
 errors were claims about what the user would see, written without a run.
 
-- [ ] **Step 6: correct the two tests that pinned the lie (P5), and read the third before touching it**
+- [ ] **Step 6: correct the three tests that pinned the lie (P5), and read the fourth before touching it**
 
+- `AgentSessionSurfaceProvenanceTest` — `the A0 two-step plan renders the two sentences it always
+  has` (`:164-170`, the file the first two drafts never opened): `a0Session()` is `Paused` at
+  `cursor = 0`, so `"Open убер — in progress"` becomes **`"Open убер — waiting for you"`**;
+  `"Find убер in the app store — not started"` does not move. Its KDoc (`:150-162`) calls this pair
+  "the byte-identity baseline" of the owner-accepted surface — add one sentence saying that A4′
+  phase 0 changed the **state word** of the paused step deliberately (D2) and the **subject** of both
+  sentences did not, so the baseline now pins the subject plus the corrected word. Do not soften the
+  expectation to a `substring = true` match on the subject: the word is exactly what D2 is about.
 - `a plan whose every step ran is whole` (`:142-151`): step 0's expectation becomes
   `AgentStepState.OBSERVED`; `everyStepExecuted()` stays `assertTrue`. Add to its KDoc: *"an
   `Observed` step ran — it is `OBSERVED`, not `DONE`; that distinction is D1."*
@@ -1821,11 +2146,20 @@ exactly — `@RunWith(RobolectricTestRunner::class)`, `@Config(sdk = [34])`, `cr
         composeTestRule.onNodeWithText(completedTitle).assertDoesNotExist()
     }
 ```
-Resolve `partialTitle` / `completedTitle` from the real resources the way the neighbouring test
-resolves its expected sentence — `launcher_agent_completed_partial_title` and
-`launcher_agent_completed_title`. Fixture note: those two strings must not share a substring, or
-`assertDoesNotExist` cannot distinguish them; **check them before relying on the assertion**, and if
-they do share one, assert on the `Partial` body string instead and say so in the log.
+The neighbour does **not** resolve resources: it hardcodes the default-locale (`en`) sentence its
+runner renders (`"Open убер — in progress"`, `:168`), with a rule named `compose` (`:62`) and a
+`render(...)` helper. Do the same:
+`partialTitle = "Plan finished, not every step ran"`, `completedTitle = "Plan complete"`
+(`values/strings.xml:189-190`).
+
+**The substring question does not arise, and the reason is measured, not assumed.**
+`onNodeWithText` without `substring = true` matches a node's **whole** text: in Compose `ui-test`
+1.12.0 (the version on this classpath), `onNodeWithText$default` sets `substring = false`, and that
+path compares with `equals` — the `substring = true` path is the one that calls `contains` (read with
+`javap`, 2026-09-25). So «Plan complete» cannot match «Plan finished, not every step ran» although
+both start with «Plan» — and in `ru` the pair also shares «выполнен». R14-43 bites a
+`substring = true` assertion; **do not switch these two to it**, and do not replace them with the
+body string — the title is the line `DOC-ILM-4` is about.
 
 - [ ] **Step 9: run, expect all green**
 
@@ -1835,38 +2169,61 @@ tools/gate.sh --scoped :feature:launcher:testDebugUnitTest :app:testDebugUnitTes
 
 - [ ] **Step 10: four mutations, each on a named assert**
 
+**By the mutation protocol, and this task is where it matters most** (§0.6 finding 2). The first
+version undid each of these with `git checkout`. Task 6 is uncommitted at this point, so the checkout
+after M6a returned `AgentSessionPresentation.kt` to HEAD — the five-value enum, no
+`anyStepHandedOff` — M6b's `sed` then matched nothing, silently, and M6b and M6c went red on a
+**compile error**: the tests reference `OBSERVED`/`WAITING`/`HANDED_OFF`, and the surface references
+`anyStepHandedOff`. Both would have been logged as proved; the checkout after M6d would have deleted
+the three new `ru` strings.
+
 ```bash
+MUT="$(mktemp -d -t sidr-mut-XXXXXX)"
+P=feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/agent/AgentSessionPresentation.kt
+S=feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/agent/AgentSessionSurface.kt
+R=feature/launcher/src/main/res/values-ru/strings.xml
+
 # M6a — restore the catch-all that made Observed a success
-sed -i 's/    is ToolResult.Observed -> AgentStepState.OBSERVED/    is ToolResult.Observed -> AgentStepState.DONE/' \
-  feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/agent/AgentSessionPresentation.kt
-tools/gate.sh --scoped :feature:launcher:testDebugUnitTest   # expect RED on `an observation is not an execution`
-git checkout feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/agent/AgentSessionPresentation.kt
+cp "$P" "$MUT/m6a"
+sed -i 's/    is ToolResult.Observed -> AgentStepState.OBSERVED/    is ToolResult.Observed -> AgentStepState.DONE/' "$P"
+tools/gate.sh --scoped :feature:launcher:testDebugUnitTest
+cp "$MUT/m6a" "$P"
 
 # M6b — stop consulting the session state
-sed -i 's/            state == ExecutionState.Running -> AgentStepState.CURRENT/            true -> AgentStepState.CURRENT/' \
-  feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/agent/AgentSessionPresentation.kt
-tools/gate.sh --scoped :feature:launcher:testDebugUnitTest   # expect RED on `a step the engine stopped on…`
-                                                    # AND on `a terminal session has nothing in progress`
-git checkout feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/agent/AgentSessionPresentation.kt
+cp "$P" "$MUT/m6b"
+sed -i 's/            state == ExecutionState.Running -> AgentStepState.CURRENT/            true -> AgentStepState.CURRENT/' "$P"
+grep -c 'true -> AgentStepState.CURRENT' "$P"    # must print 1 — a sed that matched nothing is not a mutation
+tools/gate.sh --scoped :feature:launcher:testDebugUnitTest
+cp "$MUT/m6b" "$P"
 
 # M6c — let a handed-off plan call itself whole (the mutation the first draft could not catch)
-sed -i 's/session.everyStepExecuted() \&\& !session.anyStepHandedOff()/session.everyStepExecuted()/' \
-  feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/agent/AgentSessionSurface.kt
-tools/gate.sh --scoped :feature:launcher:testDebugUnitTest   # expect RED on
-                                                    # `a completed plan with a handed-off step is shown as partial…`
-git checkout feature/launcher/src/main/java/com/sidr/launcher/feature/launcher/agent/AgentSessionSurface.kt
+cp "$S" "$MUT/m6c"
+sed -i 's/session.everyStepExecuted() \&\& !session.anyStepHandedOff()/session.everyStepExecuted()/' "$S"
+tools/gate.sh --scoped :feature:launcher:testDebugUnitTest
+cp "$MUT/m6c" "$S"
 
 # M6d — collide two words in one locale
-sed -i 's|<string name="launcher_agent_step_state_waiting">ждёт вас</string>|<string name="launcher_agent_step_state_waiting">без изменений</string>|' \
-  feature/launcher/src/main/res/values-ru/strings.xml
-tools/gate.sh --scoped :app:testDebugUnitTest                # expect RED on
-                                                    # `every step state reads differently in every locale`
-git checkout feature/launcher/src/main/res/values-ru/strings.xml
+cp "$R" "$MUT/m6d"
+sed -i 's|<string name="launcher_agent_step_state_waiting">ждёт вас</string>|<string name="launcher_agent_step_state_waiting">без изменений</string>|' "$R"
+tools/gate.sh --scoped :app:testDebugUnitTest
+cp "$MUT/m6d" "$R"
 ```
+
+**Predicted `FAILED ::` sets** — derived from the rule of step 3 and the tests of steps 1, 6 and 8,
+written before the run; a different set is a finding to run down, in either direction:
+
+| Mutation | Predicted failing tests | Count |
+|---|---|---:|
+| M6a | `AgentSessionPresentationTest` > `an observation is not an execution`; > `a gated session marks the gated step waiting, not current` (its step 0 is `OBSERVED`); > `a plan whose every step ran is whole` (its step 0 is `OBSERVED`) | 3 |
+| M6b | `AgentSessionPresentationTest` > `a step the engine stopped on is not in progress`; > `a terminal session has nothing in progress`; > `a gated session marks the gated step waiting, not current` (its step 1); `AgentSessionSurfaceProvenanceTest` > `the A0 two-step plan renders the two sentences it always has` (a `Paused` step reads «in progress» again) | 4 |
+| M6c | `AgentSessionSurfaceHandedOffTest` > `a completed plan with a handed-off step is shown as partial, not as done` | 1 |
+| M6d | `StepStateWordDistinctnessGuardTest` > `every step state reads differently in every locale` | 1 |
 
 **M6c is the one that matters most** — it is the mutation the first draft of this plan would have let
 pass. If it stays green, the Robolectric test of step 8 is not reaching the line, and that must be
-fixed before this task closes rather than recorded as a limitation.
+fixed before this task closes rather than recorded as a limitation. And it must be red **on that
+test**, with Gradle having compiled: a `gradle=1` with no `FAILED ::` line is a compile error and
+proves nothing.
 
 - [ ] **Step 11: gate from a cleared tree, then commit**
 
@@ -1917,8 +2274,17 @@ AgentSessionSurfaceProvenanceTest, а не юнит-тест над предик
 РЕНДЕРИНГ НИКТО НЕ ВИДЕЛ: слова — гипотеза до устройства, несётся в
 чеклист приёмки.
 
-Мутации: M6a -> RED, M6b -> RED (два теста), M6c -> RED (та самая, что
-в первой редакции плана осталась бы зелёной), M6d -> RED.
+Третий тест, державший ложь D2, — AgentSessionSurfaceProvenanceTest, «базовая
+линия побайтовой идентичности» принятой владельцем поверхности: у шага на
+паузе слово «in progress» сменилось на «waiting for you» НАМЕРЕННО, подлежащее
+обеих фраз не сдвинулось. Это видимое владельцу изменение, оно идёт в
+чеклист приёмки.
+
+Мутации — по протоколу cp, не git checkout (checkout откатил бы шаги 3–5
+этой же задачи, и M6b/M6c покраснели бы от ошибки компиляции): M6a -> RED
+(три теста), M6b -> RED (четыре), M6c -> RED (один — та самая, что в
+первой редакции плана осталась бы зелёной), M6d -> RED (один); каждый
+набор FAILED :: сверен с предсказанным в плане до прогона.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 EOF
@@ -2080,25 +2446,34 @@ tools/gate.sh --scoped :domain:jvmTest
 - [ ] **Step 6: two mutations**
 
 ```bash
+MUT="$(mktemp -d -t sidr-mut-XXXXXX)"
+E=domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/AgentExecutor.kt
+B=domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/AgentSession.kt
+
 # M7a — delete the timeout arm BY HAND (a sed across a multi-line catch arm is its own bug), so
 #       TimeoutCancellationException falls through to the rethrow below. Same defect as writing the
 #       two catches in the wrong order (P6): the timeout leaves as parent cancellation and kills the
 #       session instead of bounding the step.
-git diff domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/AgentExecutor.kt   # eyeball it
-tools/gate.sh --scoped :domain:jvmTest   # expect RED on
-                                # `a tool that never returns is cut at the wall-clock budget…`
-git checkout domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/AgentExecutor.kt
-# re-apply step 4 and confirm with `git diff` before moving on
+cp "$E" "$MUT/m7a"
+#   … delete the arm in an editor …
+diff "$MUT/m7a" "$E"                      # eyeball it: exactly the timeout arm, nothing else
+tools/gate.sh --scoped :domain:jvmTest
+cp "$MUT/m7a" "$E"
 
 # M7b — raise the budget so nothing is ever cut
-sed -i 's/val maxStepWallClockMs: Long = 10_000,/val maxStepWallClockMs: Long = Long.MAX_VALUE,/' \
-  domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/AgentSession.kt
-tools/gate.sh --scoped :domain:jvmTest   # expect RED on the FIRST test only — the second must stay green,
-                                # which is what proves the second is a non-vacuity check
-git checkout domain/src/commonMain/kotlin/com/sidr/launcher/domain/agent/AgentSession.kt
+cp "$B" "$MUT/m7b"
+sed -i 's/val maxStepWallClockMs: Long = 10_000,/val maxStepWallClockMs: Long = Long.MAX_VALUE,/' "$B"
+tools/gate.sh --scoped :domain:jvmTest
+cp "$MUT/m7b" "$B"
 ```
-If M7b reddens **both** tests, the second test is not measuring what it claims and must be fixed
-before this task closes.
+Predicted `FAILED ::` sets: M7a → `AgentExecutorTest > a tool that never returns is cut at the
+wall-clock budget…` (the first test). M7b → the **first test only** — the second must stay green,
+which is what proves the second is a non-vacuity check. If M7b reddens **both** tests, the second
+test is not measuring what it claims and must be fixed before this task closes.
+
+`diff` against the saved copy replaces the first version's `git diff`, and `cp` replaces its
+`git checkout` — which, for M7b, would have erased this task's own `RuntimeBudget` parameter from
+`AgentSession.kt` with no note saying so (§0.6 finding 2).
 
 - [ ] **Step 7: pin the shipped default**
 
@@ -2235,9 +2610,13 @@ do not exist.
   new dependency with no module edit — **verify that, do not assume it.**
 
 **The two-constructor shape is not decoration.** A production map in a `private companion object`
-cannot be varied by a test, and this task's tests need a row for the synthetic `test_app_tool`. The
-`internal` primary plus `@Inject` secondary is `RoomAgentSessionStore`'s own pattern
-(`RoomAgentSessionStore.kt:46`), and it keeps Dagger looking at a no-argument constructor.
+cannot be varied by a test, and this task's tests need a row for the synthetic `test_app_tool`.
+The precedent is `RoomAgentSessionStore` — **with one difference, said rather than blurred**: there
+the primary constructor is **public** (`:36`) and the `@Inject` one is the secondary (`:42-46`); here
+the primary is `internal`, so no production caller outside `:data:repository` can hand the planner
+rows of its own. Dagger (kapt, in this module) looks only at the `@Inject`-annotated constructor and
+ignores the other; an `internal` constructor is public in bytecode, so nothing about it can confuse
+the processor. That last sentence is reasoning, not a build — step 6's green run is its proof.
 
 - [ ] **Step 1: write the port and its rows**
 
@@ -2278,7 +2657,8 @@ data class AppArgumentBinding(val arg: String, val labelArg: String?)
  *
  * **Two constructors on purpose.** The `@Inject` one is production and takes no arguments, so Dagger
  * sees exactly what it saw before; the `internal` one lets a test state its own rows for a synthetic
- * tool without that tool appearing in production data. Same shape as `RoomAgentSessionStore`.
+ * tool without that tool appearing in production data. `RoomAgentSessionStore`'s shape, except that
+ * its primary constructor is public and this one is not.
  *
  * It lives in `:data:repository` because `AppTargetResolver` — the only thing that can answer this
  * sort today — lives here, and because `:domain` is `commonMain`.
@@ -2334,8 +2714,41 @@ Add a sorts fixture beside `appSelector` (`:205`), using the `internal` construc
     )
 ```
 
-**Every goal in these tests must go through `appSelector`, whose only trigger is `"удали приложение"`
-(`ru`)** — P11. A goal with any other wording declines for an unrelated reason.
+**`appSelector` cannot reach R14-37, and the first version of this step's test depended on it
+reaching it** (§0.6 finding 5). Its entry declares `argName = "app"`, and `ToolVocabulary` refuses a
+bare trigger for such an entry (`ToolVocabulary.kt:191`), so `free("удали приложение")` declined in
+the **selector**, before the resolution block — the test would have been red on correct code, and
+M8c would have "proved" nothing through it. R14-37 is the vocabulary and the tool **disagreeing**
+about `app`: the trigger supplies none, the descriptor declares it optional (the planner's own
+comment, `ToolMatchPlanner.kt:86-89`, names this as what the required-argument check is for). So add
+a second selector, beside `appSelector`, whose trigger supplies nothing:
+
+```kotlin
+    /**
+     * The shape R14-37 needs and [appSelector] cannot produce: a trigger that supplies NO `app`
+     * (`argName = null`, so it matches only as the whole text). [appSelector] declares
+     * `argName = "app"`, and `ToolVocabulary` refuses a bare trigger for such an entry — a goal
+     * through it declines in the selector, before the resolution block the R14-37 test is about.
+     * Measured 2026-09-25 on a copy of the tree: `appSelector.select("удали приложение")` is `null`;
+     * this selector's `select("покажи приложение")` is `ToolMatch(test_app_tool, {})`, and the
+     * pre-A4′ planner then returned `NoPlan` from `resolve("")` — R14-37 itself.
+     */
+    private val bareAppSelector = ToolSelector(
+        ToolVocabulary(
+            listOf(
+                ToolVocabulary.Entry(
+                    id = appTool,
+                    prefixByLocale = mapOf("ru" to setOf("покажи приложение")),
+                ),
+            ),
+        ),
+        namesOf(),
+    )
+```
+
+Every **other** goal in these tests still goes through `appSelector`, whose only trigger is
+`"удали приложение …"` with something after it (`ru`) — P11. A goal with any other wording declines
+for an unrelated reason.
 
 ```kotlin
     /**
@@ -2346,17 +2759,25 @@ Add a sorts fixture beside `appSelector` (`:205`), using the `internal` construc
      * `NoPlan` for EVERY goal, forever, with the whole suite green. A tool registered, reachable by
      * its trigger, and dead.
      *
+     * [bareAppSelector], not [appSelector]: this needs a trigger that supplies no `app` at all, and
+     * [appSelector]'s cannot match without one.
+     *
      * Two per-descriptor pins were shipped against the opposite direction (`uninstall_app` R14-35,
      * `open_app_info` phase 3b) and neither generalised. This is the generalisation.
      */
     @Test
     fun `an optional app argument the vocabulary did not supply does not kill the plan`() = runTest {
         val descriptor = appToolDescriptor("app", optional = setOf("app"))
-        val planner = ToolMatchPlanner(appSelector, appTargetsOf(), appSorts)
+        val planner = ToolMatchPlanner(bareAppSelector, appTargetsOf(), appSorts)
 
-        val result = planner.plan(PlanningRequest(free("удали приложение")), registryWith(descriptor))
+        val result = planner.plan(PlanningRequest(free("покажи приложение")), registryWith(descriptor))
 
         assertTrue("an absent OPTIONAL argument is not a reason to decline", result is PlanningResult.Planned)
+        assertEquals(
+            "absent means absent — not an empty string, not a guessed package",
+            emptyMap<String, ArgSource>(),
+            (result as PlanningResult.Planned).plan.steps.single().invocation.args,
+        )
     }
 
     /**
@@ -2434,7 +2855,18 @@ class ToolArgumentSortGuardTest {
 `productionAuthoredDescriptors()` is a private helper in **this** file. Build the three authored
 sources the way `Tier0IntentToolSourceTest` builds its one (`:54`) and extend it with
 `SystemIntentToolSource` and `MemoryToolSource` — that file builds **only** `Tier0IntentToolSource`,
-so it is a template for constructor arguments, not a complete list.
+so it is a template for constructor arguments, not a complete list. The form that compiled and ran
+green on the copy of the tree (2026-09-25):
+
+```kotlin
+    private fun productionAuthoredDescriptors(): List<ToolDescriptor> =
+        Tier0IntentToolSource(ToolPermissionCatalog(), PermissionPresence { true }).all() +
+            SystemIntentToolSource(DefaultActionCatalog()).all() +
+            MemoryToolSource().all()
+```
+with `import com.sidr.launcher.data.repository.action.DefaultActionCatalog` and
+`import com.sidr.launcher.data.repository.agent.memory.MemoryToolSource`; `PermissionPresence { true }`
+is `Tier0IntentToolSourceTest`'s `grantsEverything` (`:40`) inlined.
 
 - [ ] **Step 4: rewrite the planner's resolution block**
 
@@ -2475,12 +2907,23 @@ string convention, not a type" — so they describe the catalog. A KDoc still cl
 convention after the spelling stopped deciding is exactly the "evidence that does not describe the
 thing it is believed to describe" this block is named for.
 
-- [ ] **Step 5: adapt the three existing tests — they WILL break, and that is expected**
+- [ ] **Step 5: adapt all NINE construction sites — they WILL break, and which sorts each gets is the decision**
 
-`:243`, `:267` and `:283` all construct `ToolMatchPlanner(appSelector, appTargetsOf(...))` against
-`test_app_tool`, which has no production row. Each gains `appSorts` as its third argument. **No
-assertion in any of the three changes** — if one has to, stop: this task must not change behaviour
-for a tool that declares its sort, and an assertion that must move is a finding for the log.
+A third constructor parameter breaks every `ToolMatchPlanner(` in the tree, and there are nine, in
+five files (P11) — not the three tests the first version of this step named:
+
+| Site | Gets | Why |
+|---|---|---|
+| `ToolMatchPlannerTest:244`, `:272`, `:276`, `:284` (the three tests at `:243`, `:267`, `:283`) | `appSorts` | they plan `test_app_tool`, which has no production row |
+| `ToolMatchPlannerTest:54` (the class-level `planner`) | `ToolArgumentSorts()` | it plans the production vocabulary's tools |
+| `SelectionDeclineMeasurement:164`, `Tier0ToolExecutionEndToEndTest:151`, `FreeTextGoalEndToEndTest:143`, `AgentActingSeamTest:224` | `ToolArgumentSorts()` | production-shaped wirings: the production rows are exactly what they must exercise — `AgentActingSeamTest`'s uninstall tests depend on `uninstall_app` being resolved |
+
+**No assertion at any of the nine changes** — if one has to, stop: this task must not change
+behaviour for a tool that declares its sort, and an assertion that must move is a finding for the
+log. Measured 2026-09-25 on a copy of the tree with this task applied from this plan's own code
+blocks (under the pre-Task-3 `plan(goal, registry)` signature): `:data:repository` **380** green,
+376 + the four new tests, no existing assertion touched; `kaptDebugKotlin` accepted the `internal`
+primary + `@Inject` secondary constructor.
 
 - [ ] **Step 6: run, expect green**
 
@@ -2491,28 +2934,47 @@ tools/gate.sh --scoped :data:repository:testDebugUnitTest
 - [ ] **Step 7: three mutations, each on a named assert**
 
 ```bash
+MUT="$(mktemp -d -t sidr-mut-XXXXXX)"
+T=data/repository/src/main/java/com/sidr/launcher/data/repository/agent/ToolArgumentSorts.kt
+M=data/repository/src/main/java/com/sidr/launcher/data/repository/agent/ToolMatchPlanner.kt
+
 # M8a — delete a row: totality must bite
-sed -i '/Tier0ToolIds.OPEN_APP_INFO to AppArgumentBinding/d' \
-  data/repository/src/main/java/com/sidr/launcher/data/repository/agent/ToolArgumentSorts.kt
-tools/gate.sh --scoped :data:repository:testDebugUnitTest  # expect RED on
-                                                  # `every production tool declaring an app argument has a sort row`
-git checkout data/repository/src/main/java/com/sidr/launcher/data/repository/agent/ToolArgumentSorts.kt
+cp "$T" "$MUT/m8a"
+sed -i '/Tier0ToolIds.OPEN_APP_INFO to AppArgumentBinding/d' "$T"
+tools/gate.sh --scoped :data:repository:testDebugUnitTest
+cp "$MUT/m8a" "$T"
 
 # M8b — misname a row's argument: the orphan check must bite
-sed -i 's/Tier0ToolIds.UNINSTALL_APP to AppArgumentBinding(arg = "app"/Tier0ToolIds.UNINSTALL_APP to AppArgumentBinding(arg = "package"/' \
-  data/repository/src/main/java/com/sidr/launcher/data/repository/agent/ToolArgumentSorts.kt
-tools/gate.sh --scoped :data:repository:testDebugUnitTest  # expect RED on `no sort row names an argument its tool does not declare`
-git checkout data/repository/src/main/java/com/sidr/launcher/data/repository/agent/ToolArgumentSorts.kt
+cp "$T" "$MUT/m8b"
+sed -i 's/Tier0ToolIds.UNINSTALL_APP to AppArgumentBinding(arg = "app"/Tier0ToolIds.UNINSTALL_APP to AppArgumentBinding(arg = "package"/' "$T"
+tools/gate.sh --scoped :data:repository:testDebugUnitTest
+cp "$MUT/m8b" "$T"
 
 # M8c — stop reading `required`: R14-37 must come back
-sed -i 's/if (raw.isBlank() \&\& !appArg.required) {/if (false) {/' \
-  data/repository/src/main/java/com/sidr/launcher/data/repository/agent/ToolMatchPlanner.kt
-tools/gate.sh --scoped :data:repository:testDebugUnitTest  # expect RED on
-                                                  # `an optional app argument the vocabulary did not supply does not kill the plan`
-git checkout data/repository/src/main/java/com/sidr/launcher/data/repository/agent/ToolMatchPlanner.kt
+cp "$M" "$MUT/m8c"
+sed -i 's/if (raw.isBlank() \&\& !appArg.required) {/if (false) {/' "$M"
+tools/gate.sh --scoped :data:repository:testDebugUnitTest
+cp "$MUT/m8c" "$M"
 ```
-Re-apply steps 1 and 4 after any `git checkout` that reverts them; confirm with `git diff` before
-moving on.
+
+**`ToolArgumentSorts.kt` is a file this task CREATED, so `git checkout` could never have undone M8a
+or M8b**: on an untracked file it fails with exit 1 and leaves the mutation in place. Under the
+first version of this step M8a's deleted row would have survived into M8b and M8c, both would have
+gone red because of it, and both would have been logged as proved (§0.6 finding 2).
+
+`FAILED ::` sets — **measured**, not predicted: the three runs above were executed on 2026-09-25 on a
+copy of the tree carrying this task, with exactly these commands.
+
+| Mutation | Failing tests | Count |
+|---|---|---:|
+| M8a | `ToolArgumentSortGuardTest` > `every production tool declaring an app argument has a sort row` | 1 |
+| M8b | `ToolArgumentSortGuardTest` > `no sort row names an argument its tool does not declare`; and `AgentActingSeamTest` > `a typed uninstall command stops at AwaitingConsent with the resolved package already bound` / `consent granted - the uninstall dispatches the resolved package and the trace records the order` / `our own package is refused by the worker - after a consent card has already named it` / `R14-39 - an unresolvable target makes a matched tool command fall through to the cloud model` | 5 |
+| M8c | `ToolMatchPlannerTest` > `an optional app argument the vocabulary did not supply does not kill the plan` | 1 |
+
+M8b's four extra reds are **expected, not a regression**: a row whose `arg` names nothing makes the
+planner resolve nothing for `uninstall_app`, and those four tests are the behaviour that resolution
+carries. What M8b proves is that the orphan guard is **among** them — the guard catches the
+misnamed row at the catalog, before anything downstream has to.
 
 - [ ] **Step 8: gate from a cleared tree, then commit**
 
@@ -2520,7 +2982,7 @@ moving on.
 tools/gate.sh
 ```
 **Recount before the run:** step 2 adds two `@Test`s, step 3 adds two, and step 5 adds none (it
-adapts three). That is **+4**, not +5 — and the phase total below is computed with +4. If your own
+adapts nine construction sites). That is **+4**, not +5 (measured on the copy: 376 → 380) — and the phase total below is computed with +4. If your own
 count differs, reconcile it **before** running, not after.
 Expected: `GATE GREEN`, `TOTAL tests=1461`, `:data:repository` 384.
 
@@ -2547,15 +3009,24 @@ refactor(agentic-6/A4' ф0): сорт объявляется инструмен�
 
 Два конструктора не украшение: production-карта в private companion не
 варьируется тестом, а тестам нужен ряд для синтетического test_app_tool.
-Форма RoomAgentSessionStore; Dagger по-прежнему видит конструктор без
-аргументов.
+Форма RoomAgentSessionStore, но первичный здесь internal, а там публичный;
+Dagger видит только @Inject-конструктор без аргументов (kapt это принял).
+
+R14-37 держит тест через ВТОРОЙ селектор с голым триггером: appSelector
+объявляет argName = "app", а словарь такой записи голый триггер не
+отдаёт, так что через него цель отказывалась в селекторе, до блока
+разрешения. Девять площадок конструктора ToolMatchPlanner, а не три:
+синтетические — appSorts, производственные — ToolArgumentSorts().
 
 ToolDescriptor НЕ ТРОНУТ (17 production-файлов в четырёх модулях),
 ArgType НЕ ТРОНУТ, F6 ОСТАЁТСЯ В СИЛЕ — подтверждение с назначенным
 сроком пересмотра (фаза 3, §7.8), а не переоткрытие.
 
-Мутации: M8a (удалить ряд) -> RED, M8b (переименовать аргумент ряда) ->
-RED, M8c (перестать читать required) -> RED.
+Мутации по протоколу cp (ToolArgumentSorts.kt создан этой задачей —
+git checkout его не откатил бы вовсе): M8a (удалить ряд) -> RED, один
+тест; M8b (переименовать аргумент ряда) -> RED, гвард сирот плюс четыре
+теста удаления в AgentActingSeamTest — ожидаемо; M8c (перестать читать
+required) -> RED, один тест.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 EOF
@@ -2599,17 +3070,29 @@ In `app/build.gradle.kts`, above `android { }`:
  * Falls back to `unknown` rather than failing the build: a source archive with no `.git`, or a
  * machine with no `git` on `PATH`, must still assemble. `-dirty` is not cosmetic — it is the
  * difference between "the owner accepted commit X" and "the owner accepted something near X".
+ *
+ * `runCatching`, not `.orElse("unknown")`: a non-zero `git` exit is an EXCEPTION thrown by `.get()`
+ * ("finished with non-zero exit value 128"), not an absent value, so `orElse` never sees it —
+ * measured on Gradle 9.5.0 outside a git checkout, where the `orElse` form failed the build and
+ * this one printed `unknown`. `ifEmpty` covers the other way to get nothing: a `git` that exits 0
+ * and prints nothing.
  */
-val gitVersionSuffix: String = providers.exec {
-    commandLine("git", "describe", "--always", "--dirty", "--abbrev=7")
-}.standardOutput.asText.map { it.trim() }.orElse("unknown").get()
+val gitVersionSuffix: String = runCatching {
+    providers.exec {
+        commandLine("git", "describe", "--always", "--dirty", "--abbrev=7")
+    }.standardOutput.asText.get().trim().ifEmpty { "unknown" }
+}.getOrDefault("unknown")
 ```
 and in `defaultConfig`: `versionName = "0.1.0+$gitVersionSuffix"`.
 
-If `providers.exec { }` is unavailable or throws on a non-zero `git` exit in this Gradle/AGP
-combination, fall back to a `ProcessBuilder` read wrapped in `runCatching { … }.getOrDefault("unknown")`
-— and **say in the task log which one shipped**, because the two behave differently outside a git
-checkout.
+**The first version of this step used `.map { it.trim() }.orElse("unknown").get()` and claimed the
+same fallback in its KDoc — and step 2, which runs inside a git checkout, could never have shown
+that the claim was false** (§0.6 finding 4). Both forms were run on 2026-09-25 in a throwaway
+Gradle 9.5.0 project outside any git repository (plain Gradle, no AGP): the `orElse` form failed
+with `Process 'command 'git'' finished with non-zero exit value 128`, exit 1; the form above printed
+`unknown`, exit 0. **Not run:** the form above inside AGP 9.3.1's `app/build.gradle.kts`. Step 2
+covers the happy path there; that AGP does not change how a configuration-time `providers.exec`
+fails is reasoning, not a measurement.
 
 - [ ] **Step 2: verify the value actually reaches the manifest**
 
@@ -2736,9 +3219,12 @@ feat(agentic-6/A4' ф0): versionName из git-хэша, видимый в Нас
 считая провайдера настроенным.
 
 versionName = "0.1.0+<git describe --always --dirty --abbrev=7>";
-падение назад на `unknown`, чтобы дерево без .git собиралось. `-dirty`
-не косметика: это разница между «владелец принял коммит X» и «владелец
-принял что-то около X».
+падение назад на `unknown`, чтобы дерево без .git собиралось. Через
+runCatching, а не .orElse(): ненулевой код git — исключение из .get(),
+а не отсутствующее значение, и orElse его не видит (замерено на Gradle
+9.5.0 вне git: форма с orElse валит сборку, эта печатает unknown).
+`-dirty` не косметика: это разница между «владелец принял коммит X» и
+«владелец принял что-то около X».
 
 Порт AppBuildInfo в :domain + AndroidAppBuildInfo в :core:android, форма
 DeviceProfileProvider — feature/settings не видит BuildConfig из :app, а
@@ -2840,7 +3326,10 @@ Keep it to what is true:
   date, and usage recorded before it does not exist;
 - **the rendering hypotheses this phase shipped**: four new keys × three locales that nobody has seen
   on a screen, plus the Settings placement — all of it goes to the acceptance checklist in the
-  hypothesis tone;
+  hypothesis tone; **and one deliberate change to an owner-accepted rendering**: a paused plan's
+  cursor step no longer reads «in progress» / «выполняется» but «waiting for you» / «ждёт вас» — the
+  2026-08-22 byte-identity baseline in `AgentSessionSurfaceProvenanceTest` moved by one word (D2),
+  its subject did not;
 - **what phase 0 did NOT close, named rather than implied absent**: staleness layer 1 (→ phase 2,
   with re-planning and `PlanningRequest.priorObservations`), staleness layer 2 (→ excluded, the
   `ShortcutRefreshTrigger` address), 0.2(2)'s inert `DURABLE_EFFECT` (→ phase 2, §6.1), the
@@ -2850,8 +3339,12 @@ Keep it to what is true:
 - **the restatement of entry 6's trigger** (§3 0.2(3)): it arrived, in a form the trigger did not
   predict — the vocabulary gap surfaced through a one-step tool reporting a false success, not
   through a multi-step plan failing in public. That sentence belongs in the block's ADR at close;
-- **the plan-review record** (§0.5): sixteen defects found in this plan before its first task, three
-  blocking. Worth carrying because the phase-1 plan will be written by the same hand.
+- **the plan-review record** (§0.5, §0.6): sixteen defects found in this plan by the first review,
+  three blocking, and fifteen more by the second — the worst two **in the evidence machinery**
+  (`tools/gate.sh` counting other modules' leftovers; mutations undone with `git checkout`), each
+  found only by running it. Worth carrying because the phase-1 plan will be written by the same
+  hand, and because the rule it bought — *the tooling that produces evidence is proved by making it
+  lie on purpose* — applies to every plan after this one.
 
 - [ ] **Step 6: propose the phase commit to the owner**
 
@@ -2914,9 +3407,12 @@ domain ones; `anyStepHandedOff()` is defined in Task 6 and used there and in Tas
 sites) and 10; `ToolArgumentSorts.appBindingFor` / `AppArgumentBinding` are used under those names in
 Task 8's planner, fixtures and both guards.
 
-**Placeholders:** every code step carries its code, except four places that deliberately carry an
-instruction instead — Task 4 step 1's session construction, Task 6 step 8's surface wiring, Task 8
-step 3's `productionAuthoredDescriptors()`, and Task 1 step 1's same helper. In all four the
-instruction is *"read the neighbouring test and reuse its construction"*, which after §0.5 finding 3
-is stricter than inventing a fixture shape, not looser — three of this plan's sixteen review findings
-were invented helpers.
+**Placeholders:** every code step carries its code, except two places that deliberately carry an
+instruction instead — Task 6 step 8's surface wiring and Task 1 step 1's
+`productionAuthoredDescriptors()`. In both the instruction is *"read the neighbouring test and reuse
+its construction"*, which after §0.5 finding 3 is stricter than inventing a fixture shape, not
+looser — three of the first review's sixteen findings were invented helpers. Two former placeholders
+became code after the second review, and it matters which way: Task 4 step 1's "copy the nearest
+round-trip test" pointed at a decode-only test (§0.6 finding 8), and Task 8 step 3's helper is now the
+form that compiled and ran on a copy of the tree. An instruction to copy a neighbour is only as good
+as the neighbour it names.

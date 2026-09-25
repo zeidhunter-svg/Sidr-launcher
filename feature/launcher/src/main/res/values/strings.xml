@@ -195,6 +195,9 @@
     <string name="launcher_agent_step_state_failed">did not work</string>
     <string name="launcher_agent_step_state_current">in progress</string>
     <string name="launcher_agent_step_state_pending">not started</string>
+    <string name="launcher_agent_step_state_observed">nothing changed</string>
+    <string name="launcher_agent_step_state_handed_off">handed to the system</string>
+    <string name="launcher_agent_step_state_waiting">waiting for you</string>
     <string name="launcher_agent_failed_title">This plan could not finish</string>
     <string name="launcher_agent_blocked_title">Plan stopped</string>
     <string name="launcher_agent_blocked_body">Sidr stopped this plan because it could no longer follow it safely. Nothing further will run.</string>

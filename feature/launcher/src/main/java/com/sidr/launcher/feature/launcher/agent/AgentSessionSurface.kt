@@ -141,7 +141,10 @@ internal fun AgentSessionSurface(
         // skipped by its precondition, or with a failed step the budget let pass, is a PARTIAL result
         // and `DOC-ILM-4` says it must be shown as one rather than as success (review finding F3).
         ExecutionState.Completed -> {
-            val whole = session.everyStepExecuted()
+            // «План выполнен» requires both: every step ran, and no step's outcome is out of our
+            // sight. A cancelled `uninstall_app` satisfies the first and fails the second, which is
+            // exactly the case `DOC-ILM-4` is about.
+            val whole = session.everyStepExecuted() && !session.anyStepHandedOff()
             SidrResultSurface(
                 tone = if (whole) SidrResultTone.Completed else SidrResultTone.Partial,
                 title = if (whole) title else sidrString(R.string.launcher_agent_completed_partial_title),

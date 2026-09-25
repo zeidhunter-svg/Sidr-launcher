@@ -125,6 +125,9 @@
     <string name="launcher_agent_step_state_failed">не получилось</string>
     <string name="launcher_agent_step_state_current">выполняется</string>
     <string name="launcher_agent_step_state_pending">не начат</string>
+    <string name="launcher_agent_step_state_observed">без изменений</string>
+    <string name="launcher_agent_step_state_handed_off">передано системе</string>
+    <string name="launcher_agent_step_state_waiting">ждёт вас</string>
     <string name="launcher_agent_failed_title">План не удалось завершить</string>
     <string name="launcher_agent_blocked_title">План остановлен</string>
     <string name="launcher_agent_blocked_body">Sidr остановил этот план: продолжать его безопасно уже нельзя. Больше ничего не выполнится.</string>

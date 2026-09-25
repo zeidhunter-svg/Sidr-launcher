@@ -125,6 +125,9 @@
     <string name="launcher_agent_step_state_failed">olmadı</string>
     <string name="launcher_agent_step_state_current">sürüyor</string>
     <string name="launcher_agent_step_state_pending">başlamadı</string>
+    <string name="launcher_agent_step_state_observed">değişiklik yok</string>
+    <string name="launcher_agent_step_state_handed_off">sisteme aktarıldı</string>
+    <string name="launcher_agent_step_state_waiting">sizi bekliyor</string>
     <string name="launcher_agent_failed_title">Bu plan tamamlanamadı</string>
     <string name="launcher_agent_blocked_title">Plan durduruldu</string>
     <string name="launcher_agent_blocked_body">Sidr bu planı durdurdu, çünkü artık güvenle sürdüremiyordu. Başka hiçbir şey çalışmayacak.</string>

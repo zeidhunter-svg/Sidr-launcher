@@ -47,8 +47,10 @@ import org.junit.Test
  *    a plan in which nothing succeeded.
  *
  * These are pure functions over the session, so they are tested without Compose. The localized status
- * word each state maps to is `@Composable` and lives beside them; what matters here is that the five
- * states are distinguishable at all, which is what `R-ADL-2` needs and what a colour alone cannot give.
+ * word each state maps to is `@Composable` and lives beside them; what matters here is that the states
+ * — eight since A4′ phase 0, over four markers — are distinguishable at all, which is what `R-ADL-2`
+ * needs and what a colour alone cannot give. The word half of that is held over the resources by
+ * `StepStateWordDistinctnessGuardTest` (`:app`), because a JVM test cannot call `word()`.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AgentSessionPresentationTest {
@@ -117,12 +119,18 @@ class AgentSessionPresentationTest {
         assertFalse("nothing ran successfully — this is not a whole plan", s.everyStepExecuted())
     }
 
+    /**
+     * Renamed in A4′ phase 0 (Task 6) from `the step at the cursor is current and the ones after it are
+     * pending`: the session it builds is `AwaitingConsent`, and a step the engine STOPPED on for consent
+     * is not in progress (D2) — a name saying `current` over an assertion of `WAITING` would be the
+     * next reader's trap. Step 0 is an `Observed` step, so it is `OBSERVED`, not `DONE` (D1).
+     */
     @Test
-    fun `the step at the cursor is current and the ones after it are pending`() = runTest {
+    fun `a gated session marks the gated step waiting, not current`() = runTest {
         val s = session(cursor = 1, state = ExecutionState.AwaitingConsent, observations = mapOf(0 to notInstalled))
 
-        assertEquals(AgentStepState.DONE, s.stateOf(s.plan.steps[0]))
-        assertEquals(AgentStepState.CURRENT, s.stateOf(s.plan.steps[1]))
+        assertEquals(AgentStepState.OBSERVED, s.stateOf(s.plan.steps[0]))
+        assertEquals(AgentStepState.WAITING, s.stateOf(s.plan.steps[1]))
         assertEquals(SidrStatus.ATTENTION, s.stateOf(s.plan.steps[1]).marker())
     }
 
@@ -138,6 +146,8 @@ class AgentSessionPresentationTest {
     /**
      * The non-vacuity half: the run in which every step really did execute must still read as whole,
      * or the `Partial` tone would simply have replaced the `Completed` one everywhere.
+     *
+     * An `Observed` step ran — it is `OBSERVED`, not `DONE`; that distinction is D1 (A4′ phase 0).
      */
     @Test
     fun `a plan whose every step ran is whole`() = runTest {
@@ -147,26 +157,108 @@ class AgentSessionPresentationTest {
         )
 
         assertTrue(s.everyStepExecuted())
-        assertEquals(AgentStepState.DONE, s.stateOf(s.plan.steps[0]))
+        assertEquals(AgentStepState.OBSERVED, s.stateOf(s.plan.steps[0]))
         assertEquals(AgentStepState.DONE, s.stateOf(s.plan.steps[1]))
     }
 
     /**
-     * Every state must reach a distinguishable marker OR be told apart by its word — five states over
-     * four markers, so `SKIPPED` and `PENDING` deliberately share `INFO` and are separated by the
-     * label. This pins that no two states collapse to the *same pair*, which is the property
-     * `R-ADL-2` actually needs.
+     * **This test holds the MARKER half of the property its name states, and only that half.**
+     *
+     * Rewritten in A4′ phase 0 (Task 6). It used to assert "four distinct markers, and `SKIPPED` shares
+     * `PENDING`'s", with a message calling any other shared marker a collision. With eight states that
+     * assertion passes **unchanged** while its message becomes false: `INFO` is now shared by three
+     * states and `ATTENTION` by three more. It never contained a word and cannot — `word()` is
+     * `@Composable @ReadOnlyComposable` and unreachable from a JVM test.
+     *
+     * So it now pins what is actually true of the markers — eight states over four markers, in exactly
+     * two sharing groups — and says where the rest lives: within a sharing group the **word** is the
+     * only thing telling states apart (`R-ADL-2`: the dot is decorative), and word-distinctness is held
+     * over the real resources of all three locales by `StepStateWordDistinctnessGuardTest` in `:app`.
+     * Together the two hold "no two step states are indistinguishable"; neither does alone.
      */
     @Test
     fun `no two step states are indistinguishable`() {
-        val markers = AgentStepState.entries.associateWith { it.marker() }
+        val byMarker = AgentStepState.entries.groupBy { it.marker() }.mapValues { it.value.toSet() }
 
         assertEquals(
-            "SKIPPED and PENDING share a marker on purpose; anything else sharing one is a collision: $markers",
-            4,
-            markers.values.toSet().size,
+            "Eight step states render four markers, and two groups share one on purpose: INFO " +
+                "(OBSERVED / SKIPPED / PENDING) and ATTENTION (HANDED_OFF / CURRENT / WAITING). Inside " +
+                "each group the marker tells nothing apart — distinctness is carried by the WORD and is " +
+                "held elsewhere, by StepStateWordDistinctnessGuardTest over the en/ru/tr resources, " +
+                "because word() is @Composable and unreachable here. A change to this grouping must " +
+                "be checked against that guard. Actual grouping: $byMarker",
+            mapOf(
+                SidrStatus.SUCCESS to setOf(AgentStepState.DONE),
+                SidrStatus.DANGER to setOf(AgentStepState.FAILED),
+                SidrStatus.INFO to setOf(AgentStepState.OBSERVED, AgentStepState.SKIPPED, AgentStepState.PENDING),
+                SidrStatus.ATTENTION to setOf(AgentStepState.HANDED_OFF, AgentStepState.CURRENT, AgentStepState.WAITING),
+            ),
+            byMarker,
         )
-        assertEquals(markers[AgentStepState.SKIPPED], markers[AgentStepState.PENDING])
+    }
+
+    // ── A4′ phase 0, Task 6: the surface stops collapsing four realities into two words ──
+
+    /**
+     * D1 (spec §3 0.2(1б)) — the defect is WIDER than the ADR says. The ADR frames finding (a) as a
+     * worker problem; the 2026-09-21 measurement found the same lie where the worker is HONEST.
+     * The vocabulary is three-valued and this function had no branch for `Observed` at all, so
+     * «Открыть wattsupp — выполнено» was drawn for an app that does not exist, over a correct
+     * `Observed(APP_NOT_INSTALLED)`. That is A0's single most common shape, and it predates the
+     * whole A1″ block.
+     */
+    @Test
+    fun `an observation is not an execution`() = runTest {
+        val s = session(cursor = 1, state = ExecutionState.Running, observations = mapOf(0 to notInstalled))
+
+        assertEquals(AgentStepState.OBSERVED, s.stateOf(s.plan.steps[0]))
+        assertNotEquals(AgentStepState.DONE, s.stateOf(s.plan.steps[0]))
+    }
+
+    /**
+     * D2 (spec §3 0.2(1в)) — `CURRENT` was `step.index == cursor` with no reference to `state`, so
+     * a step the engine had STOPPED on was drawn as running while the same card carried the button
+     * asking the user to continue. The surface said «работает» and «нажмите, чтобы продолжить» at
+     * once.
+     */
+    @Test
+    fun `a step the engine stopped on is not in progress`() = runTest {
+        val gated = session(cursor = 1, state = ExecutionState.AwaitingConsent, observations = mapOf(0 to notInstalled))
+        val paused = session(cursor = 1, state = ExecutionState.Paused, observations = mapOf(0 to notInstalled))
+
+        assertEquals(AgentStepState.WAITING, gated.stateOf(gated.plan.steps[1]))
+        assertEquals(AgentStepState.WAITING, paused.stateOf(paused.plan.steps[1]))
+    }
+
+    /**
+     * The third instance of the same defect, found by this plan's pre-flight and named in no
+     * document (P4). `AgentExecutor.perform` advances the cursor BEFORE `ended(...)`, so a dead
+     * session pointed its cursor at a step that will never run — and that step read as «выполняется».
+     */
+    @Test
+    fun `a terminal session has nothing in progress`() = runTest {
+        val s = session(
+            cursor = 1,
+            state = ExecutionState.Failed,
+            observations = mapOf(0 to ToolResult.Failed(CommandFailure.Generic)),
+        )
+
+        assertEquals(AgentStepState.PENDING, s.stateOf(s.plan.steps[1]))
+        assertNotEquals(AgentStepState.CURRENT, s.stateOf(s.plan.steps[1]))
+    }
+
+    /**
+     * The fourth value reaches the screen, and the two predicates disagree about it on purpose: the
+     * step DID run (`everyStepExecuted`), and the plan still may not call itself whole
+     * (`anyStepHandedOff`). Step 8 of this task is what joins them at the one place it matters.
+     */
+    @Test
+    fun `a handed-off step is neither done nor a whole plan`() = runTest {
+        val s = session(cursor = 2, observations = mapOf(0 to notInstalled, 1 to ToolResult.HandedOff()))
+
+        assertEquals(AgentStepState.HANDED_OFF, s.stateOf(s.plan.steps[1]))
+        assertTrue("the step did run — that is a different question", s.everyStepExecuted())
+        assertTrue(s.anyStepHandedOff())
     }
 
     /**

@@ -38,9 +38,13 @@ import com.sidr.launcher.feature.launcher.R
  *    than a closed sum, so a new domain constant cannot be caught at compile time and the `else` arm is
  *    load-bearing: an unrecognised value falls through to a generic/unknown resource (see each
  *    function's own KDoc), never to a build failure or a blank line.
- *  - [stateOf] is a **subject-less** `when` over predicates, not a dispatch on a sum at all, so the
- *    language requires its `else`. It is the "none of the four signals fired" arm and reads
- *    [AgentStepState.PENDING] — see that function's own KDoc for the signals its four branches read.
+ *  - [stateOf] is two halves since A4′ phase 0, and only the second is outside the rule. A step with a
+ *    **recorded observation** is a dispatch on a sum — `ToolResult.stepState()`, exhaustive over
+ *    [ToolResult] with no `else`, so a fifth `ToolResult` value breaks this build. Only a step with
+ *    **no record** reaches the subject-less `when` that remains: it reads the trace, the cursor and the
+ *    session's own state, it is not a dispatch on a sum, so the language requires its `else` — and
+ *    that arm reads [AgentStepState.WAITING]: a step at the cursor of a session that is neither
+ *    running nor over. See that function's own KDoc for why its branches are ordered as they are.
  */
 
 /**
@@ -412,22 +416,61 @@ internal fun ConsentReason.gateType(): SidrActionGateType = when (this) {
  * Everything needed to tell them apart was already in the session: the observation for an executed
  * step, and `TraceEvent.StepSkipped` for a skipped one.
  */
-internal enum class AgentStepState { DONE, SKIPPED, FAILED, CURRENT, PENDING }
+internal enum class AgentStepState { DONE, OBSERVED, HANDED_OFF, SKIPPED, FAILED, CURRENT, WAITING, PENDING }
 
-internal fun AgentSession.stateOf(step: PlanStep): AgentStepState = when {
-    observations[step.index] is ToolResult.Failed -> AgentStepState.FAILED
-    observations[step.index] != null -> AgentStepState.DONE
-    trace.events.any { it is TraceEvent.StepSkipped && it.index == step.index } -> AgentStepState.SKIPPED
-    step.index == cursor -> AgentStepState.CURRENT
-    else -> AgentStepState.PENDING
+/**
+ * **The observation decides, exhaustively; only when there is none does the session decide.**
+ *
+ * `when (this)` over [ToolResult] with no `else` is the point of the split: this function had a
+ * `!= null -> DONE` catch-all, and that catch-all is precisely how `Observed` came to be drawn as
+ * «выполнено». A fifth [ToolResult] value is now a compile error here instead of a fifth silent
+ * success marker.
+ */
+private fun ToolResult.stepState(): AgentStepState = when (this) {
+    is ToolResult.Effected -> AgentStepState.DONE
+    is ToolResult.Observed -> AgentStepState.OBSERVED
+    is ToolResult.HandedOff -> AgentStepState.HANDED_OFF
+    is ToolResult.Failed -> AgentStepState.FAILED
 }
+
+/**
+ * Where one step actually stands — read from what the session recorded, and, for a step with no
+ * record yet, **from the session's own state** (A4' phase 0, spec §3 0.2(1б)(1в)).
+ *
+ * The 2026-08-23 round corrected the first half of this function (a step's marker had been derived
+ * from the cursor, collapsing ran / skipped / failed into SUCCESS) and left the second half
+ * uncorrected in three ways, all of which this rule closes at once:
+ *  - `Observed` had **no branch at all** and fell into `!= null -> DONE`, so the most common shape
+ *    A0 produces — "the app is not installed" — was drawn as «выполнено» (D1);
+ *  - `step.index == cursor -> CURRENT` never consulted `state`, so a step the engine had stopped
+ *    on for **consent** was drawn as «выполняется» beneath the button asking to continue (D2);
+ *  - the same line drew the cursor step of a **terminal** session as «выполняется», because
+ *    `AgentExecutor.perform` advances the cursor before `ended(...)` (found 2026-09-22, named in no
+ *    document before this one).
+ *
+ * The order is load-bearing and is not alphabetical: a recorded observation outranks any state, a
+ * skipped step outranks the cursor, and only a step that is *at* the cursor is allowed to ask what
+ * the session is doing.
+ */
+internal fun AgentSession.stateOf(step: PlanStep): AgentStepState =
+    observations[step.index]?.stepState()
+        ?: when {
+            trace.events.any { it is TraceEvent.StepSkipped && it.index == step.index } -> AgentStepState.SKIPPED
+            step.index != cursor -> AgentStepState.PENDING
+            state == ExecutionState.Running -> AgentStepState.CURRENT
+            state.isTerminal -> AgentStepState.PENDING
+            else -> AgentStepState.WAITING
+        }
 
 /** The dot. Decorative by `R-ADL-2` — [AgentStepState.word] is what actually carries the state. */
 internal fun AgentStepState.marker(): SidrStatus = when (this) {
     AgentStepState.DONE -> SidrStatus.SUCCESS
+    AgentStepState.OBSERVED -> SidrStatus.INFO
+    AgentStepState.HANDED_OFF -> SidrStatus.ATTENTION
     AgentStepState.SKIPPED -> SidrStatus.INFO
     AgentStepState.FAILED -> SidrStatus.DANGER
     AgentStepState.CURRENT -> SidrStatus.ATTENTION
+    AgentStepState.WAITING -> SidrStatus.ATTENTION
     AgentStepState.PENDING -> SidrStatus.INFO
 }
 
@@ -441,9 +484,12 @@ internal fun AgentStepState.marker(): SidrStatus = when (this) {
 @ReadOnlyComposable
 internal fun AgentStepState.word(): String = when (this) {
     AgentStepState.DONE -> sidrString(R.string.launcher_agent_step_state_done)
+    AgentStepState.OBSERVED -> sidrString(R.string.launcher_agent_step_state_observed)
+    AgentStepState.HANDED_OFF -> sidrString(R.string.launcher_agent_step_state_handed_off)
     AgentStepState.SKIPPED -> sidrString(R.string.launcher_agent_step_state_skipped)
     AgentStepState.FAILED -> sidrString(R.string.launcher_agent_step_state_failed)
     AgentStepState.CURRENT -> sidrString(R.string.launcher_agent_step_state_current)
+    AgentStepState.WAITING -> sidrString(R.string.launcher_agent_step_state_waiting)
     AgentStepState.PENDING -> sidrString(R.string.launcher_agent_step_state_pending)
 }
 
@@ -454,9 +500,24 @@ internal fun AgentStepState.word(): String = when (this) {
  * ran, and «План выполнен» over a plan half of which was skipped or failed is the exact shape
  * `DOC-ILM-4` forbids — a partial result presented as success. The surface pairs this with
  * `SidrResultTone.Partial`, which is the primitive already built for saying so.
+ *
+ * A [ToolResult.HandedOff] step **counts as executed here**, on purpose (A4′ phase 0): it did run.
+ * Whether its outcome is in sight is a different question, asked by [anyStepHandedOff], and the one
+ * place the two are joined is the `Completed` branch of `AgentSessionSurface`.
  */
 internal fun AgentSession.everyStepExecuted(): Boolean =
     plan.steps.all { step ->
         val observation = observations[step.index]
         observation != null && observation !is ToolResult.Failed
     }
+
+/**
+ * A step whose act left the launcher and whose outcome the launcher cannot see.
+ *
+ * **Deliberately a second predicate rather than a clause inside [everyStepExecuted]**, because the
+ * two ask different questions and folding them would make one name false: a handed-off step *did*
+ * execute. What it did not do is finish where we can see it. Keeping them apart also keeps each
+ * falsifiable on its own — one mutation per property, which is the rule this block pays for.
+ */
+internal fun AgentSession.anyStepHandedOff(): Boolean =
+    plan.steps.any { observations[it.index] is ToolResult.HandedOff }

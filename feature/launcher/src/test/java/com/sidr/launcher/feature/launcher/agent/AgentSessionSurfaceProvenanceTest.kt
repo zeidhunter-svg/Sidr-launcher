@@ -161,12 +161,18 @@ class AgentSessionSurfaceProvenanceTest {
      * The provenance map is empty here **on purpose** — that isolates the claim to the step line, which
      * is the half that must not move. What production actually passes, and what it adds to this same
      * plan, is the test immediately below.
+     *
+     * **A4′ phase 0 changed the STATE WORD of the paused step, deliberately, and the SUBJECT of neither
+     * sentence** (Task 6, D2): [a0Session] is `Paused` at `cursor = 0`, and a step the engine stopped on
+     * is not in progress, so «in progress» became «waiting for you». The baseline now pins the unchanged
+     * subject plus the corrected word — exact text, not a substring match on the subject, because the
+     * word is exactly what D2 is about.
      */
     @Test
     fun `the A0 two-step plan renders the two sentences it always has`() {
         render(a0Session(), emptyMap())
 
-        compose.onNodeWithText("Open убер — in progress").assertExists()
+        compose.onNodeWithText("Open убер — waiting for you").assertExists()
         compose.onNodeWithText("Find убер in the app store — not started").assertExists()
     }
 

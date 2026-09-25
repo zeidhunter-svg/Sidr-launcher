@@ -217,9 +217,11 @@ class AgentSessionPresentationTest {
 
     /**
      * D2 (spec §3 0.2(1в)) — `CURRENT` was `step.index == cursor` with no reference to `state`, so
-     * a step the engine had STOPPED on was drawn as running while the same card carried the button
-     * asking the user to continue. The surface said «работает» and «нажмите, чтобы продолжить» at
-     * once.
+     * a step the engine had STOPPED on was CURRENT. On screen that was the **Paused** card: the
+     * pending step read «выполняется» directly above the card's own «Продолжить», running and
+     * stopped at once. The gated half of this test holds the function only — `AwaitingConsent` draws
+     * no plan list, so that wrong answer was never on screen; it is pinned so that a future surface
+     * drawing the list there cannot inherit it.
      */
     @Test
     fun `a step the engine stopped on is not in progress`() = runTest {
@@ -233,7 +235,10 @@ class AgentSessionPresentationTest {
     /**
      * The third instance of the same defect, found by this plan's pre-flight and named in no
      * document (P4). `AgentExecutor.perform` advances the cursor BEFORE `ended(...)`, so a dead
-     * session pointed its cursor at a step that will never run — and that step read as «выполняется».
+     * session pointed its cursor at a step that will never run — and the function answered CURRENT
+     * for it. Wrong at the function, not drawn today: `Failed`/`Blocked` draw no step lines and
+     * `Cancelled` draws nothing, while `Completed` is reached only with the cursor past the last step.
+     * Corrected so that a future surface drawing the list in a terminal state cannot inherit it.
      */
     @Test
     fun `a terminal session has nothing in progress`() = runTest {

@@ -32,18 +32,32 @@ data class ConsentCheckpoint(val stepIndex: Int, val reason: ConsentReason)
  * it.** `withTimeout` cancels only at a *cancellable suspension point* inside the block; it interrupts
  * a tool suspended on `delay`, a future network call, or a future MCP call — the shape
  * `AgentExecutorTest`'s wall-clock tests model. A tool blocked in **non-suspending** code is not
- * interrupted, and the budget only bounds it once it returns. Every shipped Android world call is
- * exactly that shape today: `ContextIntentLauncher.launch` calls `startActivity` synchronously (a
- * plain `fun`, no suspension point), and the other workers — `SystemIntentToolWorker`,
- * `AndroidActionExecutor`, and the `:consumer:jvm` sandbox — reach the world through
- * `withContext(ioDispatcher)` around a **blocking** body, and `withContext` itself waits for that
- * body to return before the coroutine has anywhere to suspend. So a `set_timer` whose binder call
- * hangs, or a sandbox file read stuck on I/O, is bounded by nothing today, and a blocking call that
- * finishes after the deadline without ever suspending keeps its real result — not [ToolResult.HandedOff].
- * The A0 debt ("a hanging tool is bounded by nothing") is therefore **narrowed, not closed**: closed
- * for a suspending hang, latent for a synchronous one. Extending interruption to synchronous world
- * calls (a dedicated thread plus `Thread.interrupt`/cancellation, or a cooperative check inside each
- * worker) is an owner question at phase close (controller ruling R14), not decided by this task.
+ * interrupted, and the budget only bounds it once it returns. Every shipped call that leaves the
+ * launcher is a blocking call of that kind today, and so is the `:consumer:jvm` sandbox — so a
+ * `set_timer` whose binder call hangs, or a sandbox file read stuck on I/O, is bounded by nothing
+ * today. They come in two shapes, and the shapes differ in what a call that returns **after** the
+ * deadline records. Both consequences below are **by reading** kotlinx.coroutines' semantics, not
+ * measured:
+ *  - **purely synchronous** — `ContextIntentLauncher.launch` calls `startActivity` in a plain `fun`
+ *    (every Tier-0 tool), `ShortcutToolWorker` calls `startShortcut` the same way, and
+ *    `SandboxToolWorker.invoke` does its file I/O on the caller's thread with no `withContext` at all.
+ *    The block never suspends, and `withTimeout` hands back a value such a block returns even once
+ *    the deadline has passed: the call keeps its **real** result, not [ToolResult.HandedOff];
+ *  - **a blocking body inside `withContext(ioDispatcher)`** — `SystemIntentToolWorker` reaches the
+ *    world this way twice: `InstalledAppsRepositoryImpl.getInstalledApps` (the `PackageManager`
+ *    query every `launch_app` makes) and `AndroidActionExecutor.execute` (the `startActivity` of
+ *    `launch_app` and `play_store_search`). `withContext` runs the body as a child coroutine of the
+ *    timeout's scope; past the deadline that child is cancelled, the body still runs to its end, and
+ *    when it returns its value is **discarded** — the child completes cancelled, and the engine
+ *    records [ToolResult.HandedOff]. So a real `Observed(APP_NOT_INSTALLED)` from a `launch_app`
+ *    whose app query outlived the deadline would be recorded `HandedOff`, and A0's store step, whose
+ *    precondition asks for exactly that observation, would be skipped.
+ *
+ * In neither shape is the wait itself shortened. The A0 debt ("a hanging tool is bounded by nothing")
+ * is therefore **narrowed, not closed**: closed for a suspending hang, latent for a synchronous one.
+ * Extending interruption to synchronous world calls (a dedicated thread plus
+ * `Thread.interrupt`/cancellation, or a cooperative check inside each worker) is an owner question at
+ * phase close (controller ruling R14), not decided by this task.
  *
  * The default is an order of magnitude above the slowest path measured on the SM-A325F: the A0 ADR
  * (`ai-context/decisions.md`, the Task 15 device-acceptance section) measured the `launch_app`

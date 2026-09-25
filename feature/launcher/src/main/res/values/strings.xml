@@ -189,6 +189,8 @@
     <string name="launcher_agent_completed_title">Plan complete</string>
     <string name="launcher_agent_completed_partial_title">Plan finished, not every step ran</string>
     <string name="launcher_agent_completed_partial_body">Sidr went through the whole plan. Some steps did not run, and each one says which below.</string>
+    <string name="launcher_agent_completed_handed_off_title">Plan finished — the outcome is with the system</string>
+    <string name="launcher_agent_completed_handed_off_body">Sidr went through the whole plan. At least one step was handed to the system, and what happened after that is not visible to Sidr.</string>
     <string name="launcher_agent_step_line">%1$s — %2$s</string>
     <string name="launcher_agent_step_state_done">done</string>
     <string name="launcher_agent_step_state_skipped">not needed</string>

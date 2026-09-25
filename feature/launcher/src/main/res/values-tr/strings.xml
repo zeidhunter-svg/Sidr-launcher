@@ -119,6 +119,8 @@
     <string name="launcher_agent_completed_title">Plan tamamlandı</string>
     <string name="launcher_agent_completed_partial_title">Plan bitti, her adım çalışmadı</string>
     <string name="launcher_agent_completed_partial_body">Sidr planın tamamından geçti. Bazı adımlar çalışmadı — her birinin durumu aşağıda yazıyor.</string>
+    <string name="launcher_agent_completed_handed_off_title">Plan tamamlandı — sonuç sistemde</string>
+    <string name="launcher_agent_completed_handed_off_body">Sidr planı sonuna kadar yürüttü. En az bir adım sisteme aktarıldı; sonrasında ne olduğunu Sidr göremiyor.</string>
     <string name="launcher_agent_step_line">%1$s — %2$s</string>
     <string name="launcher_agent_step_state_done">yapıldı</string>
     <string name="launcher_agent_step_state_skipped">gerekmedi</string>

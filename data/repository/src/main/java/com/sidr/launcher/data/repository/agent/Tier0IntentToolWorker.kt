@@ -130,10 +130,14 @@ private const val ACTION_NOTIFICATION_SETTINGS = "android.settings.NOTIFICATION_
  * normally and throws nothing, and the caller's answer is byte-identical to the success case (rows
  * 16/28/32, measured on `ACTION_DELETE` itself; the refusal appears only in the responder's own
  * logcat, which another app cannot read). There **neither** catch fires in either direction, and the
- * precondition is the **only** signal there is: without it a refused step would be recorded
- * [ToolResult.Effected] in a trace `DOC-ILM-3` requires to be 1:1 with reality. Said the way it must
- * always be said: the precondition is **checked before the call**, and a refusal is never *detected*
- * afterwards — and it closes one cause of refusal only, a missing permission.
+ * precondition is the **only** signal there is: without it a refused step would come back exactly as
+ * a dispatched one does — since A4′ phase 0 (Task 5) that is [ToolResult.HandedOff], "handed to the
+ * system, outcome unknown", where it used to be [ToolResult.Effected]. The trace would no longer
+ * claim a removal, but it would still record a failure we can see before the call as an outcome we
+ * cannot see, in a trace `DOC-ILM-3` requires to be 1:1 with reality; with the check it is the
+ * [ToolResult.Failed] it really is. Said the way it must always be said: the precondition is
+ * **checked before the call**, and a refusal is never *detected* afterwards — and it closes one cause
+ * of refusal only, a missing permission.
  *
  * Neither may therefore be removed on the strength of the other, and the catch additionally covers a
  * state that is no permission at all — `ActivityNotFoundException` on a device with no clock app,
@@ -239,9 +243,11 @@ class Tier0IntentToolWorker @Inject constructor(
      *
      * Two refusals, both before the intent is built:
      *  - a **blank** target, for the same fail-closed reason `parseSeconds` and `parseClockTime`
-     *    decline what they cannot read: `package:` names no package, and reporting
-     *    [ToolResult.Effected] for an effect that cannot have happened is what `DOC-ILM-3` forbids. It
-     *    is a second line of defence — `ToolMatchPlanner` answers `NoPlan` when resolution fails, so a
+     *    decline what they cannot read: `package:` names no package, so the call cannot remove
+     *    anything and that is known before it is made. Without this check, a dispatch that returned
+     *    normally would come back as this arm's success, [ToolResult.HandedOff] (since A4′ phase 0,
+     *    Task 5 — [ToolResult.Effected] before it): "outcome unknown" for an outcome already known,
+     *    where the answer `DOC-ILM-3` requires is [ToolResult.Failed]. It is a second line of defence — `ToolMatchPlanner` answers `NoPlan` when resolution fails, so a
      *    blank should never arrive — and second lines are kept, not argued away;
      *  - **our own package** (owner condition 4, 2026-09-18): uninstalling Sidr mid-session kills the
      *    surface the session is running on. [ownPackageName] is injected rather than read from a

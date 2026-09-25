@@ -137,19 +137,39 @@ internal fun AgentSessionSurface(
             secondaryAction = dismiss,
         )
 
-        // «Plan complete» is only true when every step actually ran. A plan that closed with a step
-        // skipped by its precondition, or with a failed step the budget let pass, is a PARTIAL result
-        // and `DOC-ILM-4` says it must be shown as one rather than as success (review finding F3).
+        // «Plan complete» is only true when every step actually ran AND no step's outcome is out of
+        // our sight. Anything short of that is not success, and `DOC-ILM-4` says it must not be shown
+        // as success (review finding F3; A4′ phase 0).
         ExecutionState.Completed -> {
-            // «План выполнен» requires both: every step ran, and no step's outcome is out of our
-            // sight. A cancelled `uninstall_app` satisfies the first and fails the second, which is
-            // exactly the case `DOC-ILM-4` is about.
-            val whole = session.everyStepExecuted() && !session.anyStepHandedOff()
+            // Three outcomes, and the ORDER is the behaviour (final review, controller ruling R17):
+            //  1. a step did NOT run — skipped by its precondition, or failed and let pass by the
+            //     budget: the plan is partial, «выполнено не всё». Asked FIRST, because that stays true
+            //     even when another step was handed off, and the handed-off title below would hide it;
+            //  2. every step ran, but at least one was HANDED OFF — its act left the launcher and its
+            //     outcome is out of our sight (a cancelled `uninstall_app` is exactly this). Not
+            //     «План выполнен», which would claim an outcome we cannot see; and not «выполнено не
+            //     всё» either, whose body says a step «did not run» directly above a step list saying
+            //     «передано системе». Same `Partial` tone as (1): the result is not a whole success,
+            //     and no new status is invented for it;
+            //  3. otherwise the plan is whole.
+            val (tone, shownTitle, body) = when {
+                !session.everyStepExecuted() -> Triple(
+                    SidrResultTone.Partial,
+                    sidrString(R.string.launcher_agent_completed_partial_title),
+                    sidrString(R.string.launcher_agent_completed_partial_body),
+                )
+                session.anyStepHandedOff() -> Triple(
+                    SidrResultTone.Partial,
+                    sidrString(R.string.launcher_agent_completed_handed_off_title),
+                    sidrString(R.string.launcher_agent_completed_handed_off_body),
+                )
+                else -> Triple(SidrResultTone.Completed, title, null)
+            }
             SidrResultSurface(
-                tone = if (whole) SidrResultTone.Completed else SidrResultTone.Partial,
-                title = if (whole) title else sidrString(R.string.launcher_agent_completed_partial_title),
+                tone = tone,
+                title = shownTitle,
                 modifier = modifier,
-                body = if (whole) null else sidrString(R.string.launcher_agent_completed_partial_body),
+                body = body,
                 provenance = {
                     AgentPlanSteps(
                         session = session,

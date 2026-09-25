@@ -434,9 +434,11 @@ class Tier0IntentToolWorkerTest {
 
     /**
      * A blank target declines instead of dispatching, the same fail-closed reading [parseSeconds] and
-     * `parseClockTime` already carry: `Intent(ACTION_DELETE, "package:")` names no package, and an
-     * agent that fires an uninstall intent at nothing would report `Effected` over an effect that
-     * cannot have happened — which `DOC-ILM-3` forbids.
+     * `parseClockTime` already carry: `Intent(ACTION_DELETE, "package:")` names no package, so the
+     * call cannot remove anything and that is known before it is made. An agent that fired an
+     * uninstall intent at nothing would, if the dispatch returned normally, report `HandedOff`
+     * ("outcome unknown" — `Effected` until A4′ phase 0, Task 5) for an outcome already known; the
+     * `Failed` asserted below is the answer `DOC-ILM-3` requires.
      *
      * It is a second line of defence rather than the only one: `ToolMatchPlanner` declines with
      * `NoPlan` when `AppTargetResolver` cannot resolve a name, so a blank should never reach here.

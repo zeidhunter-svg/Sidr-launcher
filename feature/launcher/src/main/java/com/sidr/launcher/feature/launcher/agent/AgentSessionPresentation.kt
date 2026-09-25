@@ -443,10 +443,20 @@ private fun ToolResult.stepState(): AgentStepState = when (this) {
  *  - `Observed` had **no branch at all** and fell into `!= null -> DONE`, so the most common shape
  *    A0 produces — "the app is not installed" — was drawn as «выполнено» (D1);
  *  - `step.index == cursor -> CURRENT` never consulted `state`, so a step the engine had stopped
- *    on for **consent** was drawn as «выполняется» beneath the button asking to continue (D2);
- *  - the same line drew the cursor step of a **terminal** session as «выполняется», because
+ *    on was CURRENT whatever it had stopped for. On screen that was visible on the **Paused** card —
+ *    of the two states the engine stops in mid-plan, the only one that draws the plan list — where
+ *    the pending step read «выполняется» directly above «Продолжить» (D2). For a step stopped on
+ *    for **consent** the function gave the same wrong answer, but `AwaitingConsent` draws no plan
+ *    list (a named A0 limitation), so that half was wrong at the function and never drawn;
+ *  - the same line answered CURRENT for the cursor step of a **terminal** session, because
  *    `AgentExecutor.perform` advances the cursor before `ended(...)` (found 2026-09-22, named in no
- *    document before this one).
+ *    document before this one). Also wrong at the function and not drawn today: `Failed` and
+ *    `Blocked` draw no step lines, `Cancelled` draws nothing at all, and `Completed` — the one
+ *    terminal surface that does draw them — is reached only once the cursor is past the last step,
+ *    so no step sits at it.
+ *
+ * The two undrawn cases are corrected anyway, so that a future surface drawing the plan list in those
+ * states cannot inherit them.
  *
  * The order is load-bearing and is not alphabetical: a recorded observation outranks any state, a
  * skipped step outranks the cursor, and only a step that is *at* the cursor is allowed to ask what
@@ -502,8 +512,12 @@ internal fun AgentStepState.word(): String = when (this) {
  * `SidrResultTone.Partial`, which is the primitive already built for saying so.
  *
  * A [ToolResult.HandedOff] step **counts as executed here**, on purpose (A4′ phase 0): it did run.
- * Whether its outcome is in sight is a different question, asked by [anyStepHandedOff], and the one
- * place the two are joined is the `Completed` branch of `AgentSessionSurface`.
+ * Whether its outcome is in sight is a different question, asked by [anyStepHandedOff]. The one place
+ * the two are read together is the `Completed` branch of `AgentSessionSurface`, and they are read in
+ * ORDER, not joined into one boolean: this predicate first — a step that did not run makes the plan
+ * partial whatever else happened in it — and [anyStepHandedOff] only for a plan every step of which
+ * ran (final review, controller ruling R17; the two-way `&&` join it replaced sent a handed-off plan
+ * to the «not every step ran» title, contradicting its own step list).
  */
 internal fun AgentSession.everyStepExecuted(): Boolean =
     plan.steps.all { step ->
@@ -518,6 +532,10 @@ internal fun AgentSession.everyStepExecuted(): Boolean =
  * two ask different questions and folding them would make one name false: a handed-off step *did*
  * execute. What it did not do is finish where we can see it. Keeping them apart also keeps each
  * falsifiable on its own — one mutation per property, which is the rule this block pays for.
+ *
+ * On the `Completed` surface it is asked only after [everyStepExecuted] held, and a `true` there picks
+ * a title of its own («План пройден — исход за системой») — not the Partial «выполнено не всё», which
+ * would say of a step that ran that it did not.
  */
 internal fun AgentSession.anyStepHandedOff(): Boolean =
     plan.steps.any { observations[it.index] is ToolResult.HandedOff }

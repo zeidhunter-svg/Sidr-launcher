@@ -119,6 +119,8 @@
     <string name="launcher_agent_completed_title">План выполнен</string>
     <string name="launcher_agent_completed_partial_title">План пройден, выполнено не всё</string>
     <string name="launcher_agent_completed_partial_body">Sidr прошёл план до конца. Часть шагов не выполнялась — рядом с каждым написано, что с ним.</string>
+    <string name="launcher_agent_completed_handed_off_title">План пройден — исход за системой</string>
+    <string name="launcher_agent_completed_handed_off_body">Sidr прошёл план до конца. Как минимум один шаг передан системе, и что было дальше, Sidr не видит.</string>
     <string name="launcher_agent_step_line">%1$s — %2$s</string>
     <string name="launcher_agent_step_state_done">выполнено</string>
     <string name="launcher_agent_step_state_skipped">не потребовалось</string>

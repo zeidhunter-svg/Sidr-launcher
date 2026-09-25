@@ -32,7 +32,14 @@ data class SettingsUiState(
      * Replaces the inverted `llmRouterEnabled`, which made understanding itself opt-in.
      */
     val localOnlyMode: Boolean = false,
-    /** The installed build, `0.1.0+<git short sha>[-dirty]` — so an acceptance can name what it ran on. */
+    /**
+     * The installed build, `0.1.0+<git short sha>[-dirty]` — so an acceptance can name what it ran
+     * on. The sha comes from `git rev-parse --short=7 HEAD` (a minimum length, not an exact one);
+     * `-dirty` is appended when `git status --porcelain` is non-empty at build time, which is true
+     * for a modified TRACKED file and for an untracked one alike (`git describe --dirty` sees only
+     * the former — fix round 1, review finding 1). Ignored files do not count. Falls back to
+     * `"unknown"` (as `"0.1.0+unknown"`) outside a git checkout or with no `git` on `PATH`.
+     */
     val appVersion: String = "",
     val errorMessage: String? = null,
 )

@@ -15,9 +15,27 @@ plugins {
 /**
  * The build's identity, so an acceptance can name what it ran on (spec §4 proposal 8).
  *
+ * **Fix round 1 (review finding 1):** the first version used `git describe --always --dirty`,
+ * whose `--dirty` flag only sees changes to TRACKED files — measured in a scratch repo: after
+ * adding an untracked `New.kt`, it printed a bare sha with no `-dirty`. This task's own two new
+ * files landed as `??` in `git status`, so that form would have shown `0.1.0+<HEAD>` while the APK
+ * contained code not in HEAD — exactly the "accepted something near X" case this exists to rule
+ * out. It also (finding 2) prefers the nearest ANNOTATED tag over the sha when `--tags` is absent —
+ * measured with an annotated tag on HEAD, it printed the tag name with no hash at all.
+ *
+ * The mechanism now: sha from `git rev-parse --short=7 HEAD` (an exact commit, unlike `describe`,
+ * which can walk to an ancestor or a tag); dirty from `git status --porcelain` being non-empty,
+ * which is true for a modified tracked file AND for an untracked one — the property finding 1
+ * needed. **Ignored files do not count** (`--porcelain` omits them by default), so a build artifact
+ * excluded by `.gitignore` never spuriously marks the tree dirty. `--short=7` is a MINIMUM length,
+ * not an exact one, exactly like the old `--abbrev=7` was — said truthfully, not implied fixed.
+ *
  * Falls back to `unknown` rather than failing the build: a source archive with no `.git`, or a
- * machine with no `git` on `PATH`, must still assemble. `-dirty` is not cosmetic — it is the
- * difference between "the owner accepted commit X" and "the owner accepted something near X".
+ * machine with no `git` on `PATH`, must still assemble. Each `providers.exec` sits in its own
+ * `runCatching`, and the whole expression falls back to `unknown` when the sha cannot be read at
+ * all (outside a checkout, no git on `PATH`) — the dirty check running or not changes nothing in
+ * that case, since there is no sha to suffix. `-dirty` is not cosmetic — it is the difference
+ * between "the owner accepted commit X" and "the owner accepted something near X".
  *
  * `runCatching`, not `.orElse("unknown")`: a non-zero `git` exit is an EXCEPTION thrown by `.get()`
  * ("finished with non-zero exit value 128"), not an absent value, so `orElse` never sees it —
@@ -26,9 +44,15 @@ plugins {
  * and prints nothing.
  */
 val gitVersionSuffix: String = runCatching {
-    providers.exec {
-        commandLine("git", "describe", "--always", "--dirty", "--abbrev=7")
+    val sha = providers.exec {
+        commandLine("git", "rev-parse", "--short=7", "HEAD")
     }.standardOutput.asText.get().trim().ifEmpty { "unknown" }
+    val isDirty = runCatching {
+        providers.exec {
+            commandLine("git", "status", "--porcelain")
+        }.standardOutput.asText.get().isNotBlank()
+    }.getOrDefault(false)
+    if (isDirty) "$sha-dirty" else sha
 }.getOrDefault("unknown")
 
 android {

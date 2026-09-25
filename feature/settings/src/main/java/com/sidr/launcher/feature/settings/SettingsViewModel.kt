@@ -72,7 +72,10 @@ class SettingsViewModel @Inject constructor(
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = SettingsUiState(),
+        // Fix round 1 (review finding 4): appVersion is known immediately (it does not depend on
+        // either repository flow), so the initial emission carries it too — otherwise the line
+        // could render "Build " until both flows have emitted at least once.
+        initialValue = SettingsUiState(appVersion = buildInfo.versionName),
     )
 
     fun setAiSuggestionsEnabled(enabled: Boolean) {

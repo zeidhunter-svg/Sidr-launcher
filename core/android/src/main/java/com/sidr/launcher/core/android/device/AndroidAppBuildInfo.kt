@@ -12,8 +12,12 @@ import com.sidr.launcher.domain.device.AppBuildInfo
  * `:app`'s `DeviceProfileProvidesModule`.
  */
 class AndroidAppBuildInfo(private val context: Context) : AppBuildInfo {
-    override val versionName: String
-        get() = runCatching {
+    // Fix round 1 (review finding 3): the value cannot change while the process lives — the
+    // installed package's versionName is fixed at process start — so it is read once, not
+    // re-queried from PackageManager on every access (e.g. every `combine` emission upstream).
+    override val versionName: String by lazy {
+        runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
         }.getOrNull() ?: "unknown"
+    }
 }

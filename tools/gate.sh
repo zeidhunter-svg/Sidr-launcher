@@ -13,13 +13,27 @@
 # does not describe the thing it is believed to describe".
 #
 # TWO MODES, AND THEIR LABELS DIFFER ON PURPOSE.
-#   boundary (default) — the run that closes a task. Clears every module's results, passes
-#                        `--rerun-tasks`, compares the total against the 1440 baseline, and says
-#                        `GATE GREEN` / `GATE RED`.
+#   boundary (default) — the run that closes a task, and takes NO task list of its own (it is the
+#                        full gate by definition — see the two refusals below). Clears every module's
+#                        results, passes `--rerun-tasks`, and REQUIRES the total to reach the 1440
+#                        baseline floor before it will say `GATE GREEN`; short of the floor, or any
+#                        failure/error, it says `GATE RED`.
 #   --scoped           — a run inside a task: a TDD step or a mutation. Clears, COUNTS and reports
 #                        the named modules only, passes `--no-build-cache --no-watch-fs` instead of
 #                        `--rerun-tasks`, prints NO baseline comparison, and says
 #                        `SCOPED GREEN … — NOT a boundary gate`.
+#
+# TWO REFUSALS ADDED BY THE TASK 1 REVIEW (fix round 1, controller ruling R9 — diverges from the
+# plan's "run verbatim" instruction because the finding is Important and the plan's own §9.2 already
+# promised both properties this closes):
+#   * a boundary run given a positional task list refuses (`FATAL … exit 2`) instead of silently
+#     running that subset under the boundary label. Reproduced with a fake gradlew: a forgotten
+#     `--scoped` — `tools/gate.sh :app:testDebugUnitTest` — printed `TOTAL tests=60`, the
+#     `BASELINE … tests=1440` line, and `GATE GREEN`, exit 0.
+#   * a boundary run whose total falls below the 1440 baseline floor is `GATE RED`
+#     (`BELOW BASELINE :: …`), never `GATE GREEN` — the same reproduction shows this: failures=0 and
+#     errors=0 on a 60-test partial run used to read as green regardless of the baseline line sitting
+#     right above it.
 # The phase runs a dozen mutations; as one mode they were a dozen full `--rerun-tasks` sweeps. But
 # the saving is not why the labels differ: a cheap run that printed `GATE GREEN` would be a
 # false-green generator of exactly the kind this file exists to remove, and a scoped table compared
@@ -49,12 +63,23 @@ MODE=boundary
 case "${1:-}" in
   --boundary) MODE=boundary; shift ;;
   --scoped)   MODE=scoped;   shift ;;
-  -h|--help)  echo "usage: tools/gate.sh [--boundary|--scoped] [gradle tasks…]"; exit 0 ;;
+  -h|--help)  echo "usage: tools/gate.sh [--boundary] | --scoped :module:task…"; exit 0 ;;
 esac
 
 DEFAULT_TASKS=(:domain:jvmTest testDebugUnitTest assembleDebug :consumer:jvm:test)
 TASKS=("$@")
-[ "${#TASKS[@]}" -eq 0 ] && TASKS=("${DEFAULT_TASKS[@]}")
+
+# Task 1 review finding (Important): a boundary run used to accept a positional task list, so a
+# forgotten `--scoped` silently ran a SUBSET of the gate while still printing `GATE GREEN` and the
+# 1440 baseline line — reproduced with a fake gradlew: `tools/gate.sh :app:testDebugUnitTest`
+# printed `TOTAL tests=60`, `BASELINE … tests=1440`, `GATE GREEN`, exit 0. Boundary is the full gate
+# by definition, so it takes no task list at all — a subset must say `--scoped` and accept its
+# narrower verdict (`SCOPED GREEN … — NOT a boundary gate`), never the boundary label.
+if [ "$MODE" = boundary ] && [ "${#TASKS[@]}" -gt 0 ]; then
+  echo "FATAL: a boundary run takes no task list — it is the full gate by definition. For a subset use --scoped :module:task …" >&2
+  exit 2
+fi
+TASKS=("${DEFAULT_TASKS[@]}")
 
 # A scoped run must name modules, because "which results may I clear", "which results may I count"
 # and "what may I leave up-to-date" are all answered from the task path. An unqualified task
@@ -148,6 +173,7 @@ from xml.etree import ElementTree as ET
 
 root, mode = sys.argv[1], sys.argv[2]
 named = list(dict.fromkeys(sys.argv[3:]))
+BASELINE_TESTS = 1440
 per_module, failed = {}, []
 for path in glob.glob(os.path.join(root, "**", "build", "test-results", "**", "*.xml"),
                       recursive=True):
@@ -186,11 +212,21 @@ for line in failed:
     print(f"FAILED :: {line}")
 # The baseline belongs to a boundary run ONLY. Printing it under a scoped run would invite comparing
 # one module's count with a whole-tree number — a table describing five absent modules.
+below_baseline = False
 if mode == "boundary":
-    print("BASELINE at 2026-09-22 (074e4ce): tests=1440 failures=0 errors=0")
+    print(f"BASELINE at 2026-09-22 (074e4ce): tests={BASELINE_TESTS} failures=0 errors=0")
+    # Task 1 review finding (Important): a partial run — a module whose test task silently stopped
+    # producing XML, as well as the forgotten-`--scoped` case fix 1 above refuses outright — must not
+    # read as GATE GREEN just because failures=0 and errors=0. Reproduced: with only :app's 60 tests
+    # counted, the old script printed `GATE GREEN`. A total below the baseline floor is exactly the
+    # false green the header already claimed this script removes; now it actually does.
+    if total[0] < BASELINE_TESTS:
+        below_baseline = True
+        print(f"BELOW BASELINE :: tests={total[0]} < {BASELINE_TESTS} — a boundary run that counts "
+              f"fewer tests than the baseline is not green")
 else:
     print("SCOPED: this table counts the named modules only — NOT comparable with 1440")
-sys.exit(1 if (total[1] or total[2]) else 0)
+sys.exit(1 if (total[1] or total[2] or below_baseline) else 0)
 PY
 COUNT_EXIT=$?
 set -e

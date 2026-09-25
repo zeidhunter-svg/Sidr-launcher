@@ -12,6 +12,8 @@ import com.sidr.launcher.domain.tool.ToolRegistry
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.trace.TraceEvent
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 
 /**
  * The A0 engine: **exactly one transition per [advance]**, never a loop.
@@ -221,7 +223,17 @@ class AgentExecutor(
         // It is below the checkpoint by construction, and ToolExecutorCallSiteGuardTest fails the build
         // if a second call site ever appears.
         val result = try {
-            toolExecutor.invoke(resolved)
+            withTimeout(budget.maxStepWallClockMs) { toolExecutor.invoke(resolved) }
+        } catch (e: TimeoutCancellationException) {
+            // FIRST, and the order IS the behaviour: TimeoutCancellationException IS a
+            // CancellationException, so placing this after the rethrow below would send the timeout
+            // up as parent cancellation and kill the session instead of bounding the step.
+            //
+            // `HandedOff` rather than `Failed`, for the same reason `uninstall_app` reports it: the
+            // call was made and we stopped waiting. The side effect may have happened. `Failed`
+            // would claim knowledge in the other direction, and the whole point of the fourth value
+            // is that this engine stops claiming outcomes it cannot see.
+            ToolResult.HandedOff()
         } catch (e: CancellationException) {
             throw e // never swallow parent cancellation
         } catch (e: Exception) {

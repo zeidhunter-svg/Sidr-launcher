@@ -18,6 +18,7 @@ import com.sidr.launcher.domain.trace.ExecutionTrace
 import com.sidr.launcher.domain.trace.TraceEvent
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -281,6 +282,75 @@ class AgentExecutorTest {
         } catch (expected: CancellationException) {
             // the contract: parent cancellation is never swallowed
         }
+    }
+
+    // --- The wall-clock budget (A4' phase 0, Task 7) ---------------------------------------------
+
+    /**
+     * The A0 debt, closed: "a hanging tool is bounded by nothing" (`RuntimeBudget` bounded steps and
+     * consecutive failures only, and the domain is deliberately clock-free). A tool that never
+     * returns used to hold the session open forever with no trace event and no way out.
+     *
+     * The result recorded is `HandedOff` and not `Failed`, and the difference is the honest one: the
+     * call WAS made, we stopped waiting, and the side effect may well have happened. Recording a
+     * failure would claim knowledge in the other direction.
+     */
+    @Test
+    fun `a tool that never returns is cut at the wall-clock budget and recorded as handed off`() = runTest {
+        val hanging = object : ToolExecutor {
+            override suspend fun invoke(invocation: ResolvedInvocation): ToolResult {
+                delay(Long.MAX_VALUE / 2)
+                error("unreachable: the budget must cut this call")
+            }
+        }
+        val executor = AgentExecutor(
+            registry,
+            hanging,
+            RuntimeBudget(maxSteps = 8, maxConsecutiveFailures = 2, maxStepWallClockMs = 1_000),
+        )
+
+        val after = executor.advance(session())
+
+        assertTrue(after.observations[0] is ToolResult.HandedOff)
+        assertTrue(
+            "a cut step must still close its trace — a trace left mid-step means 'the process died'",
+            after.trace.events.any { it is TraceEvent.ToolObserved && it.index == 0 },
+        )
+        assertEquals(1, after.cursor)
+    }
+
+    /**
+     * The non-vacuity half. A budget that cut everything would pass the test above and destroy the
+     * product; a budget that cut nothing would pass this one. Both are needed, and the second is the
+     * one a "make it green" edit breaks.
+     */
+    @Test
+    fun `a tool that returns inside the budget keeps its own result`() = runTest {
+        val prompt = object : ToolExecutor {
+            override suspend fun invoke(invocation: ResolvedInvocation): ToolResult {
+                delay(10)
+                return notInstalled()
+            }
+        }
+        val executor = AgentExecutor(
+            registry,
+            prompt,
+            RuntimeBudget(maxSteps = 8, maxConsecutiveFailures = 2, maxStepWallClockMs = 1_000),
+        )
+
+        val after = executor.advance(session())
+
+        assertEquals(notInstalled(), after.observations[0])
+    }
+
+    /**
+     * The default is a product decision (10 s, an order of magnitude above the slowest measured
+     * path), not an accident of construction — and `RuntimeBudget.Default` is what `:app` binds.
+     * A change to it is a change to how long the launcher will sit on a hung tool.
+     */
+    @Test
+    fun `the shipped budget bounds a step by wall-clock time`() {
+        assertEquals(10_000L, RuntimeBudget.Default.maxStepWallClockMs)
     }
 
     // --- Fix round 1 regression + coverage tests -----------------------------------------------

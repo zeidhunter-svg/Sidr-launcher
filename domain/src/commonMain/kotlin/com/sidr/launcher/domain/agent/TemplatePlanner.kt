@@ -30,7 +30,8 @@ import com.sidr.launcher.domain.tool.ToolRegistry
  * already observed `APP_NOT_INSTALLED` keeps that observation and opens the store even if the app was
  * installed while the plan sat paused. Re-checking a precondition against a world that moved on is a
  * staleness concern, of a piece with the missing wall-clock budget, and belongs to A4' with the
- * execution model rather than to a half-patch here.
+ * execution model rather than to a half-patch here. Named as Layer 1 of the two staleness layers on
+ * [AgentSession.resumed] — read that KDoc for the full account and Layer 2.
  *
  * **Step 1 binds rather than repeats (F6).** Before the amendment the planner wrote the same literal
  * into both steps, so the two could silently disagree about what was being searched for — the plan

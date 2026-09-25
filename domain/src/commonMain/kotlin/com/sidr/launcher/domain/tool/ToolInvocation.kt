@@ -73,8 +73,8 @@ sealed interface ToolResult {
      *    silently (measured, rows 16/28/32). It is the only tool in the federation whose `Effected`
      *    could be false, and the only irreversible one, so this is where `DOC-ILM-3` (the trace is
      *    1:1 with reality) and `DOC-ILM-4` (a partial result is shown as partial) both bit.
-     *  - a step cut by [RuntimeBudget.maxStepWallClockMs] — the call was made, we stopped waiting,
-     *    and the side effect may well have happened.
+     *  - a step cut by [com.sidr.launcher.domain.agent.RuntimeBudget.maxStepWallClockMs] — the call
+     *    was made, we stopped waiting, and the side effect may well have happened.
      *
      * **This is not `ObservedFact` growing.** That type stays frozen at two values (A0.5's
      * record-don't-fix decision, held by `CoreVocabularyFreezeGuardTest`): `uninstall_app` has no

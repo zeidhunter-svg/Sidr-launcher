@@ -52,6 +52,7 @@
     <string name="settings_local_only_title">Local-only mode</string>
     <string name="settings_section_system">SYSTEM</string>
     <string name="settings_set_default_launcher_title">Set as default launcher</string>
+    <string name="settings_app_version_title">Build %1$s</string>
 
     <!-- ThemeOption/AccentOption display labels (SettingsUiState.kt values, resolved via SettingsLabels.kt) -->
     <string name="settings_theme_system">System default</string>

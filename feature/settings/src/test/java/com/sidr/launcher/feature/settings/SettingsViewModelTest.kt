@@ -5,6 +5,7 @@ import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeSuggestionScheduling
 import com.sidr.launcher.core.testing.FakeUserPreferencesRepository
+import com.sidr.launcher.domain.device.AppBuildInfo
 import com.sidr.launcher.domain.preferences.FeatureFlags
 import com.sidr.launcher.domain.preferences.UserPreferences
 import com.sidr.launcher.domain.result.OperationError
@@ -345,14 +346,24 @@ class SettingsViewModelTest {
         assertEquals(NavigationEvent.NavigateBack, event)
     }
 
+    @Test
+    fun `settings state carries the installed build's version`() = runTest(testDispatcher) {
+        val vm = buildViewModel(buildInfo = object : AppBuildInfo { override val versionName = "0.1.0+ab12cd3" })
+        advanceUntilIdle()
+
+        assertEquals("0.1.0+ab12cd3", vm.uiState.value.appVersion)
+    }
+
     private fun buildViewModel(
         flagRepo: FakeFeatureFlagRepository = FakeFeatureFlagRepository(),
         prefsRepo: FakeUserPreferencesRepository = FakeUserPreferencesRepository(),
         scheduling: FakeSuggestionScheduling = FakeSuggestionScheduling(),
+        buildInfo: AppBuildInfo = object : AppBuildInfo { override val versionName = "0.1.0+0000000" },
     ): SettingsViewModel = SettingsViewModel(
         featureFlagRepository = flagRepo,
         userPreferencesRepository = prefsRepo,
         suggestionScheduling = scheduling,
         ioDispatcher = testDispatcher,
+        buildInfo = buildInfo,
     )
 }

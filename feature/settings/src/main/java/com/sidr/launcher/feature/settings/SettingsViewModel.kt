@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.sidr.launcher.core.common.di.IoDispatcher
 import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
+import com.sidr.launcher.domain.device.AppBuildInfo
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.preferences.UserPreferencesRepository
 import com.sidr.launcher.domain.result.OperationResult
@@ -43,6 +44,7 @@ class SettingsViewModel @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
     private val suggestionScheduling: SuggestionScheduling,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    private val buildInfo: AppBuildInfo,
 ) : ViewModel() {
 
     private val _navigationEvents = Channel<NavigationEvent>(Channel.BUFFERED)
@@ -64,6 +66,7 @@ class SettingsViewModel @Inject constructor(
             micInputEnabled = preferences.micInputEnabled,
             autoHideNavBar = preferences.autoHideNavBar,
             localOnlyMode = flags.localOnlyMode,
+            appVersion = buildInfo.versionName,
             errorMessage = errorMessage,
         )
     }.stateIn(

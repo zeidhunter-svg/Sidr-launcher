@@ -269,6 +269,11 @@ private fun SettingsContent(
             // ── Default launcher ────────────────────────────────────────────────
             SidrSectionHeader(text = sidrString(R.string.settings_section_system))
             SidrNavigationRow(title = sidrString(R.string.settings_set_default_launcher_title), onClick = onSetDefaultLauncher)
+            com.sidr.launcher.core.ui.primitive.SidrText(
+                text = sidrString(R.string.settings_app_version_title, uiState.appVersion),
+                role = com.sidr.launcher.core.ui.primitive.SidrTextRole.PROVENANCE,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
 
             uiState.errorMessage?.let { message ->
                 com.sidr.launcher.core.ui.primitive.SidrText(

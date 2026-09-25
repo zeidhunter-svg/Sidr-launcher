@@ -32,6 +32,8 @@ data class SettingsUiState(
      * Replaces the inverted `llmRouterEnabled`, which made understanding itself opt-in.
      */
     val localOnlyMode: Boolean = false,
+    /** The installed build, `0.1.0+<git short sha>[-dirty]` — so an acceptance can name what it ran on. */
+    val appVersion: String = "",
     val errorMessage: String? = null,
 )
 

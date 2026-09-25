@@ -12,6 +12,25 @@ plugins {
     alias(libs.plugins.baselineprofile)
 }
 
+/**
+ * The build's identity, so an acceptance can name what it ran on (spec §4 proposal 8).
+ *
+ * Falls back to `unknown` rather than failing the build: a source archive with no `.git`, or a
+ * machine with no `git` on `PATH`, must still assemble. `-dirty` is not cosmetic — it is the
+ * difference between "the owner accepted commit X" and "the owner accepted something near X".
+ *
+ * `runCatching`, not `.orElse("unknown")`: a non-zero `git` exit is an EXCEPTION thrown by `.get()`
+ * ("finished with non-zero exit value 128"), not an absent value, so `orElse` never sees it —
+ * measured on Gradle 9.5.0 outside a git checkout, where the `orElse` form failed the build and
+ * this one printed `unknown`. `ifEmpty` covers the other way to get nothing: a `git` that exits 0
+ * and prints nothing.
+ */
+val gitVersionSuffix: String = runCatching {
+    providers.exec {
+        commandLine("git", "describe", "--always", "--dirty", "--abbrev=7")
+    }.standardOutput.asText.get().trim().ifEmpty { "unknown" }
+}.getOrDefault("unknown")
+
 android {
     namespace = "com.sidr.launcher"
     compileSdk = 37
@@ -23,7 +42,7 @@ android {
         // supported SDK at 36 and rejects targetSdkVersion=37. Revisit once Robolectric catches up.
         targetSdk = 36
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "0.1.0+$gitVersionSuffix"
         // A1″ Task 5 — instrumented measurement of `LauncherApps` must run under THIS package's uid,
         // because "am I the default home" is a property of the package asking. A library module's
         // androidTest would answer for its own test package instead.

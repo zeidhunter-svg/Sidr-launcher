@@ -46,6 +46,7 @@
     <string name="settings_local_only_title">Yalnızca yerel</string>
     <string name="settings_section_system">Sistem</string>
     <string name="settings_set_default_launcher_title">Varsayılan başlatıcı olarak ayarla</string>
+    <string name="settings_app_version_title">Sürüm %1$s</string>
 
     <string name="settings_theme_system">Sistem varsayılanı</string>
     <string name="settings_theme_light">Açık</string>

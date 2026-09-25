@@ -1,8 +1,10 @@
 package com.sidr.launcher.di
 
 import android.content.Context
+import com.sidr.launcher.core.android.device.AndroidAppBuildInfo
 import com.sidr.launcher.core.android.device.AndroidDeviceProfiler
 import com.sidr.launcher.core.common.di.ApplicationScope
+import com.sidr.launcher.domain.device.AppBuildInfo
 import com.sidr.launcher.domain.device.DeviceProfileProvider
 import com.sidr.launcher.domain.preferences.DeviceProfileCacheRepository
 import dagger.Module
@@ -34,4 +36,9 @@ object DeviceProfileProvidesModule {
         cacheRepository = cacheRepository,
         appScope = appScope,
     )
+
+    @Provides
+    @Singleton
+    fun provideAppBuildInfo(@ApplicationContext context: Context): AppBuildInfo =
+        AndroidAppBuildInfo(context = context)
 }

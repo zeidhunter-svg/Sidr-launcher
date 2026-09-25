@@ -27,6 +27,7 @@ import com.sidr.launcher.domain.trace.ExecutionTrace
 import com.sidr.launcher.domain.trace.TraceEvent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -256,6 +257,38 @@ class AgentSessionMappersTest {
         assertEquals(
             TraceEvent::class.sealedSubclasses.toSet(),
             oneOfEachEvent.map { it::class }.toSet(),
+        )
+    }
+
+    /**
+     * A0.5's "a whole class of reality unsayable" coming due (A1″ acceptance finding (a)):
+     * `uninstall_app` raises the OS dialog and the caller learns nothing about what the user then
+     * did. `Effected` claimed the removal happened; `Failed` claims a technical failure that did
+     * not occur; `Observed` needs a frozen `ObservedFact` that has no value for this. The fourth
+     * value says exactly what is true — the act left the launcher and the outcome is not ours to
+     * see — and it must survive the disk, or the trace goes on lying one save later.
+     *
+     * **Encode AND decode.** It goes out through the three `to…Entities` mappers and back through
+     * `toDomain`, like `every TraceEvent variant round-trips` — not a hand-written row, which would
+     * hold the reader only. M4a (decode) and M4c (encode) each redden it on its own.
+     */
+    @Test
+    fun `a HandedOff observation survives a round trip with its output`() {
+        val original = sessionWith(emptyList()).copy(
+            observations = mapOf(0 to ToolResult.HandedOff(ToolOutput(mapOf("dispatched_to" to "os-uninstaller")))),
+        )
+
+        val restored = AgentSessionMappers.toDomain(
+            AgentSessionMappers.toSessionEntity(original, now = 1L),
+            AgentSessionMappers.toStepEntities(original),
+            AgentSessionMappers.toTraceEntities(original, now = 1L),
+        )
+
+        val observation = restored.observations[0]
+        assertTrue("a HandedOff must not come back as some other kind", observation is ToolResult.HandedOff)
+        assertEquals(
+            mapOf("dispatched_to" to "os-uninstaller"),
+            (observation as ToolResult.HandedOff).output.values,
         )
     }
 

@@ -83,12 +83,14 @@ class SandboxToolContractTest {
     private fun ToolResult.branch(): String = when (this) {
         is ToolResult.Effected -> "Effected"
         is ToolResult.Observed -> "Observed($fact)"
+        is ToolResult.HandedOff -> "HandedOff"
         is ToolResult.Failed -> "Failed(${failure::class.simpleName})"
     }
 
     private fun ToolResult.outputKeys(): Set<String> = when (this) {
         is ToolResult.Effected -> output.values.keys
         is ToolResult.Observed -> output.values.keys
+        is ToolResult.HandedOff -> output.values.keys
         is ToolResult.Failed -> emptySet()
     }
 }

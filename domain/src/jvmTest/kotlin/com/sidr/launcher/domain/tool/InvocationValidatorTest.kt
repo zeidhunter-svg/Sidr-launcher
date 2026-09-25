@@ -4,6 +4,7 @@ import com.sidr.launcher.domain.action.ActionArg
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.intent.CommandFailure
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -235,6 +236,17 @@ class InvocationValidatorTest {
             ResolutionResult.Resolved(ResolvedInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to "убер"))),
             result,
         )
+    }
+
+    @Test
+    fun `a later step may bind to a HandedOff step's declared output`() {
+        val result = InvocationValidator.resolve(
+            ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.FromStep(0, "resolved_query"))),
+            observations = mapOf(0 to ToolResult.HandedOff(ToolOutput(mapOf("resolved_query" to "quartz")))),
+        )
+
+        assertTrue(result is ResolutionResult.Resolved)
+        assertEquals("quartz", (result as ResolutionResult.Resolved).invocation.args["query"])
     }
 
     @Test

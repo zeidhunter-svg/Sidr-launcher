@@ -63,6 +63,30 @@ sealed interface ToolResult {
     data class Observed(val fact: ObservedFact, val output: ToolOutput = ToolOutput()) : ToolResult
 
     /**
+     * The tool handed the act to something outside the launcher and **cannot see what happened
+     * next**. Not a success, not a failure, not an observation about the world: an outcome that has
+     * not arrived.
+     *
+     * Two producers, and they are the same shape:
+     *  - `uninstall_app` — `startActivity(ACTION_DELETE)` returns the moment the OS dialog is
+     *    *raised*, identically whether the user then confirms, cancels, or the responder refuses
+     *    silently (measured, rows 16/28/32). It is the only tool in the federation whose `Effected`
+     *    could be false, and the only irreversible one, so this is where `DOC-ILM-3` (the trace is
+     *    1:1 with reality) and `DOC-ILM-4` (a partial result is shown as partial) both bit.
+     *  - a step cut by [RuntimeBudget.maxStepWallClockMs] — the call was made, we stopped waiting,
+     *    and the side effect may well have happened.
+     *
+     * **This is not `ObservedFact` growing.** That type stays frozen at two values (A0.5's
+     * record-don't-fix decision, held by `CoreVocabularyFreezeGuardTest`): `uninstall_app` has no
+     * unsayable *fact*, it has an outcome that has not happened yet, which is a property of
+     * execution rather than of the world. The seam is therefore here.
+     *
+     * [output] is carried for the same reason [Effected] carries one: a tool that declares an
+     * `outputSchema` must honour it on **every** result, not on the branch it happened to take.
+     */
+    data class HandedOff(val output: ToolOutput = ToolOutput()) : ToolResult
+
+    /**
      * Technical failure. [failure] is safe to display — no stack, no PII. Produces no output by
      * construction, which is why a step binding to a failed source is `UNRESOLVED_ARG_SOURCE` rather
      * than a blank.

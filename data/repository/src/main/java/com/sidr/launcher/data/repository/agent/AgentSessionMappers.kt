@@ -78,6 +78,7 @@ internal object AgentSessionMappers {
     private const val OBSERVATION_EFFECTED = "Effected"
     private const val OBSERVATION_OBSERVED = "Observed"
     private const val OBSERVATION_FAILED = "Failed"
+    private const val OBSERVATION_HANDED_OFF = "HandedOff"
 
     private const val SHAPE_APP_NOT_INSTALLED = "AppNotInstalled"
     private const val SHAPE_FREE = "Free"
@@ -163,6 +164,7 @@ internal object AgentSessionMappers {
                     null -> null
                     is ToolResult.Effected -> OBSERVATION_EFFECTED
                     is ToolResult.Observed -> OBSERVATION_OBSERVED
+                    is ToolResult.HandedOff -> OBSERVATION_HANDED_OFF
                     is ToolResult.Failed -> OBSERVATION_FAILED
                 },
                 observationFact = (observation as? ToolResult.Observed)?.fact?.name,
@@ -172,6 +174,7 @@ internal object AgentSessionMappers {
                     null, is ToolResult.Failed -> null
                     is ToolResult.Effected -> encodeOutput(observation.output)
                     is ToolResult.Observed -> encodeOutput(observation.output)
+                    is ToolResult.HandedOff -> encodeOutput(observation.output)
                 },
                 consent = session.consents[step.index],
             )
@@ -330,6 +333,7 @@ internal object AgentSessionMappers {
                 ?: throw CorruptAgentRowException("step ${row.stepIndex}: an Observed result without a fact"),
             output = readOutput(row),
         )
+        OBSERVATION_HANDED_OFF -> ToolResult.HandedOff(readOutput(row))
         // The named fidelity gap: the variant was not persisted, so it comes back as Generic.
         OBSERVATION_FAILED -> ToolResult.Failed(CommandFailure.Generic)
         else -> throw CorruptAgentRowException(

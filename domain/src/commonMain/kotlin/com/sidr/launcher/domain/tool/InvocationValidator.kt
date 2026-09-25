@@ -138,6 +138,10 @@ object InvocationValidator {
     private fun ToolResult.output(): ToolOutput? = when (this) {
         is ToolResult.Effected -> output
         is ToolResult.Observed -> output
+        // A handed-off step DID produce whatever its tool declared before handing over; what it
+        // cannot promise is the outcome. Binding to it is therefore legal and stays governed by the
+        // declared `outputSchema`, exactly as for the two above.
+        is ToolResult.HandedOff -> output
         is ToolResult.Failed -> null
     }
 }

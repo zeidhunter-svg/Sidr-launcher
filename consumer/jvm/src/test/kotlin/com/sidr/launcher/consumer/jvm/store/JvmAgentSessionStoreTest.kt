@@ -95,8 +95,12 @@ class JvmAgentSessionStoreTest {
         assertNull(store().active().value())
     }
 
+    /**
+     * `HandedOff` has its own test below. Nothing here holds 'every': encode is held by the compiler
+     * (`resultDto` is an `else`-free `when`), decode by one test per value.
+     */
     @Test
-    fun `a saved session round-trips - every TraceEvent variant and every ToolResult`() = runTest {
+    fun `a saved session round-trips - every TraceEvent variant and the Effected, Observed and Failed results`() = runTest {
         val original = session(
             state = ExecutionState.AwaitingConsent,
             cursor = 2,
@@ -137,6 +141,16 @@ class JvmAgentSessionStoreTest {
         val s = store()
         s.save(original)
         assertEquals(original, s.active().value())
+    }
+
+    @Test
+    fun `a HandedOff observation survives this consumer's disk too`() = runTest {
+        val s = store()
+        s.save(session(observations = mapOf(0 to ToolResult.HandedOff(ToolOutput(mapOf("ticket" to "sandbox-42"))))))
+
+        val observation = s.active().value()!!.observations[0]
+        assertTrue("a HandedOff must not come back as some other kind", observation is ToolResult.HandedOff)
+        assertEquals(mapOf("ticket" to "sandbox-42"), (observation as ToolResult.HandedOff).output.values)
     }
 
     /**

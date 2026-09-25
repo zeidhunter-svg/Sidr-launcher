@@ -127,6 +127,7 @@ internal object SessionMapper {
     private fun resultDto(result: ToolResult) = when (result) {
         is ToolResult.Effected -> ResultDto("Effected", output = result.output.values)
         is ToolResult.Observed -> ResultDto("Observed", fact = result.fact.name, output = result.output.values)
+        is ToolResult.HandedOff -> ResultDto("HandedOff", output = result.output.values)
         is ToolResult.Failed -> ResultDto("Failed", failure = failureName(result.failure))
     }
 
@@ -136,6 +137,7 @@ internal object SessionMapper {
             enum(ObservedFact.entries, require(dto.fact, "result.fact"), "ObservedFact"),
             ToolOutput(dto.output),
         )
+        "HandedOff" -> ToolResult.HandedOff(ToolOutput(dto.output))
         "Failed" -> ToolResult.Failed(failure(require(dto.failure, "result.failure")))
         else -> throw IllegalArgumentException("unknown ToolResult kind: ${dto.kind}")
     }

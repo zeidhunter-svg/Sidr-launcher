@@ -18,10 +18,11 @@
 #                        results, passes `--rerun-tasks`, and REQUIRES the total to reach the 1440
 #                        baseline floor before it will say `GATE GREEN`; short of the floor, or any
 #                        failure/error, it says `GATE RED`.
-#   --scoped           — a run inside a task: a TDD step or a mutation. Clears, COUNTS and reports
-#                        the named modules only, passes `--no-build-cache --no-watch-fs` instead of
-#                        `--rerun-tasks`, prints NO baseline comparison, and says
-#                        `SCOPED GREEN … — NOT a boundary gate`.
+#   --scoped           — a run inside a task: a TDD step or a mutation. Keeps its OWN task list
+#                        untouched (boundary's default list is assigned only in boundary mode — fix
+#                        round 2 below). Clears, COUNTS and reports the named modules only, passes
+#                        `--no-build-cache --no-watch-fs` instead of `--rerun-tasks`, prints NO
+#                        baseline comparison, and says `SCOPED GREEN … — NOT a boundary gate`.
 #
 # TWO REFUSALS ADDED BY THE TASK 1 REVIEW (fix round 1, controller ruling R9 — diverges from the
 # plan's "run verbatim" instruction because the finding is Important and the plan's own §9.2 already
@@ -34,6 +35,15 @@
 #     (`BELOW BASELINE :: …`), never `GATE GREEN` — the same reproduction shows this: failures=0 and
 #     errors=0 on a 60-test partial run used to read as green regardless of the baseline line sitting
 #     right above it.
+#
+# FIX ROUND 2 (Critical, scoped re-review of round 1's own commit b3e1cc8). Round 1's boundary-only
+# refusal above was followed by an unconditional `TASKS=("${DEFAULT_TASKS[@]}")`, which overwrote a
+# SCOPED call's own task list before the scoped validation loop ever saw it — every `--scoped
+# :module:task` then died on the unqualified `testDebugUnitTest` from `DEFAULT_TASKS`
+# ("FATAL: --scoped takes only fully-qualified :module:task (got 'testDebugUnitTest')"), exit 2.
+# Round 1's own proofs only exercised boundary paths, which is how a regression that kills every
+# scoped call passed review. The default list is now assigned only inside `if [ "$MODE" = boundary
+# ]`, so scoped keeps exactly the task list the caller gave it.
 # The phase runs a dozen mutations; as one mode they were a dozen full `--rerun-tasks` sweeps. But
 # the saving is not why the labels differ: a cheap run that printed `GATE GREEN` would be a
 # false-green generator of exactly the kind this file exists to remove, and a scoped table compared
@@ -79,7 +89,15 @@ if [ "$MODE" = boundary ] && [ "${#TASKS[@]}" -gt 0 ]; then
   echo "FATAL: a boundary run takes no task list — it is the full gate by definition. For a subset use --scoped :module:task …" >&2
   exit 2
 fi
-TASKS=("${DEFAULT_TASKS[@]}")
+# Fix round 2 (Critical, scoped re-review of b3e1cc8): this used to run unconditionally, so a
+# scoped call's own task list was overwritten with DEFAULT_TASKS before the validation loop below
+# ever saw it — every `--scoped :module:task` then died on the unqualified `testDebugUnitTest` from
+# DEFAULT_TASKS with "FATAL: --scoped takes only fully-qualified :module:task (got
+# 'testDebugUnitTest')", exit 2. Scoped mode keeps its own task list untouched; only boundary mode
+# (which just proved above that no list was given) falls back to the default one.
+if [ "$MODE" = boundary ]; then
+  TASKS=("${DEFAULT_TASKS[@]}")
+fi
 
 # A scoped run must name modules, because "which results may I clear", "which results may I count"
 # and "what may I leave up-to-date" are all answered from the task path. An unqualified task

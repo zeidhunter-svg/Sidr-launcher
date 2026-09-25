@@ -66,6 +66,20 @@ data class ExecutionPlan(val steps: List<PlanStep>) {
     }
 }
 
+/**
+ * **Adding a variant here is a two-address edit, and both addresses are compile errors by
+ * construction** (A4' phase 0, spec §3 0.0):
+ *  - `CompositePlanner.plan` — where a non-`Planned` result used to become `NoPlan` silently;
+ *  - `StartAgentSessionUseCase.start` — where a non-`Planned` result used to become `Success(null)`.
+ *
+ * Neither conversion was wrong while two variants existed; both were answers given in advance for a
+ * variant nobody had written. `NoPlan` at `RouteCommandUseCase` step 2b falls through to the cloud
+ * model, so the cost of that silence is measured and doctrinal, not stylistic — see R14-39.
+ *
+ * No test holds this and none can: a sealed interface admits subclasses only from its own
+ * compilation unit, and `jvmTest` is not `commonMain`. The compiler is the enforcement; this
+ * paragraph is where the message lands.
+ */
 sealed interface PlanningResult {
     data class Planned(val plan: ExecutionPlan) : PlanningResult
     data object NoPlan : PlanningResult

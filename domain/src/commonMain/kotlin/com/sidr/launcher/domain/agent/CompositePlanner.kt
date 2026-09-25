@@ -16,8 +16,19 @@ import com.sidr.launcher.domain.tool.ToolRegistry
 class CompositePlanner(private val planners: List<Planner>) : Planner {
     override suspend fun plan(goal: AgentGoal, registry: ToolRegistry): PlanningResult {
         planners.forEach { planner ->
-            val result = planner.plan(goal, registry)
-            if (result is PlanningResult.Planned) return result
+            // Exhaustive with no `else`, and that is this function's whole safety property (spec
+            // §3 0.0). The previous shape — `if (result is Planned) return result` — did not
+            // *ignore* a third variant, it **converted** it: anything that was not `Planned` fell
+            // out of the loop and left as `NoPlan`. `NoPlan` at routing step 2b falls through to
+            // the cloud model, so the first `Clarify`-shaped variant A4' adds would have sent a
+            // clarifying question off-device as raw command text, on a goal a registered tool had
+            // already matched — R14-39 with a third cause, and with the whole suite green. A
+            // third variant must now be a compile error HERE, at the address where the decision
+            // belongs.
+            when (val result = planner.plan(goal, registry)) {
+                is PlanningResult.Planned -> return result
+                PlanningResult.NoPlan -> Unit // ask the next planner
+            }
         }
         return PlanningResult.NoPlan
     }

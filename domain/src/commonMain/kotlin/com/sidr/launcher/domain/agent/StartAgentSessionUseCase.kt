@@ -29,20 +29,26 @@ class StartAgentSessionUseCase(
     private val registry: ToolRegistry,
 ) {
     suspend fun start(goal: AgentGoal): OperationResult<AgentSessionId?> {
-        val planned = planner.plan(goal, registry)
-        if (planned !is PlanningResult.Planned) return OperationResult.Success(null)
-        if (!isRunnable(planned.plan)) return OperationResult.Success(null)
+        // Exhaustive with no `else` (spec §3 0.0). `!is Planned -> Success(null)` answered for a
+        // variant that did not exist yet, and answered it with silence. Whoever adds the third
+        // variant must decide here what a session-less answer means for it, and the compiler is
+        // what makes them.
+        val plan = when (val planned = planner.plan(goal, registry)) {
+            is PlanningResult.Planned -> planned.plan
+            PlanningResult.NoPlan -> return OperationResult.Success(null)
+        }
+        if (!isRunnable(plan)) return OperationResult.Success(null)
 
         val id = ids.newId()
         val session = AgentSession(
             id = id,
             goal = goal,
-            plan = planned.plan,
+            plan = plan,
             cursor = 0,
             state = ExecutionState.Running,
             observations = emptyMap(),
             consents = emptyMap(),
-            trace = ExecutionTrace(listOf(TraceEvent.PlanCreated(planned.plan.steps.size))),
+            trace = ExecutionTrace(listOf(TraceEvent.PlanCreated(plan.steps.size))),
         )
 
         return when (val saved = store.save(session)) {

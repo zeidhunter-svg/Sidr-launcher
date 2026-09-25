@@ -49,10 +49,12 @@ class ToolMatchPlannerTest {
 
     /**
      * `appTargetsOf()` is a resolver over an **empty** installed list, so it declines every query.
-     * Every test that uses this planner names a tool with no `app` argument, so resolution must never
-     * be consulted at all — a decline here would turn those plans into `NoPlan` and say so loudly.
+     * Every test that uses this planner names a tool with no `app` argument and no row in the
+     * production [ToolArgumentSorts], so resolution must never be consulted at all — a decline here
+     * would turn those plans into `NoPlan` and say so loudly.
      */
-    private val planner = ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()), appTargetsOf())
+    private val planner =
+        ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()), appTargetsOf(), ToolArgumentSorts())
 
     /** The production shape: the Tier-0 source seen through the federation, not directly. */
     private val registry = ToolFederation(
@@ -196,7 +198,9 @@ class ToolMatchPlannerTest {
     // descriptor and its triggers are Task 10's, so neither is invented here; and nothing below
     // touches `ToolVocabulary.DEFAULT_ENTRIES`, because a production trigger is owner-visible and one
     // invented in a planner test could silently claim a verb FastPath already owns. What is under
-    // test is the planner's treatment of an argument **named** `app` — the string convention itself.
+    // test is the planner's treatment of an argument its tool DECLARES to carry an app — through a
+    // [ToolArgumentSorts] row ([appSorts]), since A4′ phase 0; before that, through the spelling
+    // `app` alone, which is the convention the last two tests below pin as gone.
     // ---------------------------------------------------------------------------------------------
 
     /** Synthetic on purpose: no production `ToolId` is invented by this task. */
@@ -216,22 +220,52 @@ class ToolMatchPlannerTest {
         namesOf(),
     )
 
+    /** The synthetic tool's own sort row — production data stays free of `test_app_tool`. */
+    private val appSorts = ToolArgumentSorts(
+        mapOf(appTool to AppArgumentBinding(arg = "app", labelArg = "app_label")),
+    )
+
+    /**
+     * The shape R14-37 needs and [appSelector] cannot produce: a trigger that supplies NO `app`
+     * (`argName = null`, so it matches only as the whole text). [appSelector] declares
+     * `argName = "app"`, and `ToolVocabulary` refuses a bare trigger for such an entry — a goal
+     * through it declines in the selector, before the resolution block the R14-37 test is about.
+     * Measured 2026-09-25 on a copy of the tree: `appSelector.select("удали приложение")` is `null`;
+     * this selector's `select("покажи приложение")` is `ToolMatch(test_app_tool, {})`, and the
+     * pre-A4′ planner then returned `NoPlan` from `resolve("")` — R14-37 itself.
+     */
+    private val bareAppSelector = ToolSelector(
+        ToolVocabulary(
+            listOf(
+                ToolVocabulary.Entry(
+                    id = appTool,
+                    prefixByLocale = mapOf("ru" to setOf("покажи приложение")),
+                ),
+            ),
+        ),
+        namesOf(),
+    )
+
     /**
      * `app_label` is declared **not required**, and that is a property of the design rather than a
      * convenience: the vocabulary never supplies it — the planner binds it *after* resolution — while
      * the required-argument check runs *before* resolution, so a descriptor that marked it required
      * would decline every goal it was ever offered.
+     *
+     * [optional] declares an `app` argument **not** required — the descriptor half of the R14-37
+     * shape, which the helper's `required = name == "app"` could not express before A4′ phase 0.
      */
-    private fun appToolDescriptor(vararg argNames: String) = ToolDescriptor(
-        id = appTool,
-        level = ToolLevels.SYSTEM_INTENT,
-        effect = ToolEffect.EXTERNAL,
-        argSchema = argNames.map { name ->
-            ActionArg(name, required = name == "app", description = "The app to act on")
-        },
-        risk = ActionRiskLevel.CONFIRM,
-        durability = ToolDurability.TRANSIENT,
-    )
+    private fun appToolDescriptor(vararg argNames: String, optional: Set<String> = emptySet()) =
+        ToolDescriptor(
+            id = appTool,
+            level = ToolLevels.SYSTEM_INTENT,
+            effect = ToolEffect.EXTERNAL,
+            argSchema = argNames.map { name ->
+                ActionArg(name, required = name == "app" && name !in optional, description = "The app to act on")
+            },
+            risk = ActionRiskLevel.CONFIRM,
+            durability = ToolDurability.TRANSIENT,
+        )
 
     /**
      * The consent card is drawn from the **plan**, and `AgentExecutor` evaluates `checkpointFor`
@@ -242,7 +276,7 @@ class ToolMatchPlannerTest {
      */
     @Test
     fun `an app argument is bound as a package, with the raw text kept as the label`() = runTest {
-        val planner = ToolMatchPlanner(appSelector, appTargetsOf("Telegram" to "org.telegram.messenger"))
+        val planner = ToolMatchPlanner(appSelector, appTargetsOf("Telegram" to "org.telegram.messenger"), appSorts)
 
         val planned = planner.plan(
             PlanningRequest(free("удали приложение telegram")),
@@ -270,11 +304,12 @@ class ToolMatchPlannerTest {
 
         assertEquals(
             PlanningResult.NoPlan,
-            ToolMatchPlanner(appSelector, appTargetsOf()).plan(PlanningRequest(free("удали приложение нечто")), registry),
+            ToolMatchPlanner(appSelector, appTargetsOf(), appSorts)
+                .plan(PlanningRequest(free("удали приложение нечто")), registry),
         )
 
         assertTrue(
-            ToolMatchPlanner(appSelector, appTargetsOf("Нечто" to "com.example.nechto"))
+            ToolMatchPlanner(appSelector, appTargetsOf("Нечто" to "com.example.nechto"), appSorts)
                 .plan(PlanningRequest(free("удали приложение нечто")), registry) is PlanningResult.Planned,
         )
     }
@@ -282,7 +317,7 @@ class ToolMatchPlannerTest {
     /** `app_label` is opt-in: a descriptor that does not declare it is not handed one. */
     @Test
     fun `a descriptor that declares only app gets the package and no label`() = runTest {
-        val planner = ToolMatchPlanner(appSelector, appTargetsOf("Telegram" to "org.telegram.messenger"))
+        val planner = ToolMatchPlanner(appSelector, appTargetsOf("Telegram" to "org.telegram.messenger"), appSorts)
 
         val planned = planner.plan(PlanningRequest(free("удали приложение telegram")), registryWith(appToolDescriptor("app")))
 
@@ -292,9 +327,9 @@ class ToolMatchPlannerTest {
     }
 
     /**
-     * The convention is keyed on the argument's **name**: a tool that declares no `app` never reaches
-     * the resolver, which is why the class-level `planner` can carry a resolver that declines
-     * everything and still plan a timer.
+     * Resolution is keyed on a declared sort row: a tool with no row — `set_timer` has none in the
+     * production [ToolArgumentSorts] — never reaches the resolver, which is why the class-level
+     * `planner` can carry a resolver that declines everything and still plan a timer.
      */
     @Test
     fun `a tool with no app argument is untouched by resolution`() = runTest {
@@ -304,5 +339,56 @@ class ToolMatchPlannerTest {
             ArgSource.Literal("10 minutes"),
             (planned as PlanningResult.Planned).plan.steps.single().invocation.args["duration"],
         )
+    }
+
+    /**
+     * **R14-37, closed for the shape that produced it.** The old planner keyed on the argument being
+     * NAMED `app`, never on whether it was `required`: a descriptor declaring an OPTIONAL `app`
+     * entered the branch anyway, `match.args["app"]` was missing, `raw` became `""`,
+     * `resolve("")` returned `null` — the resolver's considered refusal — and the elvis returned
+     * `NoPlan` for EVERY goal, forever, with the whole suite green. A tool registered, reachable by
+     * its trigger, and dead.
+     *
+     * [bareAppSelector], not [appSelector]: this needs a trigger that supplies no `app` at all, and
+     * [appSelector]'s cannot match without one.
+     *
+     * Two per-descriptor pins were shipped against the opposite direction (`uninstall_app` R14-35,
+     * `open_app_info` phase 3b) and neither generalised. This is the generalisation.
+     */
+    @Test
+    fun `an optional app argument the vocabulary did not supply does not kill the plan`() = runTest {
+        val descriptor = appToolDescriptor("app", optional = setOf("app"))
+        val planner = ToolMatchPlanner(bareAppSelector, appTargetsOf(), appSorts)
+
+        val result = planner.plan(PlanningRequest(free("покажи приложение")), registryWith(descriptor))
+
+        assertTrue("an absent OPTIONAL argument is not a reason to decline", result is PlanningResult.Planned)
+        assertEquals(
+            "absent means absent — not an empty string, not a guessed package",
+            emptyMap<String, ArgSource>(),
+            (result as PlanningResult.Planned).plan.steps.single().invocation.args,
+        )
+    }
+
+    /**
+     * The literal is gone: an argument named `app` on a tool with **no row** is passed through
+     * untouched rather than resolved. Resolution is now something a tool DECLARES, not something its
+     * spelling earns.
+     */
+    @Test
+    fun `an app argument with no declared sort is not resolved`() = runTest {
+        val planner = ToolMatchPlanner(
+            appSelector,
+            appTargetsOf("Telegram" to "org.telegram.messenger"),
+            ToolArgumentSorts(),
+        )
+
+        val result = planner.plan(
+            PlanningRequest(free("удали приложение telegram")),
+            registryWith(appToolDescriptor("app")),
+        )
+
+        val step = (result as PlanningResult.Planned).plan.steps.single()
+        assertEquals(ArgSource.Literal("telegram"), step.invocation.args["app"])
     }
 }

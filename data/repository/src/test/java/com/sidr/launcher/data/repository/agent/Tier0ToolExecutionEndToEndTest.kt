@@ -148,7 +148,10 @@ class Tier0ToolExecutionEndToEndTest {
         val federation = federation(launcher)
         val start = StartAgentSessionUseCase(
             planner = CompositePlanner(
-                listOf(TemplatePlanner(), ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()), appTargetsOf())),
+                listOf(
+                    TemplatePlanner(),
+                    ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()), appTargetsOf(), ToolArgumentSorts()),
+                ),
             ),
             store = store,
             ids = ids,

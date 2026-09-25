@@ -162,7 +162,7 @@ class SelectionDeclineMeasurement {
         val vocabulary = ToolVocabulary()
         val selector = ToolSelector(vocabulary, shortcutSource)
         val appTargets = AppTargetResolver(appsRepo, FakeAliasStore())
-        val planner = ToolMatchPlanner(selector, appTargets)
+        val planner = ToolMatchPlanner(selector, appTargets, ToolArgumentSorts())
         val registry = federation(shortcutSource).registry
         val rows = corpus.map { phrase ->
             val executor = FakeActionExecutor()

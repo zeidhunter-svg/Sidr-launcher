@@ -222,7 +222,10 @@ class AgentActingSeamTest {
 
     /** `AgentProvidesModule.providePlanner`'s own list, with the real selector and resolver in it. */
     private fun planner() = CompositePlanner(
-        listOf(TemplatePlanner(), ToolMatchPlanner(ToolSelector(ToolVocabulary(), shortcutSource), appTargets)),
+        listOf(
+            TemplatePlanner(),
+            ToolMatchPlanner(ToolSelector(ToolVocabulary(), shortcutSource), appTargets, ToolArgumentSorts()),
+        ),
     )
 
     private fun startUseCase(federation: ToolFederation) =

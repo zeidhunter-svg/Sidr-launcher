@@ -140,7 +140,10 @@ class FreeTextGoalEndToEndTest {
      * (empty) because nothing here plans a dynamic shortcut match — see the class KDoc.
      */
     private val planner = CompositePlanner(
-        listOf(TemplatePlanner(), ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()), appTargetsOf())),
+        listOf(
+            TemplatePlanner(),
+            ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()), appTargetsOf(), ToolArgumentSorts()),
+        ),
     )
 
     private val ids = object : AgentSessionIdFactory {

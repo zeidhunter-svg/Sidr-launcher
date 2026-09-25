@@ -1,6 +1,5 @@
 package com.sidr.launcher.data.repository.agent
 
-import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.PlanStep
@@ -40,10 +39,12 @@ import javax.inject.Inject
  * model. Closing that needs an argument type richer than `ArgType.STRING` — the A0.5 finding spec
  * §10.4 already records — not a second parser here.
  *
- * **An argument named `app` is resolved to a package HERE, above the consent checkpoint** (review
- * finding C4, owner decision 2026-09-18; fork F5, «consent fires before argument binding»).
- * `AgentExecutor` evaluates `checkpointFor` before it ever reaches `toolExecutor.invoke`, so anything a
- * **worker** resolves is resolved *after* the user has already consented: the card for «удали telegram»
+ * **An argument the tool DECLARES to carry an app is resolved to a package HERE, above the consent
+ * checkpoint** (review finding C4, owner decision 2026-09-18; fork F5, «consent fires before argument
+ * binding»). Which argument that is, if any, is read from [ToolArgumentSorts] — never from the
+ * argument's spelling (A4′ phase 0, spec §3 0.4). `AgentExecutor` evaluates `checkpointFor` before it
+ * ever reaches `toolExecutor.invoke`, so anything a **worker** resolves is resolved *after* the user
+ * has already consented: the card for «удали telegram»
  * could then only echo the words typed, while the package that would actually be uninstalled did not
  * yet exist — and on a device carrying two Telegram-like labels the user would confirm one thing and
  * get another. Resolving in the planner is what makes the plan, and therefore the card, name the target
@@ -53,15 +54,28 @@ import javax.inject.Inject
  * treating it otherwise would re-open precisely the guess it refuses to make. This does not close F5 in
  * general; it closes it for the arguments this planner can resolve deterministically.
  *
- * **`app` / `app_label` is a string convention, not a type.** A descriptor opts in by declaring an
- * argument literally named `app`; if it *also* declares `app_label`, the raw text the user typed is
- * bound there, so a surface can show both what was said and what it resolved to. Nothing in the type
- * system holds those two spellings together — `ToolMatchPlannerTest` pins them, and that test is the
- * whole of the enforcement. Two consequences, stated rather than discovered later: a descriptor must
- * declare `app_label` as **not required**, because the vocabulary never supplies it (this planner does)
- * while the required-argument check above runs *before* resolution; and a typed argument kind — the one
- * thing that would make this a contract instead of a spelling — is the `ArgType` debt (spec §7.5),
- * addressed to the block that first ships MCP/AppFunctions and deliberately **not** widened here.
+ * **The sort is a catalog row, not a string convention** (A4′ phase 0). Until then a descriptor opted
+ * in by declaring an argument literally named `app` — `const val APP_ARG`, a sort implemented by
+ * comparing strings, which keyed on the name and never on `required` (R14-37: an OPTIONAL `app` the
+ * vocabulary did not supply answered `NoPlan` for every goal, with the suite green). Now a tool opts in
+ * only through its row in [ToolArgumentSorts]: [AppArgumentBinding.arg] names the argument to resolve,
+ * and [AppArgumentBinding.labelArg], when the row names one **and** the descriptor declares it, receives
+ * the raw text the user typed, so a surface can show both what was said and what it resolved to. Three
+ * consequences, stated rather than discovered later:
+ *  - a tool with **no row** is passed through untouched — an argument named `app` earns no resolution
+ *    by its spelling, and a missing row resolves nothing rather than guessing;
+ *  - a declared argument that is **optional** and that the vocabulary did not supply stays absent:
+ *    nothing to resolve, nothing to decline (a **required** one never arrives blank — the
+ *    required-argument check has already declined);
+ *  - a descriptor must declare its label argument as **not required**, because the vocabulary never
+ *    supplies it (this planner does) while the required-argument check runs *before* resolution.
+ *
+ * What holds the rows to the descriptors is a test, not the type system: `ToolArgumentSortGuardTest`
+ * checks both directions over the production authored sources — every tool declaring an argument named
+ * `app` has a row (the bridge from the old convention, which is why that test still reads the name), and
+ * no row names an argument its tool does not declare. A typed argument kind — the one thing that would
+ * make this a contract rather than a catalog — is the `ArgType` debt (spec §7.5); `F6` stays in force
+ * with its review appointed for phase 3 (spec §7.8), and `ArgType` is deliberately **not** widened here.
  *
  * **Selection now also covers third-party names.** [ToolSelector] (Task 10) chooses between our
  * authored, localized vocabulary and a dynamic `app_shortcut` name, declining rather than guessing when
@@ -72,6 +86,7 @@ import javax.inject.Inject
 class ToolMatchPlanner @Inject constructor(
     private val selector: ToolSelector,
     private val appTargets: AppTargetResolver,
+    private val sorts: ToolArgumentSorts,
 ) : Planner {
 
     override suspend fun plan(request: PlanningRequest, registry: ToolRegistry): PlanningResult {
@@ -91,35 +106,32 @@ class ToolMatchPlanner @Inject constructor(
         val required = descriptor.argSchema.filter { it.required }.map { it.name }
         if (required.any { match.args[it].isNullOrBlank() }) return PlanningResult.NoPlan
 
-        // An app name becomes a package HERE — above the consent checkpoint, see the class KDoc. The
-        // resolver's `null` is its considered refusal, never "use the raw text", so it ends the plan
-        // rather than the step: declining before a plan exists is what keeps a consent card from ever
-        // naming a target that was not resolved.
+        // An app name becomes a package HERE — above the consent checkpoint, see the class KDoc.
+        //
+        // **What decides is the tool's DECLARED sort, not the argument's spelling** (A4' phase 0,
+        // spec §3 0.4). `const val APP_ARG = "app"` was a definition of a sort implemented by
+        // comparing strings, and R14-37 is the failure mode that produced: it keyed on the NAME and
+        // never on `required`, so a descriptor declaring an OPTIONAL `app` returned `NoPlan` for
+        // every goal, forever, with a green suite. Both halves are fixed here — the sort is
+        // declared, and an absent optional value is a value that was not needed.
+        val binding = sorts.appBindingFor(descriptor.id)
+        val appArg = binding?.arg?.let { name -> descriptor.argSchema.firstOrNull { it.name == name } }
+
         val resolvedArgs = buildMap<String, String> {
             putAll(match.args)
-            // R14-37: this line keys on the argument being NAMED `app`, not on whether it is
-            // `required` — the class KDoc above ("`app` / `app_label` is a string convention, not a
-            // type") already says the spelling carries no enforcement; this is the specific failure
-            // mode that gap produces. A descriptor that declares `app` as OPTIONAL still enters this
-            // branch, so `match.args[APP_ARG]` is missing, `raw` becomes `""` via `.orEmpty()`,
-            // `appTargets.resolve("")` returns `null` (the resolver's considered refusal, never a
-            // guess — see the class KDoc), and the elvis on the `appTargets.resolve(raw)` line below
-            // returns `PlanningResult.NoPlan`. Nothing upstream forces `app` to be required, so a
-            // future descriptor that gets this wrong ships a tool that is registered, reachable by
-            // its trigger, and produces `NoPlan`
-            // for EVERY goal, forever — with the whole suite green, because nothing here asserts a
-            // *correct* plan is ever reachable, only that a resolved one is well-formed. The
-            // mitigation shipped so far is a PER-DESCRIPTOR pin — `uninstall_app`
-            // (A1″ phase 3a, Task 7, R14-35) and `open_app_info` (A1″ phase 3b, Task 4), each a test
-            // in `Tier0IntentToolSourceTest` asserting that tool's `app` argument is declared
-            // `required = true`. Two instances, and there is still no generalisation: the
-            // generalisation is A4′'s, and it is the same `ArgType` debt (spec §7.5) this class's KDoc
-            // already names, restated at the planner level rather than the schema level.
-            if (descriptor.argSchema.any { it.name == APP_ARG }) {
-                val raw = match.args[APP_ARG].orEmpty()
-                val target = appTargets.resolve(raw) ?: return PlanningResult.NoPlan
-                put(APP_ARG, target)
-                if (descriptor.argSchema.any { it.name == APP_LABEL_ARG }) put(APP_LABEL_ARG, raw)
+            if (binding != null && appArg != null) {
+                val raw = match.args[binding.arg].orEmpty()
+                if (raw.isBlank() && !appArg.required) {
+                    // Declared, optional, and the vocabulary supplied nothing. There is nothing to
+                    // resolve and nothing to decline: an absent optional argument is absent.
+                    remove(binding.arg)
+                } else {
+                    val target = appTargets.resolve(raw) ?: return PlanningResult.NoPlan
+                    put(binding.arg, target)
+                    binding.labelArg
+                        ?.takeIf { label -> descriptor.argSchema.any { it.name == label } }
+                        ?.let { put(it, raw) }
+                }
             }
         }
 
@@ -143,13 +155,5 @@ class ToolMatchPlanner @Inject constructor(
                 ),
             ),
         )
-    }
-
-    private companion object {
-        /** The argument a tool declares to say "this value is an app, resolve it for me". */
-        const val APP_ARG = "app"
-
-        /** Optional companion of [APP_ARG]: the raw text the user typed, for the surface to show. */
-        const val APP_LABEL_ARG = "app_label"
     }
 }

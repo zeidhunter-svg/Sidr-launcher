@@ -263,7 +263,21 @@ class Tier0IntentToolWorker @Inject constructor(
     private fun uninstallApp(target: String): ToolResult {
         if (target.isBlank()) return ToolResult.Failed(CommandFailure.Generic)
         if (target == ownPackageName) return ToolResult.Failed(CommandFailure.Generic)
-        return launch(Intent(Intent.ACTION_DELETE, Uri.fromParts("package", target, null)))
+
+        // The ONE arm of this worker where `Effected` was a lie (A1″ acceptance finding (a)).
+        // `launch` is not changed and must not be: the eleven navigating tools really do open their
+        // screen, and `set_alarm`/`set_timer` really do create the alarm (rows 13/29) — for them
+        // `startActivity` returning IS the effect. Here it is only the dialog being raised, and the
+        // caller learns nothing about what the user then did (rows 16/28/32: the return is
+        // byte-identical for confirm, cancel and a silent responder refusal).
+        //
+        // Only the SUCCESS branch is converted. A `Failed` from `launch` stays `Failed`: a dialog
+        // that never appeared is a failure we CAN see, and blurring it into "handed off" would give
+        // back, in the other direction, exactly the honesty this change buys.
+        return when (val dispatched = launch(Intent(Intent.ACTION_DELETE, Uri.fromParts("package", target, null)))) {
+            is ToolResult.Effected -> ToolResult.HandedOff()
+            else -> dispatched
+        }
     }
 
     /**

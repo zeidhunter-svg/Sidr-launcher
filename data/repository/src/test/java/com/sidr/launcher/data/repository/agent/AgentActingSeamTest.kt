@@ -355,7 +355,10 @@ class AgentActingSeamTest {
             assertNotNull("resolving consent must return the finished session", finished)
             checkNotNull(finished)
             assertEquals(ExecutionState.Completed, finished.state)
-            assertEquals(ToolResult.Effected(), finished.observations[0])
+            // Task 5 (A4′ phase 0): uninstall_app no longer claims Effected for a raised dialog whose
+            // outcome it cannot see (A1″ acceptance finding (a)) — it reports HandedOff instead. This
+            // assertion changed from `ToolResult.Effected()`.
+            assertEquals(ToolResult.HandedOff(), finished.observations[0])
 
             val intent = launched.single()
             assertEquals(Intent.ACTION_DELETE, intent.action)
@@ -366,7 +369,8 @@ class AgentActingSeamTest {
                     TraceEvent.ConsentRequested(0, ConsentReason.RISK_LEVEL),
                     TraceEvent.ConsentResolved(0, granted = true),
                     TraceEvent.ToolInvoked(0, Tier0ToolIds.UNINSTALL_APP),
-                    TraceEvent.ToolObserved(0, ToolResult.Effected()),
+                    // Same change as above: the trace must record what the worker actually returned.
+                    TraceEvent.ToolObserved(0, ToolResult.HandedOff()),
                 ),
                 finished.trace.events.filter {
                     it is TraceEvent.ConsentRequested ||

@@ -398,7 +398,10 @@ class Tier0IntentToolWorkerTest {
             ),
         )
 
-        assertTrue(result is ToolResult.Effected)
+        // Task 5 (A4′ phase 0): uninstall_app no longer claims Effected for a raised dialog whose
+        // outcome it cannot see (A1″ acceptance finding (a)) — it reports HandedOff. This assertion
+        // changed from `result is ToolResult.Effected`.
+        assertTrue(result is ToolResult.HandedOff)
         val intent = launched.single()
         assertEquals(Intent.ACTION_DELETE, intent.action)
         assertEquals("package:org.telegram.messenger", intent.data.toString())
@@ -447,6 +450,69 @@ class Tier0IntentToolWorkerTest {
 
         assertEquals(ToolResult.Failed(CommandFailure.Generic), result)
         assertEquals(0, launched.size)
+    }
+
+    /**
+     * Task 5 (A4′ phase 0). A1″ acceptance finding (a): `startActivity(ACTION_DELETE)` returns the
+     * instant the OS dialog is raised and returns identically whether the user confirms, cancels, or
+     * the responder refuses silently (rows 16/28/32) — so `Effected` here was a claim the worker had
+     * no way to make. `HandedOff` is the claim it can make.
+     */
+    @Test
+    fun `uninstall_app hands off — it does not claim the app was removed`() = runTest {
+        val worker = workerWith(FakeIntentLauncher(mutableListOf()), grantsEverything)
+
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.UNINSTALL_APP, mapOf("app" to "com.marlin.notes")))
+
+        assertTrue("a raised dialog is not a removal", result is ToolResult.HandedOff)
+    }
+
+    /**
+     * The non-vacuity half, and it is the half that matters: `Effected` is a lie for exactly ONE tool
+     * in this worker. The eleven navigating tools really do open their screen — `startActivity`
+     * returning IS the effect — and `set_alarm`/`set_timer` really do create the alarm (rows 13/29). A
+     * fix that downgraded them would trade one wrong word for fourteen.
+     */
+    @Test
+    fun `every other tool in this worker still reports Effected`() = runTest {
+        val worker = workerWith(FakeIntentLauncher(mutableListOf()), grantsEverything)
+
+        val stillEffecting = listOf(
+            Tier0ToolIds.SET_TIMER to mapOf("duration" to "5 minutes"),
+            Tier0ToolIds.SET_ALARM to mapOf("time" to "7:30"),
+            Tier0ToolIds.OPEN_SYSTEM_SETTINGS to emptyMap(),
+            Tier0ToolIds.SHOW_ALARMS to emptyMap(),
+            Tier0ToolIds.OPEN_CAMERA to emptyMap(),
+            Tier0ToolIds.OPEN_WIFI_SETTINGS to emptyMap(),
+            Tier0ToolIds.OPEN_BLUETOOTH_SETTINGS to emptyMap(),
+            Tier0ToolIds.OPEN_BATTERY_SETTINGS to emptyMap(),
+            Tier0ToolIds.OPEN_DATA_USAGE_SETTINGS to emptyMap(),
+            Tier0ToolIds.OPEN_DISPLAY_SETTINGS to emptyMap(),
+            Tier0ToolIds.OPEN_SOUND_SETTINGS to emptyMap(),
+            Tier0ToolIds.OPEN_LOCATION_SETTINGS to emptyMap(),
+            Tier0ToolIds.OPEN_NOTIFICATION_SETTINGS to emptyMap(),
+            Tier0ToolIds.OPEN_APP_INFO to mapOf("app" to "com.marlin.notes"),
+        )
+
+        stillEffecting.forEach { (id, args) ->
+            assertTrue(
+                "$id performs its act — downgrading it would trade one wrong word for fourteen",
+                worker.invoke(ResolvedInvocation(id, args)) is ToolResult.Effected,
+            )
+        }
+    }
+
+    /** `HandedOff` must not have eaten `Failed`: a dialog that never appeared is a failure we CAN see. */
+    @Test
+    fun `an uninstall that could not be dispatched is Failed, not handed off`() = runTest {
+        val worker = workerWith(
+            ThrowingIntentLauncher { ActivityNotFoundException("no uninstaller") },
+            grantsEverything,
+        )
+
+        val result = worker.invoke(ResolvedInvocation(Tier0ToolIds.UNINSTALL_APP, mapOf("app" to "com.marlin.notes")))
+
+        assertTrue(result is ToolResult.Failed)
     }
 
     private companion object {

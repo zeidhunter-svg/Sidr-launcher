@@ -383,19 +383,31 @@ class Tier0IntentToolSource @Inject constructor(
         // `uninstall_app` exists to put behind a `CONFIRM` gate when WE perform it.
         //
         // **`app` is `required = true`, written out although that is the default, and the reason is not
-        // tidiness** (R14-37). `ToolMatchPlanner` resolves an argument named `app` **regardless of
-        // `required`**: the branch keys on the NAME. A descriptor declaring `app` optional would
-        // therefore give `raw = ""`, `AppTargetResolver.resolve("")` returns `null` (its considered
-        // refusal, never a guess), and the planner answers `NoPlan` — for EVERY goal, forever, with the
-        // whole suite green and the tool registered, reachable by its trigger and dead. The planner
-        // carries the same warning at the code site that causes it.
+        // tidiness.** Until A4′ phase 0 the reason was R14-37: `ToolMatchPlanner` resolved an argument
+        // NAMED `app` regardless of `required`, so an optional `app` the vocabulary did not supply gave
+        // `raw = ""`, `AppTargetResolver.resolve("")` → `null`, and `NoPlan` for EVERY goal, forever,
+        // with the suite green. That mechanism is gone: the planner now resolves only a tool with a row
+        // in `ToolArgumentSorts` (this one has one — `arg = "app"`, no label), and it reads `required`,
+        // leaving a declared, OPTIONAL, unsupplied argument absent instead of resolving it.
+        // `ToolArgumentSortGuardTest` holds the rows to the descriptors; `ToolMatchPlannerTest` holds
+        // the `required` read. What the pin guards NOW is the other side of that fix: with
+        // `required = false`, a trigger that supplied no `app` would PLAN — a `SAFE` step with no
+        // target and no consent card — and the worker would then return `Failed` on the blank package
+        // (`openAppInfo`'s `isBlank()` check), where `required = true` makes the planner's
+        // required-argument check decline before any plan exists. Today's vocabulary entry declares
+        // `argName = "app"` and refuses a bare trigger, so no current input reaches that path; the pin
+        // stands against the next vocabulary edit, one step away.
         //
-        // **This is the SECOND consecutive per-descriptor pin, and there is still no generalisation.**
-        // `uninstall_app` above pins the opposite direction (`app_label` must stay OPTIONAL, R14-35);
-        // this one pins `app` REQUIRED. Neither direction is generalised, nothing in the type system
-        // holds either, and the pins are two tests in `Tier0IntentToolSourceTest`. The generalisation
-        // is the `ArgType` debt (spec §7.5) and it is A4′'s — the accumulation of instances is the
-        // evidence that block needs, and it is recorded here rather than repaired.
+        // **This was the SECOND consecutive per-descriptor pin; A4′ phase 0 generalised one direction
+        // and not the other.** `uninstall_app` above pins `app_label` OPTIONAL (R14-35); this one pins
+        // `app` REQUIRED. The R14-37 direction — an optional `app` killing every plan — is now closed in
+        // the planner for every tool rather than per descriptor, which is why this pin's reason above
+        // changed instead of disappearing. The label direction is not generalised: no guard checks that
+        // a row's `labelArg` is declared optional (`ToolArgumentSortGuardTest` checks only that it is
+        // DECLARED), a required label would still make every goal `NoPlan`, and that direction is still
+        // held per descriptor (`uninstall_app` in `Tier0IntentToolSourceTest`, `set_app_alias` in
+        // `MemoryToolSourceTest`). A typed argument kind is still the `ArgType` debt (spec §7.5); `F6`
+        // stays in force with its review appointed for phase 3 (spec §7.8).
         //
         // **`app_label` is deliberately NOT declared**, unlike `uninstall_app`. That tool needs both
         // because its `CONFIRM` card must name what the user said AND what will be removed. This tool

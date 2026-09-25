@@ -37,6 +37,19 @@ data class AppArgumentBinding(val arg: String, val labelArg: String?)
  * tool without that tool appearing in production data. `RoomAgentSessionStore`'s shape, except that
  * its primary constructor is public and this one is not.
  *
+ * **Not the shape the spec named, said rather than blurred.** Spec §3 0.4 asked for "a parallel port
+ * à la `DynamicToolNames`"; what ships is a concrete catalog in the [ToolPermissionCatalog] shape
+ * instead. What that form was FOR is kept — the declaration sits beside `ToolDescriptor`, not inside
+ * it, so `ToolDescriptor` and `ArgType` are untouched. What is dropped is the interface, because
+ * nothing here needed one yet: `DynamicToolNames` is a port because a tool SOURCE produces its data
+ * (`ShortcutToolSource` implements it from the same runtime snapshot as its descriptors) and more
+ * than one reader consumes it, whereas these rows are static, hand-declared facts about authored
+ * tools with a single reader, [ToolMatchPlanner], and a test varies them through the `internal`
+ * constructor rather than through a fake. The cost, named: with the primary constructor `internal`,
+ * only `:data:repository` can supply rows, so a future adapter in another module cannot declare its
+ * own sort without editing the map below — which a port implemented by each source would have
+ * allowed. That is an input for phase 3's sort system, not a property to rely on.
+ *
  * It lives in `:data:repository` because `AppTargetResolver` — the only thing that can answer this
  * sort today — lives here, and because `:domain` is `commonMain`.
  */

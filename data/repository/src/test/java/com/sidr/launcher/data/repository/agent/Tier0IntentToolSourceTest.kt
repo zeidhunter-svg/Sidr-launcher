@@ -157,19 +157,28 @@ class Tier0IntentToolSourceTest {
     }
 
     /**
-     * A1″ Phase 3b, Task 4 — **the SECOND consecutive per-descriptor `required` pin, and there is
-     * still no generalisation.**
+     * A1″ Phase 3b, Task 4 — the second consecutive per-descriptor `required` pin. **Its reason
+     * changed in A4′ phase 0; the pin did not.**
      *
      * The pin above holds `uninstall_app`'s `app_label` OPTIONAL (R14-35); this one holds
-     * `open_app_info`'s `app` REQUIRED. They are opposite directions of the same gap, and the gap is
-     * that `ToolMatchPlanner`'s resolution branch keys on the argument being **named** `app`, never on
-     * whether it is `required`. So a descriptor declaring `app` optional supplies no value, `raw`
-     * becomes `""`, `AppTargetResolver.resolve("")` declines, and the planner answers `NoPlan` — for
-     * every goal, forever, with the whole suite green and the tool registered, reachable by its
-     * trigger, and dead. Nothing in the type system holds either direction; these two tests are the
-     * whole of the enforcement, and the generalisation is the `ArgType` debt (spec §7.5), owned by A4′.
-     * Two instances is the evidence that block needs — the accumulation is deliberate, not an
-     * omission.
+     * `open_app_info`'s `app` REQUIRED. Until A4′ phase 0 both guarded one gap: `ToolMatchPlanner`'s
+     * resolution branch keyed on the argument being **named** `app`, never on `required`, so an
+     * optional `app` the vocabulary did not supply gave `raw = ""`, `AppTargetResolver.resolve("")`
+     * declined, and the planner answered `NoPlan` for every goal, forever, with the suite green
+     * (R14-37). That branch is gone: the planner resolves only a tool with a row in
+     * [ToolArgumentSorts] and reads `required`, leaving a declared, optional, unsupplied argument
+     * absent — held by `ToolMatchPlannerTest`'s
+     * `an optional app argument the vocabulary did not supply does not kill the plan`, with the rows
+     * held to the descriptors by `ToolArgumentSortGuardTest`. This test is no longer the whole of the
+     * enforcement for that direction.
+     *
+     * What it guards now is the other side of that fix. With `required = false`, a trigger that
+     * supplied no `app` would PLAN a `SAFE` step with no target and no consent card, and the worker
+     * would return `Failed` on the blank package; with `required = true`, the planner's
+     * required-argument check declines before any plan exists. Today's vocabulary entry declares
+     * `argName = "app"` and refuses a bare trigger, so no current input reaches that path — the pin
+     * stands against the next vocabulary edit. The label direction (R14-35) is still held only per
+     * descriptor: no guard checks that a row's `labelArg` is declared optional.
      *
      * **`app_label` is deliberately absent**, which is why the schema is asserted by equality rather
      * than by containment: `uninstall_app` needs both arguments because its `CONFIRM` card must name
@@ -190,16 +199,17 @@ class Tier0IntentToolSourceTest {
             descriptor.argSchema.map { it.name },
         )
         assertEquals(
-            "ToolMatchPlanner resolves an argument NAMED app regardless of `required` (R14-37). " +
-                "MEASURED 2026-09-20 (phase 3b mutation M3b), stated no wider than it is true: with " +
-                "required=false planted, this tool still PLANS correctly, because its vocabulary " +
-                "entry declares argName=\"app\" and refuses a bare trigger -- match(\"app info\") " +
-                "is null, so `raw` is never empty and the flag only changes WHICH line returns " +
-                "NoPlan. The pin is therefore against the WIRING changing, not against today's " +
-                "behaviour: R14-37's failure mode (raw=\"\" -> resolve(\"\") -> null -> NoPlan for " +
-                "every goal forever, suite green) arises for any descriptor whose vocabulary does " +
-                "NOT supply `app` -- one vocabulary edit away. Keep it required and keep this " +
-                "sentence honest.",
+            "open_app_info's `app` must stay required. Until A4' phase 0 the reason was R14-37 " +
+                "(ToolMatchPlanner resolved an argument NAMED app regardless of `required`); since " +
+                "then the planner resolves only tools with a ToolArgumentSorts row and reads " +
+                "`required`, so with required=false a trigger that supplied no app would PLAN a " +
+                "target-less SAFE step and the worker would return Failed on the blank package, " +
+                "instead of the planner declining before any plan exists. MEASURED 2026-09-20 " +
+                "(phase 3b mutation M3b, before A4'): with required=false planted this tool still " +
+                "planned correctly, because its vocabulary entry declares argName=\"app\" and " +
+                "refuses a bare trigger -- match(\"app info\") is null. The vocabulary is unchanged, " +
+                "so the pin stands against the next vocabulary edit, not against today's behaviour. " +
+                "Keep it required and keep this sentence honest.",
             listOf(true),
             descriptor.argSchema.map { it.required },
         )

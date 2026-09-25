@@ -437,9 +437,10 @@ class AgentActingSeamTest {
     }
 
     /**
-     * The third acting family, and the one that proves the `app`-resolution branch is keyed on the
-     * argument name rather than applied to every tool: `set_alarm` has no `app` argument, so its
-     * literal survives untouched all the way into the clock intent.
+     * The third acting family, and the one that proves `app` resolution is applied only where a tool
+     * declares it — a `ToolArgumentSorts` row since A4′ phase 0 (before that, an argument NAMED `app`)
+     * — rather than to every tool: `set_alarm` has neither, so its literal survives untouched all the
+     * way into the clock intent.
      */
     @Test
     fun `a SAFE alarm command crosses the same seam and issues its intent unresolved`() = runTest {

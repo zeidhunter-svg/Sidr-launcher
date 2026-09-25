@@ -409,10 +409,14 @@ class ToolVocabulary internal constructor(val entries: List<Entry>) {
             ),
             // The only ARGUMENT-CARRYING entry of the eleven navigating tools, so it is the only one
             // whose `tr` form is a **suffix**: Turkish is SOV and the argument precedes, exactly as
-            // `uninstall_app` above declares `uygulamasını kaldır`. `argName = "app"` opts the
-            // descriptor into `ToolMatchPlanner`'s resolution branch — which keys on this NAME and not
-            // on `required`, the reason that descriptor's `required = true` is written out and pinned
-            // by its own test (R14-37).
+            // `uninstall_app` above declares `uygulamasını kaldır`. `argName = "app"` only names which
+            // descriptor argument the matched remainder fills (and, since an entry with an `argName`
+            // refuses a bare trigger, why «app info» alone matches nothing); it opts nothing into
+            // resolution. Since A4′ phase 0 `ToolMatchPlanner` resolves an app only for a tool with a
+            // `ToolArgumentSorts` row — this one has one — and it reads `required`; why the
+            // descriptor's `required = true` is written out and pinned by its own test is said on the
+            // descriptor. Until then resolution keyed on the argument NAME regardless of `required`
+            // (R14-37).
             Entry(
                 id = Tier0ToolIds.OPEN_APP_INFO,
                 prefixByLocale = mapOf(

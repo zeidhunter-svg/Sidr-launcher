@@ -2,8 +2,8 @@ package com.sidr.launcher.feature.assistant
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.navigation.NavigationEvent
+import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.domain.ai.AiChunk
 import com.sidr.launcher.domain.ai.AiError
 import com.sidr.launcher.domain.ai.AiModelId
@@ -89,6 +89,11 @@ class AssistantViewModel @Inject constructor(
         _navigationEvents.trySend(NavigationEvent.NavigateBack)
     }
 
+    /** Navigate to the dedicated AI-provider setup surface (the chat itself never hosts the form). */
+    fun openProviderSettings() {
+        _navigationEvents.trySend(NavigationEvent.NavigateTo(Routes.AssistantProvider.ROUTE))
+    }
+
     fun send(prompt: String) {
         streamJob?.cancel()
         lastPrompt = prompt
@@ -104,7 +109,7 @@ class AssistantViewModel @Inject constructor(
                         is AiChunk.Failed -> _uiState.update {
                             it.copy(
                                 status = AssistantStatus.Error(
-                                    error = chunk.error.toUiError(),
+                                    error = chunk.error.toAssistantError(),
                                     retryable = chunk.error.isButtonRetryable(),
                                     showProviderCta = chunk.error.needsProviderSetup(),
                                 ),
@@ -132,11 +137,16 @@ class AssistantViewModel @Inject constructor(
      *
      * A blank [apiKey] skips the Keystore write (existing key is preserved). [apiKey] is never
      * logged, placed in state, or returned after this call.
+     *
+     * **Write order: key, then config.** The config write is the observable event, so it must come
+     * last — see the inline note below.
      */
     fun saveProvider(baseUrl: String, model: String, apiKey: String) {
         val trimmedUrl = baseUrl.trim()
         if (!trimmedUrl.startsWith("https://")) {
-            _uiState.update { it.copy(form = it.form.copy(saveError = "Base URL must start with https://")) }
+            _uiState.update {
+                it.copy(form = it.form.copy(saveError = ProviderSaveError.BASE_URL_NOT_HTTPS))
+            }
             return
         }
         val host = try {
@@ -146,6 +156,21 @@ class AssistantViewModel @Inject constructor(
         }
         val providerId = AiProviderId(host)
         viewModelScope.launch {
+            // Key BEFORE config (2026-08-10). The config write is what makes `activeConfig()` emit, and
+            // every observer — including the *other* screen's ViewModel instance — recomputes `keySet`
+            // from the secret store on that emit. Writing the config first left a window where an
+            // observer read the store before the key landed and then cached "no key set" until the next
+            // config change (found on-device during DS-10). It also means a provider is never announced
+            // as configured while its key is still missing.
+            if (apiKey.isNotBlank()) {
+                val keyResult = secretStore.put(SecretKeys.apiKey(providerId), apiKey.trim())
+                if (keyResult is OperationResult.Failure) {
+                    _uiState.update {
+                        it.copy(form = it.form.copy(saveError = ProviderSaveError.KEY_SAVE_FAILED))
+                    }
+                    return@launch
+                }
+            }
             val config = AiProviderConfig(
                 providerId = providerId,
                 baseUrl = trimmedUrl,
@@ -154,39 +179,45 @@ class AssistantViewModel @Inject constructor(
             )
             val configResult = providerConfig.setActiveConfig(config)
             if (configResult is OperationResult.Failure) {
-                _uiState.update { it.copy(form = it.form.copy(saveError = "Failed to save provider settings")) }
+                _uiState.update {
+                    it.copy(form = it.form.copy(saveError = ProviderSaveError.CONFIG_SAVE_FAILED))
+                }
                 return@launch
             }
-            if (apiKey.isNotBlank()) {
-                val keyResult = secretStore.put(SecretKeys.apiKey(providerId), apiKey.trim())
-                if (keyResult is OperationResult.Failure) {
-                    _uiState.update { it.copy(form = it.form.copy(saveError = "Failed to save API key")) }
-                    return@launch
-                }
+            _uiState.update {
+                it.copy(
+                    form = it.form.copy(
+                        keySet = it.form.keySet || apiKey.isNotBlank(),
+                        saveError = null,
+                    ),
+                )
             }
-            _uiState.update { it.copy(form = it.form.copy(saveError = null)) }
         }
     }
 }
 
-// ── AiError → UiError mapping (feature-local) ────────────────────────────────────────────────────
-// Lives in :feature:assistant, NOT in core:common. Per ADR Block B, UiError is in core:common with
-// no domain dep by design; putting the mapper there would add a forbidden core/common → domain edge.
-// AiError is a domain type, so the mapping happens here in the VM layer.
+// ── AiError → AssistantError mapping (feature-local) ─────────────────────────────────────────────
+// Lives in :feature:assistant, NOT in core:common. Per ADR Block B, the shared UI error type is in
+// core:common with no domain dep by design; putting the mapper there would add a forbidden
+// core/common → domain edge. AiError is a domain type, so the mapping happens here in the VM layer.
+// I18N-1 Task 10 changed only the *type* this produces (was `UiError`, whose `Message` variant
+// carried an English sentence): every case still lands on exactly the copy it did before, now chosen
+// from resources by `AssistantPresentation`. `Offline` and `Network` share a case because both
+// already produced `UiError.Network` — the same single rendered sentence.
 // Per Block-I KDoc retryability table:
 //   Retryable:     Offline / Network / Timeout / RateLimited / ServerError / Unknown
 //   Not-retryable: MissingCredentials / Unauthorized / InvalidRequest
 
-internal fun AiError.toUiError(): UiError = when (this) {
-    is AiError.Offline -> UiError.Network
-    is AiError.Network -> UiError.Network
-    is AiError.MissingCredentials -> UiError.Message("No API key configured. Set up a provider.")
-    is AiError.Unauthorized -> UiError.Message("API key rejected by provider. Update your settings.")
-    is AiError.RateLimited -> UiError.Message("Rate limited. Please wait and retry.")
-    is AiError.Timeout -> UiError.Message("Request timed out.")
-    is AiError.ServerError -> UiError.Message("Server error (${statusCode ?: "unknown"}). Please retry.")
-    is AiError.InvalidRequest -> UiError.Message("Invalid request: ${detail ?: "check model / settings"}.")
-    is AiError.Unknown -> UiError.Unknown
+internal fun AiError.toAssistantError(): AssistantError = when (this) {
+    is AiError.Offline -> AssistantError.Network
+    is AiError.Network -> AssistantError.Network
+    is AiError.MissingCredentials -> AssistantError.MissingCredentials
+    is AiError.Unauthorized -> AssistantError.Unauthorized
+    is AiError.RateLimited -> AssistantError.RateLimited
+    is AiError.Timeout -> AssistantError.Timeout
+    is AiError.ServerError -> AssistantError.ServerError(statusCode)
+    is AiError.InvalidRequest -> AssistantError.InvalidRequest(detail)
+    is AiError.Unknown -> AssistantError.Unknown
 }
 
 internal fun AiError.isButtonRetryable(): Boolean = when (this) {

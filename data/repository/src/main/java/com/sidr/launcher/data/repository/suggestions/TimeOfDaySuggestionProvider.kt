@@ -1,6 +1,8 @@
 package com.sidr.launcher.data.repository.suggestions
 
 import com.sidr.launcher.domain.suggestions.Suggestion
+import com.sidr.launcher.domain.suggestions.SuggestionActionAnchor
+import com.sidr.launcher.domain.suggestions.SuggestionActionTargetResolver
 import com.sidr.launcher.domain.suggestions.SuggestionContext
 import com.sidr.launcher.domain.suggestions.SuggestionProvider
 import com.sidr.launcher.domain.suggestions.SuggestionSource
@@ -8,33 +10,45 @@ import com.sidr.launcher.domain.suggestions.TimeOfDay
 import javax.inject.Inject
 
 /**
- * Zero-permission provider: a fixed per-[TimeOfDay] prior (Phase 7, Block U1).
+ * Zero-permission provider: a thin per-[TimeOfDay] fallback (Phase 9 Y3).
  *
- * Always contributes — no platform read, no permission, nothing to deny. Pairs with
- * [UsageSuggestionProvider] to guarantee a non-empty suggestion list on a fresh device with every
- * optional permission denied (the U6 degrade contract).
+ * It never hardcodes AOSP package names. Coarse anchors are resolved through
+ * [SuggestionActionTargetResolver] to the current device's actual launchable package; if no handler can
+ * be proven launchable, the provider contributes nothing.
  */
-class TimeOfDaySuggestionProvider @Inject constructor() : SuggestionProvider {
+class TimeOfDaySuggestionProvider @Inject constructor(
+    private val actionTargetResolver: SuggestionActionTargetResolver,
+) : SuggestionProvider {
 
     override suspend fun provide(context: SuggestionContext): List<Suggestion> =
         candidatesFor(context.timeOfDay)
+            .mapNotNull { candidate ->
+                actionTargetResolver.resolve(candidate.anchor)?.let { resolved ->
+                    Suggestion(
+                        label = resolved.label,
+                        actionId = resolved.actionId,
+                        source = SuggestionSource.TIME_OF_DAY,
+                        score = candidate.score,
+                    )
+                }
+            }
+            .distinctBy { it.actionId }
 
-    private fun candidatesFor(timeOfDay: TimeOfDay): List<Suggestion> = when (timeOfDay) {
+    private fun candidatesFor(timeOfDay: TimeOfDay): List<AnchorCandidate> = when (timeOfDay) {
         TimeOfDay.MORNING -> listOf(
-            Suggestion("Clock", "com.android.deskclock", SuggestionSource.TIME_OF_DAY, 0.60),
-            Suggestion("Camera", "com.android.camera", SuggestionSource.TIME_OF_DAY, 0.50),
+            AnchorCandidate(SuggestionActionAnchor.ALARMS, 0.30),
         )
-        TimeOfDay.WORK -> listOf(
-            Suggestion("Messages", "com.android.messaging", SuggestionSource.TIME_OF_DAY, 0.60),
-            Suggestion("Settings", "com.android.settings", SuggestionSource.TIME_OF_DAY, 0.45),
-        )
+        TimeOfDay.WORK -> emptyList()
         TimeOfDay.EVENING -> listOf(
-            Suggestion("Maps", "com.google.android.apps.maps", SuggestionSource.TIME_OF_DAY, 0.55),
-            Suggestion("Camera", "com.android.camera", SuggestionSource.TIME_OF_DAY, 0.50),
+            AnchorCandidate(SuggestionActionAnchor.CAMERA, 0.25),
         )
         TimeOfDay.NIGHT -> listOf(
-            Suggestion("Clock", "com.android.deskclock", SuggestionSource.TIME_OF_DAY, 0.60),
-            Suggestion("Music", "com.android.music", SuggestionSource.TIME_OF_DAY, 0.45),
+            AnchorCandidate(SuggestionActionAnchor.ALARMS, 0.30),
         )
     }
+
+    private data class AnchorCandidate(
+        val anchor: SuggestionActionAnchor,
+        val score: Double,
+    )
 }

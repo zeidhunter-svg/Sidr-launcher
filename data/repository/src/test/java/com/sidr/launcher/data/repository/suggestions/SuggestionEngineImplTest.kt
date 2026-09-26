@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakePermissionChecker
+import com.sidr.launcher.core.testing.FakeSuggestionActionTargetResolver
 import com.sidr.launcher.core.testing.FakeSuggestionProvider
 import com.sidr.launcher.core.testing.FakeSuggestionRankingRepository
 import com.sidr.launcher.core.testing.FakeSuggestionsCacheRepository
@@ -52,12 +53,14 @@ class SuggestionEngineImplTest {
         providers: List<SuggestionProvider>,
         rankingRepository: FakeSuggestionRankingRepository = FakeSuggestionRankingRepository(),
         cacheRepository: FakeSuggestionsCacheRepository = FakeSuggestionsCacheRepository(),
+        actionTargetResolver: FakeSuggestionActionTargetResolver = FakeSuggestionActionTargetResolver(),
     ): SuggestionEngineImpl = SuggestionEngineImpl(
         providers = providers,
         ranker = HeuristicSuggestionRanker(),
         rankingRepository = rankingRepository,
         cacheRepository = cacheRepository,
         featureFlagRepository = FakeFeatureFlagRepository(initial = FeatureFlags(aiSuggestionsEnabled = true)),
+        actionTargetResolver = actionTargetResolver,
         ioDispatcher = dispatcher,
     )
 
@@ -142,6 +145,44 @@ class SuggestionEngineImplTest {
         assertTrue(
             "a denied opt-in provider must contribute nothing",
             ranked.none { it.source == SuggestionSource.CALENDAR || it.source == SuggestionSource.LOCATION },
+        )
+    }
+
+    @Test
+    fun `refresh filters unsupported actions before ranking and persistence`() = runTest {
+        val unsupported = Suggestion(
+            label = "Clock",
+            actionId = "com.android.deskclock",
+            source = SuggestionSource.TIME_OF_DAY,
+            score = 1.0,
+        )
+        val supported = Suggestion(
+            label = "com.example.app",
+            actionId = "com.example.app",
+            source = SuggestionSource.RECENT_USAGE,
+            score = 0.1,
+        )
+        val rankingRepo = FakeSuggestionRankingRepository()
+        val cacheRepo = FakeSuggestionsCacheRepository()
+        val resolver = FakeSuggestionActionTargetResolver(defaultSupported = false).apply {
+            support("com.example.app")
+        }
+        val sut = engine(
+            providers = listOf(FakeSuggestionProvider(suggestions = listOf(unsupported, supported))),
+            rankingRepository = rankingRepo,
+            cacheRepository = cacheRepo,
+            actionTargetResolver = resolver,
+        )
+
+        val result = sut.refresh()
+
+        assertTrue(result is OperationResult.Success)
+        val ranked = (result as OperationResult.Success).value
+        assertEquals(listOf("com.example.app"), ranked.map { it.actionId })
+        assertEquals(listOf("com.example.app"), rankingRepo.recordedUpserts.map { it.actionId })
+        assertEquals(
+            listOf(CachedSuggestion(label = "com.example.app", actionId = "com.example.app")),
+            cacheRepo.getCachedSuggestions().first(),
         )
     }
 

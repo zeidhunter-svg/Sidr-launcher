@@ -1,6 +1,7 @@
 package com.sidr.launcher.data.repository.preferences
 
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -40,7 +41,25 @@ internal object PreferencesKeys {
 
     // User preferences — prefix: user_
     val USER_THEME_NAME             = stringPreferencesKey("user_theme_name")
+    // AIL-6 / DF-7 — brand accent phosphor ("green" | "amber"). Denylist-clean ("accent"/"color").
+    val USER_ACCENT_COLOR           = stringPreferencesKey("user_accent_color")
     val USER_COMMAND_INPUT_ENABLED  = booleanPreferencesKey("user_command_input_enabled")
+    // Block X6 deferred UI prefs. All three names are denylist-clean (no forbidden term):
+    // "favorites"/"count", "mic"/"input" (deliberately NOT "voice"), "setup"/"hint"/"dismissed".
+    val USER_FAVORITES_COUNT        = intPreferencesKey("user_favorites_count")
+    val USER_MIC_INPUT_ENABLED      = booleanPreferencesKey("user_mic_input_enabled")
+    val USER_SETUP_HINT_DISMISSED   = booleanPreferencesKey("user_setup_hint_dismissed")
+
+    // AIL-2 / R5 — web-search provider URL template (default Google). Holds a `{q}` placeholder for
+    // the URL-encoded query. Denylist-clean: "web"/"provider"/"template" are not forbidden terms
+    // (deliberately NOT "search"/"query", which the privacy guard rejects), so it is inventoried below.
+    val WEB_PROVIDER_TEMPLATE       = stringPreferencesKey("web_provider_template")
+    // 2026-08-10 (DS-11 A1) — opt in to the auto-hiding bottom nav. Denylist-clean ("nav"/"bar").
+    // Deliberately a NEW key, replacing the abandoned `user_always_show_nav_bar` (which expressed the
+    // same setting inverted): existing installs have this key unset, so they pick up the new default
+    // (pinned) instead of an already-persisted old value. The orphaned boolean left behind in
+    // DataStore is inert — Preferences has no schema, and it holds no user content.
+    val USER_AUTO_HIDE_NAV_BAR      = booleanPreferencesKey("user_auto_hide_nav_bar")
 
     // Feature flags — prefix: flag_
     val FLAG_AI_SUGGESTIONS_ENABLED    = booleanPreferencesKey("flag_ai_suggestions_enabled")
@@ -49,6 +68,17 @@ internal object PreferencesKeys {
     // is the only history carrier. Domain field stays FeatureFlags.usageHistoryEnabled.
     val FLAG_USAGE_HISTORY_ENABLED     = booleanPreferencesKey("flag_usage_tracking_enabled")
     val FLAG_PERMISSION_EDU_DISMISSED  = booleanPreferencesKey("flag_permission_edu_dismissed")
+    // 2026-08-19 (Этап 4.0, ADR 1/4) — "understanding never leaves this device" opt-out, off by
+    // default. Denylist-clean ("local"/"only"). Domain field: FeatureFlags.localOnlyMode.
+    // Deliberately a NEW key, replacing the abandoned `flag_llm_router_enabled` (which gated
+    // understanding itself, inverted): writeFeatureFlags persists the whole object on every settings
+    // change, so every install that ever touched a setting already has `flag_llm_router_enabled =
+    // false` stored, and a stored value beats a changed default — inverting in place would have been
+    // inert for exactly the users who use the app. Same failure and same fix as
+    // USER_AUTO_HIDE_NAV_BAR above (DS-11), which was caught on device, not in review. The orphaned
+    // boolean left behind in DataStore is inert (Preferences has no schema, it holds no user
+    // content) and there is no migration — ADR 1/4 decided that deliberately.
+    val FLAG_LOCAL_ONLY                = booleanPreferencesKey("flag_local_only")
 
     // Device-profile cache — prefix: device_
     // Flattened primitives; no Android types. When DeviceProfile is formalised in
@@ -87,23 +117,46 @@ internal object PreferencesKeys {
     val AI_PROVIDER_MODEL        = stringPreferencesKey("ai_provider_model")
     val AI_PROVIDER_DISPLAY_NAME = stringPreferencesKey("ai_provider_display_name")
 
-    // Local-NLU model availability — prefix: model_ (Block Q).
-    // Set of ModelId.value strings whose on-disk `.onnx` artifact has been SHA-256-verified and
-    // promoted by the download worker (the observable signal the OnnxIntentClassifier gate reads).
-    // Carries no user data — only opaque model identifiers; the name is denylist-clean (no forbidden
-    // term). Disk presence is the real load-time gate (LocalModelFiles.modelFile() returns null when
-    // a file is gone); this flag is just the reactive availability projection.
-    val MODEL_AVAILABLE_IDS = stringSetPreferencesKey("model_available_ids")
+    // Prayer setup + last schedule cache — prefix: prayer_ (DS-6B Task 6).
+    // These key STRINGS are inventoried here ONLY so PrivacyInventoryGuardTest covers them; the
+    // actual `Preferences.Key<>` objects are defined LOCALLY in `:data:prayer`
+    // (`PrayerPreferencesKeys.kt`) over the SAME shared `sidr_preferences` DataStore file — keys are
+    // just names, so no `:data:prayer -> :data:repository` module edge is needed (that impl is
+    // `internal` here anyway). Keep the two lists in sync by hand if either changes.
+    // Deliberately `prayer_loc_*` (NOT `prayer_location_*`) — "location" is a forbidden denylist term
+    // below; "loc" is not. Coordinates are already rounded to 2dp before they reach domain (see
+    // PrayerLocation), so no precise coordinate is ever stored.
+    val PRAYER_METHOD           = stringPreferencesKey("prayer_method")
+    val PRAYER_MADHAB           = stringPreferencesKey("prayer_madhab")
+    val PRAYER_LOC_LABEL        = stringPreferencesKey("prayer_loc_label")
+    val PRAYER_LOC_LAT2DP       = stringPreferencesKey("prayer_loc_lat2dp")
+    val PRAYER_LOC_LON2DP       = stringPreferencesKey("prayer_loc_lon2dp")
+    val PRAYER_LOC_TZ           = stringPreferencesKey("prayer_loc_tz")
+    val PRAYER_LOC_SOURCE       = stringPreferencesKey("prayer_loc_source")
+    // Last computed schedule, cached only for an instant labelled first frame (spec §0.6). DATE is
+    // the location-tz civil date (epoch-day); TIMES + PROVENANCE are JSON-encoded (kotlinx-serialization,
+    // UTF-8 safe for arbitrary city labels) so a partial/malformed read can never produce a schedule
+    // without its provenance — see PrayerScheduleCacheImpl.
+    val PRAYER_SCHED_DATE       = stringPreferencesKey("prayer_sched_date")
+    val PRAYER_SCHED_TIMES      = stringPreferencesKey("prayer_sched_times")
+    val PRAYER_SCHED_PROVENANCE = stringPreferencesKey("prayer_sched_provenance")
 
     // All DataStore key name strings — used exclusively by PrivacyInventoryGuardTest
     // to assert no key name contains a forbidden term (tests the *value* "user_theme_name",
     // not the Kotlin variable name USER_THEME_NAME).
     val ALL_KEY_NAMES: Set<String> = setOf(
         USER_THEME_NAME.name,
+        USER_ACCENT_COLOR.name,
         USER_COMMAND_INPUT_ENABLED.name,
+        USER_FAVORITES_COUNT.name,
+        USER_MIC_INPUT_ENABLED.name,
+        USER_SETUP_HINT_DISMISSED.name,
+        WEB_PROVIDER_TEMPLATE.name,
+        USER_AUTO_HIDE_NAV_BAR.name,
         FLAG_AI_SUGGESTIONS_ENABLED.name,
         FLAG_USAGE_HISTORY_ENABLED.name,
         FLAG_PERMISSION_EDU_DISMISSED.name,
+        FLAG_LOCAL_ONLY.name,
         DEVICE_IS_LOW_END.name,
         DEVICE_CACHED_AT_EPOCH_MS.name,
         DEVICE_HAS_CACHE.name,
@@ -113,7 +166,16 @@ internal object PreferencesKeys {
         AI_PROVIDER_BASE_URL.name,
         AI_PROVIDER_MODEL.name,
         AI_PROVIDER_DISPLAY_NAME.name,
-        MODEL_AVAILABLE_IDS.name,
+        PRAYER_METHOD.name,
+        PRAYER_MADHAB.name,
+        PRAYER_LOC_LABEL.name,
+        PRAYER_LOC_LAT2DP.name,
+        PRAYER_LOC_LON2DP.name,
+        PRAYER_LOC_TZ.name,
+        PRAYER_LOC_SOURCE.name,
+        PRAYER_SCHED_DATE.name,
+        PRAYER_SCHED_TIMES.name,
+        PRAYER_SCHED_PROVENANCE.name,
     )
 
     const val MAX_CACHED_SUGGESTIONS = 5

@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 13 locked vocabulary (spec §7) - see docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md
+  for the full owner-review table. This file holds TWO classes, mirroring feature/prayer's
+  strings_locked.xml (Task 7):
+
+  Class A - locked, NEVER translated: carries translatable="false". Must not appear in values-ru or
+  values-tr (LocaleCompletenessGuardTest rejects a translatable="false" key that shows up in a
+  translated folder).
+  - launcher_prayer_provenance_frame: extracted verbatim from PrayerSummaryMapper.kt's
+    toProvenanceText() ("LOCAL CALC · <method> · <madhab>" - the ALL-CAPS "LOCAL CALC" abbreviation
+    used on Home, distinct from feature/prayer's lowercase "local calculation · ..." frame on the
+    detail screen; both are correct, they are different screens' existing copy).
+  - launcher_drawer_groups_provenance: "ON-DEVICE · OFFLINE" from AppDrawerScreen.kt's Groups preview
+    grid - a terminal state/provenance token in the same family as the spec §7.1 examples
+    (LOCAL ONLY, LOCAL CALC, etc.), not enumerated verbatim there. Judgment call: flagged in the task
+    13 report.
+  - launcher_tool_level_in_app / _system_intent / _app_shortcut / _unknown / _launcher_memory: Task 10 (A1') review finding 4
+    (2026-09-03). Moved here from plain strings.xml, where they shipped translated in ru/tr. Same
+    family as launcher_drawer_groups_provenance above and as core/ui's ui_gate_type_external
+    ("EXTERNAL") - a terminal provenance/machine-vocabulary token, not a sentence. Before the move a
+    ru user saw a chip say "EXTERNAL" (ui_gate_type_external, locked English) directly above a line
+    reading "ВНЕ ПРИЛОЖЕНИЯ" (launcher_tool_level_in_app, translated) for the exact same concept - a
+    mixed surface, worse than either pure choice. AgentSessionPresentation.kt's provenanceLabelFor
+    still resolves ToolLevel -> these resources; only the resource file moved. A1" Task 7 added the
+    fourth, _app_shortcut, for its third adapter: without it every shortcut tool would disclose through
+    the _unknown fallback ("ANOTHER APP"), which is true but says less than the registry knows. Task 11
+    added the fifth, _launcher_memory, for completeness only - every launcher_memory tool is LOCAL, so
+    provenanceLabelFor's own EXTERNAL guard returns null before this entry is ever reached; see that
+    function's KDoc.
+
+  Class B - locked, but IS translated (values-ru / values-tr carry the same keys, same as any other
+  string): calculation-method names, Asr madhab labels, and the Shahada, because this screen renders
+  it (LauncherScreen.kt's HomeAnchorSlot). These live here (not in strings.xml) only so a change lands
+  in the owner-review package before it ships - Turkish uses Diyanet terminology, and the Shahada is
+  Islamic creed text; both are religious terminology the owner reviews specifically (spec §7.2).
+
+  - Calculation-method names (11, matching domain.prayer.SupportedPrayerMethods.ALL - domain stays
+    Android-resource-free per CLAUDE.md, so these are re-hosted here as the presentation-layer source
+    of truth, mirroring feature/prayer's identical duplication - there is no feature -> feature edge):
+    English copied verbatim from SupportedPrayerMethods.kt (byte-identical to feature/prayer's English,
+    since both source from the same domain displayLabel). The Turkish/Russian values are the SAME
+    DRAFT translation feature/prayer already carries (Task 7), reused for terminology consistency
+    across the two screens that render prayer method names - both awaiting the same owner sign-off.
+  - Asr madhab labels (2, matching domain.prayer.Madhab): English copied verbatim from
+    PrayerSummaryMapper.kt's pre-Task-13 madhabLabel() - "Standard" (NOT feature/prayer's longer
+    "Standard (Shafi'i / Maliki / Hanbali)"). This divergence is pre-existing and intentional to
+    preserve (byte-identity rule, spec §12) - flagged in the task 13 report as the owner's call, not
+    "fixed" here. The Turkish/Russian values are a DRAFT translation awaiting owner sign-off.
+  - The Shahada (2 lines, LauncherScreen.kt's HomeAnchorSlot, DS-4 sacred anchor): English copied
+    verbatim from the pre-Task-13 literal. The Turkish/Russian values are a DRAFT translation (standard
+    renderings used in Russian/Turkish Islamic sources) awaiting owner sign-off - mistranslating the
+    Shahada is a real risk this task will not take silently.
+
+  I18N-2 addition (2026-08-19): prayer-name labels (5, matching PrayerSummaryMapper.kt's
+  FIVE_PRAYERS_ORDER). Closes a real TalkBack bug: the Home strip's cell contentDescription used to
+  read the raw Kotlin enum name (name.name -> "FAJR"/"DHUHR"/...) instead of resolving through
+  sidrString, which was invisible in English (this file's own English value happens to equal the enum
+  name) but announced literal English inside ru/tr. Values copied verbatim from feature/prayer's
+  identical prayer_name_* keys (Task 7) for terminology consistency across both screens - same
+  duplication rationale as the calculation-method names above (no feature -> feature edge). No
+  prayer_name_sunrise here: FIVE_PRAYERS_ORDER never includes SUNRISE and Home has no sunrise row
+  (PrayerSummaryMapper.kt's prayerNameLabel() documents the same exclusion).
+-->
+<resources>
+    <!-- Class A: locked, never translated -->
+    <string name="launcher_prayer_provenance_frame" translatable="false">LOCAL CALC · %1$s · %2$s</string>
+    <string name="launcher_drawer_groups_provenance" translatable="false">ON-DEVICE · OFFLINE</string>
+    <!-- Task 10 (A1') review finding 4: DOC-ILM-2 disclosure tokens - which source supplied the tool,
+         and that its effect leaves the launcher. `_unknown` is the fail-closed label for an unmapped
+         ToolLevel, which the open value class makes reachable by construction; the raw level string
+         never reaches a user. -->
+    <string name="launcher_tool_level_in_app" translatable="false">SIDR · EXTERNAL</string>
+    <string name="launcher_tool_level_system_intent" translatable="false">SYSTEM INTENT · EXTERNAL</string>
+    <string name="launcher_tool_level_app_shortcut" translatable="false">APP SHORTCUT · EXTERNAL</string>
+    <string name="launcher_tool_level_unknown" translatable="false">ANOTHER APP · EXTERNAL</string>
+    <!-- Task 11 (A1″ Phase 3a): completeness only. `provenanceLabelFor` returns null for every LOCAL
+         tool before this `when` runs, and every launcher_memory tool is LOCAL, so this string never
+         reaches a user - see that function's own KDoc. It exists so the mapping stays total over every
+         declared ToolLevel rather than silently omitting one. -->
+    <string name="launcher_tool_level_launcher_memory" translatable="false">LAUNCHER MEMORY · LOCAL</string>
+
+    <!-- Class B: calculation-method names (SupportedPrayerMethods.ALL, display order) -->
+    <string name="launcher_prayer_method_mwl">Muslim World League</string>
+    <string name="launcher_prayer_method_egyptian">Egyptian General Authority of Survey</string>
+    <string name="launcher_prayer_method_karachi">University of Islamic Sciences, Karachi</string>
+    <string name="launcher_prayer_method_umm_al_qura">Umm al-Qura University, Makkah</string>
+    <string name="launcher_prayer_method_dubai">Dubai (UAE)</string>
+    <string name="launcher_prayer_method_moon_sighting_committee">Moonsighting Committee Worldwide</string>
+    <string name="launcher_prayer_method_north_america">Islamic Society of North America (ISNA)</string>
+    <string name="launcher_prayer_method_kuwait">Kuwait</string>
+    <string name="launcher_prayer_method_qatar">Qatar</string>
+    <string name="launcher_prayer_method_singapore">Majlis Ugama Islam Singapura</string>
+    <string name="launcher_prayer_method_turkey">Diyanet İşleri Başkanlığı, Turkey</string>
+
+    <!-- Class B: Asr madhab labels (Madhab) - "Standard" here, NOT feature/prayer's longer form -->
+    <string name="launcher_prayer_madhab_standard">Standard</string>
+    <string name="launcher_prayer_madhab_hanafi">Hanafi</string>
+
+    <!-- Class B: the Shahada (LauncherScreen.kt HomeAnchorSlot, DS-4 sacred anchor) -->
+    <string name="launcher_shahada_line1">There is no deity except Allah</string>
+    <string name="launcher_shahada_line2">Muhammad is the messenger of Allah</string>
+
+    <!-- Class B: prayer-name labels (I18N-2, PrayerSummaryMapper.kt's FIVE_PRAYERS_ORDER) -->
+    <string name="launcher_prayer_name_fajr">FAJR</string>
+    <string name="launcher_prayer_name_dhuhr">DHUHR</string>
+    <string name="launcher_prayer_name_asr">ASR</string>
+    <string name="launcher_prayer_name_maghrib">MAGHRIB</string>
+    <string name="launcher_prayer_name_isha">ISHA</string>
+</resources>

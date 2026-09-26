@@ -10,7 +10,7 @@ plugins {
 
 android {
     namespace = "com.sidr.launcher.data.repository"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 28
@@ -72,6 +72,9 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.ext.junit)
     testImplementation(project(":core:testing"))
+    // Test-only. `AgentSessionMappersTest` enumerates TraceEvent's sealed subclasses so that adding a
+    // variant without teaching the mapper to read it fails a test instead of shipping.
+    testImplementation(libs.kotlin.reflect)
 
     androidTestImplementation(libs.room.testing)
     androidTestImplementation(libs.androidx.test.ext.junit)

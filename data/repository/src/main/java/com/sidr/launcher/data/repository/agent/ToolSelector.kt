@@ -66,16 +66,17 @@ import javax.inject.Inject
  *     "business" — the shortcut need not use every token it is allowed to use.
  *
  *     **Why not strip a launch verb instead** (reusing `RuleBasedIntentMatcher.LAUNCH_VERBS`, stripping a
- *     leading/trailing verb before matching) **— considered and rejected on evidence, not on cost.**
- *     `RuleBasedIntentMatcher` returns `LaunchAppIntent` for a verb-led command ("открой telegram new
- *     message", or the `tr` suffix shape "... aç") at confidence 0.90 — above the 0.85 auto-execute
- *     threshold — so FastPath always *decides* such a command: it can never come back
- *     `Unknown`/`LowConfidence`, the two states `RouteCommandUseCase` calls undecided, and step 2b
- *     runs only on an undecided command. What a decided verb-led command does next depends on whether
- *     the app resolves: a match just launches, and a miss is `NoAppFound`, which **step 2** (not 2b)
- *     takes into the A0 launch→store plan. Either way it never reaches step 2b and therefore never
- *     reaches this selector at all — a verb table here would be machinery built for inputs that
- *     structurally cannot arrive.
+ *     leading/trailing verb before matching) **— considered and rejected on evidence, not on cost; the
+ *     evidence was narrowed by A4′ phase 1 and the question is open again.** Until that phase,
+ *     `RuleBasedIntentMatcher` returned `LaunchAppIntent` for every verb-led command at 0.90 — above the
+ *     0.85 auto-execute threshold — so FastPath always *decided* it and it never reached step 2b. Since
+ *     phase 1 a verb-led command whose app name does not resolve comes back `LowConfidence` —
+ *     undecided — when the name carries a second goal (`SecondGoal`: "открой gmail и проверь почту"),
+ *     and so it DOES reach this selector. It still selects nothing here: no authored trigger begins
+ *     with a FastPath verb (`ToolVocabularyReachabilityTest`), and rule 4 would need "открой"/"open" to
+ *     be a name or qualifier token of a shortcut. Whether stripping the verb would now convert such
+ *     commands is a scope question for phase 3 and the owner — spec §11 lists replacing `ToolSelector`
+ *     as a non-goal of A4′ — not a decision this rule takes on its own.
  *
  * **What "naming its app" and "naming itself" actually require.** The app-qualifier check is a loose,
  * order-free membership test: any one word of the qualifier appearing anywhere in the command is enough.
@@ -98,8 +99,9 @@ import javax.inject.Inject
  * **Rule 4 has its own recall cost, real since Task 10b and not merely theoretical.** Any function
  * word in the command that is neither a name token nor a qualifier token kills an otherwise-good
  * match: `"new chat in whatsapp"` declines because of `"in"`; `"новое сообщение в телеграм"` declines
- * because of `"в"`. Both are verbless, so unlike the verb-led case above — which never reaches this
- * selector at all — these **do** reach step 2b and are declined here. The trade is deliberate: a
+ * because of `"в"`. Both are verbless, so unlike the verb-led case above — which reaches this selector
+ * only since A4′ phase 1, and only when its app name carries a second goal — these reach step 2b
+ * routinely and are declined here. The trade is deliberate: a
  * decline is free and falls through to the model planner exactly as any other miss, while a false
  * positive fires an effect. Closing this would need a per-locale stopword set — a scope decision for
  * the owner, not one this rule takes on its own.

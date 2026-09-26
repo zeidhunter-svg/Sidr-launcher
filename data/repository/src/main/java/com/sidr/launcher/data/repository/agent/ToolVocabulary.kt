@@ -48,7 +48,9 @@ data class ToolMatch(val id: ToolId, val args: Map<String, String>)
  *
  * **A trigger FastPath already claims is a capability that exists only in this table.** FastPath runs
  * first and `RouteCommandUseCase` only builds a `GoalShape.Free` goal for a command it left undecided,
- * so a trigger colliding with a FastPath verb never reaches the planner. Six of the triggers this task's
+ * so a trigger colliding with a FastPath verb does not reach the planner as itself. Since A4′ phase 1
+ * a verb-led command is left undecided when its app name carries a second goal, but its text then
+ * still begins with the verb, and no entry here does. Six of the triggers this task's
  * brief proposed were dead on exactly that rule, Turkish entirely so:
  *  - `"open system settings"` / `"открой настройки системы"` — the `LAUNCH_VERBS` prefixes `"open"` /
  *    `"открой"` take them first, so they arrive as an app launch. The verbless `"system settings"` and

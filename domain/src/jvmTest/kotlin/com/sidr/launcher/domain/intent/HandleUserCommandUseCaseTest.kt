@@ -365,6 +365,68 @@ class HandleUserCommandUseCaseTest {
         assertTrue("Record must be skipped when getFlags() throws", history.recorded.isEmpty())
     }
 
+    // ── A4′ phase 1 (spec §5; owner forks F1-2, F1-3): a launch's confidence is earned ───────────
+    // Fixtures (R14-43): the installed label "Lumora" (net.fixture.alpha), the uninstalled "corvane",
+    // and the installed "Pack and Send" (net.fixture.parcel). "lumora studio" extends the installed
+    // label ON PURPOSE — that is the case under test there. Every expected value is compared by
+    // equality, never by `contains`, so a shared substring cannot blind an assertion.
+
+    @Test fun `a launch whose app name carries a second goal does not claim confidence`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(InstalledApp("net.fixture.alpha", "Lumora"))
+        matcherReturns(LauncherIntent.LaunchAppIntent("corvane and send the report"), 0.90f)
+
+        assertEquals(CommandOutcome.LowConfidence, useCase.handle("open corvane and send the report"))
+        assertEquals(0, fakeExecutor.callCount)
+    }
+
+    /**
+     * Owner fork F1-3 (2026-09-26): an installed brand followed by more words is a fact about the WORLD
+     * — the user named a variant that is not installed ("открой youtube music", "google maps" on a
+     * phone that labels Maps «Карты») — so `NoAppFound` is still claimed and step (2) of
+     * `RouteCommandUseCase` still offers the store. Spec §5.1's prefix rule would withdraw this; it is
+     * deferred until offline understanding exists (Master Plan row `B16`). Re-adding it must delete
+     * this test on purpose.
+     */
+    @Test fun `a launch naming an installed brand's variant that is not installed is still claimed`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(InstalledApp("net.fixture.alpha", "Lumora"))
+        matcherReturns(LauncherIntent.LaunchAppIntent("lumora studio"), 0.90f)
+
+        assertEquals(
+            CommandOutcome.Message(CommandMessage.NoAppFound("lumora studio")),
+            useCase.handle("открой lumora studio"),
+        )
+    }
+
+    /**
+     * The second goal is asked only AFTER the whole name failed to resolve (owner fork F1-2). An
+     * installed app whose own label reads like a second goal must still launch.
+     */
+    @Test fun `an installed app whose own name carries a conjunction and a verb still launches`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(InstalledApp("net.fixture.parcel", "Pack and Send"))
+        matcherReturns(LauncherIntent.LaunchAppIntent("pack and send"), 0.90f)
+
+        assertEquals(CommandOutcome.Executed, useCase.handle("open pack and send"))
+        val action = fakeExecutor.executedActions.single() as ExecutableAction.LaunchAppAction
+        assertEquals("net.fixture.parcel", action.packageName)
+    }
+
+    /**
+     * The history row must not claim a confidence that did not govern the outcome (DOC-ILM-3's
+     * spirit). Stored as a Double, 0.30f reads back as 0.3000000119… — hence the tolerance, here and
+     * in any query of the table.
+     */
+    @Test fun `an unearned launch is recorded with the confidence it earned, not the one it claimed`() = runTest(testDispatcher) {
+        val history = RecordingIntentMatchHistory()
+        val useCaseWithHistory = useCaseWith(history)
+        fakeRepo.appsToReturn = listOf(InstalledApp("net.fixture.alpha", "Lumora"))
+        matcherReturns(LauncherIntent.LaunchAppIntent("corvane and send the report"), 0.90f)
+
+        useCaseWithHistory.handle("open corvane and send the report")
+        advanceUntilIdle() // flush the fire-and-forget recordMatch
+
+        assertEquals(0.30, history.recorded.single().confidence, 0.0001)
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private fun matcherReturns(intent: LauncherIntent, confidence: Float) {

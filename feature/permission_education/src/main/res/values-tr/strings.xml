@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Per-feature titles (PermissionRationale.kt) -->
+    <string name="perm_title_wallpaper">Duvar kağıdını ayarla</string>
+    <string name="perm_title_voice_input">Sesli komutlar</string>
+    <string name="perm_title_calendar">Takvime duyarlı öneriler</string>
+    <string name="perm_title_location">Konuma duyarlı öneriler</string>
+    <string name="perm_title_prayer_location">Namaz için konum</string>
+
+    <!-- Per-feature call-to-action labels (PermissionRationale.kt) -->
+    <string name="perm_cta_wallpaper">Duvar kağıdını etkinleştir</string>
+    <string name="perm_cta_voice_input">Mikrofonu etkinleştir</string>
+    <string name="perm_cta_calendar">Takvim önerilerini etkinleştir</string>
+    <string name="perm_cta_location">Konum önerilerini etkinleştir</string>
+    <string name="perm_cta_prayer_location">Cihaz konumunu etkinleştir</string>
+
+    <!-- Per-feature "without this permission" capability fragment (PermissionEducationScreen.kt) -->
+    <string name="perm_capability_wallpaper">özel duvar kağıdı ayarlamayı</string>
+    <string name="perm_capability_voice_input">sesli komutları</string>
+    <string name="perm_capability_calendar">takvime dayalı önerileri</string>
+    <string name="perm_capability_location">konuma dayalı önerileri</string>
+    <string name="perm_capability_prayer_location">namaz vakitleri için cihaz konumunuzun kullanılmasını</string>
+
+    <!-- Screen chrome -->
+    <string name="perm_back">Geri</string>
+    <string name="perm_without_permission_template">Başlatıcı normal şekilde çalışmaya devam eder - bu yalnızca %1$s öğesini etkiler.</string>
+    <string name="perm_not_available_yet">HENÜZ KULLANILAMIYOR</string>
+    <string name="perm_set_wallpaper">Duvar kağıdını ayarla</string>
+    <string name="perm_done">Tamam</string>
+    <string name="perm_status_enabled">ETKİN</string>
+    <string name="perm_permanently_denied_body">İzin kalıcı olarak reddedildi. Bu özelliği kullanmak için sistem ayarlarından etkinleştirin. Başlatıcı onsuz da çalışmaya devam eder.</string>
+    <string name="perm_open_settings">Ayarları aç</string>
+    <string name="perm_not_now">Şimdi değil</string>
+    <string name="perm_status_blocked">ENGELLENDİ</string>
+    <string name="perm_status_optional">İSTEĞE BAĞLI</string>
+    <string name="perm_not_a_system_dialog">SİSTEM DİYALOĞU DEĞİL · SEÇİM SİZİN</string>
+    <string name="perm_dont_show_again">Bir daha gösterme</string>
+</resources>

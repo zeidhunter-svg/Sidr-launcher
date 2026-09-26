@@ -61,6 +61,7 @@ class PermissionPrefsRepositoryImpl @Inject constructor(
         PermissionFeature.VOICE_INPUT,
         PermissionFeature.CALENDAR_SUGGESTIONS,
         PermissionFeature.LOCATION_SUGGESTIONS,
+        PermissionFeature.PRAYER_LOCATION,
         -> null
     }
 }

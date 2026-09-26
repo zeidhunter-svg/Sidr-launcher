@@ -1,0 +1,358 @@
+package com.sidr.launcher.feature.launcher.agent
+
+import com.sidr.launcher.core.testing.FakeToolRegistry
+import com.sidr.launcher.core.ui.primitive.SidrStatus
+import com.sidr.launcher.feature.launcher.R
+import com.sidr.launcher.domain.agent.AgentGoal
+import com.sidr.launcher.domain.agent.AgentSession
+import com.sidr.launcher.domain.agent.AgentSessionId
+import com.sidr.launcher.domain.agent.ExecutionPlan
+import com.sidr.launcher.domain.agent.ExecutionState
+import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanningRequest
+import com.sidr.launcher.domain.agent.PlanningResult
+import com.sidr.launcher.domain.agent.StepPrecondition
+import com.sidr.launcher.domain.agent.TemplatePlanner
+import com.sidr.launcher.domain.intent.CommandFailure
+import com.sidr.launcher.domain.tool.ObservedFact
+import com.sidr.launcher.domain.tool.ToolEffect
+import com.sidr.launcher.domain.tool.ToolId
+import com.sidr.launcher.domain.tool.ToolIds
+import com.sidr.launcher.domain.tool.ToolLevel
+import com.sidr.launcher.domain.tool.ToolLevels
+import com.sidr.launcher.domain.tool.ToolOutput
+import com.sidr.launcher.domain.tool.ToolResult
+import com.sidr.launcher.domain.trace.ExecutionTrace
+import com.sidr.launcher.domain.trace.TraceEvent
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * **What the plan list is allowed to claim** (review findings F3/F6, 2026-08-23).
+ *
+ * The step markers used to be derived from the cursor alone — `stepIndex < cursor` meant SUCCESS — and
+ * the cursor moves for three different reasons: a step ran, a step was skipped by an unsatisfied
+ * precondition, and a step failed. Both shapes this engine reaches most often therefore lied:
+ *
+ *  - the app **is** installed, so step 1 skips and the plan closes `Completed` — the store step showed
+ *    a success marker over a store that was never opened (this is spec §12.8, the acceptance item);
+ *  - step 0 **fails**, which under `RuntimeBudget.Default` is under the consecutive-failure limit, so
+ *    step 1 skips on its precondition and the plan again closes `Completed` — two success markers over
+ *    a plan in which nothing succeeded.
+ *
+ * These are pure functions over the session, so they are tested without Compose. The localized status
+ * word each state maps to is `@Composable` and lives beside them; what matters here is that the states
+ * — eight since A4′ phase 0, over four markers — are distinguishable at all, which is what `R-ADL-2`
+ * needs and what a colour alone cannot give. The word half of that is held over the resources by
+ * `StepStateWordDistinctnessGuardTest` (`:app`), because a JVM test cannot call `word()`.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class AgentSessionPresentationTest {
+
+    private val goal = AgentGoal("открой убер", GoalShape.AppNotInstalled("убер"))
+
+    private suspend fun plan(): ExecutionPlan {
+        val planned = TemplatePlanner().plan(PlanningRequest(goal), FakeToolRegistry.withA0Tools())
+        check(planned is PlanningResult.Planned)
+        return planned.plan
+    }
+
+    private suspend fun session(
+        cursor: Int,
+        state: ExecutionState = ExecutionState.Completed,
+        observations: Map<Int, ToolResult> = emptyMap(),
+        trace: List<TraceEvent> = emptyList(),
+    ) = AgentSession(
+        id = AgentSessionId("s1"),
+        goal = goal,
+        plan = plan(),
+        cursor = cursor,
+        state = state,
+        observations = observations,
+        consents = emptyMap(),
+        trace = ExecutionTrace(trace),
+    )
+
+    private val launched = ToolResult.Effected(ToolOutput(mapOf("resolved_query" to "убер")))
+    private val notInstalled = ToolResult.Observed(
+        ObservedFact.APP_NOT_INSTALLED,
+        ToolOutput(mapOf("resolved_query" to "убер")),
+    )
+
+    /** Spec §12.8's own shape: the app was there, so the store step was never needed. */
+    @Test
+    fun `a step skipped by its precondition is skipped, not done`() = runTest {
+        val s = session(
+            cursor = 2,
+            observations = mapOf(0 to launched),
+            trace = listOf(
+                TraceEvent.StepSkipped(1, StepPrecondition.PreviousStepObserved(ObservedFact.APP_NOT_INSTALLED)),
+            ),
+        )
+
+        assertEquals(AgentStepState.DONE, s.stateOf(s.plan.steps[0]))
+        assertEquals(AgentStepState.SKIPPED, s.stateOf(s.plan.steps[1]))
+        assertEquals(SidrStatus.SUCCESS, s.stateOf(s.plan.steps[0]).marker())
+        assertEquals(SidrStatus.INFO, s.stateOf(s.plan.steps[1]).marker())
+    }
+
+    /** The failure shape: one step failed, the next skipped, and the session still says `Completed`. */
+    @Test
+    fun `a failed step is failed, and the plan that carried it is not whole`() = runTest {
+        val s = session(
+            cursor = 2,
+            observations = mapOf(0 to ToolResult.Failed(CommandFailure.Generic)),
+            trace = listOf(
+                TraceEvent.StepSkipped(1, StepPrecondition.PreviousStepObserved(ObservedFact.APP_NOT_INSTALLED)),
+            ),
+        )
+
+        assertEquals(AgentStepState.FAILED, s.stateOf(s.plan.steps[0]))
+        assertEquals(SidrStatus.DANGER, s.stateOf(s.plan.steps[0]).marker())
+        assertEquals(AgentStepState.SKIPPED, s.stateOf(s.plan.steps[1]))
+        assertFalse("nothing ran successfully — this is not a whole plan", s.everyStepExecuted())
+    }
+
+    /**
+     * Renamed in A4′ phase 0 (Task 6) from `the step at the cursor is current and the ones after it are
+     * pending`: the session it builds is `AwaitingConsent`, and a step the engine STOPPED on for consent
+     * is not in progress (D2) — a name saying `current` over an assertion of `WAITING` would be the
+     * next reader's trap. Step 0 is an `Observed` step, so it is `OBSERVED`, not `DONE` (D1).
+     */
+    @Test
+    fun `a gated session marks the gated step waiting, not current`() = runTest {
+        val s = session(cursor = 1, state = ExecutionState.AwaitingConsent, observations = mapOf(0 to notInstalled))
+
+        assertEquals(AgentStepState.OBSERVED, s.stateOf(s.plan.steps[0]))
+        assertEquals(AgentStepState.WAITING, s.stateOf(s.plan.steps[1]))
+        assertEquals(SidrStatus.ATTENTION, s.stateOf(s.plan.steps[1]).marker())
+    }
+
+    @Test
+    fun `a plan not started yet marks its first step current and nothing done`() = runTest {
+        val s = session(cursor = 0, state = ExecutionState.Running)
+
+        assertEquals(AgentStepState.CURRENT, s.stateOf(s.plan.steps[0]))
+        assertEquals(AgentStepState.PENDING, s.stateOf(s.plan.steps[1]))
+        assertFalse(s.everyStepExecuted())
+    }
+
+    /**
+     * The non-vacuity half: the run in which every step really did execute must still read as whole,
+     * or the `Partial` tone would simply have replaced the `Completed` one everywhere.
+     *
+     * An `Observed` step ran — it is `OBSERVED`, not `DONE`; that distinction is D1 (A4′ phase 0).
+     */
+    @Test
+    fun `a plan whose every step ran is whole`() = runTest {
+        val s = session(
+            cursor = 2,
+            observations = mapOf(0 to notInstalled, 1 to ToolResult.Effected()),
+        )
+
+        assertTrue(s.everyStepExecuted())
+        assertEquals(AgentStepState.OBSERVED, s.stateOf(s.plan.steps[0]))
+        assertEquals(AgentStepState.DONE, s.stateOf(s.plan.steps[1]))
+    }
+
+    /**
+     * **This test holds the MARKER half of the property its name states, and only that half.**
+     *
+     * Rewritten in A4′ phase 0 (Task 6). It used to assert "four distinct markers, and `SKIPPED` shares
+     * `PENDING`'s", with a message calling any other shared marker a collision. With eight states that
+     * assertion passes **unchanged** while its message becomes false: `INFO` is now shared by three
+     * states and `ATTENTION` by three more. It never contained a word and cannot — `word()` is
+     * `@Composable @ReadOnlyComposable` and unreachable from a JVM test.
+     *
+     * So it now pins what is actually true of the markers — eight states over four markers, in exactly
+     * two sharing groups — and says where the rest lives: within a sharing group the **word** is the
+     * only thing telling states apart (`R-ADL-2`: the dot is decorative), and word-distinctness is held
+     * over the real resources of all three locales by `StepStateWordDistinctnessGuardTest` in `:app`.
+     * Together the two hold "no two step states are indistinguishable"; neither does alone.
+     */
+    @Test
+    fun `no two step states are indistinguishable`() {
+        val byMarker = AgentStepState.entries.groupBy { it.marker() }.mapValues { it.value.toSet() }
+
+        assertEquals(
+            "Eight step states render four markers, and two groups share one on purpose: INFO " +
+                "(OBSERVED / SKIPPED / PENDING) and ATTENTION (HANDED_OFF / CURRENT / WAITING). Inside " +
+                "each group the marker tells nothing apart — distinctness is carried by the WORD and is " +
+                "held elsewhere, by StepStateWordDistinctnessGuardTest over the en/ru/tr resources, " +
+                "because word() is @Composable and unreachable here. A change to this grouping must " +
+                "be checked against that guard. Actual grouping: $byMarker",
+            mapOf(
+                SidrStatus.SUCCESS to setOf(AgentStepState.DONE),
+                SidrStatus.DANGER to setOf(AgentStepState.FAILED),
+                SidrStatus.INFO to setOf(AgentStepState.OBSERVED, AgentStepState.SKIPPED, AgentStepState.PENDING),
+                SidrStatus.ATTENTION to setOf(AgentStepState.HANDED_OFF, AgentStepState.CURRENT, AgentStepState.WAITING),
+            ),
+            byMarker,
+        )
+    }
+
+    // ── A4′ phase 0, Task 6: the surface stops collapsing four realities into two words ──
+
+    /**
+     * D1 (spec §3 0.2(1б)) — the defect is WIDER than the ADR says. The ADR frames finding (a) as a
+     * worker problem; the 2026-09-21 measurement found the same lie where the worker is HONEST.
+     * The vocabulary is three-valued and this function had no branch for `Observed` at all, so
+     * «Открыть wattsupp — выполнено» was drawn for an app that does not exist, over a correct
+     * `Observed(APP_NOT_INSTALLED)`. That is A0's single most common shape, and it predates the
+     * whole A1″ block.
+     */
+    @Test
+    fun `an observation is not an execution`() = runTest {
+        val s = session(cursor = 1, state = ExecutionState.Running, observations = mapOf(0 to notInstalled))
+
+        assertEquals(AgentStepState.OBSERVED, s.stateOf(s.plan.steps[0]))
+        assertNotEquals(AgentStepState.DONE, s.stateOf(s.plan.steps[0]))
+    }
+
+    /**
+     * D2 (spec §3 0.2(1в)) — `CURRENT` was `step.index == cursor` with no reference to `state`, so
+     * a step the engine had STOPPED on was CURRENT. On screen that was the **Paused** card: the
+     * pending step read «выполняется» directly above the card's own «Продолжить», running and
+     * stopped at once. The gated half of this test holds the function only — `AwaitingConsent` draws
+     * no plan list, so that wrong answer was never on screen; it is pinned so that a future surface
+     * drawing the list there cannot inherit it.
+     */
+    @Test
+    fun `a step the engine stopped on is not in progress`() = runTest {
+        val gated = session(cursor = 1, state = ExecutionState.AwaitingConsent, observations = mapOf(0 to notInstalled))
+        val paused = session(cursor = 1, state = ExecutionState.Paused, observations = mapOf(0 to notInstalled))
+
+        assertEquals(AgentStepState.WAITING, gated.stateOf(gated.plan.steps[1]))
+        assertEquals(AgentStepState.WAITING, paused.stateOf(paused.plan.steps[1]))
+    }
+
+    /**
+     * The third instance of the same defect, found by this plan's pre-flight and named in no
+     * document (P4). `AgentExecutor.perform` advances the cursor BEFORE `ended(...)`, so a dead
+     * session pointed its cursor at a step that will never run — and the function answered CURRENT
+     * for it. Wrong at the function, not drawn today: `Failed`/`Blocked` draw no step lines and
+     * `Cancelled` draws nothing, while `Completed` is reached only with the cursor past the last step.
+     * Corrected so that a future surface drawing the list in a terminal state cannot inherit it.
+     */
+    @Test
+    fun `a terminal session has nothing in progress`() = runTest {
+        val s = session(
+            cursor = 1,
+            state = ExecutionState.Failed,
+            observations = mapOf(0 to ToolResult.Failed(CommandFailure.Generic)),
+        )
+
+        assertEquals(AgentStepState.PENDING, s.stateOf(s.plan.steps[1]))
+        assertNotEquals(AgentStepState.CURRENT, s.stateOf(s.plan.steps[1]))
+    }
+
+    /**
+     * The fourth value reaches the screen, and the two predicates disagree about it on purpose: the
+     * step DID run (`everyStepExecuted`), and the plan still may not call itself whole
+     * (`anyStepHandedOff`). Step 8 of this task is what joins them at the one place it matters.
+     */
+    @Test
+    fun `a handed-off step is neither done nor a whole plan`() = runTest {
+        val s = session(cursor = 2, observations = mapOf(0 to notInstalled, 1 to ToolResult.HandedOff()))
+
+        assertEquals(AgentStepState.HANDED_OFF, s.stateOf(s.plan.steps[1]))
+        assertTrue("the step did run — that is a different question", s.everyStepExecuted())
+        assertTrue(s.anyStepHandedOff())
+    }
+
+    /**
+     * The presentation's `Free` arm (fix round 2, 2026-08-23 — it shipped held by nothing and
+     * survived a mutation that rendered a literal in place of the user's words).
+     *
+     * It was written while the arm was unreachable on Android, on the principle that unreachable is
+     * not a reason an arm cannot be asserted. Since A1' Task 9 it is reachable — step 2b builds a
+     * free-text goal for every undecided command — so this now covers the ordinary case rather than a
+     * hypothetical one, unchanged.
+     *
+     * The goal text and the shape text are deliberately **different** so the assertion pins which of
+     * the two the arm reads — it must be the shape's own text. The same distinction is load-bearing
+     * one layer down: `AgentSessionMappers` stores the shape's own text in `goal_shape_arg` rather
+     * than rebuilding it from `goal_text`, and `RoomAgentSessionStoreTest` pins that with the same
+     * two-different-strings trick.
+     */
+    @Test
+    fun `a free-text goal reads as the user's own words`() {
+        val free = AgentGoal(
+            text = "сделай конспект встречи",
+            shape = GoalShape.Free("сделай конспект"),
+        )
+
+        assertEquals("сделай конспект", free.subject())
+    }
+
+    // ── Task 10 / A1': the step line names its TOOL, and an EXTERNAL tool discloses where it went ──
+    //
+    // These three are unit tests over the two mapping functions. They hold the mapping — including the
+    // open-`ToolLevel` fallback that keeps a raw domain identifier away from a user — and they are NOT
+    // what closes `DOC-ILM-2`: a mapping nothing calls stays green forever. The rule is closed by
+    // [AgentSessionSurfaceProvenanceTest], which renders the real surface and goes red when the
+    // rendering is removed. Keep both; they answer different questions.
+
+    /**
+     * `set_timer` and `open_system_settings` are `Tier0ToolIds` in `:data:repository`, which
+     * `:feature:launcher` must not depend on (no feature -> data edge), so the ids are written out as
+     * literals here exactly as they are in the production mapping. Drift between the two degrades to
+     * the generic step line; it cannot render the wrong sentence.
+     */
+    private val setTimer = ToolId("set_timer")
+
+    @Test
+    fun `a step line names the tool rather than assuming a launch`() {
+        val label = toolLabelFor(setTimer)
+
+        // Before A1' every GOAL_DIRECT step rendered `launcher_agent_step_launch` ("Open %1$s"), so a
+        // timer step would have read "Open set a timer for 10 minutes". The rationale says WHY the step
+        // is in the plan; the tool says WHAT it does, and only the second belongs in this line.
+        assertEquals(R.string.launcher_agent_step_timer, label)
+    }
+
+    @Test
+    fun `an EXTERNAL tool shows provenance and a LOCAL one shows none`() {
+        assertEquals(
+            R.string.launcher_tool_level_system_intent,
+            provenanceLabelFor(ToolLevels.SYSTEM_INTENT, ToolEffect.EXTERNAL),
+        )
+        assertNull(provenanceLabelFor(ToolLevels.SANDBOX, ToolEffect.LOCAL))
+    }
+
+    /**
+     * Task 11 / A1″ Phase 3a. Guards against the generic fallback silently swallowing a new tool — a
+     * plain regression pin over [toolLabelFor], not the property that closes owner condition 2 (that is
+     * the two Robolectric tests in [AgentSessionSurfaceProvenanceTest], which render real text through
+     * the two-argument [PlanStep.line] branches).
+     */
+    @Test
+    fun `each new tool maps to its own label, not the generic one`() {
+        listOf("set_alarm", "uninstall_app", "set_app_alias", "forget_app_alias", "forget_learned_choice")
+            .forEach { id ->
+                assertNotEquals(
+                    "a tool without its own label reads as 'Run this step for …' on the gate",
+                    R.string.launcher_agent_step_generic,
+                    toolLabelFor(ToolId(id)),
+                )
+            }
+    }
+
+    @Test
+    fun `a level with no string resource falls back to a generic label, never to the raw value`() {
+        // ToolLevel is an OPEN value class, so an unknown level is reachable by construction — that is
+        // the whole point of the type. The surface must never print "mcp" at a user: invisible in
+        // English, untranslated in ru/tr, which is exactly the bug DomainIdentifierLeakGuardTest exists
+        // for. Fail closed to a generic label.
+        assertEquals(
+            R.string.launcher_tool_level_unknown,
+            provenanceLabelFor(ToolLevel("mcp"), ToolEffect.EXTERNAL),
+        )
+    }
+}

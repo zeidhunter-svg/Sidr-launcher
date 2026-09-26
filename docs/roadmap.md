@@ -1,96 +1,253 @@
 # Roadmap
 
-## Phase 0: Documentation and decisions
+> **Reframed 2026-07-05 (owner decision).** The project has one product goal delivered in **three
+> evolutionary stages**, each shippable on its own:
+>
+> 1. **Stage 1 — AI Launcher (the MVP).** A real AI-first launcher: one universal input that
+>    *understands* natural language and *routes* it to safe actions (open app, web, site, Play Store,
+>    settings, assistant), with a fast offline rule path underneath. **This is what we ship first and
+>    are refining now.**
+> 2. **Stage 2 — AI Framework.** ~~A stage of the schedule.~~ **Redefined 2026-08-19** (ADR
+>    "2026-08-19 — ADR 3/4 (agentic restart)"): "Framework" is a **portable agent core with two
+>    consumers** — the Android shell (shipping) and a PC shell (target) — *not* a stage. Its layers
+>    (`domain/tool`, `domain/agent`, `domain/context`, `domain/memory`, `domain/trace`) are built
+>    **inside vertical slices**, per the project's feature-first rule. As a schedule stage, Stage 2 is
+>    **abolished**; the sections below are kept as the record of what the layers must contain.
+> 3. **Stage 3 — Agentic OS.** An AI operating layer over Android: multi-step planning, user-consented
+>    safe automation, and one coherent intent-driven shell.
+>
+> **The AI-first launcher only becomes real in Stage 1's completion track (below).** Today's shipped
+> routing is rule-based (7 launch/search verbs + a command table); the local NLU/ONNX pipeline is built
+> but **inert** (no model — OQ#1/#2). Stage 1 makes the launcher genuinely "AI" via a **BYOK cloud LLM
+> router** that understands intent and proposes registered actions, gated by confidence, permissions,
+> and explicit confirmation for anything risky. See
+> [ai-context/ai-launcher-mvp-plan.md](../ai-context/ai-launcher-mvp-plan.md).
 
-- Create project documentation and AI handoff context.
-- Record hybrid AI decision in ADR.
-- Define architecture boundaries, security principles, and domain contracts.
-- Define performance budgets, permission strategy, and persistence boundaries.
+---
 
-## Phase 1: Compile-ready skeleton
+## Guiding principles (invariant across all three stages)
 
-- Create multi-module Gradle project.
-- Configure Kotlin, Android, Compose, Hilt, Ktor, Serialization, Coroutines, ONNX, Navigation Compose, DataStore, Room, and WorkManager dependencies.
-- Add Android launcher manifest and basic `LauncherActivity`.
-- Add domain models, repository interfaces, `OperationResult`, use-case stubs, and DI placeholders.
-- Add initial `DeviceProfile`, navigation route contracts, and permission contracts.
-- Verify the project builds.
+- Launcher core stays fully usable without AI, network, microphone, or optional permissions.
+- **Understanding belongs to the model; execution belongs to the deterministic layer.**
+  *(ADR "2026-08-19 — ADR 1/4"; replaces "local deterministic routing runs before any cloud/LLM call".)*
+  FastPath and the learned-plan cache answer deterministically and offline as a **latency optimization**,
+  not as a filter on understanding; a FastPath miss reaches the planner instead of returning "Unknown
+  command". Nothing proposed by a model executes, gains rights or leaves the device except through the
+  deterministic gates. Router-off / offline / no-key ⇒ FastPath + plan cache + an honest "needs network",
+  with byte-for-byte parity kept as a test.
+- Every AI-proposed action is **confidence-gated, permission-gated, and confirmation-gated** for risk.
+  The AI never silently executes a risky or destructive action.
+- No `feature → feature` dependency edges; single `NavHost` in `:app`; ViewModels emit
+  `NavigationEvent`.
+- `domain` stays Android-free (stdlib + coroutines). Interfaces in `domain`, impls in `data/*`.
+- Repository/use-case ops return `OperationResult<T>`; never throw to UI.
+- Private context (raw calendar titles, coordinates, messages, clipboard) is **never** sent to cloud AI
+  by default. Outbound content stays on a fail-closed allow-list.
+- Every block ends with tests + `assembleDebug`, an ADR entry, and device acceptance where applicable.
 
-## Phase 2: Launcher shell
+---
 
-- Implement Compose home screen shell with `StateFlow<UiState>`.
-- Add single `NavHost` in the `app` module and feature route wiring.
-- Display installed apps through a repository abstraction.
-- Add text command input.
-- Add basic settings and permission education screens.
-- Keep home screen, app grid, and app launch fully offline-capable.
+# Stage 1 — AI Launcher (MVP)
 
-## Phase 3: Intent system
+## 1A. Foundation — DONE (Phases 0 → 9 + Phase UX)
 
-- Implement local rule-based intent matcher.
-- Define action execution contracts and `OperationResult`-based error handling.
-- Add app launch, search, settings, and simple command intents.
-- Add confidence thresholds and safe fallback behavior.
-- Persist intent match history through repository-backed Room storage where allowed.
-- Add table-driven matcher tests.
+The launcher shell, offline core, persistence, security, and UX are built and device-accepted on
+SM-A325F / Android 13. Compressed history (full detail in `CLAUDE.md` and the per-phase plans):
 
-## Phase 4: Persistence, state, and navigation hardening
+- **Phase 0–2 — skeleton + shell.** Multi-module Clean Architecture; single `NavHost`; installed-apps
+  repository; text command input; offline home/grid/launch.
+- **Phase 3 — intent system.** Rule-based `IntentMatcher`, `ActionExecutor`, confidence gating, the MVP
+  command loop. Live on device.
+- **Phase 4 — persistence/state/hardening.** DataStore preferences/flags, Room usage/ranking/intent
+  history (with SEARCH/UNKNOWN redaction), permission-education module, recoverable `UiState.Error`.
+- **Phase 5 — cloud AI (BYOK).** OpenAI-compatible SSE engine (`Flow<AiChunk>`), `SecureSecretStore`
+  (Keystore AES-256-GCM), prompt/outbound privacy guards, `DefaultGenerativeRouter` + static fallback,
+  assistant streaming UI. **Device-proven** (openrouter / `gpt-4o-mini` streamed end-to-end; key stayed
+  encrypted).
+- **Phase 6 — local NLU (code only, INERT).** `OnnxIntentClassifier` (self-gating), rule-first
+  `LayeredIntentMatcher`, model provisioning (`ModelStore`/SHA-256/WorkManager). **No model bundled →
+  always escapes to rule-only.** Gated on OQ#1/#2 — deferred to the model track, not an MVP blocker.
+- **Phase 7 — voice + contextual suggestions.** `AndroidSpeechInputSource` + `RECORD_AUDIO` flow,
+  offline + opt-in suggestion providers, single-owner `LauncherUiState.suggestions`, periodic
+  precompute/cleanup. Block V (semantic re-rank) inert — OQ#3.
+- **Phase UX — home redesign + design system.** Minimal home + App Drawer, discoverable
+  Settings/Assistant icons, `core/ui` design system, real `:feature:settings`. Device-accepted.
+- **Phase 9 — hardening.** Startup perf (warm ~102ms, cold ~766ms, no first-frame spinner), R8 +
+  Baseline Profile, suggestion correctness, test/privacy/logging hardening, Android-13 + LOW_END-path
+  validation.
 
-- Implement DataStore-backed user preferences, feature flags, device profile cache, and last known suggestions.
-- Implement Room-backed usage history, suggestion ranking history, and intent match history.
-- Ensure feature modules access persistence only through repositories.
-- Harden `UiState`, navigation events, and recoverable error states.
+## 1B. AI-Launcher completion track — ACTIVE (NOW)
 
-## Phase 5: Cloud AI integration
+**This is the work that makes the launcher an *AI* launcher.** Detailed plan + forks:
+[ai-context/ai-launcher-mvp-plan.md](../ai-context/ai-launcher-mvp-plan.md). Blocks are vertical
+slices; each ends green (`testDebugUnitTest` + `assembleDebug`) and preserves every guiding principle.
 
-- Implement Ktor cloud AI client.
-- Add streaming adapter using `Flow<AiChunk>`.
-- Add prompt/context builder with privacy constraints.
-- Add API key storage via `SecureSecretStore` (Keystore AES-256-GCM, BYOK; backend proxy a later
-  drop-in behind the same port). OpenAI-compatible adapter with configurable base URL + free-text model.
-- Add error, retry, timeout, offline, and static fallback states.
+- **AIL-0 — Design tokens & visual identity (`core/ui`).** Refine the design system up front (palette +
+  visual identity, typography, spacing/radius/elevation, base-component tweaks) so the new surfaces build
+  on final tokens. Presentation-only; the input/results/confirmation *screen* redesign is deferred into
+  AIL-3 / AIL-5 / AIL-6 where those surfaces are created.
+- **AIL-1 — Action Registry (domain).** Introduce an extensible `LauncherAction` / `ActionDescriptor` /
+  `ActionRiskLevel` / `ActionId` registry (`domain`), registering existing + new capabilities behind
+  one testable, permission-aware vocabulary. The registry is the set of targets the router routes into.
+- **AIL-2 — Web / URL / Play-Store routing (no AI).** Detect URL-like input → `ACTION_VIEW` after safe
+  normalization; "download/install X" → Play Store (`market://`); configurable web-search provider
+  (retire the hardcoded Google `TODO`). Fully offline, high-value, populates the registry.
+- **AIL-3 — Universal Input.** One home field = app filter + command + web/site + assistant entry +
+  voice. Additive `UniversalInputRouter` + sealed `InputIntent`. Typed commands keep working
+  byte-for-byte; voice transcripts reuse the same routing path.
+- **AIL-4 — LLM Action Router (the AI core, BYOK cloud).** A **new third port** (`CommandPlanner`) —
+  distinct from `IntentMatcher` (classification) and the assistant's `GenerateReplyUseCase`
+  (conversation). Consulted only on low rule-confidence or natural-language input: it sends the user
+  command + the Action Registry's tool schema to the BYOK cloud engine, parses a **structured** action
+  proposal (never free text), and returns it as a `Suggest`/`NeedsConfirmation` outcome. Offline/failure
+  → rule outcome (identical to today). Privacy: schema + command only, no private context.
+- **AIL-5 — Confirmation & safety gating.** Wire `ActionRiskLevel` into execution: risky/ambiguous
+  actions require explicit confirmation UI; permission-gated; safe fallback. This is what "route to safe
+  actions with confirmation" means concretely.
+- **AIL-6 — Polish + device acceptance.** SM-A325F pass: universal input, LLM routing with a real BYOK
+  provider, web/URL/Play-Store, confirmation flows; **offline parity** (LLM off → identical to
+  rule-only). Docs + ADR sync.
 
-## Phase 6: Local NLU and embeddings
+**Stage 1 Definition of Done:** the user can type or speak a natural request into one field and the
+launcher routes it correctly to app / web / site / Play Store / settings / assistant; risky actions ask
+first; typed commands are unchanged; offline behavior is identical to rule-only; device-accepted.
 
-**Status: code-complete (Blocks O → R, closed 2026-06-29); device acceptance + the real model
-(OQ#1/#2) pending.** NLU rides the existing `IntentMatcher` port via the rule-first
-`LayeredIntentMatcher`; the `TextEmbedder` is a port only (impl deferred to Phase 7).
+## 1C. Separate model track (out of the MVP ship gate)
 
-- Integrate ONNX Runtime Mobile.
-- Add intent classifier and embeddings interfaces.
-- Use NNAPI opportunistically where available.
-- Add model availability and `DeviceProfile` capability checks.
-- Add WorkManager model download and verification with battery-aware constraints.
+Not blockers for Stage 1. Resolve or explicitly de-scope; stop carrying inert code as "done".
 
-## Phase 7: Voice and contextual suggestions
+- ~~**OQ#1 / OQ#2** — real NLU model (`intent.onnx`, pruned multilingual `vocab.txt`) + host + SHA-256.~~
+  **CLOSED 2026-08-19 (ADR 2/4): answered "not this way".** The ONNX NLU stack is removed in Этап 0.3.
+- ~~**OQ#3** — embedding model + tokenizer + host/hash (gates Block V semantic re-rank).~~
+  **CLOSED 2026-08-19 (ADR 2/4)**, together with the `TextEmbedder` port and the never-started Block V.
+- **Local inference, when it returns**, targets **LiteRT / LiteRT-LM** (function calling + constrained
+  decoding; one runtime for Android and the PC target), with `AICore` / Gemini Nano as a separate path.
+  Recorded alternative: ExecuTorch, with an explicit switch condition — see ADR 2/4.
+- **OQ#4** — on-device STT availability across the target device matrix (gates voice acceptance).
+- Android 9/11/14 + real LOW_END hardware validation; boot-warmup after reboot.
 
-**Status: user-facing close delivered (Blocks S + T + U + W, 2026-07-01).** Voice = a `SpeechInputSource` input *modality* feeding the existing intent
-pipeline (on-device preferred, never a new generative path, never our-backend audio); suggestions = a
-third `SuggestionEngine` port (offline time + usage always-on; calendar/location opt-in +
-degrade-to-nothing). Surface single-owner = the host `LauncherViewModel`/`LauncherUiState.suggestions`,
-now shipping with cache-first paint and background WorkManager pre-compute/cleanup. OQ#3 (embedding model +
-host) keeps Block V as a separate model/runtime track; OQ#4 (on-device STT availability) gates Block T device
-acceptance. Plan: [ai-context/phase-7-voice-suggestions-plan.md](../ai-context/phase-7-voice-suggestions-plan.md).
+---
 
-- Add `SpeechInputSource` abstraction over Android `SpeechRecognizer`.
-- Add no-op/fake speech input implementation for tests and unsupported devices.
-- Add context-aware suggestion pipeline.
-- Keep suggestions useful without sensitive or unavailable data.
-- Add user controls and permission education for calendar, location, audio, and boot warmup.
-- Keep semantic re-rank optional; Block V must not block the shipped user surface.
+# Stage 2 — AI Framework
 
-## Phase 8: Optional advanced automation
+> **Engineering target for Stage 2 → Stage 3:** the six-layer agentic architecture **A1–A6** in
+> [agentic-os-architecture.md](agentic-os-architecture.md) (ADR 2026-07-10). A1–A3 flesh out this Framework
+> stage (tools · context · memory); A4–A5 bridge into Stage 3; A6 is Stage 3. Visual identity is governed by
+> [superpowers/specs/2026-07-10-visual-identity-soft-grey-design.md](superpowers/specs/2026-07-10-visual-identity-soft-grey-design.md).
+>
+> **Design system track.** The seven imported source docs are archived in [design/](design/) (v1 = Vision,
+> v1.1 = Governing; index in its `README.md`); the reconciliation of record (three v1-vs-v1.1 conflicts + nine
+> engineering deviations + DS sequence) is ADR "2026-07-11 — DS-0" in
+> [ai-context/decisions.md](../ai-context/decisions.md). Target **IA = 4 surfaces** (Home · App Drawer ·
+> Assistant · Settings) — the imported 5-tab nav / live Agents surface is deferred until the A4 runtime
+> exists. DS blocks: DS-0 (provenance) → **DS-1 tokens + Roborazzi harness (DONE)** → DS-2/3 primitives →
+> DS-4 Home → DS-6A sacred header → DS-6B prayer data → DS-7 memory-migration.
 
-- Add optional Accessibility Service flow with explicit user-initiated consent.
-- Implement only user-approved automation actions.
-- Add clear disable path and audit-friendly UX.
-- Ensure accessibility denial disables only advanced automation.
+**Status: REDEFINED 2026-08-19 — no longer a schedule stage (ADR 3/4).** The content below stays valid
+as *what the portable core's layers must contain*; the **order** it is built in is now the vertical-slice
+queue of [the agentic restart plan](superpowers/plans/2026-08-18-agentic-track-restart.md) (Этап 4 = A0
+thin spike, Этап 5 = A1′ federated `ToolRegistry`, Этап 6 = A4′ runtime, Этап 7 = A2/A3 then A5/A6).
+Generalize the launcher's routing machinery into a
+reusable on-device AI framework. Every layer must keep the Stage-1 principles (offline core, local
+routing before LLM, confidence/permission/confirmation gating, no feature→feature edges, domain purity,
+privacy allow-list).
 
-## Phase 9: Hardening
+## Framework-1: Action Registry & Web/App Intent Router (generalized)
 
-- Add tests for domain logic, intent matching, repositories, permissions, offline states, and device capability paths.
-- Improve privacy, logging, crash-report filtering, and error handling.
-- Optimize startup, app grid rendering, AI latency, and memory usage against performance budgets.
-- Add R8/ProGuard rules for ONNX Runtime and release builds.
-- Validate behavior on Android 9, 11, 13, and 14.
-- Complete LOW_END memory profiling before release.
+Promote AIL-1/AIL-2 into a full, reusable action layer any surface can drive.
+
+- Core concepts: `ActionRegistry`, `ActionDescriptor`, `ActionRiskLevel`, `ActionCapability`,
+  `ActionPrecondition`, `PermissionGate`, `ExecutionPlan`, `ExecutionResult`.
+- Families: app launch/search, web search, direct site open, Play Store search, Android system intents,
+  assistant routing, settings routing, safe deep links.
+- Rules: URL-like input opens via `ACTION_VIEW` after normalization; ambiguous site → browser search;
+  install requests → Play Store; direct site open only on high confidence; malformed URLs never opened
+  silently.
+- Acceptance: all executable actions registered and testable; risky actions require
+  confirmation/education; web/app routing without embedding a browser; no destructive/system action runs
+  silently; execution stays compatible with `OperationResult`.
+
+## Framework-2: Context Engine v2
+
+A privacy-preserving context layer producing structured, minimal, permission-aware snapshots for
+routing, suggestions, and assistant handoff.
+
+- Possible sources: time, usage, recent launcher actions, typed prefix, voice availability, network,
+  battery/thermal/`DeviceProfile`, optional calendar/location/notification signals.
+- Privacy: raw titles/coordinates/messages never stored or sent to cloud by default; reduce to safe
+  signals; permission denial degrades only the related feature; collection is explainable + controllable.
+- Acceptance: a `ContextSnapshot` domain model exists; consumers don't read Android APIs directly;
+  suggestions/assistant/universal-input share one safe context abstraction; privacy-guard tests prove no
+  sensitive raw data leaks to persistence, logs, or AI requests.
+
+## Framework-3: User Memory & Personalization
+
+Explicit, user-controlled memory and personalization — learn stable preferences without becoming opaque
+or cloud-dependent.
+
+- Categories: launcher prefs, favorite apps, preferred actions, preferred browser/search, assistant
+  provider prefs, language, safe personalization hints, dismissed suggestions, confirmed aliases
+  ("work chat" → a specific app/action).
+- Hard rules: memory is editable/deletable; sensitive memory requires explicit user action; no private
+  memory to cloud by default; personalization degrades gracefully when disabled; memory separated from
+  transient usage history.
+- Acceptance: user can view/edit/delete stored preferences; router + suggestions consume memory through
+  domain ports; tests cover persistence, deletion, privacy guards, fallback; no hidden long-term
+  profiling.
+
+---
+
+# Stage 3 — Agentic OS
+
+**Status: FUTURE / POST-FRAMEWORK.** An AI operating layer over Android — not a replacement for Android
+internals. Starts only after Stages 1–2 are shipped and stable.
+
+## Agentic-1: Safe Automation Layer
+
+Optional, user-consented automation. Must never be required for MVP or block core launcher behavior.
+
+- Scope: simple confirmed actions, repeatable user-approved workflows, officially-supported Android
+  intents, optional Accessibility Service **only after explicit education + consent**, audit-friendly
+  execution history, a clear disable path.
+- Safety model: every action has a risk level; risky actions require confirmation; accessibility is
+  opt-in only; denial disables only automation; the user always understands what will happen first.
+- Acceptance: automation behind feature flags + permission gates; Accessibility not required for normal
+  use; user can disable automation completely; action history visible/explainable; tests cover denied /
+  revoked permission, failed execution, and safe fallback.
+- *(Absorbs the former "Phase 8 — optional advanced automation" / accessibility track.)*
+
+## Agentic-2: AI OS Shell
+
+Combine the previous layers into one coherent user-facing system — minimal home, universal input,
+assistant, contextual suggestions, action registry, safe automation, user memory, privacy controls,
+device-capability routing, offline-first local behavior, cloud AI only when appropriate.
+
+The user interacts primarily through intent:
+`Say or type what you want → Sidr routes, executes, answers, or asks for clarification.`
+
+- Acceptance: common phone tasks done through one unified input model; app/web/assistant/settings/
+  suggestions/automation feel like one system; offline behavior stays useful; AI failures never break
+  launcher functionality; permissions/privacy/safety stay visible and controllable; performance stays
+  within budgets or features degrade by `DeviceProfile`.
+
+---
+
+## Sequencing summary
+
+```
+Stage 1 (MVP): Foundation ✅ → AIL-0…AIL-6 ✅ → design track DS-1…DS-11 ✅ → I18N-1/I18N-2 ✅
+
+Agentic track (NOW, docs/superpowers/plans/2026-08-18-agentic-track-restart.md):
+  Этап 1  strategic ADRs ✅ (2026-08-19)
+  Этап 0  cleanup: release unblock · FastPath ru/tr · remove ONNX · honest statuses · budgets
+  Этап 2  toolchain refresh + :domain → KMP (android + jvm)
+  Этап 3  agentic Master Plan + doctrinal matrix extraction
+  Этап 4  A0 thin agentic spike (one real 2-step goal, end to end, device-accepted)
+  Этап 5  A1′ federated ToolRegistry (InApp · SystemIntent · AppFunctions · MCP · Accessibility)
+  Этап 6  A4′ runtime in full (session persistence, rollback, clarification, learned-plan cache)
+  Этап 7  A2 / A3 by consumer, then A5 / A6
+
+"Stage 2 (Framework)" is no longer a schedule stage — it is the portable core built inside the slices
+above (ADR 3/4). "Stage 3 (Agentic OS)" is what Этапы 4–7 deliver.
+Model track: OQ#1/#2/#3 CLOSED 2026-08-19 (ADR 2/4); OQ#4 (STT), device matrix and boot warmup remain.
+```

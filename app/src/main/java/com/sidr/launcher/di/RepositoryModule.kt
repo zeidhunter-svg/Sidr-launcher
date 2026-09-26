@@ -1,7 +1,9 @@
 package com.sidr.launcher.di
 
 import com.sidr.launcher.data.repository.InstalledAppsRepositoryImpl
+import com.sidr.launcher.data.repository.suggestions.AndroidSuggestionActionTargetResolver
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
+import com.sidr.launcher.domain.suggestions.SuggestionActionTargetResolver
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -17,4 +19,10 @@ abstract class RepositoryModule {
     abstract fun bindInstalledAppsRepository(
         impl: InstalledAppsRepositoryImpl,
     ): InstalledAppsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSuggestionActionTargetResolver(
+        impl: AndroidSuggestionActionTargetResolver,
+    ): SuggestionActionTargetResolver
 }

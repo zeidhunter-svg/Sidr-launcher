@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- I18N-1 Task 6: feature/permission_education screen chrome (titles, CTA labels, status/provenance
+     text). Permission rationale sentences (consent copy) live in strings_locked.xml instead. -->
+<resources>
+    <!-- Per-feature titles (PermissionRationale.kt) -->
+    <string name="perm_title_wallpaper">Set your wallpaper</string>
+    <string name="perm_title_voice_input">Voice commands</string>
+    <string name="perm_title_calendar">Calendar-aware suggestions</string>
+    <string name="perm_title_location">Location-aware suggestions</string>
+    <string name="perm_title_prayer_location">Prayer location</string>
+
+    <!-- Per-feature call-to-action labels (PermissionRationale.kt) -->
+    <string name="perm_cta_wallpaper">Enable wallpaper</string>
+    <string name="perm_cta_voice_input">Enable microphone</string>
+    <string name="perm_cta_calendar">Enable calendar suggestions</string>
+    <string name="perm_cta_location">Enable location suggestions</string>
+    <string name="perm_cta_prayer_location">Enable device location</string>
+
+    <!-- Per-feature "without this permission" capability fragment (PermissionEducationScreen.kt) -->
+    <string name="perm_capability_wallpaper">setting a custom wallpaper</string>
+    <string name="perm_capability_voice_input">voice commands</string>
+    <string name="perm_capability_calendar">calendar-based suggestions</string>
+    <string name="perm_capability_location">location-based suggestions</string>
+    <string name="perm_capability_prayer_location">using your device location for prayer times</string>
+
+    <!-- Screen chrome -->
+    <string name="perm_back">Back</string>
+    <string name="perm_without_permission_template">The launcher keeps working normally - this only affects %1$s.</string>
+    <string name="perm_not_available_yet">NOT AVAILABLE YET</string>
+    <string name="perm_set_wallpaper">Set wallpaper</string>
+    <string name="perm_done">Done</string>
+    <string name="perm_status_enabled">ENABLED</string>
+    <string name="perm_permanently_denied_body">Permission was permanently denied. Enable it from system settings to use this feature. The launcher keeps working without it.</string>
+    <string name="perm_open_settings">Open settings</string>
+    <string name="perm_not_now">Not now</string>
+    <string name="perm_status_blocked">BLOCKED</string>
+    <string name="perm_status_optional">OPTIONAL</string>
+    <string name="perm_not_a_system_dialog">NOT A SYSTEM DIALOG · YOU CHOOSE</string>
+    <string name="perm_dont_show_again">Don\'t show this again</string>
+</resources>

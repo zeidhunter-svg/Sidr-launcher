@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Per-feature titles (PermissionRationale.kt) -->
+    <string name="perm_title_wallpaper">Настройка обоев</string>
+    <string name="perm_title_voice_input">Голосовые команды</string>
+    <string name="perm_title_calendar">Подсказки на основе календаря</string>
+    <string name="perm_title_location">Подсказки на основе местоположения</string>
+    <string name="perm_title_prayer_location">Местоположение для намаза</string>
+
+    <!-- Per-feature call-to-action labels (PermissionRationale.kt) -->
+    <string name="perm_cta_wallpaper">Включить обои</string>
+    <string name="perm_cta_voice_input">Включить микрофон</string>
+    <string name="perm_cta_calendar">Включить подсказки календаря</string>
+    <string name="perm_cta_location">Включить подсказки по местоположению</string>
+    <string name="perm_cta_prayer_location">Включить геолокацию устройства</string>
+
+    <!-- Per-feature "without this permission" capability fragment (PermissionEducationScreen.kt) -->
+    <string name="perm_capability_wallpaper">установку собственных обоев</string>
+    <string name="perm_capability_voice_input">голосовые команды</string>
+    <string name="perm_capability_calendar">подсказки на основе календаря</string>
+    <string name="perm_capability_location">подсказки на основе местоположения</string>
+    <string name="perm_capability_prayer_location">использование геолокации устройства для времени намаза</string>
+
+    <!-- Screen chrome -->
+    <string name="perm_back">Назад</string>
+    <string name="perm_without_permission_template">Лаунчер продолжает работать как обычно - это влияет только на %1$s.</string>
+    <string name="perm_not_available_yet">ПОКА НЕДОСТУПНО</string>
+    <string name="perm_set_wallpaper">Установить обои</string>
+    <string name="perm_done">Готово</string>
+    <string name="perm_status_enabled">ВКЛЮЧЕНО</string>
+    <string name="perm_permanently_denied_body">Разрешение было отклонено навсегда. Включите его в системных настройках, чтобы использовать эту функцию. Лаунчер продолжает работать и без него.</string>
+    <string name="perm_open_settings">Открыть настройки</string>
+    <string name="perm_not_now">Не сейчас</string>
+    <string name="perm_status_blocked">ЗАБЛОКИРОВАНО</string>
+    <string name="perm_status_optional">НЕОБЯЗАТЕЛЬНО</string>
+    <string name="perm_not_a_system_dialog">ЭТО НЕ СИСТЕМНЫЙ ДИАЛОГ · ВЫБОР ЗА ВАМИ</string>
+    <string name="perm_dont_show_again">Больше не показывать</string>
+</resources>

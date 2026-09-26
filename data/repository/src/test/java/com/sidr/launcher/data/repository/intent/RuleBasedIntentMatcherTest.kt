@@ -130,6 +130,75 @@ class RuleBasedIntentMatcherTest {
         assertEquals(SimpleCommand.HELP, intent.command)
     }
 
+    @Test fun `assistant commands return SimpleCommandIntent OPEN_ASSISTANT`() = runTest {
+        listOf("assistant", "show assistant").forEach { input ->
+            val intent = matcher.match(input).best.intent as LauncherIntent.SimpleCommandIntent
+            assertEquals("Expected OPEN_ASSISTANT for '$input'", SimpleCommand.OPEN_ASSISTANT, intent.command)
+        }
+    }
+
+    // --- URL / site recognition (AIL-2, R6) ---
+
+    @Test fun `bare known-TLD domain returns OpenUrlIntent with scheme`() = runTest {
+        val best = matcher.match("github.com").best
+        val intent = best.intent as LauncherIntent.OpenUrlIntent
+        assertEquals("https://github.com", intent.url)
+        assertTrue(best.confidence >= 0.85f)
+    }
+
+    @Test fun `explicit https url returns OpenUrlIntent preserving the url`() = runTest {
+        val intent = matcher.match("https://example.com/docs").best.intent as LauncherIntent.OpenUrlIntent
+        assertEquals("https://example.com/docs", intent.url)
+    }
+
+    @Test fun `open plus url opens the site not an app launch`() = runTest {
+        val intent = matcher.match("open github.com").best.intent
+        assertTrue("expected OpenUrlIntent, got $intent", intent is LauncherIntent.OpenUrlIntent)
+        assertEquals("https://github.com", (intent as LauncherIntent.OpenUrlIntent).url)
+    }
+
+    @Test fun `open plus app name still launches the app`() = runTest {
+        val intent = matcher.match("open telegram").best.intent
+        assertTrue(intent is LauncherIntent.LaunchAppIntent)
+        assertEquals("telegram", (intent as LauncherIntent.LaunchAppIntent).displayNameQuery)
+    }
+
+    @Test fun `ambiguous unknown-TLD domain falls back to web search`() = runTest {
+        val best = matcher.match("example.foobar").best
+        val intent = best.intent as LauncherIntent.SearchIntent
+        assertEquals("example.foobar", intent.query)
+        assertTrue(best.confidence >= 0.85f)
+    }
+
+    @Test fun `punycode host is not opened silently`() = runTest {
+        val intent = matcher.match("xn--80ak6aa92e.com").best.intent
+        assertTrue("expected SearchIntent (never a silent open), got $intent", intent is LauncherIntent.SearchIntent)
+    }
+
+    @Test fun `url with query string routes to web search`() = runTest {
+        val intent = matcher.match("youtube.com/watch?v=abc").best.intent
+        assertTrue(intent is LauncherIntent.SearchIntent)
+    }
+
+    // --- install verb → Play Store (AIL-2, Q3) ---
+
+    @Test fun `install app returns PlayStoreSearchIntent`() = runTest {
+        val best = matcher.match("install whatsapp").best
+        val intent = best.intent as LauncherIntent.PlayStoreSearchIntent
+        assertEquals("whatsapp", intent.query)
+        assertTrue(best.confidence >= 0.85f)
+    }
+
+    @Test fun `bare install returns UnknownIntent`() = runTest {
+        assertTrue(matcher.match("install").best.intent is LauncherIntent.UnknownIntent)
+    }
+
+    @Test fun `download verb does not trigger Play Store (install only)`() = runTest {
+        // Q3 chose "install" only — "download X" is left to the normal rules (Unknown here).
+        val intent = matcher.match("download manager").best.intent
+        assertTrue("expected UnknownIntent for 'download manager', got $intent", intent is LauncherIntent.UnknownIntent)
+    }
+
     // --- unknowns ---
 
     @Test fun `empty input returns UnknownIntent with zero confidence`() = runTest {
@@ -165,5 +234,85 @@ class RuleBasedIntentMatcherTest {
     @Test fun `normalizedInput in result matches the input passed in`() = runTest {
         val input = "open telegram"
         assertEquals(input, matcher.match(input).normalizedInput)
+    }
+
+    // --- ru/tr locale forms (agentic restart plan, Этап 0.2) ---
+    // Table-driven parity: ru (SVO prefix, like en) and tr (SOV suffix, e.g. "telegramı aç")
+    // must reach the same intent type at the same 0.90 confidence as their English analogues.
+
+    private data class LocaleCase(
+        val input: String,
+        val expectLaunchApp: Boolean = false,
+        val expectSearch: Boolean = false,
+    )
+
+    @Test fun `ru and tr forms match english confidence parity`() = runTest {
+        val cases = listOf(
+            LocaleCase("open telegram", expectLaunchApp = true),
+            LocaleCase("открой телеграм", expectLaunchApp = true),
+            LocaleCase("открыть телеграм", expectLaunchApp = true),
+            LocaleCase("запусти телеграм", expectLaunchApp = true),
+            LocaleCase("запустить телеграм", expectLaunchApp = true),
+            LocaleCase("telegramı aç", expectLaunchApp = true),
+            LocaleCase("search weather", expectSearch = true),
+            LocaleCase("найди погоду", expectSearch = true),
+            LocaleCase("найти погоду", expectSearch = true),
+            LocaleCase("hava durumu ara", expectSearch = true),
+        )
+        cases.forEach { case ->
+            val best = matcher.match(case.input).best
+            when {
+                case.expectLaunchApp -> assertTrue(
+                    "Expected LaunchAppIntent for '${case.input}', got ${best.intent}",
+                    best.intent is LauncherIntent.LaunchAppIntent,
+                )
+                case.expectSearch -> assertTrue(
+                    "Expected SearchIntent for '${case.input}', got ${best.intent}",
+                    best.intent is LauncherIntent.SearchIntent,
+                )
+            }
+            assertTrue(
+                "Expected confidence >= 0.85 for '${case.input}', got ${best.confidence}",
+                best.confidence >= 0.85f,
+            )
+        }
+    }
+
+    @Test fun `ru install verb returns PlayStoreSearchIntent`() = runTest {
+        val best = matcher.match("установи вотсап").best
+        val intent = best.intent as LauncherIntent.PlayStoreSearchIntent
+        assertEquals("вотсап", intent.query)
+        assertTrue(best.confidence >= 0.85f)
+    }
+
+    @Test fun `tr install verb suffix form returns PlayStoreSearchIntent`() = runTest {
+        val best = matcher.match("whatsapp kur").best
+        val intent = best.intent as LauncherIntent.PlayStoreSearchIntent
+        assertEquals("whatsapp", intent.query)
+        assertTrue(best.confidence >= 0.85f)
+    }
+
+    @Test fun `ru bare settings keyword returns OpenSettingsIntent`() = runTest {
+        assertTrue(matcher.match("настройки").best.intent is LauncherIntent.OpenSettingsIntent)
+    }
+
+    @Test fun `tr bare settings keyword returns OpenSettingsIntent`() = runTest {
+        assertTrue(matcher.match("ayarlar").best.intent is LauncherIntent.OpenSettingsIntent)
+    }
+
+    @Test fun `ru simple commands return matching SimpleCommandIntent`() = runTest {
+        val intent = matcher.match("показать приложения").best.intent as LauncherIntent.SimpleCommandIntent
+        assertEquals(SimpleCommand.SHOW_APPS, intent.command)
+    }
+
+    @Test fun `tr simple commands return matching SimpleCommandIntent`() = runTest {
+        val intent = matcher.match("uygulamaları göster").best.intent as LauncherIntent.SimpleCommandIntent
+        assertEquals(SimpleCommand.SHOW_APPS, intent.command)
+    }
+
+    @Test fun `bare tr launch verb returns UnknownIntent`() = runTest {
+        val best = matcher.match("aç").best
+        assertTrue(best.intent is LauncherIntent.UnknownIntent)
+        assertTrue(best.confidence < 0.50f)
     }
 }

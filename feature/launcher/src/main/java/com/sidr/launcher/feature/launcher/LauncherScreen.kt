@@ -1,60 +1,100 @@
 package com.sidr.launcher.feature.launcher
 
 import android.Manifest
+import android.app.role.RoleManager
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.drawable.Drawable
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sidr.launcher.feature.launcher.agent.AgentSessionSurface
 import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.navigation.Routes
+import com.sidr.launcher.core.ui.component.AppTile
+import com.sidr.launcher.core.ui.component.SidrActionGate
+import com.sidr.launcher.core.ui.component.SidrActionGateType
+import com.sidr.launcher.core.ui.component.SidrActionProposal
+import com.sidr.launcher.core.ui.component.SidrActionProposalTone
+import com.sidr.launcher.core.ui.component.EmptyState
+import com.sidr.launcher.core.ui.component.ErrorState
+import com.sidr.launcher.core.ui.component.SidrSectionHeader
+import com.sidr.launcher.core.ui.component.SidrPrayerSummary
+import com.sidr.launcher.core.ui.component.SidrPrayerTimeUi
+import com.sidr.launcher.core.ui.component.SidrRouteChip
+import com.sidr.launcher.core.ui.component.SidrScaffold
+import com.sidr.launcher.core.ui.component.SidrUniversalInput
+import com.sidr.launcher.core.ui.component.SidrUniversalInputState
+import com.sidr.launcher.core.ui.component.TopBarIcon
+import com.sidr.launcher.core.ui.i18n.sidrString
+import com.sidr.launcher.core.ui.primitive.SidrText
+import com.sidr.launcher.core.ui.primitive.SidrTextRole
+import com.sidr.launcher.core.ui.theme.SidrTheme
+import com.sidr.launcher.core.ui.theme.Sizes
+import com.sidr.launcher.core.ui.theme.Spacing
+import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.permission.PermissionFeature
 import com.sidr.launcher.domain.suggestions.Suggestion
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import java.util.Locale
 
+/**
+ * The redesigned, decluttered home surface (Phase UX, Block X2).
+ *
+ * There is no full app grid here any more — the wall of icons moves to the App Drawer (Block X3).
+ * Home shows only a small, useful set: a lightweight top bar with **discoverable** Settings +
+ * Assistant icons, the unified [SidrSearchField] (search look, command-pipeline behaviour), the
+ * existing Suggestions row (unchanged single-owner [LauncherUiState.suggestions]), a **Favorites**
+ * row of the top-N most-used apps, and an **All apps** affordance. The full [LauncherUiState.apps]
+ * list still loads (the drawer and suggestion resolution need it); it just isn't rendered as a grid.
+ */
 @Composable
 fun LauncherScreen(
     modifier: Modifier = Modifier,
@@ -62,9 +102,40 @@ fun LauncherScreen(
     suggestionsContent: @Composable (suggestions: List<Suggestion>, onSuggestionTap: (Suggestion) -> Unit) -> Unit = { _, _ -> },
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // I18N-1 Task 13: the typed detail behind a PermissionDenied/DeviceNotCapable app-list load
+    // failure, exposed alongside uiState (see LauncherViewModel.appListErrorDetail's kdoc). Resolved
+    // via appDrawerErrorText(...) + sidrString(...) below; uiState's own UiError.Message English
+    // fallback is used only when this is null (core/common's untyped Network/Unknown, out of scope).
+    val appListErrorDetail by viewModel.appListErrorDetail.collectAsStateWithLifecycle()
     val commandInput by viewModel.commandInput.collectAsStateWithLifecycle()
     val feedback by viewModel.commandFeedback.collectAsStateWithLifecycle()
+    val showMic by viewModel.showMic.collectAsStateWithLifecycle()
+    val inputResults by viewModel.inputResults.collectAsStateWithLifecycle()
+    val prayerContext by viewModel.prayerContext.collectAsStateWithLifecycle()
+    val pendingRoutedAction by viewModel.pendingRoutedAction.collectAsStateWithLifecycle()
+    val devConsoleOn by viewModel.devConsoleOn.collectAsStateWithLifecycle()
+    val consoleLines by viewModel.consoleLines.collectAsStateWithLifecycle()
+    // Task 12 / A0: the agent runtime's session, if one is in flight or was restored at startup.
+    val agentSession by viewModel.agentSessionState.collectAsStateWithLifecycle()
+    val agentConfirming by viewModel.agentConfirming.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    // First-run nudge (Block X6): whether this launcher is already the system default HOME app.
+    // A runtime Android query kept in the screen (like Settings' "Set as default"); the persisted
+    // "dismissed" half lives in UserPreferences (LauncherUiState.setupHintDismissed).
+    val isDefaultLauncher = remember { isDefaultLauncher(context) }
+    // Tap anywhere outside a text field / clickable to dismiss the soft keyboard (2026-07-12). A tap
+    // on the input, chips, tiles etc. is consumed by those; only taps on empty home area reach this.
+    val focusManager = LocalFocusManager.current
+
+    // The ROLE_HOME request must go through startActivityForResult so the permission controller can
+    // read the calling package; a plain startActivity delivers a null caller and RequestRoleActivity
+    // aborts ("Package name cannot be null") without showing the chooser. This launcher routes through
+    // the host Activity's startActivityForResult. Result ignored — the nudge is dismissed on tap and
+    // isDefaultLauncher re-reads on the next composition.
+    val setDefaultLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { /* no-op */ }
 
     // Voice input (Block T). Tapping the mic starts recognition only when RECORD_AUDIO is held;
     // otherwise it routes to the permission-education screen for VOICE_INPUT (the Fork-5
@@ -79,49 +150,612 @@ fun LauncherScreen(
         }
     }
 
+    // Default home (Success, not typing, not the dev console) scrolls the WHOLE column as one unit so
+    // nothing is clipped on landscape rotation (Bug fix 2026-07-12). The scroll is enabled ONLY in that
+    // state: the "search-overtakes" panel and the dev console are LazyColumns and the Loading/Empty/Error
+    // states fill the body, none of which may live inside a parent verticalScroll (infinite-height
+    // measure). In those states the body keeps its weight(1f) box instead.
+    val homeScrollState = rememberScrollState()
+    val scrollDefaultHome = uiState is UiState.Success && !inputResults.active && !devConsoleOn
+
+    SidrScaffold(
+        modifier = modifier,
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .imePadding()
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = { focusManager.clearFocus() })
+                }
+                .then(
+                    if (scrollDefaultHome) Modifier.verticalScroll(homeScrollState) else Modifier,
+                ),
+        ) {
+            // Shahada is the topmost element, then the date line (Hijri · Gregorian) directly beneath it
+            // (owner layout). Both static — no prayer data — and hidden while typing so results overtake.
+            HomeAnchorSlot(visible = !inputResults.active && !devConsoleOn)
+            HomeDateLine(visible = !inputResults.active && !devConsoleOn)
+
+            // DS-6B Task 9: the opt-in prayer strip, immediately below the Shahada + date line. Same
+            // visibility rule as the Shahada (hidden while typing/results overtake/dev console); renders
+            // nothing at all — no empty placeholder — unless the mapped context is truthfully Available.
+            HomePrayerStrip(
+                visible = !inputResults.active && !devConsoleOn,
+                summary = prayerContext.toHomePrayerSummaryUi(),
+                onOpenDetails = { viewModel.navigateTo(Routes.PrayerDetail.ROUTE) },
+            )
+
+            // DS-4: Universal Input replaces the legacy SidrCommandPrompt. Submit drives the existing
+            // command pipeline byte-for-byte — `onSubmit` is parameterless (spec §7) and the screen owns
+            // the value it forwards to the unchanged onCommandSubmitted. Clear routes through the existing
+            // input-change path (no dedicated clear callback exists in the VM).
+            SidrUniversalInput(
+                value = commandInput,
+                onValueChange = viewModel::onCommandChanged,
+                // Submit the command AND drop focus so the soft keyboard closes on send (parity with
+                // terminal/assistant and the tap-to-dismiss behaviour above).
+                onSubmit = {
+                    viewModel.onCommandSubmitted(commandInput)
+                    focusManager.clearFocus()
+                },
+                state = if (commandInput.isNotBlank()) {
+                    SidrUniversalInputState.Typing
+                } else {
+                    SidrUniversalInputState.Idle
+                },
+                voiceAvailable = showMic,
+                onVoiceClick = onMicTap,
+                onClearClick = { viewModel.onCommandChanged("") },
+                routeContent = {
+                    // Persistent route lane under the input (artifact): APP is the selected lane (its
+                    // content is the app results / favorites below — no behaviour), WEB/ASK are always
+                    // available, SITE appears only for a safe URL. WEB/SITE no-op on a blank query.
+                    HomeRouteChips(
+                        hasSiteRoute = inputResults.chips.contains(RouteChipKind.SITE),
+                        onWeb = { viewModel.submitWebSearch(commandInput) },
+                        onAsk = {
+                            viewModel.navigateTo(Routes.Assistant.routeFor(Uri.encode(commandInput.trim())))
+                        },
+                        onSite = { viewModel.submitSite(commandInput) },
+                    )
+                },
+            )
+
+            // Command feedback — fallback UI for the last submitted command, shown just under the field.
+            CommandFeedbackArea(
+                feedback = feedback,
+                onCandidateClick = viewModel::onAppClicked,
+                onConfigureProvider = { viewModel.navigateTo(Routes.AssistantProvider.ROUTE) },
+                onDismiss = viewModel::dismissFeedback,
+            )
+
+            // AIL-5: a router-proposed action awaiting the user's go-ahead. CONFIRM-risk → the DF-4
+            // confirm card; SAFE → a one-tap accelerator. Neither auto-executes (R4). Confirm routes
+            // through the education flow first when the action declares a permission gate (inert in the
+            // MVP catalog — no family gates — but wired so a future gated family is safe by design).
+            pendingRoutedAction?.let { pending ->
+                val onConfirm: () -> Unit = {
+                    val gate = pending.permissionGate
+                    if (gate != null) {
+                        viewModel.navigateTo(Routes.PermissionEducation.routeFor(gate.name))
+                    } else {
+                        viewModel.confirmRoutedAction()
+                    }
+                }
+                PendingActionArea(
+                    pending = pending,
+                    onConfirm = onConfirm,
+                    onCancel = viewModel::cancelRoutedAction,
+                )
+            }
+
+            // Task 12 / A0: the agent runtime's surface — one component per runtime state, rendered
+            // from what the session itself reported. It sits below the router's pending card because
+            // the two are mutually exclusive in practice: a started session cleared the feedback and
+            // the pending card on its way in (see LauncherCommandSession.applyOutcome).
+            agentSession?.let { session ->
+                // A1″ fix round 1, finding 5 — both maps are `get()` on the ViewModel, deliberately
+                // (a `by lazy` froze them at the first session ever shown, which silently lost every
+                // shortcut tool discovered afterwards). Read bare, each access walks the whole
+                // federation — one `all()` per adapter over a device's hundreds of shortcut
+                // descriptors, each allocating strings and a parse round-trip, twice over — and this
+                // composable recomposes on EVERY KEYSTROKE in the command field, on the main thread.
+                // `remember(session)` keeps the correct read and pays for it once per session change
+                // instead. It also restores a stable map identity, which a bare `get()` destroyed —
+                // without it AgentSessionSurface can never skip recomposition, since every read
+                // returns a fresh Map.
+                //
+                // THE LIMIT THIS KEYING HAS, named here rather than only in a report (fix round 2,
+                // finding B — this comment previously claimed the opposite, that the surface can show
+                // nothing a change of session would not already have brought; that is false for these
+                // two maps). Their CONTENT comes from ShortcutCatalog, which moves independently of
+                // the session: the catalog starts empty and ShortcutRefreshTrigger's first refresh()
+                // is asynchronous on IO. So a session restored at process start can render while the
+                // catalog is still empty; `remember(session)` pins the two empty maps, and when the
+                // refresh lands the session has not changed, so the step keeps rendering with no
+                // dynamic name and no provenance line — a narrowed instance of the DOC-ILM-2 miss the
+                // `by lazy` -> `get()` change existed to prevent.
+                //
+                // REACHABLE AS OF A1″ TASK 11 (92e8704), not merely predicted: ToolMatchPlanner now
+                // selects through ToolSelector, whose dynamic branch returns shortcut ToolIds, so a
+                // persisted plan can name a shortcut tool. Task 11's ruling was fail-closed rather than
+                // new machinery: a session restored inside the startup window dies (Failed + cascade
+                // delete, per ShortcutToolIds) rather than pausing, so nothing wrong ever executes. The
+                // residual this keying carries is exactly that window's other half — while it is open,
+                // this surface renders the step with no dynamic name and no provenance line for an
+                // EXTERNAL tool (a narrowed DOC-ILM-2 miss) in the moment before the session dies.
+                // Teaching this surface to observe the catalog filling, or keying on something wider
+                // than the session, stays addressed onward rather than decided here.
+                //
+                // Keep `remember(session)`: it is strictly fresher than the `by lazy` it replaced and
+                // strictly cheaper than the bare `get()`. The trade-off is named, not removed.
+                val toolProvenance = remember(session) { viewModel.agentToolProvenance }
+                val dynamicLabels = remember(session) { viewModel.agentDynamicToolLabels }
+                AgentSessionSurface(
+                    session = session,
+                    toolProvenance = toolProvenance,
+                    dynamicLabels = dynamicLabels,
+                    confirming = agentConfirming,
+                    onConfirm = viewModel::confirmAgentStep,
+                    onDeny = viewModel::denyAgentStep,
+                    onContinue = viewModel::continueAgentSession,
+                    onDismiss = viewModel::dismissAgentSession,
+                )
+            }
+
+            when {
+                // Hidden developer transcript (DF-1) — takes over the body while on. LazyColumn: keep it
+                // in a weighted box (parent scroll is disabled in this state).
+                devConsoleOn -> Box(modifier = Modifier.weight(1f)) {
+                    CommandConsole(lines = consoleLines)
+                }
+                // "Search overtakes": a non-blank buffer replaces the home body with results (LazyColumn).
+                inputResults.active -> Box(modifier = Modifier.weight(1f)) {
+                    InputResultsPanel(
+                        results = inputResults,
+                        onAppClick = viewModel::onAppClicked,
+                    )
+                }
+                else -> when (val state = uiState) {
+                    is UiState.Loading -> Box(modifier = Modifier.weight(1f)) { LoadingContent() }
+                    is UiState.Empty -> Box(modifier = Modifier.weight(1f)) {
+                        EmptyState(message = sidrString(R.string.launcher_home_no_apps_found))
+                    }
+                    is UiState.Error -> Box(modifier = Modifier.weight(1f)) {
+                        val detail = appListErrorDetail
+                        val message = if (detail != null) {
+                            val resolved = appDrawerErrorText(detail)
+                            sidrString(resolved.id, *resolved.args.toTypedArray())
+                        } else {
+                            errorMessage(state.error)
+                        }
+                        ErrorState(
+                            message = message,
+                            onRetry = if (state.retryable) viewModel::retry else null,
+                        )
+                    }
+                    // Default home: rendered inline (no weight) so it scrolls with the whole column
+                    // (see [scrollDefaultHome]). HomeContent is a plain top-aligned column.
+                    is UiState.Success -> HomeContent(
+                        state = state.data,
+                        onAppClick = viewModel::onAppClicked,
+                        onSuggestionTap = viewModel::onSuggestionClicked,
+                        showSetupHint = !isDefaultLauncher && !state.data.setupHintDismissed,
+                        onSetDefault = {
+                            viewModel.dismissSetupHint()
+                            try {
+                                setDefaultLauncher.launch(defaultLauncherIntent(context))
+                            } catch (_: ActivityNotFoundException) {
+                                // No handler — never crash the launcher.
+                            }
+                        },
+                        onDismissHint = viewModel::dismissSetupHint,
+                        suggestionsContent = suggestionsContent,
+                    )
+                }
+            }
+
+            // Task 7 + 2026-07-12 revision: the app-level bottom tab bar now owns
+            // Home/Apps/Tasks/Agents/Activity/Terminal switching (AppNavHost's TabRootScaffold) —
+            // "All apps" was promoted from a Home-body row into the "Apps" tab itself, so the old
+            // three-row HomeBottomNav is retired with no replacement row here. Assistant stays
+            // reachable via the ASK route chip above (spec: no duplicate standalone Assistant row).
+            // The local-first privacy line now lives in AppNavHost's TabRootScaffold, below the tab
+            // bar itself, not here (see [HomePrivacyLine] callers).
+        }
+    }
+}
+
+// ── DS-4 Home shell (sacred anchor, date line, bottom nav, brand/privacy) ────
+
+/**
+ * Date line under the Shahada (owner layout): Hijri first, then Gregorian, on one centred row. Hidden
+ * while typing. A real calendar conversion (`HijrahDate`) — NOT prayer data (DS-6B owns that).
+ */
+@Composable
+private fun HomeDateLine(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    if (!visible) return
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = Spacing.md),
+        contentAlignment = Alignment.Center,
+    ) {
+        SidrText(
+            text = "${currentHijriDate()} · ${currentGregorianDate()}",
+            role = SidrTextRole.SYSTEM,
+            color = SidrTheme.colors.dim,
+        )
+    }
+}
+
+/**
+ * DS-4 sacred anchor (spec §6, §8): the quiet English Shahada, serif, centered — a static spiritual
+ * anchor, NOT prayer data. DS-6A owns the full Sacred Header and DS-6B owns prayer-time correctness;
+ * neither prayer times nor sources are rendered here. Hidden while typing so results can overtake.
+ */
+@Composable
+private fun HomeAnchorSlot(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    if (!visible) return
     Column(
         modifier = modifier
-            .fillMaxSize()
-            .imePadding(),
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        // NOTE (Block H, H4): the temporary home-screen "Wallpaper" demo button was removed here.
-        // The permission-education destination stays registered in AppNavHost and reachable by
-        // route; a real entry point (launcher settings / home long-press) lands in a later phase.
+        // I18N-1 Task 13: religious terminology (spec §7.2), Class B locked - present in all three
+        // locales but flagged in the owner-review package (strings_locked.xml).
+        SidrText(text = sidrString(R.string.launcher_shahada_line1), role = SidrTextRole.SACRED)
+        SidrText(text = sidrString(R.string.launcher_shahada_line2), role = SidrTextRole.SACRED)
+    }
+}
 
-        // Switching area — expands to fill available space above the input bar
-        Box(modifier = Modifier.weight(1f)) {
-            when (val state = uiState) {
-                is UiState.Loading -> LoadingContent()
-                is UiState.Empty -> EmptyContent()
-                is UiState.Error -> ErrorContent(
-                    error = state.error,
-                    retryable = state.retryable,
-                    onRetry = viewModel::retry,
+/**
+ * DS-6B Task 9: the Home prayer strip, immediately below the Shahada + date line. Presentation-only
+ * dispatch — [summary] is already mapped by [toHomePrayerSummaryUi]; this composable only applies the
+ * Shahada's visibility rule and the "render nothing, never an empty placeholder" rule for a `null`
+ * (not-`Available`) mapping.
+ */
+@Composable
+private fun HomePrayerStrip(
+    visible: Boolean,
+    summary: HomePrayerSummaryUi?,
+    onOpenDetails: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (!visible || summary == null) return
+    SidrPrayerSummary(
+        prayers = summary.prayers.map {
+            SidrPrayerTimeUi(name = prayerNameLabel(it.name), time = it.time, isNext = it.isNext)
+        },
+        status = summary.status,
+        provenance = prayerProvenanceText(summary.provenance),
+        modifier = modifier,
+        locationLabel = homeLocationLabelText(summary.locationLabel, summary.locationSource),
+        onOpenDetails = onOpenDetails,
+    )
+}
+
+/**
+ * DS-4 route lane (artifact): the explicit route accelerators under the input. WEB/ASK are always
+ * present, SITE appears only for a safe URL. No route auto-submits.
+ *
+ * DS-11 A4 (2026-08-10), two owner-directed corrections:
+ * - **Chips size to their text** instead of each taking `weight(1f)`. Four labels stretched across the
+ *   full width read as heavy furniture; the lane is an accelerator strip, not a segmented control.
+ * - **APP is no longer highlighted.** It used to render permanently `selected = true`, an inversion
+ *   the user could never turn off, because "the APP lane" was never a state — just a label for the
+ *   results already listed below. The chip stays (owner kept it as the lane's "you are here" marker)
+ *   but now rests like its neighbours.
+ *
+ * Known follow-up: APP still carries an empty `onClick`, so it is a control that does nothing when
+ * tapped. That is pre-existing and was left alone here rather than silently redesigned; it wants
+ * either a real behaviour or demotion to a non-interactive label.
+ */
+@Composable
+private fun HomeRouteChips(
+    hasSiteRoute: Boolean,
+    onWeb: () -> Unit,
+    onAsk: () -> Unit,
+    onSite: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+    ) {
+        SidrRouteChip(sidrString(R.string.launcher_route_app), selected = false, onClick = {})
+        SidrRouteChip(sidrString(R.string.launcher_route_web), selected = false, onClick = onWeb)
+        if (hasSiteRoute) {
+            SidrRouteChip(sidrString(R.string.launcher_route_site), selected = false, onClick = onSite)
+        }
+        SidrRouteChip(sidrString(R.string.launcher_route_ask), selected = false, onClick = onAsk)
+    }
+}
+
+// HomePrivacyLine moved to app/navigation/SidrTabScaffold.kt as SidrAppFooter (2026-07-12) — it now
+// renders below the tab bar on every tab root, not just Home, so it lives with the shared tab-bar
+// chrome rather than as Home-local content. LauncherViewModel::armDevMode is still threaded through
+// from AppNavHost's Home call site (see TabRootScaffold's onArmDevMode param).
+
+/** Today's Gregorian date for the top row, e.g. `Sat, 11 Jul`. */
+private fun currentGregorianDate(): String =
+    java.time.LocalDate.now().format(
+        java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM", java.util.Locale.getDefault()),
+    )
+
+/**
+ * Today's Hijri date, e.g. `25 Muharram`, via the platform [java.time.chrono.HijrahDate] (Umm al-Qura).
+ * A real calendar conversion — NOT prayer data — so the day can differ from a local moon sighting;
+ * authority/method-correct dates are DS-6B's concern.
+ */
+private fun currentHijriDate(): String =
+    java.time.chrono.HijrahDate.now().format(
+        java.time.format.DateTimeFormatter.ofPattern("d MMMM", java.util.Locale.getDefault()),
+    )
+
+// ── Home content (no full grid — Block X2) ──────────────────────────────────
+
+@Composable
+private fun HomeContent(
+    state: LauncherUiState,
+    onAppClick: (InstalledApp) -> Unit,
+    onSuggestionTap: (Suggestion) -> Unit,
+    showSetupHint: Boolean,
+    onSetDefault: () -> Unit,
+    onDismissHint: () -> Unit,
+    suggestionsContent: @Composable (suggestions: List<Suggestion>, onSuggestionTap: (Suggestion) -> Unit) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Plain top-aligned column: the caller scrolls the WHOLE default-home column (Shahada → date →
+    // input → chips → this content) together, so on landscape rotation everything scrolls as one and
+    // the Favorites grid stays reachable instead of being clipped off the bottom (2026-07-12 fix).
+    // Hence fillMaxWidth (not fillMaxSize) and no weight(1f) spacer — both would break the parent scroll.
+    Column(modifier = modifier.fillMaxWidth()) {
+        if (showSetupHint) {
+            SetupNudge(onSetDefault = onSetDefault, onDismiss = onDismissHint)
+        }
+        if (state.suggestions.isNotEmpty()) {
+            suggestionsContent(state.suggestions, onSuggestionTap)
+        }
+        if (state.favorites.isNotEmpty()) {
+            SidrSectionHeader(text = sidrString(R.string.launcher_home_favorites_header))
+            FavoritesGrid(favorites = state.favorites, onAppClick = onAppClick)
+        }
+    }
+}
+
+/**
+ * First-run nudge (Block X6): a dismissible card prompting the user to make Sidr the default
+ * launcher, plus a one-line "type or search" hint. Shown only until the user acts or dismisses
+ * (the choice persists via [UserPreferences.setupHintDismissed]).
+ */
+@Composable
+private fun SetupNudge(
+    onSetDefault: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+    ) {
+        Column(modifier = Modifier.padding(Spacing.lg)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = sidrString(R.string.launcher_setup_nudge_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier
+                        .weight(1f)
+                        .semantics { heading() },
                 )
-                is UiState.Success -> SuccessContent(
-                    state = state.data,
-                    onAppClick = viewModel::onAppClicked,
-                    onSuggestionTap = viewModel::onSuggestionClicked,
-                    suggestionsContent = suggestionsContent,
+                TopBarIcon(
+                    icon = Icons.Filled.Close,
+                    contentDescription = sidrString(R.string.launcher_setup_nudge_dismiss),
+                    onClick = onDismiss,
+                )
+            }
+            Text(
+                text = sidrString(R.string.launcher_setup_nudge_body),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = Spacing.xs),
+            )
+            TextButton(
+                onClick = onSetDefault,
+                modifier = Modifier.padding(top = Spacing.sm),
+            ) {
+                Text(text = sidrString(R.string.launcher_setup_nudge_action))
+            }
+        }
+    }
+}
+
+/**
+ * Favorites as a 4-column tile grid (artifact): monogram/icon tiles with labels, rows of four. A plain
+ * chunked grid (favorites are capped small) so it composes inside the scrolling Home column; empty cells
+ * keep the last row aligned.
+ */
+@Composable
+private fun FavoritesGrid(
+    favorites: List<InstalledApp>,
+    onAppClick: (InstalledApp) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.md),
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+    ) {
+        favorites.chunked(FAVORITES_COLUMNS).forEach { rowApps ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                rowApps.forEach { app ->
+                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        AppTile(
+                            label = app.label,
+                            onClick = { onAppClick(app) },
+                            icon = { AppTileIcon(app) },
+                        )
+                    }
+                }
+                repeat(FAVORITES_COLUMNS - rowApps.size) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+private const val FAVORITES_COLUMNS = 4
+
+/**
+ * Icon slot for an [AppTile]: loads the app's launcher icon (a `PackageManager`/`Drawable` concern
+ * that belongs to this feature module, not `core/ui`), falling back to a coloured monogram box.
+ * Decorative — the enclosing [AppTile] already carries the app label as its content description.
+ */
+@Composable
+private fun AppTileIcon(app: InstalledApp) {
+    val icon by rememberAppIcon(app.packageName)
+    if (icon != null) {
+        Image(
+            bitmap = icon!!,
+            contentDescription = null,
+            modifier = Modifier.size(Sizes.appIcon),
+        )
+    } else {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(Sizes.appIcon)
+                .background(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = MaterialTheme.shapes.small,
+                ),
+        ) {
+            Text(
+                // DISPLAY: the monogram initial is a fold of caller-supplied app label copy, so it
+                // follows the user's locale (I18N-1 spec §3.4/§4-brief Step 4).
+                text = app.label.firstOrNull()?.toString()?.uppercase(Locale.getDefault()) ?: "?",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
+    }
+}
+
+/**
+ * "Search overtakes" results (DS-4): app matches as an icon+label list. The route lane (APP/WEB/SITE/ASK)
+ * is the persistent strip under the input, so it is not repeated here. App icons use the feature-local
+ * [AppTileIcon]; each row carries a fixed minimum height so an async-loaded icon never resizes the row
+ * or shifts the input above it (spec §4, §8).
+ */
+@Composable
+private fun InputResultsPanel(
+    results: HomeInputResults,
+    onAppClick: (InstalledApp) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(modifier = modifier.fillMaxSize()) {
+        items(results.appMatches, key = { it.packageName }) { app ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = Sizes.minTouchTarget)
+                    .clickable { onAppClick(app) }
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+            ) {
+                AppTileIcon(app)
+                SidrText(
+                    text = app.label,
+                    role = SidrTextRole.HUMAN_BODY,
+                    modifier = Modifier.padding(start = Spacing.md),
                 )
             }
         }
+    }
+}
 
-        // Command feedback — fallback UI for the last submitted command (above the input bar)
-        CommandFeedbackArea(
-            feedback = feedback,
-            onCandidateClick = viewModel::onAppClicked,
-            onDismiss = viewModel::dismissFeedback,
+/** Hidden developer Command console transcript (AIL-3 / DF-1): `> command` + a one-line outcome. */
+@Composable
+private fun CommandConsole(
+    lines: List<ConsoleLine>,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+    ) {
+        items(lines) { line ->
+            Text(
+                text = "> ${line.command}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = "  ${line.result}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = Spacing.xs),
+            )
+        }
+    }
+}
+
+// ── Router proposal confirmation (AIL-5) ─────────────────────────────────────
+
+/**
+ * Renders a pending router proposal: the DS-3 [SidrActionGate] for a CONFIRM-risk action, or a
+ * lighter one-tap [RouteChipRow] accelerator for a SAFE one. Both dispatch through [onConfirm]
+ * (which the screen has already wrapped with the permission-gate check); the gate also exposes CANCEL.
+ */
+@Composable
+private fun PendingActionArea(
+    pending: PendingRoutedAction,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (pending.requiresConfirmation) {
+        SidrActionGate(
+            type = SidrActionGateType.ExternalHandoff,
+            title = sidrString(R.string.launcher_confirm_execute_title),
+            // I18N-1 (spec §4/brief Step 2): the commandLine argument itself stays English - it's the
+            // command grammar echo, not translatable prose.
+            consequence = sidrString(R.string.launcher_confirm_will_run, pending.commandLine),
+            target = pending.commandLine,
+            confirmLabel = sidrString(R.string.launcher_confirm_confirm),
+            onConfirm = onConfirm,
+            onCancel = onCancel,
+            modifier = modifier,
         )
-
-        // Command input — always visible; imePadding() on the Column keeps it above keyboard.
-        // The mic affordance is shown only when a speech recognizer is usable (degrade to keyboard).
-        CommandInputBar(
-            value = commandInput,
-            onChange = viewModel::onCommandChanged,
-            onSubmit = viewModel::onCommandSubmitted,
-            showMic = viewModel.isVoiceInputAvailable,
-            onMic = onMicTap,
+    } else {
+        // SAFE routed proposal — a one-tap accelerator, deliberately distinct from the CONFIRM gate.
+        // Still requires a deliberate tap (R4: nothing auto-executes).
+        SidrActionProposal(
+            title = pending.commandLine,
+            description = sidrString(R.string.launcher_safe_proposal_description),
+            tone = SidrActionProposalTone.Safe,
+            onExecute = onConfirm,
+            onCancel = onCancel,
+            executeLabel = sidrString(R.string.launcher_safe_proposal_run),
+            modifier = modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
         )
     }
 }
@@ -129,186 +763,112 @@ fun LauncherScreen(
 // ── Command feedback ────────────────────────────────────────────────────────
 
 @Composable
-private fun SuccessContent(
-    state: LauncherUiState,
-    onAppClick: (InstalledApp) -> Unit,
-    onSuggestionTap: (Suggestion) -> Unit,
-    suggestionsContent: @Composable (suggestions: List<Suggestion>, onSuggestionTap: (Suggestion) -> Unit) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier.fillMaxSize()) {
-        if (state.suggestions.isNotEmpty()) {
-            suggestionsContent(state.suggestions, onSuggestionTap)
-        }
-        AppGrid(
-            apps = state.apps,
-            onAppClick = onAppClick,
-            modifier = Modifier.weight(1f),
-        )
-    }
-}
-
-@Composable
 private fun CommandFeedbackArea(
     feedback: CommandFeedback,
     onCandidateClick: (InstalledApp) -> Unit,
+    onConfigureProvider: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    when (feedback) {
-        CommandFeedback.None -> Unit
-
-        is CommandFeedback.Message -> FeedbackText(
-            text = feedback.text,
-            onDismiss = onDismiss,
-            modifier = modifier,
-        )
-
-        is CommandFeedback.Suggestion -> FeedbackText(
-            text = feedback.text,
-            onDismiss = onDismiss,
-            modifier = modifier,
-        )
-
-        is CommandFeedback.Ambiguous -> Column(
+    // I18N-1 Task 12 note: CommandFeedback gained typed variants (EmptyInput/LowConfidence/
+    // UnknownCommand/Domain/Failure/VoiceError) so LauncherPresentation.feedbackText's resolution is
+    // reused here rather than duplicating the CommandOutcome -> sentence decision. The dev-console
+    // Message branch stays a verbatim passthrough (spec §3.2). Task 13 owns the rest of this screen's
+    // string extraction; this is the minimal wiring needed to keep :feature:launcher compiling once
+    // CommandFeedback's shape changed.
+    val resolved = feedbackText(feedback)
+    when {
+        // Ambiguity reads as a clarification prompt, not an error (spec §8): a quiet "Did you mean:"
+        // header over the candidate list. A candidate launches only on an explicit tap.
+        feedback is CommandFeedback.Ambiguous -> Column(
             modifier = modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
         ) {
-            Text(
-                text = "Did you mean:",
-                style = MaterialTheme.typography.labelMedium,
+            SidrText(
+                text = sidrString(requireNotNull(resolved).id, *resolved.args.toTypedArray()),
+                role = SidrTextRole.PROVENANCE,
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(Spacing.xs))
             feedback.candidates.forEach { app ->
-                Text(
+                SidrText(
                     text = app.label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    role = SidrTextRole.HUMAN_BODY,
+                    color = SidrTheme.colors.accent,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .heightIn(min = Sizes.minTouchTarget)
                         .clickable { onCandidateClick(app) }
-                        .padding(vertical = 8.dp),
+                        .padding(vertical = Spacing.sm),
                 )
             }
         }
+
+        // Этап 4.0 (fork F1) — of the three "understanding unavailable" states this is the only one
+        // the user can fix right now, in one step, so it is the only one that carries an affordance.
+        // The other two are neutral statements on purpose: nagging someone to undo a deliberate
+        // local-only choice, or to conjure a network, is the manipulation DOC-HYA-1 forbids.
+        feedback is CommandFeedback.Domain &&
+            feedback.message == CommandMessage.UnderstandingNeedsProvider -> Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+        ) {
+            SidrText(
+                text = sidrString(requireNotNull(resolved).id, *resolved.args.toTypedArray()),
+                role = SidrTextRole.PROVENANCE,
+            )
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            SidrText(
+                text = sidrString(R.string.launcher_understanding_provider_action),
+                role = SidrTextRole.HUMAN_BODY,
+                color = SidrTheme.colors.accent,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = Sizes.minTouchTarget)
+                    .clickable(onClick = onConfigureProvider)
+                    .padding(vertical = Spacing.sm),
+            )
+        }
+
+        resolved != null -> CommandFeedbackText(
+            text = sidrString(resolved.id, *resolved.args.toTypedArray()),
+            onDismiss = onDismiss,
+            modifier = modifier,
+        )
+
+        // Dev-console output only — exempt from I18N-1 (spec §3.2), rendered verbatim.
+        feedback is CommandFeedback.Message -> CommandFeedbackText(
+            text = feedback.text,
+            onDismiss = onDismiss,
+            modifier = modifier,
+        )
+
+        else -> Unit // CommandFeedback.None
     }
 }
 
 @Composable
-private fun FeedbackText(
+private fun CommandFeedbackText(
     text: String,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Text(
+    SidrText(
         text = text,
-        style = MaterialTheme.typography.bodyMedium,
+        role = SidrTextRole.HUMAN_BODY,
         modifier = modifier
             .fillMaxWidth()
+            .heightIn(min = Sizes.minTouchTarget)
             .clickable(onClick = onDismiss)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = Spacing.lg, vertical = Spacing.sm)
+            .wrapContentHeight(),
     )
 }
 
-// ── Private composables ────────────────────────────────────────────────────
-
-@Composable
-private fun AppGrid(
-    apps: List<InstalledApp>,
-    onAppClick: (InstalledApp) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 80.dp),
-        contentPadding = PaddingValues(8.dp),
-        modifier = modifier.fillMaxSize(),
-    ) {
-        items(apps, key = { it.packageName }) { app ->
-            AppItem(app = app, onClick = { onAppClick(app) })
-        }
-    }
-}
-
-@Composable
-private fun AppItem(
-    app: InstalledApp,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val icon by rememberAppIcon(app.packageName)
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier
-            .clickable(onClick = onClick)
-            .padding(8.dp),
-    ) {
-        if (icon != null) {
-            Image(
-                bitmap = icon!!,
-                contentDescription = app.label,
-                modifier = Modifier.size(48.dp),
-            )
-        } else {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        shape = MaterialTheme.shapes.small,
-                    ),
-            ) {
-                Text(
-                    text = app.label.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Text(
-            text = app.label,
-            style = MaterialTheme.typography.labelSmall,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-private fun CommandInputBar(
-    value: String,
-    onChange: (String) -> Unit,
-    onSubmit: (String) -> Unit,
-    showMic: Boolean,
-    onMic: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onChange,
-        placeholder = { Text("Type a command…") },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { onSubmit(value) }),
-        trailingIcon = if (showMic) {
-            {
-                // Text glyph keeps :feature:launcher free of a material-icons dependency.
-                IconButton(onClick = onMic) { Text("🎤") }
-            }
-        } else {
-            null
-        },
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-    )
-}
+// ── State surfaces ─────────────────────────────────────────────────────────
+// Empty/Error now render through core/ui EmptyState/ErrorState (Block X6); only the launcher-local
+// Loading spinner remains here.
 
 @Composable
 private fun LoadingContent(modifier: Modifier = Modifier) {
@@ -320,75 +880,55 @@ private fun LoadingContent(modifier: Modifier = Modifier) {
     }
 }
 
-@Composable
-private fun EmptyContent(modifier: Modifier = Modifier) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier.fillMaxSize(),
-    ) {
-        Text(text = "No apps found")
-    }
+/** Display-safe message for a [UiError] on the home error surface. */
+private fun errorMessage(error: UiError): String = when (error) {
+    is UiError.Message -> error.text
+    UiError.Network -> "Network error — check your connection"
+    UiError.Unknown -> "Something went wrong"
 }
 
-@Composable
-private fun ErrorContent(
-    error: UiError,
-    retryable: Boolean,
-    onRetry: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val message = when (error) {
-        is UiError.Message -> error.text
-        UiError.Network -> "Network error — check your connection"
-        UiError.Unknown -> "Something went wrong"
+// ── Default-launcher helpers (Block X6, first-run nudge) ─────────────────────
+
+/**
+ * Whether this app currently holds the default HOME role. API 29+ uses [RoleManager.isRoleHeld];
+ * older releases resolve the HOME intent and compare the winning package. Best-effort: any failure
+ * is treated as "not default" so the nudge can still surface.
+ */
+private fun isDefaultLauncher(context: Context): Boolean = try {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val roleManager = context.getSystemService(RoleManager::class.java)
+        roleManager != null &&
+            roleManager.isRoleAvailable(RoleManager.ROLE_HOME) &&
+            roleManager.isRoleHeld(RoleManager.ROLE_HOME)
+    } else {
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val resolved = context.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+        resolved?.activityInfo?.packageName == context.packageName
     }
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier.fillMaxSize(),
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+} catch (_: Exception) {
+    false
+}
+
+/**
+ * Builds the intent for the system default-launcher surface. Mirrors the Settings screen helper
+ * (Fork X5-C): [RoleManager.ROLE_HOME] request on API 29+ when available **and not already held**, else
+ * the Home-settings picker. Requesting a role the app already holds returns `RESULT_CANCELED` with no UI,
+ * so once Sidr is default the request would no-op — [Settings.ACTION_HOME_SETTINGS] opens the changeable
+ * Home-app picker instead. The caller launches it through an `ActivityResultContracts.StartActivityForResult`
+ * launcher — a role request delivered via a plain `startActivity` arrives with a null calling package and is
+ * rejected by the system's RequestRoleActivity.
+ */
+private fun defaultLauncherIntent(context: Context): Intent =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val roleManager = context.getSystemService(RoleManager::class.java)
+        if (roleManager != null &&
+            roleManager.isRoleAvailable(RoleManager.ROLE_HOME) &&
+            !roleManager.isRoleHeld(RoleManager.ROLE_HOME)
         ) {
-            Text(
-                text = message,
-                color = MaterialTheme.colorScheme.error,
-            )
-            if (retryable) {
-                TextButton(onClick = onRetry) { Text("Retry") }
-            }
+            roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)
+        } else {
+            Intent(Settings.ACTION_HOME_SETTINGS)
         }
+    } else {
+        Intent(Settings.ACTION_HOME_SETTINGS)
     }
-}
-
-// ── Icon loading — async on IO, no sync PackageManager call in composition ─
-
-@Composable
-private fun rememberAppIcon(packageName: String): State<ImageBitmap?> {
-    val pm = LocalContext.current.packageManager
-    val state = remember(packageName) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(packageName) {
-        withContext(Dispatchers.IO) {
-            state.value = try {
-                pm.getApplicationIcon(packageName).toImageBitmap()
-            } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
-                null
-            }
-        }
-    }
-    return state
-}
-
-// TODO: handle AdaptiveIconDrawable (intrinsicWidth/Height = -1) — move to a dedicated
-//       image-loading layer (e.g. Coil + AppIconFetcher) in a later phase.
-private fun Drawable.toImageBitmap(): ImageBitmap {
-    val bmp = Bitmap.createBitmap(
-        intrinsicWidth.coerceAtLeast(1),
-        intrinsicHeight.coerceAtLeast(1),
-        Bitmap.Config.ARGB_8888,
-    )
-    val canvas = android.graphics.Canvas(bmp)
-    setBounds(0, 0, canvas.width, canvas.height)
-    draw(canvas)
-    return bmp.asImageBitmap()
-}

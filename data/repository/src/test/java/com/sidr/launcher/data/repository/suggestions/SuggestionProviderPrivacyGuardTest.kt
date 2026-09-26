@@ -57,7 +57,7 @@ class SuggestionProviderPrivacyGuardTest {
         // backing data deliberately ALSO carries the sensitive title — proving the leak can't happen
         // even if a future change widened the projection by accident, the row itself stays opaque here.
         fakeProvider.nextCursor = MatrixCursor(arrayOf(CalendarContract.Instances.EVENT_ID, "title")).apply {
-            addRow(arrayOf(42L, sensitiveTitle))
+            addRow(arrayOf<Any>(42L, sensitiveTitle))
         }
 
         val permissionChecker = FakePermissionChecker().apply {
@@ -81,7 +81,7 @@ class SuggestionProviderPrivacyGuardTest {
             .create(CalendarContract.AUTHORITY)
         val fakeProvider = providerController.get() as FakeCursorContentProvider
         fakeProvider.nextCursor = MatrixCursor(arrayOf(CalendarContract.Instances.EVENT_ID, "title")).apply {
-            addRow(arrayOf(7L, "Secret event"))
+            addRow(arrayOf<Any>(7L, "Secret event"))
         }
 
         val permissionChecker = FakePermissionChecker() // defaultStatus = DENIED

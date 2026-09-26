@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I18N-1 Task 12: English source for feature/launcher's typed command feedback
+  (CommandFeedback -> LauncherPresentation.feedbackText) and AppDrawerViewModel's typed load-error
+  detail (AppDrawerError -> appDrawerErrorText). Every value below is byte-identical to the English
+  literal it replaces (recovered from git history where Task 11 already deleted the constant) - no
+  rewording. Task 13 extends this file with the screen-level strings (drawer/confirm-card copy etc.).
+
+  The command grammar itself ("open <app>", "search <query>", "show apps", "clear") is passed as
+  arguments (CommandExamples in LauncherPresentation.kt), never baked into a translatable sentence -
+  RuleBasedIntentMatcher parses English verbs, so a translated "open" would not parse (spec Sec4).
+-->
+<resources>
+    <!-- Command feedback: hints / errors shown under the universal input -->
+    <string name="launcher_feedback_empty_input">Type a command, e.g. \"%1$s\"</string>
+    <string name="launcher_feedback_low_confidence">Didn\'t catch that — try being more specific</string>
+    <string name="launcher_feedback_unknown_command">Unknown command. Try: %1$s, %2$s</string>
+    <string name="launcher_feedback_ambiguous">Did you mean:</string>
+
+    <!-- Domain-named messages (CommandMessage) -->
+    <string name="launcher_message_help">Try: %1$s, %2$s, %3$s, %4$s</string>
+    <string name="launcher_message_help_brief">Try: %1$s, %2$s</string>
+    <string name="launcher_feedback_no_app_found">No app found for \"%1$s\"</string>
+    <string name="launcher_message_showing_all_apps">Showing all apps</string>
+    <string name="launcher_message_assistant_soon">Assistant coming soon</string>
+    <string name="launcher_message_verbatim">%1$s</string>
+
+    <!-- Domain-named failures (CommandFailure) -->
+    <string name="launcher_failure_generic">Something went wrong. Please try again.</string>
+    <string name="launcher_failure_cant_open_app">Couldn\'t open that app.</string>
+    <string name="launcher_failure_no_search_app">No app available to handle that search.</string>
+    <string name="launcher_failure_cant_open_url">No app available to open that link.</string>
+    <string name="launcher_failure_no_store_app">Couldn\'t open the Play Store.</string>
+
+    <!-- Voice recognition errors (SpeechRecognitionError) -->
+    <string name="launcher_voice_permission_denied">Microphone permission is needed for voice input.</string>
+    <string name="launcher_voice_unavailable">Voice input isn\'t available on this device.</string>
+    <string name="launcher_voice_no_match">Didn\'t catch that — try again.</string>
+    <string name="launcher_voice_busy">Voice input is busy — try again in a moment.</string>
+    <string name="launcher_voice_network">Voice input needs a network connection right now.</string>
+    <string name="launcher_voice_timeout">No speech detected — try again.</string>
+    <string name="launcher_voice_unknown">Voice input failed — try again.</string>
+
+    <!-- Medium-confidence suggestions (SuggestedIntent) -->
+    <string name="launcher_suggest_launch_app">Did you mean to open \"%1$s\"?</string>
+    <string name="launcher_suggest_search">Search the web for \"%1$s\"?</string>
+    <string name="launcher_suggest_open_settings">Open settings?</string>
+    <string name="launcher_suggest_simple_command">Run that command?</string>
+    <string name="launcher_suggest_open_url">Open \"%1$s\"?</string>
+    <string name="launcher_suggest_play_store">Find \"%1$s\" in the Play Store?</string>
+    <string name="launcher_suggest_unknown">Try a different command</string>
+
+    <!-- AppDrawerViewModel's typed load-error detail (AppDrawerError) -->
+    <string name="launcher_drawer_permission_denied">Permission denied: %1$s</string>
+    <string name="launcher_drawer_not_supported">Not supported: %1$s</string>
+
+    <!-- I18N-1 Task 13: LauncherScreen.kt home shell -->
+    <string name="launcher_home_no_apps_found">No apps found</string>
+    <string name="launcher_home_favorites_header">Favorites</string>
+
+    <!-- DS-4 route lane chips (SidrRouteChip). Not in spec Sec7.1's enumerated locked-vocabulary
+         list (that list names specific tokens, e.g. "LOCAL CALC"/"LOCAL ONLY", not this one) - these
+         are plain English words meant to be read/understood, not opaque state codes, so they are
+         extracted as ordinary translatable strings. Judgment call, flagged in the task report. -->
+    <string name="launcher_route_app">APP</string>
+    <string name="launcher_route_web">WEB</string>
+    <string name="launcher_route_site">SITE</string>
+    <string name="launcher_route_ask">ASK</string>
+
+    <!-- First-run "set as default launcher" nudge -->
+    <string name="launcher_setup_nudge_title">Make Sidr your home screen</string>
+    <string name="launcher_setup_nudge_dismiss">Dismiss</string>
+    <string name="launcher_setup_nudge_body">Set Sidr as your default launcher, then type or search from the field above to open apps.</string>
+    <string name="launcher_setup_nudge_action">Set as default</string>
+
+    <!-- AIL-5 router-proposal confirmation (PendingActionArea) -->
+    <string name="launcher_confirm_execute_title">Execute?</string>
+    <!-- The %1$s argument (commandLine) stays English - command grammar echo (spec Sec4), not prose. -->
+    <string name="launcher_confirm_will_run">This will run: %1$s</string>
+    <string name="launcher_confirm_confirm">Confirm</string>
+    <string name="launcher_safe_proposal_description">Safe proposal. It still waits for your tap.</string>
+    <string name="launcher_safe_proposal_run">Run</string>
+
+    <!-- I18N-1 Task 13: AppDrawerScreen.kt -->
+    <string name="launcher_drawer_title">All apps</string>
+    <string name="launcher_drawer_back">Back</string>
+    <string name="launcher_drawer_ask_assistant">Ask assistant: \"%1$s\"</string>
+    <string name="launcher_drawer_empty_no_query">No apps found.</string>
+    <string name="launcher_drawer_empty_with_query">Nothing found.</string>
+    <string name="launcher_drawer_mode_groups">Groups</string>
+    <string name="launcher_drawer_mode_az">A-Z</string>
+    <string name="launcher_drawer_search_placeholder">Search applications</string>
+    <string name="launcher_drawer_clear_search">Clear search</string>
+
+    <!-- I18N-1 Task 13 fix round 1 (reviewer finding 1): Groups-preview sample category headers -
+         GroupsPreviewGrid renders these as real sticky-header text in the shipped Groups mode, so
+         they are not exempt (they are not inside preview/*.kt). -->
+    <string name="launcher_drawer_sample_category_finance">Finance</string>
+    <string name="launcher_drawer_sample_category_messaging">Messaging</string>
+    <string name="launcher_drawer_sample_category_media">Media</string>
+    <string name="launcher_drawer_sample_category_productivity">Productivity</string>
+    <string name="launcher_drawer_sample_category_other">Other</string>
+
+    <!-- I18N-2: Home/detail prayer-strip device-location label (PrayerLocationSource.DEVICE). Not
+         Class B locked - unlike calculation-method/madhab/Shahada copy, this is a plain UI label
+         with no religious content. Byte-identical to AndroidPrayerLocationProvider's
+         DEVICE_LOCATION_LABEL identity string (core/android), which stays fixed English - it also
+         serves as GetPrayerContextUseCase's cache-validity key and must never change. -->
+    <string name="launcher_prayer_location_current_device">Current location</string>
+
+    <!-- Этап 4.0 (ADR 1/4) — the three mutually exclusive reasons understanding is unavailable.
+         They replace the former blanket "Unknown command", which claimed the *command* was
+         unrecognizable when the truth was about the *system*. Ordinary (not locked) vocabulary: the
+         consent point for cloud routing is the Settings toggle, whose description IS Class B locked;
+         these three are status lines about the current mode, not consent or data-handling claims. -->
+    <string name="launcher_understanding_local_only">Not recognized locally. Cloud understanding is off.</string>
+    <string name="launcher_understanding_needs_provider">No AI provider is set up yet.</string>
+    <string name="launcher_understanding_provider_action">Set up provider</string>
+    <string name="launcher_understanding_needs_network">Understanding this command needs a network connection.</string>
+
+    <!-- Этап 4 / A0 Task 12 — the agent execution surface. Class A (ordinary UI), NOT the
+         owner-signed Class B set in strings_locked.xml: the step gate is a risk confirmation, the
+         same class as the AIL-5 confirm card, whose copy has always been Class A. Should the owner
+         want the consent line owner-reviewed, that is a separate decision. -->
+    <string name="launcher_agent_title">Agent</string>
+    <string name="launcher_agent_running_title">Working on it</string>
+    <string name="launcher_agent_step_launch">Open %1$s</string>
+    <string name="launcher_agent_step_store">Find %1$s in the app store</string>
+    <!-- Task 10 / A1': a step names its TOOL, not a launch. `launcher_agent_step_generic` is the
+         fail-soft line for a registered tool this surface has no sentence for. -->
+    <string name="launcher_agent_step_timer">Set a timer for %1$s</string>
+    <string name="launcher_agent_step_settings">Open Android settings</string>
+    <string name="launcher_agent_step_alarm">Set an alarm for %1$s</string>
+    <!-- A1" Task 7: the first CONFIRM tool. Owner condition 2 (2026-09-18): the consent card must name
+         BOTH the app label AND the package, because resolution is fuzzy and the human must see what
+         will be removed before tapping Confirm. Closed by Task 11 - `PlanStep.line` reads `app_label`
+         and `app` BY NAME for this tool id, rather than falling through to the single-literal path
+         (which cannot render two values) or to the raw goal text. %1$s is the label the user said,
+         %2$s is the package that will actually be removed. -->
+    <string name="launcher_agent_step_uninstall">Remove %1$s (%2$s)</string>
+    <!-- Task 9 / A1″ Phase 3a: the three launcher_memory tools. set_app_alias binds THREE literals
+         (the resolved package, the label the user said, and the phrase), which the single-literal
+         fallback path cannot render either. Task 11 closes it the same way as uninstall_app above:
+         `PlanStep.line` reads `app_label` (falling back to `app`) and `phrase` BY NAME. %1$s is the
+         name the user gave the app, %2$s is the phrase they coined for it. -->
+    <string name="launcher_agent_step_set_alias">Call “%1$s” “%2$s”</string>
+    <string name="launcher_agent_step_forget_alias">Forget the alias “%1$s”</string>
+    <string name="launcher_agent_step_forget_choice">Forget the learned choice for “%1$s”</string>
+    <string name="launcher_agent_step_generic">Run this step for %1$s</string>
+    <!-- A1″ Phase 3b, Task 2 (Slice A): four zero-argument navigating tools. No placeholder, exactly
+         like launcher_agent_step_settings above - the caller passes a subject the formatter ignores. -->
+    <string name="launcher_agent_step_show_alarms">Show alarms</string>
+    <string name="launcher_agent_step_open_camera">Open the camera</string>
+    <string name="launcher_agent_step_open_wifi_settings">Open Wi-Fi settings</string>
+    <string name="launcher_agent_step_open_bluetooth_settings">Open Bluetooth settings</string>
+    <!-- A1″ Phase 3b, Task 3 (Slice B): four more zero-argument navigating tools. No placeholder, same
+         shape as the four above. -->
+    <string name="launcher_agent_step_open_battery_settings">Open battery settings</string>
+    <string name="launcher_agent_step_open_data_usage_settings">Open data usage settings</string>
+    <string name="launcher_agent_step_open_display_settings">Open display settings</string>
+    <string name="launcher_agent_step_open_sound_settings">Open sound settings</string>
+    <!-- A1″ Phase 3b, Task 4 (Slice C): two zero-argument navigating tools, then the one that takes
+         an argument. launcher_agent_step_open_app_info DOES carry %1$s - it is the only one of the
+         eleven that does - and what fills it is the RESOLVED package, not the word the user typed,
+         because resolution happens above the consent gate. -->
+    <string name="launcher_agent_step_open_location_settings">Open location settings</string>
+    <string name="launcher_agent_step_open_notification_settings">Open notification settings</string>
+    <string name="launcher_agent_step_open_app_info">App info for %1$s</string>
+    <!-- A1″ Task 8: a tool whose NAME is data. %1$s is the app that published the shortcut and
+         %2$s is the shortcut's own label; both are authored by that app, in whatever language it
+         chose, and neither is ours to translate (measured: values-ru and values-tr labels arrive
+         side by side in one list on the same device). The em dash between them is OURS, which is
+         exactly why it lives here as part of the sentence rather than being concatenated in a
+         ViewModel: a locale that wants different punctuation, or the two halves the other way
+         round, changes this line and nothing else. -->
+    <string name="launcher_agent_step_shortcut">Open “%1$s — %2$s”</string>
+    <!-- Task 10 review, finding 4: the DOC-ILM-2 disclosure tokens (launcher_tool_level_*) moved to
+         Class A in strings_locked.xml - locked English, same family as ui_gate_type_external and
+         launcher_drawer_groups_provenance. See that file for why. -->
+    <string name="launcher_agent_gate_title">Confirm this step</string>
+    <string name="launcher_agent_gate_consequence">Sidr will do this next: %1$s. Nothing runs until you confirm.</string>
+    <string name="launcher_agent_gate_confirm">Confirm</string>
+    <string name="launcher_agent_cancel">Dismiss</string>
+    <!-- Paused is not an error: it says what happened (you left mid-plan) and what is on offer
+         (the rest of it), plus what dismissing costs. -->
+    <string name="launcher_agent_paused_title">Plan paused</string>
+    <string name="launcher_agent_paused_body">You left before this plan finished. Continue and Sidr picks it up where it stopped; dismiss it and nothing further runs.</string>
+    <string name="launcher_agent_paused_continue">Continue</string>
+    <string name="launcher_agent_completed_title">Plan complete</string>
+    <string name="launcher_agent_completed_partial_title">Plan finished, not every step ran</string>
+    <string name="launcher_agent_completed_partial_body">Sidr went through the whole plan. Some steps did not run, and each one says which below.</string>
+    <string name="launcher_agent_completed_handed_off_title">Plan finished — the outcome is with the system</string>
+    <string name="launcher_agent_completed_handed_off_body">Sidr went through the whole plan. At least one step was handed to the system, and what happened after that is not visible to Sidr.</string>
+    <string name="launcher_agent_step_line">%1$s — %2$s</string>
+    <string name="launcher_agent_step_state_done">done</string>
+    <string name="launcher_agent_step_state_skipped">not needed</string>
+    <string name="launcher_agent_step_state_failed">did not work</string>
+    <string name="launcher_agent_step_state_current">in progress</string>
+    <string name="launcher_agent_step_state_pending">not started</string>
+    <string name="launcher_agent_step_state_observed">nothing changed</string>
+    <string name="launcher_agent_step_state_handed_off">handed to the system</string>
+    <string name="launcher_agent_step_state_waiting">waiting for you</string>
+    <string name="launcher_agent_failed_title">This plan could not finish</string>
+    <string name="launcher_agent_blocked_title">Plan stopped</string>
+    <string name="launcher_agent_blocked_body">Sidr stopped this plan because it could no longer follow it safely. Nothing further will run.</string>
+</resources>

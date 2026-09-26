@@ -30,14 +30,29 @@ internal object PreferencesMapper {
         val defaults = UserPreferences()
         return UserPreferences(
             themeName = prefs[PreferencesKeys.USER_THEME_NAME] ?: defaults.themeName,
+            accentColor = prefs[PreferencesKeys.USER_ACCENT_COLOR] ?: defaults.accentColor,
             commandInputEnabled = prefs[PreferencesKeys.USER_COMMAND_INPUT_ENABLED]
                 ?: defaults.commandInputEnabled,
+            favoritesCount = prefs[PreferencesKeys.USER_FAVORITES_COUNT] ?: defaults.favoritesCount,
+            micInputEnabled = prefs[PreferencesKeys.USER_MIC_INPUT_ENABLED] ?: defaults.micInputEnabled,
+            setupHintDismissed = prefs[PreferencesKeys.USER_SETUP_HINT_DISMISSED]
+                ?: defaults.setupHintDismissed,
+            webProviderTemplate = prefs[PreferencesKeys.WEB_PROVIDER_TEMPLATE]
+                ?: defaults.webProviderTemplate,
+            autoHideNavBar = prefs[PreferencesKeys.USER_AUTO_HIDE_NAV_BAR]
+                ?: defaults.autoHideNavBar,
         )
     }
 
     fun writeUserPreferences(prefs: androidx.datastore.preferences.core.MutablePreferences, value: UserPreferences) {
         prefs[PreferencesKeys.USER_THEME_NAME] = value.themeName
+        prefs[PreferencesKeys.USER_ACCENT_COLOR] = value.accentColor
         prefs[PreferencesKeys.USER_COMMAND_INPUT_ENABLED] = value.commandInputEnabled
+        prefs[PreferencesKeys.USER_FAVORITES_COUNT] = value.favoritesCount
+        prefs[PreferencesKeys.USER_MIC_INPUT_ENABLED] = value.micInputEnabled
+        prefs[PreferencesKeys.USER_SETUP_HINT_DISMISSED] = value.setupHintDismissed
+        prefs[PreferencesKeys.WEB_PROVIDER_TEMPLATE] = value.webProviderTemplate
+        prefs[PreferencesKeys.USER_AUTO_HIDE_NAV_BAR] = value.autoHideNavBar
     }
 
     // ── Feature flags ─────────────────────────────────────────────────────────
@@ -50,6 +65,8 @@ internal object PreferencesMapper {
                 ?: defaults.usageHistoryEnabled,
             permissionEducationDismissed = prefs[PreferencesKeys.FLAG_PERMISSION_EDU_DISMISSED]
                 ?: defaults.permissionEducationDismissed,
+            localOnlyMode = prefs[PreferencesKeys.FLAG_LOCAL_ONLY]
+                ?: defaults.localOnlyMode,
         )
     }
 
@@ -57,6 +74,7 @@ internal object PreferencesMapper {
         prefs[PreferencesKeys.FLAG_AI_SUGGESTIONS_ENABLED] = value.aiSuggestionsEnabled
         prefs[PreferencesKeys.FLAG_USAGE_HISTORY_ENABLED] = value.usageHistoryEnabled
         prefs[PreferencesKeys.FLAG_PERMISSION_EDU_DISMISSED] = value.permissionEducationDismissed
+        prefs[PreferencesKeys.FLAG_LOCAL_ONLY] = value.localOnlyMode
     }
 
     // ── Device-profile cache (nullable: absent until first write) ──────────────

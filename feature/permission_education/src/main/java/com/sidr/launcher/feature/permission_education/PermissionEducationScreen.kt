@@ -10,17 +10,14 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -33,18 +30,31 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sidr.launcher.core.ui.component.SidrIconButton
+import com.sidr.launcher.core.ui.component.SidrLabeledStatus
+import com.sidr.launcher.core.ui.component.SidrPermissionNotice
+import com.sidr.launcher.core.ui.component.SidrPrivacyNotice
+import com.sidr.launcher.core.ui.component.SidrScaffold
+import com.sidr.launcher.core.ui.component.SidrTertiaryButton
+import com.sidr.launcher.core.ui.component.SidrTopBar
+import com.sidr.launcher.core.ui.i18n.sidrString
+import com.sidr.launcher.core.ui.primitive.SidrStatus
+import com.sidr.launcher.core.ui.primitive.SidrText
+import com.sidr.launcher.core.ui.primitive.SidrTextRole
 import com.sidr.launcher.domain.permission.PermissionFeature
 import com.sidr.launcher.domain.permission.PermissionStatus
 
 /**
- * Permission-education destination (Block G), replacing the old inline `Text("Permission
- * Education")` placeholder.
- *
- * Implements the "education ≠ request" split (Fork 5): the rationale text is always shown without
- * any system dialog; the dialog is launched only when the user taps the call-to-action for a
- * *requestable* feature. A denial disables exactly this feature — the launcher core is a separate
+ * Permission-education destination (Block G), restyled to the SIDR design system (DS-5 track,
+ * Task 6). Implements the "education ≠ request" split (Fork 5): the rationale text is always shown
+ * without any system dialog; the dialog is launched only when the user taps the call-to-action for
+ * a *requestable* feature. A denial disables exactly this feature — the launcher core is a separate
  * destination and is never blocked. The system request + wallpaper launch are the only Android
  * glue here; all decisions live in [PermissionEducationViewModel].
+ *
+ * DS-5 restyle notes: permission states render through [SidrPermissionNotice], with Back and "Not now"
+ * both resolving to the same safe [onBack] callback. Every branch keeps its exact real callback; only
+ * composition/styling changed.
  */
 @Composable
 fun PermissionEducationScreen(
@@ -85,84 +95,110 @@ fun PermissionEducationScreen(
         if (granted && state.feature == PermissionFeature.WALLPAPER) context.launchWallpaperPicker()
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(text = state.rationale.title, style = MaterialTheme.typography.headlineSmall)
-        Text(text = state.rationale.body, style = MaterialTheme.typography.bodyMedium)
+    val title = sidrString(state.feature.titleRes())
+    val body = sidrString(state.rationaleRes)
 
-        Spacer(modifier = Modifier.height(8.dp))
+    SidrScaffold(
+        modifier = modifier,
+        topBar = {
+            SidrTopBar(
+                title = title,
+                navigationIcon = {
+                    SidrIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = sidrString(R.string.perm_back),
+                        onClick = onBack,
+                    )
+                },
+            )
+        },
+    ) { inner ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(inner)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            val withoutPermission = sidrString(
+                R.string.perm_without_permission_template,
+                sidrString(state.feature.capabilityLabelRes()),
+            )
 
-        when {
-            // Dormant feature: education only, no request flow exists yet.
-            !state.requestable -> {
-                Text(
-                    text = "Not available yet.",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.outline,
-                )
-            }
-
-            state.status == PermissionStatus.GRANTED -> {
-                Text(
-                    text = "Enabled.",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                // Only wallpaper has an in-screen action; voice is used from the launcher mic.
-                if (state.feature == PermissionFeature.WALLPAPER) {
-                    Button(
-                        onClick = { context.launchWallpaperPicker() },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Set wallpaper") }
-                }
-            }
-
-            state.status == PermissionStatus.PERMANENTLY_DENIED -> {
-                Text(
-                    text = "Permission was permanently denied. Enable it from system settings to " +
-                        "use this feature. The launcher keeps working without it.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-                Button(
-                    onClick = { context.openAppSettings() },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Open settings") }
-            }
-
-            else -> {
-                // DENIED (incl. not-yet-requested): offer the system request.
-                if (state.status == PermissionStatus.DENIED) {
-                    Text(
-                        text = "Not enabled. The launcher works fine without it.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline,
+            when {
+                // Dormant feature: education only, no request flow exists yet.
+                !state.requestable -> {
+                    SidrPrivacyNotice(
+                        title = title,
+                        body = body,
+                        provenance = {
+                            SidrText(text = sidrString(R.string.perm_not_available_yet), role = SidrTextRole.PROVENANCE)
+                        },
                     )
                 }
-                Button(
-                    onClick = { androidPermission?.let { permissionLauncher.launch(it) } },
+
+                state.status == PermissionStatus.GRANTED -> {
+                    val setWallpaperLabel = sidrString(R.string.perm_set_wallpaper)
+                    SidrPermissionNotice(
+                        title = title,
+                        body = body,
+                        primaryLabel = if (state.feature == PermissionFeature.WALLPAPER) setWallpaperLabel else sidrString(R.string.perm_done),
+                        onPrimary = {
+                            if (state.feature == PermissionFeature.WALLPAPER) {
+                                context.launchWallpaperPicker()
+                            } else {
+                                onBack()
+                            }
+                        },
+                        withoutPermission = withoutPermission,
+                        status = SidrLabeledStatus(sidrString(R.string.perm_status_enabled), SidrStatus.SUCCESS),
+                    )
+                }
+
+                state.status == PermissionStatus.PERMANENTLY_DENIED -> {
+                    SidrPermissionNotice(
+                        title = title,
+                        body = sidrString(R.string.perm_permanently_denied_body),
+                        primaryLabel = sidrString(R.string.perm_open_settings),
+                        onPrimary = { context.openAppSettings() },
+                        withoutPermission = withoutPermission,
+                        secondaryLabel = sidrString(R.string.perm_not_now),
+                        onSecondary = onBack,
+                        status = SidrLabeledStatus(sidrString(R.string.perm_status_blocked), SidrStatus.DANGER),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                else -> {
+                    // DENIED (incl. not-yet-requested): offer the system request.
+                    SidrPermissionNotice(
+                        title = title,
+                        body = body,
+                        primaryLabel = sidrString(state.feature.ctaLabelRes()),
+                        onPrimary = { androidPermission?.let { permissionLauncher.launch(it) } },
+                        withoutPermission = withoutPermission,
+                        secondaryLabel = sidrString(R.string.perm_not_now),
+                        onSecondary = onBack,
+                        status = SidrLabeledStatus(sidrString(R.string.perm_status_optional), SidrStatus.INFO),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+
+            SidrText(
+                text = sidrString(R.string.perm_not_a_system_dialog),
+                role = SidrTextRole.PROVENANCE,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            if (!state.dismissed && state.requestable && state.status != PermissionStatus.GRANTED) {
+                SidrTertiaryButton(
+                    text = sidrString(R.string.perm_dont_show_again),
+                    onClick = viewModel::onDismissForever,
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text(state.rationale.ctaLabel) }
+                )
             }
         }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (!state.dismissed && state.requestable && state.status != PermissionStatus.GRANTED) {
-            TextButton(
-                onClick = viewModel::onDismissForever,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Don't show this again") }
-        }
-
-        TextButton(
-            onClick = onBack,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Back") }
     }
 }
 
@@ -180,6 +216,40 @@ private fun PermissionFeature.androidPermission(): String? = when (this) {
     PermissionFeature.VOICE_INPUT -> Manifest.permission.RECORD_AUDIO
     PermissionFeature.CALENDAR_SUGGESTIONS -> Manifest.permission.READ_CALENDAR
     PermissionFeature.LOCATION_SUGGESTIONS -> Manifest.permission.ACCESS_FINE_LOCATION
+    PermissionFeature.PRAYER_LOCATION -> Manifest.permission.ACCESS_FINE_LOCATION
+}
+
+/**
+ * Short, already-true capability fragment for the "without this permission" card — derived from the
+ * feature itself, not a new claim (mirrors what each feature's rationale/CTA already implies).
+ */
+@StringRes
+private fun PermissionFeature.capabilityLabelRes(): Int = when (this) {
+    PermissionFeature.WALLPAPER -> R.string.perm_capability_wallpaper
+    PermissionFeature.VOICE_INPUT -> R.string.perm_capability_voice_input
+    PermissionFeature.CALENDAR_SUGGESTIONS -> R.string.perm_capability_calendar
+    PermissionFeature.LOCATION_SUGGESTIONS -> R.string.perm_capability_location
+    PermissionFeature.PRAYER_LOCATION -> R.string.perm_capability_prayer_location
+}
+
+/** Screen title per feature — screen chrome, resolved directly here (not part of the locked rationale). */
+@StringRes
+private fun PermissionFeature.titleRes(): Int = when (this) {
+    PermissionFeature.WALLPAPER -> R.string.perm_title_wallpaper
+    PermissionFeature.VOICE_INPUT -> R.string.perm_title_voice_input
+    PermissionFeature.CALENDAR_SUGGESTIONS -> R.string.perm_title_calendar
+    PermissionFeature.LOCATION_SUGGESTIONS -> R.string.perm_title_location
+    PermissionFeature.PRAYER_LOCATION -> R.string.perm_title_prayer_location
+}
+
+/** Primary call-to-action label per feature, used when requestable and not yet granted. */
+@StringRes
+private fun PermissionFeature.ctaLabelRes(): Int = when (this) {
+    PermissionFeature.WALLPAPER -> R.string.perm_cta_wallpaper
+    PermissionFeature.VOICE_INPUT -> R.string.perm_cta_voice_input
+    PermissionFeature.CALENDAR_SUGGESTIONS -> R.string.perm_cta_calendar
+    PermissionFeature.LOCATION_SUGGESTIONS -> R.string.perm_cta_location
+    PermissionFeature.PRAYER_LOCATION -> R.string.perm_cta_prayer_location
 }
 
 /** Unwraps the Activity from a (possibly wrapped) Context; null if none in the chain. */
@@ -192,11 +262,15 @@ private fun Context.findActivity(): Activity? {
     return null
 }
 
-/** Opens the system wallpaper picker — the wallpaper feature's reaction to being enabled. */
+/**
+ * Opens the system wallpaper picker — the wallpaper feature's reaction to being enabled. Not a
+ * `@Composable` (it runs from a click callback), so it resolves the chooser title via the plain
+ * Android `Context.getString` rather than `sidrString` — the I18N-1 overlay seam is Compose-only.
+ */
 private fun Context.launchWallpaperPicker() {
     try {
         val intent = Intent(Intent.ACTION_SET_WALLPAPER)
-        startActivity(Intent.createChooser(intent, "Set wallpaper"))
+        startActivity(Intent.createChooser(intent, getString(R.string.perm_set_wallpaper)))
     } catch (_: ActivityNotFoundException) {
         // No wallpaper picker on this device — fail silently; nothing in the launcher breaks.
     }

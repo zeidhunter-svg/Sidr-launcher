@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- I18N-1 Task 12: Turkish. Agent-drafted, not owner-reviewed (accepted norm for this block). -->
+<resources>
+    <string name="launcher_feedback_empty_input">Bir komut girin, örn. «%1$s»</string>
+    <string name="launcher_feedback_low_confidence">Anlaşılamadı — daha net belirtin</string>
+    <string name="launcher_feedback_unknown_command">Bilinmeyen komut. Deneyin: %1$s, %2$s</string>
+    <string name="launcher_feedback_ambiguous">Şunu mu demek istediniz:</string>
+
+    <string name="launcher_message_help">Deneyin: %1$s, %2$s, %3$s, %4$s</string>
+    <string name="launcher_message_help_brief">Deneyin: %1$s, %2$s</string>
+    <string name="launcher_feedback_no_app_found">«%1$s» için uygulama bulunamadı</string>
+    <string name="launcher_message_showing_all_apps">Tüm uygulamalar gösteriliyor</string>
+    <string name="launcher_message_assistant_soon">Asistan yakında geliyor</string>
+    <string name="launcher_message_verbatim">%1$s</string>
+
+    <string name="launcher_failure_generic">Bir şeyler ters gitti. Lütfen tekrar deneyin.</string>
+    <string name="launcher_failure_cant_open_app">Bu uygulama açılamadı.</string>
+    <string name="launcher_failure_no_search_app">Bu aramayı gerçekleştirecek uygulama yok.</string>
+    <string name="launcher_failure_cant_open_url">Bu bağlantıyı açacak uygulama yok.</string>
+    <string name="launcher_failure_no_store_app">Play Store açılamadı.</string>
+
+    <string name="launcher_voice_permission_denied">Sesli giriş için mikrofon izni gerekiyor.</string>
+    <string name="launcher_voice_unavailable">Sesli giriş bu cihazda kullanılamıyor.</string>
+    <string name="launcher_voice_no_match">Anlaşılamadı — tekrar deneyin.</string>
+    <string name="launcher_voice_busy">Sesli giriş meşgul — birazdan tekrar deneyin.</string>
+    <string name="launcher_voice_network">Sesli giriş şu anda ağ bağlantısı gerektiriyor.</string>
+    <string name="launcher_voice_timeout">Konuşma algılanamadı — tekrar deneyin.</string>
+    <string name="launcher_voice_unknown">Sesli giriş başarısız oldu — tekrar deneyin.</string>
+
+    <string name="launcher_suggest_launch_app">«%1$s» uygulamasını mı açmak istediniz?</string>
+    <string name="launcher_suggest_search">Web\'de «%1$s» aransın mı?</string>
+    <string name="launcher_suggest_open_settings">Ayarlar açılsın mı?</string>
+    <string name="launcher_suggest_simple_command">Bu komut çalıştırılsın mı?</string>
+    <string name="launcher_suggest_open_url">«%1$s» açılsın mı?</string>
+    <string name="launcher_suggest_play_store">Play Store\'da «%1$s» aransın mı?</string>
+    <string name="launcher_suggest_unknown">Farklı bir komut deneyin</string>
+
+    <string name="launcher_drawer_permission_denied">İzin reddedildi: %1$s</string>
+    <string name="launcher_drawer_not_supported">Desteklenmiyor: %1$s</string>
+
+    <string name="launcher_home_no_apps_found">Uygulama bulunamadı</string>
+    <string name="launcher_home_favorites_header">Favoriler</string>
+
+    <string name="launcher_route_app">UYGULAMA</string>
+    <string name="launcher_route_web">WEB</string>
+    <string name="launcher_route_site">SİTE</string>
+    <string name="launcher_route_ask">SOR</string>
+
+    <string name="launcher_setup_nudge_title">Sidr\'ı ana ekranınız yapın</string>
+    <string name="launcher_setup_nudge_dismiss">Kapat</string>
+    <string name="launcher_setup_nudge_body">Sidr\'ı varsayılan başlatıcınız yapın, ardından uygulamaları açmak için yukarıdaki alana yazın veya arama yapın.</string>
+    <string name="launcher_setup_nudge_action">Varsayılan yap</string>
+
+    <string name="launcher_confirm_execute_title">Çalıştırılsın mı?</string>
+    <string name="launcher_confirm_will_run">Şu çalıştırılacak: %1$s</string>
+    <string name="launcher_confirm_confirm">Onayla</string>
+    <string name="launcher_safe_proposal_description">Güvenli öneri. Yine de dokunmanızı bekliyor.</string>
+    <string name="launcher_safe_proposal_run">Çalıştır</string>
+
+    <string name="launcher_drawer_title">Tüm uygulamalar</string>
+    <string name="launcher_drawer_back">Geri</string>
+    <string name="launcher_drawer_ask_assistant">Asistana sor: «%1$s»</string>
+    <string name="launcher_drawer_empty_no_query">Uygulama bulunamadı.</string>
+    <string name="launcher_drawer_empty_with_query">Hiçbir şey bulunamadı.</string>
+    <string name="launcher_drawer_mode_groups">Gruplar</string>
+    <string name="launcher_drawer_mode_az">A-Z</string>
+    <string name="launcher_drawer_search_placeholder">Uygulama ara</string>
+    <string name="launcher_drawer_clear_search">Aramayı temizle</string>
+
+    <string name="launcher_drawer_sample_category_finance">Finans</string>
+    <string name="launcher_drawer_sample_category_messaging">Mesajlaşma</string>
+    <string name="launcher_drawer_sample_category_media">Medya</string>
+    <string name="launcher_drawer_sample_category_productivity">Verimlilik</string>
+    <string name="launcher_drawer_sample_category_other">Diğer</string>
+
+    <string name="launcher_prayer_location_current_device">Mevcut konum</string>
+
+    <!-- Этап 4.0 (ADR 1/4) — anlamanın neden kullanılamadığına dair üç birbirini dışlayan durum. -->
+    <string name="launcher_understanding_local_only">Yerel olarak tanınmadı. Bulut anlama kapalı.</string>
+    <string name="launcher_understanding_needs_provider">Henüz bir yapay zeka sağlayıcısı ayarlanmadı.</string>
+    <string name="launcher_understanding_provider_action">Sağlayıcıyı ayarla</string>
+    <string name="launcher_understanding_needs_network">Bu komutu anlamak için ağ bağlantısı gerekiyor.</string>
+
+    <!-- Этап 4 / A0 Task 12 — ajan yürütme yüzeyi. Class A (sıradan arayüz metni). -->
+    <string name="launcher_agent_title">Ajan</string>
+    <string name="launcher_agent_running_title">Çalışıyor</string>
+    <string name="launcher_agent_step_launch">%1$s uygulamasını aç</string>
+    <string name="launcher_agent_step_store">%1$s uygulamasını uygulama mağazasında bul</string>
+    <string name="launcher_agent_step_timer">%1$s için zamanlayıcı kur</string>
+    <string name="launcher_agent_step_settings">Android ayarlarını aç</string>
+    <string name="launcher_agent_step_alarm">%1$s için alarm kur</string>
+    <string name="launcher_agent_step_uninstall">%1$s uygulamasını kaldır (%2$s)</string>
+    <string name="launcher_agent_step_set_alias">“%1$s” uygulamasına “%2$s” de</string>
+    <string name="launcher_agent_step_forget_alias">“%1$s” takma adını unut</string>
+    <string name="launcher_agent_step_forget_choice">“%1$s” için öğrenilen seçimi unut</string>
+    <string name="launcher_agent_step_generic">%1$s için bu adımı çalıştır</string>
+    <!-- A1″ Phase 3b, Task 2 (Slice A): dört argümansız araç. -->
+    <string name="launcher_agent_step_show_alarms">Alarmları göster</string>
+    <string name="launcher_agent_step_open_camera">Kamerayı aç</string>
+    <string name="launcher_agent_step_open_wifi_settings">Wi-Fi ayarlarını aç</string>
+    <string name="launcher_agent_step_open_bluetooth_settings">Bluetooth ayarlarını aç</string>
+    <!-- A1″ Phase 3b, Task 3 (Slice B): dört argümansız araç daha. -->
+    <string name="launcher_agent_step_open_battery_settings">Pil ayarlarını aç</string>
+    <string name="launcher_agent_step_open_data_usage_settings">Veri kullanımı ayarlarını aç</string>
+    <string name="launcher_agent_step_open_display_settings">Ekran ayarlarını aç</string>
+    <string name="launcher_agent_step_open_sound_settings">Ses ayarlarını aç</string>
+    <!-- A1″ Phase 3b, Task 4 (Slice C): iki argümansız araç ve argüman alan tek araç. -->
+    <string name="launcher_agent_step_open_location_settings">Konum ayarlarını aç</string>
+    <string name="launcher_agent_step_open_notification_settings">Bildirim ayarlarını aç</string>
+    <string name="launcher_agent_step_open_app_info">%1$s uygulama bilgisi</string>
+    <string name="launcher_agent_step_shortcut">“%1$s — %2$s” aç</string>
+    <string name="launcher_agent_gate_title">Bu adımı onaylayın</string>
+    <string name="launcher_agent_gate_consequence">Sidr sırada şunu yapacak: %1$s. Siz onaylamadan hiçbir şey çalışmaz.</string>
+    <string name="launcher_agent_gate_confirm">Onayla</string>
+    <string name="launcher_agent_cancel">Kapat</string>
+    <string name="launcher_agent_paused_title">Plan duraklatıldı</string>
+    <string name="launcher_agent_paused_body">Bu plan bitmeden ayrıldınız. Devam ederseniz Sidr kaldığı yerden sürdürür; kapatırsanız başka hiçbir şey çalışmaz.</string>
+    <string name="launcher_agent_paused_continue">Devam et</string>
+    <string name="launcher_agent_completed_title">Plan tamamlandı</string>
+    <string name="launcher_agent_completed_partial_title">Plan bitti, her adım çalışmadı</string>
+    <string name="launcher_agent_completed_partial_body">Sidr planın tamamından geçti. Bazı adımlar çalışmadı — her birinin durumu aşağıda yazıyor.</string>
+    <string name="launcher_agent_completed_handed_off_title">Plan tamamlandı — sonuç sistemde</string>
+    <string name="launcher_agent_completed_handed_off_body">Sidr planı sonuna kadar yürüttü. En az bir adım sisteme aktarıldı; sonrasında ne olduğunu Sidr göremiyor.</string>
+    <string name="launcher_agent_step_line">%1$s — %2$s</string>
+    <string name="launcher_agent_step_state_done">yapıldı</string>
+    <string name="launcher_agent_step_state_skipped">gerekmedi</string>
+    <string name="launcher_agent_step_state_failed">olmadı</string>
+    <string name="launcher_agent_step_state_current">sürüyor</string>
+    <string name="launcher_agent_step_state_pending">başlamadı</string>
+    <string name="launcher_agent_step_state_observed">değişiklik yok</string>
+    <string name="launcher_agent_step_state_handed_off">sisteme aktarıldı</string>
+    <string name="launcher_agent_step_state_waiting">sizi bekliyor</string>
+    <string name="launcher_agent_failed_title">Bu plan tamamlanamadı</string>
+    <string name="launcher_agent_blocked_title">Plan durduruldu</string>
+    <string name="launcher_agent_blocked_body">Sidr bu planı durdurdu, çünkü artık güvenle sürdüremiyordu. Başka hiçbir şey çalışmayacak.</string>
+</resources>

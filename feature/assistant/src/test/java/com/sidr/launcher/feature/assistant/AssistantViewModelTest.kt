@@ -7,12 +7,16 @@ import com.sidr.launcher.domain.ai.AiChunk
 import com.sidr.launcher.domain.ai.AiError
 import com.sidr.launcher.domain.ai.AiModelId
 import com.sidr.launcher.domain.ai.AiProviderConfig
+import com.sidr.launcher.domain.ai.AiProviderConfigRepository
 import com.sidr.launcher.domain.ai.AiProviderId
 import com.sidr.launcher.domain.ai.AiRequest
 import com.sidr.launcher.domain.ai.AiStopReason
 import com.sidr.launcher.domain.ai.GenerateReplyUseCase
 import com.sidr.launcher.domain.ai.PromptContextBuilder
+import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.security.SecretKeys
+import com.sidr.launcher.domain.security.SecureSecretStore
+import com.sidr.launcher.domain.security.SecretKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -139,6 +143,39 @@ class AssistantViewModelTest {
         assertFalse(status.showProviderCta)
     }
 
+    @Test
+    fun `AiError retry and provider CTA classification covers every variant`() {
+        val cases = listOf(
+            AiError.Offline to (true to false),
+            AiError.MissingCredentials to (false to true),
+            AiError.Unauthorized to (false to true),
+            AiError.RateLimited(retryAfterMs = 1_000L) to (true to false),
+            AiError.Timeout to (true to false),
+            AiError.Network("connection reset") to (true to false),
+            AiError.ServerError(statusCode = 500) to (true to false),
+            AiError.InvalidRequest("bad model") to (false to false),
+            AiError.Unknown("unmapped") to (true to false),
+        )
+
+        cases.forEach { (error, expected) ->
+            val (retryable, showProviderCta) = expected
+            assertEquals("${error::class.simpleName} retryable", retryable, error.isButtonRetryable())
+            assertEquals("${error::class.simpleName} provider CTA", showProviderCta, error.needsProviderSetup())
+        }
+    }
+
+    @Test
+    fun `RateLimited message says retry`() {
+        // I18N-1 Task 10: the ViewModel now carries the reason as a value and the sentence lives in
+        // resources, so this pins both halves — the mapping, and the English copy that ships.
+        assertEquals(AssistantError.RateLimited, AiError.RateLimited(retryAfterMs = 1_000L).toAssistantError())
+
+        val message = AssistantStrings.en("assistant_error_why_rate_limited")
+
+        assertEquals("Rate limited. Please wait and retry.", message)
+        assertFalse("RateLimited message must not contain old typo", message.contains("retray"))
+    }
+
     // ── retry latest-wins ─────────────────────────────────────────────────────────────────────────
 
     @Test
@@ -191,6 +228,15 @@ class AssistantViewModelTest {
     }
 
     @Test
+    fun `saveProvider with new key immediately marks keySet true`() = runTest {
+        val vm = buildVm()
+        vm.saveProvider("https://openrouter.ai/api/v1", "mistralai/mistral-7b-instruct", "secret-key")
+        advanceUntilIdle()
+
+        assertTrue("saved key must be reflected in the form immediately", vm.uiState.value.form.keySet)
+    }
+
+    @Test
     fun `saveProvider with blank key skips secretStore put`() = runTest {
         val vm = buildVm()
         vm.saveProvider("https://example.com", "gpt-4o-mini", "")
@@ -210,7 +256,11 @@ class AssistantViewModelTest {
         assertEquals(0, secretStore.putCalls.size)
         val saveError = vm.uiState.value.form.saveError
         assertNotNull(saveError)
-        assertTrue("error must mention https", saveError!!.contains("https", ignoreCase = true))
+        assertEquals(ProviderSaveError.BASE_URL_NOT_HTTPS, saveError)
+        assertTrue(
+            "error must mention https",
+            AssistantStrings.en("assistant_save_error_base_url_not_https").contains("https", ignoreCase = true),
+        )
     }
 
     @Test
@@ -221,6 +271,51 @@ class AssistantViewModelTest {
 
         val saved = configRepo.setCalls.first()
         assertEquals("openrouter.ai", saved.providerId.value)
+    }
+
+    /**
+     * Regression, found on-device during DS-10 (2026-08-10). The provider form and the chat live on two
+     * nav destinations, so they hold two ViewModel instances over the same repositories, and `keySet` is
+     * only recomputed when `activeConfig()` emits. Writing the config *before* the key therefore leaves a
+     * window in which the other instance reads the secret store, finds nothing, and caches "no key set"
+     * until the next config change — which is exactly what the device showed.
+     *
+     * The interleaving itself is not reproducible against in-memory fakes (whether the collector resumes
+     * inside or after the gap is a scheduling detail), so this pins the invariant that removes the window
+     * instead: **the key is persisted before the config that announces it.**
+     */
+    @Test
+    fun `saveProvider writes the key before it announces the config`() = runTest {
+        val order = mutableListOf<String>()
+        val recordingSecrets = object : SecureSecretStore {
+            override suspend fun get(key: SecretKey) = secretStore.get(key)
+            override suspend fun put(key: SecretKey, value: String): OperationResult<Unit> {
+                order += "key"
+                return secretStore.put(key, value)
+            }
+
+            override suspend fun remove(key: SecretKey) = secretStore.remove(key)
+        }
+        val recordingConfig = object : AiProviderConfigRepository {
+            override fun activeConfig() = configRepo.activeConfig()
+            override suspend fun setActiveConfig(config: AiProviderConfig): OperationResult<Unit> {
+                order += "config"
+                return configRepo.setActiveConfig(config)
+            }
+
+            override suspend fun clearActiveConfig() = configRepo.clearActiveConfig()
+        }
+        val vm = AssistantViewModel(
+            GenerateReplyUseCase(FakeGenerativeAiEngine(chunks = emptyList()), PromptContextBuilder()),
+            recordingConfig,
+            recordingSecrets,
+        )
+
+        vm.saveProvider("https://openrouter.ai/api/v1", "gpt-4o-mini", "secret-key")
+        advanceUntilIdle()
+
+        assertEquals(listOf("key", "config"), order)
+        assertTrue("the saving screen still reflects the key", vm.uiState.value.form.keySet)
     }
 
     // ── config presence / form state ──────────────────────────────────────────────────────────────

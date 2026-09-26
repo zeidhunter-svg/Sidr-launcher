@@ -40,7 +40,17 @@ class UserPreferencesRepositoryImplTest {
         val scope = CoroutineScope(dispatcher + Job())
         val repo = UserPreferencesRepositoryImpl(createTestDataStore(file(), scope), dispatcher)
 
-        val updated = UserPreferences(themeName = "dark", commandInputEnabled = false)
+        val updated = UserPreferences(
+            themeName = "dark",
+            accentColor = "amber",
+            commandInputEnabled = false,
+            favoritesCount = 4,
+            micInputEnabled = false,
+            setupHintDismissed = true,
+            // Deliberately the NON-default value (DS-11 A1 made `false` the default): a round-trip
+            // assertion only proves persistence when the written value differs from the default.
+            autoHideNavBar = true,
+        )
         val result = repo.updatePreferences(updated)
 
         assertTrue(result is OperationResult.Success)
@@ -52,7 +62,16 @@ class UserPreferencesRepositoryImplTest {
     fun `written preferences survive a process restart`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val target = file()
-        val updated = UserPreferences(themeName = "light", commandInputEnabled = false)
+        val updated = UserPreferences(
+            themeName = "light",
+            accentColor = "amber",
+            commandInputEnabled = false,
+            favoritesCount = 10,
+            micInputEnabled = false,
+            setupHintDismissed = true,
+            // Non-default on purpose — see the round-trip test above.
+            autoHideNavBar = true,
+        )
 
         // First "process": write, then release the file lock.
         val writeScope = CoroutineScope(dispatcher + Job())

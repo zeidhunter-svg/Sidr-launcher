@@ -1,14 +1,12 @@
 package com.sidr.launcher.di
 
 import com.sidr.launcher.data.repository.ai.AiProviderConfigRepositoryImpl
-import com.sidr.launcher.data.repository.ailocal.ModelAvailabilityRepositoryImpl
 import com.sidr.launcher.data.repository.preferences.DeviceProfileCacheRepositoryImpl
 import com.sidr.launcher.data.repository.preferences.FeatureFlagRepositoryImpl
 import com.sidr.launcher.data.repository.preferences.PermissionPrefsRepositoryImpl
 import com.sidr.launcher.data.repository.preferences.SuggestionsCacheRepositoryImpl
 import com.sidr.launcher.data.repository.preferences.UserPreferencesRepositoryImpl
 import com.sidr.launcher.domain.ai.AiProviderConfigRepository
-import com.sidr.launcher.domain.ai.local.ModelAvailabilityRepository
 import com.sidr.launcher.domain.permission.PermissionPrefsRepository
 import com.sidr.launcher.domain.preferences.DeviceProfileCacheRepository
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
@@ -66,11 +64,4 @@ abstract class PersistenceBindsModule {
     abstract fun bindAiProviderConfigRepository(
         impl: AiProviderConfigRepositoryImpl,
     ): AiProviderConfigRepository
-
-    // Block Q — observable local-NLU model availability (DataStore-backed set of verified ModelIds).
-    @Binds
-    @Singleton
-    abstract fun bindModelAvailabilityRepository(
-        impl: ModelAvailabilityRepositoryImpl,
-    ): ModelAvailabilityRepository
 }

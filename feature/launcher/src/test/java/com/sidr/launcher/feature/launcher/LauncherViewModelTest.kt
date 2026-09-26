@@ -4,9 +4,47 @@ import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
+import com.sidr.launcher.core.testing.FakeActionCatalog
+import com.sidr.launcher.core.testing.FakeAgentSessionStore
+import com.sidr.launcher.core.testing.FakeToolExecutor
+import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.core.testing.FakeActionExecutor
+import com.sidr.launcher.core.testing.configuredProvider
+import com.sidr.launcher.core.testing.FakeAliasStore
+import com.sidr.launcher.core.testing.FakeCommandPlanner
+import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
+import com.sidr.launcher.core.testing.FakePrayerCalculator
+import com.sidr.launcher.core.testing.FakePrayerPreferencesRepository
+import com.sidr.launcher.core.testing.FakePrayerScheduleCache
+import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
 import androidx.lifecycle.SavedStateHandle
+import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
+import com.sidr.launcher.domain.agent.AgentExecutor
+import com.sidr.launcher.domain.agent.AgentSessionId
+import com.sidr.launcher.domain.agent.AgentSessionIdFactory
+import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
+import com.sidr.launcher.domain.agent.ExecutionState
+import com.sidr.launcher.domain.agent.ResolveConsentUseCase
+import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
+import com.sidr.launcher.domain.agent.RuntimeBudget
+import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
+import com.sidr.launcher.domain.agent.TemplatePlanner
+import com.sidr.launcher.domain.memory.alias.Alias
+import com.sidr.launcher.domain.memory.alias.AliasTarget
+import com.sidr.launcher.domain.memory.alias.ResolvedCommandStep
+import com.sidr.launcher.domain.memory.alias.ResolveCommandWithAliasUseCase
+import com.sidr.launcher.domain.memory.resolution.CandidateSet
+import com.sidr.launcher.domain.memory.resolution.CapabilityKey
+import com.sidr.launcher.domain.memory.resolution.CommandRouteStep
+import com.sidr.launcher.domain.memory.resolution.DefaultResolutionPreferencePolicy
+import com.sidr.launcher.domain.memory.resolution.PreferenceEvidence
+import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
+import com.sidr.launcher.domain.memory.resolution.ResolutionContext
+import com.sidr.launcher.domain.memory.resolution.ResolutionPreference
+import com.sidr.launcher.domain.memory.resolution.ResolveCommandWithPreferenceUseCase
+import com.sidr.launcher.domain.memory.resolution.ResolvedTarget
+import com.sidr.launcher.domain.memory.resolution.fingerprintOf
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeSuggestionEngine
 import com.sidr.launcher.core.testing.FakeSuggestionsCacheRepository
@@ -14,7 +52,10 @@ import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeIntentMatcher
 import com.sidr.launcher.core.testing.FakeSpeechInputSource
 import com.sidr.launcher.core.testing.FakeUsageHistoryRepository
+import com.sidr.launcher.core.testing.FakeUserPreferencesRepository
 import com.sidr.launcher.domain.preferences.CachedSuggestion
+import com.sidr.launcher.domain.preferences.UserPreferences
+import com.sidr.launcher.domain.preferences.UserPreferencesRepository
 import com.sidr.launcher.domain.voice.SpeechRecognitionError
 import com.sidr.launcher.domain.voice.SpeechRecognitionState
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
@@ -29,21 +70,54 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import com.sidr.launcher.domain.action.ActionCategory
+import com.sidr.launcher.domain.action.ActionDescriptor
+import com.sidr.launcher.domain.action.ActionIds
+import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.action.LauncherAction
+import com.sidr.launcher.domain.ai.router.PlanResult
 import com.sidr.launcher.domain.history.AppUsageRecord
 import com.sidr.launcher.domain.intent.ActionExecutionResult
+import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
 import com.sidr.launcher.domain.intent.ExecutableAction
+import com.sidr.launcher.domain.intent.ExecuteActionUseCase
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.model.InstalledApp
+import com.sidr.launcher.domain.permission.PermissionFeature
+import com.sidr.launcher.domain.prayer.CalculationMethodId
+import com.sidr.launcher.domain.prayer.GetPrayerContextUseCase
+import com.sidr.launcher.domain.prayer.Madhab
+import com.sidr.launcher.domain.prayer.PrayerContext
+import com.sidr.launcher.domain.prayer.PrayerDaySchedule
+import com.sidr.launcher.domain.prayer.PrayerInstant
+import com.sidr.launcher.domain.prayer.PrayerLocation
+import com.sidr.launcher.domain.prayer.PrayerLocationSource
+import com.sidr.launcher.domain.prayer.PrayerName
+import com.sidr.launcher.domain.prayer.PrayerSetup
+import com.sidr.launcher.domain.prayer.UnavailableReason
 import com.sidr.launcher.domain.result.OperationError
+import com.sidr.launcher.domain.tool.ObservedFact
+import com.sidr.launcher.domain.tool.ToolEffect
+import com.sidr.launcher.domain.tool.ToolOutput
+import com.sidr.launcher.domain.tool.ToolResult
+import com.sidr.launcher.feature.launcher.agent.DynamicToolLabels
+import com.sidr.launcher.feature.launcher.agent.StepProvenance
+import java.time.Clock
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -52,6 +126,8 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -65,8 +141,24 @@ class LauncherViewModelTest {
     private val fakeExecutor = FakeActionExecutor()
     private val fakeUsageRepo = FakeUsageHistoryRepository()
     private val fakeSpeech = FakeSpeechInputSource()
+    private val fakePrefsRepo = FakeUserPreferencesRepository()
     // Default: usageHistoryEnabled = true so existing recording tests remain valid.
     private val fakeFlagRepo = FakeFeatureFlagRepository(FeatureFlags(usageHistoryEnabled = true))
+    // S2-1 Task 11: empty by default — every existing (pre-S2-1) assertion is exercised against an
+    // empty store, proving no-preference parity. A fresh instance per test (JUnit4 instantiates the
+    // test class per @Test method), so tests never leak preferences into one another.
+    private val fakeResolutionStore = FakeResolutionPreferenceStore()
+    private val fakeAliasStore = FakeAliasStore()
+
+    // DS-6B Task 9: parity-only default — an unconfigured prayer use case over fresh fakes, so every
+    // pre-Task-9 test (which never touches prayerContext) is unaffected. Tests that care about prayer
+    // behaviour build and pass their own [GetPrayerContextUseCase] via [buildViewModel]'s parameter.
+    private val defaultGetPrayerContext = GetPrayerContextUseCase(
+        FakePrayerPreferencesRepository(),
+        FakePrayerScheduleCache(),
+        FakePrayerCalculator(),
+        Clock.fixed(Instant.parse("2026-07-13T10:00:00Z"), ZoneId.of("UTC")),
+    )
     private val useCase = HandleUserCommandUseCase(
         matcher = fakeMatcher,
         resolver = IntentActionResolver(fakeRepo),
@@ -77,6 +169,72 @@ class LauncherViewModelTest {
         // rather than relying on Dispatchers.Unconfined to run in-place (Block H, step H-c).
         recordingScope = CoroutineScope(testDispatcher + SupervisorJob()),
     )
+
+    // Task 11 / A0 made `startAgentSession` a required collaborator of RouteCommandUseCase, and Task
+    // 12 made the four agent ports required by LauncherViewModel. One in-memory fixture serves both,
+    // and it is deliberately INERT for every pre-existing test: the store starts empty, so
+    // `restoreOnStart()` finds nothing, and TemplatePlanner only produces a plan for a decided
+    // NoAppFound, which none of the fixtures below ever produces. Every existing assertion therefore
+    // still exercises what it was written to exercise.
+    private val fakeAgentStore = FakeAgentSessionStore()
+    private val agentIds = object : AgentSessionIdFactory {
+        private var n = 0
+        override fun newId() = AgentSessionId("test-agent-${++n}")
+    }
+    private val agentRegistry = FakeToolRegistry.withA0Tools()
+    private val startAgentSession = StartAgentSessionUseCase(
+        planner = TemplatePlanner(),
+        store = fakeAgentStore,
+        ids = agentIds,
+        registry = agentRegistry,
+    )
+    private val runAgentSession = RunAgentSessionUseCase(
+        executor = AgentExecutor(agentRegistry, FakeToolExecutor(emptyList()), RuntimeBudget.Default),
+        store = fakeAgentStore,
+    )
+
+    // AIL-4: the VM routes through RouteCommandUseCase. Этап 4.0 re-pointed this fixture at the new
+    // default posture — local-only OFF, a provider configured, online — with a planner that returns
+    // NoPlan (FakeCommandPlanner's default). That combination still yields the FastPath outcome
+    // byte-for-byte, so every existing VM test keeps testing what it was written to test: the VM's
+    // CommandOutcome -> CommandFeedback mapping, not the gate. Leaving the provider unconfigured
+    // would instead make every unknown command surface UnderstandingNeedsProvider and quietly turn
+    // this whole suite into a test of the gate. The gate itself is proven in RouteCommandUseCaseTest.
+    private val routeUseCase = RouteCommandUseCase(
+        handleUserCommand = useCase,
+        planner = FakeCommandPlanner(),
+        catalog = FakeActionCatalog(),
+        featureFlagRepository = fakeFlagRepo,
+        providerConfigRepository = configuredProvider(),
+        connectivityChecker = FakeConnectivityChecker(),
+        startAgentSession = startAgentSession,
+    )
+
+    // AIL-5: executes a confirmed router-proposed action through the same resolver/executor path.
+    private val executeAction = ExecuteActionUseCase(
+        resolver = IntentActionResolver(fakeRepo),
+        executor = fakeExecutor,
+    )
+
+    private fun aliasAwareResolveCommand(
+        route: CommandRouteStep,
+        resolutionStore: FakeResolutionPreferenceStore = fakeResolutionStore,
+        actionCatalog: FakeActionCatalog = FakeActionCatalog(),
+        aliasStore: FakeAliasStore = fakeAliasStore,
+        installedApps: InstalledAppsRepository = fakeRepo,
+    ): ResolveCommandWithAliasUseCase {
+        val preferenceResolver = ResolveCommandWithPreferenceUseCase(
+            route = route,
+            store = resolutionStore,
+            policy = DefaultResolutionPreferencePolicy(),
+            catalog = actionCatalog,
+        )
+        return ResolveCommandWithAliasUseCase(
+            inner = ResolvedCommandStep { rawInput -> preferenceResolver.resolve(rawInput) },
+            store = aliasStore,
+            installedApps = installedApps,
+        )
+    }
 
     @Before
     fun setUp() {
@@ -100,23 +258,223 @@ class LauncherViewModelTest {
         savedStateHandle: SavedStateHandle = SavedStateHandle(),
         suggestionEngine: SuggestionEngine = FakeSuggestionEngine(),
         suggestionsCacheRepository: SuggestionsCacheRepository = FakeSuggestionsCacheRepository(),
+        prefsRepo: UserPreferencesRepository = fakePrefsRepo,
+        actionCatalog: FakeActionCatalog = FakeActionCatalog(),
+        connectivity: FakeConnectivityChecker = FakeConnectivityChecker(),
+        resolutionStore: FakeResolutionPreferenceStore = fakeResolutionStore,
+        getPrayerContext: GetPrayerContextUseCase = defaultGetPrayerContext,
+        // Defaulted to the shared fixture, so every pre-existing caller is byte-for-byte unchanged.
+        // Only the agent-exit tests below override it, to script what the plan's tools observe and so
+        // decide which surface the user is looking at when they leave it.
+        runAgent: RunAgentSessionUseCase = runAgentSession,
     ) = LauncherViewModel(
         installedAppsRepository = fakeRepo,
-        handleUserCommand = useCase,
+        resolveCommand = aliasAwareResolveCommand(
+            route = CommandRouteStep { routeUseCase.route(it) },
+            resolutionStore = resolutionStore,
+            actionCatalog = actionCatalog,
+        ),
+        recordResolutionChoice = RecordResolutionChoiceUseCase(resolutionStore),
+        executeAction = executeAction,
         actionExecutor = fakeExecutor,
+        actionCatalog = actionCatalog,
         usageHistoryRepository = fakeUsageRepo,
         featureFlagRepository = flagRepo,
+        userPreferencesRepository = prefsRepo,
         suggestionEngine = suggestionEngine,
         suggestionsCacheRepository = suggestionsCacheRepository,
         speechInputSource = fakeSpeech,
+        connectivityChecker = connectivity,
+        getPrayerContext = getPrayerContext,
+        runAgentSession = runAgent,
+        resolveAgentConsent = ResolveConsentUseCase(fakeAgentStore, runAgent),
+        cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
+        agentSessionStore = fakeAgentStore,
+        toolRegistry = agentRegistry,
+        // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
+        // and every step line renders exactly as it did before the dynamic arm existed.
+        dynamicToolLabels = DynamicToolLabels { emptyMap() },
         ioDispatcher = testDispatcher,
+        applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
         savedStateHandle = savedStateHandle,
     )
+
+    @Test
+    fun `isOnline reflects the connectivity checker snapshot`() = runTest {
+        val offline = buildViewModel(connectivity = FakeConnectivityChecker(initiallyOnline = false))
+        assertFalse(offline.isOnline.value)
+        val online = buildViewModel(connectivity = FakeConnectivityChecker(initiallyOnline = true))
+        assertTrue(online.isOnline.value)
+    }
+
+    /**
+     * Builds a router-ON ViewModel whose planner returns [plannerResult]. [catalog] is shared by the
+     * route use case (risk → needsConfirmation) and the VM (permissionGate lookup), matching production
+     * where both read the same [DefaultActionCatalog]. The rule matcher is forced to Unknown so the
+     * planner is always consulted (AIL-4 trigger).
+     */
+    private fun buildRouterViewModel(
+        plannerResult: PlanResult,
+        catalog: FakeActionCatalog = FakeActionCatalog(),
+        online: Boolean = true,
+        resolutionStore: FakeResolutionPreferenceStore = fakeResolutionStore,
+    ): LauncherViewModel {
+        fakeMatcher.intentToReturn = LauncherIntent.UnknownIntent(originalInput = "nl command", reason = "x")
+        fakeMatcher.confidenceToReturn = 0.0f
+        val router = RouteCommandUseCase(
+            handleUserCommand = useCase,
+            planner = FakeCommandPlanner(resultToReturn = plannerResult),
+            catalog = catalog,
+            featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = false)),
+            // Этап 4.0: the gate refuses to consult the planner unless a provider is configured
+            // (fork F4), so the router fixture has to configure one to exercise the routed path.
+            providerConfigRepository = configuredProvider(),
+            connectivityChecker = FakeConnectivityChecker(initiallyOnline = online),
+            startAgentSession = startAgentSession,
+        )
+        return LauncherViewModel(
+            installedAppsRepository = fakeRepo,
+            resolveCommand = aliasAwareResolveCommand(
+                route = CommandRouteStep { router.route(it) },
+                resolutionStore = resolutionStore,
+                actionCatalog = catalog,
+            ),
+            recordResolutionChoice = RecordResolutionChoiceUseCase(resolutionStore),
+            executeAction = executeAction,
+            actionExecutor = fakeExecutor,
+            actionCatalog = catalog,
+            usageHistoryRepository = fakeUsageRepo,
+            featureFlagRepository = fakeFlagRepo,
+            userPreferencesRepository = fakePrefsRepo,
+            suggestionEngine = FakeSuggestionEngine(),
+            suggestionsCacheRepository = FakeSuggestionsCacheRepository(),
+            speechInputSource = fakeSpeech,
+            connectivityChecker = FakeConnectivityChecker(),
+            getPrayerContext = defaultGetPrayerContext,
+            runAgentSession = runAgentSession,
+            resolveAgentConsent = ResolveConsentUseCase(fakeAgentStore, runAgentSession),
+            cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
+            agentSessionStore = fakeAgentStore,
+            toolRegistry = agentRegistry,
+            // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
+            // and every step line renders exactly as it did before the dynamic arm existed.
+            dynamicToolLabels = DynamicToolLabels { emptyMap() },
+            ioDispatcher = testDispatcher,
+            applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
+            savedStateHandle = SavedStateHandle(),
+        )
+    }
+
+    private fun safeDescriptor(id: com.sidr.launcher.domain.action.ActionId) = ActionDescriptor(
+        id = id,
+        title = "t",
+        description = "d",
+        category = ActionCategory.WEB,
+        risk = ActionRiskLevel.SAFE,
+    )
+
+    // ── AIL-5 confirmation & safety gating ──────────────────────────────────
+
+    @Test
+    fun `a CONFIRM router proposal surfaces a confirm card and never auto-executes`() =
+        runTest(testDispatcher) {
+            // Empty catalog ⇒ needsConfirmation = true (fail-safe): the card is required.
+            val vm = buildRouterViewModel(
+                plannerResult = PlanResult.RoutedAction(LauncherAction.OpenUrl("https://x.com"), 0.9f),
+            )
+
+            vm.onCommandSubmitted("go to x")
+            advanceUntilIdle()
+
+            val pending = vm.pendingRoutedAction.value
+            assertTrue("expected a pending confirm card, got $pending", pending != null)
+            assertTrue("expected requiresConfirmation", pending!!.requiresConfirmation)
+            // R4: nothing executed until the user confirms.
+            assertTrue(fakeExecutor.executedActions.isEmpty())
+        }
+
+    @Test
+    fun `a SAFE router proposal surfaces a one-tap pending action, not a card`() =
+        runTest(testDispatcher) {
+            val catalog = FakeActionCatalog(listOf(safeDescriptor(ActionIds.WEB_SEARCH)))
+            val vm = buildRouterViewModel(
+                plannerResult = PlanResult.RoutedAction(LauncherAction.WebSearch("weather"), 0.8f),
+                catalog = catalog,
+            )
+
+            vm.onCommandSubmitted("what's the weather")
+            advanceUntilIdle()
+
+            val pending = vm.pendingRoutedAction.value
+            assertTrue("expected a pending one-tap action, got $pending", pending != null)
+            assertFalse("SAFE proposal must not require a card", pending!!.requiresConfirmation)
+            // R4: still never silently executed — the user must tap.
+            assertTrue(fakeExecutor.executedActions.isEmpty())
+        }
+
+    @Test
+    fun `confirming a pending action executes it and clears the card and input`() =
+        runTest(testDispatcher) {
+            fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
+            val vm = buildRouterViewModel(
+                plannerResult = PlanResult.RoutedAction(LauncherAction.LaunchApp("Telegram"), 0.9f),
+            )
+            vm.onCommandSubmitted("fire up telegram")
+            advanceUntilIdle()
+            assertTrue(vm.pendingRoutedAction.value != null)
+
+            vm.confirmRoutedAction()
+            advanceUntilIdle()
+
+            assertEquals(
+                ExecutableAction.LaunchAppAction("org.telegram.messenger", null),
+                fakeExecutor.executedActions.single(),
+            )
+            assertEquals(null, vm.pendingRoutedAction.value)
+            assertEquals("", vm.commandInput.value)
+        }
+
+    @Test
+    fun `cancelling a pending action clears it without executing`() = runTest(testDispatcher) {
+        val vm = buildRouterViewModel(
+            plannerResult = PlanResult.RoutedAction(LauncherAction.OpenUrl("https://x.com"), 0.9f),
+        )
+        vm.onCommandSubmitted("go to x")
+        advanceUntilIdle()
+        assertTrue(vm.pendingRoutedAction.value != null)
+
+        vm.cancelRoutedAction()
+        advanceUntilIdle()
+
+        assertEquals(null, vm.pendingRoutedAction.value)
+        assertTrue(fakeExecutor.executedActions.isEmpty())
+    }
+
+    @Test
+    fun `a pending confirmation carries the descriptor permission gate`() = runTest(testDispatcher) {
+        val gatedDescriptor = ActionDescriptor(
+            id = ActionIds.OPEN_URL,
+            title = "t",
+            description = "d",
+            category = ActionCategory.WEB,
+            risk = ActionRiskLevel.CONFIRM,
+            permissionGate = PermissionFeature.VOICE_INPUT,
+        )
+        val vm = buildRouterViewModel(
+            plannerResult = PlanResult.RoutedAction(LauncherAction.OpenUrl("https://x.com"), 0.9f),
+            catalog = FakeActionCatalog(listOf(gatedDescriptor)),
+        )
+
+        vm.onCommandSubmitted("go to x")
+        advanceUntilIdle()
+
+        assertEquals(PermissionFeature.VOICE_INPUT, vm.pendingRoutedAction.value?.permissionGate)
+    }
 
     // ── App list loading ───────────────────────────────────────────────────
 
     @Test
-    fun `Loading before advanceUntilIdle then Success after for non-empty list`() =
+    fun `home shell paints before app list then Success after for non-empty list`() =
         runTest(testDispatcher) {
             fakeRepo.appsToReturn = listOf(
                 InstalledApp("com.example.one", "One"),
@@ -124,11 +482,14 @@ class LauncherViewModelTest {
             )
             val vm = buildViewModel()
 
-            // init{} has queued loadApps() but it has not run yet
+            // init{} has queued loadApps() but it has not run yet; home still paints immediately.
+            val initial = vm.uiState.value
             assertTrue(
-                "Expected Loading before advance, got ${vm.uiState.value}",
-                vm.uiState.value is UiState.Loading,
+                "Expected cache-first home shell before advance, got $initial",
+                initial is UiState.Success,
             )
+            assertTrue((initial as UiState.Success).data.apps.isEmpty())
+            assertTrue(initial.data.favorites.isEmpty())
 
             advanceUntilIdle()
 
@@ -222,6 +583,37 @@ class LauncherViewModelTest {
         )
     }
 
+    // I18N-1 Fix round 1: structurally analogous to AppDrawerViewModel's twin — same
+    // InstalledAppsRepository failure taxonomy, same UiState<T>-fixed-to-UiError constraint, same
+    // ErrorState render path in LauncherScreen.kt. appListErrorDetail is the parallel typed channel;
+    // uiState's own UiError.Message text/retryability above is left byte-identical on purpose.
+    @Test
+    fun `PermissionDenied exposes the typed AppDrawerError on appListErrorDetail`() = runTest(testDispatcher) {
+        fakeRepo.errorToReturn = OperationError.PermissionDenied("QUERY_ALL_PACKAGES")
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        assertEquals(AppDrawerError.PermissionDenied("QUERY_ALL_PACKAGES"), vm.appListErrorDetail.value)
+    }
+
+    @Test
+    fun `DeviceNotCapable exposes the typed AppDrawerError on appListErrorDetail`() = runTest(testDispatcher) {
+        fakeRepo.errorToReturn = OperationError.DeviceNotCapable("nlu")
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        assertEquals(AppDrawerError.DeviceNotCapable("nlu"), vm.appListErrorDetail.value)
+    }
+
+    @Test
+    fun `appListErrorDetail is null for a NetworkError failure`() = runTest(testDispatcher) {
+        fakeRepo.errorToReturn = OperationError.NetworkError(retryable = true)
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        assertEquals(null, vm.appListErrorDetail.value)
+    }
+
     // ── Recoverable errors + retry (Block H, H2) ───────────────────────────
 
     @Test
@@ -259,9 +651,9 @@ class LauncherViewModelTest {
     }
 
     @Test
-    fun `retry after a failure shows Loading then Success without restart`() = runTest(testDispatcher) {
-        // A repo whose first load fails (retryable) and whose retry parks on a gate, so Loading is
-        // the settled state while the reload is in flight — letting us assert the transient cleanly.
+    fun `retry after a failure keeps home shell visible then Success without restart`() = runTest(testDispatcher) {
+        // A repo whose first load fails (retryable) and whose retry parks on a gate, so the cache-first
+        // home shell is the settled state while the reload is in flight — no full-screen spinner.
         val gate = CompletableDeferred<Unit>()
         var calls = 0
         val gatedRepo = object : InstalledAppsRepository {
@@ -277,14 +669,32 @@ class LauncherViewModelTest {
         }
         val vm = LauncherViewModel(
             installedAppsRepository = gatedRepo,
-            handleUserCommand = useCase,
+            resolveCommand = aliasAwareResolveCommand(
+                route = CommandRouteStep { routeUseCase.route(it) },
+                installedApps = gatedRepo,
+            ),
+            recordResolutionChoice = RecordResolutionChoiceUseCase(fakeResolutionStore),
+            executeAction = executeAction,
             actionExecutor = fakeExecutor,
+            actionCatalog = FakeActionCatalog(),
             usageHistoryRepository = fakeUsageRepo,
             featureFlagRepository = fakeFlagRepo,
+            userPreferencesRepository = fakePrefsRepo,
             suggestionEngine = FakeSuggestionEngine(),
             suggestionsCacheRepository = FakeSuggestionsCacheRepository(),
             speechInputSource = fakeSpeech,
+            connectivityChecker = FakeConnectivityChecker(),
+            getPrayerContext = defaultGetPrayerContext,
+            runAgentSession = runAgentSession,
+            resolveAgentConsent = ResolveConsentUseCase(fakeAgentStore, runAgentSession),
+            cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
+            agentSessionStore = fakeAgentStore,
+            toolRegistry = agentRegistry,
+            // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
+            // and every step line renders exactly as it did before the dynamic arm existed.
+            dynamicToolLabels = DynamicToolLabels { emptyMap() },
             ioDispatcher = testDispatcher,
+            applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),
         )
         advanceUntilIdle()
@@ -292,14 +702,15 @@ class LauncherViewModelTest {
 
         // User taps Retry on the SAME ViewModel instance (no process/VM restart).
         vm.retry()
-        advanceUntilIdle() // null→Loading is processed; the reload is parked on gate.await()
+        advanceUntilIdle() // null state is processed; the reload is parked on gate.await()
 
-        // Resetting to null returns the combine to Loading — using the still-held usage records
-        // without racing them into a stale Error/Success emission.
+        // Resetting to null clears the stale Error but keeps the home shell visible while reloading.
+        val reloadingState = vm.uiState.value
         assertTrue(
-            "Expected Loading while the reload is in flight, got ${vm.uiState.value}",
-            vm.uiState.value is UiState.Loading,
+            "Expected cache-first home shell while the reload is in flight, got $reloadingState",
+            reloadingState is UiState.Success,
         )
+        assertTrue((reloadingState as UiState.Success).data.apps.isEmpty())
 
         gate.complete(Unit) // release the reload
         advanceUntilIdle()
@@ -360,11 +771,11 @@ class LauncherViewModelTest {
     fun `command feedback is NOT restored after process death`() = runTest(testDispatcher) {
         val handle = SavedStateHandle()
         val vm1 = buildViewModel(savedStateHandle = handle)
-        vm1.onCommandSubmitted("") // Empty outcome → sets a transient feedback Message
+        vm1.onCommandSubmitted("") // Empty outcome → sets a transient feedback EmptyInput hint
         advanceUntilIdle()
         assertTrue(
             "Sanity: feedback should be set on vm1",
-            vm1.commandFeedback.value is CommandFeedback.Message,
+            vm1.commandFeedback.value is CommandFeedback.EmptyInput,
         )
 
         // A relaunched VM restores input but must NOT resurrect the ephemeral last-command result.
@@ -454,7 +865,7 @@ class LauncherViewModelTest {
             advanceUntilIdle()
 
             assertEquals(0, fakeExecutor.callCount)
-            assertTrue(vm.commandFeedback.value is CommandFeedback.Message)
+            assertTrue(vm.commandFeedback.value is CommandFeedback.UnknownCommand)
             // unknown input is preserved so the user can edit it
             assertEquals("zzz", vm.commandInput.value)
         }
@@ -479,6 +890,90 @@ class LauncherViewModelTest {
     }
 
     // ── Suggestions (Phase 7, Block W-lite) ───────────────────────────────
+
+    @Test
+    fun `cached package suggestions wait for app list while route suggestions can paint immediately`() =
+        runTest(testDispatcher) {
+        val appListGate = CompletableDeferred<Unit>()
+        var appListCalls = 0
+        val gatedRepo = object : InstalledAppsRepository {
+            override suspend fun getInstalledApps(): OperationResult<List<InstalledApp>> {
+                appListCalls++
+                appListGate.await()
+                return OperationResult.Success(listOf(InstalledApp("com.cached", "Cached App")))
+            }
+        }
+        val cacheRepo = FakeSuggestionsCacheRepository(
+            initial = listOf(
+                CachedSuggestion(label = "Cached label", actionId = "com.cached"),
+                CachedSuggestion(label = "Assistant", actionId = Routes.Assistant.ROUTE),
+            ),
+        )
+        val gatedEngine = object : SuggestionEngine {
+            private val state = MutableStateFlow<List<Suggestion>>(emptyList())
+            val refreshStarted = CompletableDeferred<Unit>()
+            val releaseRefresh = CompletableDeferred<Unit>()
+
+            override fun suggestions(): Flow<List<Suggestion>> = state.asStateFlow()
+
+            override suspend fun refresh(): OperationResult<List<Suggestion>> {
+                refreshStarted.complete(Unit)
+                releaseRefresh.await()
+                return OperationResult.Success(emptyList())
+            }
+        }
+        val vm = LauncherViewModel(
+            installedAppsRepository = gatedRepo,
+            resolveCommand = aliasAwareResolveCommand(
+                route = CommandRouteStep { routeUseCase.route(it) },
+                installedApps = gatedRepo,
+            ),
+            recordResolutionChoice = RecordResolutionChoiceUseCase(fakeResolutionStore),
+            executeAction = executeAction,
+            actionExecutor = fakeExecutor,
+            actionCatalog = FakeActionCatalog(),
+            usageHistoryRepository = fakeUsageRepo,
+            featureFlagRepository = FakeFeatureFlagRepository(
+                FeatureFlags(aiSuggestionsEnabled = true, usageHistoryEnabled = true),
+            ),
+            userPreferencesRepository = fakePrefsRepo,
+            suggestionEngine = gatedEngine,
+            suggestionsCacheRepository = cacheRepo,
+            speechInputSource = fakeSpeech,
+            connectivityChecker = FakeConnectivityChecker(),
+            getPrayerContext = defaultGetPrayerContext,
+            runAgentSession = runAgentSession,
+            resolveAgentConsent = ResolveConsentUseCase(fakeAgentStore, runAgentSession),
+            cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
+            agentSessionStore = fakeAgentStore,
+            toolRegistry = agentRegistry,
+            // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
+            // and every step line renders exactly as it did before the dynamic arm existed.
+            dynamicToolLabels = DynamicToolLabels { emptyMap() },
+            ioDispatcher = testDispatcher,
+            applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
+            savedStateHandle = SavedStateHandle(),
+        )
+
+        advanceUntilIdle()
+
+        val firstPaint = vm.uiState.value as UiState.Success
+        assertEquals("App list load should be in flight", 1, appListCalls)
+        assertTrue("Apps are filled only after PackageManager returns", firstPaint.data.apps.isEmpty())
+        assertEquals(listOf("Assistant"), firstPaint.data.suggestions.map { it.label })
+
+        appListGate.complete(Unit)
+        advanceUntilIdle()
+
+        val afterApps = vm.uiState.value as UiState.Success
+        assertEquals(
+            listOf("Cached App", "Assistant"),
+            afterApps.data.suggestions.map { it.label },
+        )
+
+        gatedEngine.releaseRefresh.complete(Unit)
+        advanceUntilIdle()
+    }
 
     @Test
     fun `cached suggestions first-paint then fresh engine result supersedes without merge`() = runTest(testDispatcher) {
@@ -573,6 +1068,127 @@ class LauncherViewModelTest {
         assertEquals(0, suggestionEngine.refreshCount)
     }
 
+    @Test
+    fun `enabling ai suggestions after init restores cache then refreshes live`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp("com.cached", "Cached App"),
+            InstalledApp("com.fresh", "Fresh App"),
+        )
+        val flagRepo = FakeFeatureFlagRepository(
+            FeatureFlags(aiSuggestionsEnabled = false, usageHistoryEnabled = true),
+        )
+        val cacheRepo = FakeSuggestionsCacheRepository(
+            initial = listOf(CachedSuggestion(label = "com.cached", actionId = "com.cached")),
+        )
+        val freshSuggestions = listOf(
+            Suggestion(
+                label = "com.fresh",
+                actionId = "com.fresh",
+                source = SuggestionSource.RECENT_USAGE,
+                score = 1.0,
+            ),
+        )
+        val suggestionEngine = FakeSuggestionEngine().apply {
+            refreshResult = OperationResult.Success(freshSuggestions)
+        }
+        val vm = buildViewModel(
+            flagRepo = flagRepo,
+            suggestionEngine = suggestionEngine,
+            suggestionsCacheRepository = cacheRepo,
+        )
+
+        advanceUntilIdle()
+        assertTrue((vm.uiState.value as UiState.Success).data.suggestions.isEmpty())
+
+        flagRepo.updateFlags(FeatureFlags(aiSuggestionsEnabled = true, usageHistoryEnabled = true))
+        advanceUntilIdle()
+
+        val state = vm.uiState.value as UiState.Success
+        assertEquals(1, suggestionEngine.refreshCount)
+        assertEquals(listOf("Fresh App"), state.data.suggestions.map { it.label })
+    }
+
+    @Test
+    fun `disabling ai suggestions after they rendered clears them`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(InstalledApp("com.fresh", "Fresh App"))
+        val flagRepo = FakeFeatureFlagRepository(
+            FeatureFlags(aiSuggestionsEnabled = true, usageHistoryEnabled = true),
+        )
+        val suggestionEngine = FakeSuggestionEngine().apply {
+            refreshResult = OperationResult.Success(
+                listOf(
+                    Suggestion(
+                        label = "com.fresh",
+                        actionId = "com.fresh",
+                        source = SuggestionSource.RECENT_USAGE,
+                        score = 1.0,
+                    ),
+                ),
+            )
+        }
+        val vm = buildViewModel(
+            flagRepo = flagRepo,
+            suggestionEngine = suggestionEngine,
+        )
+
+        advanceUntilIdle()
+        assertEquals(listOf("Fresh App"), (vm.uiState.value as UiState.Success).data.suggestions.map { it.label })
+
+        flagRepo.updateFlags(FeatureFlags(aiSuggestionsEnabled = false, usageHistoryEnabled = true))
+        advanceUntilIdle()
+
+        assertTrue((vm.uiState.value as UiState.Success).data.suggestions.isEmpty())
+    }
+
+    @Test
+    fun `suggestions filter unlaunchable package actions while keeping installed apps and routes`() =
+        runTest(testDispatcher) {
+            fakeRepo.appsToReturn = listOf(
+                InstalledApp("com.installed", "Installed App"),
+            )
+            val suggestions = listOf(
+                Suggestion(
+                    label = "Clock",
+                    actionId = "com.android.deskclock",
+                    source = SuggestionSource.TIME_OF_DAY,
+                    score = 1.0,
+                ),
+                Suggestion(
+                    label = "com.installed",
+                    actionId = "com.installed",
+                    source = SuggestionSource.RECENT_USAGE,
+                    score = 0.8,
+                ),
+                Suggestion(
+                    label = "Assistant",
+                    actionId = Routes.Assistant.ROUTE,
+                    source = SuggestionSource.TIME_OF_DAY,
+                    score = 0.4,
+                ),
+            )
+            val suggestionEngine = FakeSuggestionEngine().apply {
+                refreshResult = OperationResult.Success(suggestions)
+            }
+            val vm = buildViewModel(
+                flagRepo = FakeFeatureFlagRepository(
+                    FeatureFlags(aiSuggestionsEnabled = true, usageHistoryEnabled = true),
+                ),
+                suggestionEngine = suggestionEngine,
+            )
+
+            advanceUntilIdle()
+
+            val state = vm.uiState.value as UiState.Success
+            assertEquals(
+                listOf("com.installed", Routes.Assistant.ROUTE),
+                state.data.suggestions.map { it.actionId },
+            )
+            assertEquals(
+                listOf("Installed App", "Assistant"),
+                state.data.suggestions.map { it.label },
+            )
+        }
+
     // ── Tap-to-launch goes straight through the executor ───────────────────
 
     @Test
@@ -590,15 +1206,15 @@ class LauncherViewModelTest {
 
     @Test
     fun `onAppClicked surfaces a message when the launch fails`() = runTest(testDispatcher) {
-        fakeExecutor.resultToReturn = ActionExecutionResult.Failure("Couldn't open that app.")
+        fakeExecutor.resultToReturn = ActionExecutionResult.Failure(CommandFailure.CantOpenApp)
         val vm = buildViewModel()
 
         vm.onAppClicked(InstalledApp("com.missing", "Missing"))
         advanceUntilIdle()
 
         val feedback = vm.commandFeedback.value
-        assertTrue(feedback is CommandFeedback.Message)
-        assertEquals("Couldn't open that app.", (feedback as CommandFeedback.Message).text)
+        assertTrue(feedback is CommandFeedback.Failure)
+        assertEquals(CommandFailure.CantOpenApp, (feedback as CommandFeedback.Failure).failure)
     }
 
     @Test
@@ -656,6 +1272,105 @@ class LauncherViewModelTest {
             NavigationEvent.NavigateTo(Routes.Assistant.ROUTE),
             eventDeferred.await(),
         )
+    }
+
+    @Test
+    fun `route suggestion tap clears stale feedback without launching`() = runTest(testDispatcher) {
+        fakeExecutor.resultToReturn = ActionExecutionResult.Failure(CommandFailure.CantOpenApp)
+        val vm = buildViewModel()
+        vm.onAppClicked(InstalledApp("com.missing", "Missing"))
+        advanceUntilIdle()
+        assertTrue(vm.commandFeedback.value is CommandFeedback.Failure)
+        fakeExecutor.reset()
+        val eventDeferred = async { vm.navigationEvents.first() }
+
+        vm.onSuggestionClicked(
+            Suggestion(
+                label = "Settings",
+                actionId = Routes.Settings.ROUTE,
+                source = SuggestionSource.TIME_OF_DAY,
+                score = 1.0,
+            ),
+        )
+
+        assertEquals(NavigationEvent.NavigateTo(Routes.Settings.ROUTE), eventDeferred.await())
+        assertEquals(CommandFeedback.None, vm.commandFeedback.value)
+        assertEquals(0, fakeExecutor.callCount)
+    }
+
+    @Test
+    fun `unknown package suggestion tap launches actionId without activity fallback`() =
+        runTest(testDispatcher) {
+            val vm = buildViewModel(
+                flagRepo = FakeFeatureFlagRepository(
+                    FeatureFlags(aiSuggestionsEnabled = true, usageHistoryEnabled = true),
+                ),
+            )
+            advanceUntilIdle()
+
+            vm.onSuggestionClicked(
+                Suggestion(
+                    label = "Direct Package",
+                    actionId = "com.direct.package",
+                    source = SuggestionSource.RECENT_USAGE,
+                    score = 1.0,
+                ),
+            )
+            advanceUntilIdle()
+
+            val action = fakeExecutor.executedActions.single() as ExecutableAction.LaunchAppAction
+            assertEquals("com.direct.package", action.packageName)
+            assertEquals(null, action.activityName)
+            assertEquals(listOf("com.direct.package"), fakeUsageRepo.recordedLaunches)
+        }
+
+    @Test
+    fun `package suggestion tap respects usage history gate`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp(
+                packageName = "org.telegram.messenger",
+                label = "Telegram",
+                activityName = "org.telegram.messenger.MainActivity",
+            ),
+        )
+        val vm = buildViewModel(
+            flagRepo = FakeFeatureFlagRepository(
+                FeatureFlags(aiSuggestionsEnabled = true, usageHistoryEnabled = false),
+            ),
+        )
+        advanceUntilIdle()
+
+        vm.onSuggestionClicked(
+            Suggestion(
+                label = "Telegram",
+                actionId = "org.telegram.messenger",
+                source = SuggestionSource.RECENT_USAGE,
+                score = 1.0,
+            ),
+        )
+        advanceUntilIdle()
+
+        val action = fakeExecutor.executedActions.single() as ExecutableAction.LaunchAppAction
+        assertEquals("org.telegram.messenger", action.packageName)
+        assertEquals("org.telegram.messenger.MainActivity", action.activityName)
+        assertTrue(fakeUsageRepo.recordedLaunches.isEmpty())
+    }
+
+    @Test
+    fun `open settings outcome clears input and emits settings navigation`() = runTest(testDispatcher) {
+        fakeMatcher.intentToReturn = LauncherIntent.OpenSettingsIntent()
+        fakeMatcher.confidenceToReturn = 0.95f
+        val vm = buildViewModel()
+        val eventDeferred = async { vm.navigationEvents.first() }
+
+        vm.onCommandChanged("settings")
+        vm.onCommandSubmitted("settings")
+        advanceUntilIdle()
+
+        assertEquals("", vm.commandInput.value)
+        assertEquals(CommandFeedback.None, vm.commandFeedback.value)
+        assertEquals(NavigationEvent.NavigateTo(Routes.Settings.ROUTE), eventDeferred.await())
+        assertEquals(0, fakeExecutor.callCount)
     }
 
     // ── Usage-aware grid sort (F6) ─────────────────────────────────────────
@@ -745,7 +1460,7 @@ class LauncherViewModelTest {
 
     @Test
     fun `failed tap-to-launch does not record usage`() = runTest(testDispatcher) {
-        fakeExecutor.resultToReturn = ActionExecutionResult.Failure("Couldn't open.")
+        fakeExecutor.resultToReturn = ActionExecutionResult.Failure(CommandFailure.CantOpenApp)
         val vm = buildViewModel()
 
         vm.onAppClicked(InstalledApp("com.missing", "Missing"))
@@ -821,6 +1536,186 @@ class LauncherViewModelTest {
             assertTrue(fakeUsageRepo.recordedLaunches.isEmpty())
         }
 
+    // ── Favorites derivation (Block X2) ────────────────────────────────────
+
+    @Test
+    fun `favorites are the top-N most-used apps in usage order`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp("com.a", "Alpha"),
+            InstalledApp("com.b", "Beta"),
+            InstalledApp("com.c", "Gamma"),
+        )
+        // Usage records arrive most-used-first (repository contract): b, then c, then a.
+        fakeUsageRepo.setRecords(listOf(
+            AppUsageRecord("com.b", lastUsedEpochMs = 3000L, launchCount = 9),
+            AppUsageRecord("com.c", lastUsedEpochMs = 2000L, launchCount = 5),
+            AppUsageRecord("com.a", lastUsedEpochMs = 1000L, launchCount = 1),
+        ))
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        val favorites = (vm.uiState.value as UiState.Success).data.favorites
+        assertEquals(
+            listOf("com.b", "com.c", "com.a"),
+            favorites.map { it.packageName },
+        )
+    }
+
+    @Test
+    fun `favorites exclude usage records for uninstalled apps`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp("com.a", "Alpha"),
+            InstalledApp("com.c", "Gamma"),
+        )
+        // com.b has usage history but is no longer installed → must not appear in favorites.
+        fakeUsageRepo.setRecords(listOf(
+            AppUsageRecord("com.b", lastUsedEpochMs = 3000L, launchCount = 9),
+            AppUsageRecord("com.a", lastUsedEpochMs = 2000L, launchCount = 5),
+            AppUsageRecord("com.c", lastUsedEpochMs = 1000L, launchCount = 1),
+        ))
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        val favorites = (vm.uiState.value as UiState.Success).data.favorites
+        assertEquals(listOf("com.a", "com.c"), favorites.map { it.packageName })
+    }
+
+    @Test
+    fun `favorites are capped at FAVORITES_COUNT`() = runTest(testDispatcher) {
+        val apps = (0 until 10).map { InstalledApp("com.app$it", "App $it") }
+        fakeRepo.appsToReturn = apps
+        fakeUsageRepo.setRecords(
+            apps.mapIndexed { i, app ->
+                AppUsageRecord(app.packageName, lastUsedEpochMs = (10 - i).toLong(), launchCount = 10 - i)
+            },
+        )
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        val favorites = (vm.uiState.value as UiState.Success).data.favorites
+        assertEquals("Favorites must be capped at 8", 8, favorites.size)
+        // The 8 most-used (first 8 records) are kept, in order.
+        assertEquals(
+            (0 until 8).map { "com.app$it" },
+            favorites.map { it.packageName },
+        )
+    }
+
+    @Test
+    fun `favorites honour a custom favoritesCount preference`() = runTest(testDispatcher) {
+        val apps = (0 until 10).map { InstalledApp("com.app$it", "App $it") }
+        fakeRepo.appsToReturn = apps
+        fakeUsageRepo.setRecords(
+            apps.mapIndexed { i, app ->
+                AppUsageRecord(app.packageName, lastUsedEpochMs = (10 - i).toLong(), launchCount = 10 - i)
+            },
+        )
+        val vm = buildViewModel(
+            prefsRepo = FakeUserPreferencesRepository(UserPreferences(favoritesCount = 4)),
+        )
+        advanceUntilIdle()
+
+        val favorites = (vm.uiState.value as UiState.Success).data.favorites
+        assertEquals("Custom favoritesCount must cap the row", 4, favorites.size)
+        assertEquals((0 until 4).map { "com.app$it" }, favorites.map { it.packageName })
+    }
+
+    @Test
+    fun `favorites are empty when favoritesCount preference is zero`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp("com.a", "Alpha"),
+            InstalledApp("com.b", "Beta"),
+        )
+        fakeUsageRepo.setRecords(listOf(
+            AppUsageRecord("com.a", lastUsedEpochMs = 2000L, launchCount = 5),
+            AppUsageRecord("com.b", lastUsedEpochMs = 1000L, launchCount = 3),
+        ))
+        val vm = buildViewModel(
+            prefsRepo = FakeUserPreferencesRepository(UserPreferences(favoritesCount = 0)),
+        )
+        advanceUntilIdle()
+
+        val state = vm.uiState.value as UiState.Success
+        assertTrue(state.data.favorites.isEmpty())
+        assertEquals(listOf("com.a", "com.b"), state.data.apps.map { it.packageName })
+    }
+
+    @Test
+    fun `favorites react to favoritesCount preference changes without reloading apps`() =
+        runTest(testDispatcher) {
+            val apps = (0 until 4).map { InstalledApp("com.app$it", "App $it") }
+            fakeRepo.appsToReturn = apps
+            fakeUsageRepo.setRecords(
+                apps.mapIndexed { i, app ->
+                    AppUsageRecord(app.packageName, lastUsedEpochMs = (4 - i).toLong(), launchCount = 4 - i)
+                },
+            )
+            val prefsRepo = FakeUserPreferencesRepository(UserPreferences(favoritesCount = 3))
+            val vm = buildViewModel(prefsRepo = prefsRepo)
+            advanceUntilIdle()
+            assertEquals(1, fakeRepo.callCount)
+            assertEquals(
+                (0 until 3).map { "com.app$it" },
+                (vm.uiState.value as UiState.Success).data.favorites.map { it.packageName },
+            )
+
+            prefsRepo.updatePreferences(UserPreferences(favoritesCount = 1))
+            advanceUntilIdle()
+
+            assertEquals("Changing the count must not re-query PackageManager", 1, fakeRepo.callCount)
+            assertEquals(
+                listOf("com.app0"),
+                (vm.uiState.value as UiState.Success).data.favorites.map { it.packageName },
+            )
+        }
+
+    @Test
+    fun `no usage history yields empty favorites`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp("com.a", "Alpha"),
+            InstalledApp("com.b", "Beta"),
+        )
+        val vm = buildViewModel()
+        advanceUntilIdle()
+
+        val state = vm.uiState.value as UiState.Success
+        assertTrue("Fresh install → no favorites", state.data.favorites.isEmpty())
+        // The full app list still loads (drawer + suggestion resolution depend on it).
+        assertEquals(2, state.data.apps.size)
+    }
+
+    // ── Top-bar / All-apps navigation (Block X2) ───────────────────────────
+
+    @Test
+    fun `settings top-bar icon emits settings navigation`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        val eventDeferred = async { vm.navigationEvents.first() }
+
+        vm.navigateTo(Routes.Settings.ROUTE)
+
+        assertEquals(NavigationEvent.NavigateTo(Routes.Settings.ROUTE), eventDeferred.await())
+    }
+
+    @Test
+    fun `assistant top-bar icon emits assistant navigation`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        val eventDeferred = async { vm.navigationEvents.first() }
+
+        vm.navigateTo(Routes.Assistant.ROUTE)
+
+        assertEquals(NavigationEvent.NavigateTo(Routes.Assistant.ROUTE), eventDeferred.await())
+    }
+
+    @Test
+    fun `all apps affordance emits app drawer navigation`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        val eventDeferred = async { vm.navigationEvents.first() }
+
+        vm.navigateTo(Routes.AppDrawer.ROUTE)
+
+        assertEquals(NavigationEvent.NavigateTo(Routes.AppDrawer.ROUTE), eventDeferred.await())
+    }
+
     // ── Voice input (Block T) ──────────────────────────────────────────────
 
     @Test
@@ -869,7 +1764,7 @@ class LauncherViewModelTest {
         advanceUntilIdle()
 
         assertEquals(0, fakeExecutor.callCount)
-        assertTrue(vm.commandFeedback.value is CommandFeedback.Message)
+        assertTrue(vm.commandFeedback.value is CommandFeedback.VoiceError)
         // The keyboard path is unaffected — a normal type-then-submit launch still executes.
         fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
         fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent("telegram")
@@ -889,6 +1784,621 @@ class LauncherViewModelTest {
         advanceUntilIdle()
 
         assertEquals(0, fakeExecutor.callCount)
-        assertTrue(vm.commandFeedback.value is CommandFeedback.Message)
+        val feedback = vm.commandFeedback.value
+        assertTrue(feedback is CommandFeedback.VoiceError)
+        assertEquals(SpeechRecognitionError.PERMISSION_DENIED, (feedback as CommandFeedback.VoiceError).error)
+    }
+
+    // ── Voice/mic user toggle (Block X6) ───────────────────────────────────
+
+    @Test
+    fun `showMic is true when recognizer available and mic pref enabled`() = runTest(testDispatcher) {
+        fakeSpeech.available = true
+        val vm = buildViewModel(
+            prefsRepo = FakeUserPreferencesRepository(UserPreferences(micInputEnabled = true)),
+        )
+        advanceUntilIdle()
+
+        assertTrue(vm.showMic.value)
+    }
+
+    @Test
+    fun `showMic is false when mic pref disabled even if recognizer available`() = runTest(testDispatcher) {
+        fakeSpeech.available = true
+        val vm = buildViewModel(
+            prefsRepo = FakeUserPreferencesRepository(UserPreferences(micInputEnabled = false)),
+        )
+        advanceUntilIdle()
+
+        assertFalse(vm.showMic.value)
+    }
+
+    @Test
+    fun `startVoiceInput is a no-op when mic input is disabled`() = runTest(testDispatcher) {
+        // Recognizer is available, but the user disabled voice in Settings: a stale mic tap must not
+        // start recognition, submit anything, or surface a message.
+        fakeSpeech.available = true
+        fakeSpeech.scriptSuccess(partials = listOf("open"), finalText = "open telegram")
+        val vm = buildViewModel(
+            prefsRepo = FakeUserPreferencesRepository(UserPreferences(micInputEnabled = false)),
+        )
+        advanceUntilIdle()
+
+        vm.startVoiceInput()
+        advanceUntilIdle()
+
+        assertEquals(0, fakeExecutor.callCount)
+        assertEquals("", vm.commandInput.value)
+        assertEquals(CommandFeedback.None, vm.commandFeedback.value)
+    }
+
+    // ── Universal-input live results (AIL-3, Task 4) ───────────────────────
+
+    @Test
+    // Note: FakeInstalledAppsRepository seeds via `appsToReturn`; FakeIntentMatcher records the
+    // *normalized* (trim+collapse+lowercase-ROOT) inputs in `receivedInputs` — assert against those.
+    fun `typing surfaces app matches and web+ask chips`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp(packageName = "org.telegram.messenger", label = "Telegram", activityName = null),
+            InstalledApp(packageName = "com.maps", label = "Maps", activityName = null),
+        )
+        val vm = buildViewModel()
+        advanceUntilIdle()
+        vm.onCommandChanged("tele")
+        advanceUntilIdle()
+        val results = vm.inputResults.value
+        assertTrue(results.active)
+        assertEquals(listOf("Telegram"), results.appMatches.map { it.label })
+        assertEquals(listOf(RouteChipKind.WEB, RouteChipKind.ASK), results.chips)
+    }
+
+    @Test
+    fun `typing a safe url adds the site chip`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        advanceUntilIdle()
+        vm.onCommandChanged("github.com")
+        advanceUntilIdle()
+        assertEquals(listOf(RouteChipKind.WEB, RouteChipKind.ASK, RouteChipKind.SITE), vm.inputResults.value.chips)
+    }
+
+    @Test
+    fun `clearing the buffer returns empty inactive results`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        advanceUntilIdle()
+        vm.onCommandChanged("tele")
+        advanceUntilIdle()
+        vm.onCommandChanged("")
+        advanceUntilIdle()
+        val results = vm.inputResults.value
+        assertFalse(results.active)
+        assertTrue(results.appMatches.isEmpty())
+        assertTrue(results.chips.isEmpty())
+    }
+
+    // ── Chip dispatch through the unchanged pipeline (AIL-3, Task 5) ───────
+
+    @Test
+    fun `web chip routes a search command through the unchanged pipeline`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        advanceUntilIdle()
+        vm.onCommandChanged("cats")
+        vm.submitWebSearch("cats")
+        advanceUntilIdle()
+        // FakeIntentMatcher records the normalized command text it was asked to match.
+        assertEquals("search cats", fakeMatcher.receivedInputs.last())
+    }
+
+    @Test
+    fun `web chip does not double-prefix an already-search-prefixed buffer`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        advanceUntilIdle()
+        vm.submitWebSearch("search cats")
+        advanceUntilIdle()
+        assertEquals("search cats", fakeMatcher.receivedInputs.last())
+    }
+
+    @Test
+    fun `site chip submits the raw url through the unchanged pipeline`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        advanceUntilIdle()
+        vm.submitSite("github.com")
+        advanceUntilIdle()
+        assertEquals("github.com", fakeMatcher.receivedInputs.last())
+    }
+
+    // ── Dev-mode Command console (AIL-3, Task 6) ───────────────────────────
+
+    @Test
+    fun `dev sentinel is inert until armed then toggles the console`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        advanceUntilIdle()
+        // Un-armed: passes through to the pipeline (matched as a normal, unknown command).
+        vm.onCommandSubmitted("//dev-mode")
+        advanceUntilIdle()
+        assertFalse(vm.devConsoleOn.value)
+        assertEquals("//dev-mode", fakeMatcher.receivedInputs.last())
+
+        // Arm, then toggle on; the sentinel must NOT reach the matcher this time.
+        fakeMatcher.reset()
+        vm.armDevMode()
+        vm.onCommandSubmitted("//dev-mode")
+        advanceUntilIdle()
+        assertTrue(vm.devConsoleOn.value)
+        assertTrue(fakeMatcher.receivedInputs.isEmpty())
+
+        // Toggle off.
+        vm.onCommandSubmitted("//dev-mode")
+        advanceUntilIdle()
+        assertFalse(vm.devConsoleOn.value)
+    }
+
+    @Test
+    fun `console records submitted commands only while on`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+        advanceUntilIdle()
+        vm.onCommandSubmitted("open telegram")
+        advanceUntilIdle()
+        assertTrue(vm.consoleLines.value.isEmpty()) // off → no transcript
+
+        vm.armDevMode()
+        vm.onCommandSubmitted("//dev-mode")   // on
+        vm.onCommandSubmitted("open telegram")
+        advanceUntilIdle()
+        assertEquals(listOf("open telegram"), vm.consoleLines.value.map { it.command })
+    }
+
+    // ── S2-1 Task 11: learned-resolution decorator + record-on-choice wiring ──────────────────
+    // Parity is the hard requirement: with an empty fakeResolutionStore (the default for every
+    // buildViewModel()/buildRouterViewModel() call above), ResolveCommandWithPreferenceUseCase.resolve()
+    // always returns Outcome(originalOutcome, null) or Outcome(originalOutcome, token) for an ambiguous
+    // list — never AutoLaunch — so every assertion in this file above holds byte-for-byte. These tests
+    // exercise the NEW behavior: token-set-on-ambiguity, record-on-candidate-tap, no-record-otherwise,
+    // and the confident-preference auto-launch directive.
+
+    @Test
+    fun `ambiguous submit sets a learning token that a later candidate tap records`() =
+        runTest(testDispatcher) {
+            fakeRepo.appsToReturn = listOf(
+                InstalledApp("com.a", "Maps"),
+                InstalledApp("com.b", "Maps"),
+            )
+            fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent("maps")
+            fakeMatcher.confidenceToReturn = 0.90f
+            val vm = buildViewModel()
+
+            vm.onCommandSubmitted("open maps")
+            advanceUntilIdle()
+            // Sanity: parity — the ambiguity list itself renders exactly as before, nothing recorded yet.
+            assertTrue(vm.commandFeedback.value is CommandFeedback.Ambiguous)
+            assertTrue(fakeResolutionStore.observeAll().first().isEmpty())
+
+            vm.onAppClicked(InstalledApp("com.a", "Maps"))
+            advanceUntilIdle()
+
+            val stored = fakeResolutionStore.observeAll().first()
+            assertEquals(1, stored.size)
+            assertEquals(ResolvedTarget.App("com.a"), stored.single().preferredTarget)
+            assertEquals(CapabilityKey(ActionIds.LAUNCH_APP, "maps"), stored.single().capabilityKey)
+        }
+
+    @Test
+    fun `clearing the input after an ambiguous submit drops the token so a later tap does not record`() =
+        runTest(testDispatcher) {
+            fakeRepo.appsToReturn = listOf(
+                InstalledApp("com.a", "Maps"),
+                InstalledApp("com.b", "Maps"),
+            )
+            fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent("maps")
+            fakeMatcher.confidenceToReturn = 0.90f
+            val vm = buildViewModel()
+
+            vm.onCommandSubmitted("open maps")
+            advanceUntilIdle()
+
+            // User abandons the ambiguity by clearing the field — NO new submit.
+            vm.onCommandChanged("")
+            advanceUntilIdle()
+
+            // A later tap of a FORMER candidate (grid or suggestion — both funnel here) must not record.
+            vm.onAppClicked(InstalledApp("com.a", "Maps"))
+            advanceUntilIdle()
+
+            assertTrue(fakeResolutionStore.observeAll().first().isEmpty())
+        }
+
+    @Test
+    fun `grid tap with no pending token does not record a choice`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+
+        vm.onAppClicked(InstalledApp("org.telegram.messenger", "Telegram"))
+        advanceUntilIdle()
+
+        assertEquals(1, fakeExecutor.callCount) // the launch still happens
+        assertTrue(fakeResolutionStore.observeAll().first().isEmpty())
+    }
+
+    @Test
+    fun `candidate tap on an app the ambiguity list never offered does not record`() =
+        runTest(testDispatcher) {
+            fakeRepo.appsToReturn = listOf(
+                InstalledApp("com.a", "Maps"),
+                InstalledApp("com.b", "Maps"),
+            )
+            fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent("maps")
+            fakeMatcher.confidenceToReturn = 0.90f
+            val vm = buildViewModel()
+
+            vm.onCommandSubmitted("open maps")
+            advanceUntilIdle()
+
+            vm.onAppClicked(InstalledApp("org.telegram.messenger", "Telegram"))
+            advanceUntilIdle()
+
+            assertTrue(fakeResolutionStore.observeAll().first().isEmpty())
+        }
+
+    @Test
+    fun `alias hit after unknown launches the declared app directly`() =
+        runTest(testDispatcher) {
+            fakeRepo.appsToReturn = listOf(
+                InstalledApp(
+                    packageName = "com.telegram",
+                    label = "Telegram",
+                    activityName = "com.telegram.MainActivity",
+                ),
+            )
+            fakeMatcher.intentToReturn = LauncherIntent.UnknownIntent(
+                originalInput = "work chat",
+                reason = "no rule match",
+            )
+            fakeMatcher.confidenceToReturn = 0.10f
+            fakeAliasStore.upsert(Alias("work chat", AliasTarget.App("com.telegram"), 1L))
+            val vm = buildViewModel()
+            advanceUntilIdle()
+            vm.onCommandChanged("Work   Chat")
+
+            vm.onCommandSubmitted("Work   Chat")
+            advanceUntilIdle()
+
+            val action = fakeExecutor.executedActions.single() as ExecutableAction.LaunchAppAction
+            assertEquals("com.telegram", action.packageName)
+            assertEquals("com.telegram.MainActivity", action.activityName)
+            assertEquals("", vm.commandInput.value)
+            assertEquals(CommandFeedback.None, vm.commandFeedback.value)
+            assertTrue(fakeResolutionStore.observeAll().first().isEmpty())
+        }
+
+    @Test
+    fun `a confident learned preference auto-launches the preferred app and clears input`() =
+        runTest(testDispatcher) {
+            fakeRepo.appsToReturn = listOf(
+                InstalledApp("com.a", "Maps"),
+                InstalledApp("com.b", "Maps"),
+            )
+            fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent("maps")
+            fakeMatcher.confidenceToReturn = 0.90f
+            // LAUNCH_APP must be SAFE-risk for AutoResolve eligibility (DefaultActionCatalog agrees).
+            val catalog = FakeActionCatalog(listOf(safeDescriptor(ActionIds.LAUNCH_APP)))
+            val candidateSet = CandidateSet(listOf(ResolvedTarget.App("com.a"), ResolvedTarget.App("com.b")))
+            fakeResolutionStore.upsert(
+                ResolutionPreference(
+                    capabilityKey = CapabilityKey(ActionIds.LAUNCH_APP, "maps"),
+                    context = ResolutionContext.None,
+                    preferredTarget = ResolvedTarget.App("com.a"),
+                    evidence = PreferenceEvidence(streak = 3, totalChoices = 3, lastChosenAtEpochMs = 0L),
+                    learnedInSetFingerprint = fingerprintOf(candidateSet),
+                ),
+            )
+            val vm = buildViewModel(actionCatalog = catalog)
+
+            vm.onCommandSubmitted("open maps")
+            advanceUntilIdle()
+
+            val action = fakeExecutor.executedActions.single() as ExecutableAction.LaunchAppAction
+            assertEquals("com.a", action.packageName)
+            assertEquals("", vm.commandInput.value)
+            // Auto-launch never sets a pending learning token (it is not the app-ambiguity confirm flow).
+            vm.onAppClicked(InstalledApp("com.b", "Maps"))
+            advanceUntilIdle()
+            assertEquals(
+                "auto-launch must not itself record a second preference",
+                1,
+                fakeResolutionStore.observeAll().first().size,
+            )
+        }
+
+    // ── Prayer context (DS-6B Task 9) ───────────────────────────────────────
+
+    private fun istanbulPrayerLocation() = PrayerLocation(
+        label = "Istanbul",
+        lat2dp = 41.01,
+        lon2dp = 28.98,
+        tzId = "Europe/Istanbul",
+        source = PrayerLocationSource.CITY,
+    )
+
+    /** Fajr 04:30, Dhuhr 13:10, Asr 17:05, Maghrib 20:35, Isha 22:15 local on 2026-07-13, Istanbul. */
+    private fun istanbulPrayerSchedule(): PrayerDaySchedule {
+        val date = LocalDate.of(2026, 7, 13)
+        val zone = ZoneId.of("Europe/Istanbul")
+        fun epoch(hour: Int, minute: Int) = date.atTime(hour, minute).atZone(zone).toInstant().toEpochMilli()
+        return PrayerDaySchedule(
+            dateInLocationTz = date,
+            instants = listOf(
+                PrayerInstant(PrayerName.FAJR, epoch(4, 30)),
+                PrayerInstant(PrayerName.DHUHR, epoch(13, 10)),
+                PrayerInstant(PrayerName.ASR, epoch(17, 5)),
+                PrayerInstant(PrayerName.MAGHRIB, epoch(20, 35)),
+                PrayerInstant(PrayerName.ISHA, epoch(22, 15)),
+            ),
+        )
+    }
+
+    /** 13:00 local Istanbul on 2026-07-13 — Dhuhr (13:10) is the next prayer. */
+    private fun istanbulNoonClock(): Clock =
+        Clock.fixed(Instant.parse("2026-07-13T10:00:00Z"), ZoneId.of("Europe/Istanbul"))
+
+    /**
+     * Starts a real subscriber on [LauncherViewModel.prayerContext] — required to start the
+     * `WhileSubscribed` sharing coroutine (the same collection the screen's
+     * `collectAsStateWithLifecycle` performs in production), returning a scope to cancel afterwards.
+     *
+     * Deliberately NOT `backgroundScope` (`TestScope`'s built-in background-job scope): empirically
+     * reproduced (in an isolated `stateIn`/`WhileSubscribed` case, independent of this VM) that a
+     * `backgroundScope.launch { ... }` issued *after* a prior `advanceUntilIdle()` call in the same
+     * `runTest` never actually gets dispatched by a later `advanceUntilIdle()` — the collector body
+     * never runs. A plain scope on the same [testDispatcher] does not have this problem.
+     */
+    private fun subscribeToPrayerContext(vm: LauncherViewModel): CoroutineScope {
+        val scope = CoroutineScope(testDispatcher + Job())
+        scope.launch { vm.prayerContext.collect {} }
+        return scope
+    }
+
+    @Test
+    fun `prayerContext maps through to Available with the correct nextPrayer once subscribed`() =
+        runTest(testDispatcher) {
+            val prefs = FakePrayerPreferencesRepository(
+                initial = PrayerSetup(CalculationMethodId("MWL"), Madhab.STANDARD, istanbulPrayerLocation()),
+            )
+            val calculator = FakePrayerCalculator().apply {
+                resultToReturn = OperationResult.Success(istanbulPrayerSchedule())
+            }
+            val vm = buildViewModel(
+                getPrayerContext = GetPrayerContextUseCase(
+                    prefs, FakePrayerScheduleCache(), calculator, istanbulNoonClock(),
+                ),
+            )
+
+            val collector = subscribeToPrayerContext(vm)
+            advanceUntilIdle()
+
+            val available = vm.prayerContext.value as PrayerContext.Available
+            assertEquals(PrayerName.DHUHR, available.nextPrayer)
+            assertEquals("Europe/Istanbul", available.locationTzId)
+            collector.cancel()
+        }
+
+    @Test
+    fun `no calculation runs before anything subscribes to prayerContext`() = runTest(testDispatcher) {
+        val prefs = FakePrayerPreferencesRepository(
+            initial = PrayerSetup(CalculationMethodId("MWL"), Madhab.STANDARD, istanbulPrayerLocation()),
+        )
+        val calculator = FakePrayerCalculator().apply {
+            resultToReturn = OperationResult.Success(istanbulPrayerSchedule())
+        }
+        val vm = buildViewModel(
+            getPrayerContext = GetPrayerContextUseCase(
+                prefs, FakePrayerScheduleCache(), calculator, istanbulNoonClock(),
+            ),
+        )
+
+        // Drive every other startup path (app list load, suggestions, connectivity, etc.) to
+        // completion. prayerContext must stay untouched — nobody has collected it yet.
+        advanceUntilIdle()
+
+        assertEquals(
+            "construction + startup must perform zero PrayerCalculator calls",
+            0,
+            calculator.callCount,
+        )
+
+        // Sanity check: the flow really is wired — subscribing does eventually calculate.
+        val collector = subscribeToPrayerContext(vm)
+        advanceUntilIdle()
+        assertTrue("expected a calculation once subscribed", calculator.callCount >= 1)
+        collector.cancel()
+    }
+
+    @Test
+    fun `prayerContext is Unavailable NOT_CONFIGURED with no prayer setup`() = runTest(testDispatcher) {
+        val vm = buildViewModel(
+            getPrayerContext = GetPrayerContextUseCase(
+                FakePrayerPreferencesRepository(),
+                FakePrayerScheduleCache(),
+                FakePrayerCalculator(),
+                istanbulNoonClock(),
+            ),
+        )
+
+        val collector = subscribeToPrayerContext(vm)
+        advanceUntilIdle()
+
+        assertEquals(
+            PrayerContext.Unavailable(UnavailableReason.NOT_CONFIGURED),
+            vm.prayerContext.value,
+        )
+        collector.cancel()
+    }
+
+    /**
+     * Task 10 review, finding 1 — the **projection** half of the provenance supply chain.
+     *
+     * `AgentSessionSurfaceProvenanceTest` holds the rendering from the surface inward and
+     * `LauncherScreenAgentProvenanceTest` holds the whole chain through the screen. This one is
+     * narrower on purpose: it says which link broke. An `agentToolProvenance` that drops a registered
+     * tool, or that loses `level`/`effect` on the way through, fails here by name instead of surfacing
+     * three layers away as "a line did not render".
+     *
+     * Both sides are read off [agentRegistry] rather than written down — the expectation is the
+     * registry's own descriptors, so a registry whose tools changed cannot leave this test agreeing
+     * with a stale constant (the shape of review finding 2).
+     */
+    @Test
+    fun `agentToolProvenance projects every registered tool's level and effect`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+
+        val provenance = vm.agentToolProvenance
+
+        assertEquals(
+            "every registered tool must be projected, or its steps disclose nothing",
+            agentRegistry.all().map { it.id }.toSet(),
+            provenance.keys,
+        )
+        agentRegistry.all().forEach { descriptor ->
+            assertEquals(
+                "provenance for ${descriptor.id.value} must carry the registry's own level/effect",
+                StepProvenance(descriptor.level, descriptor.effect),
+                provenance[descriptor.id],
+            )
+        }
+        assertTrue(
+            "the A0 fixture must declare at least one EXTERNAL tool, or this asserts nothing",
+            agentRegistry.all().any { it.effect == ToolEffect.EXTERNAL },
+        )
+    }
+
+    // ── Leaving the agent surface (owner device acceptance, 2026-09-10) ─────────────────────────
+    //
+    // The defect this section exists for: the surface went away and the launcher did not come back.
+    // `dismissAgentSession` deleted the session and stopped there, so the typed command stayed in the
+    // buffer — and "search overtakes" is a pure function of that buffer (`LauncherCommandSession
+    // .liveResults`), so the home body (Shahada, date line, prayer strip) never returned. Only a
+    // force-stop cleared it. A test that asserted only "the session was deleted" is exactly what let
+    // it ship, so every assertion below is on state a user can see.
+
+    /**
+     * The A0 shape a user actually reaches: FastPath understands «открой убер», finds no such app, and
+     * `RouteCommandUseCase` step (2) starts the two-step plan. [toolResults] scripts what the plan's
+     * tools observe, which is what decides which surface the user is left looking at — a terminal one
+     * carrying «закрыть», or the consent gate carrying «Отмена».
+     */
+    private fun agentViewModel(toolResults: List<ToolResult>): LauncherViewModel {
+        // A non-empty app list keeps uiState Success, so `inputResults.active == false` really does
+        // mean "the home body is what renders" and not "the Empty state is".
+        fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
+        fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent(displayNameQuery = "убер")
+        fakeMatcher.confidenceToReturn = 0.95f
+        return buildViewModel(
+            runAgent = RunAgentSessionUseCase(
+                executor = AgentExecutor(
+                    agentRegistry,
+                    FakeToolExecutor(toolResults),
+                    RuntimeBudget.Default,
+                ),
+                store = fakeAgentStore,
+            ),
+        )
+    }
+
+    /** Types and submits the command, exactly as the screen does. */
+    private fun LauncherViewModel.submitAgentCommand(text: String = "открой убер") {
+        onCommandChanged(text)
+        onCommandSubmitted(text)
+    }
+
+    /**
+     * What the screen actually draws: `AgentSessionSurface` returns before rendering anything when
+     * the state has no title, and `Cancelled` is exactly that state. So "no surface" is two shapes,
+     * not one — a null session (dismiss) and a `Cancelled` one (a refused consent).
+     */
+    private fun LauncherViewModel.agentSurfaceVisible(): Boolean {
+        val session = agentSessionState.value ?: return false
+        return session.state != ExecutionState.Cancelled
+    }
+
+    @Test
+    fun `dismissing the agent surface returns the launcher to its resting home state`() =
+        runTest(testDispatcher) {
+            val vm = agentViewModel(toolResults = emptyList())
+            vm.submitAgentCommand()
+            advanceUntilIdle()
+
+            assertNotNull(
+                "the fixture must reach the agent surface, or this test asserts nothing",
+                vm.agentSessionState.value,
+            )
+            assertTrue("the surface must be on screen before it is dismissed", vm.agentSurfaceVisible())
+            assertTrue(
+                "the typed command stays in the buffer while the surface is up (applyOutcome)",
+                vm.commandInput.value.isNotEmpty(),
+            )
+            assertTrue("home is overtaken while the command stands", vm.inputResults.value.active)
+
+            vm.dismissAgentSession()
+            advanceUntilIdle()
+
+            assertNull("the session is deleted", vm.agentSessionState.value)
+            assertEquals("the command buffer is cleared", "", vm.commandInput.value)
+            assertFalse(
+                "the home body must be drawn again — this is the assertion the defect would have failed",
+                vm.inputResults.value.active,
+            )
+            assertEquals(CommandFeedback.None, vm.commandFeedback.value)
+        }
+
+    @Test
+    fun `dismissing twice leaves the launcher at rest`() = runTest(testDispatcher) {
+        val vm = agentViewModel(toolResults = emptyList())
+        vm.submitAgentCommand()
+        advanceUntilIdle()
+
+        vm.dismissAgentSession()
+        advanceUntilIdle()
+        vm.dismissAgentSession()
+        advanceUntilIdle()
+
+        assertNull(vm.agentSessionState.value)
+        assertEquals("", vm.commandInput.value)
+        assertFalse(vm.inputResults.value.active)
+        assertFalse("a second dismiss must not re-arm the consent spinner", vm.agentConfirming.value)
+    }
+
+    /**
+     * The second way out, and the one the owner reached through «Отмена». A refused consent ends the
+     * session `Cancelled`, which `AgentSessionSurface` renders as nothing at all — so the surface
+     * leaves the screen down this path too, and the launcher owes the user the same return home.
+     */
+    @Test
+    fun `refusing consent returns the launcher to its resting home state`() = runTest(testDispatcher) {
+        val vm = agentViewModel(
+            toolResults = listOf(
+                ToolResult.Observed(
+                    ObservedFact.APP_NOT_INSTALLED,
+                    ToolOutput(mapOf("resolved_query" to "убер")),
+                ),
+            ),
+        )
+        vm.submitAgentCommand()
+        advanceUntilIdle()
+
+        val awaiting = vm.agentSessionState.value
+        assertNotNull("the fixture must reach the consent gate", awaiting)
+        assertEquals(
+            "the fixture must stop at the consent checkpoint, or this test asserts nothing",
+            ExecutionState.AwaitingConsent,
+            awaiting!!.state,
+        )
+        assertTrue(vm.inputResults.value.active)
+
+        vm.denyAgentStep(stepIndex = 1)
+        advanceUntilIdle()
+
+        assertFalse("a refused plan draws no surface", vm.agentSurfaceVisible())
+        assertEquals("the command buffer is cleared", "", vm.commandInput.value)
+        assertFalse(
+            "the home body must be drawn again after «Отмена» too",
+            vm.inputResults.value.active,
+        )
     }
 }

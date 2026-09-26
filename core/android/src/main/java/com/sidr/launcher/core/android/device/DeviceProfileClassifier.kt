@@ -40,9 +40,9 @@ object DeviceProfileClassifier {
     /**
      * Assembles a [DeviceCapability] from raw signals.
      *
-     * @param nnapiAvailable best-effort hint: `Build.VERSION.SDK_INT >= 29` (the only window the ORT
-     *   NNAPI EP can activate). A hint for EP selection inside `OnnxIntentClassifier`, not a
-     *   guarantee — NNAPI stays off-by-default regardless (Block P).
+     * @param nnapiAvailable best-effort hint: `Build.VERSION.SDK_INT >= 29`. Historically fed local-NLU
+     *   execution-provider selection (removed Этап 0.3); kept as a device-capability signal for a
+     *   future local-inference accelerator.
      * @param thermalStatus `PowerManager.getCurrentThermalStatus()` on API 29+, else [NO_THERMAL_SIGNAL].
      *   `thermalOk` is `status < THERMAL_STATUS_SEVERE` (the sentinel reads as OK).
      * @param isPowerSaveMode `PowerManager.isPowerSaveMode`; `batteryOk` is its negation.

@@ -14,11 +14,48 @@
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- A1' Tier-0 tool `set_timer`. `AlarmClock.ACTION_SET_TIMER` is refused by ActivityTaskManager
+         without this ("Permission Denial: … requires com.android.alarm.permission.SET_ALARM", owner
+         device acceptance 2026-09-05); the block had claimed in eight places that it needed none.
+         What it grants: the ability to start a timer in the device's clock app. Nothing more — it is
+         not read access to alarms or alarm data, and it carries no user content off the device.
+         Observed on the SM-A325F 2026-09-05: with `EXTRA_SKIP_UI=false` the Samsung clock opens AND
+         the timer is already counting down — the flag governs whether the app shows its UI, not
+         whether the timer starts, so this is a real effect and not merely a prefilled form.
+         protectionLevel `normal` (verified: `pm list permissions -f -g` -> `protectionLevel:normal`,
+         `package:android`), so it is granted at install and never prompts.
+         Held by ToolPermissionManifestGuardTest. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <!--
+      A1" Phase 3a / `uninstall_app`. `normal`, install-time, granted with no prompt (row 28). It
+      grants no data access and cannot remove anything silently: the OS draws its own dialog and the
+      user confirms there, behind Sidr's own CONFIRM gate. Owner decision 2026-09-18.
+      Without it the uninstaller starts and dies in ~190 ms drawing nothing, while `startActivity`
+      still returns normally (rows 16/28/32) — which is why the check that this is held is a
+      precondition taken BEFORE the call and never a refusal detected afterwards.
+      The limit that goes with that (spec §7.7): the precondition closes exactly ONE cause of
+      refusal, a missing permission. Device policy, a work profile, or a package that simply cannot
+      be removed still refuse invisibly, because the platform hands the caller nothing to read.
+      Held by ToolPermissionManifestGuardTest and ToolRegistryPermissionGuardTest.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
 
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SHOW_ALARMS" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.STILL_IMAGE_CAMERA" />
         </intent>
     </queries>
 
@@ -26,11 +63,22 @@
         android:name=".SidrLauncherApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="Sidr Launcher"
+        android:label="@string/app_name"
+        android:localeConfig="@xml/locales_config"
         android:networkSecurityConfig="@xml/network_security_config"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.SidrLauncher">
+        <!-- I18N-1 Task 14: backports per-app language persistence to API 28-32 (AppCompatDelegate is
+             the store; no user_language DataStore key is introduced - spec §9). -->
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data
+                android:name="autoStoreLocales"
+                android:value="true" />
+        </service>
         <!-- Block Q: WorkManager on-demand init. SidrLauncherApp implements Configuration.Provider,
              so the default WorkManagerInitializer must be removed (RemoveWorkManagerInitializer lint).
              Only the WorkManager startup entry is removed; the InitializationProvider stays for any
@@ -48,11 +96,20 @@
 
         <activity
             android:name=".LauncherActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <!-- Also expose Sidr as a normal, tappable app in other launchers' drawers so it can be
+                 opened right after install (before it is the default home). Kept as a separate filter
+                 from the HOME one; the launcher already filters itself out of its own app list. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 

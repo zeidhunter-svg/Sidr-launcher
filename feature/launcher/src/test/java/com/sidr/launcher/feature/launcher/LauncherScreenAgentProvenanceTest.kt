@@ -1,0 +1,448 @@
+package com.sidr.launcher.feature.launcher
+
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.lifecycle.SavedStateHandle
+import com.sidr.launcher.core.testing.FakeActionCatalog
+import com.sidr.launcher.core.testing.FakeActionExecutor
+import com.sidr.launcher.core.testing.FakeAgentSessionStore
+import com.sidr.launcher.core.testing.FakeAliasStore
+import com.sidr.launcher.core.testing.FakeCommandPlanner
+import com.sidr.launcher.core.testing.FakeConnectivityChecker
+import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
+import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
+import com.sidr.launcher.core.testing.FakeIntentMatcher
+import com.sidr.launcher.core.testing.FakePrayerCalculator
+import com.sidr.launcher.core.testing.FakePrayerPreferencesRepository
+import com.sidr.launcher.core.testing.FakePrayerScheduleCache
+import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
+import com.sidr.launcher.core.testing.FakeSpeechInputSource
+import com.sidr.launcher.core.testing.FakeSuggestionEngine
+import com.sidr.launcher.core.testing.FakeSuggestionsCacheRepository
+import com.sidr.launcher.core.testing.FakeToolExecutor
+import com.sidr.launcher.core.testing.FakeToolRegistry
+import com.sidr.launcher.core.testing.FakeUsageHistoryRepository
+import com.sidr.launcher.core.testing.FakeUserPreferencesRepository
+import com.sidr.launcher.core.testing.configuredProvider
+import com.sidr.launcher.core.ui.theme.SidrTheme
+import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.agent.AgentExecutor
+import com.sidr.launcher.domain.agent.AgentGoal
+import com.sidr.launcher.domain.agent.AgentSession
+import com.sidr.launcher.domain.agent.AgentSessionId
+import com.sidr.launcher.domain.agent.AgentSessionIdFactory
+import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
+import com.sidr.launcher.domain.agent.ExecutionPlan
+import com.sidr.launcher.domain.agent.ExecutionState
+import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanStep
+import com.sidr.launcher.domain.agent.PlanningRequest
+import com.sidr.launcher.domain.agent.PlanningResult
+import com.sidr.launcher.domain.agent.ResolveConsentUseCase
+import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
+import com.sidr.launcher.domain.agent.RuntimeBudget
+import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
+import com.sidr.launcher.domain.agent.StepPrecondition
+import com.sidr.launcher.domain.agent.StepRationale
+import com.sidr.launcher.domain.agent.TemplatePlanner
+import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
+import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
+import com.sidr.launcher.domain.intent.ExecuteActionUseCase
+import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
+import com.sidr.launcher.domain.intent.IntentActionResolver
+import com.sidr.launcher.domain.memory.alias.ResolveCommandWithAliasUseCase
+import com.sidr.launcher.domain.memory.alias.ResolvedCommandStep
+import com.sidr.launcher.domain.memory.resolution.CommandRouteStep
+import com.sidr.launcher.domain.memory.resolution.DefaultResolutionPreferencePolicy
+import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
+import com.sidr.launcher.domain.memory.resolution.ResolveCommandWithPreferenceUseCase
+import com.sidr.launcher.domain.prayer.GetPrayerContextUseCase
+import com.sidr.launcher.domain.tool.ToolDescriptor
+import com.sidr.launcher.domain.tool.ToolDurability
+import com.sidr.launcher.domain.tool.ToolEffect
+import com.sidr.launcher.domain.tool.ToolId
+import com.sidr.launcher.domain.tool.ToolInvocation
+import com.sidr.launcher.domain.tool.ToolLevels
+import com.sidr.launcher.domain.tool.ToolRegistry
+import com.sidr.launcher.domain.trace.ExecutionTrace
+import com.sidr.launcher.feature.launcher.agent.DynamicToolLabel
+import com.sidr.launcher.feature.launcher.agent.DynamicToolLabels
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneId
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+/**
+ * Task 10 review, finding 1. **The link that actually delivers provenance to a user.**
+ *
+ * `AgentSessionSurfaceProvenanceTest` proves the disclosure renders *from [AgentSessionSurface]
+ * inward*, i.e. given a populated `toolProvenance` map. It cannot see where that map comes from, and
+ * the map is exactly the part no test held: deleting the `toolProvenance = viewModel.agentToolProvenance`
+ * argument at `LauncherScreen`'s call site (or emptying [LauncherViewModel.agentToolProvenance]'s
+ * projection of the registry) left the whole 1285-test suite green while no user saw a line.
+ *
+ * This test therefore starts one layer further out — at [LauncherScreen] over a real
+ * [LauncherViewModel] — so the chain `ToolRegistry -> agentToolProvenance -> LauncherScreen ->
+ * AgentSessionSurface -> rendered line` is held end to end by one assertion. The fixture is
+ * [LauncherScreenPrayerStripTest]'s, which is itself [LauncherViewModelTest]'s; the only additions are
+ * a store seeded with a restorable session and a registry whose tools are `EXTERNAL`.
+ *
+ * **Why a session already `Paused`.** `LauncherAgentSession.restoreOnStart` presents a restored
+ * session as `Paused` and, for one already `Paused`, hands it back untouched — so the surface is on
+ * screen with no command typed and no engine run, and the plan list (which is where the per-step
+ * disclosure lives) is drawn. `AwaitingConsent` would exercise the consent card's own line instead;
+ * that half is covered by `AgentSessionSurfaceProvenanceTest` and is not the link under test here.
+ *
+ * **Why the A0 plan and not a hand-built one.** The plan comes from the real [TemplatePlanner] over
+ * [FakeToolRegistry.withA0Tools] — the same registry instance the ViewModel is given — so the expected
+ * count of disclosure lines is a function of the tools the registry actually declares, not of a map
+ * this test wrote for itself (the sibling of review finding 2).
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
+class LauncherScreenAgentProvenanceTest {
+
+    @get:Rule val compose = createComposeRule()
+
+    private val dispatcher = UnconfinedTestDispatcher()
+
+    // `var` since A1″ Task 8: the dynamic-name test swaps in a registry carrying an `app_shortcut`
+    // tool before building the ViewModel. Every helper below reads the field at call time.
+    private var agentRegistry: ToolRegistry = FakeToolRegistry.withA0Tools()
+    private var agentToolLabels = DynamicToolLabels { emptyMap() }
+    private val agentStore = FakeAgentSessionStore()
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(dispatcher)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
+
+    /** The A0 two-step plan, already `Paused`, exactly as a session that outlived its process reads. */
+    private suspend fun seedPausedA0Session(): AgentSession {
+        val goal = AgentGoal("открой убер", GoalShape.AppNotInstalled("убер"))
+        val planned = TemplatePlanner().plan(PlanningRequest(goal), agentRegistry)
+        check(planned is PlanningResult.Planned)
+        val session = AgentSession(
+            id = AgentSessionId("restored-1"),
+            goal = goal,
+            plan = planned.plan,
+            cursor = 0,
+            state = ExecutionState.Paused,
+            observations = emptyMap(),
+            consents = emptyMap(),
+            trace = ExecutionTrace(emptyList()),
+        )
+        agentStore.save(session)
+        return session
+    }
+
+    private fun buildViewModel(): LauncherViewModel {
+        val fakeRepo = FakeInstalledAppsRepository()
+        val fakeExecutor = FakeActionExecutor()
+        val useCase = HandleUserCommandUseCase(
+            matcher = FakeIntentMatcher(),
+            resolver = IntentActionResolver(fakeRepo),
+            executor = fakeExecutor,
+            confidencePolicy = DefaultIntentConfidencePolicy(),
+            recordingScope = CoroutineScope(dispatcher + SupervisorJob()),
+        )
+        val agentIds = object : AgentSessionIdFactory {
+            private var n = 0
+            override fun newId() = AgentSessionId("test-agent-${++n}")
+        }
+        val runAgent = RunAgentSessionUseCase(
+            executor = AgentExecutor(agentRegistry, FakeToolExecutor(emptyList()), RuntimeBudget.Default),
+            store = agentStore,
+        )
+        val routeUseCase = RouteCommandUseCase(
+            handleUserCommand = useCase,
+            planner = FakeCommandPlanner(),
+            catalog = FakeActionCatalog(),
+            featureFlagRepository = FakeFeatureFlagRepository(),
+            providerConfigRepository = configuredProvider(),
+            connectivityChecker = FakeConnectivityChecker(),
+            startAgentSession = StartAgentSessionUseCase(
+                planner = TemplatePlanner(),
+                store = agentStore,
+                ids = agentIds,
+                registry = agentRegistry,
+            ),
+        )
+        val resolutionStore = FakeResolutionPreferenceStore()
+        val preferenceResolver = ResolveCommandWithPreferenceUseCase(
+            route = CommandRouteStep { routeUseCase.route(it) },
+            store = resolutionStore,
+            policy = DefaultResolutionPreferencePolicy(),
+            catalog = FakeActionCatalog(),
+        )
+        val resolveCommand = ResolveCommandWithAliasUseCase(
+            inner = ResolvedCommandStep { rawInput -> preferenceResolver.resolve(rawInput) },
+            store = FakeAliasStore(),
+            installedApps = fakeRepo,
+        )
+        return LauncherViewModel(
+            installedAppsRepository = fakeRepo,
+            resolveCommand = resolveCommand,
+            recordResolutionChoice = RecordResolutionChoiceUseCase(resolutionStore),
+            executeAction = ExecuteActionUseCase(
+                resolver = IntentActionResolver(fakeRepo),
+                executor = fakeExecutor,
+            ),
+            actionExecutor = fakeExecutor,
+            actionCatalog = FakeActionCatalog(),
+            usageHistoryRepository = FakeUsageHistoryRepository(),
+            featureFlagRepository = FakeFeatureFlagRepository(),
+            userPreferencesRepository = FakeUserPreferencesRepository(),
+            suggestionEngine = FakeSuggestionEngine(),
+            suggestionsCacheRepository = FakeSuggestionsCacheRepository(),
+            speechInputSource = FakeSpeechInputSource(),
+            connectivityChecker = FakeConnectivityChecker(),
+            getPrayerContext = GetPrayerContextUseCase(
+                FakePrayerPreferencesRepository(),
+                FakePrayerScheduleCache(),
+                FakePrayerCalculator(),
+                Clock.fixed(Instant.parse("2026-07-13T10:00:00Z"), ZoneId.of("UTC")),
+            ),
+            runAgentSession = runAgent,
+            resolveAgentConsent = ResolveConsentUseCase(agentStore, runAgent),
+            cancelAgentSession = CancelAgentSessionUseCase(agentStore),
+            agentSessionStore = agentStore,
+            toolRegistry = agentRegistry,
+            dynamicToolLabels = agentToolLabels,
+            ioDispatcher = dispatcher,
+            applicationScope = CoroutineScope(dispatcher + SupervisorJob()),
+            savedStateHandle = SavedStateHandle(),
+        )
+    }
+
+    /**
+     * The whole supply chain in one assertion: both A0 tools are `EXTERNAL` in the registry the screen's
+     * ViewModel holds, so both restored plan rows must carry the disclosure line under them.
+     *
+     * The expected count is **derived from the registry**, not written down: it is the number of plan
+     * steps whose tool the registry declares `EXTERNAL`, which is the same predicate
+     * `provenanceLabelFor` applies. A registry whose A0 tools stopped being `EXTERNAL` would lower the
+     * expectation *and* the rendering together — which is why the count alone would not be enough, and
+     * `assertTrue` below refuses a vacuous zero.
+     */
+    @Test
+    fun `the screen supplies the surface with the registry's provenance, so a restored plan discloses it`() {
+        val session = runBlocking { seedPausedA0Session() }
+        val expected = session.plan.steps.count { step ->
+            agentRegistry.find(step.invocation.id)?.effect == ToolEffect.EXTERNAL
+        }
+        assertTrue(
+            "the fixture must contain at least one EXTERNAL step, or this test asserts nothing",
+            expected > 0,
+        )
+        val vm = buildViewModel()
+
+        compose.setContent {
+            SidrTheme(darkTheme = true) {
+                LauncherScreen(viewModel = vm)
+            }
+        }
+        compose.waitForIdle()
+
+        // "SIDR · EXTERNAL" is launcher_tool_level_in_app: both A0 descriptors are IN_APP + EXTERNAL.
+        compose.onAllNodesWithContentDescription("source SIDR · EXTERNAL")
+            .assertCountEquals(expected)
+    }
+
+    /**
+     * A1″ Task 8. **The same supply chain, for a tool whose name is data rather than copy.**
+     *
+     * `toolLabelFor` maps a `ToolId` to a string resource, and a shortcut has no resource: its name was
+     * authored by another app, in that app's language, and translating it is not ours to do. So the name
+     * arrives through a second channel — `DynamicToolLabels`, projected at the composition root from
+     * `:data:repository`'s `DynamicToolNames` — and this test holds the whole of it: without that
+     * channel the step renders `launcher_agent_step_generic` ("Run this step for …") and a user is told
+     * nothing about which shortcut of which app is about to run.
+     *
+     * `DOC-ILM-2` is held the same way, **behaviourally**: the provenance line under the step must name
+     * the `app_shortcut` level, not fall back to the unmapped-level label. A `SAFE` tool never reaches
+     * the consent gate, so this line is the only disclosure there is.
+     */
+    @Test
+    fun `a shortcut tool renders its own name and its app_shortcut provenance`() {
+        agentRegistry = FakeToolRegistry(
+            listOf(
+                ToolDescriptor(
+                    id = SHORTCUT_TOOL_ID,
+                    level = ToolLevels.APP_SHORTCUT,
+                    effect = ToolEffect.EXTERNAL,
+                    risk = ActionRiskLevel.SAFE,
+                    durability = ToolDurability.TRANSIENT,
+                ),
+            ),
+        )
+        agentToolLabels = DynamicToolLabels {
+            mapOf(SHORTCUT_TOOL_ID to DynamicToolLabel("Example Chat", "New message"))
+        }
+        runBlocking { seedPausedShortcutSession() }
+        val vm = buildViewModel()
+
+        compose.setContent {
+            SidrTheme(darkTheme = true) {
+                LauncherScreen(viewModel = vm)
+            }
+        }
+        compose.waitForIdle()
+
+        // The name is the app's, the sentence around it is ours: `launcher_agent_step_shortcut`. The
+        // row also carries the step's state word, so this is a substring match on the step line itself.
+        compose.onNodeWithText("Open \u201CExample Chat \u2014 New message\u201D", substring = true)
+            .assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("source APP SHORTCUT · EXTERNAL")
+            .assertCountEquals(1)
+    }
+
+    /**
+     * **Fix round 1, finding 5.** The two maps the surface is given are `get()` on the ViewModel — read
+     * bare, each access walks the whole federation (`ToolRegistry.all()`, plus a second full walk for
+     * the names) and allocates a fresh `Map`. `LauncherScreen` recomposes on **every keystroke** in the
+     * command field while a session is on screen, on the main thread, over a device's hundreds of
+     * shortcut descriptors.
+     *
+     * `get()` is nonetheless correct and must stay: the `by lazy` it replaced froze both maps at the
+     * first session ever shown, which silently lost every shortcut discovered afterwards. The fix is
+     * therefore at the **call site** — `remember(session)` — and this test is what holds it: typing must
+     * not re-read either port.
+     *
+     * It counts reads rather than measuring time, because a duration assertion on a Robolectric frame
+     * would be noise. What it cannot see, said rather than implied: it does not prove the map identity
+     * is stable across recompositions (which is what lets `AgentSessionSurface` skip work), only that
+     * the two ports are not consulted again — the same `remember` delivers both, and the read count is
+     * the falsifiable half.
+     */
+    @Test
+    fun `typing does not re-walk the federation behind the agent surface`() {
+        val counting = CountingRegistry(
+            FakeToolRegistry(
+                listOf(
+                    ToolDescriptor(
+                        id = SHORTCUT_TOOL_ID,
+                        level = ToolLevels.APP_SHORTCUT,
+                        effect = ToolEffect.EXTERNAL,
+                        risk = ActionRiskLevel.SAFE,
+                        durability = ToolDurability.TRANSIENT,
+                    ),
+                ),
+            ),
+        )
+        agentRegistry = counting
+        var nameReads = 0
+        agentToolLabels = DynamicToolLabels {
+            nameReads++
+            mapOf(SHORTCUT_TOOL_ID to DynamicToolLabel("Example Chat", "New message"))
+        }
+        runBlocking { seedPausedShortcutSession() }
+        val vm = buildViewModel()
+
+        compose.setContent {
+            SidrTheme(darkTheme = true) {
+                LauncherScreen(viewModel = vm)
+            }
+        }
+        compose.waitForIdle()
+
+        // The surface is really on screen: without this the counts below would be trivially stable.
+        compose.onNodeWithText("Open \u201CExample Chat \u2014 New message\u201D", substring = true)
+            .assertIsDisplayed()
+        val registryReadsAfterFirstFrame = counting.allCalls
+        val nameReadsAfterFirstFrame = nameReads
+        assertTrue(
+            "the surface must have read both ports at least once, or this test cannot see a regression",
+            registryReadsAfterFirstFrame > 0 && nameReadsAfterFirstFrame > 0,
+        )
+
+        "telegram".forEachIndexed { i, _ ->
+            vm.onCommandChanged("telegram".substring(0, i + 1))
+            compose.waitForIdle()
+        }
+
+        assertEquals(
+            "Eight keystrokes re-walked the registry. Each read is one all() per adapter over every " +
+                "shortcut the device publishes, on the main thread, for a map whose value cannot have " +
+                "changed because the session did not.",
+            registryReadsAfterFirstFrame,
+            counting.allCalls,
+        )
+        assertEquals(
+            "Eight keystrokes re-read the dynamic-name port, which walks the same snapshot a second " +
+                "time and allocates two strings per shortcut.",
+            nameReadsAfterFirstFrame,
+            nameReads,
+        )
+    }
+
+    /** Counts only `all()` — `find()` is a single-tool lookup and is not what the surface walks. */
+    private class CountingRegistry(private val delegate: ToolRegistry) : ToolRegistry {
+        var allCalls = 0
+            private set
+
+        override fun all(): List<ToolDescriptor> {
+            allCalls++
+            return delegate.all()
+        }
+
+        override fun find(id: ToolId): ToolDescriptor? = delegate.find(id)
+    }
+
+    /** A one-step plan over the shortcut tool, already `Paused` — the state that draws the plan list. */
+    private suspend fun seedPausedShortcutSession(): AgentSession {
+        val goal = AgentGoal("new message", GoalShape.Free("new message"))
+        val session = AgentSession(
+            id = AgentSessionId("restored-shortcut-1"),
+            goal = goal,
+            plan = ExecutionPlan(
+                listOf(
+                    PlanStep(
+                        index = 0,
+                        invocation = ToolInvocation(SHORTCUT_TOOL_ID),
+                        risk = ActionRiskLevel.SAFE,
+                        precondition = StepPrecondition.None,
+                        rationale = StepRationale.GOAL_DIRECT,
+                    ),
+                ),
+            ),
+            cursor = 0,
+            state = ExecutionState.Paused,
+            observations = emptyMap(),
+            consents = emptyMap(),
+            trace = ExecutionTrace(emptyList()),
+        )
+        agentStore.save(session)
+        return session
+    }
+
+    private companion object {
+        /** Derived exactly as `ShortcutToolIds.of` derives it; `:feature:launcher` has no data edge. */
+        val SHORTCUT_TOOL_ID = ToolId("shortcut:com.example.chat/new_message")
+    }
+}

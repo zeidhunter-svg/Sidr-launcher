@@ -1,20 +1,16 @@
 package com.sidr.launcher.di
 
 import com.sidr.launcher.core.common.di.IoDispatcher
-import com.sidr.launcher.data.ailocal.provision.ModelDownloadConfig
 import com.sidr.launcher.data.repository.suggestions.CalendarSuggestionProvider
 import com.sidr.launcher.data.repository.suggestions.LocationSuggestionProvider
-import com.sidr.launcher.data.repository.suggestions.SemanticSuggestionRanker
 import com.sidr.launcher.data.repository.suggestions.SuggestionEngineImpl
 import com.sidr.launcher.data.repository.suggestions.TimeOfDaySuggestionProvider
 import com.sidr.launcher.data.repository.suggestions.UsageSuggestionProvider
-import com.sidr.launcher.domain.ai.local.ModelAvailabilityRepository
-import com.sidr.launcher.domain.ai.local.TextEmbedder
-import com.sidr.launcher.domain.device.DeviceProfileProvider
 import com.sidr.launcher.domain.history.SuggestionRankingRepository
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.preferences.SuggestionsCacheRepository
 import com.sidr.launcher.domain.suggestions.HeuristicSuggestionRanker
+import com.sidr.launcher.domain.suggestions.SuggestionActionTargetResolver
 import com.sidr.launcher.domain.suggestions.SuggestionEngine
 import com.sidr.launcher.domain.suggestions.SuggestionRanker
 import dagger.Module
@@ -44,19 +40,7 @@ object SuggestionsProvidesModule {
 
     @Provides
     @Singleton
-    fun provideSuggestionRanker(
-        textEmbedder: TextEmbedder,
-        deviceProfileProvider: DeviceProfileProvider,
-        modelAvailabilityRepository: ModelAvailabilityRepository,
-        @EmbeddingModelConfig embeddingConfig: ModelDownloadConfig,
-    ): SuggestionRanker = SemanticSuggestionRanker(
-        heuristic = HeuristicSuggestionRanker(),
-        textEmbedder = textEmbedder,
-        deviceProfileProvider = deviceProfileProvider,
-        modelAvailabilityRepository = modelAvailabilityRepository,
-        embeddingModelId = embeddingConfig.modelId,
-        embeddingModelPinned = embeddingConfig.isPinned,
-    )
+    fun provideSuggestionRanker(): SuggestionRanker = HeuristicSuggestionRanker()
 
     @Provides
     @Singleton
@@ -69,6 +53,7 @@ object SuggestionsProvidesModule {
         rankingRepository: SuggestionRankingRepository,
         cacheRepository: SuggestionsCacheRepository,
         featureFlagRepository: FeatureFlagRepository,
+        actionTargetResolver: SuggestionActionTargetResolver,
         @IoDispatcher ioDispatcher: CoroutineDispatcher,
     ): SuggestionEngine = SuggestionEngineImpl(
         providers = listOf(timeOfDayProvider, usageProvider, calendarProvider, locationProvider),
@@ -76,6 +61,7 @@ object SuggestionsProvidesModule {
         rankingRepository = rankingRepository,
         cacheRepository = cacheRepository,
         featureFlagRepository = featureFlagRepository,
+        actionTargetResolver = actionTargetResolver,
         ioDispatcher = ioDispatcher,
     )
 }

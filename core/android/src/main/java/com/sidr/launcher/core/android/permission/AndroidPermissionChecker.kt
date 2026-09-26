@@ -43,5 +43,6 @@ class AndroidPermissionChecker(
         PermissionFeature.VOICE_INPUT -> Manifest.permission.RECORD_AUDIO
         PermissionFeature.CALENDAR_SUGGESTIONS -> Manifest.permission.READ_CALENDAR
         PermissionFeature.LOCATION_SUGGESTIONS -> Manifest.permission.ACCESS_FINE_LOCATION
+        PermissionFeature.PRAYER_LOCATION -> Manifest.permission.ACCESS_FINE_LOCATION
     }
 }

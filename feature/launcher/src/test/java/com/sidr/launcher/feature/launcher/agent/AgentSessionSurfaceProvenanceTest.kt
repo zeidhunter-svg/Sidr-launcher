@@ -151,9 +151,15 @@ class AgentSessionSurfaceProvenanceTest {
 
     /**
      * **The byte-identity baseline.** Task 10 moves the step line off `StepRationale` and onto the
-     * step's tool id; these two sentences are what the surface the owner accepted on 2026-08-22
-     * renders, and they must survive that move unchanged — `launch_app` must land on the same resource
-     * `GOAL_DIRECT` did, and `play_store_search` on the same one `APP_NOT_INSTALLED_FALLBACK` did.
+     * step's tool id; the SUBJECT of each sentence («Open убер», «Find убер in the app store») is what
+     * the surface the owner accepted on 2026-08-22 renders, and these two sentences must survive that
+     * move unchanged — `launch_app` must land on the same resource `GOAL_DIRECT` did, and
+     * `play_store_search` on the same one `APP_NOT_INSTALLED_FALLBACK` did.
+     *
+     * **The state word after the dash is younger than that acceptance.** It was added the day after,
+     * by the 2026-08-23 A0 review round (`a7f4755`), which is `CODE-GREEN` only: its device re-check
+     * (`docs/superpowers/plans/2026-08-23-a0-device-recheck.md` — the A2 strings and the §12.5 `Paused`
+     * item) is still open, so no owner has accepted any state word on this surface.
      *
      * Written and run BEFORE the change for exactly that reason: a claim of byte-identity is worth only
      * the run that produced it on the old code.
@@ -164,9 +170,10 @@ class AgentSessionSurfaceProvenanceTest {
      *
      * **A4′ phase 0 changed the STATE WORD of the paused step, deliberately, and the SUBJECT of neither
      * sentence** (Task 6, D2): [a0Session] is `Paused` at `cursor = 0`, and a step the engine stopped on
-     * is not in progress, so «in progress» became «waiting for you». The baseline now pins the unchanged
-     * subject plus the corrected word — exact text, not a substring match on the subject, because the
-     * word is exactly what D2 is about.
+     * is not in progress, so «in progress» became «waiting for you». What moved is therefore a
+     * 2026-08-23 word no owner has accepted yet; the subject the owner did accept is untouched. The
+     * baseline now pins the unchanged subject plus the corrected word — exact text, not a substring
+     * match on the subject, because the word is exactly what D2 is about.
      */
     @Test
     fun `the A0 two-step plan renders the two sentences it always has`() {

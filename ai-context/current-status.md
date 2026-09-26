@@ -5,7 +5,28 @@
 > digest); per-phase plans carry their own checklists.** This file is the status snapshot — if it
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
-> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-09-20
+> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-09-26
+> (**Этап 6 (A4′) phase 0 — engine preconditions — `CODE-GREEN` at 1463 / 0 failures** (boundary
+> `tools/gate.sh` at `be07399`, 557 executed, cleared tree: `:domain` 445 · `:consumer:jvm` 57 ·
+> `:data:repository` 384 · `:feature:launcher` 200 · `:app` 61 · other eight 316), sixteen commits
+> `b475111`…`be07399`; the phase's closing docs commit is proposed to the owner and made by the agent
+> after the owner agrees (controller ruling R7). **No device round, by
+> design** — A4′ has one acceptance, at its end — so **nothing below is `DEVICE-ACCEPTED`**. What
+> landed: `PlanningResult` exhaustive at both consumers; `Planner` takes one `PlanningRequest`;
+> `ToolResult` gained `HandedOff`, so **a cancelled uninstall no longer claims success — in code**
+> (A1″ acceptance finding (a)); the launcher surface draws eight step states instead of collapsing
+> four realities into two words, and a plan with a handed-off step gets its own `Completed` title;
+> a wall-clock step budget that is **cooperative** — it cuts a suspending hang, but every shipped
+> world call blocks (two shapes, `§HANDOFF` question 1; owner question R14); `ToolArgumentSorts`
+> replaces the literal `"app"` **in the planner** and closes R14-37 in code (the `:feature:launcher`
+> step-line rendering still keys on it); `tools/gate.sh`; a build id
+> (`0.1.0+<sha>[-dirty]`) in Settings. Four owner items are open (the R14 interruption question, a
+> Turkish review of **six new unjudged `tr` strings**, `usageHistoryEnabled` with its date, the §2
+> doctrine line). Full record, including the plan defects execution found and rulings R1–R19:
+> `§HANDOFF` of the track plan, subsection «Фаза 0 A4′»; the block ADR is written at A4′ close. Not
+> entered in this header between 2026-09-20 and now: Этап 6 Tracks 1–2 (the `B15` measurement, gate
+> 1439 → 1440, and the two doctrine rows) and the A4′ spec — their record is that same `§HANDOFF`
+> insert and ADR «2026-09-20 — Две строки доктрины»**); prior 2026-09-20
 > (**Этап 5.5 (A1″) — OWNER DEVICE ACCEPTANCE on the SM-A325F / Android 13: Parts A and B of the
 > checklist run in full, in `ru-RU` **and, for the first time in the project, `tr` and `en`**. The
 > block is **`CLOSED`**, and spec §16 criterion 1 — the last open one of nine — is closed with it.
@@ -1544,13 +1565,27 @@ path, live TalkBack, fontScale 2.0 and the system per-app-language picker are un
 *(Real assistant streaming against a live provider — done Round 3, and re-confirmed 2026-09-20 during
 the A1″ acceptance, which also exercised the model **planner** path end to end.)*
 
+**A4′ phase 0 (2026-09-26) is `CODE-GREEN` only, and everything it changes on screen is a hypothesis
+until A4′'s one acceptance at its end:** the three new step words and the handed-off `Completed` title
+in `en`/`ru`/`tr`, the Settings build line, and one deliberate change of a **state word**: a paused
+plan's step reads «ждёт вас», not «выполняется». That word was never owner-accepted — the step
+**subjects** the owner accepted on 2026-08-22 are untouched, and the state words came a day later
+with the 2026-08-23 A0 review round, whose device re-check (A2 and §12.5 of
+`docs/superpowers/plans/2026-08-23-a0-device-recheck.md`, where the `Paused` card first appears on a
+phone) is still open. In particular, **that a cancelled uninstall no longer reads as success has not
+been seen on a phone.** The wall-clock budget is not claimed to bound today's workers — its cut is
+cooperative and every shipped world call blocks; the two shapes are in `§HANDOFF` question 1 (owner
+question R14).
+
 ## Source of truth
 
 > **Re-based 2026-09-20 — this list had been stale since 2026-07-11 and pointed two tracks back.**
 
 - Current state + hard rules + gate (NOT a session digest since Этап 0.4): `CLAUDE.md`
-- Decisions log — **latest ADR: «2026-09-19 — Этап 5.5 (A1″)», whose last section is the owner's
-  device acceptance of 2026-09-20**: `ai-context/decisions.md`
+- Decisions log — **latest block ADR: «2026-09-19 — Этап 5.5 (A1″)», whose last section is the
+  owner's device acceptance of 2026-09-20**; the latest ADR of all is «2026-09-20 — Две строки
+  доктрины» (docs only). A4′ has no ADR yet — it is written at the block's close, not per phase:
+  `ai-context/decisions.md`
 - Architecture: `docs/architecture.md` · Roadmap: `docs/roadmap.md`
 - **Governing**: agentic Master Plan `docs/governing/sidr-agentic-master-plan-v1.0.md` · doctrine
   matrix (rules `DOC-*`) `docs/governing/sidr-doctrine-matrix-v1.0.md`
@@ -1559,8 +1594,14 @@ the A1″ acceptance, which also exercised the model **planner** path end to end
 - Last closed block: **A1″ (Этап 5.5), `CLOSED` 2026-09-20**; its spec
   `docs/superpowers/specs/2026-09-12-a1-second-tool-mass-and-selection-design.md`, its acceptance
   checklist `docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md` (run, with four of its
-  own lines corrected in place). Next: **A4′ runtime**, which now carries four findings from that
-  acceptance.
+  own lines corrected in place).
+- Active block: **A4′ runtime (Этап 6)** — spec
+  `docs/superpowers/specs/2026-09-21-a4-runtime-design.md` (owner-approved 2026-09-21); **phase 0
+  `CODE-GREEN` 2026-09-26**, plan `docs/superpowers/plans/2026-09-22-a4-phase0-engine-preconditions.md`,
+  record and open owner items in the track plan's `§HANDOFF` («Фаза 0 A4′»); phases 1–4 to go. Of the
+  four findings A1″'s acceptance handed it, phase 0 **repaired (a) in code** (a cancelled uninstall
+  claiming success), **named (b) excluded** from A4′ with its own address (the `HOME`-role grant a live
+  process does not see — staleness layer 2, `ShortcutRefreshTrigger`), and did not touch (c) or (d).
 
 ## Keeping this file honest
 

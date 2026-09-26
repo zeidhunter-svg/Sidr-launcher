@@ -44,7 +44,7 @@ tools return values and steps bind to them, landing **before** the Room 3→4 mi
 "2026-08-21 — Развилка агентного трека" in `decisions.md`. Everything else the revision found is parked
 in `§HANDOFF`, not built.
 
-**Where the active block stands (2026-09-20).** A1″ (Этап 5.5) is **`CLOSED`** — phases 0–3a closed
+**Where the last closed block stands (2026-09-20)** — the active one, A4′, is in the table below. A1″ (Этап 5.5) is **`CLOSED`** — phases 0–3a closed
 2026-09-19, phase 3b 2026-09-20, both at `CODE-GREEN` at gate **1439**, and the owner ran the device
 acceptance the same day on the SM-A325F: Parts A and B in full, in `ru-RU` **and, for the first time in
 the project, `tr` and `en`**. **Spec §16 criterion 1 — the last open one of nine — is closed.** The
@@ -72,7 +72,8 @@ four predate the block (`launch_app`, `play_store_search`, `set_timer`, `open_sy
 | **5** — A1′ federated `ToolRegistry` | ✅ **2026-09-10 — `CLOSED`** — `CODE-GREEN` 2026-09-03, then the owner ran Parts A and B of the acceptance checklist on the SM-A325F in `ru-RU` and signed off (spec §16 criterion 1, the last open criterion of nine). The run itself produced three fixes — a missing `SET_ALARM`, a checklist that read the database without its WAL, and an agent surface whose exit left the launcher in search mode. `en`/`tr` never ran on the phone. Tool *mass* and *selection* split out as a new block, `A1″` |
 | **5.5** — A1″ tool mass + selection (phases 0–3a) | ✅ **`CLOSED` 2026-09-20** — `CODE-GREEN` 2026-09-19, then the owner ran Parts A and B on the SM-A325F and signed off. Five acting tools against a floor of four, a fourth adapter, selection over a dynamic registry, and the track's first `CONFIRM` tool. Gate 1438. Before the round, phases 1–2 had only a device *reading* from the Task 13b **smoke round** (`ab2d063`, explicitly not an acceptance) and phase 3a had none at all. **Accepted on device 2026-09-20** together with 3b, in one round, on build `db1e75d`: [checklist](docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md) |
 | **5.5b** — A1″ phase 3b, the eleven navigating tools | ✅ **`CLOSED` 2026-09-20** — `CODE-GREEN` and owner device acceptance the same day; all eleven opened their screens on the SM-A325F, none shadowed by another. Eleven `system_intent` / `SAFE` / `EXTERNAL` tools (`show_alarms`, `open_camera`, and nine `open_*_settings`/`open_app_info` screens), registered, permitted, dispatched, reachable in `en`/`ru`/`tr` and rendered. Gate **1439** (+1: the `open_app_info` `required` pin, the phase's only new `@Test`). Ten pre-flight findings, three mutation findings. **Spec §16 criterion 1 is CLOSED** — tools and levels sufficed, and the owner's Phase 4 device round ran on 2026-09-20. Plan: [2026-09-19-a1-phase3b-navigating-tools.md](docs/superpowers/plans/2026-09-19-a1-phase3b-navigating-tools.md) |
-| **5.6–7** — A4′ runtime, A2/A3/A5/A6 | each needs its own spec + plan (`brainstorm → spec → plan → build`) |
+| **6** — A4′ runtime, **phase 0** (engine preconditions) | ⏳ **`CODE-GREEN` 2026-09-26**, gate **1463**; **no device round, by design** — the block has one acceptance, at its end. `PlanningResult` exhaustive, `PlanningRequest`, `ToolResult.HandedOff` (a cancelled uninstall no longer claims success — in code; not seen on a phone), eight step states + a third `Completed` title, a **cooperative** wall-clock budget, `ToolArgumentSorts` (closes R14-37 in code), `tools/gate.sh`, a build id in Settings. Four owner questions open. Spec [2026-09-21-a4-runtime-design.md](docs/superpowers/specs/2026-09-21-a4-runtime-design.md); record in `§HANDOFF` of the track plan («Фаза 0 A4′») — the block ADR is written at A4′ close |
+| **6–7** — A4′ phases 1–4, then A2/A3/A5/A6 | A4′'s spec is owner-approved (2026-09-21) and each remaining phase gets its own plan; A2/A3/A5/A6 each need their own spec + plan (`brainstorm → spec → plan → build`) |
 
 The four strategic ADRs (all 2026-08-19, in `decisions.md`):
 
@@ -252,7 +253,8 @@ below is recorded in its own ADR.
   already observed `APP_NOT_INSTALLED` opens the store even if the app was installed while the plan sat
   paused; it passed only through the `cursor == 0` / mid-step shapes, the latter produced with
   `pm disable-user` plus an on-device `force-stop` poll (window 157–170 ms warm, 1033 ms cold). This is
-  a **staleness** debt owned by **A4′**, alongside the missing wall-clock budget, and it is narrow today
+  a **staleness** debt owned by **A4′** (phase 2 since A4′ phase 0, which also added a wall-clock
+  budget — cooperative, narrowed rather than closed; see the A0-engine row below), and it is narrow today
   only because Master Plan §3.6 `B1` holds `GoalShape` at one value. **(2)** the plan list is not drawn
   in `AwaitingConsent` — the two-step shape is visible in `Paused` and `Completed` only. **(3)** item 8's
   acceptance needed agent intervention, so it exercises the engine rather than the product. Migration 3→4
@@ -418,7 +420,9 @@ below is recorded in its own ADR.
   is the only irreversible one; `DOC-ILM-3`/`DOC-ILM-4` both bite, and the same file's `openAppInfo`
   KDoc cites the rule verbatim. No honest "handed off, outcome unknown" value exists — `ToolResult` is
   `Effected | Observed(ObservedFact) | Failed` and `ObservedFact` is frozen — so this is A0.5's
-  "a whole class of reality unsayable" coming due. Owner ruling: **name it, fix in A4′**. **(b)** a
+  "a whole class of reality unsayable" coming due. Owner ruling: **name it, fix in A4′**. **Repaired in
+  code by A4′ phase 0** (`CODE-GREEN` 2026-09-26, not yet seen on a phone): `ToolResult` gained a
+  fourth value, `HandedOff`, `uninstall_app` returns it, and the surface draws it as such. **(b)** a
   **`HOME`-role grant is not seen by a live process**: `ShortcutRefreshTrigger.start()` runs once per
   process and observes **shortcut** changes, and a role change is not one, so the catalog stays empty
   until a restart — measured by the agent (`youtube shorts` dead, then alive after `force-stop`).
@@ -445,7 +449,11 @@ below is recorded in its own ADR.
   Rule taken from it: **a checklist line predicting a specific visible rendering is a hypothesis until
   it has been run once, and must be written in that tone.**
   **Residual limitations from the `CODE-GREEN` close, carried forward unchanged:**
-  **(1) `ToolMatchPlanner` resolves an argument named `app` regardless of `required`** (R14-37). A
+  **(1) `ToolMatchPlanner` resolves an argument named `app` regardless of `required`** (R14-37).
+  **Closed in code by A4′ phase 0** (`CODE-GREEN` 2026-09-26): `ToolArgumentSorts` declares which
+  argument carries an app, and the planner reads `required`; what stays is that the step-line
+  *rendering* in `:feature:launcher` still keys on the literal `"app"`/`"app_label"` (→ A4′ phase 3).
+  The text below is the record of the defect as it stood. A
   future descriptor declaring `app` as **optional** (e.g. `share_to(app, text)`) gets `raw = ""` →
   `resolve("")` → `null` → **`NoPlan` for every goal, forever, with the suite green** — the block's own
   failure mode (a tool registered and dead) recurring for the next author. R14-35 closed the opposite
@@ -488,6 +496,12 @@ below is recorded in its own ADR.
   all** is worth keeping: `ToolVocabulary.matchIn` flattens `prefixByLocale`/`suffixByLocale` across
   locales, so **trigger matching is locale-blind** — the `tr` forms were exercised from a `ru-RU`
   device, and a locale switch is needed only to read rendered *strings*.
+  **That zero is about TRIGGERS, not strings.** A4′ phase 0 (2026-09-26) shipped **six `tr` strings
+  nobody has judged**: «değişiklik yok», «sisteme aktarıldı», «sizi bekliyor», «Plan tamamlandı —
+  sonuç sistemde» and its body, «Sürüm %1$s». Two carry a concrete doubt — the handed-off title opens
+  with the `tr` **whole-success** title (proposed «Plan bitti — sonuç sistemde»), and «Sürüm» reads as
+  version/release where `en`/`ru` say Build/Сборка (proposed «Derleme»). Owner item, listed in
+  `§HANDOFF` («Фаза 0 A4′»).
   **(5) the `ToolWorker` holder list is still keyed on FILES, not on the registry.** Phase 0 moved
   *permission* totality onto the registry; the holder floor in `ToolWorkerCallSiteGuardTest` and the
   `ToolId`-keyed floors in `DoctrineGuardTest` / `Tier0IntentToolSourceTest` did not move. **The measured
@@ -569,7 +583,11 @@ below is recorded in its own ADR.
   (`Ready`/`Partial`, OQ#4), boot warmup after a physical reboot.
 - **A0 engine, named gaps (ADR «2026-08-22 — Этап 4 (A0)»):** no **wall-clock** budget —
   `RuntimeBudget` bounds steps and consecutive failures only, and the domain is deliberately clock-free,
-  so a hanging tool is bounded by nothing (A4′); a persisted `Failed` observation **loses its
+  so a hanging tool is bounded by nothing (A4′) — **narrowed, not closed, by A4′ phase 0**:
+  `RuntimeBudget.maxStepWallClockMs` (10 s, `withTimeout` at the one call site) cuts a *suspending*
+  hang, but the cut is cooperative and every shipped world call blocks — see `§HANDOFF` («Фаза 0
+  A4′», question 1) for the two shapes and what each records (owner question R14); a persisted
+  `Failed` observation **loses its
   `CommandFailure` variant** and restores as `Generic`, so a resumed session reports a less specific
   failure than the one that occurred; **a resumed plan never re-checks its preconditions against the
   world** — `resumed()` continues from the persisted cursor, so an observation taken before the pause is
@@ -663,14 +681,18 @@ below is recorded in its own ADR.
   plus `:core:ui:verifyRoborazziDebug` whenever `core/ui` is touched, and `:app:assembleRelease` for
   release-affecting work. **`:domain:jvmTest` and `:consumer:jvm:test` must be listed explicitly:**
   `testDebugUnitTest` has not reached `:domain` since it went KMP, and it never reaches `:consumer:jvm`
-  at all. **Baseline at 2026-09-20 (Этап 6 Трек 1, the B15 harness): 1440 tests, 0 failures, 0 errors**,
-  from a run printing `557 actionable tasks: 557 executed` with
-  `build/test-results` cleared first — `:domain:jvmTest` **440** + `:consumer:jvm` **56** +
-  `:data:repository` **376** + `:feature:launcher` **194** + `:app` **59** + the other eight modules
-  **315** (`core/ui` 128, `data/ai-cloud` 32, `data/prayer` 38, `feature/assistant` 38,
-  `feature/settings` 33, `feature/prayer` 19, `feature/permission_education` 15, `core/android` 12).
-  **Compare a fresh gate against 1440** — not against 1439, not against 1438, not against 1375, not
-  against 1314, and not against any number quoted in the A1′ ADR. The single test added since the
+  at all. **Baseline at 2026-09-26 (A4′ phase 0, measured at `be07399`): 1463 tests, 0 failures, 0
+  errors**, from a run printing `557 actionable tasks: 557 executed` with
+  `build/test-results` cleared first — `:domain:jvmTest` **445** + `:consumer:jvm` **57** +
+  `:data:repository` **384** + `:feature:launcher` **200** + `:app` **61** + the other eight modules
+  **316** (`core/ui` 128, `data/ai-cloud` 32, `data/prayer` 38, `feature/assistant` 38,
+  `feature/settings` 34, `feature/prayer` 19, `feature/permission_education` 15, `core/android` 12).
+  `tools/gate.sh` carries the same number as its floor (`BASELINE_TESTS`).
+  **Compare a fresh gate against 1463** — not against 1440, not against 1439, not against 1438, not
+  against 1375, not against 1314, and not against any number quoted in the A1′ ADR. A4′ phase 0 took
+  it **1440 → 1463** (+23: `:domain` +5, `:consumer:jvm` +1, `:data:repository` +8,
+  `:feature:launcher` +6, `:app` +2, `feature/settings` +1). The 1440 before it was Этап
+  6 Трек 1: the single test added since the
   A1″ phase-3b boundary (**1439**) is `SelectionDeclineMeasurement` in `:data:repository` (375 → 376) —
   the `B15` measurement harness, **not a guard**: with its git-ignored inputs absent it prints
   `B15 :: SKIPPED` and passes, so a fresh clone stays green. The single test phase 3b itself added was
@@ -702,10 +724,15 @@ below is recorded in its own ADR.
   configuration per invocation, and a mutation-heavy block pays that ten or more times. What makes
   it safe is two flags, not the daemon: this repo sets `org.gradle.caching=true`, and the daemon
   keeps a watched file-system state between builds, so a run that passed neither could be served a
-  test task's pre-change XML `FROM-CACHE`. A **boundary** run passes `--rerun-tasks`, so every task
-  executes; a **scoped** run of `tools/gate.sh` (lands in A4′ phase 0, Task 1 — until then it does
-  not exist) passes `--no-build-cache --no-watch-fs`, reads from Gradle's log how **each named task**
-  ran, and fails as `SCOPED NOT RUN` when a named test task did not execute. An earlier version of
+  test task's pre-change XML `FROM-CACHE`. **`tools/gate.sh` runs the gate** (since A4′ phase 0, Task
+  1) in two modes whose labels differ on purpose: the **boundary** run (no arguments; it refuses a task
+  list) clears every module's `build/test-results`, passes `--rerun-tasks` so every task executes,
+  counts from the JUnit XML and says `GATE GREEN` only with zero failures/errors **and** a total at or
+  above its floor; a **scoped** run
+  (`--scoped :module:task …`, for a TDD step or a mutation) clears and counts the named modules only,
+  passes `--no-build-cache --no-watch-fs`, reads from Gradle's log how **each named task**
+  ran, fails as `SCOPED NOT RUN` when a named test task did not execute, prints each failing test as a
+  `FAILED ::` line, and labels itself `SCOPED GREEN … — NOT a boundary gate`. An earlier version of
   this line said a scoped run "warns when zero tasks executed": Gradle 9.5.0 never prints a zero
   count, so that warning could not fire (plan §0.6, finding 3).
 - **Never pipe `gradlew` through `tail`** — that masked a red gate as exit 0 on 2026-07-13. Check the

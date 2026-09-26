@@ -5,7 +5,18 @@
 > checkbox (`- [ ]`) syntax for tracking.
 
 > **Status: written and reviewed 2026-09-22; corrected on the review's findings and committed
-> 2026-09-25 (`0fe16b1`); reviewed a second time and corrected again 2026-09-25 (§0.6). Not started.** Branch `launcher--7`, base `074e4ce`, gate baseline **1440 / 0 / 0**.
+> 2026-09-25 (`0fe16b1`); reviewed a second time and corrected again 2026-09-25 (§0.6).** Branch `launcher--7`, base `074e4ce`, gate baseline **1440 / 0 / 0**.
+>
+> **Executed: `CODE-GREEN` at 1463 / 0 / 0, closed 2026-09-26** (commits `b475111`…`be07399`; boundary
+> gate at `be07399`, 557 executed, cleared tree). **1463, not the 1462 Task 10 predicts below** — the
+> final review added one test (a third `Completed` branch, controller ruling R17); the body of this
+> plan is left as it was written. No device round, by design. What execution found in this plan, the
+> owner questions and the carry list: `§HANDOFF` of
+> [the track plan](2026-08-18-agentic-track-restart.md), subsection «Фаза 0 A4′». **One claim the body
+> repeats is false** (§0.2's `AgentSessionSurfaceProvenanceTest` bullet, Task 6, Task 10 step 5): D2
+> does not change a rendering the owner accepted on 2026-08-22. The owner accepted the step
+> **subjects**, which are unchanged; the state words were added on 2026-08-23 (`a7f4755`, `CODE-GREEN`,
+> device re-check still open). The `§HANDOFF` says it correctly.
 > Spec: [§3 (0.0…0.4), §4, §9, §10 of
 > 2026-09-21-a4-runtime-design.md](../specs/2026-09-21-a4-runtime-design.md) — the block's governing
 > document, `ПОЛНА`, §0–§11 owner-approved 2026-09-21. Template: [A1″ phase

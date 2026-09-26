@@ -1,6 +1,7 @@
 package com.sidr.launcher.di
 
 import android.content.Context
+import com.sidr.launcher.core.common.di.IoDispatcher
 import com.sidr.launcher.data.repository.agent.APP_PACKAGE_NAME
 import com.sidr.launcher.data.repository.agent.ContextIntentLauncher
 import com.sidr.launcher.data.repository.agent.ContextPermissionPresence
@@ -49,6 +50,7 @@ import dagger.hilt.components.SingletonComponent
 import java.util.UUID
 import javax.inject.Named
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineDispatcher
 
 /**
  * Wires the A0 agentic spike into the graph (Task 11): the two ports the engine talks to, the
@@ -267,10 +269,14 @@ object AgentProvidesModule {
     fun provideAgentExecutor(
         registry: ToolRegistry,
         toolExecutor: ToolExecutor,
+        @IoDispatcher ioDispatcher: CoroutineDispatcher,
     ): AgentExecutor = AgentExecutor(
         registry = registry,
         toolExecutor = toolExecutor,
         budget = RuntimeBudget.Default,
+        // A4′ phase 2 (F2-1): world calls leave the thread that drives the engine — on Android the
+        // main thread — so a parked binder call holds a pool thread and the budget can still fire.
+        worldContext = ioDispatcher,
     )
 
     @Provides

@@ -22,6 +22,8 @@ import com.sidr.launcher.domain.tool.ToolFederation
 import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.trace.TraceEvent
 import java.nio.file.Path
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 
 /**
  * The second consumer's driver: a console harness, not a product and not a UI.
@@ -50,6 +52,13 @@ class ConsoleHarness(
     root: Path,
     private val out: (String) -> Unit,
     private val ask: () -> String?,
+    /**
+     * Where the sandbox's file calls run (A4′ phase 2, F2-1). `Main.kt` passes `Dispatchers.IO`; the
+     * default keeps them on the caller's dispatcher, which is what the tests driving this harness under
+     * `runTest` need (plan §0.2, probe 3). That leaves `Main.kt`'s one line the only unproven wiring
+     * here — named, not tested.
+     */
+    worldContext: CoroutineContext = EmptyCoroutineContext,
 ) {
     // This consumer reaches the world through one federation, same as the plan's Task 4 Step 2 shape
     // pulled forward by one task: SandboxToolWorker is that federation's registered worker for the
@@ -60,7 +69,7 @@ class ConsoleHarness(
     )
     private val registry = federation.registry
     private val store = JvmAgentSessionStore(root.resolve(".sidr-agent/session.json"))
-    private val executor = AgentExecutor(registry, federation.executor)
+    private val executor = AgentExecutor(registry, federation.executor, worldContext = worldContext)
 
     // Named `runner`, not `run`: this class already has a `run` member, and `kotlin.run { }` is used
     // nowhere here precisely so no reader has to work out which `run` a call resolves to.

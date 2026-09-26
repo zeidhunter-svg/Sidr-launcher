@@ -16,9 +16,12 @@ import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.trace.ExecutionTrace
 import com.sidr.launcher.domain.trace.TraceEvent
+import java.util.concurrent.CountDownLatch
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -357,6 +360,78 @@ class AgentExecutorTest {
     @Test
     fun `the shipped budget bounds a step by wall-clock time`() {
         assertEquals(10_000L, RuntimeBudget.Default.maxStepWallClockMs)
+    }
+
+    /**
+     * R14, closed by owner fork F2-1 (plan §0.1). A call parked in NON-suspending code — the shape of
+     * every binder call Android makes — is interrupted by neither `withTimeout` nor
+     * `runInterruptible` (plan §0.2, probe 2: an uninterruptible block waited out its full time under
+     * both). What the budget CAN do is stop waiting for it, and that is what this pins: the engine is
+     * back at exactly the budget in virtual time while the worker thread is still parked.
+     *
+     * The JUnit timeout is what makes the mutation that puts the call back on the caller's thread
+     * (M1a) FAIL instead of hang: the latch then parks the test's own thread, and only JUnit can end it.
+     */
+    @Test(timeout = 20_000)
+    fun `a call blocked outside any suspension point is abandoned at the budget, not waited for`() = runTest {
+        val release = CountDownLatch(1)
+        val parked = object : ToolExecutor {
+            override suspend fun invoke(invocation: ResolvedInvocation): ToolResult {
+                release.await()
+                return notInstalled("вельтрикс")
+            }
+        }
+        try {
+            val executor = AgentExecutor(
+                registry,
+                parked,
+                RuntimeBudget(maxSteps = 8, maxConsecutiveFailures = 2, maxStepWallClockMs = 1_000),
+                worldContext = Dispatchers.IO,
+            )
+
+            val after = executor.advance(session("вельтрикс"))
+
+            assertEquals(ToolResult.HandedOff(), after.observations[0])
+            assertEquals(1_000L, currentTime)
+        } finally {
+            release.countDown()
+        }
+    }
+
+    /**
+     * Owner fork F2-1b. A call the engine stopped waiting for may still be acting, so the plan does not
+     * start another: two world calls in flight at once would break the order the plan promised. The
+     * two steps below do not depend on each other — the only shape in which the second could run at
+     * all — and the second must never be called.
+     */
+    @Test
+    fun `a step cut by the clock ends the plan, so no second call starts while the first may still act`() = runTest {
+        val calls = mutableListOf<ToolId>()
+        val firstHangs = object : ToolExecutor {
+            override suspend fun invoke(invocation: ResolvedInvocation): ToolResult {
+                calls += invocation.id
+                if (calls.size == 1) delay(Long.MAX_VALUE / 2)
+                return ToolResult.Effected()
+            }
+        }
+        val independent = ExecutionPlan(
+            listOf(
+                planForMissingApp("вельтрикс").steps[0],
+                planForMissingApp("лумора").steps[0].copy(index = 1),
+            ),
+        )
+        val executor = AgentExecutor(
+            registry,
+            firstHangs,
+            RuntimeBudget(maxSteps = 8, maxConsecutiveFailures = 2, maxStepWallClockMs = 1_000),
+        )
+
+        var current = executor.advance(session("вельтрикс").copy(plan = independent))
+        current = executor.advance(current)
+
+        assertEquals(ExecutionState.Blocked, current.state)
+        assertEquals(listOf(ToolIds.LAUNCH_APP), calls)
+        assertEquals(TraceEvent.SessionEnded(ExecutionState.Blocked), current.trace.events.last())
     }
 
     // --- Fix round 1 regression + coverage tests -----------------------------------------------

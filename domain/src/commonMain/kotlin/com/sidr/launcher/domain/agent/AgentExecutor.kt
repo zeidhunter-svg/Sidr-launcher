@@ -11,8 +11,15 @@ import com.sidr.launcher.domain.tool.ToolExecutor
 import com.sidr.launcher.domain.tool.ToolRegistry
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.trace.TraceEvent
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withTimeout
 
 /**
@@ -58,6 +65,15 @@ class AgentExecutor(
     private val registry: ToolRegistry,
     private val toolExecutor: ToolExecutor,
     private val budget: RuntimeBudget = RuntimeBudget.Default,
+    /**
+     * Where the one call to the world runs (A4′ phase 2, owner fork F2-1). Production passes an IO
+     * dispatcher — `:app` its `@IoDispatcher`, `:consumer:jvm` `Dispatchers.IO` in `Main.kt` — so a
+     * call parked in native code holds a pool thread, not the thread driving the engine (on Android,
+     * the main thread). The default keeps the call on the caller's dispatcher, and every test that
+     * drives this engine under `runTest` needs exactly that: there, a call on a real dispatcher loses
+     * to virtual time and is cut at once (plan §0.2, probe 3).
+     */
+    private val worldContext: CoroutineContext = EmptyCoroutineContext,
 ) {
 
     /** One full transition: decide the next step, then (if one was cleared to run) perform it. */
@@ -222,22 +238,37 @@ class AgentExecutor(
         //
         // It is below the checkpoint by construction, and ToolExecutorCallSiteGuardTest fails the build
         // if a second call site ever appears.
+        //
+        // A4′ phase 2 (owner fork F2-1, R14): the call runs in its OWN scope on [worldContext], and
+        // the engine waits for it only until the budget. A call parked in non-suspending code — every
+        // binder call Android makes, every JVM file operation — can be interrupted by nothing
+        // (measured, plan §0.2 probe 2); it can only stop being waited for. `withTimeout` around a call
+        // in the caller's own context did neither: it sat out the whole block and then kept or
+        // discarded the result depending on the call's shape.
+        val call = CoroutineScope(currentCoroutineContext().minusKey(Job) + worldContext + SupervisorJob())
+            .async { toolExecutor.invoke(resolved) }
+        var cut = false
         val result = try {
-            withTimeout(budget.maxStepWallClockMs) { toolExecutor.invoke(resolved) }
+            withTimeout(budget.maxStepWallClockMs) { call.await() }
         } catch (e: TimeoutCancellationException) {
             // FIRST, and the order IS the behaviour: TimeoutCancellationException IS a
             // CancellationException, so placing this after the rethrow below would send the timeout
             // up as parent cancellation and kill the session instead of bounding the step.
             //
             // `HandedOff` rather than `Failed`, for the same reason `uninstall_app` reports it: the
-            // call was made and we stopped waiting. The side effect may have happened. `Failed`
-            // would claim knowledge in the other direction, and the whole point of the fourth value
-            // is that this engine stops claiming outcomes it cannot see.
+            // call was made and we stopped waiting. The side effect may have happened — for a parked
+            // call it may still happen after this line — and `Failed` would claim knowledge in the
+            // other direction.
+            cut = true
             ToolResult.HandedOff()
         } catch (e: CancellationException) {
             throw e // never swallow parent cancellation
         } catch (e: Exception) {
             ToolResult.Failed(CommandFailure.Generic)
+        } finally {
+            // A no-op for a call that finished. For one we stopped waiting for: a suspending call
+            // stops here; a parked one runs to its end on its own thread and its result is dropped.
+            call.cancel()
         }
 
         val observed = session
@@ -247,10 +278,13 @@ class AgentExecutor(
                 observations = session.observations + (invoked.index to result),
             )
 
-        return if (result is ToolResult.Failed && observed.trailingFailures() >= budget.maxConsecutiveFailures) {
-            observed.ended(ExecutionState.Failed)
-        } else {
-            observed
+        return when {
+            // Owner fork F2-1b: a cut call may still be acting. Starting another world call now would
+            // put two in flight and break the order the plan promised, so the plan stops here.
+            cut -> observed.ended(ExecutionState.Blocked)
+            result is ToolResult.Failed && observed.trailingFailures() >= budget.maxConsecutiveFailures ->
+                observed.ended(ExecutionState.Failed)
+            else -> observed
         }
     }
 

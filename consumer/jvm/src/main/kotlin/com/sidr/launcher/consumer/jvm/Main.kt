@@ -1,5 +1,6 @@
 package com.sidr.launcher.consumer.jvm
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Paths
 
@@ -22,7 +23,7 @@ fun main(args: Array<String>) {
     val goal = args.drop(1).joinToString(" ")
 
     val state = runBlocking {
-        ConsoleHarness(root = root, out = ::println, ask = ::readlnOrNull).run(goal)
+        ConsoleHarness(root = root, out = ::println, ask = ::readlnOrNull, worldContext = Dispatchers.IO).run(goal)
     }
     println("Final state: $state")
 }

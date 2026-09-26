@@ -28,36 +28,19 @@ data class ConsentCheckpoint(val stepIndex: Int, val reason: ConsentReason)
  * dispatcher's clock, which `runTest` makes virtual, so the domain stays clock-free in the sense
  * that mattered — nothing here calls `System.currentTimeMillis()` and no test depends on real time.
  *
- * **The cut is COOPERATIVE, not preemptive — say this plainly, because "closed" would overclaim
- * it.** `withTimeout` cancels only at a *cancellable suspension point* inside the block; it interrupts
- * a tool suspended on `delay`, a future network call, or a future MCP call — the shape
- * `AgentExecutorTest`'s wall-clock tests model. A tool blocked in **non-suspending** code is not
- * interrupted, and the budget only bounds it once it returns. Every shipped call that leaves the
- * launcher is a blocking call of that kind today, and so is the `:consumer:jvm` sandbox — so a
- * `set_timer` whose binder call hangs, or a sandbox file read stuck on I/O, is bounded by nothing
- * today. They come in two shapes, and the shapes differ in what a call that returns **after** the
- * deadline records. Both consequences below are **by reading** kotlinx.coroutines' semantics, not
- * measured:
- *  - **purely synchronous** — `ContextIntentLauncher.launch` calls `startActivity` in a plain `fun`
- *    (every Tier-0 tool), `ShortcutToolWorker` calls `startShortcut` the same way, and
- *    `SandboxToolWorker.invoke` does its file I/O on the caller's thread with no `withContext` at all.
- *    The block never suspends, and `withTimeout` hands back a value such a block returns even once
- *    the deadline has passed: the call keeps its **real** result, not [ToolResult.HandedOff];
- *  - **a blocking body inside `withContext(ioDispatcher)`** — `SystemIntentToolWorker` reaches the
- *    world this way twice: `InstalledAppsRepositoryImpl.getInstalledApps` (the `PackageManager`
- *    query every `launch_app` makes) and `AndroidActionExecutor.execute` (the `startActivity` of
- *    `launch_app` and `play_store_search`). `withContext` runs the body as a child coroutine of the
- *    timeout's scope; past the deadline that child is cancelled, the body still runs to its end, and
- *    when it returns its value is **discarded** — the child completes cancelled, and the engine
- *    records [ToolResult.HandedOff]. So a real `Observed(APP_NOT_INSTALLED)` from a `launch_app`
- *    whose app query outlived the deadline would be recorded `HandedOff`, and A0's store step, whose
- *    precondition asks for exactly that observation, would be skipped.
+ * **Since A4′ phase 2 the cut is the engine's, not the tool's** (owner fork F2-1, R14 closed).
+ * `AgentExecutor` runs the one world call in its own scope on an injected context and waits only until
+ * this budget; then it records [ToolResult.HandedOff] and ends the plan `Blocked` (fork F2-1b — a
+ * call it stopped waiting for may still be acting, so no second call starts). Measured on JVM before
+ * the choice (plan §0.2, probe 2): with a 2 000 ms block and a 300 ms budget, an interruptible and an
+ * uninterruptible block both came back at ~300 ms under this scheme; under the previous
+ * `withTimeout`-only shape both took the full 2 000 ms, and `runInterruptible` cut only the
+ * interruptible one. Binder calls were not measured — the phone was off-limits — and are, by
+ * reading, of the uninterruptible kind.
  *
- * In neither shape is the wait itself shortened. The A0 debt ("a hanging tool is bounded by nothing")
- * is therefore **narrowed, not closed**: closed for a suspending hang, latent for a synchronous one.
- * Extending interruption to synchronous world calls (a dedicated thread plus
- * `Thread.interrupt`/cancellation, or a cooperative check inside each worker) is an owner question at
- * phase close (controller ruling R14), not decided by this task.
+ * **What it still does not do, named:** it does not STOP the call. A parked call runs on in the
+ * background and may complete its act after `HandedOff` is recorded; that is exactly what
+ * `HandedOff` says. It bounds how long the ENGINE waits, not how long the world takes.
  *
  * The default is an order of magnitude above the slowest path measured on the SM-A325F: the A0 ADR
  * (`ai-context/decisions.md`, the Task 15 device-acceptance section) measured the `launch_app`

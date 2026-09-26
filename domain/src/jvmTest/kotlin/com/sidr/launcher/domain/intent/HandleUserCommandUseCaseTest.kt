@@ -68,6 +68,9 @@ class HandleUserCommandUseCaseTest {
         val action = fakeExecutor.executedActions.single()
         assertTrue(action is ExecutableAction.LaunchAppAction)
         assertEquals("org.telegram.messenger", (action as ExecutableAction.LaunchAppAction).packageName)
+        // A4′ phase 1 resolves a claimed launch before the gate and reuses that read after it: the
+        // installed apps are read exactly once, not once per side of the gate.
+        assertEquals(1, fakeRepo.callCount)
     }
 
     @Test fun `high-confidence search executes via executor`() = runTest(testDispatcher) {
@@ -130,6 +133,8 @@ class HandleUserCommandUseCaseTest {
         assertTrue(outcome is CommandOutcome.Suggest)
         assertEquals(0.60f, (outcome as CommandOutcome.Suggest).confidence)
         assertEquals(0, fakeExecutor.callCount)
+        // Below the auto-execute threshold a launch is never resolved: no installed-apps read at all.
+        assertEquals(0, fakeRepo.callCount)
     }
 
     @Test fun `confidence exactly at suggest threshold suggests, not low`() = runTest(testDispatcher) {

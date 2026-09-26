@@ -85,6 +85,7 @@ import com.sidr.launcher.domain.intent.ExecuteActionUseCase
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.intent.LauncherIntent
+import com.sidr.launcher.domain.intent.SearchTarget
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.permission.PermissionFeature
 import com.sidr.launcher.domain.prayer.CalculationMethodId
@@ -1875,27 +1876,88 @@ class LauncherViewModelTest {
         assertTrue(results.chips.isEmpty())
     }
 
-    // ── Chip dispatch through the unchanged pipeline (AIL-3, Task 5) ───────
+    // ── Chip dispatch (AIL-3, Task 5) ──────────────────────────────────────
+    // A4′ phase 1: the WEB chip is an explicit destination, so it dispatches the act itself
+    // (ExecuteActionUseCase, the path confirm() uses) and never asks the IntentMatcher — which since
+    // phase 1 withdraws a search whose query carries a second goal, and would refuse the user's own
+    // choice. The SITE chip still submits through the command pipeline.
 
     @Test
-    fun `web chip routes a search command through the unchanged pipeline`() = runTest(testDispatcher) {
+    fun `web chip opens a web search for the buffer without consulting the matcher`() = runTest(testDispatcher) {
         val vm = buildViewModel()
         advanceUntilIdle()
         vm.onCommandChanged("cats")
         vm.submitWebSearch("cats")
         advanceUntilIdle()
-        // FakeIntentMatcher records the normalized command text it was asked to match.
-        assertEquals("search cats", fakeMatcher.receivedInputs.last())
+        assertEquals(
+            listOf(ExecutableAction.OpenSearchAction(query = "cats", target = SearchTarget.WEB)),
+            fakeExecutor.executedActions,
+        )
+        assertEquals(emptyList<String>(), fakeMatcher.receivedInputs)
+        // Executed → applyOutcome clears the buffer, exactly as a confirmed or typed search does.
+        assertEquals("", vm.commandInput.value)
     }
 
     @Test
-    fun `web chip does not double-prefix an already-search-prefixed buffer`() = runTest(testDispatcher) {
+    fun `web chip drops a leading search verb instead of searching for it`() = runTest(testDispatcher) {
         val vm = buildViewModel()
         advanceUntilIdle()
         vm.submitWebSearch("search cats")
         advanceUntilIdle()
-        assertEquals("search cats", fakeMatcher.receivedInputs.last())
+        assertEquals(
+            listOf(ExecutableAction.OpenSearchAction(query = "cats", target = SearchTarget.WEB)),
+            fakeExecutor.executedActions,
+        )
+        assertEquals(emptyList<String>(), fakeMatcher.receivedInputs)
     }
+
+    @Test
+    fun `web chip opens a web search for a buffer carrying a second goal`() = runTest(testDispatcher) {
+        // The shape FastPath's search arm withdraws since A4′ phase 1 («… и закажи такси»). Tapping WEB
+        // is the user choosing the browser for exactly this text, so it is searched as it stands.
+        val buffer = "билеты в корванск и закажи такси"
+        val vm = buildViewModel()
+        advanceUntilIdle()
+        vm.onCommandChanged(buffer)
+        vm.submitWebSearch(buffer)
+        advanceUntilIdle()
+        assertEquals(
+            listOf(ExecutableAction.OpenSearchAction(query = buffer, target = SearchTarget.WEB)),
+            fakeExecutor.executedActions,
+        )
+        assertEquals(emptyList<String>(), fakeMatcher.receivedInputs)
+    }
+
+    @Test
+    fun `web chip after an ambiguous submit drops the learning token so a later tap does not record`() =
+        runTest(testDispatcher) {
+            // Parity with the pre-phase-1 chip, which was a fresh submit and so always replaced the
+            // pending token. The chip no longer submits; without its own drop, the token armed by the
+            // ambiguity below would survive the search and a later grid tap on a former candidate
+            // would be recorded as the user's answer to an ambiguity they walked away from.
+            fakeRepo.appsToReturn = listOf(
+                InstalledApp("com.a", "Maps"),
+                InstalledApp("com.b", "Maps"),
+            )
+            fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent("maps")
+            fakeMatcher.confidenceToReturn = 0.90f
+            val vm = buildViewModel()
+
+            vm.onCommandSubmitted("open maps")
+            advanceUntilIdle()
+            assertTrue(vm.commandFeedback.value is CommandFeedback.Ambiguous)
+
+            // The fake answers every text alike; reset it so no matcher answer can re-arm the token —
+            // only the chip's own handling decides what happens to it.
+            fakeMatcher.reset()
+            vm.submitWebSearch("open maps")
+            advanceUntilIdle()
+
+            vm.onAppClicked(InstalledApp("com.a", "Maps"))
+            advanceUntilIdle()
+
+            assertEquals(emptyList<ResolutionPreference>(), fakeResolutionStore.observeAll().first())
+        }
 
     @Test
     fun `site chip submits the raw url through the unchanged pipeline`() = runTest(testDispatcher) {

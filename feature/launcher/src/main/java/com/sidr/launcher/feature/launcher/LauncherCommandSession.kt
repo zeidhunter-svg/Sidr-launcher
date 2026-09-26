@@ -211,15 +211,44 @@ internal class LauncherCommandSession(
     }
 
     /**
-     * Web-search route chip (AIL-3): prefix the buffer with the `search` verb and route it through the
-     * UNCHANGED command pipeline (AIL-2 web search, already history-redacted). No new executor path.
+     * Web-search route chip (AIL-3): the user has chosen the destination, so the chip dispatches the
+     * act — [LauncherAction.WebSearch] through [ExecuteActionUseCase], the path [confirm] already uses,
+     * with the same [applyOutcome] handling and the same dev-console line. No new executor path.
+     *
+     * **Why it no longer goes through the command pipeline** (A4′ phase 1). It used to prefix the buffer
+     * with `search` and [submit] it, so FastPath re-scored the user's choice as if it were a typed
+     * command — and since phase 1 FastPath's search arm withdraws a query that carries a second goal
+     * (`SecondGoal`, «… и закажи такси») to `LowConfidence`. An explicit destination must not be
+     * re-scored: the chip would refuse exactly the text a user reaches for it with, and with a provider
+     * configured that text would go to the cloud model instead of the browser the user picked. So the
+     * chip never consults the `IntentMatcher`. It therefore also records no `intent_match` SEARCH row
+     * any more — a row whose text was redacted anyway (`IntentMatchMapper`).
+     *
+     * A buffer that already starts with the `search` verb drops it rather than searching for the word
+     * ("search cats" searches "cats"), as the old prefix de-duplication did.
      */
     fun submitWebSearch(query: String) {
         val q = query.trim()
         if (q.isEmpty()) return
-        // Avoid "search search x" when the buffer already carries the search verb.
-        val command = if (q.lowercase(Locale.ROOT).startsWith("search ")) q else "search $q"
-        submit(command)
+        val searchQuery = if (q.lowercase(Locale.ROOT).startsWith(SEARCH_VERB_PREFIX)) {
+            q.substring(SEARCH_VERB_PREFIX.length).trim()
+        } else {
+            q
+        }
+        if (searchQuery.isEmpty()) return
+        // A web search answers no app ambiguity. The chip used to be a fresh submit, which always
+        // replaced the pending learning token; now that it is not, it drops the token itself — or a
+        // later grid tap on a former candidate would be recorded as the answer to an ambiguity the
+        // user walked away from (the same misrecord [onChanged] guards against).
+        appLaunch.rememberLearningToken(null)
+        val action = LauncherAction.WebSearch(searchQuery)
+        scope.launch {
+            val outcome = executeAction.execute(action)
+            applyOutcome(outcome)
+            if (devConsole.consoleOn.value) {
+                devConsole.append(commandLineFor(action), outcomeSummary(outcome))
+            }
+        }
     }
 
     /**
@@ -383,6 +412,8 @@ internal class LauncherCommandSession(
         // AIL-5: the bracketed risk tag on the confirm card. MVP produces a card only for CONFIRM-risk
         // (or unregistered) proposals; DANGEROUS is reserved for Stage 3.
         const val RISK_CONFIRM_LABEL = "CONFIRM"
+        // The WEB chip's de-duplication: a buffer already led by the search verb is not searched for it.
+        const val SEARCH_VERB_PREFIX = "search "
         // SavedStateHandle key for the typed command text (H3 process-death restoration).
         const val KEY_COMMAND_INPUT = "command_input"
     }

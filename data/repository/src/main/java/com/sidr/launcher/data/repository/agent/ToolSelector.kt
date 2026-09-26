@@ -68,15 +68,20 @@ import javax.inject.Inject
  *     **Why not strip a launch verb instead** (reusing `RuleBasedIntentMatcher.LAUNCH_VERBS`, stripping a
  *     leading/trailing verb before matching) **— considered and rejected on evidence, not on cost; the
  *     evidence was narrowed by A4′ phase 1 and the question is open again.** Until that phase,
- *     `RuleBasedIntentMatcher` returned `LaunchAppIntent` for every verb-led command at 0.90 — above the
- *     0.85 auto-execute threshold — so FastPath always *decided* it and it never reached step 2b. Since
- *     phase 1 a verb-led command whose app name does not resolve comes back `LowConfidence` —
- *     undecided — when the name carries a second goal (`SecondGoal`: "открой gmail и проверь почту"),
- *     and so it DOES reach this selector. It still selects nothing here: no authored trigger begins
- *     with a FastPath verb (`ToolVocabularyReachabilityTest`), and rule 4 would need "открой"/"open" to
- *     be a name or qualifier token of a shortcut. Whether stripping the verb would now convert such
- *     commands is a scope question for phase 3 and the owner — spec §11 lists replacing `ToolSelector`
- *     as a non-goal of A4′ — not a decision this rule takes on its own.
+ *     `RuleBasedIntentMatcher` returned `LaunchAppIntent` at 0.90 — above the 0.85 auto-execute
+ *     threshold — for every command carrying a launch verb where FastPath claims it (first in `en`/`ru`,
+ *     last in `tr`: "открой telegram new message", "… aç"), so FastPath always *decided* it and it never
+ *     reached step 2b. Since phase 1 a command FastPath claimed by its verb comes back `LowConfidence` —
+ *     undecided — when the rest of it carries a second goal (`SecondGoal`): the launch arm when the app
+ *     name does not resolve ("открой gmail и проверь почту") and the search arm («найди … и закажи
+ *     такси») alike, and so it DOES reach this selector. It still selects nothing through that verb: the
+ *     text still carries the FastPath verb where FastPath claims it (first in `en`/`ru`, last in `tr`),
+ *     `ToolVocabulary`'s matching anchors a trigger at the start or the end of the text, no authored
+ *     trigger begins with an `en`/`ru` FastPath verb or ends with a `tr` one
+ *     (`ToolVocabularyReachabilityTest`), and rule 4 would need the verb («открой», "open", «найди»,
+ *     "aç", …) to be a name or qualifier token of a shortcut. Whether stripping the verb would now
+ *     convert such commands is a scope question for phase 3 and the owner — spec §11 lists replacing
+ *     `ToolSelector` as a non-goal of A4′ — not a decision this rule takes on its own.
  *
  * **What "naming its app" and "naming itself" actually require.** The app-qualifier check is a loose,
  * order-free membership test: any one word of the qualifier appearing anywhere in the command is enough.
@@ -99,9 +104,9 @@ import javax.inject.Inject
  * **Rule 4 has its own recall cost, real since Task 10b and not merely theoretical.** Any function
  * word in the command that is neither a name token nor a qualifier token kills an otherwise-good
  * match: `"new chat in whatsapp"` declines because of `"in"`; `"новое сообщение в телеграм"` declines
- * because of `"в"`. Both are verbless, so unlike the verb-led case above — which reaches this selector
- * only since A4′ phase 1, and only when its app name carries a second goal — these reach step 2b
- * routinely and are declined here. The trade is deliberate: a
+ * because of `"в"`. Both are verbless, so unlike the FastPath-verb case above — which reaches this
+ * selector only since A4′ phase 1, and only when the rest of the command carries a second goal — these
+ * reach step 2b routinely and are declined here. The trade is deliberate: a
  * decline is free and falls through to the model planner exactly as any other miss, while a false
  * positive fires an effect. Closing this would need a per-locale stopword set — a scope decision for
  * the owner, not one this rule takes on its own.

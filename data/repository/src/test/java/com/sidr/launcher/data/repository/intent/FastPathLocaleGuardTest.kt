@@ -56,7 +56,10 @@ class FastPathLocaleGuardTest {
      * definition, so every such verb is either one [SecondGoal] recognises on its side of a
      * conjunction (`en`/`ru` prefix verbs after it, `tr` suffix verbs before it) or is exempted HERE,
      * by name and with its reason. Adding a FastPath verb therefore forces a decision instead of
-     * leaving a silent hole; and an exempted verb that crept back into the list is red too.
+     * leaving a silent hole; and an exempted verb that crept back into the list is red too. A
+     * multi-word entry in any of [SecondGoal]'s three lists is red as well: `carriedBy` compares single
+     * space-split tokens, so "fixing" a multi-word FastPath verb ("look up") by adding it verbatim
+     * would turn this guard green while the verb stayed dead — the very hole it exists to forbid.
      */
     @Test fun every_fastpath_verb_is_a_second_goal_verb_or_named_as_an_exemption() {
         val exempt = mapOf(
@@ -78,5 +81,15 @@ class FastPathLocaleGuardTest {
         assertTrue("FastPath verbs SecondGoal neither knows nor exempts: $missing", missing.isEmpty())
         val readmitted = exempt.keys.filter { it in after || it in before }
         assertTrue("exempted verbs back in SecondGoal's lists: $readmitted", readmitted.isEmpty())
+        val multiWord = (
+            SecondGoal.CONJUNCTIONS_BY_LOCALE.values.flatten() +
+                SecondGoal.VERBS_AFTER_CONJUNCTION_BY_LOCALE.values.flatten() +
+                SecondGoal.VERBS_BEFORE_CONJUNCTION_BY_LOCALE.values.flatten()
+            ).filter { entry -> entry.any(Char::isWhitespace) }
+        assertTrue(
+            "SecondGoal entries with whitespace can never match — carriedBy compares single " +
+                "space-split tokens of the normalized text: $multiWord",
+            multiWord.isEmpty(),
+        )
     }
 }

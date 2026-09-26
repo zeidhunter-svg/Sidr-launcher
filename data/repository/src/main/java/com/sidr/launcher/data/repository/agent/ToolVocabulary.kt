@@ -49,9 +49,15 @@ data class ToolMatch(val id: ToolId, val args: Map<String, String>)
  * **A trigger FastPath already claims is a capability that exists only in this table.** FastPath runs
  * first and `RouteCommandUseCase` only builds a `GoalShape.Free` goal for a command it left undecided,
  * so a trigger colliding with a FastPath verb does not reach the planner as itself. Since A4′ phase 1
- * a verb-led command is left undecided when its app name carries a second goal, but its text then
- * still begins with the verb, and no entry here does. Six of the triggers this task's
- * brief proposed were dead on exactly that rule, Turkish entirely so:
+ * FastPath leaves a command it claimed by its verb undecided when the rest carries a second goal —
+ * the launch arm (an app name that does not resolve) and the search arm (a query) alike — but the text
+ * then still carries the FastPath verb where FastPath claims it: first in `en`/`ru`, last in `tr`.
+ * `Entry.matchIn` anchors a prefix trigger at the start of the text and a suffix trigger at its end, so a
+ * trigger could match such a text through that verb only by beginning with an `en`/`ru` FastPath verb
+ * or ending with a `tr` one, and no entry here does: [ToolVocabularyReachabilityTest] builds each
+ * trigger's sample command with the trigger at that same end and requires FastPath to leave it
+ * unclaimed. Six of the triggers this task's brief proposed were dead on exactly that rule, Turkish
+ * entirely so:
  *  - `"open system settings"` / `"открой настройки системы"` — the `LAUNCH_VERBS` prefixes `"open"` /
  *    `"открой"` take them first, so they arrive as an app launch. The verbless `"system settings"` and
  *    `"системные настройки"` carry the same meaning and survive.

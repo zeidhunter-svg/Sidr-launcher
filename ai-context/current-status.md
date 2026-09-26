@@ -6,6 +6,19 @@
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
 > / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-09-26
+> (**Этап 6 (A4′) phase 1 — FastPath overflow — `CODE-GREEN` at 1485 / 0 failures** (boundary
+> `tools/gate.sh`, 557 executed, cleared tree: `:domain` 455 · `:consumer:jvm` 57 · `:data:repository`
+> 394 · `:feature:launcher` 202 · `:app` 61 · other eight 316), code commits `7106653`…`eb86c3c` plus the
+> final-review fix `bffa146` (the WEB route chip is no longer re-scored by FastPath). **No
+> device round, by design.** FastPath no longer claims 0.90 for a command whose remainder carries a
+> second goal (`SecondGoal`, a closed «conjunction + listed verb» vocabulary): such a search or an
+> unresolvable launch is left undecided and reaches step 2b and the model; A0's launch→store plan is
+> kept byte for byte. `B15`: `HANDLED_BY_FASTPATH` 13 → 6, `PLANNED` still 0. New doctrine row
+> `DOC-NYH-4` (31 rules). The owner decided every open item of phase 0 and of the phase-1 plan
+> (R14 → a task in phase 2's plan; the Turkish review and the `SecondGoal` homonyms → A4′'s
+> acceptance); one privacy question stays open — whether `intent_match` should stop keeping launch
+> text verbatim. Full record: `§HANDOFF` of the track plan, subsection «Фаза 1
+> A4′»**); earlier the same day
 > (**Этап 6 (A4′) phase 0 — engine preconditions — `CODE-GREEN` at 1463 / 0 failures** (boundary
 > `tools/gate.sh` at `be07399`, 557 executed, cleared tree: `:domain` 445 · `:consumer:jvm` 57 ·
 > `:data:repository` 384 · `:feature:launcher` 200 · `:app` 61 · other eight 316), sixteen commits
@@ -1575,7 +1588,15 @@ with the 2026-08-23 A0 review round, whose device re-check (A2 and §12.5 of
 phone) is still open. In particular, **that a cancelled uninstall no longer reads as success has not
 been seen on a phone.** The wall-clock budget is not claimed to bound today's workers — its cut is
 cooperative and every shipped world call blocks; the two shapes are in `§HANDOFF` question 1 (owner
-question R14).
+question R14 — answered 2026-09-26: extend the interruption, as a task in phase 2's plan).
+
+**A4′ phase 1 (2026-09-26) is `CODE-GREEN` only, too.** That «открой gmail и проверь новые письма»
+no longer offers a store search and «найди билеты … и сделай бронь» no longer opens the browser has
+not been seen on a phone, nor has the WEB chip's direct web search; what the user sees instead is a
+hypothesis list in the phase plan §0.6 and `§HANDOFF` «Фаза 1 A4′». And
+one sentence of the Master Plan's DoD is **knowingly false** until A4′ closes (owner decision
+2026-09-26): «router-off / offline / no-key behave as today» — in local-only mode such a command used
+to start an A0 session and now answers «Не распознано локально».
 
 ## Source of truth
 
@@ -1598,7 +1619,9 @@ question R14).
 - Active block: **A4′ runtime (Этап 6)** — spec
   `docs/superpowers/specs/2026-09-21-a4-runtime-design.md` (owner-approved 2026-09-21); **phase 0
   `CODE-GREEN` 2026-09-26**, plan `docs/superpowers/plans/2026-09-22-a4-phase0-engine-preconditions.md`,
-  record and open owner items in the track plan's `§HANDOFF` («Фаза 0 A4′»); phases 1–4 to go. Of the
+  record in the track plan's `§HANDOFF` («Фаза 0 A4′»); **phase 1 `CODE-GREEN` 2026-09-26**, plan
+  `docs/superpowers/plans/2026-09-26-a4-phase1-fastpath-overflow.md`, record and the owner's answers
+  to every open item of both phases in `§HANDOFF` («Фаза 1 A4′»); phases 2–4 to go. Of the
   four findings A1″'s acceptance handed it, phase 0 **repaired (a) in code** (a cancelled uninstall
   claiming success), **named (b) excluded** from A4′ with its own address (the `HOME`-role grant a live
   process does not see — staleness layer 2, `ShortcutRefreshTrigger`), and did not touch (c) or (d).

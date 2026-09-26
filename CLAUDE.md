@@ -30,7 +30,7 @@ milestones, and the `Agentic Shell v1 = DONE` definition:
 Different layer, not a replacement: the restart plan keeps the owner's four decisions, the §0 session
 protocol and `§HANDOFF`; the Master Plan governs how blocks are run from Этап 4 on. The eight Islamic
 principles' **checkable** part now lives in
-[docs/governing/sidr-doctrine-matrix-v1.0.md](docs/governing/sidr-doctrine-matrix-v1.0.md) as 30
+[docs/governing/sidr-doctrine-matrix-v1.0.md](docs/governing/sidr-doctrine-matrix-v1.0.md) as 31
 `DOC-*` rules — cite a rule by ID, never paraphrase it; a rule's third column is a real test name or
 an honest `<нет>`, and `DoctrineMatrixGuardTest` fails the build on a false claim.
 
@@ -73,6 +73,7 @@ four predate the block (`launch_app`, `play_store_search`, `set_timer`, `open_sy
 | **5.5** — A1″ tool mass + selection (phases 0–3a) | ✅ **`CLOSED` 2026-09-20** — `CODE-GREEN` 2026-09-19, then the owner ran Parts A and B on the SM-A325F and signed off. Five acting tools against a floor of four, a fourth adapter, selection over a dynamic registry, and the track's first `CONFIRM` tool. Gate 1438. Before the round, phases 1–2 had only a device *reading* from the Task 13b **smoke round** (`ab2d063`, explicitly not an acceptance) and phase 3a had none at all. **Accepted on device 2026-09-20** together with 3b, in one round, on build `db1e75d`: [checklist](docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md) |
 | **5.5b** — A1″ phase 3b, the eleven navigating tools | ✅ **`CLOSED` 2026-09-20** — `CODE-GREEN` and owner device acceptance the same day; all eleven opened their screens on the SM-A325F, none shadowed by another. Eleven `system_intent` / `SAFE` / `EXTERNAL` tools (`show_alarms`, `open_camera`, and nine `open_*_settings`/`open_app_info` screens), registered, permitted, dispatched, reachable in `en`/`ru`/`tr` and rendered. Gate **1439** (+1: the `open_app_info` `required` pin, the phase's only new `@Test`). Ten pre-flight findings, three mutation findings. **Spec §16 criterion 1 is CLOSED** — tools and levels sufficed, and the owner's Phase 4 device round ran on 2026-09-20. Plan: [2026-09-19-a1-phase3b-navigating-tools.md](docs/superpowers/plans/2026-09-19-a1-phase3b-navigating-tools.md) |
 | **6** — A4′ runtime, **phase 0** (engine preconditions) | ⏳ **`CODE-GREEN` 2026-09-26**, gate **1463**; **no device round, by design** — the block has one acceptance, at its end. `PlanningResult` exhaustive, `PlanningRequest`, `ToolResult.HandedOff` (a cancelled uninstall no longer claims success — in code; not seen on a phone), eight step states + a third `Completed` title, a **cooperative** wall-clock budget, `ToolArgumentSorts` (closes R14-37 in code), `tools/gate.sh`, a build id in Settings. Four owner questions open. Spec [2026-09-21-a4-runtime-design.md](docs/superpowers/specs/2026-09-21-a4-runtime-design.md); record in `§HANDOFF` of the track plan («Фаза 0 A4′») — the block ADR is written at A4′ close |
+| **6** — A4′ runtime, **phase 1** (FastPath overflow) | ⏳ **`CODE-GREEN` 2026-09-26**, gate **1485**; no device round, by design. `SecondGoal` — a closed «conjunction + listed verb» vocabulary (owner fork F1-1) — makes the search arm, and the launch arm only after the whole app name failed to resolve (F1-2), withdraw FastPath's 0.90 to `LowConfidence`, so such commands reach step 2b and the model; A0's launch→store plan is kept byte for byte, including an installed brand's uninstalled variant (F1-3: the spec §5.1 prefix rule is deferred to offline understanding). The WEB route chip now dispatches a web search directly instead of being re-scored by FastPath (final-review fix). `B15`: `HANDLED_BY_FASTPATH` 13 → 6, `PLANNED` still 0. New doctrine row `DOC-NYH-4`. Plan [2026-09-26-a4-phase1-fastpath-overflow.md](docs/superpowers/plans/2026-09-26-a4-phase1-fastpath-overflow.md); record in `§HANDOFF` of the track plan («Фаза 1 A4′») |
 | **6–7** — A4′ phases 1–4, then A2/A3/A5/A6 | A4′'s spec is owner-approved (2026-09-21) and each remaining phase gets its own plan; A2/A3/A5/A6 each need their own spec + plan (`brainstorm → spec → plan → build`) |
 
 The four strategic ADRs (all 2026-08-19, in `decisions.md`):
@@ -681,15 +682,20 @@ below is recorded in its own ADR.
   plus `:core:ui:verifyRoborazziDebug` whenever `core/ui` is touched, and `:app:assembleRelease` for
   release-affecting work. **`:domain:jvmTest` and `:consumer:jvm:test` must be listed explicitly:**
   `testDebugUnitTest` has not reached `:domain` since it went KMP, and it never reaches `:consumer:jvm`
-  at all. **Baseline at 2026-09-26 (A4′ phase 0, measured at `be07399`): 1463 tests, 0 failures, 0
+  at all. **Baseline at 2026-09-26 (A4′ phase 1, measured on its closing tree): 1485 tests, 0 failures, 0
   errors**, from a run printing `557 actionable tasks: 557 executed` with
-  `build/test-results` cleared first — `:domain:jvmTest` **445** + `:consumer:jvm` **57** +
-  `:data:repository` **384** + `:feature:launcher` **200** + `:app` **61** + the other eight modules
+  `build/test-results` cleared first — `:domain:jvmTest` **455** + `:consumer:jvm` **57** +
+  `:data:repository` **394** + `:feature:launcher` **202** + `:app` **61** + the other eight modules
   **316** (`core/ui` 128, `data/ai-cloud` 32, `data/prayer` 38, `feature/assistant` 38,
   `feature/settings` 34, `feature/prayer` 19, `feature/permission_education` 15, `core/android` 12).
   `tools/gate.sh` carries the same number as its floor (`BASELINE_TESTS`).
-  **Compare a fresh gate against 1463** — not against 1440, not against 1439, not against 1438, not
-  against 1375, not against 1314, and not against any number quoted in the A1′ ADR. A4′ phase 0 took
+  **Compare a fresh gate against 1485** — not against 1483, not against 1463, not against 1440, not against 1439, not
+  against 1438, not against 1375, not against 1314, and not against any number quoted in the A1′ ADR.
+  A4′ phase 1 took it **1463 → 1485** (+22: `:domain` +10 — `SecondGoalTest` 6,
+  `HandleUserCommandUseCaseTest` +4; `:data:repository` +10 — `RuleBasedIntentMatcherTest` +3,
+  `FastPathLocaleGuardTest` +1, `FastPathOverflowSeamTest` 6; `:feature:launcher` +2 — the WEB-chip
+  fix of the final review, one test for the chip and one for learning-token parity; 1483 was the
+  plan's figure before that fix). A4′ phase 0 took
   it **1440 → 1463** (+23: `:domain` +5, `:consumer:jvm` +1, `:data:repository` +8,
   `:feature:launcher` +6, `:app` +2, `feature/settings` +1). The 1440 before it was Этап
   6 Трек 1: the single test added since the

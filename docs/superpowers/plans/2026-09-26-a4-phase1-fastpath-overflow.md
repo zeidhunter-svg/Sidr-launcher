@@ -4,7 +4,31 @@
 > (recommended) or `superpowers:executing-plans` to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-> **Status: written, reviewed twice and corrected, 2026-09-26.** Not started.
+> **Status: EXECUTED 2026-09-26 — `CODE-GREEN` at 1485 / 0 / 0** (boundary `tools/gate.sh`, cleared
+> tree, 557 executed). Tasks 1–4 landed exactly the predicted 1483, every per-task total and module
+> delta as predicted; the final-review fix added 2 in `:feature:launcher`. Code commits `7106653` (T1)
+> · `efcfb08` (T2) · `0ea0470` (T3) · `eb86c3c` (T4), the final-review fix `bffa146`, then the Task 5 docs commit.
+> All 21 mutation runs matched their predicted `FAILED ::` sets name for name. Owner decisions at
+> close: doctrine reading **(б)**, `DOC-NYH-4` with the draft wording; §0.6 answers in `§HANDOFF`
+> «Фаза 1 A4′». `B15` after: exactly §0.2, recorded in the `B15` document §9.
+> **Deviations from the body below, named** (the body is left as written):
+> - Two addresses in Task 5 did not match the tree, and execution stopped on both for the owner:
+>   `CLAUDE.md`'s baseline paragraph is `:680-720`, not `:684-705` (owner: edit the whole paragraph);
+>   the matrix's 2026-09-20 journal rows are `:223-224`, not `:222-223` (a pointer to form only).
+> - Task 5 step 1 was taken from Task 4's boundary run (identical content, 1483); the closing
+>   boundary run came after every Task 5 edit. `B15` «before» is the harness report from Task 1's
+>   boundary run (FastPath not yet changed), not a run at `1f5dbbf` — it matched §0.2 line for line.
+> - Task 3's first boundary run went red on the known timing-sensitive `:data:ai-cloud` test only
+>   (aborted at 406/557); the re-run from a cleared tree was green at 1477.
+> - `CLAUDE.md`'s stage table got a **new** row for phase 1 rather than an edit of phase 0's row.
+> - **Not in this plan at all:** the final whole-branch review found that the WEB route chip
+>   (`LauncherCommandSession.submitWebSearch`) re-routed its text through FastPath, so Task 2 made the
+>   chip refuse exactly the text it withdraws. The owner ruled «fix now»: the chip dispatches
+>   `LauncherAction.WebSearch` directly (+2 tests in `:feature:launcher`, mutations MF1–MF2), together
+>   with three review minors (KDoc for `tr`/search arm, a no-whitespace guard in `SecondGoal`'s lists,
+>   a pinned single installed-apps read — MF3–MF5). Hence 1485, and the gate floor is 1485, not 1483.
+>
+> Original status line: **written, reviewed twice and corrected, 2026-09-26.** Not started.
 > - Branch `launcher--7`, base `1f5dbbf`, gate baseline **1463 / 0 / 0**.
 > - **Spec:** [§0, §1, §2, §5, §9, §10 of
 >   2026-09-21-a4-runtime-design.md](../specs/2026-09-21-a4-runtime-design.md). It is `ПОЛНА`; the

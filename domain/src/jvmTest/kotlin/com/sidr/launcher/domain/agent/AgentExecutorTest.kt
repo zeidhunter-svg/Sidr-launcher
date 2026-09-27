@@ -4,14 +4,19 @@ import com.sidr.launcher.core.testing.FakeToolExecutor
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.intent.CommandFailure
+import com.sidr.launcher.domain.permission.PermissionFeature
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ObservedFact
 import com.sidr.launcher.domain.tool.RejectionReason
 import com.sidr.launcher.domain.tool.ResolvedInvocation
+import com.sidr.launcher.domain.tool.ToolDescriptor
+import com.sidr.launcher.domain.tool.ToolDurability
+import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolExecutor
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
+import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.trace.ExecutionTrace
@@ -103,7 +108,7 @@ class AgentExecutorTest {
         assertEquals(1, tools.invocations.size)          // the store was NOT called
         assertTrue(
             afterSecond.trace.events.any {
-                it is TraceEvent.ConsentRequested && it.reason == ConsentReason.RISK_LEVEL
+                it is TraceEvent.ConsentRequested && ConsentReason.RISK_LEVEL in it.reasons
             },
         )
     }
@@ -828,6 +833,101 @@ class AgentExecutorTest {
         assertEquals(
             1,
             cleared.trace.events.count { it is TraceEvent.ConsentResolved && it.index == 1 },
+        )
+    }
+
+    // --- More than one reason to stop (A4′ phase 2, spec §6.1, owner fork F2-2) -----------------
+
+    private val quill = ToolId("fixture_quill")     // CONFIRM + DURABLE — uninstall_app's shape
+    private val ledger = ToolId("fixture_ledger")   // SAFE + DURABLE — no such tool ships yet
+    private val parcel = ToolId("fixture_parcel")   // CONFIRM + a declared permission gate
+
+    private fun fixtureTool(
+        id: ToolId,
+        risk: ActionRiskLevel,
+        durability: ToolDurability,
+        gate: PermissionFeature? = null,
+    ) = ToolDescriptor(
+        id = id,
+        level = ToolLevels.SANDBOX,
+        effect = ToolEffect.LOCAL,
+        risk = risk,
+        durability = durability,
+        permissionGate = gate,
+    )
+
+    private val stops = FakeToolRegistry(
+        listOf(
+            fixtureTool(quill, ActionRiskLevel.CONFIRM, ToolDurability.DURABLE),
+            fixtureTool(ledger, ActionRiskLevel.SAFE, ToolDurability.DURABLE),
+            fixtureTool(parcel, ActionRiskLevel.CONFIRM, ToolDurability.TRANSIENT, PermissionFeature.WALLPAPER),
+        ),
+    )
+
+    private fun oneStep(id: ToolId, risk: ActionRiskLevel) = session("вельтрикс").copy(
+        plan = ExecutionPlan(
+            listOf(PlanStep(0, ToolInvocation(id), risk, StepPrecondition.None, StepRationale.GOAL_DIRECT)),
+        ),
+    )
+
+    /**
+     * `DOC-HMA-3`, first half: an irreversible step is marked BEFORE it runs. Until phase 2 the
+     * `DURABLE_EFFECT` branch sat below `requiresConsent(risk)` and was never reached for exactly the
+     * risk band where irreversibility matters most (spec §3 0.2(2); A0.5's named finding).
+     */
+    @Test
+    fun `a CONFIRM step that is also DURABLE records both reasons before it runs`() = runTest {
+        val tools = FakeToolExecutor(emptyList())
+
+        val after = AgentExecutor(stops, tools, budget).advance(oneStep(quill, ActionRiskLevel.CONFIRM))
+
+        assertEquals(ExecutionState.AwaitingConsent, after.state)
+        assertEquals(
+            listOf(TraceEvent.ConsentRequested(0, setOf(ConsentReason.RISK_LEVEL, ConsentReason.DURABLE_EFFECT))),
+            after.trace.events.filterIsInstance<TraceEvent.ConsentRequested>(),
+        )
+        assertTrue("nothing may run before consent", tools.invocations.isEmpty())
+    }
+
+    @Test
+    fun `a SAFE step that is DURABLE stops for its durability alone`() = runTest {
+        val tools = FakeToolExecutor(emptyList())
+
+        val after = AgentExecutor(stops, tools, budget).advance(oneStep(ledger, ActionRiskLevel.SAFE))
+
+        assertEquals(
+            listOf(TraceEvent.ConsentRequested(0, setOf(ConsentReason.DURABLE_EFFECT))),
+            after.trace.events.filterIsInstance<TraceEvent.ConsentRequested>(),
+        )
+        assertTrue(tools.invocations.isEmpty())
+    }
+
+    @Test
+    fun `a declared permission gate is recorded even when risk already stops the step`() = runTest {
+        val after = AgentExecutor(stops, FakeToolExecutor(emptyList()), budget)
+            .advance(oneStep(parcel, ActionRiskLevel.CONFIRM))
+
+        assertEquals(
+            listOf(TraceEvent.ConsentRequested(0, setOf(ConsentReason.RISK_LEVEL, ConsentReason.MISSING_PERMISSION))),
+            after.trace.events.filterIsInstance<TraceEvent.ConsentRequested>(),
+        )
+    }
+
+    /**
+     * `RISK_RAISED` is a claim about a transition, so it needs a step that ran before this one. A0's
+     * store step is the shape that has one: `launch_app` (SAFE) ran, `play_store_search` (CONFIRM) is
+     * next. The first-step tests above pin the other half by their exact sets: nothing ran before
+     * them, so no rise is recorded.
+     */
+    @Test
+    fun `the A0 store step records the rise in risk as well as the risk level`() = runTest {
+        val executor = AgentExecutor(registry, FakeToolExecutor(listOf(notInstalled())), budget)
+
+        val atGate = executor.advance(executor.advance(session()))
+
+        assertEquals(
+            listOf(TraceEvent.ConsentRequested(1, setOf(ConsentReason.RISK_LEVEL, ConsentReason.RISK_RAISED))),
+            atGate.trace.events.filterIsInstance<TraceEvent.ConsentRequested>(),
         )
     }
 

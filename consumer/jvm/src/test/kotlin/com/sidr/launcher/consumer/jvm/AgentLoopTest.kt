@@ -77,11 +77,16 @@ class AgentLoopTest {
         assertEquals(2, paused.cursor)
         assertTrue("nothing was deleted before consent", file.exists())
         assertTrue(
-            // `checkpointFor`'s first branch since 2026-08-23 is `maxOf(PlanStep.risk, registry.risk)
-            // >= CONFIRM` (A0 finding F2). DANGEROUS takes it either way, and the reason is RISK_LEVEL
-            // rather than DURABLE_EFFECT — spec §11.3's recorded finding, not a defect to fix here.
-            "the gate names the risk level, not durability — DANGEROUS takes checkpointFor's first branch",
-            paused.trace.events.contains(TraceEvent.ConsentRequested(2, ConsentReason.RISK_LEVEL)),
+            // A0.5 recorded that DANGEROUS took checkpointFor's first branch, so the gate named the
+            // risk and never the durability (spec §11.3). A4′ phase 2 (F2-2) records every reason:
+            // risk, the rise from the two SAFE steps that ran, and irreversibility.
+            "the gate names every reason delete_file stops for",
+            paused.trace.events.contains(
+                TraceEvent.ConsentRequested(
+                    2,
+                    setOf(ConsentReason.RISK_LEVEL, ConsentReason.RISK_RAISED, ConsentReason.DURABLE_EFFECT),
+                ),
+            ),
         )
         assertTrue(
             "step 1 bound its path from step 0's output",

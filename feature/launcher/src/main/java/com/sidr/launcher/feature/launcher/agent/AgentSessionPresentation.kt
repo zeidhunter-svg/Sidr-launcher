@@ -388,16 +388,18 @@ internal fun ExecutionState.title(): String? = when (this) {
 /**
  * Why the engine stopped -> which kind of boundary the gate announces. This is a mapping of typed
  * values, NOT of copy: `SidrActionGate` renders the type as its own already-translated risk chip
- * (`ui_gate_type_*`), so the reason survives translation without this task inventing four more keys.
+ * (`ui_gate_type_*`), so the reason survives translation without this task inventing more keys.
  *
- * It is also why the gate's type is not hardcoded to `Confirmation`: a `MISSING_PERMISSION`
- * checkpoint labelled "confirmation" would understate what is being asked for.
+ * **A stop can have several reasons** (A4′ phase 2, F2-2), and the chip shows the one that says most
+ * about what is at stake: irreversibility first (`DESTRUCTIVE`, which also tones the surface as a
+ * risk — `DOC-HMA-3`'s "marked before execution" as the user sees it), then a declared permission,
+ * then risk. The trace keeps every reason; the chip is one word. Until phase 2 `DURABLE_EFFECT` mapped
+ * to `ExternalHandoff`, which was never reached and would have understated it.
  */
-internal fun ConsentReason.gateType(): SidrActionGateType = when (this) {
-    ConsentReason.RISK_LEVEL -> SidrActionGateType.Confirmation
-    ConsentReason.RISK_RAISED -> SidrActionGateType.Confirmation
-    ConsentReason.MISSING_PERMISSION -> SidrActionGateType.Permission
-    ConsentReason.DURABLE_EFFECT -> SidrActionGateType.ExternalHandoff
+internal fun Set<ConsentReason>.gateType(): SidrActionGateType = when {
+    ConsentReason.DURABLE_EFFECT in this -> SidrActionGateType.Destructive
+    ConsentReason.MISSING_PERMISSION in this -> SidrActionGateType.Permission
+    else -> SidrActionGateType.Confirmation
 }
 
 /**

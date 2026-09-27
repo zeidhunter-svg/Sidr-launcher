@@ -132,7 +132,7 @@ class AgentExecutor(
         val granted = when {
             checkpoint == null -> session
             session.consents[next.index] == null -> return session
-                .record(TraceEvent.ConsentRequested(next.index, checkpoint.reason))
+                .record(TraceEvent.ConsentRequested(next.index, checkpoint.reasons))
                 .copy(state = ExecutionState.AwaitingConsent)
             session.consents[next.index] == false -> return session
                 .recordConsent(next.index, granted = false)
@@ -327,47 +327,43 @@ class AgentExecutor(
     }
 
     /**
-     * Four triggers, all fail-safe. [ConsentReason.MISSING_PERMISSION] fires whenever a tool merely
-     * *declares* a gate: consulting the real grant state would put `PermissionChecker` inside the
-     * engine, and stopping unconditionally is the conservative half of that.
+     * Four triggers, all fail-safe — and since A4′ phase 2 (spec §6.1, owner fork F2-2) **every one
+     * that holds is recorded**, not the first. Until then this was a `when` whose first branch,
+     * `requiresConsent(risk)`, shadowed the rest: `uninstall_app` (CONFIRM and DURABLE) stopped for
+     * its risk and its irreversibility was never written down — exactly the risk band where it matters
+     * (A0.5's finding, spec §3 0.2(2)). Reordering the branches was not a fix: A1″'s M1a went red
+     * precisely because the stop's reason is load-bearing.
+     *
+     * [ConsentReason.MISSING_PERMISSION] fires whenever a tool merely *declares* a gate: consulting
+     * the real grant state would put `PermissionChecker` inside the engine, and stopping unconditionally
+     * is the conservative half of that.
+     *
+     * [ConsentReason.RISK_RAISED] is a claim about a transition, so it needs a step that already ran
+     * before this one. Measured against a default of SAFE, it would stamp every first CONFIRM step with
+     * a "rise" from a step that never existed.
      *
      * **Every input is read through [effectiveRisk], not off the plan** (review finding F2,
-     * 2026-08-23). `permissionGate` and `durability` were always read from the live registry while
-     * `risk` came from the persisted [PlanStep] alone, and nothing re-checks risk on resume —
-     * `InvocationValidator.validate` covers tool identity, argument schema, output schema and types,
-     * and deliberately knows nothing about risk. A plan written when a tool was `SAFE` therefore kept
-     * running it as `SAFE` after a build that declared it `CONFIRM`: no checkpoint, no
-     * `ConsentRequested`, the tool straight to the world. Taking the higher of the two closes it in
-     * the direction that cannot be wrong.
+     * 2026-08-23): a plan written when a tool was `SAFE` must still stop after a build that declared
+     * it `CONFIRM`, and the higher of plan and registry closes that in the direction that cannot be
+     * wrong.
      *
-     * **Coverage, corrected by the A0 Task 14 review (2026-08-22) — this KDoc used to say the branch
-     * was "unit-tested", and it is not.** Neither A0 tool declares a gate or is `DURABLE`, and no test
-     * anywhere constructs a `ToolDescriptor` that does, so [ConsentReason.MISSING_PERMISSION] and
-     * [ConsentReason.DURABLE_EFFECT] have **zero** coverage: fail-safe by construction, unproven by
-     * test. [ConsentReason.RISK_RAISED] is untested as well, and today unreachable — with
-     * `SAFE < CONFIRM < DANGEROUS`, any upward transition lands on CONFIRM or DANGEROUS and the first
-     * branch takes it. It goes live the moment a level is inserted below CONFIRM, which is A1′'s
-     * business; whoever inserts it writes the case with it. Tracked as `D11` in `§HANDOFF`.
+     * Coverage (D11, `§HANDOFF`): since phase 2, `AgentExecutorTest` builds a descriptor with a gate
+     * and one that is `DURABLE`, and drives the A0 store step past a SAFE step that ran — all four
+     * triggers are now exercised.
      */
     private fun checkpointFor(session: AgentSession, step: PlanStep): ConsentCheckpoint? {
         val descriptor = registry.find(step.invocation.id)
         val risk = effectiveRisk(step)
-        val previousRisk = session.plan.steps
+        val ran = session.plan.steps
             .filter { it.index < step.index && session.observations.containsKey(it.index) }
-            .maxOfOrNull { effectiveRisk(it) }
-            ?: ActionRiskLevel.SAFE
 
-        return when {
-            requiresConsent(risk) ->
-                ConsentCheckpoint(step.index, ConsentReason.RISK_LEVEL)
-            risk > previousRisk ->
-                ConsentCheckpoint(step.index, ConsentReason.RISK_RAISED)
-            descriptor?.permissionGate != null ->
-                ConsentCheckpoint(step.index, ConsentReason.MISSING_PERMISSION)
-            descriptor?.durability == ToolDurability.DURABLE ->
-                ConsentCheckpoint(step.index, ConsentReason.DURABLE_EFFECT)
-            else -> null
+        val reasons = buildSet {
+            if (requiresConsent(risk)) add(ConsentReason.RISK_LEVEL)
+            if (ran.isNotEmpty() && risk > ran.maxOf { effectiveRisk(it) }) add(ConsentReason.RISK_RAISED)
+            if (descriptor?.permissionGate != null) add(ConsentReason.MISSING_PERMISSION)
+            if (descriptor?.durability == ToolDurability.DURABLE) add(ConsentReason.DURABLE_EFFECT)
         }
+        return if (reasons.isEmpty()) null else ConsentCheckpoint(step.index, reasons)
     }
 
     /**

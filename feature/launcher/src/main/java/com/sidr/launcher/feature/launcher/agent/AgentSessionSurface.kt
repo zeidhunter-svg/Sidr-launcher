@@ -93,7 +93,7 @@ internal fun AgentSessionSurface(
             }
             if (checkpoint != null && step != null) {
                 SidrActionGate(
-                    type = checkpoint.reason.gateType(),
+                    type = checkpoint.reasons.gateType(),
                     title = title,
                     consequence = sidrString(
                         R.string.launcher_agent_gate_consequence,

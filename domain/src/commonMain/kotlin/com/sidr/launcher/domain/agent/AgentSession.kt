@@ -18,7 +18,12 @@ enum class ExecutionState {
 
 enum class ConsentReason { RISK_LEVEL, RISK_RAISED, MISSING_PERMISSION, DURABLE_EFFECT }
 
-data class ConsentCheckpoint(val stepIndex: Int, val reason: ConsentReason)
+/**
+ * Every reason the step at [stepIndex] must stop for — not the first one found (A4′ phase 2, spec
+ * §6.1, owner fork F2-2). One stop is one checkpoint and one trace event, however many reasons it has;
+ * never empty, because a step with no reason to stop gets no checkpoint at all.
+ */
+data class ConsentCheckpoint(val stepIndex: Int, val reasons: Set<ConsentReason>)
 
 /**
  * Loop bounds — and, since A4' phase 0, a **wall-clock** bound too.

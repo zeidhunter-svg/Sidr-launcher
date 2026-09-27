@@ -21,7 +21,7 @@ sealed interface TraceEvent {
     data class StepStarted(val index: Int) : TraceEvent
     data class StepSkipped(val index: Int, val precondition: StepPrecondition) : TraceEvent
     data class StepRejected(val index: Int, val reason: RejectionReason) : TraceEvent
-    data class ConsentRequested(val index: Int, val reason: ConsentReason) : TraceEvent
+    data class ConsentRequested(val index: Int, val reasons: Set<ConsentReason>) : TraceEvent
     data class ConsentResolved(val index: Int, val granted: Boolean) : TraceEvent
     data class ToolInvoked(val index: Int, val toolId: ToolId) : TraceEvent
     data class ToolObserved(val index: Int, val result: ToolResult) : TraceEvent

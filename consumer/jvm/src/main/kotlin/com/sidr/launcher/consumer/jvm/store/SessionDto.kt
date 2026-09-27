@@ -67,6 +67,8 @@ internal data class TraceDto(
     val stepCount: Int? = null,
     val toolId: String? = null,
     val reason: String? = null,
+    /** Since A4′ phase 2: every reason a `ConsentRequested` stopped for. A file written before carries `reason`. */
+    val reasons: List<String>? = null,
     val granted: Boolean? = null,
     val state: String? = null,
     val precondition: PreconditionDto? = null,

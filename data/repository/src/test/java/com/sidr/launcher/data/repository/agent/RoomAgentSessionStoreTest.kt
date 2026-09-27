@@ -94,7 +94,7 @@ class RoomAgentSessionStoreTest {
             TraceEvent.StepStarted(0),
             TraceEvent.ToolInvoked(0, ToolIds.LAUNCH_APP),
             TraceEvent.ToolObserved(0, observedNotInstalled),
-            TraceEvent.ConsentRequested(1, ConsentReason.RISK_LEVEL),
+            TraceEvent.ConsentRequested(1, setOf(ConsentReason.RISK_LEVEL)),
         ),
     ): AgentSession {
         val planned = TemplatePlanner().plan(PlanningRequest(goal), FakeToolRegistry.withA0Tools())

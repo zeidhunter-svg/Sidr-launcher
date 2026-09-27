@@ -259,7 +259,7 @@ class AgentSessionSurfaceProvenanceTest {
         render(
             timerSession(
                 ExecutionState.AwaitingConsent,
-                trace = listOf(TraceEvent.ConsentRequested(0, ConsentReason.RISK_LEVEL)),
+                trace = listOf(TraceEvent.ConsentRequested(0, setOf(ConsentReason.RISK_LEVEL))),
             ),
             external,
         )
@@ -355,7 +355,7 @@ class AgentSessionSurfaceProvenanceTest {
             state = ExecutionState.AwaitingConsent,
             observations = emptyMap(),
             consents = emptyMap(),
-            trace = ExecutionTrace(listOf(TraceEvent.ConsentRequested(0, ConsentReason.RISK_LEVEL))),
+            trace = ExecutionTrace(listOf(TraceEvent.ConsentRequested(0, setOf(ConsentReason.RISK_LEVEL)))),
         )
     }
 

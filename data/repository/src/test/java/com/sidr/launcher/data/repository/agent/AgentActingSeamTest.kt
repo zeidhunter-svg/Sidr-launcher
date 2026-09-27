@@ -324,8 +324,8 @@ class AgentActingSeamTest {
         checkNotNull(session)
         assertEquals(ExecutionState.AwaitingConsent, session.state)
         assertEquals(
-            "the stop must be recorded as a risk-level checkpoint on step 0",
-            listOf(TraceEvent.ConsentRequested(0, ConsentReason.RISK_LEVEL)),
+            "the stop must carry every reason on step 0 — risk, and irreversibility (A4′ phase 2, F2-2)",
+            listOf(TraceEvent.ConsentRequested(0, setOf(ConsentReason.RISK_LEVEL, ConsentReason.DURABLE_EFFECT))),
             session.trace.events.filterIsInstance<TraceEvent.ConsentRequested>(),
         )
 
@@ -369,7 +369,7 @@ class AgentActingSeamTest {
 
             assertEquals(
                 listOf(
-                    TraceEvent.ConsentRequested(0, ConsentReason.RISK_LEVEL),
+                    TraceEvent.ConsentRequested(0, setOf(ConsentReason.RISK_LEVEL, ConsentReason.DURABLE_EFFECT)),
                     TraceEvent.ConsentResolved(0, granted = true),
                     TraceEvent.ToolInvoked(0, Tier0ToolIds.UNINSTALL_APP),
                     // Same change as above: the trace must record what the worker actually returned.

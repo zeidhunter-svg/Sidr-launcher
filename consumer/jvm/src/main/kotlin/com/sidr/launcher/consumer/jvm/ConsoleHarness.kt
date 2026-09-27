@@ -216,7 +216,7 @@ class ConsoleHarness(
         is TraceEvent.StepStarted -> "StepStarted(${event.index})"
         is TraceEvent.StepSkipped -> "StepSkipped(${event.index}, ${event.precondition})"
         is TraceEvent.StepRejected -> "StepRejected(${event.index}, ${event.reason})"
-        is TraceEvent.ConsentRequested -> "ConsentRequested(${event.index}, ${event.reason})"
+        is TraceEvent.ConsentRequested -> "ConsentRequested(${event.index}, ${event.reasons})"
         is TraceEvent.ConsentResolved -> "ConsentResolved(${event.index}, granted=${event.granted})"
         is TraceEvent.ToolInvoked -> "ToolInvoked(${event.index}, ${event.toolId.value})"
         is TraceEvent.ToolObserved -> "ToolObserved(${event.index}, ${event.result})"

@@ -2,15 +2,19 @@ package com.sidr.launcher.data.repository.agent.memory
 
 import com.sidr.launcher.domain.action.ActionIds
 import com.sidr.launcher.domain.intent.CommandFailure
+import com.sidr.launcher.domain.intent.CommandNormalizer
+import com.sidr.launcher.domain.memory.alias.AliasStore
 import com.sidr.launcher.domain.memory.alias.AliasTarget
 import com.sidr.launcher.domain.memory.alias.DeleteAliasUseCase
 import com.sidr.launcher.domain.memory.alias.MAX_ALIAS_PHRASE_LENGTH
 import com.sidr.launcher.domain.memory.alias.SaveAliasUseCase
+import com.sidr.launcher.domain.memory.alias.appPackageOrNull
 import com.sidr.launcher.domain.memory.resolution.CapabilityKey
 import com.sidr.launcher.domain.memory.resolution.DeleteLearnedChoiceUseCase
 import com.sidr.launcher.domain.memory.resolution.ResolutionContext
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.ResolvedInvocation
+import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.tool.ToolWorker
 import kotlinx.coroutines.CancellationException
@@ -44,15 +48,16 @@ import javax.inject.Inject
  * block exists to remove. This worker therefore rejects a blank or over-length phrase itself, before
  * calling the use case, and likewise rejects a blank resolved package.
  *
- * **`Effected` for `forget_*` means the operation RAN, not that a row was removed.**
- * `AliasStore.delete`/`ResolutionPreferenceStore.delete` report no row count, so "there was nothing to
- * remove" and "one row was removed" are indistinguishable from here, and this worker must never imply
- * the stronger claim.
+ * **`Effected` for `forget_*` means the operation RAN, not that a row was removed.** Since A4′ phase 2
+ * `forget_app_alias` reads the alias before deleting it and reports what it pointed at
+ * ([MemoryToolKeys.PREVIOUS_APP]) — blank means there was nothing to remove, and an undo then has
+ * nothing to put back. `forget_learned_choice` reports nothing, and cannot be undone.
  */
 class MemoryToolWorker @Inject constructor(
     private val save: SaveAliasUseCase,
     private val deleteAlias: DeleteAliasUseCase,
     private val deleteChoice: DeleteLearnedChoiceUseCase,
+    private val aliases: AliasStore,
 ) : ToolWorker {
 
     override suspend fun invoke(invocation: ResolvedInvocation): ToolResult = try {
@@ -78,18 +83,33 @@ class MemoryToolWorker @Inject constructor(
         if (phrase.isBlank() || phrase.length > MAX_ALIAS_PHRASE_LENGTH) {
             return ToolResult.Failed(CommandFailure.Generic)
         }
+        // A4′ phase 2 (spec §6.2): read what the key points at BEFORE writing. `save` is an upsert, so
+        // an undo that only forgot would delete the user's older alias along with ours. A prior alias
+        // that cannot be read writes nothing — an act whose undo cannot be told is not taken.
+        val key = CommandNormalizer.normalize(phrase)
+        val replaced = aliasTargetOf(key) ?: return ToolResult.Failed(CommandFailure.Generic)
         return when (save.save(phrase, AliasTarget.App(app))) {
-            is OperationResult.Success -> ToolResult.Effected()
+            is OperationResult.Success -> ToolResult.Effected(
+                ToolOutput(mapOf(MemoryToolKeys.STORED_PHRASE to key, MemoryToolKeys.PREVIOUS_APP to replaced)),
+            )
             is OperationResult.Failure -> ToolResult.Failed(CommandFailure.Generic)
         }
     }
 
     private suspend fun forgetAppAlias(args: Map<String, String>): ToolResult {
         val phrase = args["phrase"].orEmpty()
+        // The same key the delete uses — unchanged, never re-normalized (the test above pins why).
+        val removed = aliasTargetOf(phrase) ?: return ToolResult.Failed(CommandFailure.Generic)
         return when (deleteAlias.delete(phrase)) {
-            is OperationResult.Success -> ToolResult.Effected()
+            is OperationResult.Success -> ToolResult.Effected(ToolOutput(mapOf(MemoryToolKeys.PREVIOUS_APP to removed)))
             is OperationResult.Failure -> ToolResult.Failed(CommandFailure.Generic)
         }
+    }
+
+    /** The package [key] points at now, `""` when nothing, `null` when the store could not say. */
+    private suspend fun aliasTargetOf(key: String): String? = when (val found = aliases.find(key)) {
+        is OperationResult.Success -> found.value?.target?.appPackageOrNull().orEmpty()
+        is OperationResult.Failure -> null
     }
 
     /**

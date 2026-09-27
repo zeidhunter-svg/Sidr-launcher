@@ -12,3 +12,13 @@ object MemoryToolIds {
     val FORGET_APP_ALIAS = ToolId("forget_app_alias")
     val FORGET_LEARNED_CHOICE = ToolId("forget_learned_choice")
 }
+
+/**
+ * What the two alias tools report, so an undo can be told honestly (A4′ phase 2, spec §6.2, plan §0.3
+ * P7): the key actually written — `SaveAliasUseCase` normalizes it, `forget_app_alias` does not — and
+ * the package the key pointed at BEFORE, blank when there was none.
+ */
+object MemoryToolKeys {
+    const val STORED_PHRASE = "stored_phrase"
+    const val PREVIOUS_APP = "previous_app"
+}

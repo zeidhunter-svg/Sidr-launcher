@@ -17,6 +17,7 @@ import com.sidr.launcher.core.testing.NoOpIntentMatcher
 import com.sidr.launcher.core.testing.configuredProvider
 import com.sidr.launcher.data.repository.action.DefaultActionCatalog
 import com.sidr.launcher.data.repository.agent.memory.MemoryToolIds
+import com.sidr.launcher.data.repository.agent.memory.MemoryToolKeys
 import com.sidr.launcher.data.repository.agent.memory.MemoryToolSource
 import com.sidr.launcher.data.repository.agent.memory.MemoryToolWorker
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutCatalog
@@ -41,12 +42,14 @@ import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RuntimeBudget
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.TemplatePlanner
+import com.sidr.launcher.domain.agent.UndoAgentSessionUseCase
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
+import com.sidr.launcher.domain.memory.alias.Alias
 import com.sidr.launcher.domain.memory.alias.AliasTarget
 import com.sidr.launcher.domain.memory.alias.DeleteAliasUseCase
 import com.sidr.launcher.domain.memory.alias.SaveAliasUseCase
@@ -58,6 +61,7 @@ import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolAdapter
 import com.sidr.launcher.domain.tool.ToolFederation
 import com.sidr.launcher.domain.tool.ToolLevels
+import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.tool.ToolWorker
 import com.sidr.launcher.domain.trace.TraceEvent
@@ -215,6 +219,7 @@ class AgentActingSeamTest {
                     save = SaveAliasUseCase(aliasStore),
                     deleteAlias = DeleteAliasUseCase(aliasStore),
                     deleteChoice = DeleteLearnedChoiceUseCase(preferenceStore),
+                    aliases = aliasStore,
                 ),
             ),
         ),
@@ -429,7 +434,11 @@ class AgentActingSeamTest {
             session.trace.events.none { it is TraceEvent.ConsentRequested },
         )
         assertEquals(MemoryToolIds.SET_APP_ALIAS, session.plan.steps.single().invocation.id)
-        assertEquals(ToolResult.Effected(), session.observations[0])
+        assertEquals(
+            // A4′ phase 2 (F2-3.3): the alias tool reports the key it wrote and what it replaced.
+            ToolResult.Effected(ToolOutput(mapOf(MemoryToolKeys.STORED_PHRASE to ALIAS_PHRASE, MemoryToolKeys.PREVIOUS_APP to ""))),
+            session.observations[0],
+        )
 
         val stored = aliasStore.observeAll().first().single()
         assertEquals(ALIAS_PHRASE, stored.phrase)
@@ -552,7 +561,11 @@ class AgentActingSeamTest {
         val (_, session) = routeAndRun(GOAL_ALIAS, federation(), localOnly = true, online = false)
 
         assertEquals(ExecutionState.Completed, checkNotNull(session).state)
-        assertEquals(ToolResult.Effected(), session.observations[0])
+        assertEquals(
+            // A4′ phase 2 (F2-3.3): the alias tool reports the key it wrote and what it replaced.
+            ToolResult.Effected(ToolOutput(mapOf(MemoryToolKeys.STORED_PHRASE to ALIAS_PHRASE, MemoryToolKeys.PREVIOUS_APP to ""))),
+            session.observations[0],
+        )
         assertEquals(0, modelPlanner.planCallCount)
         assertNull(modelPlanner.lastCommand)
     }
@@ -617,6 +630,43 @@ class AgentActingSeamTest {
 
         val available = planner().plan(PlanningRequest(goal(GOAL_ALARM)), federation().registry)
         assertTrue("the same text must plan when the permission is held: $available", available is PlanningResult.Planned)
+    }
+
+    // --- A4′ phase 2, spec §6.2 / §10 criterion 5: compensation on launcher_memory, end to end ---
+
+    private fun undoUseCase(federation: ToolFederation) =
+        UndoAgentSessionUseCase(startUseCase(federation), ToolInverseCatalog(), federation.registry)
+
+    /**
+     * The whole chain the pieces are tested for separately: a typed alias command runs through the
+     * REAL memory worker, which reports what it wrote; the REAL catalog turns that into an inverse; the
+     * inverse runs as a new session through the real engine and the Room store; the alias is gone.
+     */
+    @Test
+    fun `an alias set by a typed command is undone through the real worker, catalog, engine and store`() = runTest {
+        val federation = federation()
+        val (_, finished) = routeAndRun(GOAL_ALIAS, federation)
+        assertEquals(ExecutionState.Completed, checkNotNull(finished).state)
+
+        val undoing = (undoUseCase(federation).undo(finished) as OperationResult.Success).value!!
+        val undone = (runUseCase(federation).run(undoing) as OperationResult.Success).value
+
+        assertEquals(ExecutionState.Completed, undone.state)
+        assertEquals(emptyList<Alias>(), aliasStore.observeAll().first())
+    }
+
+    /** Review Focus 2, end to end: the older alias comes back, it is not deleted with ours. */
+    @Test
+    fun `an alias that replaced an older one is pointed back by undo, not forgotten`() = runTest {
+        aliasStore.upsert(Alias(ALIAS_PHRASE, AliasTarget.App("net.fixture.parcel"), createdAtEpochMs = 0L))
+        val federation = federation()
+        val (_, finished) = routeAndRun(GOAL_ALIAS, federation)
+        check(aliasStore.observeAll().first().single().target == AliasTarget.App(TARGET_PACKAGE))
+
+        val undoing = (undoUseCase(federation).undo(checkNotNull(finished)) as OperationResult.Success).value!!
+        runUseCase(federation).run(undoing)
+
+        assertEquals(AliasTarget.App("net.fixture.parcel"), aliasStore.observeAll().first().single().target)
     }
 
     private companion object {

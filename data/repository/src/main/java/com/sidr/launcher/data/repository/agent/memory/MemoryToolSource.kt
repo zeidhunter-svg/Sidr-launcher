@@ -52,6 +52,10 @@ class MemoryToolSource @Inject constructor() : ToolRegistry {
             effect = ToolEffect.LOCAL,
             risk = ActionRiskLevel.SAFE,
             durability = ToolDurability.TRANSIENT,
+            outputSchema = listOf(
+                ActionArg(MemoryToolKeys.STORED_PHRASE, description = "The alias key as stored"),
+                ActionArg(MemoryToolKeys.PREVIOUS_APP, description = "The package the key pointed at before; blank if it was new"),
+            ),
         ),
         ToolDescriptor(
             id = MemoryToolIds.FORGET_APP_ALIAS,
@@ -62,6 +66,9 @@ class MemoryToolSource @Inject constructor() : ToolRegistry {
             effect = ToolEffect.LOCAL,
             risk = ActionRiskLevel.SAFE,
             durability = ToolDurability.TRANSIENT,
+            outputSchema = listOf(
+                ActionArg(MemoryToolKeys.PREVIOUS_APP, description = "The package the removed alias pointed at; blank if there was none"),
+            ),
         ),
         ToolDescriptor(
             id = MemoryToolIds.FORGET_LEARNED_CHOICE,

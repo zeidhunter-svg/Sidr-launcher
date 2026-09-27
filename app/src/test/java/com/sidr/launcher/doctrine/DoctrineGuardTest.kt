@@ -259,11 +259,14 @@ class DoctrineGuardTest {
         shortcutRegistry = shortcutSource(),
         shortcutWorker = ShortcutToolWorker(ShortcutLauncher { _, _ -> }),
         memoryRegistry = MemoryToolSource(),
-        memoryWorker = MemoryToolWorker(
-            save = SaveAliasUseCase(FakeAliasStore()),
-            deleteAlias = DeleteAliasUseCase(FakeAliasStore()),
-            deleteChoice = DeleteLearnedChoiceUseCase(FakeResolutionPreferenceStore()),
-        ),
+        memoryWorker = FakeAliasStore().let { aliases ->
+            MemoryToolWorker(
+                save = SaveAliasUseCase(aliases),
+                deleteAlias = DeleteAliasUseCase(aliases),
+                deleteChoice = DeleteLearnedChoiceUseCase(FakeResolutionPreferenceStore()),
+                aliases = aliases,
+            )
+        },
     )
 
     private object NoAppsRepository : InstalledAppsRepository {

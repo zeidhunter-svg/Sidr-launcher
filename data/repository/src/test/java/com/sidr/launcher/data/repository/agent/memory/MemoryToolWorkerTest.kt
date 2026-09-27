@@ -15,6 +15,7 @@ import com.sidr.launcher.domain.memory.resolution.ResolutionPreferenceStore
 import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.ResolvedInvocation
+import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -125,6 +126,7 @@ class MemoryToolWorkerTest {
         save = SaveAliasUseCase(aliasStore),
         deleteAlias = DeleteAliasUseCase(aliasStore),
         deleteChoice = DeleteLearnedChoiceUseCase(preferenceStore),
+        aliases = aliasStore,
     )
 
     @Test
@@ -275,5 +277,80 @@ class MemoryToolWorkerTest {
         )
 
         assertTrue(result is ToolResult.Failed)
+    }
+
+    // --- A4′ phase 2: what an undo needs, reported by the act itself (spec §6.2, plan §0.3 P7) ---
+
+    private class FindFailingAliasStore : AliasStore {
+        val upserted = mutableListOf<Alias>()
+        override suspend fun find(phrase: String): OperationResult<Alias?> =
+            OperationResult.Failure(OperationError.UnknownError("io"))
+        override suspend fun upsert(alias: Alias): OperationResult<Unit> {
+            upserted += alias
+            return OperationResult.Success(Unit)
+        }
+        override suspend fun delete(phrase: String): OperationResult<Unit> = OperationResult.Success(Unit)
+        override fun observeAll(): Flow<List<Alias>> = MutableStateFlow(emptyList())
+    }
+
+    @Test
+    fun `set_app_alias reports the key it wrote and that nothing was there before`() = runTest {
+        val result = memoryWorker().invoke(
+            ResolvedInvocation(MemoryToolIds.SET_APP_ALIAS, mapOf("app" to "net.fixture.quill", "phrase" to "вельтрикс")),
+        )
+
+        assertEquals(
+            ToolResult.Effected(ToolOutput(mapOf(MemoryToolKeys.STORED_PHRASE to "вельтрикс", MemoryToolKeys.PREVIOUS_APP to ""))),
+            result,
+        )
+    }
+
+    /** Review Focus 2: `save` is an upsert, so this is the alias an undo must point back to. */
+    @Test
+    fun `set_app_alias reports the app an overwritten alias pointed at`() = runTest {
+        val store = RecordingAliasStore().apply {
+            upserted += Alias("вельтрикс", AliasTarget.App("net.fixture.parcel"), createdAtEpochMs = 0L)
+        }
+
+        val result = memoryWorker(aliasStore = store).invoke(
+            ResolvedInvocation(MemoryToolIds.SET_APP_ALIAS, mapOf("app" to "net.fixture.quill", "phrase" to "вельтрикс")),
+        )
+
+        assertEquals(
+            ToolResult.Effected(ToolOutput(mapOf(MemoryToolKeys.STORED_PHRASE to "вельтрикс", MemoryToolKeys.PREVIOUS_APP to "net.fixture.parcel"))),
+            result,
+        )
+    }
+
+    @Test
+    fun `forget_app_alias reports the app the removed alias pointed at`() = runTest {
+        val store = RecordingAliasStore().apply {
+            upserted += Alias("вельтрикс", AliasTarget.App("net.fixture.parcel"), createdAtEpochMs = 0L)
+        }
+
+        val result = memoryWorker(aliasStore = store).invoke(
+            ResolvedInvocation(MemoryToolIds.FORGET_APP_ALIAS, mapOf("phrase" to "вельтрикс")),
+        )
+
+        assertEquals(ToolResult.Effected(ToolOutput(mapOf(MemoryToolKeys.PREVIOUS_APP to "net.fixture.parcel"))), result)
+    }
+
+    /** An act whose undo cannot be told honestly is not taken. */
+    @Test
+    fun `a prior alias that cannot be read writes nothing`() = runTest {
+        val store = FindFailingAliasStore()
+        val worker = MemoryToolWorker(
+            save = SaveAliasUseCase(store),
+            deleteAlias = DeleteAliasUseCase(store),
+            deleteChoice = DeleteLearnedChoiceUseCase(RecordingPreferenceStore()),
+            aliases = store,
+        )
+
+        val result = worker.invoke(
+            ResolvedInvocation(MemoryToolIds.SET_APP_ALIAS, mapOf("app" to "net.fixture.quill", "phrase" to "вельтрикс")),
+        )
+
+        assertTrue(result is ToolResult.Failed)
+        assertEquals(0, store.upserted.size)
     }
 }

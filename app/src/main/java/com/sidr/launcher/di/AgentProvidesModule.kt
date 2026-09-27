@@ -31,6 +31,7 @@ import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
 import com.sidr.launcher.domain.agent.CompositePlanner
 import com.sidr.launcher.domain.agent.Planner
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
+import com.sidr.launcher.domain.agent.ResumeAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RuntimeBudget
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
@@ -299,6 +300,13 @@ object AgentProvidesModule {
         executor: AgentExecutor,
         store: AgentSessionStore,
     ): RunAgentSessionUseCase = RunAgentSessionUseCase(executor = executor, store = store)
+
+    @Provides
+    @Singleton
+    fun provideResumeAgentSessionUseCase(
+        start: StartAgentSessionUseCase,
+        run: RunAgentSessionUseCase,
+    ): ResumeAgentSessionUseCase = ResumeAgentSessionUseCase(start = start, run = run)
 
     @Provides
     @Singleton

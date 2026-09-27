@@ -122,10 +122,10 @@ data class AgentSession(
      *  - **Layer 1 — the engine's own observations.** This continues from the persisted cursor and
      *    nothing re-plans, so an observation taken before the pause is acted on however stale it has
      *    become (A0 acceptance §12.8: a session that already observed `APP_NOT_INSTALLED` opens the
-     *    store even if the app was installed while the plan sat paused). **Addressed to phase 2**,
-     *    where re-planning on partial failure is the same mechanism and where
-     *    `PlanningRequest.priorObservations` is the input it needs — you cannot react to a re-check
-     *    without something that re-plans.
+     *    store even if the app was installed while the plan sat paused). **Built in phase 2** — not
+     *    here, in `ResumeAgentSessionUseCase`: a plan in which nothing has acted is planned afresh
+     *    ([replansOnResume]); anything that may have acted still continues from this cursor, and that
+     *    remainder is named, not closed.
      *  - **Layer 2 — a source's own snapshot.** `ShortcutRefreshTrigger.start()` runs once per
      *    process and observes **shortcut** changes; a grant of the `android.app.role.HOME` role is
      *    not one, so the dynamic catalog stays empty until a restart (A1″ acceptance finding (b),
@@ -139,4 +139,43 @@ data class AgentSession(
      */
     fun resumed(): AgentSession =
         copy(state = ExecutionState.Running).record(TraceEvent.SessionResumed)
+
+    /**
+     * Whether «Продолжить» on this paused session plans the goal AFRESH rather than picking up at the
+     * cursor (A4′ phase 2, spec §6.4 as amended by owner fork F2-3.1; staleness layer 1, spec §3 0.3).
+     *
+     * True exactly when nothing can have acted yet, so looking again cannot do anything twice:
+     *  - no result is `Effected` or `HandedOff` — only looks (`Observed`) and failures;
+     *  - no call is in flight ([midStepInvocation]) — a call cut off by the process's death may have
+     *    acted, and resuming it once is what `DOC-HMA-1` requires;
+     *  - the plan is not an undo ([Compensation.isUndo]) — its goal is the original goal, and planning
+     *    it again would redo what it undoes.
+     *
+     * One predicate for two readers: `ResumeAgentSessionUseCase` acts on it, and the paused card picks
+     * its body by it (F2-3.2), so the card cannot promise one thing while the button does another.
+     */
+    fun replansOnResume(): Boolean =
+        state == ExecutionState.Paused &&
+            !Compensation.isUndo(plan) &&
+            midStepInvocation() == null &&
+            observations.values.none { it is ToolResult.Effected || it is ToolResult.HandedOff }
+}
+
+/**
+ * The [TraceEvent.ToolInvoked] event of the step whose tool call has been decided but not yet
+ * performed, or `null` if [AgentSession] is not currently mid-step. Moved here from `AgentExecutor`
+ * in A4′ phase 2 so the resume rule ([AgentSession.replansOnResume]) reads the SAME predicate the
+ * engine does, rather than a copy.
+ *
+ * **It reads the last `ToolInvoked`, not the last trace event, and that difference is the whole
+ * behaviour** (review finding F1, 2026-08-23). The restart path appends [TraceEvent.SessionPaused] and
+ * [TraceEvent.SessionResumed] *after* the pending `ToolInvoked`; keyed on the trace tail the predicate
+ * answered `null` on exactly the shape it exists to recognise, and one granted consent paid for two
+ * executions (`DOC-HMA-1`). "The last `ToolInvoked` has no `ToolObserved` for its index" is the same
+ * predicate without the adjacency assumption.
+ */
+internal fun AgentSession.midStepInvocation(): TraceEvent.ToolInvoked? {
+    val last = trace.events.filterIsInstance<TraceEvent.ToolInvoked>().lastOrNull() ?: return null
+    val alreadyObserved = trace.events.any { it is TraceEvent.ToolObserved && it.index == last.index }
+    return if (alreadyObserved) null else last
 }

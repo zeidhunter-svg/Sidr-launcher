@@ -14,6 +14,7 @@ import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.AgentSessionStore
 import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
+import com.sidr.launcher.domain.agent.ResumeAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.history.UsageHistoryRepository
 import com.sidr.launcher.domain.memory.alias.ResolveCommandWithAliasUseCase
@@ -96,6 +97,7 @@ class LauncherViewModel @Inject constructor(
     private val runAgentSession: RunAgentSessionUseCase,
     private val resolveAgentConsent: ResolveConsentUseCase,
     private val cancelAgentSession: CancelAgentSessionUseCase,
+    private val resumeAgentSession: ResumeAgentSessionUseCase,
     private val agentSessionStore: AgentSessionStore,
     // Task 10 / A1': read-only lookup of a registered tool's descriptor, the same shape and the same
     // reason [actionCatalog] is here. The surface must be able to say where an EXTERNAL tool's effect
@@ -264,6 +266,7 @@ class LauncherViewModel @Inject constructor(
         cancelSession = cancelAgentSession,
         store = agentSessionStore,
         scope = viewModelScope,
+        resumeSession = resumeAgentSession,
     )
 
     /** The agent runtime's current session, or null when none is on screen. */

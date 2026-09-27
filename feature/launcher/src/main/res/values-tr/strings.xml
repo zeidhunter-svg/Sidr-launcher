@@ -115,6 +115,7 @@
     <string name="launcher_agent_cancel">Kapat</string>
     <string name="launcher_agent_paused_title">Plan duraklatıldı</string>
     <string name="launcher_agent_paused_body">Bu plan bitmeden ayrıldınız. Devam ederseniz Sidr kaldığı yerden sürdürür; kapatırsanız başka hiçbir şey çalışmaz.</string>
+    <string name="launcher_agent_paused_body_replan">Bu plan bitmeden ayrıldınız; o zamandan beri bir şeyler değişmiş olabilir. Devam ederseniz Sidr planı baştan gözden geçirir; kapatırsanız başka hiçbir şey çalışmaz.</string>
     <string name="launcher_agent_paused_continue">Devam et</string>
     <string name="launcher_agent_completed_title">Plan tamamlandı</string>
     <string name="launcher_agent_completed_partial_title">Plan bitti, her adım çalışmadı</string>

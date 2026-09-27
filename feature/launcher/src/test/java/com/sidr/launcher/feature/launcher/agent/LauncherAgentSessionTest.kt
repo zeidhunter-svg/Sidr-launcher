@@ -11,6 +11,7 @@ import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
+import com.sidr.launcher.domain.agent.ResumeAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RuntimeBudget
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
@@ -77,6 +78,7 @@ class LauncherAgentSessionTest {
             cancelSession = CancelAgentSessionUseCase(store),
             store = store,
             scope = scope,
+            resumeSession = ResumeAgentSessionUseCase(StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry), runner),
         )
     }
 
@@ -154,11 +156,17 @@ class LauncherAgentSessionTest {
         assertNull("and the delete the dead process owed is completed", store.activeOrNull)
     }
 
+    /**
+     * A4′ phase 2 (owner fork F2-3.1). This test used to pin «resuming re-evaluates rather than steps
+     * past, and the world is still untouched». Its seed is exactly A0's §12.8 stale shape — step 0 has
+     * only LOOKED — and the owner decided such a plan looks again: a fresh session re-runs the launch
+     * and, still finding nothing, returns to the store's consent gate. The world is touched once more,
+     * on purpose; the gate is still there.
+     */
     @Test
-    fun `continuing a paused session that owes consent returns to AwaitingConsent`() = runTest {
-        val tools = FakeToolExecutor(listOf(notInstalled(), ToolResult.Effected()))
+    fun `continuing a plan that has only looked looks at the world again before it asks`() = runTest {
+        val tools = FakeToolExecutor(listOf(notInstalled(), notInstalled()))
         seedRunningAtCursorOne(tools)
-        val invocationsAfterSeed = tools.invocations.size
         val agent = collaborator(tools, this)
 
         agent.restoreOnStart()
@@ -166,19 +174,47 @@ class LauncherAgentSessionTest {
         agent.continueSession()
         advanceUntilIdle()
 
-        // Resuming re-evaluates rather than steps past: the CONFIRM-risk step 1 puts its consent
-        // checkpoint back on screen, and the world is still untouched.
         assertEquals(ExecutionState.AwaitingConsent, agent.session.value?.state)
-        assertEquals(invocationsAfterSeed, tools.invocations.size)
-        assertTrue(
-            "resume must be recorded in the trace",
-            agent.session.value!!.trace.events.contains(TraceEvent.SessionResumed),
-        )
+        assertEquals(AgentSessionId("s2"), agent.session.value?.id)
+        assertEquals(listOf(ToolIds.LAUNCH_APP, ToolIds.LAUNCH_APP), tools.invocations.map { it.id })
     }
 
+    /** A0 acceptance §12.8, through the product's own path: the app appeared while the plan waited. */
+    @Test
+    fun `continuing a stale plan opens an app installed while it waited, and offers no store`() = runTest {
+        val tools = FakeToolExecutor(listOf(notInstalled(), ToolResult.Effected()))
+        seedRunningAtCursorOne(tools)
+        val agent = collaborator(tools, this)
+
+        agent.restoreOnStart()
+        advanceUntilIdle()
+        agent.continueSession()
+        advanceUntilIdle()
+
+        assertEquals(ExecutionState.Completed, agent.session.value?.state)
+        assertEquals(listOf(ToolIds.LAUNCH_APP, ToolIds.LAUNCH_APP), tools.invocations.map { it.id })
+    }
+
+    /** Review Focus 1 (plan §0.3 P6): each tap would re-plan into a new id, so two taps = two looks. */
+    @Test
+    fun `a second Continue tap while the first is still running starts nothing`() = runTest {
+        val tools = FakeToolExecutor(listOf(notInstalled(), notInstalled(), notInstalled()))
+        seedRunningAtCursorOne(tools)
+        val agent = collaborator(tools, this)
+        agent.restoreOnStart()
+        advanceUntilIdle()
+
+        agent.continueSession()
+        agent.continueSession()
+        advanceUntilIdle()
+
+        assertEquals("two taps, one fresh look", 2, tools.invocations.size)
+    }
+
+    // A4′ phase 2: the resume re-plans (F2-3.1), so the fresh session's own look takes the second script entry.
     @Test
     fun `confirming the same step twice invokes the tool once`() = runTest {
-        val tools = FakeToolExecutor(listOf(notInstalled(), ToolResult.Effected()))
+        val tools = FakeToolExecutor(listOf(notInstalled(), notInstalled(), ToolResult.Effected()))
         seedRunningAtCursorOne(tools)
         val agent = collaborator(tools, this)
         agent.restoreOnStart()

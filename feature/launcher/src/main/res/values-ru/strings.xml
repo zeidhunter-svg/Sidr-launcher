@@ -115,6 +115,7 @@
     <string name="launcher_agent_cancel">Закрыть</string>
     <string name="launcher_agent_paused_title">План приостановлен</string>
     <string name="launcher_agent_paused_body">Вы вышли до того, как план завершился. Продолжите — и Sidr возьмётся с того места, где остановился; закройте — и больше ничего не выполнится.</string>
+    <string name="launcher_agent_paused_body_replan">Вы вышли до того, как план завершился, а с тех пор всё могло измениться. Продолжите — и Sidr проверит план заново; закройте — и больше ничего не выполнится.</string>
     <string name="launcher_agent_paused_continue">Продолжить</string>
     <string name="launcher_agent_completed_title">План выполнен</string>
     <string name="launcher_agent_completed_partial_title">План пройден, выполнено не всё</string>

@@ -231,6 +231,7 @@ class LauncherScreenAgentProvenanceTest {
             runAgentSession = runAgent,
             resolveAgentConsent = ResolveConsentUseCase(agentStore, runAgent),
             cancelAgentSession = CancelAgentSessionUseCase(agentStore),
+            resumeAgentSession = resumeOver(agentStore, runAgent, agentRegistry),
             agentSessionStore = agentStore,
             toolRegistry = agentRegistry,
             dynamicToolLabels = agentToolLabels,

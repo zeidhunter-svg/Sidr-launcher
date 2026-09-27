@@ -6,6 +6,7 @@ import com.sidr.launcher.domain.agent.AgentSessionStore
 import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
+import com.sidr.launcher.domain.agent.ResumeAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.result.OperationResult
 import kotlinx.coroutines.CoroutineScope
@@ -32,6 +33,7 @@ internal class LauncherAgentSession(
     private val cancelSession: CancelAgentSessionUseCase,
     private val store: AgentSessionStore,
     private val scope: CoroutineScope,
+    private val resumeSession: ResumeAgentSessionUseCase,
 ) {
     private val _session = MutableStateFlow<AgentSession?>(null)
     val session: StateFlow<AgentSession?> = _session.asStateFlow()
@@ -84,9 +86,26 @@ internal class LauncherAgentSession(
         _session.value = paused
     }
 
-    fun continueSession() = scope.launch {
-        val paused = _session.value ?: return@launch
-        _session.value = (runSession.run(paused.resumed()) as? OperationResult.Success)?.value
+    /**
+     * A tap that lands while a previous «Продолжить» (or, from Task 6, «Отменить») is still running
+     * does nothing. Before A4′ phase 2 two taps drove the same session twice; since resume can
+     * re-plan into a NEW session id (F2-3.1), the store's conditional write no longer de-duplicates
+     * them, and each tap would perform step 0 (plan §0.3 P6). Confined to the main thread like every
+     * caller here, so the check and the set cannot interleave.
+     */
+    private var busy = false
+
+    fun continueSession() {
+        if (busy) return
+        val paused = _session.value ?: return
+        busy = true
+        scope.launch {
+            try {
+                _session.value = (resumeSession.resume(paused) as? OperationResult.Success)?.value
+            } finally {
+                busy = false
+            }
+        }
     }
 
     fun confirm(stepIndex: Int) = resolve(stepIndex, granted = true)

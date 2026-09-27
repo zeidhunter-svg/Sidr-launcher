@@ -185,6 +185,7 @@
          (the rest of it), plus what dismissing costs. -->
     <string name="launcher_agent_paused_title">Plan paused</string>
     <string name="launcher_agent_paused_body">You left before this plan finished. Continue and Sidr picks it up where it stopped; dismiss it and nothing further runs.</string>
+    <string name="launcher_agent_paused_body_replan">You left before this plan finished, and things may have changed since. Continue and Sidr looks at the plan afresh; dismiss it and nothing further runs.</string>
     <string name="launcher_agent_paused_continue">Continue</string>
     <string name="launcher_agent_completed_title">Plan complete</string>
     <string name="launcher_agent_completed_partial_title">Plan finished, not every step ran</string>

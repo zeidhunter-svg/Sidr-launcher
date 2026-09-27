@@ -102,10 +102,12 @@ sealed interface PlanningResult {
  * the first real addition edits the signature of four production implementations in three modules,
  * both consumers, and every test fake — which is the cost this type is here to not pay twice.
  *
- * [priorObservations] is **not speculative**: its consumer is named and dated — re-planning after a
- * partial failure, phase 2 (§6.4), which cannot work without what the first attempt observed. It is
- * empty at every call site phase 0 ships, and that is the honest state rather than a placeholder: a
- * first attempt has observed nothing.
+ * [priorObservations] is **not speculative, and its consumer moved once**: re-planning after a
+ * partial failure was dated to phase 2 (§6.4), and the owner moved it to phase 3 on 2026-09-27 (fork
+ * F2-3.1). None of the deterministic planners can do anything better after a failure, and the first
+ * planner that can — the bridge's model planner — arrives there. Phase 2's re-planning (on resume)
+ * plans afresh with an EMPTY request on purpose: what the stale attempt observed is exactly what is
+ * no longer trusted. It is empty at every call site, and that is the honest state.
  *
  * The tool registry stays a separate parameter. It is not context about the attempt; it is the world
  * the plan is written against, and it is read by the engine as well as by the planner.

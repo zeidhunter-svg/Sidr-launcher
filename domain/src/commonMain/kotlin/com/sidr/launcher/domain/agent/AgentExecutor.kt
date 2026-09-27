@@ -288,32 +288,6 @@ class AgentExecutor(
         }
     }
 
-    /**
-     * The [TraceEvent.ToolInvoked] event of the step whose tool call has been decided but not yet
-     * performed, or `null` if [AgentSession] is not currently mid-step.
-     *
-     * **It reads the last `ToolInvoked`, not the last trace event, and that difference is the whole
-     * behaviour** (review finding F1, 2026-08-23). The only path a mid-step session takes back into
-     * this engine is the restart one, and that path appends [TraceEvent.SessionPaused] and
-     * [TraceEvent.SessionResumed] *after* the pending `ToolInvoked` before the engine ever sees the
-     * session again. Keyed on the trace **tail**, the predicate therefore answered `null` on exactly
-     * the shape it exists to recognise: [prepare] did not short-circuit, re-cleared the same step,
-     * appended a second `StepStarted` + `ToolInvoked`, and [perform] then ran the pending call from
-     * the duplicate rather than from the original. Two `ToolInvoked` against one `ToolObserved` is
-     * not a trace that is 1:1 with reality (`DOC-ILM-3`), and on a step whose consent was already
-     * granted it is one confirmation authorising two executions (`DOC-HMA-1`).
-     *
-     * "The last `ToolInvoked` has no `ToolObserved` for its index" is the same predicate without the
-     * adjacency assumption: [perform] records `ToolObserved` for every step it clears — including the
-     * re-resolution failure below — so an unmatched `ToolInvoked` means the process died during the
-     * call and nothing else.
-     */
-    private fun AgentSession.midStepInvocation(): TraceEvent.ToolInvoked? {
-        val last = trace.events.filterIsInstance<TraceEvent.ToolInvoked>().lastOrNull() ?: return null
-        val alreadyObserved = trace.events.any { it is TraceEvent.ToolObserved && it.index == last.index }
-        return if (alreadyObserved) null else last
-    }
-
     private fun isSatisfied(
         precondition: StepPrecondition,
         session: AgentSession,

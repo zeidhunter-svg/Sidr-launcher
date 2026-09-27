@@ -120,7 +120,15 @@ internal fun AgentSessionSurface(
             tone = SidrResultTone.Partial,
             title = title,
             modifier = modifier,
-            body = sidrString(R.string.launcher_agent_paused_body),
+            // F2-3.2: the body says what «Продолжить» will actually do, by the predicate the resume
+            // use case acts on — a plan that has only looked is planned afresh.
+            body = sidrString(
+                if (session.replansOnResume()) {
+                    R.string.launcher_agent_paused_body_replan
+                } else {
+                    R.string.launcher_agent_paused_body
+                },
+            ),
             provenance = {
                 AgentPlanSteps(
                     session = session,

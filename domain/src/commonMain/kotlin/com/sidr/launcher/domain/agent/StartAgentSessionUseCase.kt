@@ -28,24 +28,43 @@ class StartAgentSessionUseCase(
     private val ids: AgentSessionIdFactory,
     private val registry: ToolRegistry,
 ) {
-    /**
-     * The request carries no prior observations: a first attempt has observed nothing, and
-     * re-planning (phase 2) does not start here.
-     */
+    /** Plans [goal] and persists a `Running` session; `Success(null)` when there is nothing to run. */
     suspend fun start(goal: AgentGoal): OperationResult<AgentSessionId?> {
-        // Exhaustive with no `else` (spec §3 0.0). `!is Planned -> Success(null)` answered for a
-        // variant that did not exist yet, and answered it with silence. Whoever adds the third
-        // variant must decide here what a session-less answer means for it, and the compiler is
-        // what makes them.
+        val plan = plan(goal) ?: return OperationResult.Success(null)
+        return when (val started = startPlanned(goal, plan)) {
+            is OperationResult.Failure -> started
+            is OperationResult.Success -> OperationResult.Success(started.value?.id)
+        }
+    }
+
+    /**
+     * The first attempt's plan for [goal] if it is runnable against the registry NOW; persists
+     * nothing. The request carries no prior observations: a first attempt has observed nothing, and
+     * since owner fork F2-3.1 re-planning after a failure is phase 3's (spec §6.4, amended).
+     */
+    suspend fun plan(goal: AgentGoal): ExecutionPlan? {
+        // Exhaustive with no `else` (spec §3 0.0). Whoever adds a third variant must decide here what a
+        // session-less answer means for it, and the compiler is what makes them.
         val plan = when (val planned = planner.plan(PlanningRequest(goal), registry)) {
             is PlanningResult.Planned -> planned.plan
-            PlanningResult.NoPlan -> return OperationResult.Success(null)
+            PlanningResult.NoPlan -> return null
         }
-        if (!isRunnable(plan)) return OperationResult.Success(null)
+        return plan.takeIf(::isRunnable)
+    }
 
-        val id = ids.newId()
+    /**
+     * Persists a `Running` session for [plan] and returns it — a plan the caller built itself (an
+     * undo, spec §6.2) or took from [plan]. `Success(null)` when [plan] is not runnable: validated
+     * here too, so no caller can persist an unchecked plan (F10).
+     *
+     * **Saving REPLACES whatever session the store held** — the store keeps one session at rest (Room:
+     * `replaceSession` deletes every other id; JVM: one file). That is what lets a fresh plan supersede
+     * a stale one atomically on resume (spec §6.4, plan §0.3 P5).
+     */
+    suspend fun startPlanned(goal: AgentGoal, plan: ExecutionPlan): OperationResult<AgentSession?> {
+        if (!isRunnable(plan)) return OperationResult.Success(null)
         val session = AgentSession(
-            id = id,
+            id = ids.newId(),
             goal = goal,
             plan = plan,
             cursor = 0,
@@ -54,10 +73,9 @@ class StartAgentSessionUseCase(
             consents = emptyMap(),
             trace = ExecutionTrace(listOf(TraceEvent.PlanCreated(plan.steps.size))),
         )
-
         return when (val saved = store.save(session)) {
             is OperationResult.Failure -> saved
-            is OperationResult.Success -> OperationResult.Success(id)
+            is OperationResult.Success -> OperationResult.Success(session)
         }
     }
 

@@ -428,6 +428,7 @@ internal object AgentSessionMappers {
     private fun readRationale(raw: String): StepRationale = when (raw) {
         StepRationale.GOAL_DIRECT.name -> StepRationale.GOAL_DIRECT
         StepRationale.APP_NOT_INSTALLED_FALLBACK.name -> StepRationale.APP_NOT_INSTALLED_FALLBACK
+        StepRationale.COMPENSATION.name -> StepRationale.COMPENSATION
         else -> throw CorruptAgentRowException("unknown step rationale \"$raw\"")
     }
 

@@ -354,4 +354,23 @@ class AgentSessionUseCasesTest {
     private fun plannerOf(plan: ExecutionPlan) = object : Planner {
         override suspend fun plan(request: PlanningRequest, registry: ToolRegistry) = PlanningResult.Planned(plan)
     }
+
+    /**
+     * A4′ phase 2: `startPlanned` is how a plan built outside the planner — an undo — reaches the
+     * store, and it validates exactly as `start` does (F10), so no caller can persist an unchecked
+     * plan.
+     */
+    @Test
+    fun `startPlanned refuses a plan the registry cannot run and persists nothing`() = runTest {
+        val unknown = ExecutionPlan(
+            listOf(
+                PlanStep(0, ToolInvocation(ToolId("fixture_unregistered")), ActionRiskLevel.SAFE, StepPrecondition.None, StepRationale.COMPENSATION),
+            ),
+        )
+
+        val started = StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry).startPlanned(goal, unknown)
+
+        assertNull((started as OperationResult.Success).value)
+        assertTrue(store.saved.isEmpty())
+    }
 }

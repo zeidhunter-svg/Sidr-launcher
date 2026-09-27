@@ -13,8 +13,14 @@ sealed interface StepPrecondition {
     data class PreviousStepObserved(val fact: ObservedFact) : StepPrecondition
 }
 
-/** Typed provenance — why this step is in the plan. The feature layer renders it to localized text. */
-enum class StepRationale { GOAL_DIRECT, APP_NOT_INSTALLED_FALLBACK }
+/**
+ * Typed provenance — why this step is in the plan. The feature layer renders it to localized text.
+ *
+ * [COMPENSATION] (A4′ phase 2): the step undoes a step of another, finished plan. It is what marks a
+ * plan as an undo — `Compensation.isUndo` — so that it offers no undo of its own and is never planned
+ * again from its goal. Persisted by name in an existing TEXT column; no migration.
+ */
+enum class StepRationale { GOAL_DIRECT, APP_NOT_INSTALLED_FALLBACK, COMPENSATION }
 
 data class PlanStep(
     /**
@@ -71,7 +77,7 @@ data class ExecutionPlan(val steps: List<PlanStep>) {
  * **Adding a variant here is a two-address edit, and both addresses are compile errors by
  * construction** (A4' phase 0, spec §3 0.0):
  *  - `CompositePlanner.plan` — where a non-`Planned` result used to become `NoPlan` silently;
- *  - `StartAgentSessionUseCase.start` — where a non-`Planned` result used to become `Success(null)`.
+ *  - `StartAgentSessionUseCase.plan` — where a non-`Planned` result used to become `Success(null)`.
  *
  * Neither conversion was wrong while two variants existed; both were answers given in advance for a
  * variant nobody had written. `NoPlan` at `RouteCommandUseCase` step 2b falls through to the cloud

@@ -1,5 +1,6 @@
 package com.sidr.launcher.data.repository.agent.memory
 
+import com.sidr.launcher.core.testing.FakeAliasStore
 import com.sidr.launcher.domain.action.ActionIds
 import com.sidr.launcher.domain.intent.CommandNormalizer
 import com.sidr.launcher.domain.memory.alias.Alias
@@ -252,10 +253,12 @@ class MemoryToolWorkerTest {
     }
 
     /**
-     * `AliasStore.delete` reports no row count, so the worker cannot distinguish "removed one" from
-     * "there was none". `Effected` here means THE OPERATION RAN, not THAT SOMETHING WAS REMOVED — this
-     * worker's own KDoc says exactly that sentence, and this test is what keeps the limitation a
-     * documented property rather than a reader's inference.
+     * Since A4′ phase 2 the worker itself CAN tell "removed one" from "there was none" — it reads the
+     * alias before deleting it and reports what it pointed at in [MemoryToolKeys.PREVIOUS_APP], blank
+     * for "there was none" (see `forget_app_alias reports the app the removed alias pointed at` below
+     * and `ToolInverseCatalog`, which reads exactly that field to decide whether there is anything to
+     * undo). What this test still holds is narrower: `Effected` on its own, with no output inspected,
+     * means THE OPERATION RAN, not THAT SOMETHING WAS REMOVED.
      */
     @Test
     fun `forgetting a phrase that was never stored is still Effected`() = runTest {
@@ -352,5 +355,40 @@ class MemoryToolWorkerTest {
 
         assertTrue(result is ToolResult.Failed)
         assertEquals(0, store.upserted.size)
+    }
+
+    /**
+     * Fix round 1, I1: `FakeAliasStore(failWrites = true)` reads succeed and writes fail, so
+     * `setAppAlias` reaches its `aliasTargetOf` read (which succeeds, reporting no prior alias) and only
+     * then hits `save.save(...)`, which fails. The existing `a store failure is Failed, never Effected`
+     * test uses a store whose READ also fails, so it never reached this branch — this is the one that
+     * does.
+     */
+    @Test
+    fun `a failed alias write is Failed, never Effected, even when the prior alias was read`() = runTest {
+        val store = FakeAliasStore(failWrites = true)
+        val worker = memoryWorker(aliasStore = store)
+
+        val result = worker.invoke(
+            ResolvedInvocation(MemoryToolIds.SET_APP_ALIAS, mapOf("app" to "net.fixture.quill", "phrase" to "вельтрикс")),
+        )
+
+        assertTrue(result is ToolResult.Failed)
+    }
+
+    /**
+     * Fix round 1, I1: same gap for `forgetAppAlias`'s delete-failure branch. The alias is seeded first
+     * so the (succeeding) read finds a target, and only the delete itself fails.
+     */
+    @Test
+    fun `a failed alias delete is Failed, never Effected, even when the alias was read`() = runTest {
+        val store = FakeAliasStore()
+        store.upsert(Alias("вельтрикс", AliasTarget.App("net.fixture.parcel"), createdAtEpochMs = 0L))
+        store.failWrites = true
+        val worker = memoryWorker(aliasStore = store)
+
+        val result = worker.invoke(ResolvedInvocation(MemoryToolIds.FORGET_APP_ALIAS, mapOf("phrase" to "вельтрикс")))
+
+        assertTrue(result is ToolResult.Failed)
     }
 }

@@ -3,6 +3,7 @@ package com.sidr.launcher.consumer.jvm
 import com.sidr.launcher.consumer.jvm.plan.FilePlanner
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionIdFactory
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionStore
+import com.sidr.launcher.consumer.jvm.tool.SandboxToolInverses
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolSource
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolWorker
 import com.sidr.launcher.domain.agent.AgentExecutor
@@ -14,12 +15,14 @@ import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
+import com.sidr.launcher.domain.agent.UndoAgentSessionUseCase
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.InvocationValidator
 import com.sidr.launcher.domain.tool.ResolutionResult
 import com.sidr.launcher.domain.tool.ToolAdapter
 import com.sidr.launcher.domain.tool.ToolFederation
 import com.sidr.launcher.domain.tool.ToolLevels
+import com.sidr.launcher.domain.tool.Undo
 import com.sidr.launcher.domain.trace.TraceEvent
 import java.nio.file.Path
 import kotlin.coroutines.CoroutineContext
@@ -75,6 +78,13 @@ class ConsoleHarness(
     // nowhere here precisely so no reader has to work out which `run` a call resolves to.
     private val runner = RunAgentSessionUseCase(executor, store)
 
+    // A4′ phase 2 (spec §6.5 as amended): after a finished outcome, offer to undo what can be undone.
+    private val undo = UndoAgentSessionUseCase(
+        StartAgentSessionUseCase(FilePlanner(), store, JvmAgentSessionIdFactory(), registry),
+        SandboxToolInverses(),
+        registry,
+    )
+
     private var printed = 0
 
     suspend fun run(goalText: String): ExecutionState {
@@ -92,6 +102,7 @@ class ConsoleHarness(
         printTrace(ran)
         if (ran.state != ExecutionState.AwaitingConsent) {
             out("Outcome: ${ran.state}")
+            offerUndo(ran)
             return ran.state
         }
 
@@ -126,7 +137,7 @@ class ConsoleHarness(
             is OperationResult.Success -> result.value
         }
         if (id == null) {
-            out("No plan for: \"$goalText\". This harness understands: remove <file name>")
+            out("No plan for: \"$goalText\". This harness understands: remove <file name> · rename <file name> to <new name>")
             return null
         }
         return (store.active() as? OperationResult.Success)?.value
@@ -170,7 +181,22 @@ class ConsoleHarness(
 
         printTrace(resolved)
         out("Outcome: ${resolved.state}")
+        offerUndo(resolved)
         return resolved.state
+    }
+
+    /** Offers «undo» when the finished session has something undoable, and names what it cannot undo. */
+    private suspend fun offerUndo(finished: AgentSession) {
+        val review = undo.review(finished)
+        if (review.none { it.undo is Undo.By }) return
+        review.filter { it.undo == Undo.NotUndoable }.forEach { out("Cannot be undone: step ${it.stepIndex}") }
+        out("Undo what can be undone? [y/N]")
+        if (ask()?.trim()?.lowercase() != "y") return
+        val undoing = (undo.undo(finished) as? OperationResult.Success)?.value ?: return
+        val done = (runner.run(undoing) as? OperationResult.Success)?.value ?: return
+        printed = 0
+        printTrace(done)
+        out("Undo outcome: ${done.state}")
     }
 
     /**

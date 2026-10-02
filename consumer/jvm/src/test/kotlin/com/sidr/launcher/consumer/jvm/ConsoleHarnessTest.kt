@@ -172,4 +172,17 @@ class ConsoleHarnessTest {
         )
         assertEquals(ExecutionState.Completed, state)
     }
+
+    @Test
+    fun `after a rename the harness offers undo, and undo puts the name back`() = runTest {
+        temp.newFile("ledger.txt")
+
+        val state = harness(mutableListOf("y")).run("rename ledger.txt to ledger.old")
+
+        assertEquals(ExecutionState.Completed, state)
+        val log = printed.joinToString("\n")
+        assertTrue(log, log.contains("Undo outcome: Completed"))
+        assertTrue(File(temp.root, "ledger.txt").exists())
+        assertFalse(File(temp.root, "ledger.old").exists())
+    }
 }

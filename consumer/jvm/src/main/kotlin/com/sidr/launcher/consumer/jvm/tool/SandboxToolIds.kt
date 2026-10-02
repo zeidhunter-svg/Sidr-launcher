@@ -15,6 +15,7 @@ object SandboxToolIds {
     val WORKSPACE_INFO = ToolId("workspace_info")
     val FIND_FILE = ToolId("find_file")
     val DELETE_FILE = ToolId("delete_file")
+    val RENAME_FILE = ToolId("rename_file")
 }
 
 /**
@@ -26,4 +27,7 @@ object SandboxKeys {
     const val QUERY = "query"
     const val RESOLVED_PATH = "resolved_path"
     const val PATH = "path"
+    const val NEW_NAME = "new_name"
+    const val RENAMED_PATH = "renamed_path"
+    const val PREVIOUS_NAME = "previous_name"
 }

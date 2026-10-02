@@ -64,6 +64,24 @@ class SandboxToolSource : ToolRegistry {
             risk = ActionRiskLevel.DANGEROUS,
             durability = ToolDurability.DURABLE,
         ),
+        ToolDescriptor(
+            id = SandboxToolIds.RENAME_FILE,
+            level = ToolLevels.SANDBOX,
+            effect = ToolEffect.LOCAL,
+            argSchema = listOf(
+                ActionArg(SandboxKeys.PATH, description = "Absolute path of the file to rename"),
+                ActionArg(SandboxKeys.NEW_NAME, description = "The new file name — a bare name, never a path"),
+            ),
+            outputSchema = listOf(
+                ActionArg(SandboxKeys.RENAMED_PATH, description = "Absolute path after the rename"),
+                ActionArg(SandboxKeys.PREVIOUS_NAME, description = "The file name before the rename"),
+            ),
+            // A4′ phase 2: the stand's one reversible tool (spec §6.5). It writes durable state but is
+            // undone by itself, so it is TRANSIENT in this codebase's sense — the precedent of the
+            // launcher's alias tools; DURABLE here means "cannot be put back".
+            risk = ActionRiskLevel.SAFE,
+            durability = ToolDurability.TRANSIENT,
+        ),
     )
 
     override fun all(): List<ToolDescriptor> = descriptors

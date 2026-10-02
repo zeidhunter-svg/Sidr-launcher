@@ -1,9 +1,12 @@
 package com.sidr.launcher.consumer.jvm.tool
 
 import com.sidr.launcher.domain.tool.ResolvedInvocation
+import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
@@ -254,5 +257,54 @@ class SandboxToolWorkerTest {
             ),
         )
         assertTrue(result is ToolResult.Failed)
+    }
+
+    // --- rename_file (A4′ phase 2): the stand's one reversible tool --------------------------------
+
+    private fun rename(path: String, newName: String) = runBlocking {
+        SandboxToolWorker(temp.root.toPath()).invoke(
+            ResolvedInvocation(SandboxToolIds.RENAME_FILE, mapOf(SandboxKeys.PATH to path, SandboxKeys.NEW_NAME to newName)),
+        )
+    }
+
+    @Test
+    fun `rename_file renames inside the sandbox and reports what an undo needs`() {
+        val ledger = temp.newFile("ledger.txt").toPath().toRealPath()
+
+        val result = rename(ledger.toString(), "ledger.old")
+
+        val renamed = ledger.resolveSibling("ledger.old")
+        assertEquals(
+            ToolResult.Effected(ToolOutput(mapOf(SandboxKeys.RENAMED_PATH to renamed.toString(), SandboxKeys.PREVIOUS_NAME to "ledger.txt"))),
+            result,
+        )
+        assertFalse(Files.exists(ledger))
+        assertTrue(Files.exists(renamed))
+    }
+
+    /** A rename that could also move is a move; `archive/` is INSIDE the sandbox, so only the name rule stops it. */
+    @Test
+    fun `rename_file refuses a new name that is a path, even one inside the sandbox`() {
+        val ledger = temp.newFile("ledger.txt").toPath().toRealPath()
+        temp.newFolder("archive")
+
+        assertTrue(rename(ledger.toString(), "archive/ledger.txt") is ToolResult.Failed)
+        assertTrue(Files.exists(ledger))
+    }
+
+    /** Its undo would have to bring the overwritten file back, and nothing kept it. */
+    @Test
+    fun `rename_file never renames over an existing file`() {
+        val ledger = temp.newFile("ledger.txt").toPath().toRealPath()
+        val other = temp.newFile("other.txt").toPath().toRealPath()
+
+        assertTrue(rename(ledger.toString(), "other.txt") is ToolResult.Failed)
+        assertTrue(Files.exists(ledger))
+        assertTrue(Files.exists(other))
+    }
+
+    @Test
+    fun `rename_file on a file that is not there fails`() {
+        assertTrue(rename(temp.root.toPath().resolve("absent.txt").toString(), "absent.old") is ToolResult.Failed)
     }
 }

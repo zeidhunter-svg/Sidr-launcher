@@ -48,6 +48,7 @@ class SandboxToolWorker(private val root: Path) : ToolWorker {
             )
             SandboxToolIds.FIND_FILE -> findFile(invocation)
             SandboxToolIds.DELETE_FILE -> deleteFile(invocation)
+            SandboxToolIds.RENAME_FILE -> renameFile(invocation)
             // A tool this executor does not implement must not silently succeed. The registry and the
             // executor are separate objects, so "registered but unimplemented" is a reachable state.
             else -> ToolResult.Failed(CommandFailure.Generic)
@@ -101,6 +102,29 @@ class SandboxToolWorker(private val root: Path) : ToolWorker {
         } else {
             ToolResult.Failed(CommandFailure.Generic)
         }
+    }
+
+    /**
+     * A4′ phase 2. Renames within one directory. Refuses a new name that is a path — a rename that
+     * could also move is a move, and a move can leave the sandbox — and never renames over an existing
+     * file: `Files.move` without `REPLACE_EXISTING` throws `FileAlreadyExistsException`, which
+     * [invoke]'s catch turns into `Failed`. That refusal is load-bearing for undo, which could not
+     * bring back an overwritten file.
+     */
+    private fun renameFile(invocation: ResolvedInvocation): ToolResult {
+        val source = contained(invocation.args[SandboxKeys.PATH].orEmpty())
+            ?: return ToolResult.Failed(CommandFailure.Generic)
+        val newName = invocation.args[SandboxKeys.NEW_NAME].orEmpty()
+        if (newName.isBlank() || newName.contains('/') || newName.contains('\\') || newName == "." || newName == "..") {
+            return ToolResult.Failed(CommandFailure.Generic)
+        }
+        if (!Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) return ToolResult.Failed(CommandFailure.Generic)
+        val target = source.resolveSibling(newName)
+        if (contained(target.toString()) == null) return ToolResult.Failed(CommandFailure.Generic)
+        Files.move(source, target)
+        return ToolResult.Effected(
+            ToolOutput(mapOf(SandboxKeys.RENAMED_PATH to target.toString(), SandboxKeys.PREVIOUS_NAME to source.fileName.toString())),
+        )
     }
 
     private fun canonicalRoot(): Path = root.toAbsolutePath().normalize().toRealPath()

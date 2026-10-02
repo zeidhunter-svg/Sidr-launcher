@@ -6,14 +6,15 @@ import org.junit.Test
 import java.io.File
 
 /**
- * A4′ phase 2, spec §6.3 (owner, 2026-09-21): compensation must not buy silence. The strongest form of
- * that promise is structural — the engine that decides consent cannot see an inverse, an undo review
- * or an undo step, so no edit INSIDE it can let "this can be undone" lower a gate. Every rule for undo
- * lives outside `AgentExecutor.kt` (`Compensation`, `UndoAgentSessionUseCase`, the per-consumer
- * `ToolInverses`); this reads the engine's code, comments stripped, and requires it to name none of it.
+ * A4′ phase 2, spec §6.3 (owner, 2026-09-21): compensation must not buy silence. This guard holds the
+ * engine free of undo VOCABULARY — a name scan: `AgentExecutor.kt`, comments stripped, must not
+ * mention `ToolInverses`, `Undo`, `Compensation`/`COMPENSATION` or `StepUndo`. It cannot see, and does
+ * not try to see, whether some other spelling lets "this can be undone" influence a gate decision —
+ * that is what the behavioural half holds.
  *
- * `UndoAgentSessionUseCaseTest > an undo whose inverse asks for consent stops at the gate…` is the
- * behavioural half. Both go red under M3a (plan Task 3).
+ * `UndoAgentSessionUseCaseTest > an undo whose inverse asks for consent stops at the gate…` is that
+ * behavioural half: it holds the actual property, that undo never lowers a gate. Both go red under
+ * M3a (plan Task 3).
  *
  * Reopening spec §6.3 (the first reversible CONFIRM tool, by ADR) is exactly the edit that must
  * change this guard — deliberately, in the same commit as the ADR.

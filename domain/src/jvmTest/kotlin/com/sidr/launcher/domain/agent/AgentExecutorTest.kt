@@ -299,11 +299,11 @@ class AgentExecutorTest {
      * bounded steps and consecutive failures only, and the domain is deliberately clock-free). What
      * this test proves is the **cooperative** half — a tool suspended at a cancellable point (`delay`
      * here; a future network or MCP call in production) used to hold the session open forever with no
-     * trace event and no way out, and is now cut. It does **not** prove a bound on a tool blocked in
-     * non-suspending code: `withTimeout` only cancels at a suspension point, and today's shipped
-     * Android workers and the JVM sandbox reach the world synchronously or via `withContext` around a
-     * blocking body, so for them this budget is latent rather than enforced (see
-     * `RuntimeBudget`'s KDoc for the full account).
+     * trace event and no way out, and is now cut. Since A4′ phase 2 (owner fork F2-1, R14) the cut is
+     * the engine's own, not the tool's: `AgentExecutor` runs the world call in its own scope and stops
+     * WAITING at the budget regardless of whether the call itself can be interrupted — a parked,
+     * non-suspending call (every binder call Android makes) is handed off the same way a suspending one
+     * is cut (see `RuntimeBudget`'s KDoc for the full account).
      *
      * The result recorded is `HandedOff` and not `Failed`, and the difference is the honest one: the
      * call WAS made, we stopped waiting, and the side effect may well have happened. Recording a
@@ -365,6 +365,35 @@ class AgentExecutorTest {
     @Test
     fun `the shipped budget bounds a step by wall-clock time`() {
         assertEquals(10_000L, RuntimeBudget.Default.maxStepWallClockMs)
+    }
+
+    /**
+     * N1 / T1 m1 (final review, 2026-10-03): the world call runs detached from structured concurrency
+     * (`minusKey(Job) + SupervisorJob()`), so nothing but the `finally { call.cancel() }` in
+     * [AgentExecutor.perform] stops a cut suspending call from resuming and acting later. Without that
+     * line, a tool cut at the wall-clock budget would keep running in the background and could still
+     * write an alias or issue an intent seconds after the card already said the plan had stopped.
+     */
+    @Test
+    fun `a cut suspending call never acts after the cut`() = runTest {
+        var acted = false
+        val slow = object : ToolExecutor {
+            override suspend fun invoke(invocation: ResolvedInvocation): ToolResult {
+                delay(20_000)
+                acted = true
+                return ToolResult.Effected()
+            }
+        }
+        val executor = AgentExecutor(
+            registry,
+            slow,
+            RuntimeBudget(maxSteps = 8, maxConsecutiveFailures = 2, maxStepWallClockMs = 1_000),
+        )
+
+        executor.advance(session())
+        testScheduler.advanceUntilIdle()
+
+        assertTrue("the cut call must never reach its side effect", !acted)
     }
 
     /**

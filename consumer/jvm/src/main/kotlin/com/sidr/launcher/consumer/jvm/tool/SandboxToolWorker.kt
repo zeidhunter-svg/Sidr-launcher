@@ -106,10 +106,13 @@ class SandboxToolWorker(private val root: Path) : ToolWorker {
 
     /**
      * A4′ phase 2. Renames within one directory. Refuses a new name that is a path — a rename that
-     * could also move is a move, and a move can leave the sandbox — and never renames over an existing
-     * file: `Files.move` without `REPLACE_EXISTING` throws `FileAlreadyExistsException`, which
-     * [invoke]'s catch turns into `Failed`. That refusal is load-bearing for undo, which could not
-     * bring back an overwritten file.
+     * could also move is a move, and a move can leave the sandbox — and does not rename over an
+     * existing file *outside* a check-then-rename (TOCTOU) window: `Files.move` without
+     * `REPLACE_EXISTING` checks for the target's absence and then renames, so a file created at the
+     * target between that check and the rename can still be overwritten; the exception it throws when
+     * the check does catch an existing target is `FileAlreadyExistsException`, which [invoke]'s catch
+     * turns into `Failed`. The same limit as the sandbox's path-based containment generally (A0.5
+     * residual 3) — this refusal is load-bearing for undo outside that window, not unconditionally.
      */
     private fun renameFile(invocation: ResolvedInvocation): ToolResult {
         val source = contained(invocation.args[SandboxKeys.PATH].orEmpty())

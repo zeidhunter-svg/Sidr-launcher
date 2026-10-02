@@ -169,9 +169,11 @@ class LauncherScreenAgentProvenanceTest {
     }
 
     /**
-     * A4′ phase 2 — the mid-call shape `restoreOnStart` must resume, never re-plan (plan Task 4):
-     * `launch_app`'s call is in flight when the process dies, so `Tier0Intent`... no — this is the
-     * A0 `launch_app` tool itself, carried from `ToolIds.LAUNCH_APP`, with no observation recorded yet.
+     * A4′ phase 2 — the mid-call shape `restoreOnStart` must resume, never re-plan (plan Task 4): a
+     * one-step plan whose `ToolInvoked(0)` has no matching `ToolObserved(0)`, which is exactly what a
+     * process death mid-call leaves behind. The step calls `launch_app` (`ToolIds.LAUNCH_APP`), the A0
+     * tool itself, so [AgentSession.replansOnResume] must read this as "a call may still be acting"
+     * and refuse to plan the goal afresh.
      */
     private suspend fun seedPausedMidCall(name: String): AgentSession {
         val goal = AgentGoal("открой $name", GoalShape.Free("открой $name"))

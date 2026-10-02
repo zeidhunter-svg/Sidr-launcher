@@ -152,7 +152,12 @@ data class AgentSession(
      *    it again would redo what it undoes.
      *
      * One predicate for two readers: `ResumeAgentSessionUseCase` acts on it, and the paused card picks
-     * its body by it (F2-3.2), so the card cannot promise one thing while the button does another.
+     * its body by it (F2-3.2), so the card cannot promise one thing while the button does another —
+     * **except in one corner, open as an owner question (final review N5/T4 M1):** when this is true
+     * but the fresh look finds NO plan (`start.plan(paused.goal)` returns `null`), the card still read
+     * "planning afresh", yet what actually runs is the stale paused plan continuing from its cursor.
+     * The direction is safe — nothing is skipped or redone — but the promise and the button diverge in
+     * that one case until the owner answers M1.
      */
     fun replansOnResume(): Boolean =
         state == ExecutionState.Paused &&

@@ -24,7 +24,10 @@ class UndoAgentSessionUseCase(
      *
      * Also empty for a plan the clock stopped (owner fork F2-1b): its cut call may still be acting,
      * and an undo is a world call too. A `Blocked` session whose last step is `HandedOff` is exactly
-     * that shape — `AgentExecutor` ends the plan there and nowhere else with that pair.
+     * that shape, but it is not the only one `AgentExecutor` produces with that pair: a step-budget
+     * stop after a genuine `HandedOff` (today unreachable on Android while plans are one step, P8)
+     * ends there too. The direction is still safe either way — both withhold undo on the same
+     * evidence, an outcome that was never seen.
      */
     fun review(session: AgentSession): List<StepUndo> = when {
         !session.state.isTerminal || session.state == ExecutionState.Cancelled -> emptyList()

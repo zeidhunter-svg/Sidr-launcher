@@ -27,8 +27,10 @@ class ResumeAgentSessionUseCase(
         val fresh = start.plan(paused.goal) ?: return run.run(paused.resumed())
         val started = when (val saved = start.startPlanned(paused.goal, fresh)) {
             is OperationResult.Failure -> return saved
-            // Unreachable: `plan` already validated against the same registry. Continuing the stale
-            // session is the honest fallback — it is still the one in the store.
+            // Practically unreachable: `plan` validated against the same registry just above, but the
+            // federation is derived per call (A1″), so a source's tool set can change between that
+            // `plan` and this `startPlanned`. Continuing the stale session is the honest fallback — it
+            // is still the one in the store.
             is OperationResult.Success -> saved.value ?: return run.run(paused.resumed())
         }
         return run.run(started)

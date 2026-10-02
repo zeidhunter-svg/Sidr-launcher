@@ -24,7 +24,9 @@ import com.sidr.launcher.core.ui.theme.SidrShapes
 import com.sidr.launcher.core.ui.theme.Spacing
 import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.ExecutionState
+import com.sidr.launcher.domain.agent.StepUndo
 import com.sidr.launcher.domain.tool.ToolId
+import com.sidr.launcher.domain.tool.Undo
 import com.sidr.launcher.domain.trace.TraceEvent
 import com.sidr.launcher.feature.launcher.R
 
@@ -49,12 +51,33 @@ internal fun AgentSessionSurface(
     onDeny: (Int) -> Unit,
     onContinue: () -> Unit,
     onDismiss: () -> Unit,
+    // A4′ phase 2 (F2-3.3). Defaulted so a caller that has no undo — a test of another state — draws
+    // no button; the one production caller, `LauncherScreen`, passes both.
+    undoReview: List<StepUndo> = emptyList(),
+    onUndo: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     // Null for exactly one state (Cancelled), which renders nothing; every other state has a title.
     val title = session.state.title() ?: return
     val subject = session.goal.subject()
     val dismiss = SidrSurfaceAction(sidrString(R.string.launcher_agent_cancel), onDismiss)
+    // «Отменить» exists only when at least one step can actually be undone; and when only part can,
+    // the card names the rest, so the button's reach is never implied larger than it is (B14).
+    val undo = if (undoReview.any { it.undo is Undo.By }) {
+        SidrSurfaceAction(sidrString(R.string.launcher_agent_undo), onUndo)
+    } else {
+        null
+    }
+    val notUndoable = if (undo == null) {
+        null
+    } else {
+        undoReview
+            .filter { it.undo == Undo.NotUndoable }
+            .mapNotNull { pending -> session.plan.steps.firstOrNull { it.index == pending.stepIndex } }
+            .map { it.line(subject, dynamicLabels) }
+            .takeIf { it.isNotEmpty() }
+            ?.let { sidrString(R.string.launcher_agent_undo_not_all, it.joinToString(", ")) }
+    }
 
     when (session.state) {
         // The planner has not answered yet. Indeterminate, because there is nothing honest to
@@ -186,22 +209,28 @@ internal fun AgentSessionSurface(
                         dynamicLabels = dynamicLabels,
                     )
                     AgentProvenance(session = session)
+                    notUndoable?.let { SidrText(text = it, role = SidrTextRole.PROVENANCE) }
                 },
                 primaryAction = dismiss,
+                secondaryAction = undo,
             )
         }
 
         ExecutionState.Failed -> SidrErrorSurface(
             title = title,
             modifier = modifier,
+            next = notUndoable,
             primaryAction = dismiss,
+            secondaryAction = undo,
         )
 
         ExecutionState.Blocked -> SidrBlockedState(
             title = title,
             body = sidrString(R.string.launcher_agent_blocked_body),
             modifier = modifier,
+            next = notUndoable,
             primaryAction = dismiss,
+            secondaryAction = undo,
         )
 
         ExecutionState.Cancelled -> Unit

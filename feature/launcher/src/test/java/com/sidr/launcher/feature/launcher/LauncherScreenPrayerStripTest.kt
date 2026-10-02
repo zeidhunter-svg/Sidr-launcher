@@ -180,6 +180,7 @@ class LauncherScreenPrayerStripTest {
             resolveAgentConsent = ResolveConsentUseCase(agentStore, runAgent),
             cancelAgentSession = CancelAgentSessionUseCase(agentStore),
             resumeAgentSession = resumeOver(agentStore, runAgent, agentRegistry),
+            undoAgentSession = undoOver(agentStore, agentRegistry),
             agentSessionStore = agentStore,
             toolRegistry = agentRegistry,
             // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty

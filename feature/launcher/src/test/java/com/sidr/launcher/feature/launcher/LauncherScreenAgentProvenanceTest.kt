@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.lifecycle.SavedStateHandle
 import com.sidr.launcher.core.testing.FakeActionCatalog
 import com.sidr.launcher.core.testing.FakeActionExecutor
@@ -60,14 +61,20 @@ import com.sidr.launcher.domain.memory.resolution.DefaultResolutionPreferencePol
 import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
 import com.sidr.launcher.domain.memory.resolution.ResolveCommandWithPreferenceUseCase
 import com.sidr.launcher.domain.prayer.GetPrayerContextUseCase
+import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ToolDescriptor
 import com.sidr.launcher.domain.tool.ToolDurability
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolId
+import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
+import com.sidr.launcher.domain.tool.ToolInverses
 import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolRegistry
+import com.sidr.launcher.domain.tool.ToolResult
+import com.sidr.launcher.domain.tool.Undo
 import com.sidr.launcher.domain.trace.ExecutionTrace
+import com.sidr.launcher.domain.trace.TraceEvent
 import com.sidr.launcher.feature.launcher.agent.DynamicToolLabel
 import com.sidr.launcher.feature.launcher.agent.DynamicToolLabels
 import java.time.Clock
@@ -161,7 +168,41 @@ class LauncherScreenAgentProvenanceTest {
         return session
     }
 
-    private fun buildViewModel(): LauncherViewModel {
+    /**
+     * A4′ phase 2 — the mid-call shape `restoreOnStart` must resume, never re-plan (plan Task 4):
+     * `launch_app`'s call is in flight when the process dies, so `Tier0Intent`... no — this is the
+     * A0 `launch_app` tool itself, carried from `ToolIds.LAUNCH_APP`, with no observation recorded yet.
+     */
+    private suspend fun seedPausedMidCall(name: String): AgentSession {
+        val goal = AgentGoal("открой $name", GoalShape.Free("открой $name"))
+        val invocation = ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal(name)))
+        val session = AgentSession(
+            id = AgentSessionId("restored-midcall-1"),
+            goal = goal,
+            plan = ExecutionPlan(
+                listOf(PlanStep(0, invocation, ActionRiskLevel.SAFE, StepPrecondition.None, StepRationale.GOAL_DIRECT)),
+            ),
+            cursor = 0,
+            state = ExecutionState.Paused,
+            observations = emptyMap(),
+            consents = emptyMap(),
+            trace = ExecutionTrace(
+                listOf(
+                    TraceEvent.PlanCreated(1),
+                    TraceEvent.StepStarted(0),
+                    TraceEvent.ToolInvoked(0, ToolIds.LAUNCH_APP),
+                    TraceEvent.SessionPaused,
+                ),
+            ),
+        )
+        agentStore.save(session)
+        return session
+    }
+
+    private fun buildViewModel(
+        tools: FakeToolExecutor = FakeToolExecutor(emptyList()),
+        inverses: ToolInverses = noInverses,
+    ): LauncherViewModel {
         val fakeRepo = FakeInstalledAppsRepository()
         val fakeExecutor = FakeActionExecutor()
         val useCase = HandleUserCommandUseCase(
@@ -176,7 +217,7 @@ class LauncherScreenAgentProvenanceTest {
             override fun newId() = AgentSessionId("test-agent-${++n}")
         }
         val runAgent = RunAgentSessionUseCase(
-            executor = AgentExecutor(agentRegistry, FakeToolExecutor(emptyList()), RuntimeBudget.Default),
+            executor = AgentExecutor(agentRegistry, tools, RuntimeBudget.Default),
             store = agentStore,
         )
         val routeUseCase = RouteCommandUseCase(
@@ -232,6 +273,7 @@ class LauncherScreenAgentProvenanceTest {
             resolveAgentConsent = ResolveConsentUseCase(agentStore, runAgent),
             cancelAgentSession = CancelAgentSessionUseCase(agentStore),
             resumeAgentSession = resumeOver(agentStore, runAgent, agentRegistry),
+            undoAgentSession = undoOver(agentStore, agentRegistry, inverses),
             agentSessionStore = agentStore,
             toolRegistry = agentRegistry,
             dynamicToolLabels = agentToolLabels,
@@ -440,6 +482,53 @@ class LauncherScreenAgentProvenanceTest {
         )
         agentStore.save(session)
         return session
+    }
+
+    /**
+     * A4′ phase 2 — the seam for «Отменить», the way the precedent seams hold `DOC-ILM-2`: the real
+     * screen, the real ViewModel, the real collaborator and use cases, and a fake only at the world.
+     *
+     * A session that died mid-call on `launch_app` comes back Paused; «Continue» performs the pending
+     * call (a call in flight is resumed, never re-planned — plan Task 4), which finishes the plan; the
+     * finished card offers «Undo»; «Undo» starts an undo session. The fixture's inverse for
+     * `launch_app` is `play_store_search` — **a fixture pairing, not a claim that a store search
+     * undoes a launch**: it is the one pair of tools this registry has, and `play_store_search` is
+     * CONFIRM here, so the undo stops at the gate (spec §6.3) and nothing further reaches the world.
+     *
+     * **A tall window, not the class default.** Robolectric's default root is 320x470px — too short
+     * for Home's full column (Shahada, date, prayer strip, input, the agent card) to lay out the
+     * "Continue"/"Undo" row with a non-zero height, so `performClick()`'s touch injection lands on a
+     * zero-size target and silently does nothing (confirmed: invoking the same node's semantics
+     * `OnClick` action directly DOES run the full chain to `Completed`). `SidrPrayerSummaryScreenshotTest`
+     * sets the same kind of qualifier for the same reason — a tall screen for scrollable content.
+     */
+    @Test
+    @Config(sdk = [34], qualifiers = "w360dp-h2400dp")
+    fun `a finished plan on the screen offers Undo, and Undo reaches the engine through its gate`() {
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
+        val inverses = ToolInverses { forward, _ ->
+            if (forward.id == ToolIds.LAUNCH_APP) {
+                Undo.By(ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.Literal(forward.args.getValue("query")))))
+            } else {
+                Undo.NotUndoable
+            }
+        }
+        runBlocking { seedPausedMidCall("лумора") }
+        val vm = buildViewModel(tools, inverses)
+        compose.setContent {
+            SidrTheme(darkTheme = true) {
+                LauncherScreen(viewModel = vm)
+            }
+        }
+        compose.waitForIdle()
+
+        compose.onNodeWithText("Continue").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Undo").performClick()
+        compose.waitForIdle()
+
+        assertEquals(listOf(ToolIds.LAUNCH_APP), tools.invocations.map { it.id })
+        compose.onNodeWithText("Confirm this step").assertExists()
     }
 
     private companion object {

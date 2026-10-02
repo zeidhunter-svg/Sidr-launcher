@@ -3,26 +3,46 @@ package com.sidr.launcher.feature.launcher.agent
 import com.sidr.launcher.core.testing.FakeAgentSessionStore
 import com.sidr.launcher.core.testing.FakeToolExecutor
 import com.sidr.launcher.core.testing.FakeToolRegistry
+import com.sidr.launcher.domain.action.ActionArg
+import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentExecutor
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.AgentSessionIdFactory
 import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
+import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
 import com.sidr.launcher.domain.agent.ResumeAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RuntimeBudget
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
+import com.sidr.launcher.domain.agent.StepPrecondition
+import com.sidr.launcher.domain.agent.StepRationale
+import com.sidr.launcher.domain.agent.StepUndo
 import com.sidr.launcher.domain.agent.TemplatePlanner
+import com.sidr.launcher.domain.agent.UndoAgentSessionUseCase
+import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ObservedFact
+import com.sidr.launcher.domain.tool.ToolDescriptor
+import com.sidr.launcher.domain.tool.ToolDurability
+import com.sidr.launcher.domain.tool.ToolEffect
+import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
+import com.sidr.launcher.domain.tool.ToolInverses
+import com.sidr.launcher.domain.tool.ToolInvocation
+import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolOutput
+import com.sidr.launcher.domain.tool.ToolRegistry
 import com.sidr.launcher.domain.tool.ToolResult
+import com.sidr.launcher.domain.tool.Undo
 import com.sidr.launcher.domain.trace.TraceEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -70,7 +90,12 @@ class LauncherAgentSessionTest {
         store.save(store.active.copy(state = ExecutionState.Running))
     }
 
-    private fun collaborator(tools: FakeToolExecutor, scope: CoroutineScope): LauncherAgentSession {
+    private fun collaborator(
+        tools: FakeToolExecutor,
+        scope: CoroutineScope,
+        registry: ToolRegistry = this.registry,
+        inverses: ToolInverses = ToolInverses { _, _ -> Undo.NotUndoable },
+    ): LauncherAgentSession {
         val runner = RunAgentSessionUseCase(AgentExecutor(registry, tools, RuntimeBudget.Default), store)
         return LauncherAgentSession(
             runSession = runner,
@@ -79,6 +104,7 @@ class LauncherAgentSessionTest {
             store = store,
             scope = scope,
             resumeSession = ResumeAgentSessionUseCase(StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry), runner),
+            undoSession = UndoAgentSessionUseCase(StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry), inverses, registry),
         )
     }
 
@@ -296,5 +322,73 @@ class LauncherAgentSessionTest {
         )
         assertEquals(1, events.count { it is TraceEvent.StepStarted && it.index == 0 })
         assertEquals(ExecutionState.AwaitingConsent, agent.session.value?.state)
+    }
+
+    // --- «Отменить» (A4′ phase 2, spec §6.6, owner fork F2-3.3) --------------------------------
+
+    private val note = ToolId("fixture_note")
+    private val unnote = ToolId("fixture_unnote")
+    private val undoRegistry = FakeToolRegistry(
+        listOf(note, unnote).map {
+            ToolDescriptor(id = it, level = ToolLevels.SANDBOX, effect = ToolEffect.LOCAL, argSchema = listOf(ActionArg("name", description = "fixture")), risk = ActionRiskLevel.SAFE, durability = ToolDurability.TRANSIENT)
+        },
+    )
+    private val undoInverses = ToolInverses { forward, _ ->
+        if (forward.id == note) Undo.By(ToolInvocation(unnote, mapOf("name" to ArgSource.Literal(forward.args.getValue("name"))))) else Undo.NotUndoable
+    }
+    private val noteGoal = AgentGoal("запомни вельтрикс", GoalShape.Free("запомни вельтрикс"))
+    private val notePlan = ExecutionPlan(
+        listOf(PlanStep(0, ToolInvocation(note, mapOf("name" to ArgSource.Literal("вельтрикс"))), ActionRiskLevel.SAFE, StepPrecondition.None, StepRationale.GOAL_DIRECT)),
+    )
+
+    /** A finished one-step note plan on screen, the way a real one arrives: started, then attached. */
+    private suspend fun TestScope.finishedNote(tools: FakeToolExecutor): LauncherAgentSession {
+        val agent = collaborator(tools, this, registry = undoRegistry, inverses = undoInverses)
+        val started = StartAgentSessionUseCase(TemplatePlanner(), store, ids, undoRegistry).startPlanned(noteGoal, notePlan)
+        agent.attach((started as OperationResult.Success).value!!.id)
+        advanceUntilIdle()
+        check(agent.session.value?.state == ExecutionState.Completed) { "seed expected Completed, was ${agent.session.value?.state}" }
+        return agent
+    }
+
+    @Test
+    fun `the undo review follows the session on screen`() = runTest {
+        val agent = finishedNote(FakeToolExecutor(listOf(ToolResult.Effected())))
+
+        assertEquals(
+            listOf(StepUndo(0, Undo.By(ToolInvocation(unnote, mapOf("name" to ArgSource.Literal("вельтрикс")))))),
+            agent.undoReview.value,
+        )
+
+        agent.cancel()
+        advanceUntilIdle()
+        assertEquals(emptyList<StepUndo>(), agent.undoReview.value)
+    }
+
+    @Test
+    fun `Undo starts a session that undoes the finished plan and shows it`() = runTest {
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected(), ToolResult.Effected()))
+        val agent = finishedNote(tools)
+
+        agent.undo()
+        advanceUntilIdle()
+
+        assertEquals(listOf(note, unnote), tools.invocations.map { it.id })
+        assertEquals(ExecutionState.Completed, agent.session.value?.state)
+        assertEquals(listOf(StepRationale.COMPENSATION), agent.session.value?.plan?.steps?.map { it.rationale })
+        assertEquals("an undo offers no undo of its own", emptyList<StepUndo>(), agent.undoReview.value)
+    }
+
+    /** Review Focus 1: two taps, two new sessions otherwise — the store's conditional write cannot see them. */
+    @Test
+    fun `a second Undo tap while the first is running starts nothing`() = runTest {
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected(), ToolResult.Effected(), ToolResult.Effected()))
+        val agent = finishedNote(tools)
+
+        agent.undo()
+        agent.undo()
+        advanceUntilIdle()
+
+        assertEquals(listOf(note, unnote), tools.invocations.map { it.id })
     }
 }

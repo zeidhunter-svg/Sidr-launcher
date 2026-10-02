@@ -8,6 +8,8 @@ import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
 import com.sidr.launcher.domain.agent.ResumeAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
+import com.sidr.launcher.domain.agent.StepUndo
+import com.sidr.launcher.domain.agent.UndoAgentSessionUseCase
 import com.sidr.launcher.domain.result.OperationResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,6 +36,7 @@ internal class LauncherAgentSession(
     private val store: AgentSessionStore,
     private val scope: CoroutineScope,
     private val resumeSession: ResumeAgentSessionUseCase,
+    private val undoSession: UndoAgentSessionUseCase,
 ) {
     private val _session = MutableStateFlow<AgentSession?>(null)
     val session: StateFlow<AgentSession?> = _session.asStateFlow()
@@ -47,10 +50,23 @@ internal class LauncherAgentSession(
     private val _confirming = MutableStateFlow(false)
     val confirming: StateFlow<Boolean> = _confirming.asStateFlow()
 
+    /**
+     * What «Отменить» would undo for the session on screen, and what it could not (A4′ phase 2, spec
+     * §6.6). Recomputed every time the session on screen changes — through [show], never by a
+     * collector that would outlive a test's scope.
+     */
+    private val _undoReview = MutableStateFlow<List<StepUndo>>(emptyList())
+    val undoReview: StateFlow<List<StepUndo>> = _undoReview.asStateFlow()
+
+    private fun show(next: AgentSession?) {
+        _session.value = next
+        _undoReview.value = next?.let(undoSession::review).orEmpty()
+    }
+
     fun attach(id: AgentSessionId) = scope.launch {
         val active = (store.active() as? OperationResult.Success)?.value ?: return@launch
         if (active.id != id) return@launch
-        _session.value = (runSession.run(active) as? OperationResult.Success)?.value
+        show((runSession.run(active) as? OperationResult.Success)?.value)
     }
 
     /**
@@ -77,13 +93,13 @@ internal class LauncherAgentSession(
         }
 
         if (active.state == ExecutionState.Paused) {
-            _session.value = active
+            show(active)
             return@launch
         }
 
         val paused = active.pausedForRestore()
         store.save(paused)
-        _session.value = paused
+        show(paused)
     }
 
     /**
@@ -101,7 +117,7 @@ internal class LauncherAgentSession(
         busy = true
         scope.launch {
             try {
-                _session.value = (resumeSession.resume(paused) as? OperationResult.Success)?.value
+                show((resumeSession.resume(paused) as? OperationResult.Success)?.value)
             } finally {
                 busy = false
             }
@@ -123,7 +139,7 @@ internal class LauncherAgentSession(
             // surface rather than blanking it — the user pressed a button that had already been honoured.
             val next = (resolveConsent.resolve(current.id, stepIndex, granted)
                 as? OperationResult.Success)?.value
-            if (next != null) _session.value = next
+            if (next != null) show(next)
         } finally {
             _confirming.value = false
         }
@@ -131,7 +147,26 @@ internal class LauncherAgentSession(
 
     fun cancel() = scope.launch {
         _session.value?.let { cancelSession.cancel(it.id) }
-        _session.value = null
+        show(null)
         _confirming.value = false
+    }
+
+    /**
+     * «Отменить» (owner fork F2-3.3): a NEW session that undoes the finished one on screen, run through
+     * the same engine and gates. Never automatic. Shares [busy] with [continueSession] — one run at a
+     * time from this card, and a second tap does nothing (plan §0.3 P6).
+     */
+    fun undo() {
+        if (busy) return
+        val finished = _session.value ?: return
+        busy = true
+        scope.launch {
+            try {
+                val undoing = (undoSession.undo(finished) as? OperationResult.Success)?.value ?: return@launch
+                show((runSession.run(undoing) as? OperationResult.Success)?.value)
+            } finally {
+                busy = false
+            }
+        }
     }
 }

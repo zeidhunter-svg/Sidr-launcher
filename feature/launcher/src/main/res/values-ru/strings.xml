@@ -134,4 +134,6 @@
     <string name="launcher_agent_failed_title">План не удалось завершить</string>
     <string name="launcher_agent_blocked_title">План остановлен</string>
     <string name="launcher_agent_blocked_body">Sidr остановил этот план: продолжать его безопасно уже нельзя. Больше ничего не выполнится.</string>
+    <string name="launcher_agent_undo">Отменить</string>
+    <string name="launcher_agent_undo_not_all">Здесь не отменить: %1$s</string>
 </resources>

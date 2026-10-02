@@ -118,6 +118,7 @@ fun LauncherScreen(
     // Task 12 / A0: the agent runtime's session, if one is in flight or was restored at startup.
     val agentSession by viewModel.agentSessionState.collectAsStateWithLifecycle()
     val agentConfirming by viewModel.agentConfirming.collectAsStateWithLifecycle()
+    val agentUndoReview by viewModel.agentUndoReview.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     // First-run nudge (Block X6): whether this launcher is already the system default HOME app.
@@ -302,6 +303,8 @@ fun LauncherScreen(
                     onDeny = viewModel::denyAgentStep,
                     onContinue = viewModel::continueAgentSession,
                     onDismiss = viewModel::dismissAgentSession,
+                    undoReview = agentUndoReview,
+                    onUndo = viewModel::undoAgentSession,
                 )
             }
 

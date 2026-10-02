@@ -291,6 +291,7 @@ class LauncherViewModelTest {
         resolveAgentConsent = ResolveConsentUseCase(fakeAgentStore, runAgent),
         cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
         resumeAgentSession = resumeOver(fakeAgentStore, runAgent, agentRegistry),
+        undoAgentSession = undoOver(fakeAgentStore, agentRegistry),
         agentSessionStore = fakeAgentStore,
         toolRegistry = agentRegistry,
         // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
@@ -357,6 +358,7 @@ class LauncherViewModelTest {
             resolveAgentConsent = ResolveConsentUseCase(fakeAgentStore, runAgentSession),
             cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
             resumeAgentSession = resumeOver(fakeAgentStore, runAgentSession, agentRegistry),
+            undoAgentSession = undoOver(fakeAgentStore, agentRegistry),
             agentSessionStore = fakeAgentStore,
             toolRegistry = agentRegistry,
             // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
@@ -692,6 +694,7 @@ class LauncherViewModelTest {
             resolveAgentConsent = ResolveConsentUseCase(fakeAgentStore, runAgentSession),
             cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
             resumeAgentSession = resumeOver(fakeAgentStore, runAgentSession, agentRegistry),
+            undoAgentSession = undoOver(fakeAgentStore, agentRegistry),
             agentSessionStore = fakeAgentStore,
             toolRegistry = agentRegistry,
             // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
@@ -950,6 +953,7 @@ class LauncherViewModelTest {
             resolveAgentConsent = ResolveConsentUseCase(fakeAgentStore, runAgentSession),
             cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
             resumeAgentSession = resumeOver(fakeAgentStore, runAgentSession, agentRegistry),
+            undoAgentSession = undoOver(fakeAgentStore, agentRegistry),
             agentSessionStore = fakeAgentStore,
             toolRegistry = agentRegistry,
             // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty

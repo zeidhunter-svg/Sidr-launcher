@@ -37,6 +37,7 @@ import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RuntimeBudget
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.TemplatePlanner
+import com.sidr.launcher.domain.agent.UndoAgentSessionUseCase
 import com.sidr.launcher.domain.tool.ToolAdapter
 import com.sidr.launcher.domain.tool.ToolExecutor
 import com.sidr.launcher.domain.tool.ToolFederation
@@ -314,6 +315,14 @@ object AgentProvidesModule {
         start: StartAgentSessionUseCase,
         run: RunAgentSessionUseCase,
     ): ResumeAgentSessionUseCase = ResumeAgentSessionUseCase(start = start, run = run)
+
+    @Provides
+    @Singleton
+    fun provideUndoAgentSessionUseCase(
+        start: StartAgentSessionUseCase,
+        inverses: ToolInverses,
+        registry: ToolRegistry,
+    ): UndoAgentSessionUseCase = UndoAgentSessionUseCase(start = start, inverses = inverses, registry = registry)
 
     @Provides
     @Singleton

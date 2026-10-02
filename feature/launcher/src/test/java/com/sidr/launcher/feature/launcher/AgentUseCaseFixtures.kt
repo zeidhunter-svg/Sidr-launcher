@@ -27,3 +27,16 @@ internal fun resumeOver(
     StartAgentSessionUseCase(TemplatePlanner(), store, SequentialIds("resumed-"), registry),
     run,
 )
+
+/** An undo that has nothing to offer — what every test that does not exercise undo passes. */
+internal val noInverses = com.sidr.launcher.domain.tool.ToolInverses { _, _ -> com.sidr.launcher.domain.tool.Undo.NotUndoable }
+
+internal fun undoOver(
+    store: AgentSessionStore,
+    registry: ToolRegistry,
+    inverses: com.sidr.launcher.domain.tool.ToolInverses = noInverses,
+): com.sidr.launcher.domain.agent.UndoAgentSessionUseCase = com.sidr.launcher.domain.agent.UndoAgentSessionUseCase(
+    StartAgentSessionUseCase(TemplatePlanner(), store, SequentialIds("undo-"), registry),
+    inverses,
+    registry,
+)

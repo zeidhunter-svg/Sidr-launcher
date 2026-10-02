@@ -134,4 +134,6 @@
     <string name="launcher_agent_failed_title">Bu plan tamamlanamadı</string>
     <string name="launcher_agent_blocked_title">Plan durduruldu</string>
     <string name="launcher_agent_blocked_body">Sidr bu planı durdurdu, çünkü artık güvenle sürdüremiyordu. Başka hiçbir şey çalışmayacak.</string>
+    <string name="launcher_agent_undo">Geri al</string>
+    <string name="launcher_agent_undo_not_all">Burada geri alınamaz: %1$s</string>
 </resources>

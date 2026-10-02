@@ -5,7 +5,7 @@ import com.sidr.launcher.domain.tool.ToolId
 /**
  * This consumer's tool vocabulary — **declared here, not in `commonMain`.**
  *
- * `ToolIds` in `domain/tool` keeps exactly its two A0 values. Adding these three there would be
+ * `ToolIds` in `domain/tool` keeps exactly its two A0 values. Adding these four there would be
  * precisely the per-consumer taxonomy A0.5 exists to warn about (spec §11.2), and `ToolId`'s
  * value-class-over-`String` design already makes it unnecessary: "adding an action requires no change
  * to a central enum", as `ActionId`'s KDoc puts it. That this works with no core edit is one of the two

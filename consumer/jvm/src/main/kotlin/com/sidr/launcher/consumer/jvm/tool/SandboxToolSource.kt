@@ -10,7 +10,7 @@ import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolRegistry
 
 /**
- * The second consumer's only tool source: three filesystem tools over a sandbox directory.
+ * The second consumer's only tool source: four filesystem tools over a sandbox directory.
  *
  * It is a `ToolRegistry` directly, the same shape `SystemIntentToolSource` takes, so the registry
  * stays "a list of sources" and A1' can still federate or discard either one. **The A1 fork is not

@@ -25,7 +25,7 @@ import com.sidr.launcher.domain.tool.ToolRegistry
  * `ToolIds.LAUNCH_APP`/`PLAY_STORE_SEARCH`, so reusing it would have forced this consumer to name its
  * tools after Android families — a costume, not a proof (spec §2, `F4`).
  *
- * **Reading the goal is deliberately trivial.** One verb, then the rest of the line. Not a parser, not
+ * **Reading the goal is deliberately trivial.** Two verbs, then the rest of the line. Not a parser, not
  * a matcher, not an understanding layer — anything richer would be building this consumer's own
  * FastPath, which is neither this block's subject nor in its budget. A goal it cannot read is
  * [PlanningResult.NoPlan].

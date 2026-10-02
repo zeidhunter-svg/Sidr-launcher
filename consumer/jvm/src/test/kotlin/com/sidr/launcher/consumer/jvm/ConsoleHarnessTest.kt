@@ -185,4 +185,25 @@ class ConsoleHarnessTest {
         assertTrue(File(temp.root, "ledger.txt").exists())
         assertFalse(File(temp.root, "ledger.old").exists())
     }
+
+    /**
+     * I1 (fix round 1): "undo is never automatic" (spec §6.3) was asserted only in prose — the only
+     * harness undo test answers "y", and every older test runs a `remove` plan with nothing undoable,
+     * so `offerUndo` returns before ever reaching `ask()`. This is the first test that answers "n" to
+     * an actually-undoable outcome: without the gate at `ConsoleHarness.offerUndo`, the rename would be
+     * undone anyway.
+     */
+    @Test
+    fun `after a rename the harness never undoes without a yes`() = runTest {
+        temp.newFile("ledger.txt")
+
+        val state = harness(mutableListOf("n")).run("rename ledger.txt to ledger.old")
+
+        assertEquals(ExecutionState.Completed, state)
+        val log = printed.joinToString("\n")
+        assertTrue(log, log.contains("Undo what can be undone? [y/N]"))
+        assertFalse(log, log.contains("Undo outcome"))
+        assertTrue(File(temp.root, "ledger.old").exists())
+        assertFalse(File(temp.root, "ledger.txt").exists())
+    }
 }

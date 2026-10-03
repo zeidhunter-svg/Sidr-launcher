@@ -156,8 +156,12 @@ class ResumeAgentSessionUseCaseTest {
         assertEquals(listOf(mapOf("query" to "лумора")), tools.invocations.map { it.args })
     }
 
+    /**
+     * Owner decision 2026-10-03, M1(b): the card promised a fresh look, so when the look finds no plan
+     * the stale session ends Failed. Continuing a plan whose re-check just failed is §12.8's staleness.
+     */
     @Test
-    fun `a goal that no longer plans leaves the paused plan to continue as it was`() = runTest {
+    fun `a goal that no longer plans ends the stale plan honestly instead of continuing it`() = runTest {
         val nothing = object : Planner {
             override suspend fun plan(request: PlanningRequest, registry: ToolRegistry): PlanningResult = PlanningResult.NoPlan
         }
@@ -167,8 +171,10 @@ class ResumeAgentSessionUseCaseTest {
         val after = resume(tools, nothing).resume(paused).value()
 
         assertEquals(AgentSessionId("s1"), after.id)
-        assertEquals(ExecutionState.AwaitingConsent, after.state)
+        assertEquals(ExecutionState.Failed, after.state)
         assertTrue(tools.invocations.isEmpty())
-        assertTrue(after.trace.events.contains(TraceEvent.SessionResumed))
+        assertEquals(TraceEvent.SessionEnded(ExecutionState.Failed), after.trace.events.last())
+        assertTrue(TraceEvent.SessionResumed !in after.trace.events)
+        assertEquals("at rest the store is empty", null, store.activeOrNull)
     }
 }

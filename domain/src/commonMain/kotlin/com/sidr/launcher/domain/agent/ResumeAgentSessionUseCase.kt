@@ -12,8 +12,11 @@ import com.sidr.launcher.domain.result.OperationResult
  * under the same step index would have made the trace lie (§0.3 P4), which is why this is a new
  * session and not a revision.
  *
- * Otherwise — something may have acted, a call is in flight, the plan is an undo, or the goal no
- * longer plans at all — the paused session continues from its cursor exactly as before phase 2.
+ * If something may have acted, a call is in flight, or the plan is an undo, the paused session
+ * continues from its cursor exactly as before phase 2. If the goal no longer plans, the stale session
+ * ends [ExecutionState.Failed]: continuing a plan whose re-check just failed is the staleness A0 §12.8
+ * condemned (owner decision 2026-10-03, M1(b)). Nothing is performed; the trace records
+ * `SessionEnded(Failed)`; at rest the store is empty.
  *
  * Re-planning after a FAILURE is not here: none of the deterministic planners can do anything better
  * after one, and its first consumer is phase 3's model planner (the amendment).
@@ -24,14 +27,15 @@ class ResumeAgentSessionUseCase(
 ) {
     suspend fun resume(paused: AgentSession): OperationResult<AgentSession> {
         if (!paused.replansOnResume()) return run.run(paused.resumed())
-        val fresh = start.plan(paused.goal) ?: return run.run(paused.resumed())
+        val fresh = start.plan(paused.goal) ?: return run.run(paused.ended(ExecutionState.Failed))
         val started = when (val saved = start.startPlanned(paused.goal, fresh)) {
             is OperationResult.Failure -> return saved
             // Practically unreachable: `plan` validated against the same registry just above, but the
             // federation is derived per call (A1″), so a source's tool set can change between that
-            // `plan` and this `startPlanned`. Continuing the stale session is the honest fallback — it
-            // is still the one in the store.
-            is OperationResult.Success -> saved.value ?: return run.run(paused.resumed())
+            // `plan` and this `startPlanned`. It means the same as the no-plan case above — the goal
+            // no longer plans against the current registry — so it ends the same way (owner decision
+            // 2026-10-03, M1(b)): the stale session ends `Failed`, it is not continued.
+            is OperationResult.Success -> saved.value ?: return run.run(paused.ended(ExecutionState.Failed))
         }
         return run.run(started)
     }

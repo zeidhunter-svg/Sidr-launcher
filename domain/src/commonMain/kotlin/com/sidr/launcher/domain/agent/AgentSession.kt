@@ -124,8 +124,9 @@ data class AgentSession(
      *    become (A0 acceptance §12.8: a session that already observed `APP_NOT_INSTALLED` opens the
      *    store even if the app was installed while the plan sat paused). **Built in phase 2** — not
      *    here, in `ResumeAgentSessionUseCase`: a plan in which nothing has acted is planned afresh
-     *    ([replansOnResume]); anything that may have acted still continues from this cursor, and that
-     *    remainder is named, not closed.
+     *    ([replansOnResume]), and if that fresh look finds no plan the stale session ends
+     *    [ExecutionState.Failed] rather than continuing (owner decision 2026-10-03, M1(b)); anything
+     *    that may have acted still continues from this cursor, and that remainder is named, not closed.
      *  - **Layer 2 — a source's own snapshot.** `ShortcutRefreshTrigger.start()` runs once per
      *    process and observes **shortcut** changes; a grant of the `android.app.role.HOME` role is
      *    not one, so the dynamic catalog stays empty until a restart (A1″ acceptance finding (b),
@@ -152,12 +153,11 @@ data class AgentSession(
      *    it again would redo what it undoes.
      *
      * One predicate for two readers: `ResumeAgentSessionUseCase` acts on it, and the paused card picks
-     * its body by it (F2-3.2), so the card cannot promise one thing while the button does another —
-     * **except in one corner, open as an owner question (final review N5/T4 M1):** when this is true
-     * but the fresh look finds NO plan (`start.plan(paused.goal)` returns `null`), the card still read
-     * "planning afresh", yet what actually runs is the stale paused plan continuing from its cursor.
-     * The direction is safe — nothing is skipped or redone — but the promise and the button diverge in
-     * that one case until the owner answers M1.
+     * its body by it (F2-3.2), so the card cannot promise one thing while the button does another.
+     * When this is true but the fresh look finds NO plan (`start.plan(paused.goal)` returns `null`),
+     * the stale session ends [ExecutionState.Failed] instead of continuing (owner decision 2026-10-03,
+     * M1(b); final review N5/T4 M1) — the card then reads «План не удалось завершить», not a promise
+     * of a fresh look that a stale continuation would have broken.
      */
     fun replansOnResume(): Boolean =
         state == ExecutionState.Paused &&

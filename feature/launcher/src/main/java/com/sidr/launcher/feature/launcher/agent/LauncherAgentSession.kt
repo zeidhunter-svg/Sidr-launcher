@@ -26,8 +26,9 @@ import kotlinx.coroutines.launch
  * would be the system deciding on their behalf. [continueSession]'s behaviour since Task 4 (A4′ phase
  * 2, spec §6.4, owner fork F2-3.1) depends on [AgentSession.replansOnResume]: if nothing in the plan
  * can have acted yet, Continue starts a NEW session that plans the goal afresh — no `SessionResumed`,
- * a different id — and replaces the paused one in the store; otherwise it resumes from the cursor as
- * before, recording `SessionResumed`, setting `Running`, and letting the engine re-evaluate — which
+ * a different id — and replaces the paused one in the store (if the goal no longer plans, the stale
+ * session instead ends `Failed` and nothing is performed — owner decision 2026-10-03, M1(b));
+ * otherwise it resumes from the cursor as before, recording `SessionResumed`, setting `Running`, and letting the engine re-evaluate — which
  * puts a pending consent checkpoint back on screen rather than stepping past it.
  *
  * Everything it touches is a `:domain` port, so it is unit-testable without Android or Compose.

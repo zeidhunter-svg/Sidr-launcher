@@ -5,7 +5,7 @@
 > checkbox (`- [ ]`) syntax for tracking.
 
 > **Status: written 2026-10-03, reviewed once on 2026-10-04 against the tree and the spec, every finding
-> applied (§0.11). Not started.**
+> applied (§0.11). The owner's three forks answered 2026-10-04 (§0.1). Not started.**
 > - Branch `launcher--7`, base `fe495cd`, gate baseline **1560 / 0 / 0**.
 > - **Spec:** [§7 in full — §7.12 (owner amendment D1–D3, accepted 2026-10-03) governs wherever it
 >   differs from the rest of §7 — plus §9, §10, §11 of
@@ -233,6 +233,12 @@ build, and each is pinned by a test in the task that owns the code.
 Each is put the way the owner asked for owner items: what it means, the options with their cost, a
 recommendation, and a one-line answer format. **Answer format for all three, one line:**
 `A: <allow|deny> · B: <a|b> · C: <a|b>`.
+
+> **Owner's answer, 2026-10-04: `A: allow · B: a · C: a`** — all three as recommended. So Task 3 builds
+> the allow-list (`OFFERED_LEVELS = setOf(IN_APP, SYSTEM_INTENT)`) and its test reads `…is not offered`;
+> Task 11 builds `OfferedToolIdsFreezeGuardTest`, its total is **1644** and ADR 2 carries the freeze
+> clause; F3a-C (a) changes no task — the alias limit is named at close (Task 13 Step 5). The (deny)
+> and (b) branches below are the record of what was weighed, not instructions.
 
 **F3a-A — the shape of the offering filter (spec §7.6 against §7.12.1).** Spec §7.6, written
 2026-09-21, gives the required filter as `registry.all().filter { it.level != ToolLevels.APP_SHORTCUT }`
@@ -593,7 +599,7 @@ the cell changes **in the same task**. `DOC-ADL-3`'s cell and the paragraph at
 ### 0.7 · Owner dependencies and hypotheses
 
 **Owner dependencies.**
-1. **The three forks of §0.1** — needed by Task 3 (F3a-A) and Task 11 (F3a-B); F3a-C changes no task
+1. **The three forks of §0.1 — answered 2026-10-04, `A: allow · B: a · C: a`** — needed by Task 3 (F3a-A) and Task 11 (F3a-B); F3a-C changes no task
    under (a). Tasks 1–2 do not depend on any.
 2. **The transport measurement (Task 12):** a labelled corpus in
    `app/src/test/resources/bridge-measure/corpus.tsv` (format in Task 6's README), two to four models,

@@ -4,7 +4,16 @@
 > (recommended) or `superpowers:executing-plans` to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-> **Status: written 2026-09-27, reviewed once against the tree and the spec (§0.8). Not started.**
+> **Status: EXECUTED 2026-09-27 … 2026-10-03 — `CODE-GREEN` at 1560 / 0 / 0** (boundary
+> `tools/gate.sh`, cleared tree, 557 executed). The record — commits, the measured gate chain (also
+> under "Gate chain (hypothesis)" below), plan defects PF-1 and PF-2, rulings, and the owner's answers
+> of 2026-10-03 (M1(b), done in `180df26`: when the fresh look on «Продолжить» finds no plan, the stale
+> session ends `Failed` instead of continuing; and the `DOC-HMA-3` cell's phase-3 remainder marker) —
+> is in `§HANDOFF` of the track plan, «Фаза 2 A4′». The body below is left as written except where
+> execution corrected it in place (M2d, PF-1; Task 6's seam test, PF-2).
+>
+> Original status line: **written 2026-09-27, reviewed once against the tree and the spec (§0.8). Not
+> started.**
 > - Branch `launcher--7`, base `4cf37c7`, gate baseline **1485 / 0 / 0**.
 > - **Spec:** [§6 in full, plus §3 (0.2, 0.3, 0.4), §9, §10 of
 >   2026-09-21-a4-runtime-design.md](../specs/2026-09-21-a4-runtime-design.md). It is `ПОЛНА`; the
@@ -2889,6 +2898,14 @@ class ResumeAgentSessionUseCase(
 }
 ```
 
+> **Superseded by the owner's answer M1(b), 2026-10-03 (`180df26`).** Both stale fallbacks above —
+> «the goal no longer plans» and the practically unreachable `startPlanned` → `null` — now end the
+> stale session `Failed` through `ended()` (`SessionEnded(Failed)`, nothing at rest, the card reads «План
+> не удалось завершить», nothing is performed) instead of continuing it from its cursor. The test
+> `a goal that no longer plans leaves the paused plan to continue as it was` was inverted into
+> `a goal that no longer plans ends the stale plan honestly instead of continuing it`, so M4e's row below
+> describes the pre-M1 tree. The record is in `§HANDOFF` «Фаза 2 A4′» and spec §6.4.
+
 `ExecutionPlan.kt:99-103` — replace
 ```kotlin
  * [priorObservations] is **not speculative**: its consumer is named and dated — re-planning after a
@@ -4028,8 +4045,13 @@ and `undoAgentSession = undoOver(agentStore, agentRegistry, inverses),`. Then ap
      * `launch_app` is `play_store_search` — **a fixture pairing, not a claim that a store search
      * undoes a launch**: it is the one pair of tools this registry has, and `play_store_search` is
      * CONFIRM here, so the undo stops at the gate (spec §6.3) and nothing further reaches the world.
+     *
+     * **A tall window, not the class default.** Robolectric's default root is 320x470px — too short
+     * for Home's full column to lay out the "Continue"/"Undo" row with a non-zero height, so
+     * `performClick()` lands on a zero-size target and silently does nothing.
      */
     @Test
+    @Config(sdk = [34], qualifiers = "w360dp-h2400dp")
     fun `a finished plan on the screen offers Undo, and Undo reaches the engine through its gate`() {
         val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
         val inverses = ToolInverses { forward, _ ->
@@ -4057,6 +4079,15 @@ and `undoAgentSession = undoOver(agentStore, agentRegistry, inverses),`. Then ap
         compose.onNodeWithText("Confirm this step").assertExists()
     }
 ```
+> **Corrected by execution (PF-2, 2026-10-02).** As first written, this test carried no `@Config` of
+> its own and inherited the class's `@Config(sdk = [34])`. At Robolectric's default 320×470 px root,
+> Home's column overflows and the card's action row lays out at height 0 (measured 58×0), so the touch
+> click on «Undo» lands nowhere and the test is red for a layout reason, not a wiring one. The
+> per-test qualifier above is the fix the controller accepted (test-only, no production change;
+> precedent `SidrPrayerSummaryScreenshotTest`). Its cost — a real small-screen layout where the row
+> collapses is invisible to this seam — is carried to the block's acceptance: «Отменить» visible and
+> tappable on the SM-A325F card (`§HANDOFF` «Фаза 2 A4′»).
+
 `seedPausedMidCall(name)` is a new private helper next to `seedPausedA0Session`. It saves an
 `AgentSession` with:
 - plan `[PlanStep(0, ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal(name))), SAFE, None, GOAL_DIRECT)]`;
@@ -4917,6 +4948,19 @@ These are deliberate. Each names exactly what to write, and the surrounding file
 
 **Gate chain (hypothesis).** 1485 → T1 **1488** → T2 **1497** → T3 **1510** → T4 **1520** → T5
 **1535** → T6 **1543** → T7 **1556**.
+
+> **Measured (boundary `tools/gate.sh`, cleared tree, 557 executed each).** 1485 → T1 **1488**
+> (`fc4282d`) → T2 **1497** (`a6ecdd5`; plan fix `f9f5c06`) → T3 **1510** (`0abc731`) → T4 **1520**
+> (`54ebc42`) → T5 **1535** (`f93d2d2`) → T5 fix **1537** (`8052238`) → T6 **1545** (`85ef49c`) → T7
+> **1558** (`8d5abef`) → T7 fix **1559** (`fe1bd8c`) → final-review fix **1560** (`6bc76a4`) → the owner's
+> M1(b) **1560** (`180df26`; a test inverted, not added — Task 4's `a goal that no longer plans leaves the
+> paused plan to continue as it was` became `…ends the stale plan honestly instead of continuing it`). Every
+> task's own module delta matched the table below; the chain diverges from it by **+4**, all from test
+> commits the plan did not contain: +2 `:data:repository` (Task 5 review I1 — a failed alias write or
+> delete is `Failed`, not `Effected`), +1 `:consumer:jvm` (Task 7 review I1 — the harness never undoes
+> without "y"), +1 `:domain` (final review N1 — a cut suspending call never acts after the cut). Final
+> decomposition: `:domain` 480 · `:consumer:jvm` 72 · `:data:repository` 410 · `:feature:launcher` 216
+> · `:app` 66 · the other eight 316. The gate floor is **1560**, not 1556.
 
 | Module | Base | T1 | T2 | T3 | T4 | T5 | T6 | T7 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|

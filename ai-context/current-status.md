@@ -5,7 +5,29 @@
 > digest); per-phase plans carry their own checklists.** This file is the status snapshot — if it
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
-> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-09-26
+> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-10-03
+> (**Этап 6 (A4′) phase 2 — partial failure and undo — `CODE-GREEN` at 1560 / 0 failures** (boundary
+> `tools/gate.sh` at `6bc76a4`, 557 executed, cleared tree: `:domain` 480 · `:consumer:jvm` 72 ·
+> `:data:repository` 410 · `:feature:launcher` 216 · `:app` 66 · other eight 316; the same 1560 again at
+> `180df26`), plan `a3a7366`, code commits `fc4282d`…`fe1bd8c`, the final-review fix `6bc76a4` and the
+> owner's M1(b) `180df26`; the closing docs commit is proposed to the owner and made after he agrees
+> (R7). **No device round, by design.** **R14 is closed in code**
+> (owner fork F2-1): the one world call runs in its own scope on an injected IO context, and the engine
+> stops *waiting* at the wall-clock budget, records `HandedOff` and ends the plan `Blocked` — world calls
+> left the main thread with it. A consent stop carries a **set** of reasons (F2-2), so `DURABLE_EFFECT`
+> is no longer inert for `CONFIRM+` and the uninstall card's chip reads `DESTRUCTIVE`. «Продолжить» on
+> a paused plan in which nothing has acted plans the goal afresh as a **new** session (F2-3.1): A0's
+> §12.8 is reachable by the user's own path and fixed in code for such a plan. «Отменить» on a finished
+> card runs what can be undone as a **new** session through the same gates and names what cannot
+> (F2-3.3); compensable today: two of the three `launcher_memory` tools, one step at a time; no gate
+> lowered (spec §6.3). `:consumer:jvm` undoes a partial failure on real files (`rename_file`).
+> `DOC-HMA-3` names its tests and carries a phase-3 remainder marker (owner, 2026-10-03). Gate 1560, not
+> the plan's 1556: every task matched its prediction, and +4 came from three test commits review rounds
+> added. The owner answered **M1** on 2026-10-03 with (b): when the fresh look on «Продолжить» finds no
+> plan, the stale session ends `Failed` («План не удалось завершить») instead of continuing from its
+> cursor — done in `180df26`, spec §6.4 amended. Three new unjudged `tr` strings join the block's
+> Turkish review. Full record: `§HANDOFF` of
+> the track plan, subsection «Фаза 2 A4′»**); prior 2026-09-26
 > (**Этап 6 (A4′) phase 1 — FastPath overflow — `CODE-GREEN` at 1485 / 0 failures** (boundary
 > `tools/gate.sh`, 557 executed, cleared tree: `:domain` 455 · `:consumer:jvm` 57 · `:data:repository`
 > 394 · `:feature:launcher` 202 · `:app` 61 · other eight 316), code commits `7106653`…`eb86c3c` plus the
@@ -1588,7 +1610,11 @@ with the 2026-08-23 A0 review round, whose device re-check (A2 and §12.5 of
 phone) is still open. In particular, **that a cancelled uninstall no longer reads as success has not
 been seen on a phone.** The wall-clock budget is not claimed to bound today's workers — its cut is
 cooperative and every shipped world call blocks; the two shapes are in `§HANDOFF` question 1 (owner
-question R14 — answered 2026-09-26: extend the interruption, as a task in phase 2's plan).
+question R14 — answered 2026-09-26: extend the interruption, as a task in phase 2's plan). *Re-based
+2026-10-03:* phase 2 did it in code — the engine now stops **waiting** at the budget for a blocked call
+too. Still not claimed: that the **act** stops (a call parked in native code may still act after the
+cut, which is what `HandedOff` records), that binder behaves as the JVM probe's FIFO did (binder was
+never measured), or any of it on a phone.
 
 **A4′ phase 1 (2026-09-26) is `CODE-GREEN` only, too.** That «открой gmail и проверь новые письма»
 no longer offers a store search and «найди билеты … и сделай бронь» no longer opens the browser has
@@ -1597,6 +1623,18 @@ hypothesis list in the phase plan §0.6 and `§HANDOFF` «Фаза 1 A4′». An
 one sentence of the Master Plan's DoD is **knowingly false** until A4′ closes (owner decision
 2026-09-26): «router-off / offline / no-key behave as today» — in local-only mode such a command used
 to start an A0 session and now answers «Не распознано локально».
+
+**A4′ phase 2 (2026-10-03) is `CODE-GREEN` only, too — nothing of it has been seen on a phone.** Not
+the uninstall card's `DESTRUCTIVE` chip, not the paused card's «Sidr проверит план заново» body, not
+§12.8 on the user's own path (install the app while the plan waits, then «Продолжить»), not «Отменить»
+and the card it leaves, not the step a budget cut ends on; world calls moved off the main thread with
+no visible change **expected** — by reading, not measured. What the user would see is a hypothesis list
+in `§HANDOFF` «Фаза 2 A4′». The 2026-08-23 A0 re-check checklist still predicts §12.8's **pre**-phase-2
+behaviour; the block's acceptance checklist has to re-derive it. Undo is claimed for exactly two of the
+three `launcher_memory` tools, one step at a time, and only while the card is on screen; a plan that has
+already acted still resumes on its pre-pause observations (→ phase 3); and that a plan whose fresh look
+finds no plan now ends «План не удалось завершить» (owner decision M1(b), `180df26`) has not been seen on
+a phone either.
 
 ## Source of truth
 
@@ -1621,10 +1659,13 @@ to start an A0 session and now answers «Не распознано локаль�
   `CODE-GREEN` 2026-09-26**, plan `docs/superpowers/plans/2026-09-22-a4-phase0-engine-preconditions.md`,
   record in the track plan's `§HANDOFF` («Фаза 0 A4′»); **phase 1 `CODE-GREEN` 2026-09-26**, plan
   `docs/superpowers/plans/2026-09-26-a4-phase1-fastpath-overflow.md`, record and the owner's answers
-  to every open item of both phases in `§HANDOFF` («Фаза 1 A4′»); phases 2–4 to go. Of the
+  to every open item of both phases in `§HANDOFF` («Фаза 1 A4′»); **phase 2 `CODE-GREEN` 2026-10-03**,
+  plan `docs/superpowers/plans/2026-09-27-a4-phase2-partial-failure-and-undo.md`, record and the owner's
+  answers of 2026-10-03 (M1(b), the `DOC-HMA-3` remainder marker) in `§HANDOFF` («Фаза 2 A4′»); phases 3–4 to go. Of the
   four findings A1″'s acceptance handed it, phase 0 **repaired (a) in code** (a cancelled uninstall
   claiming success), **named (b) excluded** from A4′ with its own address (the `HOME`-role grant a live
-  process does not see — staleness layer 2, `ShortcutRefreshTrigger`), and did not touch (c) or (d).
+  process does not see — staleness layer 2, `ShortcutRefreshTrigger`), and no phase so far has touched
+  (c) or (d).
 
 ## Keeping this file honest
 

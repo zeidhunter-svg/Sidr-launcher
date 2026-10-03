@@ -67,14 +67,15 @@ four predate the block (`launch_app`, `play_store_search`, `set_timer`, `open_sy
 | **2** toolchain (AGP 9.3.1/Kotlin 2.4.10/Gradle 9.5.0/compileSdk 37) + `:domain` → KMP | ✅ 2026-08-19 |
 | **3** agentic Master Plan + doctrinal matrix (`docs/governing/`) | ✅ 2026-08-19 — docs + one guard test |
 | **4.0** — invert the understanding flag (`llmRouterEnabled` → `localOnlyMode`, ADR 1/4) | ✅ 2026-08-20 code, **`DEVICE-ACCEPTED` 2026-08-22** in the Task 15 session (`ru-RU`, no provider ⇒ «ИИ-провайдер ещё не настроен» + a route to the provider screen, not `Unknown command`); first behavioural change of the track |
-| **4** — A0 thin agentic spike | ✅ **2026-08-22 — `CLOSED`** — all nine work-order items, then Task 15: the owner ran all eight §12 acceptance items on the SM-A325F and signed off. Migration 3→4 executed for real by both routes (instrumented 9/9 on device; and a genuine `user_version` 3→4 upgrade of the owner's own database, `identity_hash` matching `4.json`). Residual limitations named in Known debt — the largest is that §12.8 is unreachable by any path a user can take (an A4′ debt). **Reviewed end-to-end 2026-08-23**: nine findings, eight fixed and mutation-verified (`CODE-GREEN`; two §12 items await a device re-check) |
+| **4** — A0 thin agentic spike | ✅ **2026-08-22 — `CLOSED`** — all nine work-order items, then Task 15: the owner ran all eight §12 acceptance items on the SM-A325F and signed off. Migration 3→4 executed for real by both routes (instrumented 9/9 on device; and a genuine `user_version` 3→4 upgrade of the owner's own database, `identity_hash` matching `4.json`). Residual limitations named in Known debt — the largest is that §12.8 is unreachable by any path a user can take (an A4′ debt; made reachable and fixed in code for a plan that has only looked by A4′ phase 2 — not seen on a phone). **Reviewed end-to-end 2026-08-23**: nine findings, eight fixed and mutation-verified (`CODE-GREEN`; two §12 items await a device re-check) |
 | **4.5** — A0.5 second consumer of the portable core (`:consumer:jvm`) | ✅ **2026-08-26 — `CODE-GREEN`**; `DEVICE-ACCEPTED` **not applicable**, not absent — the block changes nothing on the phone. All four §3.1a questions answered with addresses, `B1` answered, the §6.3 divergence recorded and held by a test |
 | **5** — A1′ federated `ToolRegistry` | ✅ **2026-09-10 — `CLOSED`** — `CODE-GREEN` 2026-09-03, then the owner ran Parts A and B of the acceptance checklist on the SM-A325F in `ru-RU` and signed off (spec §16 criterion 1, the last open criterion of nine). The run itself produced three fixes — a missing `SET_ALARM`, a checklist that read the database without its WAL, and an agent surface whose exit left the launcher in search mode. `en`/`tr` never ran on the phone. Tool *mass* and *selection* split out as a new block, `A1″` |
 | **5.5** — A1″ tool mass + selection (phases 0–3a) | ✅ **`CLOSED` 2026-09-20** — `CODE-GREEN` 2026-09-19, then the owner ran Parts A and B on the SM-A325F and signed off. Five acting tools against a floor of four, a fourth adapter, selection over a dynamic registry, and the track's first `CONFIRM` tool. Gate 1438. Before the round, phases 1–2 had only a device *reading* from the Task 13b **smoke round** (`ab2d063`, explicitly not an acceptance) and phase 3a had none at all. **Accepted on device 2026-09-20** together with 3b, in one round, on build `db1e75d`: [checklist](docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md) |
 | **5.5b** — A1″ phase 3b, the eleven navigating tools | ✅ **`CLOSED` 2026-09-20** — `CODE-GREEN` and owner device acceptance the same day; all eleven opened their screens on the SM-A325F, none shadowed by another. Eleven `system_intent` / `SAFE` / `EXTERNAL` tools (`show_alarms`, `open_camera`, and nine `open_*_settings`/`open_app_info` screens), registered, permitted, dispatched, reachable in `en`/`ru`/`tr` and rendered. Gate **1439** (+1: the `open_app_info` `required` pin, the phase's only new `@Test`). Ten pre-flight findings, three mutation findings. **Spec §16 criterion 1 is CLOSED** — tools and levels sufficed, and the owner's Phase 4 device round ran on 2026-09-20. Plan: [2026-09-19-a1-phase3b-navigating-tools.md](docs/superpowers/plans/2026-09-19-a1-phase3b-navigating-tools.md) |
 | **6** — A4′ runtime, **phase 0** (engine preconditions) | ⏳ **`CODE-GREEN` 2026-09-26**, gate **1463**; **no device round, by design** — the block has one acceptance, at its end. `PlanningResult` exhaustive, `PlanningRequest`, `ToolResult.HandedOff` (a cancelled uninstall no longer claims success — in code; not seen on a phone), eight step states + a third `Completed` title, a **cooperative** wall-clock budget, `ToolArgumentSorts` (closes R14-37 in code), `tools/gate.sh`, a build id in Settings. Four owner questions open. Spec [2026-09-21-a4-runtime-design.md](docs/superpowers/specs/2026-09-21-a4-runtime-design.md); record in `§HANDOFF` of the track plan («Фаза 0 A4′») — the block ADR is written at A4′ close |
 | **6** — A4′ runtime, **phase 1** (FastPath overflow) | ⏳ **`CODE-GREEN` 2026-09-26**, gate **1485**; no device round, by design. `SecondGoal` — a closed «conjunction + listed verb» vocabulary (owner fork F1-1) — makes the search arm, and the launch arm only after the whole app name failed to resolve (F1-2), withdraw FastPath's 0.90 to `LowConfidence`, so such commands reach step 2b and the model; A0's launch→store plan is kept byte for byte, including an installed brand's uninstalled variant (F1-3: the spec §5.1 prefix rule is deferred to offline understanding). The WEB route chip now dispatches a web search directly instead of being re-scored by FastPath (final-review fix). `B15`: `HANDLED_BY_FASTPATH` 13 → 6, `PLANNED` still 0. New doctrine row `DOC-NYH-4`. Plan [2026-09-26-a4-phase1-fastpath-overflow.md](docs/superpowers/plans/2026-09-26-a4-phase1-fastpath-overflow.md); record in `§HANDOFF` of the track plan («Фаза 1 A4′») |
-| **6–7** — A4′ phases 1–4, then A2/A3/A5/A6 | A4′'s spec is owner-approved (2026-09-21) and each remaining phase gets its own plan; A2/A3/A5/A6 each need their own spec + plan (`brainstorm → spec → plan → build`) |
+| **6** — A4′ runtime, **phase 2** (partial failure and undo) | ⏳ **`CODE-GREEN` 2026-10-03**, gate **1560**; no device round, by design. **R14 closed in code** (owner fork F2-1): the one world call runs in its own scope on an injected IO context, and the engine stops *waiting* at the wall-clock budget, records `HandedOff` and ends the plan `Blocked` (F2-1b) — world calls left the main thread with it. A consent stop carries a **set** of reasons (F2-2), so `DURABLE_EFFECT` is no longer inert for `CONFIRM+` and the uninstall card's chip reads `DESTRUCTIVE`. «Продолжить» on a paused plan in which nothing has acted plans the goal afresh as a **new** session (F2-3.1): A0's §12.8 is reachable by the user's own path and fixed in code for such a plan; re-planning after a failure → phase 3. «Отменить» on a finished card runs what can be undone as a **new** session through the same gates and names what cannot (F2-3.3) — compensable today: two of the three `launcher_memory` tools, one step at a time; no gate lowered (spec §6.3). `:consumer:jvm` undoes a partial failure on real files (`rename_file`). `DOC-HMA-3` names its tests, with a phase-3 remainder marker (owner, 2026-10-03). Owner question M1 answered (b) and done in `180df26`: when the fresh look finds no plan, the stale session ends `Failed` («План не удалось завершить») instead of continuing from its cursor. Plan [2026-09-27-a4-phase2-partial-failure-and-undo.md](docs/superpowers/plans/2026-09-27-a4-phase2-partial-failure-and-undo.md); record in `§HANDOFF` of the track plan («Фаза 2 A4′») |
+| **6–7** — A4′ phases 3–4, then A2/A3/A5/A6 | A4′'s spec is owner-approved (2026-09-21) and each remaining phase gets its own plan; A2/A3/A5/A6 each need their own spec + plan (`brainstorm → spec → plan → build`) |
 
 The four strategic ADRs (all 2026-08-19, in `decisions.md`):
 
@@ -249,14 +250,20 @@ below is recorded in its own ADR.
 
 - **A0 and Этап 4.0 are `DEVICE-ACCEPTED` as of 2026-08-22, with three residual limitations** (owner ran
   all eight §12 items on the SM-A325F and signed off; full record in the A0 ADR): **(1)** §12.8 —
-  "app installed ⇒ the store step is skipped" — is **unreachable by any path a user can take**, because
-  `AgentSession.resumed()` continues from the persisted cursor and nothing re-plans, so a session that
-  already observed `APP_NOT_INSTALLED` opens the store even if the app was installed while the plan sat
+  "app installed ⇒ the store step is skipped" — was **unreachable by any path a user can take**, because
+  `AgentSession.resumed()` continued from the persisted cursor and nothing re-planned, so a session that
+  already observed `APP_NOT_INSTALLED` opened the store even if the app was installed while the plan sat
   paused; it passed only through the `cursor == 0` / mid-step shapes, the latter produced with
-  `pm disable-user` plus an on-device `force-stop` poll (window 157–170 ms warm, 1033 ms cold). This is
-  a **staleness** debt owned by **A4′** (phase 2 since A4′ phase 0, which also added a wall-clock
-  budget — cooperative, narrowed rather than closed; see the A0-engine row below), and it is narrow today
-  only because Master Plan §3.6 `B1` holds `GoalShape` at one value. **(2)** the plan list is not drawn
+  `pm disable-user` plus an on-device `force-stop` poll (window 157–170 ms warm, 1033 ms cold).
+  **A4′ phase 2 made it reachable by the user's own path and fixed it in code for a plan that has only
+  looked** (`CODE-GREEN` 2026-10-03, owner fork F2-3.1): «Продолжить» on a paused plan in which nothing
+  has acted (no `Effected`/`HandedOff`, no call in flight, not an undo) plans the goal afresh as a
+  **new** session, so an app installed while the plan waited opens and no store is offered.
+  **Not seen on a phone** — the 2026-08-23 re-check checklist still predicts the pre-phase-2 behaviour,
+  and A4′'s block acceptance must re-derive §12.8. What stays, named: a plan that has already **acted**
+  still continues from its cursor on whatever it observed before the pause (→ A4′ phase 3). When the
+  fresh look finds no plan, the stale session now ends `Failed` («План не удалось завершить») instead of
+  continuing (owner decision M1(b), `180df26`, `§HANDOFF` «Фаза 2 A4′») — also not seen on a phone. **(2)** the plan list is not drawn
   in `AwaitingConsent` — the two-step shape is visible in `Paused` and `Completed` only. **(3)** item 8's
   acceptance needed agent intervention, so it exercises the engine rather than the product. Migration 3→4
   is no longer a debt: it executed on device both instrumented (9/9) and as a genuine `user_version` 3→4
@@ -282,14 +289,20 @@ below is recorded in its own ADR.
   **(1) four vocabulary findings addressed to A1′** — `ObservedFact` (a whole class of reality unsayable:
   the same "it is not there" ends `Failed` on JVM and `Completed` on Android, §6.3, held by a test and
   **not to be "fixed"** — it is a recorded owner decision), `CommandFailure`, `StepRationale`, `ArgType`
-  (one value, so "typed" means "named" and a rich MCP schema is not expressible). **(2) `DURABLE_EFFECT`
-  is unreachable for any tool at `CONFIRM` or above** — a branch-order property of `checkpointFor`, so the
-  `DURABLE` marking is inert exactly where risk is highest. **The user is still stopped** (`RISK_LEVEL`
-  takes the branch): a trace-fidelity gap, not a safety hole. → A4′. **(3) the JVM sandbox's own limits** —
+  (one value, so "typed" means "named" and a rich MCP schema is not expressible). **(2) CLOSED in code by
+  A4′ phase 2** (`CODE-GREEN` 2026-10-03, owner fork F2-2): `DURABLE_EFFECT` was unreachable for any tool
+  at `CONFIRM` or above — a branch-order property of `checkpointFor`, so the `DURABLE` marking was inert
+  exactly where risk is highest, while `RISK_LEVEL` still stopped the user (a trace-fidelity gap, not a
+  safety hole). Fixed not by reordering the branches but by a **set** of reasons on `ConsentCheckpoint`
+  and `TraceEvent.ConsentRequested`: the uninstall stop now records `RISK_LEVEL` and `DURABLE_EFFECT`,
+  and its card's chip reads `DESTRUCTIVE` (not seen on a phone). **(3) the JVM sandbox's own limits** —
   `findFile` follows symlinks when testing `isRegularFile`, so an in-sandbox link to an outside file can be
   reported under its in-sandbox path (leaks a *name*, never content; binding it into `delete_file` is
   refused); the TOCTOU window inherent to path-based containment without `O_NOFOLLOW`/dirfd; the
-  unreadable-directory test yields coverage only on non-root runs. **(4) `JvmAgentSessionStore`** — its
+  unreadable-directory test yields coverage only on non-root runs. A4′ phase 2's `rename_file` adds two
+  instances: a symlink leaf is renamed at its in-sandbox target, leaving the link dangling (the
+  `deleteFile` comment on the same case was already wrong), and its refusal to rename over an existing
+  file holds only outside the same TOCTOU window (`Files.move` checks, then renames). **(4) `JvmAgentSessionStore`** — its
   `FileLock` is **proved by nothing** (no single-JVM test can discriminate it; the mechanism is kept and
   the claim dropped), `SessionDto` carries no version field while an undecodable file is now deleted, so
   version skew is indistinguishable from corruption (→ A5), and `delete()` leaves an orphaned `.lock`
@@ -583,17 +596,25 @@ below is recorded in its own ADR.
 - **Untested matrices:** Android 9 / 11 / 14, real LOW_END hardware, on-device STT states
   (`Ready`/`Partial`, OQ#4), boot warmup after a physical reboot.
 - **A0 engine, named gaps (ADR «2026-08-22 — Этап 4 (A0)»):** no **wall-clock** budget —
-  `RuntimeBudget` bounds steps and consecutive failures only, and the domain is deliberately clock-free,
-  so a hanging tool is bounded by nothing (A4′) — **narrowed, not closed, by A4′ phase 0**:
-  `RuntimeBudget.maxStepWallClockMs` (10 s, `withTimeout` at the one call site) cuts a *suspending*
-  hang, but the cut is cooperative and every shipped world call blocks — see `§HANDOFF` («Фаза 0
-  A4′», question 1) for the two shapes and what each records (owner question R14); a persisted
+  `RuntimeBudget` bounded steps and consecutive failures only, and the domain is deliberately clock-free,
+  so a hanging tool was bounded by nothing (A4′) — **narrowed by A4′ phase 0**
+  (`RuntimeBudget.maxStepWallClockMs`, 10 s, `withTimeout` at the one call site: a cooperative cut,
+  latent for every blocking world call) and **R14 closed in code by A4′ phase 2** (`CODE-GREEN`
+  2026-10-03, owner fork F2-1): the call runs in its own scope on an injected context (`@IoDispatcher` on
+  Android, `Dispatchers.IO` on JVM), and the engine stops **waiting** at the budget whether or not the
+  call can be interrupted, records `HandedOff` and ends the plan `Blocked` (F2-1b). What stays, named:
+  the engine stops waiting, not the **act** — a call parked in native code may still act after the cut,
+  which is exactly what `HandedOff` says; binder itself was never measured (the probe was a FIFO
+  `open(2)` on JVM); nothing of it has been seen on a phone; and the clock is the dispatcher's, not a
+  port (`§HANDOFF`, «Фаза 0 A4′» question 1 and «Фаза 2 A4′»); a persisted
   `Failed` observation **loses its
   `CommandFailure` variant** and restores as `Generic`, so a resumed session reports a less specific
-  failure than the one that occurred; **a resumed plan never re-checks its preconditions against the
-  world** — `resumed()` continues from the persisted cursor, so an observation taken before the pause is
-  acted on afterwards however stale it has become (found by Task 15's device acceptance, same A4′
-  staleness family as the wall-clock gap); `GoalShape` must stay at **one** value until A4′ (Master Plan
+  failure than the one that occurred; **a resumed plan never re-checked its preconditions against the
+  world** — `resumed()` continued from the persisted cursor, so an observation taken before the pause was
+  acted on afterwards however stale it had become (found by Task 15's device acceptance, same A4′
+  staleness family as the wall-clock gap) — **closed in code by A4′ phase 2 for a plan in which nothing
+  has acted** (it is planned afresh, F2-3.1); a plan that has acted still continues on its pre-pause
+  observations (→ A4′ phase 3); `GoalShape` must stay at **one** value until A4′ (Master Plan
   §3.6 `B1`).
 - **A0 guards, deferred findings D1–D11** (full text in `§HANDOFF` of the track plan).
   *Owner-level* — they need the `Test` inputs block in `app/build.gradle.kts` widened, which costs
@@ -610,11 +631,13 @@ below is recorded in its own ADR.
   checking the field it protects; **D9** the call-site guard compares file *names*, so an
   `expect`/`actual` split reads as a duplicate-scan bug; **D10** one assertion is a tautology after the
   derivation started filtering by the same predicate; **D11** (from the Task 14 review) three of
-  `checkpointFor`'s four consent triggers — `RISK_RAISED`, `MISSING_PERMISSION`, `DURABLE_EFFECT` — have
-  **zero** test coverage: the first is unreachable while risk has three levels, the other two because no
-  test builds a `ToolDescriptor` with a gate or `DURABLE`. Fail-safe by construction, unproven by test;
-  owned by whoever inserts a risk level below `CONFIRM` — A1′ closed without inserting one, so it falls
-  to whichever block does.
+  `checkpointFor`'s four consent triggers — `RISK_RAISED`, `MISSING_PERMISSION`, `DURABLE_EFFECT` — had
+  **zero** test coverage: the first was unreachable while risk has three levels and one reason is
+  recorded per stop, the other two because no test built a `ToolDescriptor` with a gate or `DURABLE`.
+  **Closed by A4′ phase 2** (a set of reasons per stop, F2-2): `AgentExecutorTest` now covers all four —
+  `RISK_RAISED` on A0's store step, recorded **beside** `RISK_LEVEL` (as a *sole* reason it stays
+  unreachable while risk has three levels), `MISSING_PERMISSION` on a fixture with a declared gate, and
+  `DURABLE_EFFECT` on a `CONFIRM`+`DURABLE` and a `SAFE`+`DURABLE` fixture.
 - **Not owned by any block:** `RoomColumnNames` is a hand-written inventory and its guard scans **it**,
   not the entities or the exported schema — a column added to an `@Entity` and forgotten there passes
   silently, including one with a denylisted term in its name (Block F design). It matters more since A0
@@ -682,15 +705,30 @@ below is recorded in its own ADR.
   plus `:core:ui:verifyRoborazziDebug` whenever `core/ui` is touched, and `:app:assembleRelease` for
   release-affecting work. **`:domain:jvmTest` and `:consumer:jvm:test` must be listed explicitly:**
   `testDebugUnitTest` has not reached `:domain` since it went KMP, and it never reaches `:consumer:jvm`
-  at all. **Baseline at 2026-09-26 (A4′ phase 1, measured on its closing tree): 1485 tests, 0 failures, 0
-  errors**, from a run printing `557 actionable tasks: 557 executed` with
-  `build/test-results` cleared first — `:domain:jvmTest` **455** + `:consumer:jvm` **57** +
-  `:data:repository` **394** + `:feature:launcher` **202** + `:app` **61** + the other eight modules
+  at all. **Baseline at 2026-10-03 (A4′ phase 2, measured at `6bc76a4` and again at `180df26`, the tree
+  its close commit documents): 1560 tests, 0 failures, 0 errors**, from a run printing `557 actionable tasks: 557 executed`
+  with `build/test-results` cleared first — `:domain:jvmTest` **480** + `:consumer:jvm` **72** +
+  `:data:repository` **410** + `:feature:launcher` **216** + `:app` **66** + the other eight modules
   **316** (`core/ui` 128, `data/ai-cloud` 32, `data/prayer` 38, `feature/assistant` 38,
   `feature/settings` 34, `feature/prayer` 19, `feature/permission_education` 15, `core/android` 12).
   `tools/gate.sh` carries the same number as its floor (`BASELINE_TESTS`).
-  **Compare a fresh gate against 1485** — not against 1483, not against 1463, not against 1440, not against 1439, not
-  against 1438, not against 1375, not against 1314, and not against any number quoted in the A1′ ADR.
+  **Compare a fresh gate against 1560** — not against 1556, not against 1485, not against 1483, not
+  against 1463, not against 1440, not against 1439, not against 1438, not against 1375, not against 1314,
+  and not against any number quoted in the A1′ ADR.
+  A4′ phase 2 took it **1485 → 1560** (+75: `:domain` +25 — `AgentExecutorTest` +7, `CompensationTest` 6,
+  `ResumeAgentSessionUseCaseTest` 6, `UndoAgentSessionUseCaseTest` 5, `AgentSessionUseCasesTest` +1;
+  `:consumer:jvm` +15 — `SandboxToolInversesTest` 4, `SandboxToolWorkerTest` +4, `AgentLoopTest` +2,
+  `ConsoleHarnessTest` +2, `FilePlannerTest` +1, `SandboxToolSourceTest` +1, `JvmAgentSessionStoreTest`
+  +1; `:data:repository` +16 — `MemoryToolWorkerTest` +6, `ToolInverseCatalogTest` 5,
+  `AgentActingSeamTest` +2, `AgentSessionMappersTest` +2, `MemoryToolSourceTest` +1; `:feature:launcher`
+  +14 — `LauncherAgentSessionTest` +5 net, `AgentSessionSurfaceUndoTest` 4, `AgentSessionGateChipTest` 2,
+  `AgentSessionSurfacePausedTest` 2, `LauncherScreenAgentProvenanceTest` +1; `:app` +5 —
+  `ToolInverseCatalogGuardTest` 3, `AgentExecutorWiringTest` 1, `CompensationOutsideTheEngineGuardTest`
+  1), by the chain T1 1488 → T2 1497 → T3 1510 → T4 1520 → T5 1535 → its fix 1537 → T6 1545 → T7 1558 →
+  its fix 1559 → the final-review fix 1560 → the owner's M1(b) `180df26` 1560 (a test inverted, not
+  added). 1556 was the plan's figure: every task matched its predicted
+  module delta, and the +4 are three test commits the plan did not contain (+2 `:data:repository` and +1
+  `:consumer:jvm` from task reviews, +1 `:domain` from the final review).
   A4′ phase 1 took it **1463 → 1485** (+22: `:domain` +10 — `SecondGoalTest` 6,
   `HandleUserCommandUseCaseTest` +4; `:data:repository` +10 — `RuleBasedIntentMatcherTest` +3,
   `FastPathLocaleGuardTest` +1, `FastPathOverflowSeamTest` 6; `:feature:launcher` +2 — the WEB-chip
@@ -714,7 +752,13 @@ below is recorded in its own ADR.
   **One caveat measured at the 3b boundary and worth knowing before a red gate is believed:**
   `:data:ai-cloud`'s `first token arriving just under the deadline still completes normally` is
   timing-sensitive — it failed once under back-to-back Gradle load (on a run that also aborted at
-  407/557 tasks) and passed on an immediate re-run from a cleared tree.
+  407/557 tasks) and passed on an immediate re-run from a cleared tree. **A second environmental shape,
+  measured in A4′ phase 2:** after about twenty mutation runs, a two-hour-old Gradle daemon (2.7 GB) and
+  Kotlin daemon (2.1 GB) drove the machine into swap (load average 47 on 16 cores, zram 7.9 of 8 GB), and
+  a boundary run went red on three 60-s timeouts (two Compose preview screens and one `runTest` in
+  `AgentActingSeamTest`) plus an uncounted `:app`;
+  after `gradlew --stop` the re-run from a cleared tree was green. Stop the daemon before a boundary gate
+  that follows a mutation batch.
   **Clear `build/test-results` before a boundary gate.** A1″ paid for this rule (R14-44): stale XML left
   by a mutation run after the final gate is indistinguishable from a red gate, and it misleads in both
   directions — a controller either disbelieves a correct report, or a later reader takes a leftover green

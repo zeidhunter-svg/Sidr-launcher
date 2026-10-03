@@ -65,6 +65,9 @@ class ToolPermissionCatalog @Inject constructor() {
         val ROWS: Map<ToolId, List<String>> = mapOf(
             ToolIds.LAUNCH_APP to emptyList(),
             ToolIds.PLAY_STORE_SEARCH to emptyList(),
+            // A4′ phase 3a: the browser and the search provider need no permission of ours.
+            InAppToolIds.WEB_SEARCH to emptyList(),
+            InAppToolIds.OPEN_URL to emptyList(),
             Tier0ToolIds.SET_TIMER to listOf("com.android.alarm.permission.SET_ALARM"),
             Tier0ToolIds.OPEN_SYSTEM_SETTINGS to emptyList(),
             Tier0ToolIds.SET_ALARM to listOf("com.android.alarm.permission.SET_ALARM"),

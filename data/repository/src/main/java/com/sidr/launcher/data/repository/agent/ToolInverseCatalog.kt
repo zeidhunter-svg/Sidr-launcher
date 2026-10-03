@@ -75,6 +75,9 @@ class ToolInverseCatalog @Inject constructor() : ToolInverses {
         val ROWS: Map<ToolId, Row> = mapOf(
             ToolIds.LAUNCH_APP to Row.NOTHING_TO_UNDO,
             ToolIds.PLAY_STORE_SEARCH to Row.NOTHING_TO_UNDO,
+            // A4′ phase 3a: opening a page or a search leaves nothing to put back.
+            InAppToolIds.WEB_SEARCH to Row.NOTHING_TO_UNDO,
+            InAppToolIds.OPEN_URL to Row.NOTHING_TO_UNDO,
             // A real timer / alarm runs (spec §6.2, rows 13/29 of the A1″ measurements); no tool removes one.
             Tier0ToolIds.SET_TIMER to Row.NOT_UNDOABLE,
             Tier0ToolIds.SET_ALARM to Row.NOT_UNDOABLE,

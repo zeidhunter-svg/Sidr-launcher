@@ -85,6 +85,11 @@ internal fun AgentGoal.subject(): String = when (val shape = shape) {
  * `launch_app` / `play_store_search` need no literal — they are `ToolIds` in `:domain`.
  */
 private const val TIER0_SET_TIMER = "set_timer"
+
+// A4′ phase 3a: the two router actions projected as tools (`InAppToolIds`, `:data:repository`). Literals
+// for the same no-feature->data reason as the TIER0_* ones; `DoctrineGuardTest` scans for them.
+private const val IN_APP_WEB_SEARCH = "web_search"
+private const val IN_APP_OPEN_URL = "open_url"
 private const val TIER0_OPEN_SYSTEM_SETTINGS = "open_system_settings"
 private const val TIER0_SET_ALARM = "set_alarm"
 
@@ -167,6 +172,8 @@ private const val PHRASE_ARG = "phrase"
 internal fun toolLabelFor(id: ToolId): Int = when (id.value) {
     ToolIds.LAUNCH_APP.value -> R.string.launcher_agent_step_launch
     ToolIds.PLAY_STORE_SEARCH.value -> R.string.launcher_agent_step_store
+    IN_APP_WEB_SEARCH -> R.string.launcher_agent_step_web_search
+    IN_APP_OPEN_URL -> R.string.launcher_agent_step_open_url
     TIER0_SET_TIMER -> R.string.launcher_agent_step_timer
     TIER0_OPEN_SYSTEM_SETTINGS -> R.string.launcher_agent_step_settings
     TIER0_SET_ALARM -> R.string.launcher_agent_step_alarm

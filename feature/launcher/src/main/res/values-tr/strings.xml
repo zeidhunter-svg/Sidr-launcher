@@ -86,6 +86,8 @@
     <string name="launcher_agent_running_title">Çalışıyor</string>
     <string name="launcher_agent_step_launch">%1$s uygulamasını aç</string>
     <string name="launcher_agent_step_store">%1$s uygulamasını uygulama mağazasında bul</string>
+    <string name="launcher_agent_step_web_search">İnternette ara: %1$s</string>
+    <string name="launcher_agent_step_open_url">%1$s adresini tarayıcıda aç</string>
     <string name="launcher_agent_step_timer">%1$s için zamanlayıcı kur</string>
     <string name="launcher_agent_step_settings">Android ayarlarını aç</string>
     <string name="launcher_agent_step_alarm">%1$s için alarm kur</string>

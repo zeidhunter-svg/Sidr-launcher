@@ -53,7 +53,7 @@ class ToolInverseCatalogGuardTest {
 
     @Test
     fun `every authored tool has a row, so a new one forces the undo question`() {
-        assertEquals(20, authored.all().size)
+        assertEquals(22, authored.all().size)
         assertEquals(authored.all().map { it.id }.toSet(), catalog.rows().keys)
     }
 

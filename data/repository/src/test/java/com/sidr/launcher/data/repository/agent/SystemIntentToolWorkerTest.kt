@@ -4,6 +4,7 @@ import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.domain.intent.ActionExecutionResult
 import com.sidr.launcher.domain.intent.CommandFailure
+import com.sidr.launcher.domain.intent.ExecutableAction
 import com.sidr.launcher.domain.intent.ExecuteActionUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.model.InstalledApp
@@ -94,7 +95,7 @@ class SystemIntentToolWorkerTest {
     fun `an unregistered tool id fails closed and never reaches the action path`() = runTest {
         apps.appsToReturn = listOf(InstalledApp(packageName = "com.uber", label = "убер", activityName = "Main"))
 
-        val result = executor().invoke(ResolvedInvocation(ToolId("web_search"), mapOf("query" to "убер")))
+        val result = executor().invoke(ResolvedInvocation(ToolId("open_settings"), mapOf("query" to "убер")))
 
         assertTrue(result is ToolResult.Failed)
         assertEquals(0, actionExecutor.executedActions.size)
@@ -130,5 +131,39 @@ class SystemIntentToolWorkerTest {
         val result = executor().invoke(ResolvedInvocation(ToolIds.LAUNCH_APP, mapOf("query" to "убер")))
 
         assertTrue(result is ToolResult.Failed)
+    }
+
+    /**
+     * A4′ phase 3a, Task 1 (spec §7.12.3): the router's two actions with an executor become tools. The
+     * worker reads each tool's OWN argument — `query` for a search, `url` for an address — through the
+     * same unchanged `ExecuteActionUseCase` chain the launch has always used.
+     */
+    @Test
+    fun `a web search effects with the query it was given and declares no output`() = runTest {
+        val result = executor().invoke(
+            ResolvedInvocation(InAppToolIds.WEB_SEARCH, mapOf("query" to "ostravel lectures")),
+        )
+
+        assertEquals(ToolResult.Effected(), result)
+        val search = actionExecutor.executedActions.single() as ExecutableAction.OpenSearchAction
+        assertEquals("ostravel lectures", search.query)
+    }
+
+    @Test
+    fun `opening a url opens that address, never a search for it`() = runTest {
+        val url = "https://quillmere.example/path?q=a&b=c"
+
+        val result = executor().invoke(ResolvedInvocation(InAppToolIds.OPEN_URL, mapOf("url" to url)))
+
+        assertEquals(ToolResult.Effected(), result)
+        assertEquals(listOf(ExecutableAction.OpenUrlAction(url)), actionExecutor.executedActions)
+    }
+
+    @Test
+    fun `a blank url fails closed and never reaches the action path`() = runTest {
+        val result = executor().invoke(ResolvedInvocation(InAppToolIds.OPEN_URL, mapOf("url" to "  ")))
+
+        assertEquals(ToolResult.Failed(CommandFailure.Generic), result)
+        assertTrue(actionExecutor.executedActions.isEmpty())
     }
 }

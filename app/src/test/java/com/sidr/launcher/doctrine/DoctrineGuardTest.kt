@@ -3,6 +3,7 @@ package com.sidr.launcher.doctrine
 import android.content.Intent
 import com.sidr.launcher.agent.stripComments
 import com.sidr.launcher.data.repository.action.DefaultActionCatalog
+import com.sidr.launcher.data.repository.agent.InAppToolIds
 import com.sidr.launcher.data.repository.agent.IntentLauncher
 import com.sidr.launcher.data.repository.agent.PermissionPresence
 import com.sidr.launcher.data.repository.agent.SystemIntentToolSource
@@ -789,6 +790,11 @@ class DoctrineGuardTest {
     private val declaredRisk: Map<ToolId, ActionRiskLevel> = mapOf(
         ToolIds.LAUNCH_APP to ActionRiskLevel.SAFE,
         ToolIds.PLAY_STORE_SEARCH to ActionRiskLevel.CONFIRM,
+        // A4′ phase 3a (spec §7.12.3): the router's actions with an executor, now tools. The catalog is
+        // authoritative; these pins are the gate half of "the KDoc argument lapses only as its three
+        // parts are met".
+        InAppToolIds.WEB_SEARCH to ActionRiskLevel.SAFE,
+        InAppToolIds.OPEN_URL to ActionRiskLevel.CONFIRM,
         Tier0ToolIds.SET_TIMER to ActionRiskLevel.SAFE,
         Tier0ToolIds.OPEN_SYSTEM_SETTINGS to ActionRiskLevel.SAFE,
         Tier0ToolIds.SET_ALARM to ActionRiskLevel.SAFE,
@@ -930,6 +936,8 @@ class DoctrineGuardTest {
         val REQUIRED_TOOL_IDS: List<ToolId> = listOf(
             ToolIds.LAUNCH_APP,
             ToolIds.PLAY_STORE_SEARCH,
+            InAppToolIds.WEB_SEARCH,
+            InAppToolIds.OPEN_URL,
             Tier0ToolIds.SET_TIMER,
             Tier0ToolIds.OPEN_SYSTEM_SETTINGS,
             Tier0ToolIds.SET_ALARM,

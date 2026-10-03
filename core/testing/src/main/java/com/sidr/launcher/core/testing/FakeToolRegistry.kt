@@ -10,7 +10,11 @@ import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolRegistry
 
-/** In-memory registry for domain tests. [withA0Tools] mirrors what `SystemIntentToolSource` projects. */
+/**
+ * In-memory registry for domain tests. [withA0Tools] mirrors **everything** `SystemIntentToolSource`
+ * projects — four families since A4′ phase 3a — field for field (`SystemIntentToolContractTest` holds
+ * it); the name is A0's.
+ */
 class FakeToolRegistry(private val descriptors: List<ToolDescriptor>) : ToolRegistry {
 
     override fun all(): List<ToolDescriptor> = descriptors
@@ -38,6 +42,22 @@ class FakeToolRegistry(private val descriptors: List<ToolDescriptor>) : ToolRegi
                     level = ToolLevels.IN_APP,
                     effect = ToolEffect.EXTERNAL,
                     argSchema = listOf(ActionArg("query", description = "The app name to find")),
+                    risk = ActionRiskLevel.CONFIRM,
+                    durability = ToolDurability.TRANSIENT,
+                ),
+                ToolDescriptor(
+                    id = ToolId("web_search"),
+                    level = ToolLevels.IN_APP,
+                    effect = ToolEffect.EXTERNAL,
+                    argSchema = listOf(ActionArg("query", description = "What to search for")),
+                    risk = ActionRiskLevel.SAFE,
+                    durability = ToolDurability.TRANSIENT,
+                ),
+                ToolDescriptor(
+                    id = ToolId("open_url"),
+                    level = ToolLevels.IN_APP,
+                    effect = ToolEffect.EXTERNAL,
+                    argSchema = listOf(ActionArg("url", description = "The web address to open")),
                     risk = ActionRiskLevel.CONFIRM,
                     durability = ToolDurability.TRANSIENT,
                 ),

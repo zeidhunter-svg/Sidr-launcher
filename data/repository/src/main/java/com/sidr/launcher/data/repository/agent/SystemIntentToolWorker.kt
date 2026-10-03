@@ -33,38 +33,35 @@ class SystemIntentToolWorker @Inject constructor(
 ) : ToolWorker {
 
     override suspend fun invoke(invocation: ResolvedInvocation): ToolResult {
-        // The query is normalised once and the same value feeds both the action and the output, so
-        // `resolved_query` is the string the launch actually resolved against rather than a second,
-        // independently derived reading of the same argument. That is the invariant a later step binds
-        // to; two reads could disagree, one cannot.
-        val query = invocation.args["query"]?.trim().orEmpty()
-        if (query.isEmpty()) return ToolResult.Failed(CommandFailure.Generic)
-
-        val action = actionFor(invocation.id, query) ?: return ToolResult.Failed(CommandFailure.Generic)
-        return map(executeAction.execute(action), outputFor(invocation.id, query))
-    }
-
-    private fun actionFor(id: ToolId, query: String): LauncherAction? = when (id) {
-        ToolIds.LAUNCH_APP -> LauncherAction.LaunchApp(query)
-        ToolIds.PLAY_STORE_SEARCH -> LauncherAction.PlayStoreSearch(query)
-        // An unregistered tool never reaches the action path. Tested with a query in hand, so the
-        // blank-query guard above cannot answer for this branch.
-        else -> null
+        val action = actionFor(invocation) ?: return ToolResult.Failed(CommandFailure.Generic)
+        return map(executeAction.execute(action), outputFor(invocation.id, action))
     }
 
     /**
-     * `launch_app` reports `resolved_query` on every result it can carry an output on (`Effected`,
-     * `Observed`) — outputs are a property of the tool, not of the branch it took, so this is not gated
-     * on which [CommandOutcome] came back. `play_store_search` declares no output
-     * ([SystemIntentToolSource]) and stays the default empty [ToolOutput].
-     *
-     * The key is [SystemIntentToolSource.RESOLVED_QUERY], the same constant the descriptor is built
-     * from: declaration and emission cannot drift on the spelling, and `SystemIntentToolContractTest`
-     * checks they do not drift on the set either.
+     * Each tool reads its OWN argument (`query`, or `url` for `open_url`), trimmed once; a blank or
+     * missing one fails closed before the action path. An unregistered tool never reaches it either.
      */
-    private fun outputFor(id: ToolId, query: String): ToolOutput =
-        if (id == ToolIds.LAUNCH_APP) {
-            ToolOutput(mapOf(SystemIntentToolSource.RESOLVED_QUERY to query))
+    private fun actionFor(invocation: ResolvedInvocation): LauncherAction? {
+        fun arg(name: String): String? = invocation.args[name]?.trim()?.takeIf { it.isNotEmpty() }
+        return when (invocation.id) {
+            ToolIds.LAUNCH_APP -> arg("query")?.let { LauncherAction.LaunchApp(it) }
+            ToolIds.PLAY_STORE_SEARCH -> arg("query")?.let { LauncherAction.PlayStoreSearch(it) }
+            InAppToolIds.WEB_SEARCH -> arg("query")?.let { LauncherAction.WebSearch(it) }
+            InAppToolIds.OPEN_URL -> arg("url")?.let { LauncherAction.OpenUrl(it) }
+            // An unregistered tool never reaches the action path. Tested with a query in hand, so the
+            // blank-argument guard above cannot answer for this branch.
+            else -> null
+        }
+    }
+
+    /**
+     * `launch_app` reports `resolved_query` on every result it can carry an output on — the query the
+     * action was BUILT from, so the output and the launch can never disagree (one read, not two). The
+     * other three declare no output ([SystemIntentToolSource]) and stay the default empty [ToolOutput].
+     */
+    private fun outputFor(id: ToolId, action: LauncherAction): ToolOutput =
+        if (id == ToolIds.LAUNCH_APP && action is LauncherAction.LaunchApp) {
+            ToolOutput(mapOf(SystemIntentToolSource.RESOLVED_QUERY to action.query))
         } else {
             ToolOutput()
         }

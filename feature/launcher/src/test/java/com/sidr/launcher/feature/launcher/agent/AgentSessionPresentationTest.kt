@@ -334,7 +334,10 @@ class AgentSessionPresentationTest {
      */
     @Test
     fun `each new tool maps to its own label, not the generic one`() {
-        listOf("set_alarm", "uninstall_app", "set_app_alias", "forget_app_alias", "forget_learned_choice")
+        listOf(
+            "set_alarm", "uninstall_app", "set_app_alias", "forget_app_alias", "forget_learned_choice",
+            "web_search", "open_url",
+        )
             .forEach { id ->
                 assertNotEquals(
                     "a tool without its own label reads as 'Run this step for …' on the gate",

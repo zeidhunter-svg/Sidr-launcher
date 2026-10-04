@@ -1,0 +1,133 @@
+package com.sidr.launcher.domain.ai.bridge
+
+import com.sidr.launcher.core.testing.FakeBridgeTransport
+import com.sidr.launcher.domain.ai.AiError
+import com.sidr.launcher.domain.ai.bridge.BridgeFixtures.descriptions
+import com.sidr.launcher.domain.ai.bridge.BridgeFixtures.plan
+import com.sidr.launcher.domain.ai.bridge.BridgeFixtures.registry
+import com.sidr.launcher.domain.intent.ModelUnavailableReason
+import com.sidr.launcher.domain.tool.ToolId
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Test
+
+/**
+ * The bridge's one model call (spec §7.12.2): one ask, at most one retry that adds ONLY the closed
+ * code's static note, a ceiling that covers both, and every failure said by its reason.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class BridgeModelPlannerTest {
+
+    private val command = "открой lumora"
+    private val valid = TransportReply.Answer(plan("launch_app", "app" to "lumora"), ReplyMeta.NONE)
+    private val notOffered = TransportReply.Answer(
+        plan("set_app_alias", "app" to "lumora", "phrase" to "SNTL-REJECTED-ECHO"),
+        ReplyMeta.NONE,
+    )
+
+    private fun planner(transport: FakeBridgeTransport, budget: BridgeBudget = BridgeBudget.Default) =
+        BridgeModelPlanner(registry, descriptions, transport, budget)
+
+    @Test
+    fun `a valid first answer asks the model once and returns its reading`() = runTest {
+        val transport = FakeBridgeTransport(listOf(valid))
+
+        val result = planner(transport).plan(command)
+
+        assertEquals(ToolId("launch_app"), (result as ModelPlanning.Proposed).step.tool)
+        assertEquals(1, transport.requests.size)
+    }
+
+    /** Criterion 18: one retry, and the retry is the first request plus the closed code's note — nothing else. */
+    @Test
+    fun `an invalid answer is asked again exactly once, with only the closed code added`() = runTest {
+        val transport = FakeBridgeTransport(listOf(notOffered, valid))
+
+        val result = planner(transport).plan(command)
+
+        assertEquals(ToolId("launch_app"), (result as ModelPlanning.Proposed).step.tool)
+        assertEquals(2, transport.requests.size)
+        assertEquals(
+            transport.requests[0].copy(retryNote = BridgeRendering.retryNote(BridgeError.NOT_OFFERED)),
+            transport.requests[1],
+        )
+        assertFalse(transport.requests[1].toString().contains("SNTL-REJECTED-ECHO"))
+    }
+
+    /** Criterion 18: never a second retry. */
+    @Test
+    fun `a second invalid answer is unreadable, and the model is never asked a third time`() = runTest {
+        val transport = FakeBridgeTransport(listOf(notOffered, notOffered, valid))
+
+        val result = planner(transport).plan(command)
+
+        assertEquals(ModelPlanning.Unavailable(ModelUnavailableReason.UNREADABLE), result)
+        assertEquals(2, transport.requests.size)
+    }
+
+    @Test
+    fun `an unparseable first reply is asked again with the shape code`() = runTest {
+        val transport = FakeBridgeTransport(listOf(TransportReply.Unparseable(ReplyMeta.NONE), valid))
+
+        planner(transport).plan(command)
+
+        assertEquals(BridgeRendering.retryNote(BridgeError.SHAPE), transport.requests[1].retryNote)
+    }
+
+    /** Finding (c) of the A1″ acceptance: a broken key, a dead endpoint, a refused model each say so. */
+    @Test
+    fun `a transport failure is reported by its reason and never asked again`() = runTest {
+        val table = listOf(
+            AiError.Unauthorized to ModelUnavailableReason.CREDENTIALS,
+            AiError.MissingCredentials to ModelUnavailableReason.CREDENTIALS,
+            AiError.InvalidRequest("http_404") to ModelUnavailableReason.REQUEST_REJECTED,
+            AiError.RateLimited(null) to ModelUnavailableReason.PROVIDER_FAILING,
+            AiError.ServerError(502) to ModelUnavailableReason.PROVIDER_FAILING,
+            AiError.Timeout to ModelUnavailableReason.TIMED_OUT,
+            AiError.Network("IOException") to ModelUnavailableReason.NETWORK,
+        )
+        table.forEach { (error, reason) ->
+            val transport = FakeBridgeTransport(listOf(TransportReply.Failed(error)))
+
+            assertEquals("$error", ModelPlanning.Unavailable(reason), planner(transport).plan(command))
+            assertEquals("$error", 1, transport.requests.size)
+        }
+    }
+
+    /** Criterion 19: the ceiling bounds the WHOLE planning, retry included. */
+    @Test
+    fun `the ceiling covers both attempts`() = runTest {
+        val transport = FakeBridgeTransport(listOf(notOffered, valid), delayMs = 30_000)
+
+        val result = planner(transport, BridgeBudget(ceilingMs = 45_000, maxOutputTokens = 2_048)).plan(command)
+
+        assertEquals(ModelPlanning.Unavailable(ModelUnavailableReason.TIMED_OUT), result)
+        assertEquals(45_000L, currentTime)
+    }
+
+    @Test
+    fun `the request carries the rendered offering and the command verbatim`() = runTest {
+        val transport = FakeBridgeTransport(listOf(valid))
+
+        planner(transport).plan(command)
+
+        val offering = BridgeFilter.offeringOf(registry, descriptions)
+        val request = transport.requests.single()
+        assertEquals(BridgeRendering.systemText(offering), request.system)
+        assertEquals(BridgeRendering.schemaJson(offering), request.schemaJson)
+        assertEquals(command, request.command)
+        assertEquals(null, request.retryNote)
+    }
+
+    @Test
+    fun `the budget's output limit reaches the request`() = runTest {
+        val transport = FakeBridgeTransport(listOf(valid))
+
+        planner(transport, BridgeBudget(ceilingMs = 45_000, maxOutputTokens = 777)).plan(command)
+
+        assertEquals(777, transport.requests.single().maxOutputTokens)
+    }
+}

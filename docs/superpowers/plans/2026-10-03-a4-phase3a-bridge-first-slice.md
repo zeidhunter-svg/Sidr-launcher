@@ -167,6 +167,8 @@ cp "$MUT/orig" "$F"; cmp "$MUT/orig" "$F" && echo RESTORED && trap - EXIT
   - Apps: «Lumora» `net.fixture.lumora` · «Vemblic» `net.fixture.vemblic` · two «Tessar»
     `net.fixture.tessar.one` / `net.fixture.tessar.two` · «Zantor» `net.fixture.zantor`.
   - Aliases: «кварцелот» → `net.fixture.zantor`; «плимдорф» → `net.fixture.plimdorf` (never typed).
+  - **Added in execution (Task 7 review):** the plan's own Task 7 code also uses two «Pellix»
+    `net.fixture.pellix.one` / `net.fixture.pellix.two` and the alias «телега» → `net.fixture.zantor`.
   - Learned choice: slot `tessar` → `net.fixture.tessar.two`; slot `фальмира` → `net.fixture.falmira`
     (never typed).
   - Shortcut: package `net.fixture.qorvath`, app label «Qorvath», shortcut label «Brimwell».
@@ -658,6 +660,8 @@ delta.
 > either asked of the model or bound by the device`, `:data:repository`). Every task's own predicted delta
 > matched to the test; the chain from T6 on is the plan's +3 (`:domain` +2, `:data:repository` +1), so
 > T11 is expected at **1647**, not 1644. **T6: 1636** (plan 1632 + 3 carried + 1: the timeout test) → T11 **1648**.
+> **T7: 1651** (plan 1646 + 4 carried + 1: a controller ruling — the behavioural `MENTION_ARG` test in
+> `DeviceMentionBinderTest`, `:data:repository` 433) → T8 **1656**, T9 **1667**, T10 **1675**, T11 **1649**.
 
 - Task 11 is the only task whose total falls: −41 removed (P4) and +15 added (`:domain` +6, `:app` +8,
   `:feature:launcher` +1; the migrated tests keep their counts) → **1670 − 26 = 1644**. With F3a-B (b)
@@ -5131,7 +5135,7 @@ class FakeMentionBinder(var binding: ((AgentGoal, ProposedStep) -> Binding)? = n
 |---|---|---|---|
 | M7a | `DeviceMentionBinder.kt` · `        if (proposed.tool != ToolIds.LAUNCH_APP) {\n            return act(goal, proposed, words, origins, AppChoice(sort.arg, mention, apps, learning = null))\n        }\n` → `` | learned choices answer for `launch_app` only | `:data:repository` — `DeviceMentionBinderTest > uninstall never reads a learned choice` **only** |
 | M7b | `DeviceMentionBinder.kt` · `act(goal, proposed, words + (sort.arg to target), origins + (sort.arg to ValueOrigin.Ours), choice = null)` → `act(goal, proposed, words, origins, AppChoice(sort.arg, mention, apps, token))` | a confident learned choice binds | `:data:repository` — `> launch_app's confident learned choice binds without asking` **only** |
-| M7c | `DeviceMentionBinder.kt` · `ResolutionDecision.NoPreference -> act(goal, proposed, words, origins, AppChoice(sort.arg, mention, apps, token))` → `ResolutionDecision.NoPreference -> act(goal, proposed, words + (sort.arg to apps.first().packageName), origins, choice = null)` | criterion 17: two candidates are a choice | `:data:repository` — `> two candidates give a choice before any plan, and nothing is bound yet` **only** |
+| M7c | `DeviceMentionBinder.kt` · `ResolutionDecision.NoPreference -> act(goal, proposed, words, origins, AppChoice(sort.arg, mention, apps, token))` → `ResolutionDecision.NoPreference -> act(goal, proposed, words + (sort.arg to apps.first().packageName), origins, choice = null)` | criterion 17: two candidates are a choice | `:data:repository` — `> two candidates give a choice before any plan, and nothing is bound yet` **only**. **Measured in execution 2026-10-04 (E7-1): two** — plus `> every app mention the model is asked for is one the binder reads, and every bindable tool asks for one`, the test a controller ruling added to this task (with `launch_app` bound at once, `choose` returns null and the mention lands in its `unread` set) |
 | M7d | `Interpretation.kt` · `if (pending.candidates.none { it.packageName == packageName }) return null` → `` (the line removed) | a pick is one of the candidates | `:domain` — `InterpretationTest > a package that was not offered changes nothing` **only** |
 | M7e | `AgentExecutor.kt` · `    private fun checkpointFor(session: AgentSession, step: PlanStep): ConsentCheckpoint? {\n` → `    private fun checkpointFor(session: AgentSession, step: PlanStep): ConsentCheckpoint? {\n        if (step.rationale == StepRationale.MODEL_PROPOSED) return null\n` | `DOC-ADL-1`: one gate whoever proposed | `:domain` — `AgentExecutorTest > a CONFIRM step the model proposed stops at the engine's consent exactly like a deterministic one` **only** (if `:app`'s `CompensationOutsideTheEngineGuardTest` also reddens on the word `StepRationale` in the engine, record it — not run here) |
 | M7f | `AgentSessionMappers.kt` · `        StepRationale.MODEL_PROPOSED.name -> StepRationale.MODEL_PROPOSED\n` → `` | the rationale survives the store | `:data:repository` — `AgentSessionMappersTest > every StepRationale round-trips` **only** |

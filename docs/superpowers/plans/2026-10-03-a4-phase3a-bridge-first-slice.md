@@ -663,6 +663,11 @@ delta.
 > **T7: 1651** (plan 1646 + 4 carried + 1: a controller ruling — the behavioural `MENTION_ARG` test in
 > `DeviceMentionBinderTest`, `:data:repository` 433) → T8 **1656**, T9 **1667**, T10 **1675**, T11 **1649**.
 > **T8: 1656** as predicted (`:domain` 528, `:feature:launcher` 220; the fix round changed a fixture, not the count).
+> **T9: 1672** = plan 1662 + 5 carried + 3 (controller rulings on the implementer's findings F8, F9, F10d — `a dismissed pick
+> card leaves nothing to learn from a later tap`, `an assistant command without a question opens the bare assistant route`,
+> `a newer command supersedes a slow answer still on its way`) + 2 (task-review fix round — `editing the command during the
+> wait abandons it`, `dictating a new command dismisses the standing interpretation`), all `:feature:launcher` (235);
+> `:domain` 529. → T10 **1680**, T11 **1654**.
 
 - Task 11 is the only task whose total falls: −41 removed (P4) and +15 added (`:domain` +6, `:app` +8,
   `:feature:launcher` +1; the migrated tests keep their counts) → **1670 − 26 = 1644**. With F3a-B (b)
@@ -6068,6 +6073,10 @@ card's start and the route's start share one store and one id sequence).
 
 - [ ] **Step 4: run — expect green.** `:domain` → `tests=527`; `:feature:launcher` → `tests=230`.
 
+  > **Measured in execution (2026-10-04):** 529 / 230 at the tree of the day (+2 carried in `:domain`). Step 2 also
+  > prints `No parameter with name 'startAgentSession' found.` ×6 and inference errors at the two `OpenAssistant(…)` test
+  > sites; the two screen-test constructions sat at `:691` / `:948`, not `:~675` / `:~932`.
+
 - [ ] **Step 5: mutations — six.** Plant strings carry the FILE's indentation: the code blocks of this
 task sit inside a list and are shifted two spaces right of it (the plan review caught three plants that
 had copied the shift and would have matched nothing).
@@ -6084,8 +6093,28 @@ had copied the shift and would have matched nothing).
 (M9e is two plants of one file: run them as two `plant` calls in the SAME invocation, then one restore —
 the protocol's single `cp` restores both.)
 
+> **Measured in execution (2026-10-04) — M9a–M9f PROVED exactly as predicted.** The implementer found five tests that
+> could not fail under a plausible regression; the controller ruled them into the task, and the task review added a
+> sixth (I1 — an edit during the wait did not cancel the in-flight command: a late answer put up a card for abandoned
+> text, a SAFE step one tap from running; the in-flight half of Review Focus 2). Seven more plants, each PROVED with
+> exactly its own test red:
+>
+> | # | Plant | Red |
+> |---|---|---|
+> | M9g | drop `wait.cancel()` in `submit`'s `finally` | `a model's interpretation waits on the card and nothing runs` (new assert: a quick answer never shows the wait) |
+> | M9h | drop `_interpretation.value = null` at the top of `applyOutcome` | `a navigation reading opens Sidr's settings only on Run` (new assert) |
+> | M9i | drop `appLaunch.rememberLearningToken(null)` in `dismissInterpretation` | `a dismissed pick card leaves nothing to learn from a later tap` (new) |
+> | M9j | `routeForPrompt(outcome.question ?: "")` | `an assistant command without a question opens the bare assistant route` (new) |
+> | M9k | drop `pending?.cancel()` in `submit` (with the `pending = scope.launch {` line as context — the bare line occurs more than once) | `a newer command supersedes a slow answer still on its way` (new) |
+> | M9l | drop `pending?.cancel()` in `onChanged` (review I1, fix `5a75f6d`) | `editing the command during the wait abandons it` (new) |
+> | M9m | voice `onPartial` → `setCommandInput` instead of `onChanged` (review m1) | `dictating a new command dismisses the standing interpretation` (new) |
+>
+> Also `AgentOutcomePassThroughTest`'s new test now asserts both halves of its file's property (equality **and** no store
+> read), per the file's own KDoc.
+
 - [ ] **Step 6: boundary gate from a cleared tree** (`./gradlew --stop` first). Expected `GATE GREEN`,
-  `TOTAL tests=1662`: `:domain` **527** (+1), `:feature:launcher` **230** (+10).
+  `TOTAL tests=1662`: `:domain` **527** (+1), `:feature:launcher` **230** (+10). *(Measured: 1670 at `892f85a`, 1672
+  after the review fix `5a75f6d` — see the note under Step 5.)*
 
 - [ ] **Step 7: commit (controller).**
 

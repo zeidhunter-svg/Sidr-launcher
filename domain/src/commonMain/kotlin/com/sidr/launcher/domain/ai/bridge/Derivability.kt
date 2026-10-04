@@ -20,5 +20,9 @@ object Derivability {
 
     private val SEPARATORS = Regex("[^\\p{L}\\p{N}]+")
 
-    private fun words(text: String): List<String> = text.lowercase().split(SEPARATORS).filter { it.isNotEmpty() }
+    /** U+0307, the combining dot that «İ».lowercase() leaves behind on the JVM. Not a letter, so it would split the word. */
+    private const val COMBINING_DOT_ABOVE = "\u0307"
+
+    private fun words(text: String): List<String> =
+        text.lowercase().replace(COMBINING_DOT_ABOVE, "").split(SEPARATORS).filter { it.isNotEmpty() }
 }

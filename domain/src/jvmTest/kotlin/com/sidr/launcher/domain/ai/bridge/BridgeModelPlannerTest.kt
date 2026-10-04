@@ -57,6 +57,31 @@ class BridgeModelPlannerTest {
         assertFalse(transport.requests[1].toString().contains("SNTL-REJECTED-ECHO"))
     }
 
+    /**
+     * Spec §7.12.1 D1 — the model learns nothing about the world, refusals included. The validator tells
+     * the two codes apart FOR THE DEVICE; the retry that goes out must not: otherwise a proposed
+     * `shortcut:…` id reveals, by the note it gets back, whether that shortcut is installed.
+     */
+    @Test
+    fun `a rejected id gets the same retry text whether or not it exists on the device`() = runTest {
+        suspend fun retryRequestFor(tool: String): BridgeRequest {
+            val transport = FakeBridgeTransport(
+                listOf(TransportReply.Answer(plan(tool), ReplyMeta.NONE), valid),
+            )
+            planner(transport).plan(command)
+            return transport.requests[1]
+        }
+
+        val registeredNotOffered = retryRequestFor("shortcut:net.fixture.qorvath/brimwell")
+        val unregistered = retryRequestFor("fixture_quill")
+
+        assertEquals(unregistered, registeredNotOffered)
+        assertEquals(
+            "Your previous reply was rejected: it named a tool that is not among the tool ids listed above. Use only those ids.",
+            registeredNotOffered.retryNote,
+        )
+    }
+
     /** Criterion 18: never a second retry. */
     @Test
     fun `a second invalid answer is unreadable, and the model is never asked a third time`() = runTest {

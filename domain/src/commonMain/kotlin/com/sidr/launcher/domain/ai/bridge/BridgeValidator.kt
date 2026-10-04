@@ -15,7 +15,10 @@ sealed interface Verdict {
  *  - **membership in the offering** — not in the federation: `set_app_alias` and `shortcut:…` are
  *    registered and `SAFE`, the engine would not stop them, and `B13` would rest on one render filter;
  *  - **derivability** — an argument the description marks as a mention holds the user's own words.
- * It reports nothing the device knows: binding happens after it, and its outcome never returns here.
+ * The verdict tells `UNKNOWN_TOOL` from `NOT_OFFERED` for the device's own use; the retry text that goes
+ * out deliberately does NOT (`BridgeRendering.retryNote`), since a differing note would tell the model
+ * whether an id it proposed is registered on this phone. Binding happens after this, and its outcome
+ * never returns here.
  */
 object BridgeValidator {
 

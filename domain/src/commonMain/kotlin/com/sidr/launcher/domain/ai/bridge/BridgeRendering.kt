@@ -124,10 +124,10 @@ object BridgeRendering {
     fun retryNote(error: BridgeError): String = when (error) {
         BridgeError.SHAPE ->
             "Your previous reply was rejected: it was not one JSON object of the required form. Reply again with only that object."
-        BridgeError.UNKNOWN_TOOL ->
-            "Your previous reply was rejected: it named a tool that does not exist. Use only the tool ids listed above."
-        BridgeError.NOT_OFFERED ->
-            "Your previous reply was rejected: it named a tool that is not listed for you. Use only the tool ids listed above."
+        // ONE text for both: the validator tells them apart for the device, but a note that differed
+        // would tell the model whether an id it proposed exists on this phone (spec §7.12.1 D1).
+        BridgeError.UNKNOWN_TOOL, BridgeError.NOT_OFFERED ->
+            "Your previous reply was rejected: it named a tool that is not among the tool ids listed above. Use only those ids."
         BridgeError.UNDERIVABLE_MENTION ->
             "Your previous reply was rejected: an argument marked \"app\" held words the user did not type. Copy the user's own words for the app."
     }

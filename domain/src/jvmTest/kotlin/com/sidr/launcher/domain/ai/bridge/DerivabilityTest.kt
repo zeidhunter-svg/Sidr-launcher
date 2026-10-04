@@ -29,6 +29,17 @@ class DerivabilityTest {
         assertFalse(Derivability.isDerivable("телега", "открой телегу"))
     }
 
+    /**
+     * On the JVM «İ».lowercase() is «i» + U+0307 (a combining dot, not a letter), which the word split
+     * used to cut at: «İmvoral» became [i, mvoral]. A Turkish user's auto-capitalised word then failed
+     * to match the model's plain «imvoral», and the fragment «mvoral» counted as the user's word.
+     */
+    @Test
+    fun `a capital dotted I the user typed matches its plain lowercase form, and never splits the word`() {
+        assertTrue(Derivability.isDerivable("imvoral", "aç İmvoral"))
+        assertFalse(Derivability.isDerivable("mvoral", "aç İmvoral"))
+    }
+
     @Test
     fun `a blank mention is not derivable`() {
         assertFalse(Derivability.isDerivable("  ", "открой lumora"))

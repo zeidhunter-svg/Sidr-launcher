@@ -505,3 +505,17 @@ tasks.withType<Test>().configureEach {
         .withPropertyName("i18nGuardAppBuildGradleKts")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }
+
+// A4′ phase 3a (plan §0.2 B-7, probed in §0.3): the transport measurement is PAID and NETWORKED, so it
+// never runs in a gate. Every Test task of :app excludes it unless the run names the property, which
+// tools/gate.sh never does and tools/measure-bridge-transport.sh does. Excluded = not executed and not
+// counted, so the gate's floor and its per-module counts are untouched.
+tasks.withType<Test>().configureEach {
+    if (!providers.gradleProperty("sidr.measureBridgeTransport").isPresent) {
+        filter { excludeTestsMatching("*.BridgeTransportMeasurement") }
+    } else {
+        systemProperty("sidr.measureModels", providers.gradleProperty("sidr.measureModels").getOrElse(""))
+        systemProperty("sidr.measureDryRun", providers.gradleProperty("sidr.measureDryRun").isPresent.toString())
+        testLogging.showStandardStreams = true
+    }
+}

@@ -23,9 +23,22 @@ case "$#" in
   *) usage ;;
 esac
 MODELS="$1"
+# The harness splits MODELS on commas and trims each segment (Task 6 fix round 2), so ONE quoted word can
+# still smuggle a flag or a blank id past the count check above: `"m1 --dry-run"` or `m1,--dry-run`
+# would start a LIVE run with a bogus id. Refused: whitespace anywhere, an empty segment (leading,
+# trailing or doubled comma), a segment starting with "-".
 case "$MODELS" in
-  "" | -*) usage ;;
+  "" | -* | *[[:space:]]* | ,* | *, | *,,* | *,-*) usage ;;
 esac
+# And printable ASCII only: Kotlin's trim() also strips Unicode spaces such as U+00A0, which glibc's
+# [[:space:]] does not match (measured under ru_RU.UTF-8), so `m1,<U+00A0>--dry-run` would pass the line
+# above and reach the harness as the id "--dry-run". C locale, scoped to the function, for byte ranges.
+printable_ascii() {
+  local LC_ALL=C
+  case "$1" in *[!\!-~]*) return 1 ;; esac
+  return 0
+}
+printable_ascii "$MODELS" || usage
 
 if [ -z "${SIDR_MEASURE_API_KEY:-}" ]; then echo "FATAL: SIDR_MEASURE_API_KEY is not set"; exit 2; fi
 CORPUS=app/src/test/resources/bridge-measure/corpus.tsv
@@ -39,7 +52,10 @@ LOG=build/bridge-measure.log
 # and keep it for up to 3 h of idleness. This is a one-off run, so the daemon's startup saving is
 # irrelevant. With `--no-daemon` Gradle may still fork a single-use build process (to honour
 # org.gradle.jvmargs), and that process exits with the build.
+# In-process Kotlin compilation (fix round 2): a Kotlin compile daemon started by this run inherits the key
+# in its environment (measured in fix round 1), so none is started.
 ./gradlew "-Porg.gradle.java.installations.paths=$JDK17" --console=plain --no-daemon --no-build-cache --rerun-tasks \
+  -Pkotlin.compiler.execution.strategy=in-process \
   :app:testDebugUnitTest --tests '*BridgeTransportMeasurement' \
   -Psidr.measureBridgeTransport "-Psidr.measureModels=$MODELS" ${EXTRA[@]+"${EXTRA[@]}"} -i > "$LOG" 2>&1
 STATUS=$?

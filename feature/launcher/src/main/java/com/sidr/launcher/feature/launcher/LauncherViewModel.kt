@@ -361,7 +361,11 @@ class LauncherViewModel @Inject constructor(
     private val voiceInput = LauncherVoiceInput(
         speechInputSource = speechInputSource,
         scope = viewModelScope,
-        onPartial = { text -> commandSession.setCommandInput(text) },
+        // Task 9 review m1: a partial is the user dictating a new command, so it rides the same edit
+        // path as typing — it dismisses a standing interpretation card and abandons a command still
+        // waiting on its answer. (A partial cannot follow the Final it belongs to: the recognizer's
+        // flow closes on Final, so this never cancels the command onFinal submits.)
+        onPartial = { text -> commandSession.onChanged(text) },
         onFinal = { text ->
             commandSession.setCommandInput(text)
             // Same entry point as the keyboard's IME "Done" / submit.

@@ -154,6 +154,14 @@ internal class LauncherCommandSession(
         _pendingRoutedAction.value = null
         _interpretation.value = null
         pickedPackage = null
+        // A4′ phase 3a, Task 9 review I1 (Review Focus 2, in flight): an edit also abandons a command
+        // still waiting on its answer. Left running, its late answer would put up a card for text the
+        // user has already left — one tap from running on a SAFE step. Every caller is a user gesture
+        // (a text change in the field, its ✕, a voice partial, leaving the agent surface); the
+        // session's own buffer writes go through setCommandInput and cancel nothing.
+        pending?.cancel()
+        pending = null
+        _thinking.value = false
         // Editing/clearing the buffer without submitting abandons any pending ambiguity: drop the
         // learning token so a later unrelated grid/suggestion tap (both funnel through onAppClicked)
         // can't be misrecorded as an explicit resolution of that stale ambiguity.

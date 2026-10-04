@@ -2824,4 +2824,52 @@ class LauncherViewModelTest {
         assertEquals(null, vm.interpretation.value)
         assertEquals(CommandFeedback.LowConfidence, vm.commandFeedback.value)
     }
+
+    /**
+     * Review Focus 2, in flight (Task 9 review I1): an edit made while the model is still thinking
+     * abandons the command. Its late answer would otherwise put up a card for text the user has already
+     * left — one tap from running on a SAFE step.
+     */
+    @Test
+    fun `editing the command during the wait abandons it`() = runTest(testDispatcher) {
+        var answered = false
+        val vm = buildViewModel(
+            route = CommandRouteStep {
+                delay(10_000)
+                answered = true
+                CommandOutcome.Interpreted(storeStepReading())
+            },
+        )
+        vm.onCommandSubmitted("найди lumora в магазине")
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertTrue("the command is still waiting on the model", vm.thinking.value)
+
+        vm.onCommandChanged("найди что-то другое")
+        advanceUntilIdle()
+
+        assertEquals("no card for the abandoned text", null, vm.interpretation.value)
+        assertFalse(vm.thinking.value)
+        assertFalse("the model call itself was cancelled, not merely ignored", answered)
+        assertEquals("the edit stands", "найди что-то другое", vm.commandInput.value)
+    }
+
+    /** Task 9 review m1: dictating a new command abandons the card standing for the old one, as typing does. */
+    @Test
+    fun `dictating a new command dismisses the standing interpretation`() = runTest(testDispatcher) {
+        val vm = answering(CommandOutcome.Interpreted(storeStepReading()))
+        vm.onCommandSubmitted("найди lumora в магазине")
+        advanceUntilIdle()
+        assertEquals("the card is up before the dictation", storeStepReading(), vm.interpretation.value)
+
+        fakeSpeech.scriptedStates = listOf(
+            SpeechRecognitionState.Ready,
+            SpeechRecognitionState.Partial("открой tess"),
+        )
+        vm.startVoiceInput()
+        advanceUntilIdle()
+
+        assertEquals("открой tess", vm.commandInput.value)
+        assertEquals(null, vm.interpretation.value)
+    }
 }

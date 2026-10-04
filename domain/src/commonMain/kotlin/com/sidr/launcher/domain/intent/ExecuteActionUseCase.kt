@@ -26,7 +26,7 @@ class ExecuteActionUseCase(
     suspend fun execute(action: LauncherAction): CommandOutcome = when (action) {
         // Navigation / UI-only families — resolved by the ViewModel, never the executor.
         LauncherAction.OpenSettings -> CommandOutcome.OpenSettings
-        is LauncherAction.OpenAssistant -> CommandOutcome.OpenAssistant
+        is LauncherAction.OpenAssistant -> CommandOutcome.OpenAssistant(question = action.prompt)
         LauncherAction.ShowApps -> CommandOutcome.ShowApps
 
         // Side-effecting families — build the semantic intent, resolve (query → executable), execute.

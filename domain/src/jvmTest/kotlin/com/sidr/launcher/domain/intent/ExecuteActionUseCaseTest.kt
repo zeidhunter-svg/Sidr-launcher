@@ -107,7 +107,7 @@ class ExecuteActionUseCaseTest {
     fun `OpenAssistant navigates without touching the executor`() = runTest {
         val outcome = useCase.execute(LauncherAction.OpenAssistant("hi"))
 
-        assertEquals(CommandOutcome.OpenAssistant, outcome)
+        assertEquals(CommandOutcome.OpenAssistant(question = "hi"), outcome)
         assertTrue(executor.executedActions.isEmpty())
     }
 

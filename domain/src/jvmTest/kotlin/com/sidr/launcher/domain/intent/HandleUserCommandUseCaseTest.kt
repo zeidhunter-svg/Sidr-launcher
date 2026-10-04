@@ -212,7 +212,7 @@ class HandleUserCommandUseCaseTest {
     @Test fun `OPEN_ASSISTANT routes to OpenAssistant, not executor`() = runTest(testDispatcher) {
         matcherReturns(LauncherIntent.SimpleCommandIntent(SimpleCommand.OPEN_ASSISTANT), 0.95f)
 
-        assertEquals(CommandOutcome.OpenAssistant, useCase.handle("assistant"))
+        assertEquals(CommandOutcome.OpenAssistant(question = null), useCase.handle("assistant"))
         assertEquals(0, fakeExecutor.callCount)
     }
 

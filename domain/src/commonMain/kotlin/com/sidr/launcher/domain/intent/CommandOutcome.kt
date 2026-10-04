@@ -2,6 +2,7 @@ package com.sidr.launcher.domain.intent
 
 import com.sidr.launcher.domain.action.LauncherAction
 import com.sidr.launcher.domain.agent.AgentSessionId
+import com.sidr.launcher.domain.ai.bridge.Interpretation
 import com.sidr.launcher.domain.model.InstalledApp
 
 /**
@@ -44,8 +45,13 @@ sealed interface CommandOutcome {
     /** A technical failure occurred; [failure] is safe to display (no PII/stack). */
     data class Failed(val failure: CommandFailure) : CommandOutcome
 
-    /** Navigate to the assistant — the ViewModel maps this to its navigation Channel. */
-    data object OpenAssistant : CommandOutcome
+    /**
+     * Navigate to the assistant — the ViewModel maps this to its navigation Channel. [question], when
+     * present, is put into the assistant's input UNSENT (A4′ phase 3a, spec §7.12.3 condition 3): the
+     * model judged the command a question, and the user's «отправить» is the confirmation of that
+     * reading. `null` opens it empty, as FastPath's "assistant" always has.
+     */
+    data class OpenAssistant(val question: String?) : CommandOutcome
 
     /** Navigate to launcher settings — the ViewModel maps this to its navigation Channel. */
     data object OpenSettings : CommandOutcome
@@ -76,4 +82,12 @@ sealed interface CommandOutcome {
      * message and starts rendering session state.
      */
     data class AgentSessionStarted(val id: AgentSessionId) : CommandOutcome
+
+    /**
+     * The model's reading of a command, bound to this device and shown BEFORE anything runs (A4′ phase
+     * 3a, spec §7.12.3 condition 1) — the interpretation card. Nothing here executes: only the user's
+     * «Выполнить» starts a session, through the engine, which gates it by risk like any plan. Replaces
+     * the router's `RoutedAction` (removed in Task 11).
+     */
+    data class Interpreted(val interpretation: Interpretation) : CommandOutcome
 }

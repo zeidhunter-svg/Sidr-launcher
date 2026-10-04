@@ -5,8 +5,14 @@ import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.domain.action.ActionCatalog
 import com.sidr.launcher.domain.action.LauncherAction
+import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
+import com.sidr.launcher.domain.ai.bridge.Interpretation
+import com.sidr.launcher.domain.ai.bridge.SidrDestination
+import com.sidr.launcher.domain.ai.bridge.choose
+import com.sidr.launcher.domain.ai.bridge.plan
 import com.sidr.launcher.domain.input.InputIntent
 import com.sidr.launcher.domain.input.UniversalInputRouter
+import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.ExecuteActionUseCase
 import com.sidr.launcher.domain.intent.LauncherIntent
@@ -15,6 +21,8 @@ import com.sidr.launcher.domain.memory.resolution.ResolvedCommand
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.feature.launcher.agent.LauncherAgentSession
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -75,6 +83,9 @@ internal class LauncherCommandSession(
     // there — the command pipeline neither drives the agent nor reads its state, which is what keeps
     // the two surfaces separable.
     private val agentSession: LauncherAgentSession,
+    // A4′ phase 3a: «Выполнить» on the interpretation card starts the model's plan through the
+    // engine — `startPlanned` validates it against the federation, the engine gates it by risk.
+    private val startAgentSession: StartAgentSessionUseCase,
     private val scope: CoroutineScope,
     private val onNavigate: (String) -> Unit,
 ) {
@@ -124,11 +135,25 @@ internal class LauncherCommandSession(
     private val _pendingRoutedAction = MutableStateFlow<PendingRoutedAction?>(null)
     val pendingRoutedAction: StateFlow<PendingRoutedAction?> = _pendingRoutedAction
 
+    // ── The interpretation card (A4′ phase 3a, spec §7.12.3 condition 1) — transient (plan §0.2 B-12).
+    private val _interpretation = MutableStateFlow<Interpretation?>(null)
+    val interpretation: StateFlow<Interpretation?> = _interpretation
+
+    // ── The visible wait (spec §7.12.2, plan §0.2 B-10) and the command it waits for. ──
+    private val _thinking = MutableStateFlow(false)
+    val thinking: StateFlow<Boolean> = _thinking
+    private var pending: Job? = null
+
+    // The package the user picked on the card's list, recorded as a learned choice at «Выполнить».
+    private var pickedPackage: String? = null
+
     fun onChanged(text: String) {
         setCommandInput(text)
         // Editing a new command clears stale feedback and any pending confirm card.
         _feedback.value = CommandFeedback.None
         _pendingRoutedAction.value = null
+        _interpretation.value = null
+        pickedPackage = null
         // Editing/clearing the buffer without submitting abandons any pending ambiguity: drop the
         // learning token so a later unrelated grid/suggestion tap (both funnel through onAppClicked)
         // can't be misrecorded as an explicit resolution of that stale ambiguity.
@@ -147,40 +172,52 @@ internal class LauncherCommandSession(
             )
             return
         }
-        scope.launch {
-            when (val resolved = resolveCommand.resolve(text)) {
-                is ResolvedCommand.Outcome -> {
-                    // Non-ambiguous → learningToken is null (parity: identical to the pre-S2-1 outcome
-                    // path). Ambiguous with no stored preference → outcome is the original
-                    // NeedsConfirmation, unchanged, plus a token for a later candidate tap to record.
-                    appLaunch.rememberLearningToken(resolved.learningToken)
-                    applyOutcome(resolved.outcome)
-                    if (devConsole.consoleOn.value) {
-                        devConsole.append(text, outcomeSummary(resolved.outcome))
+        pending?.cancel()
+        pending = scope.launch {
+            // Plan §0.2 B-10: FastPath answers before 300 ms and shows nothing; only a slow answer — the
+            // model's — shows the wait, with «Отмена».
+            val wait = launch {
+                delay(THINKING_DELAY_MS)
+                _thinking.value = true
+            }
+            try {
+                when (val resolved = resolveCommand.resolve(text)) {
+                    is ResolvedCommand.Outcome -> {
+                        // Non-ambiguous → learningToken is null (parity: identical to the pre-S2-1 outcome
+                        // path). Ambiguous with no stored preference → outcome is the original
+                        // NeedsConfirmation, unchanged, plus a token for a later candidate tap to record.
+                        appLaunch.rememberLearningToken(resolved.learningToken)
+                        applyOutcome(resolved.outcome)
+                        if (devConsole.consoleOn.value) {
+                            devConsole.append(text, outcomeSummary(resolved.outcome))
+                        }
+                    }
+                    is ResolvedCommand.AutoLaunch -> {
+                        // A confident learned preference — launch it directly. Executed-like semantics
+                        // (input clear) come only from launchApp's real success; a failure renders the
+                        // decorator's reordered fallback outcome exactly as a typed command would.
+                        appLaunch.rememberLearningToken(null)
+                        val packageName = resolved.target.packageName
+                        val activityName = (appList.state.value as? UiState.Success)
+                            ?.data
+                            ?.apps
+                            ?.firstOrNull { it.packageName == packageName }
+                            ?.activityName
+                        if (devConsole.consoleOn.value) {
+                            devConsole.append(text, "auto $packageName")
+                        }
+                        appLaunch.launch(
+                            packageName = packageName,
+                            activityName = activityName,
+                            onResult = { success ->
+                                if (success) setCommandInput("") else applyOutcome(resolved.fallback)
+                            },
+                        )
                     }
                 }
-                is ResolvedCommand.AutoLaunch -> {
-                    // A confident learned preference — launch it directly. Executed-like semantics
-                    // (input clear) come only from launchApp's real success; a failure renders the
-                    // decorator's reordered fallback outcome exactly as a typed command would.
-                    appLaunch.rememberLearningToken(null)
-                    val packageName = resolved.target.packageName
-                    val activityName = (appList.state.value as? UiState.Success)
-                        ?.data
-                        ?.apps
-                        ?.firstOrNull { it.packageName == packageName }
-                        ?.activityName
-                    if (devConsole.consoleOn.value) {
-                        devConsole.append(text, "auto $packageName")
-                    }
-                    appLaunch.launch(
-                        packageName = packageName,
-                        activityName = activityName,
-                        onResult = { success ->
-                            if (success) setCommandInput("") else applyOutcome(resolved.fallback)
-                        },
-                    )
-                }
+            } finally {
+                wait.cancel()
+                _thinking.value = false
             }
         }
     }
@@ -202,12 +239,13 @@ internal class LauncherCommandSession(
         CommandOutcome.LowConfidence -> "low confidence"
         is CommandOutcome.Unknown -> "unknown"
         is CommandOutcome.Failed -> "✗ ${outcome.failure}"
-        CommandOutcome.OpenAssistant -> "→ assistant"
+        is CommandOutcome.OpenAssistant -> "→ assistant"
         CommandOutcome.OpenSettings -> "→ settings"
         CommandOutcome.ShowApps -> "→ apps"
         CommandOutcome.ClearInput -> "cleared"
         is CommandOutcome.RoutedAction -> "→ route ${outcome.action.id.value}"
         is CommandOutcome.AgentSessionStarted -> "→ agent ${outcome.id.value}"
+        is CommandOutcome.Interpreted -> "? interpretation"
     }
 
     /**
@@ -281,6 +319,7 @@ internal class LauncherCommandSession(
     fun applyOutcome(outcome: CommandOutcome) {
         // Any new outcome dismisses a stale confirm card; the RoutedAction branch re-arms it below.
         _pendingRoutedAction.value = null
+        _interpretation.value = null
         when (outcome) {
             CommandOutcome.Empty ->
                 _feedback.value = CommandFeedback.EmptyInput
@@ -311,11 +350,12 @@ internal class LauncherCommandSession(
             is CommandOutcome.Failed ->
                 _feedback.value = CommandFeedback.Failure(outcome.failure)
 
-            CommandOutcome.OpenAssistant -> {
+            is CommandOutcome.OpenAssistant -> {
                 setCommandInput("")
                 _feedback.value = CommandFeedback.None
-                // Route string belongs to the UI layer — the domain only said "OpenAssistant".
-                onNavigate(Routes.Assistant.ROUTE)
+                // Route string belongs to the UI layer — the domain only said "OpenAssistant". A question
+                // the model read arrives prefilled and UNSENT (spec §7.12.3 condition 3).
+                onNavigate(outcome.question?.let(Routes.Assistant::routeForPrompt) ?: Routes.Assistant.ROUTE)
             }
 
             CommandOutcome.OpenSettings -> {
@@ -356,6 +396,15 @@ internal class LauncherCommandSession(
                 _feedback.value = CommandFeedback.None
                 agentSession.attach(outcome.id)
             }
+
+            // A4′ phase 3a (condition 1): the model's reading waits on the card. A launch the user must
+            // pick arms the learned-choice token; the pick binds and «Выполнить» records (B-3).
+            is CommandOutcome.Interpreted -> {
+                _feedback.value = CommandFeedback.None
+                pickedPackage = null
+                appLaunch.rememberLearningToken((outcome.interpretation as? Interpretation.Act)?.choice?.learning)
+                _interpretation.value = outcome.interpretation
+            }
         }
     }
 
@@ -381,6 +430,58 @@ internal class LauncherCommandSession(
     fun cancel() {
         _pendingRoutedAction.value = null
         _feedback.value = CommandFeedback.None
+    }
+
+    /** «Отмена» on the wait (spec §7.12.2): the command's coroutine — the model call with it — is cancelled. */
+    fun cancelThinking() {
+        pending?.cancel()
+        pending = null
+        _thinking.value = false
+    }
+
+    /** A pick on the card's list (spec §7.12.3 condition 2): it BINDS the step's app; it launches nothing. */
+    fun chooseApp(packageName: String) {
+        val act = _interpretation.value as? Interpretation.Act ?: return
+        val bound = act.choose(packageName) ?: return
+        pickedPackage = packageName
+        _interpretation.value = bound
+    }
+
+    /**
+     * «Выполнить» (condition 1). A navigation opens its screen. A step starts a session through the
+     * engine, which gates it by its risk exactly as any plan; a `CONFIRM` step therefore costs a second
+     * card — the regression spec §7.12.3 accepts. The card is taken down BEFORE the start, so a second
+     * tap finds nothing to run (Review Focus 1).
+     */
+    fun runInterpretation() {
+        when (val reading = _interpretation.value ?: return) {
+            is Interpretation.Navigate -> applyOutcome(
+                when (reading.destination) {
+                    SidrDestination.LAUNCHER_SETTINGS -> CommandOutcome.OpenSettings
+                    SidrDestination.APP_GRID -> CommandOutcome.ShowApps
+                },
+            )
+            is Interpretation.Act -> {
+                val plan = reading.plan() ?: return // a pick is still owed
+                _interpretation.value = null
+                pickedPackage?.let(appLaunch::recordChoiceIfPending)
+                pickedPackage = null
+                scope.launch {
+                    val started = (startAgentSession.startPlanned(reading.goal, plan) as? OperationResult.Success)?.value
+                    applyOutcome(
+                        if (started != null) CommandOutcome.AgentSessionStarted(started.id)
+                        else CommandOutcome.Failed(CommandFailure.Generic),
+                    )
+                }
+            }
+        }
+    }
+
+    /** «Отмена» on the card: nothing runs, nothing is learned. */
+    fun dismissInterpretation() {
+        _interpretation.value = null
+        pickedPackage = null
+        appLaunch.rememberLearningToken(null)
     }
 
     /** The `>`-prefixed command form shown on the confirm card / one-tap chip (display-safe). */
@@ -416,5 +517,7 @@ internal class LauncherCommandSession(
         const val SEARCH_VERB_PREFIX = "search "
         // SavedStateHandle key for the typed command text (H3 process-death restoration).
         const val KEY_COMMAND_INPUT = "command_input"
+        // A4′ phase 3a (plan §0.2 B-10): how long a command may take before the wait is shown.
+        const val THINKING_DELAY_MS = 300L
     }
 }

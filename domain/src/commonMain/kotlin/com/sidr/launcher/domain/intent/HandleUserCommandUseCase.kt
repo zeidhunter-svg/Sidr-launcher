@@ -125,7 +125,7 @@ class HandleUserCommandUseCase(
     }
 
     private fun routeSimpleCommand(command: SimpleCommand): CommandOutcome = when (command) {
-        SimpleCommand.OPEN_ASSISTANT -> CommandOutcome.OpenAssistant
+        SimpleCommand.OPEN_ASSISTANT -> CommandOutcome.OpenAssistant(question = null)
         SimpleCommand.SHOW_APPS -> CommandOutcome.ShowApps
         SimpleCommand.CLEAR -> CommandOutcome.ClearInput
         SimpleCommand.HELP -> CommandOutcome.Message(CommandMessage.Help)

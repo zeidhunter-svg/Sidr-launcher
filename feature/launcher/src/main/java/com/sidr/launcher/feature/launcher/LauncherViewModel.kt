@@ -16,8 +16,10 @@ import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
 import com.sidr.launcher.domain.agent.ResumeAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
+import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StepUndo
 import com.sidr.launcher.domain.agent.UndoAgentSessionUseCase
+import com.sidr.launcher.domain.ai.bridge.Interpretation
 import com.sidr.launcher.domain.history.UsageHistoryRepository
 import com.sidr.launcher.domain.memory.alias.ResolveCommandWithAliasUseCase
 import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
@@ -102,6 +104,8 @@ class LauncherViewModel @Inject constructor(
     private val resumeAgentSession: ResumeAgentSessionUseCase,
     private val undoAgentSession: UndoAgentSessionUseCase,
     private val agentSessionStore: AgentSessionStore,
+    // A4′ phase 3a: the interpretation card's «Выполнить» starts the model's plan through the engine.
+    private val startAgentSession: StartAgentSessionUseCase,
     // Task 10 / A1': read-only lookup of a registered tool's descriptor, the same shape and the same
     // reason [actionCatalog] is here. The surface must be able to say where an EXTERNAL tool's effect
     // goes (`DOC-ILM-2`), and provenance lives on the descriptor — a plan step carries the tool's id
@@ -336,6 +340,7 @@ class LauncherViewModel @Inject constructor(
         appList = appList,
         devConsole = devConsole,
         agentSession = agentSession,
+        startAgentSession = startAgentSession,
         scope = viewModelScope,
         onNavigate = { route -> navigateTo(route) },
     )
@@ -344,6 +349,12 @@ class LauncherViewModel @Inject constructor(
     val inputResults: StateFlow<HomeInputResults> get() = commandSession.liveResults
     val commandFeedback: StateFlow<CommandFeedback> get() = commandSession.feedback
     val pendingRoutedAction: StateFlow<PendingRoutedAction?> get() = commandSession.pendingRoutedAction
+
+    /** A4′ phase 3a: the model's reading, shown before anything runs (spec §7.12.3 condition 1). */
+    val interpretation: StateFlow<Interpretation?> get() = commandSession.interpretation
+
+    /** A4′ phase 3a: a command has not answered within 300 ms — the model is being asked. */
+    val thinking: StateFlow<Boolean> get() = commandSession.thinking
 
     // Этап 4 / A0: extracted to LauncherVoiceInput — see startVoiceInput() below for the wiring. The
     // callbacks forward-reference [commandSession] the same way [appLaunch]'s onFeedback does above.
@@ -463,6 +474,14 @@ class LauncherViewModel @Inject constructor(
     fun cancelRoutedAction() {
         commandSession.cancel()
     }
+
+    fun runInterpretation() = commandSession.runInterpretation()
+
+    fun dismissInterpretation() = commandSession.dismissInterpretation()
+
+    fun chooseInterpretationApp(packageName: String) = commandSession.chooseApp(packageName)
+
+    fun cancelThinking() = commandSession.cancelThinking()
 
     // ── Agent runtime (Task 12 / A0) — thin delegations, exactly like the pairs above ──────
 

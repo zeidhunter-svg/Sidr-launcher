@@ -20,6 +20,16 @@ import com.sidr.launcher.core.testing.FakePrayerScheduleCache
 import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
 import androidx.lifecycle.SavedStateHandle
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
+import com.sidr.launcher.domain.ai.bridge.AppChoice
+import com.sidr.launcher.domain.ai.bridge.Interpretation
+import com.sidr.launcher.domain.ai.bridge.PrincipalId
+import com.sidr.launcher.domain.ai.bridge.SidrDestination
+import com.sidr.launcher.domain.ai.bridge.ValueOrigin
+import com.sidr.launcher.domain.intent.CommandOutcome
+import com.sidr.launcher.domain.memory.resolution.ResolutionLearningToken
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import com.sidr.launcher.domain.agent.AgentExecutor
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.AgentSession
@@ -309,6 +319,7 @@ class LauncherViewModelTest {
         resumeAgentSession = resumeOver(fakeAgentStore, runAgent, agentRegistry),
         undoAgentSession = undoOver(fakeAgentStore, agentRegistry),
         agentSessionStore = fakeAgentStore,
+        startAgentSession = startAgentSession,
         toolRegistry = agentRegistry,
         // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
         // and every step line renders exactly as it did before the dynamic arm existed.
@@ -376,6 +387,7 @@ class LauncherViewModelTest {
             resumeAgentSession = resumeOver(fakeAgentStore, runAgentSession, agentRegistry),
             undoAgentSession = undoOver(fakeAgentStore, agentRegistry),
             agentSessionStore = fakeAgentStore,
+            startAgentSession = startAgentSession,
             toolRegistry = agentRegistry,
             // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
             // and every step line renders exactly as it did before the dynamic arm existed.
@@ -712,6 +724,7 @@ class LauncherViewModelTest {
             resumeAgentSession = resumeOver(fakeAgentStore, runAgentSession, agentRegistry),
             undoAgentSession = undoOver(fakeAgentStore, agentRegistry),
             agentSessionStore = fakeAgentStore,
+            startAgentSession = startAgentSession,
             toolRegistry = agentRegistry,
             // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
             // and every step line renders exactly as it did before the dynamic arm existed.
@@ -971,6 +984,7 @@ class LauncherViewModelTest {
             resumeAgentSession = resumeOver(fakeAgentStore, runAgentSession, agentRegistry),
             undoAgentSession = undoOver(fakeAgentStore, agentRegistry),
             agentSessionStore = fakeAgentStore,
+            startAgentSession = startAgentSession,
             toolRegistry = agentRegistry,
             // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
             // and every step line renders exactly as it did before the dynamic arm existed.
@@ -2540,5 +2554,274 @@ class LauncherViewModelTest {
 
         assertEquals(CommandFeedback.Domain(CommandMessage.UnderstandingLocalOnly), vm.commandFeedback.value)
         assertEquals(null, fakeAgentStore.activeOrNull)
+    }
+
+    // ── A4′ phase 3a: the interpretation card (spec §7.12.3) ─────────────────────────────
+
+    private fun storeStepReading() = Interpretation.Act(
+        goal = AgentGoal("найди lumora в магазине", GoalShape.Free("найди lumora в магазине")),
+        step = PlanStep(
+            index = 0,
+            invocation = ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.Literal("lumora"))),
+            risk = ActionRiskLevel.CONFIRM,
+            precondition = StepPrecondition.None,
+            rationale = StepRationale.MODEL_PROPOSED,
+        ),
+        origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+        effect = ToolEffect.EXTERNAL,
+        choice = null,
+    )
+
+    private val tessarOne = InstalledApp("net.fixture.tessar.one", "Tessar")
+    private val tessarTwo = InstalledApp("net.fixture.tessar.two", "Tessar")
+
+    private fun launchPickReading(): Interpretation.Act {
+        val candidates = CandidateSet(listOf(ResolvedTarget.App(tessarOne.packageName), ResolvedTarget.App(tessarTwo.packageName)))
+        return Interpretation.Act(
+            goal = AgentGoal("открой tessar", GoalShape.Free("открой tessar")),
+            step = PlanStep(
+                index = 0,
+                invocation = ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal("tessar"))),
+                risk = ActionRiskLevel.SAFE,
+                precondition = StepPrecondition.None,
+                rationale = StepRationale.MODEL_PROPOSED,
+            ),
+            origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+            effect = ToolEffect.EXTERNAL,
+            choice = AppChoice(
+                arg = "app",
+                mention = "tessar",
+                candidates = listOf(tessarOne, tessarTwo),
+                learning = ResolutionLearningToken(
+                    capabilityKey = CapabilityKey(ActionIds.LAUNCH_APP, "tessar"),
+                    context = ResolutionContext.None,
+                    candidateSet = candidates,
+                    fingerprint = fingerprintOf(candidates),
+                    isAppAmbiguityFlow = true,
+                ),
+            ),
+        )
+    }
+
+    private fun answering(outcome: CommandOutcome) = buildViewModel(route = CommandRouteStep { outcome })
+
+    /** Criterion 15, the surface half: the model's reading waits on the card; nothing has started. */
+    @Test
+    fun `a model's interpretation waits on the card and nothing runs`() = runTest(testDispatcher) {
+        val reading = storeStepReading()
+        val vm = answering(CommandOutcome.Interpreted(reading))
+
+        vm.onCommandSubmitted("найди lumora в магазине")
+        advanceUntilIdle()
+
+        assertEquals(reading, vm.interpretation.value)
+        assertTrue(fakeAgentStore.saved.isEmpty())
+        assertTrue(fakeExecutor.executedActions.isEmpty())
+        // advanceUntilIdle has run virtual time well past the 300 ms threshold: a wait left armed after
+        // the answer arrived would have fired by now.
+        assertFalse("a quick answer never shows the wait", vm.thinking.value)
+    }
+
+    /** «Выполнить» starts a session THROUGH THE ENGINE, which gates the CONFIRM step like any other. */
+    @Test
+    fun `Run starts the session through the engine and the card leaves`() = runTest(testDispatcher) {
+        val vm = answering(CommandOutcome.Interpreted(storeStepReading()))
+        vm.onCommandSubmitted("найди lumora в магазине")
+        advanceUntilIdle()
+
+        vm.runInterpretation()
+        advanceUntilIdle()
+
+        assertEquals(null, vm.interpretation.value)
+        assertEquals(ExecutionState.AwaitingConsent, vm.agentSessionState.value?.state)
+        assertTrue(fakeExecutor.executedActions.isEmpty())
+    }
+
+    @Test
+    fun `dismissing the card starts nothing`() = runTest(testDispatcher) {
+        val vm = answering(CommandOutcome.Interpreted(storeStepReading()))
+        vm.onCommandSubmitted("найди lumora в магазине")
+        advanceUntilIdle()
+
+        vm.dismissInterpretation()
+        advanceUntilIdle()
+
+        assertEquals(null, vm.interpretation.value)
+        assertTrue(fakeAgentStore.saved.isEmpty())
+    }
+
+    /** Criterion 17: a pick binds the step's app — it launches nothing and starts nothing. */
+    @Test
+    fun `a pick binds the app and launches nothing`() = runTest(testDispatcher) {
+        val vm = answering(CommandOutcome.Interpreted(launchPickReading()))
+        vm.onCommandSubmitted("открой tessar")
+        advanceUntilIdle()
+
+        vm.chooseInterpretationApp("net.fixture.tessar.two")
+        advanceUntilIdle()
+
+        val bound = vm.interpretation.value as Interpretation.Act
+        assertEquals(null, bound.choice)
+        assertEquals(ArgSource.Literal("net.fixture.tessar.two"), bound.step.invocation.args["app"])
+        assertTrue(fakeExecutor.executedActions.isEmpty())
+        assertTrue(fakeAgentStore.saved.isEmpty())
+    }
+
+    /** Plan §0.2 B-3: the learned choice is recorded at «Выполнить» — the launch act — not at the pick. */
+    @Test
+    fun `Run after a pick records the learned choice once`() = runTest(testDispatcher) {
+        val vm = answering(CommandOutcome.Interpreted(launchPickReading()))
+        vm.onCommandSubmitted("открой tessar")
+        advanceUntilIdle()
+        vm.chooseInterpretationApp("net.fixture.tessar.two")
+        advanceUntilIdle()
+        assertTrue("nothing is learned at the pick", fakeResolutionStore.observeAll().first().isEmpty())
+
+        vm.runInterpretation()
+        advanceUntilIdle()
+
+        val learned = fakeResolutionStore.observeAll().first().single()
+        assertEquals(CapabilityKey(ActionIds.LAUNCH_APP, "tessar"), learned.capabilityKey)
+        assertEquals(ResolvedTarget.App("net.fixture.tessar.two"), learned.preferredTarget)
+    }
+
+    /** Review Focus 2: the card describes the old text; an edit abandons it. */
+    @Test
+    fun `editing the command dismisses the interpretation`() = runTest(testDispatcher) {
+        val vm = answering(CommandOutcome.Interpreted(storeStepReading()))
+        vm.onCommandSubmitted("найди lumora в магазине")
+        advanceUntilIdle()
+
+        vm.onCommandChanged("найди что-то другое")
+
+        assertEquals(null, vm.interpretation.value)
+    }
+
+    /** Review Focus 1: two taps, one session. */
+    @Test
+    fun `a second Run tap while the first is still starting starts one session`() = runTest(testDispatcher) {
+        val vm = answering(CommandOutcome.Interpreted(storeStepReading()))
+        vm.onCommandSubmitted("найди lumora в магазине")
+        advanceUntilIdle()
+
+        vm.runInterpretation()
+        vm.runInterpretation()
+        advanceUntilIdle()
+
+        assertEquals(1, fakeAgentStore.saved.map { it.id }.distinct().size)
+    }
+
+    /** Criterion 19: the wait is visible after a moment, and cancelling it applies nothing. */
+    @Test
+    fun `the wait shows after a moment and cancelling it applies nothing`() = runTest(testDispatcher) {
+        val vm = buildViewModel(
+            route = CommandRouteStep {
+                delay(10_000)
+                CommandOutcome.Interpreted(storeStepReading())
+            },
+        )
+        vm.onCommandSubmitted("найди lumora в магазине")
+        advanceTimeBy(299)
+        runCurrent()
+        assertFalse("no wait shown at 299 ms of a slow answer", vm.thinking.value)
+        advanceTimeBy(2)
+        runCurrent()
+        assertTrue(vm.thinking.value)
+
+        vm.cancelThinking()
+        advanceUntilIdle()
+
+        assertFalse(vm.thinking.value)
+        assertEquals(null, vm.interpretation.value)
+        assertTrue(fakeAgentStore.saved.isEmpty())
+    }
+
+    /** Review Focus 3 and condition 3: the question arrives prefilled and intact, unsent. */
+    @Test
+    fun `a question with reserved characters reaches the assistant intact`() = runTest(testDispatcher) {
+        val vm = answering(CommandOutcome.OpenAssistant("почему 2+2=4? & #1"))
+        val event = async { vm.navigationEvents.first() }
+
+        vm.onCommandSubmitted("почему 2+2=4? & #1")
+        advanceUntilIdle()
+
+        assertEquals(
+            NavigationEvent.NavigateTo(
+                "assistant?prompt=%D0%BF%D0%BE%D1%87%D0%B5%D0%BC%D1%83%202%2B2%3D4%3F%20%26%20%231",
+            ),
+            event.await(),
+        )
+    }
+
+    /** Plan §0.2 B-9: a navigation the model read is shown first, like everything it reads. */
+    @Test
+    fun `a navigation reading opens Sidr's settings only on Run`() = runTest(testDispatcher) {
+        val vm = answering(CommandOutcome.Interpreted(Interpretation.Navigate(SidrDestination.LAUNCHER_SETTINGS)))
+        vm.onCommandSubmitted("открой настройки лаунчера")
+        advanceUntilIdle()
+        val event = async { vm.navigationEvents.first() }
+        runCurrent()
+        assertFalse("nothing navigated before Run", event.isCompleted)
+
+        vm.runInterpretation()
+        advanceUntilIdle()
+
+        assertEquals(NavigationEvent.NavigateTo(Routes.Settings.ROUTE), event.await())
+        assertEquals("the card leaves once its screen opens", null, vm.interpretation.value)
+    }
+
+    /** «Отмена» on a pick card learns nothing — not even from a later tap on a former candidate. */
+    @Test
+    fun `a dismissed pick card leaves nothing to learn from a later tap`() = runTest(testDispatcher) {
+        val vm = answering(CommandOutcome.Interpreted(launchPickReading()))
+        vm.onCommandSubmitted("открой tessar")
+        advanceUntilIdle()
+
+        vm.dismissInterpretation()
+        vm.onAppClicked(tessarTwo)
+        advanceUntilIdle()
+
+        assertEquals("the tap itself launched", 1, fakeExecutor.executedActions.size)
+        assertTrue("nothing is learned from a dismissed card", fakeResolutionStore.observeAll().first().isEmpty())
+    }
+
+    /** FastPath's own «assistant» carries no question: the assistant opens empty, on its bare route. */
+    @Test
+    fun `an assistant command without a question opens the bare assistant route`() = runTest(testDispatcher) {
+        val vm = answering(CommandOutcome.OpenAssistant(null))
+        val event = async { vm.navigationEvents.first() }
+
+        vm.onCommandSubmitted("assistant")
+        advanceUntilIdle()
+
+        assertEquals(NavigationEvent.NavigateTo(Routes.Assistant.ROUTE), event.await())
+    }
+
+    /**
+     * A command submitted while the model is still thinking about an earlier one supersedes it: the
+     * earlier answer, arriving later, must not put a card up over the newer command's outcome.
+     */
+    @Test
+    fun `a newer command supersedes a slow answer still on its way`() = runTest(testDispatcher) {
+        val vm = buildViewModel(
+            route = CommandRouteStep { text ->
+                if (text == "найди lumora в магазине") {
+                    delay(10_000)
+                    CommandOutcome.Interpreted(storeStepReading())
+                } else {
+                    CommandOutcome.LowConfidence
+                }
+            },
+        )
+        vm.onCommandSubmitted("найди lumora в магазине")
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertTrue("the first command is still waiting on the model", vm.thinking.value)
+
+        vm.onCommandSubmitted("найди что-то другое")
+        advanceUntilIdle()
+
+        assertEquals(null, vm.interpretation.value)
+        assertEquals(CommandFeedback.LowConfidence, vm.commandFeedback.value)
     }
 }

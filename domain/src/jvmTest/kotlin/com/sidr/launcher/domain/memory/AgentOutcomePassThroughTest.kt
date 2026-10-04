@@ -5,6 +5,8 @@ import com.sidr.launcher.core.testing.FakeAliasStore
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
 import com.sidr.launcher.domain.agent.AgentSessionId
+import com.sidr.launcher.domain.ai.bridge.Interpretation
+import com.sidr.launcher.domain.ai.bridge.SidrDestination
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.memory.alias.Alias
 import com.sidr.launcher.domain.memory.alias.AliasStore
@@ -80,6 +82,35 @@ class AgentOutcomePassThroughTest {
         resolved as ResolvedCommand.Outcome
         assertEquals(agentOutcome, resolved.outcome)
         assertEquals("the alias store must not be consulted", 0, store.interactions)
+        assertEquals("the installed-app list must not be read", 0, apps.callCount)
+    }
+
+    /**
+     * The same pair as the two tests above (the class KDoc): the card comes back identical, and neither
+     * decorator consulted its memory. A model's reading is not an ambiguity to learn from (a pick on the
+     * card is learned at «Выполнить», not here) and not a phrase to alias.
+     */
+    @Test
+    fun `both decorators pass an interpretation through untouched`() = runTest {
+        val interpreted = CommandOutcome.Interpreted(Interpretation.Navigate(SidrDestination.APP_GRID))
+        val preferenceStore = CountingPreferenceStore()
+        val aliasStore = CountingAliasStore()
+        val apps = FakeInstalledAppsRepository()
+        val preference = ResolveCommandWithPreferenceUseCase(
+            route = CommandRouteStep { interpreted },
+            store = preferenceStore,
+            policy = DefaultResolutionPreferencePolicy(),
+            catalog = FakeActionCatalog(),
+        )
+        val alias = ResolveCommandWithAliasUseCase(
+            inner = ResolvedCommandStep { preference.resolve(it) },
+            store = aliasStore,
+            installedApps = apps,
+        )
+
+        assertEquals(ResolvedCommand.Outcome(interpreted, null), alias.resolve("открой все приложения"))
+        assertEquals("the preference store must not be consulted", 0, preferenceStore.interactions)
+        assertEquals("the alias store must not be consulted", 0, aliasStore.interactions)
         assertEquals("the installed-app list must not be read", 0, apps.callCount)
     }
 

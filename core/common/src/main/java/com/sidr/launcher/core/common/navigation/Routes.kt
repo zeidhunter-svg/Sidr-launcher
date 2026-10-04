@@ -26,6 +26,30 @@ sealed class Routes {
          * (the assistant deliberately holds no SavedStateHandle — key/prompt stay transient).
          */
         fun routeFor(encodedPrompt: String): String = "$ROUTE?$ARG_PROMPT=$encodedPrompt"
+
+        /**
+         * [routeFor] with the encoding done here (A4′ phase 3a). The model's question for the assistant
+         * reaches a plain-Kotlin command session, which cannot call Android's `Uri.encode`. Every byte of
+         * the UTF-8 form is percent-encoded except RFC 3986's unreserved characters, which Navigation's
+         * `Uri.decode` reads back exactly — `&`, `?`, `#`, `=`, `+` and spaces included.
+         */
+        fun routeForPrompt(prompt: String): String = routeFor(encodeQueryValue(prompt))
+
+        private fun encodeQueryValue(value: String): String = buildString {
+            value.encodeToByteArray().forEach { byte ->
+                val code = byte.toInt() and 0xFF
+                val char = code.toChar()
+                if (char in 'A'..'Z' || char in 'a'..'z' || char in '0'..'9' || char in "-._~") {
+                    append(char)
+                } else {
+                    append('%')
+                    append(HEX[code shr 4])
+                    append(HEX[code and 0x0F])
+                }
+            }
+        }
+
+        private const val HEX = "0123456789ABCDEF"
     }
     
     object Settings : Routes() {

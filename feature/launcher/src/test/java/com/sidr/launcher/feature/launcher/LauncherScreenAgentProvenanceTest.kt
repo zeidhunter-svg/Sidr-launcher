@@ -222,6 +222,14 @@ class LauncherScreenAgentProvenanceTest {
             executor = AgentExecutor(agentRegistry, tools, RuntimeBudget.Default),
             store = agentStore,
         )
+        // A4′ phase 3a: one instance for the route and for the card's «Выполнить», so both starts share
+        // one store and one id sequence.
+        val startAgentSession = StartAgentSessionUseCase(
+            planner = TemplatePlanner(),
+            store = agentStore,
+            ids = agentIds,
+            registry = agentRegistry,
+        )
         val routeUseCase = RouteCommandUseCase(
             handleUserCommand = useCase,
             planner = FakeCommandPlanner(),
@@ -229,12 +237,7 @@ class LauncherScreenAgentProvenanceTest {
             featureFlagRepository = FakeFeatureFlagRepository(),
             providerConfigRepository = configuredProvider(),
             connectivityChecker = FakeConnectivityChecker(),
-            startAgentSession = StartAgentSessionUseCase(
-                planner = TemplatePlanner(),
-                store = agentStore,
-                ids = agentIds,
-                registry = agentRegistry,
-            ),
+            startAgentSession = startAgentSession,
         )
         val resolutionStore = FakeResolutionPreferenceStore()
         val preferenceResolver = ResolveCommandWithPreferenceUseCase(
@@ -277,6 +280,7 @@ class LauncherScreenAgentProvenanceTest {
             resumeAgentSession = resumeOver(agentStore, runAgent, agentRegistry),
             undoAgentSession = undoOver(agentStore, agentRegistry, inverses),
             agentSessionStore = agentStore,
+            startAgentSession = startAgentSession,
             toolRegistry = agentRegistry,
             dynamicToolLabels = agentToolLabels,
             ioDispatcher = dispatcher,

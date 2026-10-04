@@ -3,8 +3,14 @@
 A4′ phase 3a, spec §7.12.2: which transport form becomes the default, and what the budget numbers are.
 Paid and networked — it never runs in `tools/gate.sh`. The owner runs it:
 
-    SIDR_MEASURE_API_KEY=... tools/measure-bridge-transport.sh <model>[,<model>...]
-    SIDR_MEASURE_API_KEY=... tools/measure-bridge-transport.sh <model> --dry-run   # no network
+    read -rs SIDR_MEASURE_API_KEY && export SIDR_MEASURE_API_KEY
+    tools/measure-bridge-transport.sh <model>[,<model>...]
+    tools/measure-bridge-transport.sh <model> --dry-run   # no network
+
+`read -rs` takes the key without echoing it and keeps it off the command line: a typed
+`SIDR_MEASURE_API_KEY=... tools/…` line is saved verbatim in the shell's history file.
+The script accepts exactly `<models>` (one comma-separated word) and an optional trailing `--dry-run`;
+anything else is refused before Gradle starts.
 
 - `corpus.tsv` — one command per line: `<label><TAB><command>`; `#` starts a comment. Labels:
   `act` (should become a plan), `question` (should go to the assistant), `nav` (a Sidr screen),

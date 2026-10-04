@@ -15,6 +15,7 @@ import com.sidr.launcher.domain.security.SecretKeys
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.ConnectTimeoutException
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -188,6 +189,24 @@ class OpenAiCompatibleBridgeTransportTest {
         // encoding, before any socket, and is a failure — not a throw, and not "no network".
         val broken = transport(mode = BridgeTransportMode.RESPONSE_FORMAT).ask(request.copy(schemaJson = "{"))
         assertTrue("$broken", broken is TransportReply.Failed && broken.error is AiError.Unknown)
+    }
+
+    /**
+     * The exception the shipped engine really raises, not a stand-in named "…Timeout…" (that would test
+     * the substring, not the behaviour). `bridgeHttpClient` sets connect and socket timeouts and no
+     * request timeout, so `HttpRequestTimeoutException` cannot arise from it. A reasoning model's silent
+     * wait ends inside `HttpURLConnection.getResponseCode()`, and Ktor 3.0.1's Android engine
+     * (`timeoutAwareConnection`, read with `javap`) turns that `java.net.SocketTimeoutException` into
+     * `ConnectTimeoutException(request, cause)` — exactly the call below, on the request it was given.
+     * It is an `IOException`, so without the timeout branch it would read as "no network".
+     */
+    @Test
+    fun `a request that times out is reported as a timeout, not as no network`() = runTest {
+        val silent = MockEngine { sent -> throw ConnectTimeoutException(sent, java.net.SocketTimeoutException("Read timed out")) }
+
+        val reply = transport(silent).ask(request)
+
+        assertEquals(TransportReply.Failed(AiError.Timeout), reply)
     }
 
     @Test

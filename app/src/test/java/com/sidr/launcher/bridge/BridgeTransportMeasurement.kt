@@ -9,6 +9,7 @@ import com.sidr.launcher.data.repository.agent.AuthoredToolDescriptions
 import com.sidr.launcher.domain.ai.AiModelId
 import com.sidr.launcher.domain.ai.AiProviderConfig
 import com.sidr.launcher.domain.ai.AiProviderId
+import com.sidr.launcher.domain.ai.bridge.BridgeBudget
 import com.sidr.launcher.domain.ai.bridge.BridgeFilter
 import com.sidr.launcher.domain.ai.bridge.BridgeModelPlanner
 import com.sidr.launcher.domain.ai.bridge.BridgeRequest
@@ -69,14 +70,16 @@ class BridgeTransportMeasurement {
         val registry = ProductionGraph.federation().registry
         val descriptions = AuthoredToolDescriptions()
         val offered = BridgeFilter.offeringOf(registry, descriptions).tools.size
+        // Built BEFORE the dry-run return, so the dry run prints the budget the live run would pass.
+        val budget = BridgeBudget(ceilingMs = MEASURE_CEILING_MS, maxOutputTokens = BridgeBudget.Default.maxOutputTokens)
         if (System.getProperty("sidr.measureDryRun") == "true") {
-            println("BRIDGE-MEASURE :: dry-run key=present corpus=${corpus.size} models=$models modes=${BridgeTransportMode.entries} offering=$offered")
+            println("BRIDGE-MEASURE :: dry-run key=present corpus=${corpus.size} models=$models modes=${BridgeTransportMode.entries} offering=$offered ceiling=${budget.ceilingMs}")
             return@runBlocking
         }
 
         // The cap of Task 12 rule 2, not the provisional ceiling: the measurement must be able to SEE a
         // latency the rule could still accept, or it can never raise the ceiling it exists to set.
-        val client = bridgeHttpClient(socketTimeoutMs = 90_000)
+        val client = bridgeHttpClient(socketTimeoutMs = MEASURE_SOCKET_MS)
         val provider = AiProviderId("measure")
         val store = FakeSecureSecretStore().apply { put(SecretKeys.apiKey(provider), key) }
         val report = StringBuilder()
@@ -91,7 +94,7 @@ class BridgeTransportMeasurement {
                 val rows = corpus.map { (label, command) ->
                     val recording = Recording(OpenAiCompatibleBridgeTransport(client, store, config, Dispatchers.IO, mode))
                     val started = System.nanoTime()
-                    val result = BridgeModelPlanner(registry, descriptions, recording).plan(command)
+                    val result = BridgeModelPlanner(registry, descriptions, recording, budget).plan(command)
                     Row(model, mode, label, command, result, recording.replies.toList(), (System.nanoTime() - started) / 1_000_000)
                 }
                 rows.forEach { emit(lineOf(it)) }
@@ -128,8 +131,11 @@ class BridgeTransportMeasurement {
         val retried = rows.count { it.replies.size == 2 }
         val timedOut = rows.count { (it.result as? ModelPlanning.Unavailable)?.reason?.name == "TIMED_OUT" }
         val sorted = rows.map { it.ms }.sorted()
-        val median = sorted[n / 2]
-        val p90 = sorted[((n * 9) / 10).coerceAtMost(n - 1)]
+        val median = sorted.getOrNull(n / 2)
+        // Nearest rank: the ceil(0.9 n)-th smallest, computed in integers ((9n + 9) / 10 == ceil(9n / 10))
+        // so no floating rounding can move it. `(n * 9) / 10` was the maximum for n <= 10 and one rank high
+        // above it — and Task 12 rule 2 multiplies this number by 1.5.
+        val p90 = if (n == 0) null else sorted[(9 * n + 9) / 10 - 1]
         val metas = rows.flatMap { row -> row.replies.mapNotNull { (it as? TransportReply.Answer)?.meta ?: (it as? TransportReply.Unparseable)?.meta } }
         val truncated = metas.count { it.finishReason == "length" }
         val reasoning = metas.count { (it.reasoningTokens ?: 0) > 0 }
@@ -137,8 +143,24 @@ class BridgeTransportMeasurement {
         val toAssistant = questions.count { it.result is ModelPlanning.ToAssistant }
         val toSearch = questions.count { (it.result as? ModelPlanning.Proposed)?.step?.tool?.value == "web_search" }
         return "BRIDGE-MEASURE :: summary model=$model mode=$mode n=$n parsed_first=$parsedFirst/$n usable=$usable/$n " +
-            "retried=$retried timed_out=$timedOut median_ms=$median p90_ms=$p90 truncated=$truncated " +
+            "retried=$retried timed_out=$timedOut median_ms=${median ?: "-"} p90_ms=${p90 ?: "-"} truncated=$truncated " +
             "reasoning_reported=$reasoning questions_to_assistant=$toAssistant/${questions.size} " +
             "questions_to_web_search=$toSearch/${questions.size}"
+    }
+
+    private companion object {
+        /** The socket cap of Task 12 rule 2: one attempt may be silent this long before the socket ends it. */
+        const val MEASURE_SOCKET_MS = 90_000L
+
+        /**
+         * The planner's ceiling for the measurement. `BridgeModelPlanner` wraps the WHOLE planning, the one
+         * retry included, in `withTimeoutOrNull(ceilingMs)`; with `BridgeBudget.Default` (45 s) a 60 s answer
+         * would be cut and recorded as `timed_out` at ~45 000 ms, so p90 could never exceed 45 s and rule 2
+         * would be fed a truncated number. Two attempts × the socket cap, so one silent wait up to the cap is
+         * observed rather than cut. Not a strict bound: connect time and body transfer count against the
+         * ceiling too, so a slow first attempt followed by a long retry can still meet it — that row reads
+         * `timed_out`, and its `ms` says how long it ran.
+         */
+        const val MEASURE_CEILING_MS = 2 * MEASURE_SOCKET_MS
     }
 }

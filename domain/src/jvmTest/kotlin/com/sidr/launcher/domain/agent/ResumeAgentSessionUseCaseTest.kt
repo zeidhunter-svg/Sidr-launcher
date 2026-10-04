@@ -7,6 +7,7 @@ import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ObservedFact
+import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolOutput
@@ -56,13 +57,55 @@ class ResumeAgentSessionUseCaseTest {
         return paused
     }
 
-    private fun <T> OperationResult<T>.value(): T = (this as OperationResult.Success).value
+    private fun OperationResult<Resumption>.ran(): AgentSession =
+        ((this as OperationResult.Success).value as Resumption.Ran).session
+
+    /** A one-step store search the MODEL proposed, stopped at its consent card, the process killed. */
+    private suspend fun pausedModelPlan(): AgentSession {
+        val session = AgentSession(
+            id = AgentSessionId("m1"),
+            goal = AgentGoal("найди lumora в магазине", GoalShape.Free("найди lumora в магазине")),
+            plan = ExecutionPlan(
+                listOf(
+                    PlanStep(
+                        index = 0,
+                        invocation = ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.Literal("lumora"))),
+                        risk = ActionRiskLevel.CONFIRM,
+                        precondition = StepPrecondition.None,
+                        rationale = StepRationale.MODEL_PROPOSED,
+                    ),
+                ),
+            ),
+            cursor = 0,
+            state = ExecutionState.Paused,
+            observations = emptyMap(),
+            consents = emptyMap(),
+            trace = ExecutionTrace(
+                listOf(
+                    TraceEvent.PlanCreated(1),
+                    TraceEvent.ConsentRequested(0, setOf(ConsentReason.RISK_LEVEL)),
+                    TraceEvent.SessionPaused,
+                ),
+            ),
+        )
+        store.save(session)
+        return session
+    }
+
+    /** A planner that WOULD plan — so "it was not asked" cannot pass by its having nothing to say. */
+    private class CountingPlanner : Planner {
+        var calls = 0
+        override suspend fun plan(request: PlanningRequest, registry: ToolRegistry): PlanningResult {
+            calls++
+            return TemplatePlanner().plan(request, registry)
+        }
+    }
 
     @Test
     fun `a paused plan that has only looked is planned again, and an app installed meanwhile opens`() = runTest {
         val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
 
-        val after = resume(tools).resume(pausedAfterLooking()).value()
+        val after = resume(tools).resume(pausedAfterLooking()).ran()
 
         assertEquals(AgentSessionId("s2"), after.id)
         assertEquals(ExecutionState.Completed, after.state)
@@ -73,7 +116,7 @@ class ResumeAgentSessionUseCaseTest {
     fun `a paused plan still missing its app offers the store again, after a fresh look`() = runTest {
         val tools = FakeToolExecutor(listOf(notInstalled()))
 
-        val after = resume(tools).resume(pausedAfterLooking()).value()
+        val after = resume(tools).resume(pausedAfterLooking()).ran()
 
         assertEquals(AgentSessionId("s2"), after.id)
         assertEquals(ExecutionState.AwaitingConsent, after.state)
@@ -104,7 +147,7 @@ class ResumeAgentSessionUseCaseTest {
         store.save(paused)
         val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
 
-        val after = resume(tools).resume(paused).value()
+        val after = resume(tools).resume(paused).ran()
 
         assertEquals(AgentSessionId("s-acted"), after.id)
         assertEquals(listOf(mapOf("query" to "вельтрикс")), tools.invocations.map { it.args })
@@ -117,7 +160,7 @@ class ResumeAgentSessionUseCaseTest {
         store.save(AgentExecutor(registry, FakeToolExecutor(emptyList())).prepare(store.active).pausedForRestore())
         val tools = FakeToolExecutor(listOf(notInstalled()))
 
-        val after = resume(tools).resume(store.active).value()
+        val after = resume(tools).resume(store.active).ran()
 
         assertEquals(AgentSessionId("s1"), after.id)
         assertEquals(1, tools.invocations.size)
@@ -149,7 +192,7 @@ class ResumeAgentSessionUseCaseTest {
         store.save(undo)
         val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
 
-        val after = resume(tools, eager).resume(undo).value()
+        val after = resume(tools, eager).resume(undo).ran()
 
         assertEquals(0, asked)
         assertEquals(AgentSessionId("s-undo"), after.id)
@@ -168,7 +211,7 @@ class ResumeAgentSessionUseCaseTest {
         val paused = pausedAfterLooking()
         val tools = FakeToolExecutor(emptyList())
 
-        val after = resume(tools, nothing).resume(paused).value()
+        val after = resume(tools, nothing).resume(paused).ran()
 
         assertEquals(AgentSessionId("s1"), after.id)
         assertEquals(ExecutionState.Failed, after.state)
@@ -176,5 +219,62 @@ class ResumeAgentSessionUseCaseTest {
         assertEquals(TraceEvent.SessionEnded(ExecutionState.Failed), after.trace.events.last())
         assertTrue(TraceEvent.SessionResumed !in after.trace.events)
         assertEquals("at rest the store is empty", null, store.activeOrNull)
+    }
+
+    /**
+     * Spec §7.12.3 condition 4, criterion 20. A plan the model wrote, in which nothing has acted, is not
+     * planned again here: `CompositePlanner` would answer `NoPlan` (`ToolMatchPlanner` cannot read the
+     * model's words), and M1(b) would end a legitimate plan «не удалось завершить». The engine hands it
+     * back; the layer that holds the route takes its words through the route again.
+     */
+    @Test
+    fun `a model-planned paused plan that has only looked is handed back for a new route, never planned again`() = runTest {
+        val planner = CountingPlanner()
+        val paused = pausedModelPlan()
+
+        val result = resume(FakeToolExecutor(emptyList()), planner).resume(paused)
+
+        assertEquals(OperationResult.Success(Resumption.NeedsRoute(paused.goal)), result)
+        assertEquals(0, planner.calls)
+        assertEquals("the stale session is the route layer's to close", paused, store.active)
+    }
+
+    /**
+     * The phase-2 rule stands for a model plan too: a call in flight at the pause may have acted, so it is
+     * resumed once, never re-routed. A `SAFE` step (`web_search`), so no consent question confounds it.
+     */
+    @Test
+    fun `a model-planned plan paused mid-call resumes its call instead of going back to the route`() = runTest {
+        val webSearch = ToolId("web_search")
+        val paused = AgentSession(
+            id = AgentSessionId("m2"),
+            goal = AgentGoal("найди ostravel lectures", GoalShape.Free("найди ostravel lectures")),
+            plan = ExecutionPlan(
+                listOf(
+                    PlanStep(
+                        index = 0,
+                        invocation = ToolInvocation(webSearch, mapOf("query" to ArgSource.Literal("ostravel lectures"))),
+                        risk = ActionRiskLevel.SAFE,
+                        precondition = StepPrecondition.None,
+                        rationale = StepRationale.MODEL_PROPOSED,
+                    ),
+                ),
+            ),
+            cursor = 0,
+            state = ExecutionState.Paused,
+            observations = emptyMap(),
+            consents = emptyMap(),
+            trace = ExecutionTrace(
+                listOf(TraceEvent.PlanCreated(1), TraceEvent.ToolInvoked(0, webSearch), TraceEvent.SessionPaused),
+            ),
+        ).also { store.save(it) }
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
+        val planner = CountingPlanner()
+
+        val after = resume(tools, planner).resume(paused).ran()
+
+        assertEquals(ExecutionState.Completed, after.state)
+        assertEquals(listOf(webSearch), tools.invocations.map { it.id })
+        assertEquals(0, planner.calls)
     }
 }

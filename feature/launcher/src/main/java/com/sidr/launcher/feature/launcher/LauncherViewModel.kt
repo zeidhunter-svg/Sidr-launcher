@@ -263,7 +263,7 @@ class LauncherViewModel @Inject constructor(
     // because that class takes it: `applyOutcome`'s AgentSessionStarted branch hands it the id of the
     // session Task 11's cut already started and persisted. The dependency is one-way, CommandSession
     // -> AgentSession; nothing here reads the command pipeline.
-    private val agentSession = LauncherAgentSession(
+    private val agentSession: LauncherAgentSession = LauncherAgentSession(
         runSession = runAgentSession,
         resolveConsent = resolveAgentConsent,
         cancelSession = cancelAgentSession,
@@ -271,6 +271,9 @@ class LauncherViewModel @Inject constructor(
         scope = viewModelScope,
         resumeSession = resumeAgentSession,
         undoSession = undoAgentSession,
+        // A4′ phase 3a (condition 4): forward-references [commandSession], declared below — legal for the
+        // same reason as [appLaunch]'s onFeedback: the lambda runs only after construction.
+        onReroute = { text -> commandSession.submit(text) },
     )
 
     /** The agent runtime's current session, or null when none is on screen. */

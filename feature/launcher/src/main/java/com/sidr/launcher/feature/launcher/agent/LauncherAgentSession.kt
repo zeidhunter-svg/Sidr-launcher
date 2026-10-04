@@ -7,6 +7,7 @@ import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
 import com.sidr.launcher.domain.agent.ResumeAgentSessionUseCase
+import com.sidr.launcher.domain.agent.Resumption
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StepUndo
 import com.sidr.launcher.domain.agent.UndoAgentSessionUseCase
@@ -29,7 +30,9 @@ import kotlinx.coroutines.launch
  * a different id — and replaces the paused one in the store (if the goal no longer plans, the stale
  * session instead ends `Failed` and nothing is performed — owner decision 2026-10-03, M1(b));
  * otherwise it resumes from the cursor as before, recording `SessionResumed`, setting `Running`, and letting the engine re-evaluate — which
- * puts a pending consent checkpoint back on screen rather than stepping past it.
+ * puts a pending consent checkpoint back on screen rather than stepping past it. A paused plan the MODEL
+ * wrote (A4′ phase 3a, spec §7.12.3 condition 4) is neither: the engine hands it back, this collaborator
+ * closes the stale session and passes its goal text to [onReroute] — back through the whole command route.
  *
  * Everything it touches is a `:domain` port, so it is unit-testable without Android or Compose.
  */
@@ -41,6 +44,8 @@ internal class LauncherAgentSession(
     private val scope: CoroutineScope,
     private val resumeSession: ResumeAgentSessionUseCase,
     private val undoSession: UndoAgentSessionUseCase,
+    /** Where a paused plan the model wrote goes: its words, back through the command route (spec §7.12.3 condition 4). */
+    private val onReroute: (String) -> Unit,
 ) {
     private val _session = MutableStateFlow<AgentSession?>(null)
     val session: StateFlow<AgentSession?> = _session.asStateFlow()
@@ -121,7 +126,18 @@ internal class LauncherAgentSession(
         busy = true
         scope.launch {
             try {
-                show((resumeSession.resume(paused) as? OperationResult.Success)?.value)
+                when (val resumed = (resumeSession.resume(paused) as? OperationResult.Success)?.value) {
+                    is Resumption.Ran -> show(resumed.session)
+                    is Resumption.NeedsRoute -> {
+                        // Condition 4: the model's old reading is not acted on. Close it, then take the
+                        // user's own words through the whole command route again — local-only, the
+                        // provider, the network and the interpretation card are all met afresh.
+                        cancelSession.cancel(paused.id)
+                        show(null)
+                        onReroute(resumed.goal.text)
+                    }
+                    null -> show(null)
+                }
             } finally {
                 busy = false
             }

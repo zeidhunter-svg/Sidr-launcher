@@ -21,14 +21,22 @@ import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
 import androidx.lifecycle.SavedStateHandle
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
 import com.sidr.launcher.domain.agent.AgentExecutor
+import com.sidr.launcher.domain.agent.AgentGoal
+import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.AgentSessionIdFactory
 import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
+import com.sidr.launcher.domain.agent.ConsentReason
+import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.ExecutionState
+import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RuntimeBudget
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
+import com.sidr.launcher.domain.agent.StepPrecondition
+import com.sidr.launcher.domain.agent.StepRationale
 import com.sidr.launcher.domain.agent.TemplatePlanner
 import com.sidr.launcher.domain.memory.alias.Alias
 import com.sidr.launcher.domain.memory.alias.AliasTarget
@@ -79,6 +87,7 @@ import com.sidr.launcher.domain.ai.router.PlanResult
 import com.sidr.launcher.domain.history.AppUsageRecord
 import com.sidr.launcher.domain.intent.ActionExecutionResult
 import com.sidr.launcher.domain.intent.CommandFailure
+import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
 import com.sidr.launcher.domain.intent.ExecutableAction
 import com.sidr.launcher.domain.intent.ExecuteActionUseCase
@@ -100,10 +109,15 @@ import com.sidr.launcher.domain.prayer.PrayerName
 import com.sidr.launcher.domain.prayer.PrayerSetup
 import com.sidr.launcher.domain.prayer.UnavailableReason
 import com.sidr.launcher.domain.result.OperationError
+import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ObservedFact
+import com.sidr.launcher.domain.tool.ToolIds
+import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
+import com.sidr.launcher.domain.trace.ExecutionTrace
+import com.sidr.launcher.domain.trace.TraceEvent
 import com.sidr.launcher.feature.launcher.agent.DynamicToolLabels
 import com.sidr.launcher.feature.launcher.agent.StepProvenance
 import java.time.Clock
@@ -268,10 +282,12 @@ class LauncherViewModelTest {
         // Only the agent-exit tests below override it, to script what the plan's tools observe and so
         // decide which surface the user is looking at when they leave it.
         runAgent: RunAgentSessionUseCase = runAgentSession,
+        // A4′ phase 3a, Task 8: a test may route through its own RouteCommandUseCase (Task 9 scripts it).
+        route: CommandRouteStep = CommandRouteStep { routeUseCase.route(it) },
     ) = LauncherViewModel(
         installedAppsRepository = fakeRepo,
         resolveCommand = aliasAwareResolveCommand(
-            route = CommandRouteStep { routeUseCase.route(it) },
+            route = route,
             resolutionStore = resolutionStore,
             actionCatalog = actionCatalog,
         ),
@@ -2470,5 +2486,59 @@ class LauncherViewModelTest {
             "the home body must be drawn again after «Отмена» too",
             vm.inputResults.value.active,
         )
+    }
+
+    /** A one-step store search the MODEL proposed, stopped at its consent card, the process killed. */
+    private fun pausedModelPlanForVm() = AgentSession(
+        id = AgentSessionId("m1"),
+        goal = AgentGoal("найди lumora в магазине", GoalShape.Free("найди lumora в магазине")),
+        plan = ExecutionPlan(
+            listOf(
+                PlanStep(
+                    index = 0,
+                    invocation = ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.Literal("lumora"))),
+                    risk = ActionRiskLevel.CONFIRM,
+                    precondition = StepPrecondition.None,
+                    rationale = StepRationale.MODEL_PROPOSED,
+                ),
+            ),
+        ),
+        cursor = 0,
+        state = ExecutionState.Paused,
+        observations = emptyMap(),
+        consents = emptyMap(),
+        trace = ExecutionTrace(
+            listOf(
+                TraceEvent.PlanCreated(1),
+                TraceEvent.ConsentRequested(0, setOf(ConsentReason.RISK_LEVEL)),
+                TraceEvent.SessionPaused,
+            ),
+        ),
+    )
+
+    /**
+     * Spec §7.12.3 condition 4: the route's gates are met again. Local-only switched on while the plan
+     * sat paused — «Продолжить» now says so honestly instead of acting on the model's old reading.
+     */
+    @Test
+    fun `continuing a model plan after local-only was switched on says so honestly`() = runTest(testDispatcher) {
+        fakeAgentStore.save(pausedModelPlanForVm())
+        val localOnlyRoute = RouteCommandUseCase(
+            handleUserCommand = useCase,
+            planner = FakeCommandPlanner(),
+            catalog = FakeActionCatalog(),
+            featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = true)),
+            providerConfigRepository = configuredProvider(),
+            connectivityChecker = FakeConnectivityChecker(),
+            startAgentSession = startAgentSession,
+        )
+        val vm = buildViewModel(route = CommandRouteStep { localOnlyRoute.route(it) })
+        advanceUntilIdle()
+
+        vm.continueAgentSession()
+        advanceUntilIdle()
+
+        assertEquals(CommandFeedback.Domain(CommandMessage.UnderstandingLocalOnly), vm.commandFeedback.value)
+        assertEquals(null, fakeAgentStore.activeOrNull)
     }
 }

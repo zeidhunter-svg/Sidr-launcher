@@ -7,9 +7,11 @@ import com.sidr.launcher.domain.action.ActionArg
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentExecutor
 import com.sidr.launcher.domain.agent.AgentGoal
+import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.AgentSessionIdFactory
 import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
+import com.sidr.launcher.domain.agent.ConsentReason
 import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
@@ -39,6 +41,7 @@ import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolRegistry
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.tool.Undo
+import com.sidr.launcher.domain.trace.ExecutionTrace
 import com.sidr.launcher.domain.trace.TraceEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -69,6 +72,7 @@ class LauncherAgentSessionTest {
         override fun newId() = AgentSessionId("s${++n}")
     }
     private val goal = AgentGoal("открой убер", GoalShape.AppNotInstalled("убер"))
+    private val rerouted = mutableListOf<String>()
 
     /** `launch_app`'s missing-app result, carrying the `resolved_query` step 1 binds to (F6). */
     private fun notInstalled() = ToolResult.Observed(
@@ -104,6 +108,7 @@ class LauncherAgentSessionTest {
             scope = scope,
             resumeSession = ResumeAgentSessionUseCase(StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry), runner),
             undoSession = UndoAgentSessionUseCase(StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry), inverses, registry),
+            onReroute = { rerouted += it },
         )
     }
 
@@ -389,5 +394,67 @@ class LauncherAgentSessionTest {
         advanceUntilIdle()
 
         assertEquals(listOf(note, unnote), tools.invocations.map { it.id })
+    }
+
+    /** A one-step store search the MODEL proposed, stopped at its consent card, the process killed. */
+    private suspend fun pausedModelPlan(): AgentSession {
+        val session = AgentSession(
+            id = AgentSessionId("m1"),
+            goal = AgentGoal("найди lumora в магазине", GoalShape.Free("найди lumora в магазине")),
+            plan = ExecutionPlan(
+                listOf(
+                    PlanStep(
+                        index = 0,
+                        invocation = ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.Literal("lumora"))),
+                        risk = ActionRiskLevel.CONFIRM,
+                        precondition = StepPrecondition.None,
+                        rationale = StepRationale.MODEL_PROPOSED,
+                    ),
+                ),
+            ),
+            cursor = 0,
+            state = ExecutionState.Paused,
+            observations = emptyMap(),
+            consents = emptyMap(),
+            trace = ExecutionTrace(
+                listOf(
+                    TraceEvent.PlanCreated(1),
+                    TraceEvent.ConsentRequested(0, setOf(ConsentReason.RISK_LEVEL)),
+                    TraceEvent.SessionPaused,
+                ),
+            ),
+        )
+        store.save(session)
+        return session
+    }
+
+    /** Spec §7.12.3 condition 4: the stale session is closed and its words go through the route again. */
+    @Test
+    fun `continuing a paused plan the model wrote closes it and takes its words through the route again`() = runTest {
+        store.save(pausedModelPlan())
+        val agent = collaborator(FakeToolExecutor(emptyList()), this)
+        agent.restoreOnStart()
+        advanceUntilIdle()
+
+        agent.continueSession()
+        advanceUntilIdle()
+
+        assertEquals(listOf("найди lumora в магазине"), rerouted)
+        assertNull(store.activeOrNull)
+        assertNull(agent.session.value)
+    }
+
+    @Test
+    fun `going back through the route performs nothing on the way`() = runTest {
+        store.save(pausedModelPlan())
+        val tools = FakeToolExecutor(emptyList())
+        val agent = collaborator(tools, this)
+        agent.restoreOnStart()
+        advanceUntilIdle()
+
+        agent.continueSession()
+        advanceUntilIdle()
+
+        assertEquals(emptyList<Any>(), tools.invocations)
     }
 }

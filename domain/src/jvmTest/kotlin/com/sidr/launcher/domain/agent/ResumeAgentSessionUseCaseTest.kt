@@ -92,7 +92,7 @@ class ResumeAgentSessionUseCaseTest {
         return session
     }
 
-    /** A planner that WOULD plan — so "it was not asked" cannot pass by its having nothing to say. */
+    /** Counts every ask, whatever it answers (for `GoalShape.Free` it delegates to `TemplatePlanner`, which says `NoPlan`). */
     private class CountingPlanner : Planner {
         var calls = 0
         override suspend fun plan(request: PlanningRequest, registry: ToolRegistry): PlanningResult {

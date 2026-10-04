@@ -444,10 +444,37 @@ class LauncherAgentSessionTest {
         assertNull(agent.session.value)
     }
 
+    /**
+     * The step is `SAFE` on purpose: a `CONFIRM` step stops at its consent gate, so a regression that
+     * RAN the stale plan instead of re-routing would invoke nothing and this test could not fail. A `SAFE`
+     * `web_search` would be invoked at once, so «performs nothing» now discriminates.
+     */
     @Test
     fun `going back through the route performs nothing on the way`() = runTest {
-        store.save(pausedModelPlan())
-        val tools = FakeToolExecutor(emptyList())
+        val webSearch = ToolId("web_search")
+        store.save(
+            AgentSession(
+                id = AgentSessionId("m2"),
+                goal = AgentGoal("найди ostravel lectures", GoalShape.Free("найди ostravel lectures")),
+                plan = ExecutionPlan(
+                    listOf(
+                        PlanStep(
+                            index = 0,
+                            invocation = ToolInvocation(webSearch, mapOf("query" to ArgSource.Literal("ostravel lectures"))),
+                            risk = ActionRiskLevel.SAFE,
+                            precondition = StepPrecondition.None,
+                            rationale = StepRationale.MODEL_PROPOSED,
+                        ),
+                    ),
+                ),
+                cursor = 0,
+                state = ExecutionState.Paused,
+                observations = emptyMap(),
+                consents = emptyMap(),
+                trace = ExecutionTrace(listOf(TraceEvent.PlanCreated(1), TraceEvent.SessionPaused)),
+            ),
+        )
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
         val agent = collaborator(tools, this)
         agent.restoreOnStart()
         advanceUntilIdle()
@@ -455,6 +482,7 @@ class LauncherAgentSessionTest {
         agent.continueSession()
         advanceUntilIdle()
 
+        assertEquals(listOf("найди ostravel lectures"), rerouted)
         assertEquals(emptyList<Any>(), tools.invocations)
     }
 }

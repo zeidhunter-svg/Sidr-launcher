@@ -1,7 +1,7 @@
 ---
 name: reviewer
-description: Fresh-eyes spec/quality reviewer for one just-completed plan task. Reviews the diff against the task text, spec, and repo constraints; reports ranked findings. Default tier for small and medium task diffs; privacy/consent/doctrine diffs, large deletions and the final branch review go to reviewer-deep. Never edits code.
-model: sonnet
+description: Fresh-eyes spec/quality reviewer for one just-completed plan task. Reviews the diff against the task text, spec, and repo constraints; reports ranked findings. Default tier for every task review (scoped re-reviews of small fix diffs may override the model to sonnet); privacy/consent/doctrine diffs, large deletions and the final branch review go to reviewer-deep. Never edits code.
+model: opus
 effort: high
 disallowedTools: Edit, Write, NotebookEdit
 ---

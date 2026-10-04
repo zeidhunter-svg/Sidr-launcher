@@ -30,8 +30,9 @@ sealed interface CommandMessage {
     data class Verbatim(val text: String) : CommandMessage
 
     // ── Understanding unavailable (Этап 4.0, ADR 1/4 clause 5) ───────────────
-    // Three mutually exclusive states, produced by `RouteCommandUseCase`'s ordered early returns:
-    // at most one can ever be reached for a single command. Before Этап 4.0 all three answered
+    // Four mutually exclusive states (three from Этап 4.0, a fourth from A4′ phase 3a), produced by
+    // `RouteCommandUseCase`'s ordered early returns: at most one can ever be reached for a single
+    // command. Before Этап 4.0 all three answered
     // "Unknown command", which was a claim about the *command* when the truth was about the
     // *system* — a FastPath miss is no longer grounds to call an understandable command unknown.
 
@@ -45,8 +46,10 @@ sealed interface CommandMessage {
 
     /**
      * No AI provider is configured. The feature layer renders this one with a tap-through to the
-     * provider setup screen (owner decision, Этап 4.0 F1) — it is the only one of the three whose
-     * fix the user can apply right now, in one step.
+     * provider setup screen (owner decision, Этап 4.0 F1) — of the three original states it is the only
+     * one whose fix the user can apply right now, in one step. Since A4′ phase 3a
+     * [UnderstandingModelUnavailable] carries the same tap-through for the two causes the provider
+     * screen can fix (`LauncherPresentation.offersProviderSetup`).
      */
     data object UnderstandingNeedsProvider : CommandMessage
 

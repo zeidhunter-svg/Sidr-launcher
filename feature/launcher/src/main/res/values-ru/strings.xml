@@ -91,11 +91,11 @@
     <string name="launcher_interpretation_choose_app">Какое приложение — «%1$s»?</string>
     <string name="launcher_interpretation_candidate">%1$s (%2$s)</string>
     <string name="launcher_thinking">Разбираю команду…</string>
-    <string name="launcher_model_unavailable_credentials">Провайдер ИИ не принял ключ.</string>
-    <string name="launcher_model_unavailable_request_rejected">Провайдер ИИ отклонил запрос. Проверьте настройки провайдера.</string>
-    <string name="launcher_model_unavailable_provider_failing">Провайдер ИИ перегружен или сбоит. Попробуйте позже.</string>
-    <string name="launcher_model_unavailable_timed_out">Провайдер ИИ не ответил вовремя.</string>
-    <string name="launcher_model_unavailable_network">Не удалось связаться с провайдером ИИ.</string>
+    <string name="launcher_model_unavailable_credentials">Ключ ИИ-провайдера не найден или не принят.</string>
+    <string name="launcher_model_unavailable_request_rejected">ИИ-провайдер отклонил запрос. Проверьте настройки провайдера.</string>
+    <string name="launcher_model_unavailable_provider_failing">ИИ-провайдер перегружен или сбоит. Попробуйте позже.</string>
+    <string name="launcher_model_unavailable_timed_out">ИИ-провайдер не ответил вовремя.</string>
+    <string name="launcher_model_unavailable_network">Не удалось связаться с ИИ-провайдером.</string>
     <string name="launcher_model_unavailable_unreadable">Не удалось прочитать ответ модели.</string>
 
     <!-- Этап 4 / A0 Task 12 — поверхность выполнения агента. Class A (обычный UI). -->

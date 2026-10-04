@@ -177,9 +177,9 @@ class LauncherScreenInterpretationTest {
         compose.onNodeWithText("Working out what you meant…").assertDoesNotExist()
     }
 
-    /** Wiring 3: a refused key puts its sentence AND the provider button on the screen. */
+    /** Wiring 3: a missing or refused key puts its sentence AND the provider button on the screen. */
     @Test
-    fun `a refused key shows its sentence and the provider setup button`() {
+    fun `a missing or refused key shows its sentence and the provider setup button`() {
         val vm = show(
             CommandRouteStep {
                 CommandOutcome.Message(CommandMessage.UnderstandingModelUnavailable(ModelUnavailableReason.CREDENTIALS))
@@ -189,7 +189,7 @@ class LauncherScreenInterpretationTest {
         vm.onCommandSubmitted("kelmora goal")
         compose.waitForIdle()
 
-        compose.onNodeWithText("The AI provider did not accept the key.").assertExists()
+        compose.onNodeWithText("The AI provider key is missing or was not accepted.").assertExists()
         compose.onNodeWithText("Set up provider").assertExists()
     }
 

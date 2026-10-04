@@ -60,8 +60,9 @@ internal fun feedbackText(feedback: CommandFeedback): FeedbackText? = when (feed
         CommandMessage.ShowingAllApps -> FeedbackText(R.string.launcher_message_showing_all_apps)
         CommandMessage.AssistantComingSoon -> FeedbackText(R.string.launcher_message_assistant_soon)
         is CommandMessage.Verbatim -> FeedbackText(R.string.launcher_message_verbatim, listOf(m.text))
-        // Этап 4.0 — the three mutually exclusive reasons understanding is unavailable. Each names a
-        // different fix, which is the whole point of not collapsing them back into one line.
+        // Этап 4.0 — the mutually exclusive reasons understanding is unavailable (three, and since
+        // A4′ phase 3a a fourth, [UnderstandingModelUnavailable], with six causes of its own). Each
+        // names a different fix, which is the whole point of not collapsing them back into one line.
         CommandMessage.UnderstandingLocalOnly ->
             FeedbackText(R.string.launcher_understanding_local_only)
         CommandMessage.UnderstandingNeedsProvider ->

@@ -101,4 +101,30 @@ class AppTargetResolverTest {
         val resolver = AppTargetResolver(FailingApps, EmptyAliases)
         assertNull(resolver.resolve("telegram"))
     }
+
+    // --- candidates (A4′ phase 3a, spec §7.12.3 condition 2): the decline is no longer one shape ---
+
+    @Test
+    fun `two apps sharing a label are both candidates, never one guessed`() = runTest {
+        val one = app("Tessar", "net.fixture.tessar.one")
+        val two = app("Tessar", "net.fixture.tessar.two")
+        val resolver = AppTargetResolver(FakeApps(listOf(one, two)), EmptyAliases)
+
+        assertEquals(AppCandidates.Several(listOf(one, two)), resolver.candidates("tessar"))
+    }
+
+    @Test
+    fun `an alias names exactly one candidate`() = runTest {
+        val zantor = app("Zantor", "net.fixture.zantor")
+        val resolver = AppTargetResolver(FakeApps(listOf(zantor)), FakeAliases(mapOf("кварцелот" to "net.fixture.zantor")))
+
+        assertEquals(AppCandidates.One(zantor), resolver.candidates("Кварцелот"))
+    }
+
+    @Test
+    fun `a repository failure is unavailable, not an empty answer`() = runTest {
+        val resolver = AppTargetResolver(FailingApps, EmptyAliases)
+
+        assertEquals(AppCandidates.Unavailable, resolver.candidates("tessar"))
+    }
 }

@@ -31,7 +31,7 @@ class ExecuteActionUseCase(
 
         // Side-effecting families — build the semantic intent, resolve (query → executable), execute.
         is LauncherAction.LaunchApp ->
-            resolveAndRoute(LauncherIntent.LaunchAppIntent(action.query))
+            resolveAndRoute(LauncherIntent.LaunchAppIntent(action.query, action.packageName))
         is LauncherAction.WebSearch ->
             resolveAndRoute(LauncherIntent.SearchIntent(action.query))
         is LauncherAction.OpenUrl ->

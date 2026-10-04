@@ -2,6 +2,7 @@ package com.sidr.launcher.data.repository.agent
 
 import com.sidr.launcher.data.repository.agent.memory.MemoryToolIds
 import com.sidr.launcher.domain.tool.ToolId
+import com.sidr.launcher.domain.tool.ToolIds
 import javax.inject.Inject
 
 /**
@@ -64,6 +65,13 @@ class ToolArgumentSorts internal constructor(
 
     private companion object {
         val ROWS: Map<ToolId, AppArgumentBinding> = mapOf(
+            // A4′ phase 3a (plan §0.2 B-3): the bridge binds the model's word for an app BEFORE the
+            // card — the package into the pin `app`, the user's words into `query`, which the step
+            // line, the `resolved_query` output and a "not found" message all speak. `query` is
+            // REQUIRED, which this catalog's KDoc says a label argument must not be; that rule exists
+            // because ToolMatchPlanner checks required arguments before resolving, and launch_app is
+            // never selected by the vocabulary at step 2b. The bridge fills both before validation.
+            ToolIds.LAUNCH_APP to AppArgumentBinding(arg = "app", labelArg = "query"),
             // A1″ phase 3a, Task 6b / fork F5: resolved ABOVE the consent gate, so the CONFIRM card
             // names the package that will actually be removed rather than the words typed.
             Tier0ToolIds.UNINSTALL_APP to AppArgumentBinding(arg = "app", labelArg = "app_label"),

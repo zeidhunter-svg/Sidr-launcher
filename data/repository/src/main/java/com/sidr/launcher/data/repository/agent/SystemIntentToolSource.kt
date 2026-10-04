@@ -47,7 +47,7 @@ class SystemIntentToolSource @Inject constructor(
 
     private val projected: List<ToolDescriptor> by lazy {
         listOfNotNull(
-            project(ActionIds.LAUNCH_APP, outputSchema = RESOLVED_QUERY_OUTPUT),
+            project(ActionIds.LAUNCH_APP, extraArgs = PIN_INPUT, outputSchema = RESOLVED_QUERY_OUTPUT),
             project(ActionIds.PLAY_STORE_SEARCH),
             // A4′ phase 3a (spec §7.12.3, D3): the router's two other actions with an executor. The
             // three navigation families (settings, assistant, app grid) are NOT projected — they
@@ -63,6 +63,7 @@ class SystemIntentToolSource @Inject constructor(
 
     private fun project(
         actionId: ActionId,
+        extraArgs: List<ActionArg> = emptyList(),
         outputSchema: List<ActionArg> = emptyList(),
     ): ToolDescriptor? {
         val descriptor = catalog.descriptor(actionId) ?: return null
@@ -74,7 +75,7 @@ class SystemIntentToolSource @Inject constructor(
             // Both projected families reach another app. No projected tool is LOCAL today; the LOCAL
             // value is carried by `:consumer:jvm`'s sandbox. Named, not implied absent (spec §6.4).
             effect = ToolEffect.EXTERNAL,
-            argSchema = descriptor.argSchema,
+            argSchema = descriptor.argSchema + extraArgs,
             outputSchema = outputSchema,
             risk = descriptor.risk,
             // Neither A0 tool writes durable state: launching an app and opening a store page both
@@ -95,6 +96,17 @@ class SystemIntentToolSource @Inject constructor(
 
         val RESOLVED_QUERY_OUTPUT = listOf(
             ActionArg(RESOLVED_QUERY, description = "The query this launch resolved against"),
+        )
+
+        /**
+         * `launch_app`'s pin (A4′ phase 3a, plan §0.2 B-3). A property of the TOOL, like
+         * [RESOLVED_QUERY] — `ActionDescriptor` has no such argument. Optional: every path but the
+         * bridge leaves it out, and the device, never the model, fills it (`DeviceMentionBinder`).
+         */
+        internal const val PIN_ARG = "app"
+
+        val PIN_INPUT = listOf(
+            ActionArg(PIN_ARG, required = false, description = "The package this launch is pinned to"),
         )
     }
 }

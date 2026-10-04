@@ -166,4 +166,19 @@ class SystemIntentToolWorkerTest {
         assertEquals(ToolResult.Failed(CommandFailure.Generic), result)
         assertTrue(actionExecutor.executedActions.isEmpty())
     }
+
+    @Test
+    fun `a pinned launch opens the pinned package even when two apps share the label`() = runTest {
+        apps.appsToReturn = listOf(
+            InstalledApp(packageName = "com.a", label = "убер", activityName = "Main"),
+            InstalledApp(packageName = "com.b", label = "убер", activityName = "Main"),
+        )
+
+        val result = executor().invoke(
+            ResolvedInvocation(ToolIds.LAUNCH_APP, mapOf("query" to "убер", "app" to "com.b")),
+        )
+
+        assertEquals(ToolResult.Effected(ToolOutput(mapOf("resolved_query" to "убер"))), result)
+        assertEquals(listOf(ExecutableAction.LaunchAppAction("com.b", "Main")), actionExecutor.executedActions)
+    }
 }

@@ -44,7 +44,9 @@ class SystemIntentToolWorker @Inject constructor(
     private fun actionFor(invocation: ResolvedInvocation): LauncherAction? {
         fun arg(name: String): String? = invocation.args[name]?.trim()?.takeIf { it.isNotEmpty() }
         return when (invocation.id) {
-            ToolIds.LAUNCH_APP -> arg("query")?.let { LauncherAction.LaunchApp(it) }
+            ToolIds.LAUNCH_APP -> arg("query")?.let {
+                LauncherAction.LaunchApp(it, packageName = arg(SystemIntentToolSource.PIN_ARG))
+            }
             ToolIds.PLAY_STORE_SEARCH -> arg("query")?.let { LauncherAction.PlayStoreSearch(it) }
             InAppToolIds.WEB_SEARCH -> arg("query")?.let { LauncherAction.WebSearch(it) }
             InAppToolIds.OPEN_URL -> arg("url")?.let { LauncherAction.OpenUrl(it) }

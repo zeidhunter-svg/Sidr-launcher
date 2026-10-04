@@ -24,6 +24,7 @@ import com.sidr.launcher.domain.agent.TemplatePlanner
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolId
+import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.trace.ExecutionTrace
@@ -378,5 +379,42 @@ class AgentSessionSurfaceProvenanceTest {
 
         compose.onNodeWithText("telegram", substring = true).assertExists()
         compose.onNodeWithText("com.example.msg", substring = true).assertExists()
+    }
+
+    /**
+     * A4′ phase 3a, Task 2. A launch the device pinned to a package (the binding pick, plan §0.2 B-3)
+     * names BOTH what the user called it and the package that will open — two apps can share the label.
+     * Fixture label and package share no substring (R14-43), so neither half can pass for the other.
+     */
+    @Test
+    fun `a pinned launch step names the app and the package it is pinned to`() {
+        val goal = AgentGoal("включи мне vemblic", GoalShape.Free("включи мне vemblic"))
+        val session = AgentSession(
+            id = AgentSessionId("s1"),
+            goal = goal,
+            plan = ExecutionPlan(
+                listOf(
+                    PlanStep(
+                        index = 0,
+                        invocation = ToolInvocation(
+                            ToolIds.LAUNCH_APP,
+                            mapOf("query" to ArgSource.Literal("Vemblic"), "app" to ArgSource.Literal("net.fixture.zantor")),
+                        ),
+                        risk = ActionRiskLevel.SAFE,
+                        precondition = StepPrecondition.None,
+                        rationale = StepRationale.GOAL_DIRECT,
+                    ),
+                ),
+            ),
+            cursor = 0,
+            state = ExecutionState.Running,
+            observations = emptyMap(),
+            consents = emptyMap(),
+            trace = ExecutionTrace(emptyList()),
+        )
+
+        render(session, emptyMap())
+
+        compose.onNodeWithText("Open Vemblic (net.fixture.zantor) — in progress").assertExists()
     }
 }

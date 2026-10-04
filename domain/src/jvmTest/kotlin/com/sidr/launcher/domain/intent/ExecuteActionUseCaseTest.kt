@@ -137,4 +137,20 @@ class ExecuteActionUseCaseTest {
         assertTrue("expected Failed, got $outcome", outcome is CommandOutcome.Failed)
         assertTrue(executor.executedActions.isEmpty())
     }
+
+    @Test
+    fun `a pinned launch reaches the resolver with its package`() = runTest {
+        repo.appsToReturn = listOf(
+            InstalledApp("net.fixture.tessar.one", "Tessar"),
+            InstalledApp("net.fixture.tessar.two", "Tessar"),
+        )
+
+        val outcome = useCase.execute(LauncherAction.LaunchApp("tessar", packageName = "net.fixture.tessar.one"))
+
+        assertEquals(CommandOutcome.Executed, outcome)
+        assertEquals(
+            ExecutableAction.LaunchAppAction("net.fixture.tessar.one", null),
+            executor.executedActions.single(),
+        )
+    }
 }

@@ -85,6 +85,7 @@
     <string name="launcher_agent_title">Агент</string>
     <string name="launcher_agent_running_title">Выполняю</string>
     <string name="launcher_agent_step_launch">Открыть %1$s</string>
+    <string name="launcher_agent_step_launch_pinned">Открыть %1$s (%2$s)</string>
     <string name="launcher_agent_step_store">Найти %1$s в магазине приложений</string>
     <string name="launcher_agent_step_web_search">Найти в интернете: %1$s</string>
     <string name="launcher_agent_step_open_url">Открыть %1$s в браузере</string>

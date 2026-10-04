@@ -41,6 +41,22 @@ class IntentActionResolver(
         if (appsResult is OperationResult.Failure) return appsResult
 
         val apps = (appsResult as OperationResult.Success).value
+
+        // A4′ phase 3a (plan §0.2 B-3): a launch the device already pinned to a package opens exactly
+        // that package. `LaunchAppIntent.packageName` existed unused until now; nothing but the bridge
+        // sets it, so every other path below is byte-for-byte unchanged. Gone since the pin was made →
+        // "not found" under the words the user typed, never a fallback to the label.
+        intent.packageName?.let { pinned ->
+            val app = apps.firstOrNull { it.packageName == pinned }
+            return OperationResult.Success(
+                if (app != null) {
+                    ExecutableAction.LaunchAppAction(packageName = app.packageName, activityName = app.activityName)
+                } else {
+                    ExecutableAction.ShowMessageAction(CommandMessage.NoAppFound(intent.displayNameQuery))
+                },
+            )
+        }
+
         val query = intent.displayNameQuery.lowercase(Locale.ROOT)
         val matches = apps.filter { it.label.lowercase(Locale.ROOT) == query }
 

@@ -20,7 +20,13 @@ sealed interface LauncherAction {
     val id: ActionId
 
     /** Launch an installed app matching [query] (unresolved display-name query, not a package). */
-    data class LaunchApp(val query: String) : LauncherAction {
+    /**
+     * [packageName] pins the launch to one installed package (A4′ phase 3a): the device binds the
+     * model's word for an app BEFORE the interpretation card, and two apps can share a label, so the
+     * pick has to survive to execution. `null` — every path but the bridge's — resolves [query] by
+     * label exactly as before.
+     */
+    data class LaunchApp(val query: String, val packageName: String? = null) : LauncherAction {
         override val id: ActionId get() = ActionIds.LAUNCH_APP
     }
 

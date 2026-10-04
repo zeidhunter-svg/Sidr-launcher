@@ -3,9 +3,23 @@ package com.sidr.launcher.data.repository.agent
 import com.sidr.launcher.domain.intent.CommandNormalizer
 import com.sidr.launcher.domain.memory.alias.AliasStore
 import com.sidr.launcher.domain.memory.alias.appPackageOrNull
+import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.domain.result.OperationResult
 import javax.inject.Inject
+
+/**
+ * What a name resolves to on this device (A4′ phase 3a, spec §7.12.3 condition 2). Until then
+ * [AppTargetResolver.resolve] folded "two candidates", "none", "blank" and "the list could not be read"
+ * into one `null`; the bridge must tell them apart — two candidates are a choice for the user, none is
+ * an honest "not found", a failed read is neither.
+ */
+sealed interface AppCandidates {
+    data object None : AppCandidates
+    data class One(val app: InstalledApp) : AppCandidates
+    data class Several(val apps: List<InstalledApp>) : AppCandidates
+    data object Unavailable : AppCandidates
+}
 
 /**
  * A name becomes a package, or nothing happens. Task 6 (A1″ Phase 3a) — this feeds `uninstall_app`,
@@ -30,19 +44,30 @@ class AppTargetResolver @Inject constructor(
     private val apps: InstalledAppsRepository,
     private val aliases: AliasStore,
 ) {
-    suspend fun resolve(query: String): String? {
+    /**
+     * Every candidate the name can mean, never a guess: an alias first (if its target is still
+     * installed), then every app whose normalized label is the normalized name.
+     */
+    suspend fun candidates(query: String): AppCandidates {
         val normalized = CommandNormalizer.normalize(query)
-        if (normalized.isBlank()) return null
+        if (normalized.isBlank()) return AppCandidates.None
 
-        val installed = (apps.getInstalledApps() as? OperationResult.Success)?.value ?: return null
+        val installed = (apps.getInstalledApps() as? OperationResult.Success)?.value
+            ?: return AppCandidates.Unavailable
 
         (aliases.find(normalized) as? OperationResult.Success)?.value?.target?.appPackageOrNull()
-            ?.takeIf { pkg -> installed.any { it.packageName == pkg } }
-            ?.let { return it }
+            ?.let { pkg -> installed.firstOrNull { it.packageName == pkg } }
+            ?.let { return AppCandidates.One(it) }
 
-        return installed
-            .filter { CommandNormalizer.normalize(it.label) == normalized }
-            .singleOrNull()
-            ?.packageName
+        val matches = installed.filter { CommandNormalizer.normalize(it.label) == normalized }
+        return when (matches.size) {
+            0 -> AppCandidates.None
+            1 -> AppCandidates.One(matches.single())
+            else -> AppCandidates.Several(matches)
+        }
     }
+
+    /** One package or nothing — the shape `ToolMatchPlanner` (step 2b) has always declined on. */
+    suspend fun resolve(query: String): String? =
+        (candidates(query) as? AppCandidates.One)?.app?.packageName
 }

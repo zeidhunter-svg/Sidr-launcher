@@ -150,6 +150,7 @@ private const val MEMORY_FORGET_LEARNED_CHOICE = "forget_learned_choice"
  */
 private const val APP_ARG = "app"
 private const val APP_LABEL_ARG = "app_label"
+private const val QUERY_ARG = "query"
 private const val PHRASE_ARG = "phrase"
 
 /**
@@ -307,6 +308,16 @@ internal fun PlanStep.line(subject: String, dynamicLabels: Map<ToolId, DynamicTo
     fun literal(name: String): String? = (invocation.args[name] as? ArgSource.Literal)?.value
 
     when (invocation.id.value) {
+        ToolIds.LAUNCH_APP.value -> {
+            // A4′ phase 3a: a launch the device pinned (the binding pick) names what the user called it
+            // AND the package that will open — two apps can share a label. Unpinned, it has one literal
+            // and falls through to the line it always had.
+            val label = literal(QUERY_ARG)
+            val pkg = literal(APP_ARG)
+            if (label != null && pkg != null) {
+                return sidrString(R.string.launcher_agent_step_launch_pinned, label, pkg)
+            }
+        }
         MEMORY_SET_APP_ALIAS -> {
             val app = literal(APP_LABEL_ARG) ?: literal(APP_ARG)
             val phrase = literal(PHRASE_ARG)

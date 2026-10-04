@@ -47,7 +47,9 @@ class SystemIntentToolSourceTest {
 
     @Test
     fun `the argument schema is carried over from the catalog`() {
-        assertEquals(listOf("query"), source.find(ToolIds.LAUNCH_APP)!!.argSchema.map { it.name })
+        // The catalog's `query`, plus the tool-level pin (A4′ phase 3a): optional, set only by the device.
+        assertEquals(listOf("query", "app"), source.find(ToolIds.LAUNCH_APP)!!.argSchema.map { it.name })
+        assertEquals(false, source.find(ToolIds.LAUNCH_APP)!!.argSchema.single { it.name == "app" }.required)
         assertEquals(listOf("query"), source.find(ToolIds.PLAY_STORE_SEARCH)!!.argSchema.map { it.name })
         assertEquals(listOf("query"), source.find(InAppToolIds.WEB_SEARCH)!!.argSchema.map { it.name })
         assertEquals(listOf("url"), source.find(InAppToolIds.OPEN_URL)!!.argSchema.map { it.name })

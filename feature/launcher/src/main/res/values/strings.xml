@@ -125,6 +125,7 @@
     <string name="launcher_agent_title">Agent</string>
     <string name="launcher_agent_running_title">Working on it</string>
     <string name="launcher_agent_step_launch">Open %1$s</string>
+    <string name="launcher_agent_step_launch_pinned">Open %1$s (%2$s)</string>
     <string name="launcher_agent_step_store">Find %1$s in the app store</string>
     <string name="launcher_agent_step_web_search">Search the web: %1$s</string>
     <string name="launcher_agent_step_open_url">Open %1$s in the browser</string>

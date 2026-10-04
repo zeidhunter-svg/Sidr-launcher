@@ -155,6 +155,32 @@ class IntentActionResolverTest {
         assertTrue(action is ExecutableAction.NoOpAction)
     }
 
+    // --- LaunchAppIntent: a pinned package (A4′ phase 3a, plan §0.2 B-3) ---
+
+    @Test fun `a pinned package launches that package even when two apps share the label`() = runTest {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp("net.fixture.tessar.one", "Tessar"),
+            InstalledApp("net.fixture.tessar.two", "Tessar", activityName = ".Main"),
+        )
+        val action = resolveSuccess(
+            LauncherIntent.LaunchAppIntent("tessar", packageName = "net.fixture.tessar.two"),
+        )
+        assertEquals(ExecutableAction.LaunchAppAction("net.fixture.tessar.two", ".Main"), action)
+    }
+
+    /**
+     * The typed name still matches an installed app — a DIFFERENT package than the pinned one. So an
+     * ignored pin launches `tessar.one` and this test sees it; a fixture where the name matched nothing
+     * would read `NoAppFound` with the pin or without it and prove nothing (plan review, M2a).
+     */
+    @Test fun `a pinned package that is no longer installed is not found under the typed name`() = runTest {
+        fakeRepo.appsToReturn = listOf(InstalledApp("net.fixture.tessar.one", "Tessar"))
+        val action = resolveSuccess(
+            LauncherIntent.LaunchAppIntent("tessar", packageName = "net.fixture.tessar.two"),
+        )
+        assertEquals(ExecutableAction.ShowMessageAction(CommandMessage.NoAppFound("tessar")), action)
+    }
+
     // --- helpers ---
 
     private suspend fun resolveSuccess(intent: LauncherIntent): ExecutableAction {

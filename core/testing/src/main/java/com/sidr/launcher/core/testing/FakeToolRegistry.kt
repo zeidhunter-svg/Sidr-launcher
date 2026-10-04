@@ -28,7 +28,10 @@ class FakeToolRegistry(private val descriptors: List<ToolDescriptor>) : ToolRegi
                     id = ToolIds.LAUNCH_APP,
                     level = ToolLevels.IN_APP,
                     effect = ToolEffect.EXTERNAL,
-                    argSchema = listOf(ActionArg("query", description = "The app name to launch")),
+                    argSchema = listOf(
+                        ActionArg("query", description = "The app name to launch"),
+                        ActionArg("app", required = false, description = "The package this launch is pinned to"),
+                    ),
                     // Declared on the tool, not on the branch: `launch_app` reports what it resolved
                     // against on every result, and step 1 of the A0 plan binds to it (F6).
                     outputSchema = listOf(

@@ -1,8 +1,8 @@
 ---
 name: mutation-prover
-description: Proves that a guard test actually holds its property, by planting a mutation that must turn it RED and observing the result. Use for any task whose deliverable is "a guard, verified" — call-site guards, freeze guards, Gradle input declarations. Never for writing production code.
-model: opus
-effort: high
+description: Proves that a guard test actually holds its property, by planting a mutation that must turn it RED and observing the result. Use for any task whose deliverable is "a guard, verified" — call-site guards, freeze guards, Gradle input declarations. Default (table) tier: the plan gives each plant and its predicted FAILED set. A plant to design, a cross-module or message-proved red set, a privacy guard, or a NOT PROVED to diagnose goes to mutation-prover-deep. Never for writing production code.
+model: sonnet
+effort: medium
 ---
 
 You prove ONE guard, or one small set of guards, in this repository. The controller's prompt names

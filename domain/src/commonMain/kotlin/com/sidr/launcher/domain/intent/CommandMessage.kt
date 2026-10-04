@@ -23,8 +23,9 @@ sealed interface CommandMessage {
     data object AssistantComingSoon : CommandMessage
 
     /**
-     * Text from an external source - today only the LLM router's clarify question. Passed through
-     * verbatim: it is model output, and its language is the model's, not ours.
+     * Text from an external source - the bridge's one clarify question (A4′ phase 3a) - model text,
+     * so the sentence around it says so. Passed through verbatim: it is model output, and its language
+     * is the model's, not ours.
      */
     data class Verbatim(val text: String) : CommandMessage
 
@@ -51,4 +52,12 @@ sealed interface CommandMessage {
 
     /** A provider is configured but the device is offline. Nothing to fix, only to wait for. */
     data object UnderstandingNeedsNetwork : CommandMessage
+
+    /**
+     * A provider is configured and the device is online, but the model gave no usable answer, and
+     * [reason] says why (A4′ phase 3a; finding (c) of the A1″ acceptance - a broken key, a refused model,
+     * a dead endpoint and "the model answered prose" all used to read «Неизвестная команда»). A fourth
+     * state beside the three above, and reached only past them: it comes from step 7 itself.
+     */
+    data class UnderstandingModelUnavailable(val reason: ModelUnavailableReason) : CommandMessage
 }

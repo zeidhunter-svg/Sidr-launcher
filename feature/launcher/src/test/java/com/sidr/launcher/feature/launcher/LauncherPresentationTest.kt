@@ -2,8 +2,11 @@ package com.sidr.launcher.feature.launcher
 
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.CommandMessage
+import com.sidr.launcher.domain.intent.ModelUnavailableReason
 import com.sidr.launcher.domain.voice.SpeechRecognitionError
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LauncherPresentationTest {
@@ -188,5 +191,40 @@ class LauncherPresentationTest {
             R.string.launcher_understanding_needs_network,
             requireNotNull(feedbackText(CommandFeedback.Domain(CommandMessage.UnderstandingNeedsNetwork))).id,
         )
+    }
+
+    /** Finding (c) of the A1″ acceptance: each reason the model gave nothing usable is its own sentence. */
+    @Test
+    fun `each model-unavailable reason has its own sentence`() {
+        val expected = mapOf(
+            ModelUnavailableReason.CREDENTIALS to R.string.launcher_model_unavailable_credentials,
+            ModelUnavailableReason.REQUEST_REJECTED to R.string.launcher_model_unavailable_request_rejected,
+            ModelUnavailableReason.PROVIDER_FAILING to R.string.launcher_model_unavailable_provider_failing,
+            ModelUnavailableReason.TIMED_OUT to R.string.launcher_model_unavailable_timed_out,
+            ModelUnavailableReason.NETWORK to R.string.launcher_model_unavailable_network,
+            ModelUnavailableReason.UNREADABLE to R.string.launcher_model_unavailable_unreadable,
+        )
+        assertEquals("the table must name every reason", ModelUnavailableReason.entries.toSet(), expected.keys)
+        val actual = ModelUnavailableReason.entries.associateWith { reason ->
+            requireNotNull(feedbackText(CommandFeedback.Domain(CommandMessage.UnderstandingModelUnavailable(reason)))).id
+        }
+        assertEquals(expected, actual)
+        assertEquals(ModelUnavailableReason.entries.size, actual.values.toSet().size)
+    }
+
+    /** The one affordance (Этап 4.0, F1) is offered exactly where the user can fix it in the provider screen. */
+    @Test
+    fun `the provider-setup affordance follows the reasons the user can fix there`() {
+        val fixableThere = setOf(ModelUnavailableReason.CREDENTIALS, ModelUnavailableReason.REQUEST_REJECTED)
+        ModelUnavailableReason.entries.forEach { reason ->
+            assertEquals(
+                "offer for $reason",
+                reason in fixableThere,
+                CommandMessage.UnderstandingModelUnavailable(reason).offersProviderSetup(),
+            )
+        }
+        assertTrue(CommandMessage.UnderstandingNeedsProvider.offersProviderSetup())
+        assertFalse(CommandMessage.UnderstandingLocalOnly.offersProviderSetup())
+        assertFalse(CommandMessage.UnderstandingNeedsNetwork.offersProviderSetup())
     }
 }

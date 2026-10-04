@@ -3,6 +3,7 @@ package com.sidr.launcher.feature.launcher
 import androidx.annotation.StringRes
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.CommandMessage
+import com.sidr.launcher.domain.intent.ModelUnavailableReason
 import com.sidr.launcher.domain.voice.SpeechRecognitionError
 
 /**
@@ -67,6 +68,16 @@ internal fun feedbackText(feedback: CommandFeedback): FeedbackText? = when (feed
             FeedbackText(R.string.launcher_understanding_needs_provider)
         CommandMessage.UnderstandingNeedsNetwork ->
             FeedbackText(R.string.launcher_understanding_needs_network)
+        is CommandMessage.UnderstandingModelUnavailable -> FeedbackText(
+            when (m.reason) {
+                ModelUnavailableReason.CREDENTIALS -> R.string.launcher_model_unavailable_credentials
+                ModelUnavailableReason.REQUEST_REJECTED -> R.string.launcher_model_unavailable_request_rejected
+                ModelUnavailableReason.PROVIDER_FAILING -> R.string.launcher_model_unavailable_provider_failing
+                ModelUnavailableReason.TIMED_OUT -> R.string.launcher_model_unavailable_timed_out
+                ModelUnavailableReason.NETWORK -> R.string.launcher_model_unavailable_network
+                ModelUnavailableReason.UNREADABLE -> R.string.launcher_model_unavailable_unreadable
+            },
+        )
     }
     is CommandFeedback.Failure -> when (feedback.failure) {
         CommandFailure.Generic -> FeedbackText(R.string.launcher_failure_generic)
@@ -96,6 +107,17 @@ internal fun feedbackText(feedback: CommandFeedback): FeedbackText? = when (feed
         SuggestedIntent.Unknown -> FeedbackText(R.string.launcher_suggest_unknown)
     }
     is CommandFeedback.Ambiguous -> FeedbackText(R.string.launcher_feedback_ambiguous)
+}
+
+/**
+ * Whether the line carries «Настроить провайдера» (Этап 4.0, F1): only where the provider screen can fix
+ * the cause - no provider, a key the provider refused, a request it rejected (usually the model's name).
+ */
+internal fun CommandMessage.offersProviderSetup(): Boolean = when (this) {
+    CommandMessage.UnderstandingNeedsProvider -> true
+    is CommandMessage.UnderstandingModelUnavailable ->
+        reason == ModelUnavailableReason.CREDENTIALS || reason == ModelUnavailableReason.REQUEST_REJECTED
+    else -> false
 }
 
 /**

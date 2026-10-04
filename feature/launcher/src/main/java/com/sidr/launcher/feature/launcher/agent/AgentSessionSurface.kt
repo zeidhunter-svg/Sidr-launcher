@@ -303,7 +303,7 @@ private fun AgentPlanSteps(
  * `provenanceLabelFor`.
  */
 @Composable
-private fun AgentStepProvenance(provenance: StepProvenance?) {
+internal fun AgentStepProvenance(provenance: StepProvenance?) {
     val label = provenance?.let { provenanceLabelFor(it.level, it.effect) }
     if (label != null) {
         SidrProvenanceLine(source = sidrString(label))

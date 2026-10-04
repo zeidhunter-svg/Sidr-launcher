@@ -79,7 +79,6 @@ import com.sidr.launcher.core.ui.primitive.SidrTextRole
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Sizes
 import com.sidr.launcher.core.ui.theme.Spacing
-import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.permission.PermissionFeature
 import com.sidr.launcher.domain.suggestions.Suggestion
@@ -113,6 +112,8 @@ fun LauncherScreen(
     val inputResults by viewModel.inputResults.collectAsStateWithLifecycle()
     val prayerContext by viewModel.prayerContext.collectAsStateWithLifecycle()
     val pendingRoutedAction by viewModel.pendingRoutedAction.collectAsStateWithLifecycle()
+    val interpretation by viewModel.interpretation.collectAsStateWithLifecycle()
+    val thinking by viewModel.thinking.collectAsStateWithLifecycle()
     val devConsoleOn by viewModel.devConsoleOn.collectAsStateWithLifecycle()
     val consoleLines by viewModel.consoleLines.collectAsStateWithLifecycle()
     // Task 12 / A0: the agent runtime's session, if one is in flight or was restored at startup.
@@ -231,6 +232,23 @@ fun LauncherScreen(
                 onConfigureProvider = { viewModel.navigateTo(Routes.AssistantProvider.ROUTE) },
                 onDismiss = viewModel::dismissFeedback,
             )
+
+            // A4′ phase 3a (spec §7.12.2): a command the model is reading shows the wait, with «Отмена».
+            if (thinking) {
+                ThinkingArea(onCancel = viewModel::cancelThinking)
+            }
+
+            // A4′ phase 3a (condition 1): the model's reading, before anything runs.
+            interpretation?.let { reading ->
+                InterpretationArea(
+                    interpretation = reading,
+                    provenance = viewModel.agentToolProvenance,
+                    dynamicLabels = viewModel.agentDynamicToolLabels,
+                    onRun = viewModel::runInterpretation,
+                    onDismiss = viewModel::dismissInterpretation,
+                    onChoose = viewModel::chooseInterpretationApp,
+                )
+            }
 
             // AIL-5: a router-proposed action awaiting the user's go-ahead. CONFIRM-risk → the DF-4
             // confirm card; SAFE → a one-tap accelerator. Neither auto-executes (R4). Confirm routes
@@ -807,12 +825,13 @@ private fun CommandFeedbackArea(
             }
         }
 
-        // Этап 4.0 (fork F1) — of the three "understanding unavailable" states this is the only one
-        // the user can fix right now, in one step, so it is the only one that carries an affordance.
-        // The other two are neutral statements on purpose: nagging someone to undo a deliberate
-        // local-only choice, or to conjure a network, is the manipulation DOC-HYA-1 forbids.
+        // Этап 4.0 (fork F1) — of the "understanding unavailable" states only those the provider
+        // screen can fix carry an affordance (`offersProviderSetup`): no provider at all, and, since
+        // A4′ phase 3a, a key the provider refused or a request it rejected. The rest are neutral
+        // statements on purpose: nagging someone to undo a deliberate local-only choice, or to conjure
+        // a network, is the manipulation DOC-HYA-1 forbids.
         feedback is CommandFeedback.Domain &&
-            feedback.message == CommandMessage.UnderstandingNeedsProvider -> Column(
+            feedback.message.offersProviderSetup() -> Column(
             modifier = modifier
                 .fillMaxWidth()
                 .padding(horizontal = Spacing.lg, vertical = Spacing.sm),

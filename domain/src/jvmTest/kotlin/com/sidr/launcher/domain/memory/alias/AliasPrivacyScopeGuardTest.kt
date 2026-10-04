@@ -37,6 +37,9 @@ class AliasPrivacyScopeGuardTest {
             "PromptContextBuilder",
             "CommandPlanner",
             "CatalogSchemaRenderer",
+            "ModelPlanner",
+            "BridgeRendering",
+            "BridgeTransport",
             "com.sidr.launcher.domain.ai",
         )
 

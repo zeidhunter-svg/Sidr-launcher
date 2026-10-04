@@ -25,6 +25,8 @@ kotlin {
             implementation(project(":core:testing"))
             implementation(libs.junit4)
             implementation(libs.coroutines.test)
+            // A4′ phase 3a (plan §0.2 B-5): the schema-agreement test reads the schema's TEXT. Test-only.
+            implementation(libs.serialization.json)
         }
     }
 }

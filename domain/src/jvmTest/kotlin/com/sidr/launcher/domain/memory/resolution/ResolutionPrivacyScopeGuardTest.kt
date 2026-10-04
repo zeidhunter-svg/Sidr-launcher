@@ -42,6 +42,9 @@ class ResolutionPrivacyScopeGuardTest {
             "PromptContextBuilder",
             "CommandPlanner",
             "CatalogSchemaRenderer",
+            "ModelPlanner",
+            "BridgeRendering",
+            "BridgeTransport",
             "com.sidr.launcher.domain.ai",
         )
 

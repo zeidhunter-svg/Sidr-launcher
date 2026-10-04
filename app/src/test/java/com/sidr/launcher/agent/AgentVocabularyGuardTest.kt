@@ -9,7 +9,8 @@ import java.io.File
  * **The A1 fork, held open mechanically.** `domain/agent`, `domain/tool` and `domain/trace` are the
  * portable engine.
  * If a single reference to the action vocabulary — `LauncherAction`, `ActionCatalog`, `ActionId` — or
- * to a transport — `GenerativeAiEngine`, `CommandPlanner`, Ktor — grows inside them, then A1' can no
+ * to a transport — `GenerativeAiEngine`, `CommandPlanner`, Ktor — and since A4′ phase 3a the bridge's
+ * model port and its package — grows inside them, then A1' can no
  * longer choose "a parallel tool vocabulary" without first unpicking the engine, and the fork CLAUDE.md
  * calls deliberately undecided would have been decided by drift rather than by a decision.
  *
@@ -94,6 +95,12 @@ class AgentVocabularyGuardTest {
         "ActionId",
         "GenerativeAiEngine",
         "CommandPlanner",
+        // A4′ phase 3a: the bridge. The engine plans nothing with a model and names no model port —
+        // a paused plan the model wrote goes back through the ROUTE (spec §7.12.3 condition 4), never
+        // through anything `domain/agent` can see. The package term covers every bridge type.
+        "ModelPlanner",
+        "BridgeTransport",
+        "com.sidr.launcher.domain.ai",
         "io.ktor",
         "HttpClient",
     )

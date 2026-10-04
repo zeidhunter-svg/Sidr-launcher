@@ -295,6 +295,9 @@ class PrayerLocationPrivacyGuardTest {
             "GenerateReplyUseCase",
             "CommandPlanner",
             "CatalogSchemaRenderer",
+            "ModelPlanner",
+            "BridgeRendering",
+            "BridgeTransport",
             "com.sidr.launcher.domain.ai",
         )
 

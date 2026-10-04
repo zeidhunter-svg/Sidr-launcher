@@ -657,7 +657,7 @@ delta.
 > `:domain`) · **1617** (T5 1614 + 2 carried + 1: fix round — `every required argument a tool declares is
 > either asked of the model or bound by the device`, `:data:repository`). Every task's own predicted delta
 > matched to the test; the chain from T6 on is the plan's +3 (`:domain` +2, `:data:repository` +1), so
-> T11 is expected at **1647**, not 1644.
+> T11 is expected at **1647**, not 1644. **T6: 1636** (plan 1632 + 3 carried + 1: the timeout test) → T11 **1648**.
 
 - Task 11 is the only task whose total falls: −41 removed (P4) and +15 added (`:domain` +6, `:app` +8,
   `:feature:launcher` +1; the migrated tests keep their counts) → **1670 − 26 = 1644**. With F3a-B (b)
@@ -4424,6 +4424,25 @@ Then run the machinery, in this order, and record each result in the task report
 | M6c | `OpenAiCompatibleBridgeTransport.kt` · `val body = encode(request, config.modelId.value.trim())` → `val body = encode(request, config.modelId.value.trim() + key)` | the key never enters the body | `:data:ai-cloud` — `> the key is sent only in the header and never in the body or a failure`, `> prompt mode sends the system text and the command, and nothing else` |
 | M6d | `OpenAiCompatibleBridgeTransport.kt` · `is OperationResult.Success -> stored.value?.trim()?.takeIf { it.isNotEmpty() }` → `is OperationResult.Success -> stored.value?.trim().orEmpty()` | no key, no call | `:data:ai-cloud` — `> a missing key is a credentials failure and makes no call` **only** |
 | M6e | `OpenAiCompatibleBridgeTransport.kt` · `            request.retryNote?.let { note -> addJsonObject { put("role", "system"); put("content", note) } }\n` → `` | the retry's note is sent | `:data:ai-cloud` — `> a retry adds only the static note after the command` **only** |
+
+> **Corrected in execution (2026-10-04) — the code blocks above are the record of what was planned; the tree
+> differs where this note says.** Measured total **1636** (the +3 carried from T4/T5 fix rounds, +1 here).
+> - **E6-R1 (review, Important):** the harness built `BridgeModelPlanner` with `BridgeBudget.Default` (45 s), so
+>   the planner's ceiling cut every wait the 90 s socket was meant to observe and rule 2 of Task 12 would have
+>   read a truncated p90. The harness passes `MEASURE_CEILING_MS = 180_000` (two attempts × the 90 s socket;
+>   the ceiling covers the retry); the dry-run line gains `ceiling=180000`. p90 is nearest-rank
+>   (`sorted[(9n+9)/10 - 1]`), not `sorted[9n/10]` (the maximum for n ≤ 10).
+> - **E6-R2 (review, Important):** the script's dry-run guard depended on argument position (`--dry-run m1` ran
+>   LIVE with model id `--dry-run`). It now parses strictly before the key check: one positional of printable
+>   ASCII with no whitespace, no empty comma segment and no segment starting with `-`, optionally followed by
+>   exactly `--dry-run`; anything else → usage, exit 2, no Gradle (twelve shapes run). Gradle runs with
+>   `--no-daemon` and `-Pkotlin.compiler.execution.strategy=in-process` (no daemon keeps the key); the README
+>   reads the key with `read -rs`.
+> - **E6-F2:** new test `a request that times out is reported as a timeout, not as no network` (Ktor 3.0.1's
+>   Android engine raises `ConnectTimeoutException` on the socket timeout — read in the jar); probe P2
+>   (timeout → `Network`) reddens exactly it. **E6-F3:** the cancellation rethrow is held by `cancellation is
+>   not swallowed` (probe P1 → RED) — row M6f in spirit, run, not reasoned.
+> - Untested and deferred: 403, other 4xx, odd statuses, nested argument values.
 
 - [ ] **Step 7: boundary gate from a cleared tree.** Expected `GATE GREEN`, `TOTAL tests=1632`: the other
   eight **334** (`:data:ai-cloud` 32 → **50**); `:app` **68** (the harness is not counted).

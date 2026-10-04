@@ -632,7 +632,8 @@ the cell changes **in the same task**. `DOC-ADL-3`'s cell and the paragraph at
   its own ambiguity chips. Not «открой телегу»: a word form is not bound in 3a — it reads «не найдено»,
   Review Focus 5 — the plan review caught the first draft of this line contradicting D1.)
 - «почему небо синее» is expected to open the assistant with the question already typed, not sent.
-- A broken key is expected to read «Провайдер ИИ не принял ключ.» with «Настроить провайдера»; a model
+- A broken key is expected to read «Ключ ИИ-провайдера не найден или не принят.» with «Настроить провайдера»
+  (wording corrected in execution, T10 review I1 — `CREDENTIALS` also covers a key that is missing or unreadable); a model
   that answers prose twice, «Не удалось прочитать ответ модели.».
 - A paused model plan («Продолжить» after the process died at the uninstall gate) is expected to close
   and come back as a fresh card for the same words — or as «Не распознано локально…» if local-only was
@@ -668,6 +669,8 @@ delta.
 > `a newer command supersedes a slow answer still on its way`) + 2 (task-review fix round — `editing the command during the
 > wait abandons it`, `dictating a new command dismisses the standing interpretation`), all `:feature:launcher` (235);
 > `:domain` 529. → T10 **1680**, T11 **1654**.
+> **T10: 1691** = 1680 + 11 (controller rulings on the implementer's test holes, all `:feature:launcher`, 254; detail under
+> Task 10 Step 6) → T11 **1665**.
 
 - Task 11 is the only task whose total falls: −41 removed (P4) and +15 added (`:domain` +6, `:app` +8,
   `:feature:launcher` +1; the migrated tests keep their counts) → **1670 − 26 = 1644**. With F3a-B (b)
@@ -6599,10 +6602,10 @@ group), and one changed value:
 | `launcher_interpretation_choose_app` | `Which app is \"%1$s\"?` | `Какое приложение — «%1$s»?` | `\"%1$s\" hangi uygulama?` |
 | `launcher_interpretation_candidate` | `%1$s (%2$s)` | `%1$s (%2$s)` | `%1$s (%2$s)` |
 | `launcher_thinking` | `Working out what you meant…` | `Разбираю команду…` | `Ne demek istediğinizi anlamaya çalışıyorum…` |
-| `launcher_model_unavailable_credentials` | `The AI provider did not accept the key.` | `Провайдер ИИ не принял ключ.` | `Yapay zekâ sağlayıcısı anahtarı kabul etmedi.` |
-| `launcher_model_unavailable_request_rejected` | `The AI provider refused the request. Check the provider settings.` | `Провайдер ИИ отклонил запрос. Проверьте настройки провайдера.` | `Yapay zekâ sağlayıcısı isteği reddetti. Sağlayıcı ayarlarını kontrol edin.` |
-| `launcher_model_unavailable_provider_failing` | `The AI provider is busy or failing. Try again later.` | `Провайдер ИИ перегружен или сбоит. Попробуйте позже.` | `Yapay zekâ sağlayıcısı meşgul ya da hata veriyor. Daha sonra tekrar deneyin.` |
-| `launcher_model_unavailable_timed_out` | `The AI provider did not answer in time.` | `Провайдер ИИ не ответил вовремя.` | `Yapay zekâ sağlayıcısı zamanında yanıt vermedi.` |
+| `launcher_model_unavailable_credentials` | `The AI provider key is missing or was not accepted.` | `Ключ ИИ-провайдера не найден или не принят.` | `Yapay zekâ sağlayıcısının anahtarı bulunamadı veya kabul edilmedi.` |
+| `launcher_model_unavailable_request_rejected` | `The AI provider refused the request. Check the provider settings.` | `ИИ-провайдер отклонил запрос. Проверьте настройки провайдера.` | `Yapay zekâ sağlayıcısı isteği reddetti. Sağlayıcı ayarlarını kontrol edin.` |
+| `launcher_model_unavailable_provider_failing` | `The AI provider is busy or failing. Try again later.` | `ИИ-провайдер перегружен или сбоит. Попробуйте позже.` | `Yapay zekâ sağlayıcısı meşgul ya da hata veriyor. Daha sonra tekrar deneyin.` |
+| `launcher_model_unavailable_timed_out` | `The AI provider did not answer in time.` | `ИИ-провайдер не ответил вовремя.` | `Yapay zekâ sağlayıcısı zamanında yanıt vermedi.` |
 | `launcher_model_unavailable_network` | `Could not reach the AI provider.` | `Не удалось связаться с провайдером ИИ.` | `Yapay zekâ sağlayıcısına ulaşılamadı.` |
 | `launcher_model_unavailable_unreadable` | `The model's answer could not be read.` | `Не удалось прочитать ответ модели.` | `Modelin yanıtı okunamadı.` |
 | `launcher_message_verbatim` (**value changed**) | `The model asks: %1$s` | `Модель спрашивает: %1$s` | `Model soruyor: %1$s` |
@@ -6630,6 +6633,19 @@ the transport deliberately does not read into a user string.)
 
 - [ ] **Step 6: boundary gate from a cleared tree.** Expected `GATE GREEN`, `TOTAL tests=1670`:
   `:feature:launcher` **238** (+8).
+
+> **Measured in execution (2026-10-04/05) — T10: 1691** = plan 1670 + 10 carried + 11 (controller rulings on the
+> implementer's holes: seven `InterpretationSurfaceTest` tests — Cancel on the card and on the pick list, Run on a
+> navigation card, `APP_GRID`, no model mark on a package bound by a pick (`ValueOrigin.Ours`), the `CONFIRM` tone, the
+> provenance line — and a new `LauncherScreenInterpretationTest`, four tests: a card on the real screen and its Run
+> starts the session, the wait drawn and cancelled, a refused/missing key with its button, the «The model asks:» mark).
+> `LauncherPresentationTest`'s two tests became total over the enum (map / set equality). Fixture `pellix` → `kelmora`
+> (R14-43: «Pellix»/«pellix» shared a substring). **M10a–M10d PROVED; M10a's red set is five** (+ the two Cancel tests and
+> the screen test), **M10c's two** (+ the screen test). Thirteen more plants M10e–M10q, each reddening exactly its own
+> test. Task review I1 (`75fb672`): «The AI provider did not accept the key» was untrue for `MissingCredentials`, which
+> `CREDENTIALS` also covers (no config, or a Keystore key that cannot be read — no request ever sent) — reworded to
+> «missing or was not accepted» in three locales, no new enum value; ru now says «ИИ-провайдер» on the whole line.
+> → T11 **1665** (plan 1644 + 21).
 
 - [ ] **Step 7: commit (controller).**
 

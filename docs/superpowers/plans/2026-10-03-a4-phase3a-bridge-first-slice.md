@@ -651,6 +651,14 @@ delta.
 | the other eight | 316 | 316 | 316 | 316 | 316 | 316 | 334 | 334 | 334 | 334 | 334 | **323** |
 | **total** | **1560** | 1563 | 1571 | 1583 | 1608 | 1614 | 1632 | 1646 | 1651 | 1662 | 1670 | **1644** |
 
+> **Measured in execution (2026-10-04), T1–T5:** 1563 · 1571 · 1583 · **1610** (T4 1608 + 2: fix round of the
+> task review — `a rejected id gets the same retry text whether or not it exists on the device` and
+> `a capital dotted I the user typed matches its plain lowercase form, and never splits the word`, both
+> `:domain`) · **1617** (T5 1614 + 2 carried + 1: fix round — `every required argument a tool declares is
+> either asked of the model or bound by the device`, `:data:repository`). Every task's own predicted delta
+> matched to the test; the chain from T6 on is the plan's +3 (`:domain` +2, `:data:repository` +1), so
+> T11 is expected at **1647**, not 1644.
+
 - Task 11 is the only task whose total falls: −41 removed (P4) and +15 added (`:domain` +6, `:app` +8,
   `:feature:launcher` +1; the migrated tests keep their counts) → **1670 − 26 = 1644**. With F3a-B (b)
   it is 1643 (no freeze guard). (Before the plan review added `:domain`'s sixth test these read 1643 /
@@ -2207,10 +2215,10 @@ object BridgeRendering {
     fun retryNote(error: BridgeError): String = when (error) {
         BridgeError.SHAPE ->
             "Your previous reply was rejected: it was not one JSON object of the required form. Reply again with only that object."
-        BridgeError.UNKNOWN_TOOL ->
-            "Your previous reply was rejected: it named a tool that does not exist. Use only the tool ids listed above."
-        BridgeError.NOT_OFFERED ->
-            "Your previous reply was rejected: it named a tool that is not listed for you. Use only the tool ids listed above."
+        // Corrected in execution (2026-10-04, Task 4 review, finding E4-R1): ONE text for both codes — two
+        // texts told the model whether an id it proposed is registered on this phone (D1). Commit 7a5d8d8.
+        BridgeError.UNKNOWN_TOOL, BridgeError.NOT_OFFERED ->
+            "Your previous reply was rejected: it named a tool that is not among the tool ids listed above. Use only those ids."
         BridgeError.UNDERIVABLE_MENTION ->
             "Your previous reply was rejected: an argument marked \"app\" held words the user did not type. Copy the user's own words for the app."
     }
@@ -3191,7 +3199,7 @@ class FakeBridgeTransport(replies: List<TransportReply>, private val delayMs: Lo
 |---|---|---|---|
 | M4a | `Derivability.kt` · `return typed.windowed(wanted.size).any { it == wanted }` → `return true` | criterion 16a | `:domain` — `DerivabilityTest > part of a word is not derivable`, `> another form of the word is not derivable`, `> a value the user typed is said by the user, anything else is the model's`; `BridgeValidatorTest > an app mention the user did not type is rejected as underivable`, `> a search text the user did not type is labelled the model's` |
 | M4b | `BridgeValidator.kt` · `else Verdict.Rejected(BridgeError.NOT_OFFERED)` → `else Verdict.Valid(ModelPlanning.Declined)` | criterion 16b | `:domain` — `BridgeValidatorTest > a registered tool outside the offering is rejected before anything runs`; `BridgeModelPlannerTest > an invalid answer is asked again exactly once, with only the closed code added`, `> a second invalid answer is unreadable, and the model is never asked a third time`, `> the ceiling covers both attempts` (all three script `notOffered` as their invalid answer, which the plant turns into a valid `Declined` — found by the plan review) |
-| M4c | `BridgeModelPlanner.kt` · `return when (val judged = judge(transport.ask(retry), offering, command)) {` → `return when (val judged = judge(TransportReply.Unparseable(ReplyMeta.NONE), offering, command)) {` | criterion 18: zero retries | `:domain` — `BridgeModelPlannerTest > an invalid answer is asked again exactly once, with only the closed code added`, `> a second invalid answer is unreadable, and the model is never asked a third time`, `> an unparseable first reply is asked again with the shape code` |
+| M4c | `BridgeModelPlanner.kt` · `return when (val judged = judge(transport.ask(retry), offering, command)) {` → `return when (val judged = judge(TransportReply.Unparseable(ReplyMeta.NONE), offering, command)) {` | criterion 18: zero retries | `:domain` — `BridgeModelPlannerTest > an invalid answer is asked again exactly once, with only the closed code added`, `> a second invalid answer is unreadable, and the model is never asked a third time`, `> an unparseable first reply is asked again with the shape code`, **and `> the ceiling covers both attempts`** (measured in execution 2026-10-04, finding E4-1: without the retry planning ends at 30 s with `UNREADABLE`, inside the 45 s ceiling — the same mechanism review M2 applied to M4b; M4b, M4c and M4f all redden the ceiling test, so a red ceiling test alone says nothing about the ceiling) |
 | M4d | `BridgeModelPlanner.kt` · `is Judged.Retry -> ModelPlanning.Unavailable(ModelUnavailableReason.UNREADABLE)` → `is Judged.Retry -> (judge(transport.ask(retry), offering, command) as? Judged.Done)?.planning ?: ModelPlanning.Unavailable(ModelUnavailableReason.UNREADABLE)` | criterion 18: two retries | `:domain` — `BridgeModelPlannerTest > a second invalid answer is unreadable, and the model is never asked a third time` **only** |
 | M4e | `BridgeModelPlanner.kt` · `val retry = first.copy(retryNote = BridgeRendering.retryNote(error))` → `val retry = first.copy(retryNote = BridgeRendering.retryNote(error) + " " + firstReply)` | the retry echoes nothing | `:domain` — `BridgeModelPlannerTest > an invalid answer is asked again exactly once, with only the closed code added`, `> an unparseable first reply is asked again with the shape code` |
 | M4f | `BridgeModelPlanner.kt` · `withTimeoutOrNull(budget.ceilingMs)` → `withTimeoutOrNull(budget.ceilingMs * 2)` | criterion 19: the ceiling covers the retry | `:domain` — `BridgeModelPlannerTest > the ceiling covers both attempts` **only** |

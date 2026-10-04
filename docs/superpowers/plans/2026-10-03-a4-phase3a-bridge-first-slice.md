@@ -662,6 +662,7 @@ delta.
 > T11 is expected at **1647**, not 1644. **T6: 1636** (plan 1632 + 3 carried + 1: the timeout test) → T11 **1648**.
 > **T7: 1651** (plan 1646 + 4 carried + 1: a controller ruling — the behavioural `MENTION_ARG` test in
 > `DeviceMentionBinderTest`, `:data:repository` 433) → T8 **1656**, T9 **1667**, T10 **1675**, T11 **1649**.
+> **T8: 1656** as predicted (`:domain` 528, `:feature:launcher` 220; the fix round changed a fixture, not the count).
 
 - Task 11 is the only task whose total falls: −41 removed (P4) and +15 added (`:domain` +6, `:app` +8,
   `:feature:launcher` +1; the migrated tests keep their counts) → **1670 − 26 = 1644**. With F3a-B (b)
@@ -5390,6 +5391,9 @@ with `pausedModelPlanForVm()` the same session as above, as a private function o
 
 - [ ] **Step 2: run — expect compile-red.** `:domain` → `Unresolved reference 'Resumption'`;
   `:feature:launcher` → `No value passed for parameter 'onReroute'`.
+  **Measured in execution 2026-10-04 (E8-1):** `:feature:launcher` reads `No parameter with name 'onReroute'
+  found` (the tests pass it by name before the constructor has it); `:domain` also prints `Cannot infer type for
+  type parameter 'T'`.
 
 - [ ] **Step 3: implement.** `ResumeAgentSessionUseCase.kt` — add above the class:
 
@@ -5483,6 +5487,7 @@ the recursive-inference bug noted at `:244-247`) and wire the callback:
 |---|---|---|---|
 | M8a | `ResumeAgentSessionUseCase.kt` · `        if (paused.plan.isModelProposed()) return OperationResult.Success(Resumption.NeedsRoute(paused.goal))\n` → `` | criterion 20: never through `CompositePlanner` | `:domain` — `ResumeAgentSessionUseCaseTest > a model-planned paused plan that has only looked is handed back for a new route, never planned again` **only**; `:feature:launcher` — `LauncherAgentSessionTest > continuing a paused plan the model wrote closes it…`, `LauncherViewModelTest > continuing a model plan after local-only was switched on says so honestly` (the store step re-planned and run: `going back through the route performs nothing on the way` may stay green — the store step stops at consent; record) |
 | M8b | `LauncherAgentSession.kt` · `                        cancelSession.cancel(paused.id)\n` → `` | the stale session is closed | `:feature:launcher` — `LauncherAgentSessionTest > continuing a paused plan the model wrote closes it and takes its words through the route again`, `LauncherViewModelTest > continuing a model plan after local-only was switched on says so honestly` |
+| M8c | *(added in execution, Task 8 review)* `LauncherAgentSession.kt` · `                        cancelSession.cancel(paused.id)\n` → `                        runSession.run(paused.resumed())\n                        cancelSession.cancel(paused.id)\n` | the re-route performs nothing on the way | `:feature:launcher` — `LauncherAgentSessionTest > going back through the route performs nothing on the way` **only**, message `expected:<[]> but was:<[ResolvedInvocation(id=ToolId(value=web_search), …)]>`. **Measured 2026-10-04.** As planned that test could not fail — its only step was `CONFIRM`, so a stale run stopped at consent; its fixture is now a `SAFE` `web_search` step (fix round `ff7c5ad`). The plant keeps the re-route on purpose: one that replaced it would redden the test's `rerouted` assertion instead |
 
 - [ ] **Step 6: boundary gate from a cleared tree.** Expected `GATE GREEN`, `TOTAL tests=1651`:
   `:domain` **526** (+2), `:feature:launcher` **220** (+3).

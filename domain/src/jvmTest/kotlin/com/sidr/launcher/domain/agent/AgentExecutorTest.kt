@@ -970,4 +970,42 @@ class AgentExecutorTest {
             planForMissingApp("убер").steps[1].copy(precondition = StepPrecondition.None),
         ),
     )
+
+    /**
+     * `DOC-ADL-1`'s anchor after the router (spec §7.12.3): the same risk gets the same gate whoever
+     * proposed the step. A `CONFIRM` step the MODEL proposed stops at the engine's consent exactly as a
+     * deterministic one does — same state, same trace, nothing invoked.
+     */
+    @Test
+    fun `a CONFIRM step the model proposed stops at the engine's consent exactly like a deterministic one`() = runTest {
+        fun storeStep(rationale: StepRationale) = AgentSession(
+            id = AgentSessionId("s-${rationale.name}"),
+            goal = AgentGoal("найди lumora в магазине", GoalShape.Free("найди lumora в магазине")),
+            plan = ExecutionPlan(
+                listOf(
+                    PlanStep(
+                        index = 0,
+                        invocation = ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.Literal("lumora"))),
+                        risk = ActionRiskLevel.CONFIRM,
+                        precondition = StepPrecondition.None,
+                        rationale = rationale,
+                    ),
+                ),
+            ),
+            cursor = 0,
+            state = ExecutionState.Running,
+            observations = emptyMap(),
+            consents = emptyMap(),
+            trace = ExecutionTrace(emptyList()),
+        )
+        val tools = FakeToolExecutor(emptyList())
+
+        val deterministic = AgentExecutor(registry, tools, budget).advance(storeStep(StepRationale.GOAL_DIRECT))
+        val proposed = AgentExecutor(registry, tools, budget).advance(storeStep(StepRationale.MODEL_PROPOSED))
+
+        assertEquals(ExecutionState.AwaitingConsent, proposed.state)
+        assertEquals(deterministic.state, proposed.state)
+        assertEquals(deterministic.trace.events, proposed.trace.events)
+        assertEquals(emptyList<Any>(), tools.invocations)
+    }
 }

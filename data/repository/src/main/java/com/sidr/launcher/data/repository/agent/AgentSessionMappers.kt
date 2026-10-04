@@ -429,6 +429,7 @@ internal object AgentSessionMappers {
         StepRationale.GOAL_DIRECT.name -> StepRationale.GOAL_DIRECT
         StepRationale.APP_NOT_INSTALLED_FALLBACK.name -> StepRationale.APP_NOT_INSTALLED_FALLBACK
         StepRationale.COMPENSATION.name -> StepRationale.COMPENSATION
+        StepRationale.MODEL_PROPOSED.name -> StepRationale.MODEL_PROPOSED
         else -> throw CorruptAgentRowException("unknown step rationale \"$raw\"")
     }
 

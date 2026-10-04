@@ -19,8 +19,14 @@ sealed interface StepPrecondition {
  * [COMPENSATION] (A4′ phase 2): the step undoes a step of another, finished plan. It is what marks a
  * plan as an undo — `Compensation.isUndo` — so that it offers no undo of its own and is never planned
  * again from its goal. Persisted by name in an existing TEXT column; no migration.
+ *
+ * [MODEL_PROPOSED] (A4′ phase 3a, spec §7.12.3 condition 4): the bridge's model planner wrote the step.
+ * A paused plan made of such steps, in which nothing has acted, is never planned again from its goal by
+ * the deterministic planner — it goes back through the route ([isModelProposed],
+ * `ResumeAgentSessionUseCase`). Persisted by name, like [COMPENSATION]; never shown — a step's line is
+ * keyed on its tool, so it needs no string.
  */
-enum class StepRationale { GOAL_DIRECT, APP_NOT_INSTALLED_FALLBACK, COMPENSATION }
+enum class StepRationale { GOAL_DIRECT, APP_NOT_INSTALLED_FALLBACK, COMPENSATION, MODEL_PROPOSED }
 
 data class PlanStep(
     /**
@@ -72,6 +78,9 @@ data class ExecutionPlan(val steps: List<PlanStep>) {
         }
     }
 }
+
+/** A plan the bridge's model planner wrote (A4′ phase 3a) — its steps carry [StepRationale.MODEL_PROPOSED]. */
+fun ExecutionPlan.isModelProposed(): Boolean = steps.any { it.rationale == StepRationale.MODEL_PROPOSED }
 
 /**
  * **Adding a variant here is a two-address edit, and both addresses are compile errors by

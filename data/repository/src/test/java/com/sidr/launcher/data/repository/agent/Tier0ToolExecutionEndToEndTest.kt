@@ -6,9 +6,9 @@ import android.content.Intent
 import android.provider.AlarmClock
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import com.sidr.launcher.core.testing.FakeActionCatalog
 import com.sidr.launcher.core.testing.FakeActionExecutor
-import com.sidr.launcher.core.testing.FakeCommandPlanner
+import com.sidr.launcher.core.testing.FakeMentionBinder
+import com.sidr.launcher.core.testing.FakeModelPlanner
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
@@ -104,7 +104,7 @@ class Tier0ToolExecutionEndToEndTest {
     private lateinit var dao: AgentSessionDao
     private lateinit var store: RoomAgentSessionStore
 
-    private val modelPlanner = FakeCommandPlanner()
+    private val modelPlanner = FakeModelPlanner()
 
     @Before
     fun setUp() {
@@ -165,8 +165,8 @@ class Tier0ToolExecutionEndToEndTest {
                 confidencePolicy = DefaultIntentConfidencePolicy(),
                 recordingScope = CoroutineScope(SupervisorJob()),
             ),
-            planner = modelPlanner,
-            catalog = FakeActionCatalog(),
+            modelPlanner = modelPlanner,
+            binder = FakeMentionBinder(),
             featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = false)),
             providerConfigRepository = configuredProvider(),
             connectivityChecker = FakeConnectivityChecker(initiallyOnline = true),

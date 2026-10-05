@@ -1,9 +1,9 @@
 package com.sidr.launcher.data.repository.intent
 
-import com.sidr.launcher.core.testing.FakeActionCatalog
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeAgentSessionStore
-import com.sidr.launcher.core.testing.FakeCommandPlanner
+import com.sidr.launcher.core.testing.FakeMentionBinder
+import com.sidr.launcher.core.testing.FakeModelPlanner
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
@@ -57,7 +57,7 @@ class FastPathOverflowSeamTest {
         appsToReturn = listOf(InstalledApp("net.fixture.alpha", "Lumora"))
     }
     private val executor = FakeActionExecutor()
-    private val modelPlanner = FakeCommandPlanner()
+    private val modelPlanner = FakeModelPlanner()
     private val agentStore = FakeAgentSessionStore()
     private val ids = object : AgentSessionIdFactory {
         private var n = 0
@@ -72,8 +72,8 @@ class FastPathOverflowSeamTest {
             confidencePolicy = DefaultIntentConfidencePolicy(),
             recordingScope = CoroutineScope(SupervisorJob()),
         ),
-        planner = modelPlanner,
-        catalog = FakeActionCatalog(),
+        modelPlanner = modelPlanner,
+        binder = FakeMentionBinder(),
         featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = localOnly)),
         providerConfigRepository = configuredProvider(),
         connectivityChecker = FakeConnectivityChecker(initiallyOnline = true),

@@ -13,10 +13,11 @@ import com.sidr.launcher.domain.trace.TraceEvent
  * **The plan is validated here too, not only before every step** (review finding F10, 2026-08-23).
  * Spec §4.2 and §6.2 both say the shape check "runs at plan time **and** again before every step";
  * only the second half existed, so whatever a `Planner` returned was persisted unread. For A0's
- * `TemplatePlanner` that costs nothing — it cannot emit an invalid plan — but the port exists so A4'
- * can bind a model planner behind it, and the difference then is between an unrunnable plan that was
- * never written and one that is on disk, on screen, and carrying the raw command text until its first
- * step fails.
+ * `TemplatePlanner` that costs nothing — it cannot emit an invalid plan — and since A4′ phase 3a the
+ * model's plans arrive here too, through `startPlanned` from the interpretation card — validated against
+ * the whole federation, the engine's second line behind the bridge's validator. The difference is
+ * between an unrunnable plan that was never written and one that is on disk, on screen, and carrying
+ * the raw command text until its first step fails.
  *
  * A rejected plan is returned as `Success(null)`: the same answer as `NoPlan`, which the caller
  * already handles by keeping the FastPath outcome untouched. Failing *open to the previous behaviour*

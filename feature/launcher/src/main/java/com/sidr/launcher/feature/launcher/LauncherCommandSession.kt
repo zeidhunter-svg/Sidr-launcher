@@ -3,7 +3,6 @@ package com.sidr.launcher.feature.launcher
 import androidx.lifecycle.SavedStateHandle
 import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.navigation.Routes
-import com.sidr.launcher.domain.action.ActionCatalog
 import com.sidr.launcher.domain.action.LauncherAction
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.ai.bridge.Interpretation
@@ -33,8 +32,10 @@ import java.util.Locale
 
 /**
  * Task 4 / A0. The command pipeline — typed/voice input, the AIL-3 universal-input live results, the
- * transient command feedback, the AIL-5 pending router proposal, and the whole submit → resolve →
- * [applyOutcome] → confirm/cancel cycle — extracted unchanged from `LauncherViewModel`. Same
+ * transient command feedback, and the whole submit → resolve → [applyOutcome] cycle — extracted
+ * unchanged from `LauncherViewModel`; since A4′ phase 3a it also holds the interpretation card (the
+ * model's reading, shown before anything runs) where the deleted router's pending proposal and its
+ * confirm/cancel used to be. Same
  * `resolveCommand.resolve()` branching, same dev-console pre-check and append points, same
  * `applyOutcome` exhaustive `when` (still no `else` — Task 11 adds a branch here, not an escape hatch).
  * This class is a move, not a redesign; `LauncherViewModelTest` must not need one character of edit.
@@ -46,10 +47,9 @@ import java.util.Locale
  * ViewModel until every collaborator existed.
  *
  * Naming: the Produces section of the task brief renames three of the four top-level properties on
- * the move (`commandInput` → [input], `commandFeedback` → [feedback], `inputResults` → [liveResults]);
- * [pendingRoutedAction] keeps its name, as the brief lists it unchanged. `LauncherViewModel` keeps
- * every original external name as a delegating one-liner, so nothing outside this class sees the
- * rename.
+ * the move (`commandInput` → [input], `commandFeedback` → [feedback], `inputResults` → [liveResults]).
+ * `LauncherViewModel` keeps every original external name as a delegating one-liner, so nothing outside
+ * this class sees the rename.
  *
  * [appList] is not in the brief's "Consumes" line but is a real, load-bearing, **read-only** dependency
  * (per the controller's Tasks 1-3 precedent note): the `AutoLaunch` branch of [submit] needs the
@@ -73,7 +73,6 @@ import java.util.Locale
 internal class LauncherCommandSession(
     private val resolveCommand: ResolveCommandWithAliasUseCase,
     private val executeAction: ExecuteActionUseCase,
-    private val actionCatalog: ActionCatalog,
     private val universalInputRouter: UniversalInputRouter,
     private val savedStateHandle: SavedStateHandle,
     private val appLaunch: LauncherAppLaunch,
@@ -131,10 +130,6 @@ internal class LauncherCommandSession(
     private val _feedback = MutableStateFlow<CommandFeedback>(CommandFeedback.None)
     val feedback: StateFlow<CommandFeedback> = _feedback
 
-    // ── Pending router proposal (AIL-5) — a RoutedAction awaiting confirm/one-tap. Null = none. ──
-    private val _pendingRoutedAction = MutableStateFlow<PendingRoutedAction?>(null)
-    val pendingRoutedAction: StateFlow<PendingRoutedAction?> = _pendingRoutedAction
-
     // ── The interpretation card (A4′ phase 3a, spec §7.12.3 condition 1) — transient (plan §0.2 B-12).
     private val _interpretation = MutableStateFlow<Interpretation?>(null)
     val interpretation: StateFlow<Interpretation?> = _interpretation
@@ -149,9 +144,8 @@ internal class LauncherCommandSession(
 
     fun onChanged(text: String) {
         setCommandInput(text)
-        // Editing a new command clears stale feedback and any pending confirm card.
+        // Editing a new command clears stale feedback and any interpretation card standing for the old one.
         _feedback.value = CommandFeedback.None
-        _pendingRoutedAction.value = null
         _interpretation.value = null
         pickedPackage = null
         // A4′ phase 3a, Task 9 review I1 (Review Focus 2, in flight): an edit also abandons a command
@@ -251,15 +245,16 @@ internal class LauncherCommandSession(
         CommandOutcome.OpenSettings -> "→ settings"
         CommandOutcome.ShowApps -> "→ apps"
         CommandOutcome.ClearInput -> "cleared"
-        is CommandOutcome.RoutedAction -> "→ route ${outcome.action.id.value}"
         is CommandOutcome.AgentSessionStarted -> "→ agent ${outcome.id.value}"
         is CommandOutcome.Interpreted -> "? interpretation"
     }
 
     /**
      * Web-search route chip (AIL-3): the user has chosen the destination, so the chip dispatches the
-     * act — [LauncherAction.WebSearch] through [ExecuteActionUseCase], the path [confirm] already uses,
-     * with the same [applyOutcome] handling and the same dev-console line. No new executor path.
+     * act — [LauncherAction.WebSearch] through [ExecuteActionUseCase], with the same [applyOutcome]
+     * handling and the same dev-console line. No new executor path. Since A4′ phase 3a this is the one
+     * place the launcher executes an action directly (`OneModelPathGuardTest`): the USER points it at a
+     * destination, so it is not the model's path (spec §7.12.3).
      *
      * **Why it no longer goes through the command pipeline** (A4′ phase 1). It used to prefix the buffer
      * with `search` and [submit] it, so FastPath re-scored the user's choice as if it were a typed
@@ -287,6 +282,8 @@ internal class LauncherCommandSession(
         // later grid tap on a former candidate would be recorded as the answer to an ambiguity the
         // user walked away from (the same misrecord [onChanged] guards against).
         appLaunch.rememberLearningToken(null)
+        // The user chose the browser: a command still waiting on the model is abandoned (T9 m2).
+        supersedeWaitingCommand()
         val action = LauncherAction.WebSearch(searchQuery)
         scope.launch {
             val outcome = executeAction.execute(action)
@@ -307,6 +304,21 @@ internal class LauncherCommandSession(
         submit(q)
     }
 
+    /**
+     * A4′ phase 3a, Task 11 (Task 9 review m2): a gesture that does something ELSE abandons a command
+     * still waiting on the model — the WEB chip ([submitWebSearch]) and a tap on an app
+     * (`LauncherViewModel.onAppClicked`). Left running, the slow answer would land over what the user
+     * just did: `OpenAssistant(question)` navigates away from the app they opened, a card stands over the
+     * search they chose. The command's coroutine is cancelled, the model call with it, and the wait goes.
+     * [submitSite] needs no call: it is a [submit], which supersedes on its own. [onChanged] and
+     * [cancelThinking] keep their own lines, written out where they are.
+     */
+    internal fun supersedeWaitingCommand() {
+        pending?.cancel()
+        pending = null
+        _thinking.value = false
+    }
+
     fun dismissFeedback() {
         _feedback.value = CommandFeedback.None
     }
@@ -325,8 +337,7 @@ internal class LauncherCommandSession(
     // ── CommandOutcome → UI — exhaustive when, no else branch ──────────────
     // Add a new branch here whenever CommandOutcome gains a new variant.
     fun applyOutcome(outcome: CommandOutcome) {
-        // Any new outcome dismisses a stale confirm card; the RoutedAction branch re-arms it below.
-        _pendingRoutedAction.value = null
+        // Any new outcome dismisses a stale interpretation card; the Interpreted branch re-arms it below.
         _interpretation.value = null
         when (outcome) {
             CommandOutcome.Empty ->
@@ -382,20 +393,6 @@ internal class LauncherCommandSession(
                 _feedback.value = CommandFeedback.None
             }
 
-            // AIL-4/5: the LLM router proposed a registered action. Per Fork R4 it is NEVER
-            // auto-executed — it is surfaced as a pending affordance (confirm card for CONFIRM risk,
-            // one-tap for SAFE) that the user must act on. Execution happens in confirm().
-            is CommandOutcome.RoutedAction -> {
-                _feedback.value = CommandFeedback.None
-                _pendingRoutedAction.value = PendingRoutedAction(
-                    action = outcome.action,
-                    commandLine = commandLineFor(outcome.action),
-                    riskLabel = RISK_CONFIRM_LABEL,
-                    requiresConfirmation = outcome.needsConfirmation,
-                    permissionGate = actionCatalog.descriptor(outcome.action.id)?.permissionGate,
-                )
-            }
-
             // Task 11 started a session and persisted it; Task 12's job here is to hand the id over
             // and get out of the way. The feedback line is cleared because the agent surface is now
             // the honest account of what is happening — leaving "no such app" underneath it would
@@ -414,30 +411,6 @@ internal class LauncherCommandSession(
                 _interpretation.value = outcome.interpretation
             }
         }
-    }
-
-    /**
-     * Execute the pending router proposal (AIL-5) — the user confirmed the card or tapped the SAFE
-     * one-tap affordance. Runs through [ExecuteActionUseCase] (resolve → execute) and feeds the result
-     * back through [applyOutcome], so a successful launch clears the input, a navigation routes, and an
-     * ambiguous/not-found result surfaces exactly as a typed command would. No-op if nothing is pending.
-     */
-    fun confirm() {
-        val pending = _pendingRoutedAction.value ?: return
-        _pendingRoutedAction.value = null
-        scope.launch {
-            val outcome = executeAction.execute(pending.action)
-            applyOutcome(outcome)
-            if (devConsole.consoleOn.value) {
-                devConsole.append("confirm ${pending.action.id.value}", outcomeSummary(outcome))
-            }
-        }
-    }
-
-    /** Dismiss the pending router proposal without executing (CANCEL). Leaves the typed text in place. */
-    fun cancel() {
-        _pendingRoutedAction.value = null
-        _feedback.value = CommandFeedback.None
     }
 
     /** «Отмена» on the wait (spec §7.12.2): the command's coroutine — the model call with it — is cancelled. */
@@ -492,7 +465,7 @@ internal class LauncherCommandSession(
         appLaunch.rememberLearningToken(null)
     }
 
-    /** The `>`-prefixed command form shown on the confirm card / one-tap chip (display-safe). */
+    /** The command form the dev console shows for the web chip's search (display-safe). */
     private fun commandLineFor(action: LauncherAction): String = when (action) {
         is LauncherAction.LaunchApp -> "open ${action.query}"
         is LauncherAction.WebSearch -> "search ${action.query}"
@@ -518,9 +491,6 @@ internal class LauncherCommandSession(
     }
 
     private companion object {
-        // AIL-5: the bracketed risk tag on the confirm card. MVP produces a card only for CONFIRM-risk
-        // (or unregistered) proposals; DANGEROUS is reserved for Stage 3.
-        const val RISK_CONFIRM_LABEL = "CONFIRM"
         // The WEB chip's de-duplication: a buffer already led by the search verb is not searched for it.
         const val SEARCH_VERB_PREFIX = "search "
         // SavedStateHandle key for the typed command text (H3 process-death restoration).

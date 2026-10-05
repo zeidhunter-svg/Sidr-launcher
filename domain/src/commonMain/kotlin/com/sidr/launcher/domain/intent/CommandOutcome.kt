@@ -1,6 +1,5 @@
 package com.sidr.launcher.domain.intent
 
-import com.sidr.launcher.domain.action.LauncherAction
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.ai.bridge.Interpretation
 import com.sidr.launcher.domain.model.InstalledApp
@@ -63,20 +62,6 @@ sealed interface CommandOutcome {
     data object ClearInput : CommandOutcome
 
     /**
-     * The LLM router (AIL-4) proposed a registered [action] for a low-confidence / natural-language
-     * command. Per Fork R4 it is **never auto-executed**: [needsConfirmation] (`true` for a
-     * [com.sidr.launcher.domain.action.ActionRiskLevel.CONFIRM] action, `false` for `SAFE`) tells the
-     * UI whether to require an explicit confirm card or offer a one-tap suggestion. [confidence] is the
-     * model's advisory 0..1. The confirmation card + execution wiring land in AIL-5; AIL-4 surfaces it
-     * display-safely only.
-     */
-    data class RoutedAction(
-        val action: LauncherAction,
-        val confidence: Float,
-        val needsConfirmation: Boolean,
-    ) : CommandOutcome
-
-    /**
      * A goal FastPath decided but did not achieve — the app does not exist — has been handed to the
      * agent, and [id] identifies the session now in flight. The command surface stops rendering a
      * message and starts rendering session state.
@@ -86,8 +71,8 @@ sealed interface CommandOutcome {
     /**
      * The model's reading of a command, bound to this device and shown BEFORE anything runs (A4′ phase
      * 3a, spec §7.12.3 condition 1) — the interpretation card. Nothing here executes: only the user's
-     * «Выполнить» starts a session, through the engine, which gates it by risk like any plan. Replaces
-     * the router's `RoutedAction` (removed in Task 11).
+     * «Выполнить» starts a session, through the engine, which gates it by risk like any plan. It replaced
+     * the deleted router's proposal outcome (A4′ phase 3a, D3).
      */
     data class Interpreted(val interpretation: Interpretation) : CommandOutcome
 }

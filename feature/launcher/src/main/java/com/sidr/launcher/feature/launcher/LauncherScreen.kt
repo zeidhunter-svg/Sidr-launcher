@@ -59,10 +59,6 @@ import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.core.ui.component.AppTile
-import com.sidr.launcher.core.ui.component.SidrActionGate
-import com.sidr.launcher.core.ui.component.SidrActionGateType
-import com.sidr.launcher.core.ui.component.SidrActionProposal
-import com.sidr.launcher.core.ui.component.SidrActionProposalTone
 import com.sidr.launcher.core.ui.component.EmptyState
 import com.sidr.launcher.core.ui.component.ErrorState
 import com.sidr.launcher.core.ui.component.SidrSectionHeader
@@ -111,7 +107,6 @@ fun LauncherScreen(
     val showMic by viewModel.showMic.collectAsStateWithLifecycle()
     val inputResults by viewModel.inputResults.collectAsStateWithLifecycle()
     val prayerContext by viewModel.prayerContext.collectAsStateWithLifecycle()
-    val pendingRoutedAction by viewModel.pendingRoutedAction.collectAsStateWithLifecycle()
     val interpretation by viewModel.interpretation.collectAsStateWithLifecycle()
     val thinking by viewModel.thinking.collectAsStateWithLifecycle()
     val devConsoleOn by viewModel.devConsoleOn.collectAsStateWithLifecycle()
@@ -250,30 +245,10 @@ fun LauncherScreen(
                 )
             }
 
-            // AIL-5: a router-proposed action awaiting the user's go-ahead. CONFIRM-risk → the DF-4
-            // confirm card; SAFE → a one-tap accelerator. Neither auto-executes (R4). Confirm routes
-            // through the education flow first when the action declares a permission gate (inert in the
-            // MVP catalog — no family gates — but wired so a future gated family is safe by design).
-            pendingRoutedAction?.let { pending ->
-                val onConfirm: () -> Unit = {
-                    val gate = pending.permissionGate
-                    if (gate != null) {
-                        viewModel.navigateTo(Routes.PermissionEducation.routeFor(gate.name))
-                    } else {
-                        viewModel.confirmRoutedAction()
-                    }
-                }
-                PendingActionArea(
-                    pending = pending,
-                    onConfirm = onConfirm,
-                    onCancel = viewModel::cancelRoutedAction,
-                )
-            }
-
             // Task 12 / A0: the agent runtime's surface — one component per runtime state, rendered
-            // from what the session itself reported. It sits below the router's pending card because
+            // from what the session itself reported. It sits below the interpretation card because
             // the two are mutually exclusive in practice: a started session cleared the feedback and
-            // the pending card on its way in (see LauncherCommandSession.applyOutcome).
+            // the card on its way in (see LauncherCommandSession.applyOutcome).
             agentSession?.let { session ->
                 // A1″ fix round 1, finding 5 — both maps are `get()` on the ViewModel, deliberately
                 // (a `by lazy` froze them at the first session ever shown, which silently lost every
@@ -736,48 +711,6 @@ private fun CommandConsole(
                 modifier = Modifier.padding(bottom = Spacing.xs),
             )
         }
-    }
-}
-
-// ── Router proposal confirmation (AIL-5) ─────────────────────────────────────
-
-/**
- * Renders a pending router proposal: the DS-3 [SidrActionGate] for a CONFIRM-risk action, or a
- * lighter one-tap [RouteChipRow] accelerator for a SAFE one. Both dispatch through [onConfirm]
- * (which the screen has already wrapped with the permission-gate check); the gate also exposes CANCEL.
- */
-@Composable
-private fun PendingActionArea(
-    pending: PendingRoutedAction,
-    onConfirm: () -> Unit,
-    onCancel: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    if (pending.requiresConfirmation) {
-        SidrActionGate(
-            type = SidrActionGateType.ExternalHandoff,
-            title = sidrString(R.string.launcher_confirm_execute_title),
-            // I18N-1 (spec §4/brief Step 2): the commandLine argument itself stays English - it's the
-            // command grammar echo, not translatable prose.
-            consequence = sidrString(R.string.launcher_confirm_will_run, pending.commandLine),
-            target = pending.commandLine,
-            confirmLabel = sidrString(R.string.launcher_confirm_confirm),
-            onConfirm = onConfirm,
-            onCancel = onCancel,
-            modifier = modifier,
-        )
-    } else {
-        // SAFE routed proposal — a one-tap accelerator, deliberately distinct from the CONFIRM gate.
-        // Still requires a deliberate tap (R4: nothing auto-executes).
-        SidrActionProposal(
-            title = pending.commandLine,
-            description = sidrString(R.string.launcher_safe_proposal_description),
-            tone = SidrActionProposalTone.Safe,
-            onExecute = onConfirm,
-            onCancel = onCancel,
-            executeLabel = sidrString(R.string.launcher_safe_proposal_run),
-            modifier = modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
-        )
     }
 }
 

@@ -246,7 +246,6 @@ class LauncherScreenInterpretationTest {
                 executor = fakeExecutor,
             ),
             actionExecutor = fakeExecutor,
-            actionCatalog = FakeActionCatalog(),
             usageHistoryRepository = FakeUsageHistoryRepository(),
             featureFlagRepository = FakeFeatureFlagRepository(),
             userPreferencesRepository = FakeUserPreferencesRepository(),

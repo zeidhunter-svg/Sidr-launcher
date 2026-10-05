@@ -19,20 +19,22 @@ object OutboundContextPolicy {
         GENERATION_LIMITS,
 
         /**
-         * The static Action Registry tool schema the AIL-4 router sends alongside the user command
-         * (`CatalogSchemaRenderer`): action ids + human descriptions + argument names/descriptions.
-         * Content-free and device-context-free by construction — it names *capabilities*, never any
-         * calendar/location/usage/history/device value. Adding it is the one privacy widening AIL-4
-         * makes, and it is guard-tested (the rendered schema is scanned for forbidden terms).
+         * Our descriptions of the AUTHORED tools the bridge offers, and the JSON schema of the answer
+         * made from the same offering (A4′ phase 3a, ADR 2026-10 «ACTION_CATALOG_SCHEMA → AUTHORED_TOOL_SCHEMA»;
+         * change-control §5). Our literals only — tool ids, our sentences, argument names — never a
+         * third party's text: the dynamic tier and the launcher's memory are not offered
+         * (`BridgeFilter`), and nothing the device knows (apps, aliases, learned choices, prayer,
+         * calendar, usage) has a path here (`BridgePayloadGuardTest`, which reads the PAYLOAD). It
+         * REPLACES the router's `ACTION_CATALOG_SCHEMA`, whose producer is gone — the set stays four.
          */
-        ACTION_CATALOG_SCHEMA,
+        AUTHORED_TOOL_SCHEMA,
     }
 
     val ALLOWED: Set<AllowedContext> = setOf(
         AllowedContext.USER_COMMAND,
         AllowedContext.STATIC_SYSTEM_PROMPT,
         AllowedContext.GENERATION_LIMITS,
-        AllowedContext.ACTION_CATALOG_SCHEMA,
+        AllowedContext.AUTHORED_TOOL_SCHEMA,
     )
 
     /**

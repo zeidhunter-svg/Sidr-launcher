@@ -2,21 +2,15 @@ package com.sidr.launcher.domain.ai.router
 
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeAgentSessionStore
-import com.sidr.launcher.core.testing.FakeCommandPlanner
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeIntentMatcher
+import com.sidr.launcher.core.testing.FakeMentionBinder
+import com.sidr.launcher.core.testing.FakeModelPlanner
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.core.testing.configuredProvider
-import com.sidr.launcher.domain.action.ActionArg
-import com.sidr.launcher.domain.action.ActionCatalog
-import com.sidr.launcher.domain.action.ActionCategory
-import com.sidr.launcher.domain.action.ActionDescriptor
-import com.sidr.launcher.domain.action.ActionId
-import com.sidr.launcher.domain.action.ActionIds
 import com.sidr.launcher.domain.action.ActionRiskLevel
-import com.sidr.launcher.domain.action.LauncherAction
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.AgentSessionIdFactory
@@ -30,16 +24,27 @@ import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.StepRationale
 import com.sidr.launcher.domain.agent.TemplatePlanner
+import com.sidr.launcher.domain.ai.bridge.Binding
+import com.sidr.launcher.domain.ai.bridge.Interpretation
+import com.sidr.launcher.domain.ai.bridge.ModelPlanning
+import com.sidr.launcher.domain.ai.bridge.PrincipalId
+import com.sidr.launcher.domain.ai.bridge.ProposedStep
+import com.sidr.launcher.domain.ai.bridge.SidrDestination
+import com.sidr.launcher.domain.ai.bridge.ValueOrigin
+import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.intent.LauncherIntent
+import com.sidr.launcher.domain.intent.ModelUnavailableReason
 import com.sidr.launcher.domain.intent.SimpleCommand
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.preferences.FeatureFlags
 import com.sidr.launcher.domain.tool.ArgSource
+import com.sidr.launcher.domain.tool.ToolEffect
+import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolRegistry
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -69,8 +74,8 @@ import org.junit.Test
  * the *system*, and the three [CommandMessage] states replace it. A test asserting the old string
  * would be testing the lie.
  *
- * **`DOC-NYH-1` - nothing auto-executes.** A planner proposal still surfaces only as a non-executing
- * [CommandOutcome.RoutedAction] (Fork R4).
+ * **`DOC-NYH-1` - nothing auto-executes.** A model reading surfaces only as a non-executing
+ * [CommandOutcome.Interpreted] (Fork R4; A4′ phase 3a, spec §7.12.3 condition 1).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RouteCommandUseCaseTest {
@@ -78,7 +83,8 @@ class RouteCommandUseCaseTest {
     private val matcher = FakeIntentMatcher()
     private val appsRepo = FakeInstalledAppsRepository()
     private val executor = FakeActionExecutor()
-    private val planner = FakeCommandPlanner()
+    private val planner = FakeModelPlanner()
+    private val binder = FakeMentionBinder()
     private val connectivity = FakeConnectivityChecker(initiallyOnline = true)
 
     // The agent side of the cut (Task 11). The real `TemplatePlanner` over the real A0 tool set, not a
@@ -89,28 +95,6 @@ class RouteCommandUseCaseTest {
     private val agentIds = object : AgentSessionIdFactory {
         private var n = 0
         override fun newId() = AgentSessionId("s${++n}")
-    }
-
-    private val catalog: ActionCatalog = object : ActionCatalog {
-        private val list = listOf(
-            ActionDescriptor(
-                id = ActionIds.OPEN_URL,
-                title = "Open link",
-                description = "Open a web address",
-                category = ActionCategory.WEB,
-                risk = ActionRiskLevel.CONFIRM,
-                argSchema = listOf(ActionArg("url", description = "url")),
-            ),
-            ActionDescriptor(
-                id = ActionIds.SHOW_APPS,
-                title = "All apps",
-                description = "Show the app grid",
-                category = ActionCategory.SYSTEM,
-                risk = ActionRiskLevel.SAFE,
-            ),
-        )
-        override fun all(): List<ActionDescriptor> = list
-        override fun descriptor(id: ActionId): ActionDescriptor? = list.firstOrNull { it.id == id }
     }
 
     private val provider = configuredProvider()
@@ -131,8 +115,8 @@ class RouteCommandUseCaseTest {
             confidencePolicy = DefaultIntentConfidencePolicy(),
             recordingScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
         ),
-        planner = planner,
-        catalog = catalog,
+        modelPlanner = planner,
+        binder = binder,
         featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = localOnly)),
         providerConfigRepository = provider,
         connectivityChecker = connectivity,
@@ -164,7 +148,7 @@ class RouteCommandUseCaseTest {
     @Test
     fun `local-only and FastPath missed - says so plainly, planner never consulted (DOC-ADL-3)`() = runTest {
         driveUnknown()
-        planner.resultToReturn = PlanResult.RoutedAction(LauncherAction.ShowApps, 0.9f)
+        planner.answer = ModelPlanning.Navigate(SidrDestination.APP_GRID)
 
         val outcome = useCase(localOnly = true).route("do a barrel roll")
 
@@ -175,7 +159,7 @@ class RouteCommandUseCaseTest {
     @Test
     fun `local-only and FastPath decided - outcome is byte-for-byte the FastPath one (DOC-ADL-3)`() = runTest {
         driveConfidentShowApps()
-        planner.resultToReturn = PlanResult.RoutedAction(LauncherAction.OpenUrl("https://x.test"), 0.9f)
+        planner.answer = ModelPlanning.Navigate(SidrDestination.APP_GRID)
 
         val outcome = useCase(localOnly = true).route("apps")
 
@@ -186,7 +170,7 @@ class RouteCommandUseCaseTest {
     @Test
     fun `FastPath hit - planner never consulted, latency optimization not a filter (R1)`() = runTest {
         driveConfidentShowApps()
-        planner.resultToReturn = PlanResult.RoutedAction(LauncherAction.OpenUrl("https://x.test"), 0.9f)
+        planner.answer = ModelPlanning.Navigate(SidrDestination.APP_GRID)
 
         val outcome = useCase().route("apps")
 
@@ -198,7 +182,7 @@ class RouteCommandUseCaseTest {
     fun `offline - honest needs-network, planner never consulted (DOC-ADL-3)`() = runTest {
         driveUnknown()
         connectivity.online = false
-        planner.resultToReturn = PlanResult.RoutedAction(LauncherAction.ShowApps, 0.9f)
+        planner.answer = ModelPlanning.Navigate(SidrDestination.APP_GRID)
 
         val outcome = useCase().route("do a barrel roll")
 
@@ -207,7 +191,8 @@ class RouteCommandUseCaseTest {
     }
 
     /**
-     * Fork F4 made this a property of the GATE rather than of [LlmCommandPlanner]'s implementation.
+     * Fork F4 made this a property of the GATE rather than of any one planner's implementation (the
+     * router's `LlmCommandPlanner` then; the bridge's `BridgeModelPlanner` since A4′ phase 3a).
      * Before Этап 4.0 nothing left the device without a provider only because that one adapter
      * happened to return `NoPlan` first; a second planner implementation, or a reordering inside this
      * one, would have silently ended the guarantee. `planCallCount == 0` is the guarantee: the gate
@@ -218,7 +203,7 @@ class RouteCommandUseCaseTest {
         driveUnknown()
         provider.clearActiveConfig()
         connectivity.online = true
-        planner.resultToReturn = PlanResult.RoutedAction(LauncherAction.ShowApps, 0.9f)
+        planner.answer = ModelPlanning.Navigate(SidrDestination.APP_GRID)
 
         val outcome = useCase().route("do a barrel roll")
 
@@ -256,9 +241,9 @@ class RouteCommandUseCaseTest {
     }
 
     @Test
-    fun `planner returns NoPlan - keeps the FastPath outcome`() = runTest {
+    fun `the model declines - keeps the FastPath outcome`() = runTest {
         driveUnknown()
-        planner.resultToReturn = PlanResult.NoPlan
+        planner.answer = ModelPlanning.Declined
 
         val outcome = useCase().route("do a barrel roll")
 
@@ -267,36 +252,9 @@ class RouteCommandUseCaseTest {
     }
 
     @Test
-    fun `CONFIRM-risk proposal surfaces as needsConfirmation RoutedAction (R4)`() = runTest {
-        driveUnknown()
-        planner.resultToReturn = PlanResult.RoutedAction(LauncherAction.OpenUrl("https://x.test"), 0.8f)
-
-        val outcome = useCase().route("go to x.test")
-
-        assertEquals(
-            CommandOutcome.RoutedAction(LauncherAction.OpenUrl("https://x.test"), 0.8f, needsConfirmation = true),
-            outcome,
-        )
-        assertEquals("go to x.test", planner.lastCommand)
-    }
-
-    @Test
-    fun `SAFE proposal surfaces as one-tap RoutedAction, still not executed (R4)`() = runTest {
-        driveUnknown()
-        planner.resultToReturn = PlanResult.RoutedAction(LauncherAction.ShowApps, 0.7f)
-
-        val outcome = useCase().route("show me everything")
-
-        assertEquals(
-            CommandOutcome.RoutedAction(LauncherAction.ShowApps, 0.7f, needsConfirmation = false),
-            outcome,
-        )
-    }
-
-    @Test
     fun `Clarify becomes a Message`() = runTest {
         driveUnknown()
-        planner.resultToReturn = PlanResult.Clarify("Which app did you mean?")
+        planner.answer = ModelPlanning.Clarify("Which app did you mean?")
 
         val outcome = useCase().route("open the thing")
 
@@ -306,12 +264,14 @@ class RouteCommandUseCaseTest {
     @Test
     fun `rule path runs exactly once even when planner is consulted`() = runTest {
         driveUnknown()
-        planner.resultToReturn = PlanResult.NoPlan
+        planner.answer = ModelPlanning.Declined
 
         useCase().route("do a barrel roll")
 
         // handle() → matcher.match() exactly once: the router wraps, never double-runs the rule path.
         assertEquals(1, matcher.callCount)
+        // The premise the name states (Task 11): the planner WAS consulted on this path.
+        assertEquals(1, planner.planCallCount)
     }
 
     // --- Task 11: the cut into the command pipeline ---------------------------------------------
@@ -561,5 +521,154 @@ class RouteCommandUseCaseTest {
 
         assertEquals(CommandOutcome.ShowApps, outcome)
         assertTrue("only an undecided command may open step 2b", agentStore.saved.isEmpty())
+    }
+
+    // --- A4′ phase 3a: the one model path (spec §7.12.3) ----------------------------------------
+
+    /**
+     * Criterion 15, the route half: the model's reading becomes a card; NO session is started.
+     *
+     * The padded input pins step 7's trim twice over (Task 11 ruling on hole H1): what the MODEL is asked,
+     * and the goal the card will start — the trimmed command under [GoalShape.Free], never
+     * `AppNotInstalled`, which is block (2)'s shape and which `TemplatePlanner` would claim.
+     */
+    @Test
+    fun `a model plan becomes an interpretation, and no session is started`() = runTest {
+        driveUnknown()
+        planner.answer = ModelPlanning.Proposed(
+            ProposedStep(
+                tool = ToolIds.PLAY_STORE_SEARCH,
+                args = mapOf("query" to "lumora"),
+                origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                risk = ActionRiskLevel.CONFIRM,
+                effect = ToolEffect.EXTERNAL,
+            ),
+        )
+
+        val outcome = useCase().route("  найди lumora в магазине  ")
+
+        val act = (outcome as CommandOutcome.Interpreted).interpretation as Interpretation.Act
+        assertEquals(ToolIds.PLAY_STORE_SEARCH, act.step.invocation.id)
+        assertEquals("the model is asked the trimmed command", "найди lumora в магазине", planner.lastCommand)
+        assertEquals(
+            AgentGoal(text = "найди lumora в магазине", shape = GoalShape.Free("найди lumora в магазине")),
+            act.goal,
+        )
+        assertTrue("nothing is started before «Выполнить»", agentStore.saved.isEmpty())
+    }
+
+    @Test
+    fun `an assistant answer opens the assistant with the question`() = runTest {
+        driveUnknown()
+        planner.answer = ModelPlanning.ToAssistant("почему небо синее")
+
+        assertEquals(CommandOutcome.OpenAssistant("почему небо синее"), useCase().route("почему небо синее"))
+    }
+
+    @Test
+    fun `a navigation answer is shown before it opens anything`() = runTest {
+        driveUnknown()
+        planner.answer = ModelPlanning.Navigate(SidrDestination.APP_GRID)
+
+        assertEquals(
+            CommandOutcome.Interpreted(Interpretation.Navigate(SidrDestination.APP_GRID)),
+            useCase().route("покажи все приложения"),
+        )
+    }
+
+    /** Total over the reasons (Task 11 ruling on hole H3): each one is passed through, none is collapsed. */
+    @Test
+    fun `an unavailable model is said so, with its reason`() = runTest {
+        driveUnknown()
+
+        ModelUnavailableReason.entries.forEach { reason ->
+            planner.answer = ModelPlanning.Unavailable(reason)
+
+            assertEquals(
+                "$reason",
+                CommandOutcome.Message(CommandMessage.UnderstandingModelUnavailable(reason)),
+                useCase().route("сделай что-нибудь"),
+            )
+        }
+        assertEquals("every reason was routed", ModelUnavailableReason.entries.size, planner.planCallCount)
+    }
+
+    /**
+     * Criterion 15, the other half (plan review): the deterministic paths get NO card. The model here
+     * WOULD answer with a step, so "it was not asked" is not vacuous — FastPath's decision, A0's plan and
+     * step 2b's tool match each return before step 7, and none of them waits on «Выполнить».
+     */
+    @Test
+    fun `the deterministic paths never get an interpretation card`() = runTest {
+        planner.answer = ModelPlanning.Proposed(
+            ProposedStep(
+                tool = ToolIds.PLAY_STORE_SEARCH,
+                args = mapOf("query" to "lumora"),
+                origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                risk = ActionRiskLevel.CONFIRM,
+                effect = ToolEffect.EXTERNAL,
+            ),
+        )
+
+        driveConfidentShowApps()
+        val fastPath = useCase().route("apps")
+
+        driveAppLaunch()
+        appsRepo.appsToReturn = emptyList()
+        val a0 = useCase().route("открой убер")
+
+        driveUnknown()
+        val toolMatch = useCase(agentPlanner = plansOneStep()).route("do a barrel roll")
+
+        assertEquals(CommandOutcome.ShowApps, fastPath)
+        assertTrue("A0: $a0", a0 is CommandOutcome.AgentSessionStarted)
+        assertTrue("2b: $toolMatch", toolMatch is CommandOutcome.AgentSessionStarted)
+        assertEquals(0, planner.planCallCount)
+    }
+
+    /** Review Focus 5, D1: what binding found goes to the user — the model is asked exactly once. */
+    @Test
+    fun `a mention that matches no app says so and asks the model nothing more`() = runTest {
+        driveUnknown()
+        planner.answer = ModelPlanning.Proposed(
+            ProposedStep(
+                tool = ToolIds.LAUNCH_APP,
+                args = mapOf("app" to "телегу"),
+                origins = mapOf("app" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                risk = ActionRiskLevel.SAFE,
+                effect = ToolEffect.EXTERNAL,
+            ),
+        )
+        binder.binding = { _, _ -> Binding.NotFound("телегу") }
+
+        val outcome = useCase().route("открой телегу")
+
+        assertEquals(CommandOutcome.Message(CommandMessage.NoAppFound("телегу")), outcome)
+        assertEquals(1, planner.planCallCount)
+    }
+
+    /**
+     * Task 11 ruling on hole H2: the device could not read its own app list. That is said as a failure —
+     * never hidden behind FastPath's own answer (`Unknown`), which would blame the command for the state
+     * of the phone — and the model is not asked again.
+     */
+    @Test
+    fun `an unreadable app list is said as a failure, not hidden behind FastPath's answer`() = runTest {
+        driveUnknown()
+        planner.answer = ModelPlanning.Proposed(
+            ProposedStep(
+                tool = ToolIds.LAUNCH_APP,
+                args = mapOf("app" to "lumora"),
+                origins = mapOf("app" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                risk = ActionRiskLevel.SAFE,
+                effect = ToolEffect.EXTERNAL,
+            ),
+        )
+        binder.binding = { _, _ -> Binding.Unavailable }
+
+        val outcome = useCase().route("открой lumora")
+
+        assertEquals(CommandOutcome.Failed(CommandFailure.Generic), outcome)
+        assertEquals(1, planner.planCallCount)
     }
 }

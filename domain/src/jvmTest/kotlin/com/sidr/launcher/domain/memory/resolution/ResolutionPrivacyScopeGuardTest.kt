@@ -20,12 +20,14 @@ class ResolutionPrivacyScopeGuardTest {
 
     @Test
     fun `learned resolutions keep outbound allow-list byte-for-byte unchanged`() {
+        // A4′ phase 3a replaced the router's schema category with AUTHORED_TOOL_SCHEMA (ADR 1 of the
+        // phase); the set stays four.
         assertEquals(
             setOf(
                 AllowedContext.USER_COMMAND,
                 AllowedContext.STATIC_SYSTEM_PROMPT,
                 AllowedContext.GENERATION_LIMITS,
-                AllowedContext.ACTION_CATALOG_SCHEMA,
+                AllowedContext.AUTHORED_TOOL_SCHEMA,
             ),
             OutboundContextPolicy.ALLOWED,
         )
@@ -40,8 +42,6 @@ class ResolutionPrivacyScopeGuardTest {
             "GenerativeAiEngine",
             "GenerateReplyUseCase",
             "PromptContextBuilder",
-            "CommandPlanner",
-            "CatalogSchemaRenderer",
             "ModelPlanner",
             "BridgeRendering",
             "BridgeTransport",

@@ -12,20 +12,21 @@ import org.junit.Test
  * that — it fails closed if a suggestion/calendar/location field is ever folded into the outbound
  * surface instead of staying inside [com.sidr.launcher.domain.suggestions.Suggestion]/`CachedSuggestion`.
  *
- * AIL-4 deliberately added exactly one category — [AllowedContext.ACTION_CATALOG_SCHEMA] (the static
- * router tool schema, guard-tested in `RouterOutboundGuardTest`). This test still fails closed if a
+ * A4′ phase 3a replaced the router's schema category with AUTHORED_TOOL_SCHEMA (ADR 1 of the phase):
+ * [AllowedContext.AUTHORED_TOOL_SCHEMA] — our descriptions of the offered authored tools, read off the
+ * payload by `BridgePayloadGuardTest` (`:app`). This test still fails closed if a
  * *suggestion/calendar/location* category were ever added.
  */
 class SuggestionOutboundIsolationTest {
 
     @Test
-    fun `allow-list adds only the AIL-4 schema category, never a suggestion-context category`() {
+    fun `allow-list holds only the authored tool schema beside the basics, never a suggestion-context category`() {
         assertEquals(
             setOf(
                 AllowedContext.USER_COMMAND,
                 AllowedContext.STATIC_SYSTEM_PROMPT,
                 AllowedContext.GENERATION_LIMITS,
-                AllowedContext.ACTION_CATALOG_SCHEMA,
+                AllowedContext.AUTHORED_TOOL_SCHEMA,
             ),
             OutboundContextPolicy.ALLOWED,
         )

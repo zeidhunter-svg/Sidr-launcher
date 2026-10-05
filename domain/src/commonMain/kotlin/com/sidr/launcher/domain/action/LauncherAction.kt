@@ -1,8 +1,9 @@
 package com.sidr.launcher.domain.action
 
 /**
- * A concrete, routed action instance carrying its **semantic, still-unresolved** arguments — the value
- * type the AIL-4 router emits (`PlanResult.RoutedAction`) and the AIL-5 confirmation UI acts on.
+ * A concrete action instance carrying its **semantic, still-unresolved** arguments — the value type
+ * the `in_app` tool worker (`SystemIntentToolWorker`) and the web chip hand to `ExecuteActionUseCase`.
+ * The AIL-4 router that first emitted it was deleted in A4′ phase 3a; the model's steps are tools now.
  *
  * This is intentionally a **parallel** hierarchy to `ExecutableAction`, not a wrapper around it:
  * a routed [LaunchApp] carries the raw `query` ("telegram"), not a resolved package — resolution

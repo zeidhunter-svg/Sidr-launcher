@@ -11,7 +11,8 @@ import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.configuredProvider
 import com.sidr.launcher.core.testing.FakeAliasStore
-import com.sidr.launcher.core.testing.FakeCommandPlanner
+import com.sidr.launcher.core.testing.FakeMentionBinder
+import com.sidr.launcher.core.testing.FakeModelPlanner
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakePrayerCalculator
@@ -22,7 +23,9 @@ import androidx.lifecycle.SavedStateHandle
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
 import com.sidr.launcher.domain.ai.bridge.AppChoice
 import com.sidr.launcher.domain.ai.bridge.Interpretation
+import com.sidr.launcher.domain.ai.bridge.ModelPlanning
 import com.sidr.launcher.domain.ai.bridge.PrincipalId
+import com.sidr.launcher.domain.ai.bridge.ProposedStep
 import com.sidr.launcher.domain.ai.bridge.SidrDestination
 import com.sidr.launcher.domain.ai.bridge.ValueOrigin
 import com.sidr.launcher.domain.intent.CommandOutcome
@@ -92,8 +95,6 @@ import com.sidr.launcher.domain.action.ActionCategory
 import com.sidr.launcher.domain.action.ActionDescriptor
 import com.sidr.launcher.domain.action.ActionIds
 import com.sidr.launcher.domain.action.ActionRiskLevel
-import com.sidr.launcher.domain.action.LauncherAction
-import com.sidr.launcher.domain.ai.router.PlanResult
 import com.sidr.launcher.domain.history.AppUsageRecord
 import com.sidr.launcher.domain.intent.ActionExecutionResult
 import com.sidr.launcher.domain.intent.CommandFailure
@@ -106,7 +107,6 @@ import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.intent.SearchTarget
 import com.sidr.launcher.domain.model.InstalledApp
-import com.sidr.launcher.domain.permission.PermissionFeature
 import com.sidr.launcher.domain.prayer.CalculationMethodId
 import com.sidr.launcher.domain.prayer.GetPrayerContextUseCase
 import com.sidr.launcher.domain.prayer.Madhab
@@ -219,23 +219,24 @@ class LauncherViewModelTest {
     )
 
     // AIL-4: the VM routes through RouteCommandUseCase. Этап 4.0 re-pointed this fixture at the new
-    // default posture — local-only OFF, a provider configured, online — with a planner that returns
-    // NoPlan (FakeCommandPlanner's default). That combination still yields the FastPath outcome
+    // default posture — local-only OFF, a provider configured, online — with a model planner that
+    // declines (FakeModelPlanner's default; A4′ phase 3a). That combination still yields the FastPath outcome
     // byte-for-byte, so every existing VM test keeps testing what it was written to test: the VM's
     // CommandOutcome -> CommandFeedback mapping, not the gate. Leaving the provider unconfigured
     // would instead make every unknown command surface UnderstandingNeedsProvider and quietly turn
     // this whole suite into a test of the gate. The gate itself is proven in RouteCommandUseCaseTest.
     private val routeUseCase = RouteCommandUseCase(
         handleUserCommand = useCase,
-        planner = FakeCommandPlanner(),
-        catalog = FakeActionCatalog(),
+        modelPlanner = FakeModelPlanner(),
+        binder = FakeMentionBinder(),
         featureFlagRepository = fakeFlagRepo,
         providerConfigRepository = configuredProvider(),
         connectivityChecker = FakeConnectivityChecker(),
         startAgentSession = startAgentSession,
     )
 
-    // AIL-5: executes a confirmed router-proposed action through the same resolver/executor path.
+    // The web chip's act, through the same resolver/executor path (the router's confirm card that also
+    // used it was deleted in A4′ phase 3a).
     private val executeAction = ExecuteActionUseCase(
         resolver = IntentActionResolver(fakeRepo),
         executor = fakeExecutor,
@@ -304,7 +305,6 @@ class LauncherViewModelTest {
         recordResolutionChoice = RecordResolutionChoiceUseCase(resolutionStore),
         executeAction = executeAction,
         actionExecutor = fakeExecutor,
-        actionCatalog = actionCatalog,
         usageHistoryRepository = fakeUsageRepo,
         featureFlagRepository = flagRepo,
         userPreferencesRepository = prefsRepo,
@@ -338,26 +338,24 @@ class LauncherViewModelTest {
     }
 
     /**
-     * Builds a router-ON ViewModel whose planner returns [plannerResult]. [catalog] is shared by the
-     * route use case (risk → needsConfirmation) and the VM (permissionGate lookup), matching production
-     * where both read the same [DefaultActionCatalog]. The rule matcher is forced to Unknown so the
-     * planner is always consulted (AIL-4 trigger).
+     * Builds a ViewModel over the REAL route (A4′ phase 3a) whose model planner answers [answer], bound
+     * by the fake binder exactly as the model wrote it. The rule matcher is forced to Unknown so the
+     * model is always asked (step 7).
      */
-    private fun buildRouterViewModel(
-        plannerResult: PlanResult,
-        catalog: FakeActionCatalog = FakeActionCatalog(),
+    private fun buildBridgeViewModel(
+        answer: ModelPlanning,
         online: Boolean = true,
         resolutionStore: FakeResolutionPreferenceStore = fakeResolutionStore,
     ): LauncherViewModel {
         fakeMatcher.intentToReturn = LauncherIntent.UnknownIntent(originalInput = "nl command", reason = "x")
         fakeMatcher.confidenceToReturn = 0.0f
-        val router = RouteCommandUseCase(
+        val route = RouteCommandUseCase(
             handleUserCommand = useCase,
-            planner = FakeCommandPlanner(resultToReturn = plannerResult),
-            catalog = catalog,
+            modelPlanner = FakeModelPlanner(answer),
+            binder = FakeMentionBinder(),
             featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = false)),
             // Этап 4.0: the gate refuses to consult the planner unless a provider is configured
-            // (fork F4), so the router fixture has to configure one to exercise the routed path.
+            // (fork F4), so the fixture has to configure one to exercise the model path.
             providerConfigRepository = configuredProvider(),
             connectivityChecker = FakeConnectivityChecker(initiallyOnline = online),
             startAgentSession = startAgentSession,
@@ -365,14 +363,12 @@ class LauncherViewModelTest {
         return LauncherViewModel(
             installedAppsRepository = fakeRepo,
             resolveCommand = aliasAwareResolveCommand(
-                route = CommandRouteStep { router.route(it) },
+                route = CommandRouteStep { route.route(it) },
                 resolutionStore = resolutionStore,
-                actionCatalog = catalog,
             ),
             recordResolutionChoice = RecordResolutionChoiceUseCase(resolutionStore),
             executeAction = executeAction,
             actionExecutor = fakeExecutor,
-            actionCatalog = catalog,
             usageHistoryRepository = fakeUsageRepo,
             featureFlagRepository = fakeFlagRepo,
             userPreferencesRepository = fakePrefsRepo,
@@ -405,104 +401,6 @@ class LauncherViewModelTest {
         category = ActionCategory.WEB,
         risk = ActionRiskLevel.SAFE,
     )
-
-    // ── AIL-5 confirmation & safety gating ──────────────────────────────────
-
-    @Test
-    fun `a CONFIRM router proposal surfaces a confirm card and never auto-executes`() =
-        runTest(testDispatcher) {
-            // Empty catalog ⇒ needsConfirmation = true (fail-safe): the card is required.
-            val vm = buildRouterViewModel(
-                plannerResult = PlanResult.RoutedAction(LauncherAction.OpenUrl("https://x.com"), 0.9f),
-            )
-
-            vm.onCommandSubmitted("go to x")
-            advanceUntilIdle()
-
-            val pending = vm.pendingRoutedAction.value
-            assertTrue("expected a pending confirm card, got $pending", pending != null)
-            assertTrue("expected requiresConfirmation", pending!!.requiresConfirmation)
-            // R4: nothing executed until the user confirms.
-            assertTrue(fakeExecutor.executedActions.isEmpty())
-        }
-
-    @Test
-    fun `a SAFE router proposal surfaces a one-tap pending action, not a card`() =
-        runTest(testDispatcher) {
-            val catalog = FakeActionCatalog(listOf(safeDescriptor(ActionIds.WEB_SEARCH)))
-            val vm = buildRouterViewModel(
-                plannerResult = PlanResult.RoutedAction(LauncherAction.WebSearch("weather"), 0.8f),
-                catalog = catalog,
-            )
-
-            vm.onCommandSubmitted("what's the weather")
-            advanceUntilIdle()
-
-            val pending = vm.pendingRoutedAction.value
-            assertTrue("expected a pending one-tap action, got $pending", pending != null)
-            assertFalse("SAFE proposal must not require a card", pending!!.requiresConfirmation)
-            // R4: still never silently executed — the user must tap.
-            assertTrue(fakeExecutor.executedActions.isEmpty())
-        }
-
-    @Test
-    fun `confirming a pending action executes it and clears the card and input`() =
-        runTest(testDispatcher) {
-            fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
-            val vm = buildRouterViewModel(
-                plannerResult = PlanResult.RoutedAction(LauncherAction.LaunchApp("Telegram"), 0.9f),
-            )
-            vm.onCommandSubmitted("fire up telegram")
-            advanceUntilIdle()
-            assertTrue(vm.pendingRoutedAction.value != null)
-
-            vm.confirmRoutedAction()
-            advanceUntilIdle()
-
-            assertEquals(
-                ExecutableAction.LaunchAppAction("org.telegram.messenger", null),
-                fakeExecutor.executedActions.single(),
-            )
-            assertEquals(null, vm.pendingRoutedAction.value)
-            assertEquals("", vm.commandInput.value)
-        }
-
-    @Test
-    fun `cancelling a pending action clears it without executing`() = runTest(testDispatcher) {
-        val vm = buildRouterViewModel(
-            plannerResult = PlanResult.RoutedAction(LauncherAction.OpenUrl("https://x.com"), 0.9f),
-        )
-        vm.onCommandSubmitted("go to x")
-        advanceUntilIdle()
-        assertTrue(vm.pendingRoutedAction.value != null)
-
-        vm.cancelRoutedAction()
-        advanceUntilIdle()
-
-        assertEquals(null, vm.pendingRoutedAction.value)
-        assertTrue(fakeExecutor.executedActions.isEmpty())
-    }
-
-    @Test
-    fun `a pending confirmation carries the descriptor permission gate`() = runTest(testDispatcher) {
-        val gatedDescriptor = ActionDescriptor(
-            id = ActionIds.OPEN_URL,
-            title = "t",
-            description = "d",
-            category = ActionCategory.WEB,
-            risk = ActionRiskLevel.CONFIRM,
-            permissionGate = PermissionFeature.VOICE_INPUT,
-        )
-        val vm = buildRouterViewModel(
-            plannerResult = PlanResult.RoutedAction(LauncherAction.OpenUrl("https://x.com"), 0.9f),
-            catalog = FakeActionCatalog(listOf(gatedDescriptor)),
-        )
-
-        vm.onCommandSubmitted("go to x")
-        advanceUntilIdle()
-
-        assertEquals(PermissionFeature.VOICE_INPUT, vm.pendingRoutedAction.value?.permissionGate)
-    }
 
     // ── App list loading ───────────────────────────────────────────────────
 
@@ -709,7 +607,6 @@ class LauncherViewModelTest {
             recordResolutionChoice = RecordResolutionChoiceUseCase(fakeResolutionStore),
             executeAction = executeAction,
             actionExecutor = fakeExecutor,
-            actionCatalog = FakeActionCatalog(),
             usageHistoryRepository = fakeUsageRepo,
             featureFlagRepository = fakeFlagRepo,
             userPreferencesRepository = fakePrefsRepo,
@@ -967,7 +864,6 @@ class LauncherViewModelTest {
             recordResolutionChoice = RecordResolutionChoiceUseCase(fakeResolutionStore),
             executeAction = executeAction,
             actionExecutor = fakeExecutor,
-            actionCatalog = FakeActionCatalog(),
             usageHistoryRepository = fakeUsageRepo,
             featureFlagRepository = FakeFeatureFlagRepository(
                 FeatureFlags(aiSuggestionsEnabled = true, usageHistoryEnabled = true),
@@ -1916,7 +1812,7 @@ class LauncherViewModelTest {
 
     // ── Chip dispatch (AIL-3, Task 5) ──────────────────────────────────────
     // A4′ phase 1: the WEB chip is an explicit destination, so it dispatches the act itself
-    // (ExecuteActionUseCase, the path confirm() uses) and never asks the IntentMatcher — which since
+    // (ExecuteActionUseCase, the path the deleted router's confirm() used) and never asks the IntentMatcher — which since
     // phase 1 withdraws a search whose query carries a second goal, and would refuse the user's own
     // choice. The SITE chip still submits through the command pipeline.
 
@@ -2049,7 +1945,7 @@ class LauncherViewModelTest {
 
     // ── S2-1 Task 11: learned-resolution decorator + record-on-choice wiring ──────────────────
     // Parity is the hard requirement: with an empty fakeResolutionStore (the default for every
-    // buildViewModel()/buildRouterViewModel() call above), ResolveCommandWithPreferenceUseCase.resolve()
+    // buildViewModel()/buildBridgeViewModel() call above), ResolveCommandWithPreferenceUseCase.resolve()
     // always returns Outcome(originalOutcome, null) or Outcome(originalOutcome, token) for an ambiguous
     // list — never AutoLaunch — so every assertion in this file above holds byte-for-byte. These tests
     // exercise the NEW behavior: token-set-on-ambiguity, record-on-candidate-tap, no-record-otherwise,
@@ -2539,8 +2435,8 @@ class LauncherViewModelTest {
         fakeAgentStore.save(pausedModelPlanForVm())
         val localOnlyRoute = RouteCommandUseCase(
             handleUserCommand = useCase,
-            planner = FakeCommandPlanner(),
-            catalog = FakeActionCatalog(),
+            modelPlanner = FakeModelPlanner(),
+            binder = FakeMentionBinder(),
             featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = true)),
             providerConfigRepository = configuredProvider(),
             connectivityChecker = FakeConnectivityChecker(),
@@ -2871,5 +2767,140 @@ class LauncherViewModelTest {
 
         assertEquals("открой tess", vm.commandInput.value)
         assertEquals(null, vm.interpretation.value)
+    }
+
+    /** End to end through the real route: the model's reading waits on the card; «Выполнить» starts it. */
+    @Test
+    fun `a model plan through the real route waits on the card, and Run starts an engine session`() = runTest(testDispatcher) {
+        val vm = buildBridgeViewModel(
+            answer = ModelPlanning.Proposed(
+                ProposedStep(
+                    tool = ToolIds.PLAY_STORE_SEARCH,
+                    args = mapOf("query" to "lumora"),
+                    origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                    risk = ActionRiskLevel.CONFIRM,
+                    effect = ToolEffect.EXTERNAL,
+                ),
+            ),
+        )
+        vm.onCommandSubmitted("найди lumora в магазине")
+        advanceUntilIdle()
+        assertTrue(vm.interpretation.value is Interpretation.Act)
+        assertTrue("nothing started before «Выполнить»", fakeAgentStore.saved.isEmpty())
+
+        vm.runInterpretation()
+        advanceUntilIdle()
+
+        assertEquals(ExecutionState.AwaitingConsent, vm.agentSessionState.value?.state)
+    }
+
+    /**
+     * Task 9 review m2, ruled into Task 11: the WEB chip is the user choosing the browser while the model
+     * is still thinking about the command. Its slow answer — the assistant with a question, which would
+     * navigate away from the search the user chose — must not land: the command is abandoned and the
+     * model call with it, and the wait goes at the tap.
+     */
+    @Test
+    fun `the web chip supersedes a slow answer still on its way`() = runTest(testDispatcher) {
+        var answered = false
+        val vm = buildViewModel(
+            route = CommandRouteStep {
+                delay(10_000)
+                answered = true
+                CommandOutcome.OpenAssistant("почему небо синее")
+            },
+        )
+        val navigation = async { vm.navigationEvents.first() }
+        vm.onCommandSubmitted("почему небо синее")
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertTrue("the command is still waiting on the model", vm.thinking.value)
+
+        vm.submitWebSearch("ostravel lectures")
+        runCurrent()
+        assertFalse("the wait goes at the tap, not when the abandoned answer would have come", vm.thinking.value)
+        advanceUntilIdle()
+
+        assertEquals(
+            "the chip's own search ran",
+            listOf(ExecutableAction.OpenSearchAction(query = "ostravel lectures", target = SearchTarget.WEB)),
+            fakeExecutor.executedActions,
+        )
+        assertFalse("the model call itself was cancelled, not merely ignored", answered)
+        assertFalse("the abandoned answer navigated nowhere", navigation.isCompleted)
+        navigation.cancel()
+    }
+
+    /**
+     * Task 9 review m2, ruled into Task 11: a tap on an app while the model is still thinking opens that
+     * app — and the slow answer, a card for the abandoned command, must not stand over it afterwards.
+     */
+    @Test
+    fun `a tap on an app supersedes a slow answer still on its way`() = runTest(testDispatcher) {
+        var answered = false
+        val vm = buildViewModel(
+            route = CommandRouteStep {
+                delay(10_000)
+                answered = true
+                CommandOutcome.Interpreted(storeStepReading())
+            },
+        )
+        vm.onCommandSubmitted("найди lumora в магазине")
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertTrue("the command is still waiting on the model", vm.thinking.value)
+
+        vm.onAppClicked(InstalledApp("net.fixture.vemblic", "Vemblic"))
+        runCurrent()
+        assertFalse("the wait goes at the tap, not when the abandoned answer would have come", vm.thinking.value)
+        advanceUntilIdle()
+
+        assertEquals(
+            "the tap's own launch ran",
+            listOf(ExecutableAction.LaunchAppAction("net.fixture.vemblic", null)),
+            fakeExecutor.executedActions,
+        )
+        assertFalse("the model call itself was cancelled, not merely ignored", answered)
+        assertEquals("no card for the abandoned command", null, vm.interpretation.value)
+    }
+
+    /**
+     * Task 11 ruling on hole H8 (the rest of Task 9 review m2): a suggestion that opens a screen while the
+     * model is still thinking is the user going somewhere else. The slow answer — the assistant with a
+     * question — must not navigate away from the screen the user chose; the wait goes at the tap.
+     */
+    @Test
+    fun `a suggestion that opens a screen supersedes a slow answer still on its way`() = runTest(testDispatcher) {
+        var answered = false
+        val vm = buildViewModel(
+            route = CommandRouteStep {
+                delay(10_000)
+                answered = true
+                CommandOutcome.OpenAssistant("почему небо синее")
+            },
+        )
+        // A plain scope on the test dispatcher, not `backgroundScope` — see subscribeToPrayerContext.
+        val navigations = mutableListOf<NavigationEvent>()
+        val collector = CoroutineScope(testDispatcher + Job())
+        collector.launch { vm.navigationEvents.collect { navigations += it } }
+        vm.onCommandSubmitted("почему небо синее")
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertTrue("the command is still waiting on the model", vm.thinking.value)
+
+        vm.onSuggestionClicked(
+            Suggestion(label = "Settings", actionId = Routes.Settings.ROUTE, source = SuggestionSource.TIME_OF_DAY, score = 1.0),
+        )
+        runCurrent()
+        assertFalse("the wait goes at the tap, not when the abandoned answer would have come", vm.thinking.value)
+        advanceUntilIdle()
+
+        assertEquals(
+            "only the screen the user chose",
+            listOf<NavigationEvent>(NavigationEvent.NavigateTo(Routes.Settings.ROUTE)),
+            navigations,
+        )
+        assertFalse("the model call itself was cancelled, not merely ignored", answered)
+        collector.cancel()
     }
 }

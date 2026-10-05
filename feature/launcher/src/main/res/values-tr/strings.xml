@@ -51,12 +51,6 @@
     <string name="launcher_setup_nudge_body">Sidr\'ı varsayılan başlatıcınız yapın, ardından uygulamaları açmak için yukarıdaki alana yazın veya arama yapın.</string>
     <string name="launcher_setup_nudge_action">Varsayılan yap</string>
 
-    <string name="launcher_confirm_execute_title">Çalıştırılsın mı?</string>
-    <string name="launcher_confirm_will_run">Şu çalıştırılacak: %1$s</string>
-    <string name="launcher_confirm_confirm">Onayla</string>
-    <string name="launcher_safe_proposal_description">Güvenli öneri. Yine de dokunmanızı bekliyor.</string>
-    <string name="launcher_safe_proposal_run">Çalıştır</string>
-
     <string name="launcher_drawer_title">Tüm uygulamalar</string>
     <string name="launcher_drawer_back">Geri</string>
     <string name="launcher_drawer_ask_assistant">Asistana sor: «%1$s»</string>

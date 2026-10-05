@@ -126,7 +126,11 @@ data class PlanningRequest(
     val priorObservations: Map<Int, ToolResult> = emptyMap(),
 )
 
-/** Port. A0 binds the deterministic `TemplatePlanner`; A4' binds a model planner behind the same seam. */
+/**
+ * Port of the DETERMINISTIC planners, asked at step 2b and on resume — where no model may be called
+ * (`DOC-ADL-3`). The model planner is a different port, `com.sidr.launcher.domain.ai.bridge.ModelPlanner`,
+ * asked at step 7 only (A4′ phase 3a, spec §7.12.2).
+ */
 interface Planner {
     suspend fun plan(request: PlanningRequest, registry: com.sidr.launcher.domain.tool.ToolRegistry): PlanningResult
 }

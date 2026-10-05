@@ -32,8 +32,9 @@ sealed interface ResolutionResult {
 }
 
 /**
- * Pure, fail-closed argument validation — the A0 counterpart of `ProposalValidator`, which stays
- * untouched and served as the model. Stdlib only.
+ * Pure, fail-closed argument validation — modelled on the router's `ProposalValidator` (deleted in A4′
+ * phase 3a). Its model-side twin is now the bridge's `BridgeValidator`, which judges the model's answer
+ * before anything is bound; this one judges every plan the engine runs. Stdlib only.
  *
  * F6 split it into two phases, and the split is what keeps it fail-closed rather than merely more
  * capable: [validate] is everything decidable **without having run anything**, so it runs at plan time

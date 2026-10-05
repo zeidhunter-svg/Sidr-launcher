@@ -1,13 +1,16 @@
 package com.sidr.launcher.domain.ai.router
 
-import com.sidr.launcher.domain.action.ActionCatalog
-import com.sidr.launcher.domain.action.ActionRiskLevel
-import com.sidr.launcher.domain.action.requiresConsent
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.ai.AiProviderConfigRepository
+import com.sidr.launcher.domain.ai.bridge.Binding
+import com.sidr.launcher.domain.ai.bridge.Interpretation
+import com.sidr.launcher.domain.ai.bridge.MentionBinder
+import com.sidr.launcher.domain.ai.bridge.ModelPlanner
+import com.sidr.launcher.domain.ai.bridge.ModelPlanning
 import com.sidr.launcher.domain.connectivity.ConnectivityChecker
+import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
@@ -52,9 +55,11 @@ import kotlinx.coroutines.flow.first
  *    and gains no new module edge (ADR 3/4). The API key deliberately stays the planner's business:
  *    the gate decides *whether to ask*, never touches secrets.
  * 6. **Offline ⇒ [CommandMessage.UnderstandingNeedsNetwork]** — no socket the planner would abandon.
- * 7. Map the plan: a [PlanResult.RoutedAction] surfaces as a **non-executing** proposal
- *    ([CommandOutcome.RoutedAction], Fork R4 — never auto-execute); a [PlanResult.Clarify] becomes a
- *    message; [PlanResult.NoPlan] keeps the FastPath outcome.
+ * 7. **The one model path** (A4′ phase 3a, D3): ask the [ModelPlanner]; bind its step on the device
+ *    ([MentionBinder]); hand back a reading for the card ([CommandOutcome.Interpreted]), the assistant
+ *    with the question, a verbatim clarify, an honest «model unavailable», or — when the model declines
+ *    — FastPath's outcome untouched. Nothing here executes (`DOC-NYH-1`, Fork R4); the model is below
+ *    gates 3, 5 and 6 (`DOC-ADL-3`).
  *
  * **Step 2 sits above step 3 and that does not weaken the chain.** The three
  * understanding-unavailable messages stay mutually exclusive because step 2 is keyed on an outcome
@@ -98,8 +103,11 @@ import kotlinx.coroutines.flow.first
  */
 class RouteCommandUseCase(
     private val handleUserCommand: HandleUserCommandUseCase,
-    private val planner: CommandPlanner,
-    private val catalog: ActionCatalog,
+    // A4′ phase 3a (D3): the ONE model path. Not `Planner` — that port is asked at step 2b and on resume,
+    // where a model may never be called (`DOC-ADL-3`). This one is asked here, at step 7, only.
+    private val modelPlanner: ModelPlanner,
+    // Binding on the device, AFTER the model has answered: nothing it finds goes back to the model (D1).
+    private val binder: MentionBinder,
     private val featureFlagRepository: FeatureFlagRepository,
     private val providerConfigRepository: AiProviderConfigRepository,
     private val connectivityChecker: ConnectivityChecker,
@@ -168,15 +176,26 @@ class RouteCommandUseCase(
             return CommandOutcome.Message(CommandMessage.UnderstandingNeedsNetwork)
         }
 
-        // (7) Consult the planner and map its structured decision; any failure ⇒ NoPlan ⇒ FastPath outcome.
-        return when (val plan = planner.plan(rawInput.trim(), catalog)) {
-            is PlanResult.RoutedAction -> CommandOutcome.RoutedAction(
-                action = plan.action,
-                confidence = plan.confidence,
-                needsConfirmation = needsConfirmation(plan),
-            )
-            is PlanResult.Clarify -> CommandOutcome.Message(CommandMessage.Verbatim(plan.question))
-            PlanResult.NoPlan -> ruleOutcome
+        // (7) The one model path (A4′ phase 3a, D3). The model reads the command and our nineteen tools'
+        // descriptions — nothing of this phone (D1). The device then binds the model's words to this
+        // phone, and NOTHING the binding finds is sent back: a pick, a "not found" go to the user. And
+        // nothing here runs anything (condition 1): a reading becomes a card, and only the user's
+        // «Выполнить» starts a session, through the engine.
+        val command = rawInput.trim()
+        return when (val answer = modelPlanner.plan(command)) {
+            is ModelPlanning.Proposed ->
+                when (val bound = binder.bind(AgentGoal(text = command, shape = GoalShape.Free(command)), answer.step)) {
+                    is Binding.Bound -> CommandOutcome.Interpreted(bound.interpretation)
+                    is Binding.NotFound -> CommandOutcome.Message(CommandMessage.NoAppFound(bound.mention))
+                    Binding.Unavailable -> CommandOutcome.Failed(CommandFailure.Generic)
+                }
+            // Condition 3: a question goes to the assistant, prefilled and unsent — never to a web search.
+            is ModelPlanning.ToAssistant -> CommandOutcome.OpenAssistant(answer.question)
+            is ModelPlanning.Navigate -> CommandOutcome.Interpreted(Interpretation.Navigate(answer.destination))
+            is ModelPlanning.Clarify -> CommandOutcome.Message(CommandMessage.Verbatim(answer.question))
+            ModelPlanning.Declined -> ruleOutcome
+            // Finding (c) of the A1″ acceptance: a broken key or a dead endpoint is said, not hidden.
+            is ModelPlanning.Unavailable -> CommandOutcome.Message(CommandMessage.UnderstandingModelUnavailable(answer.reason))
         }
     }
 
@@ -191,12 +210,4 @@ class RouteCommandUseCase(
     /** Keeps a decided FastPath outcome byte-for-byte; replaces only the "unknown command" claim. */
     private fun CommandOutcome.orHonestly(message: CommandMessage): CommandOutcome =
         if (isUndecided()) CommandOutcome.Message(message) else this
-
-    /**
-     * A router proposal never auto-executes (R4). [ActionRiskLevel.SAFE] families may render as a
-     * one-tap suggestion (`false`); everything else — including any unregistered/unknown descriptor —
-     * requires an explicit confirm card (`true`), the fail-safe default.
-     */
-    private fun needsConfirmation(plan: PlanResult.RoutedAction): Boolean =
-        requiresConsent(catalog.descriptor(plan.action.id)?.risk ?: ActionRiskLevel.DANGEROUS)
 }

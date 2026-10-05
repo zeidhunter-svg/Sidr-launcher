@@ -11,7 +11,8 @@ import com.sidr.launcher.core.testing.FakeActionCatalog
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeAgentSessionStore
 import com.sidr.launcher.core.testing.FakeAliasStore
-import com.sidr.launcher.core.testing.FakeCommandPlanner
+import com.sidr.launcher.core.testing.FakeMentionBinder
+import com.sidr.launcher.core.testing.FakeModelPlanner
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
@@ -232,8 +233,8 @@ class LauncherScreenAgentProvenanceTest {
         )
         val routeUseCase = RouteCommandUseCase(
             handleUserCommand = useCase,
-            planner = FakeCommandPlanner(),
-            catalog = FakeActionCatalog(),
+            modelPlanner = FakeModelPlanner(),
+            binder = FakeMentionBinder(),
             featureFlagRepository = FakeFeatureFlagRepository(),
             providerConfigRepository = configuredProvider(),
             connectivityChecker = FakeConnectivityChecker(),
@@ -260,7 +261,6 @@ class LauncherScreenAgentProvenanceTest {
                 executor = fakeExecutor,
             ),
             actionExecutor = fakeExecutor,
-            actionCatalog = FakeActionCatalog(),
             usageHistoryRepository = FakeUsageHistoryRepository(),
             featureFlagRepository = FakeFeatureFlagRepository(),
             userPreferencesRepository = FakeUserPreferencesRepository(),

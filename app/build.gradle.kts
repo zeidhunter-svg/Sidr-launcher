@@ -152,6 +152,10 @@ dependencies {
     testImplementation(project(":core:testing"))
     testImplementation(libs.junit4)
     testImplementation(libs.coroutines.test)
+    // A4′ phase 3a: the bridge's payload guard drives the real transport over a MockEngine and reads
+    // the JSON it sent. Test-only.
+    testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.serialization.json)
 
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)

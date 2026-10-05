@@ -9,7 +9,6 @@ import com.sidr.launcher.core.common.di.ApplicationScope
 import com.sidr.launcher.core.common.di.IoDispatcher
 import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
-import com.sidr.launcher.domain.action.ActionCatalog
 import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.AgentSessionStore
 import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
@@ -66,19 +65,16 @@ import javax.inject.Inject
 class LauncherViewModel @Inject constructor(
     private val installedAppsRepository: InstalledAppsRepository,
     // S2-2 Task 8: alias resolution wraps S2-1's learned-resolution decorator. It only fills Unknown,
-    // so no-alias and every non-Unknown outcome stay byte-for-byte on the existing rule/router path.
+    // so no-alias and every non-Unknown outcome stay byte-for-byte on the existing rule/model path.
     private val resolveCommand: ResolveCommandWithAliasUseCase,
     // S2-1 Task 11: records an explicit candidate choice from the app-ambiguity flow, fire-and-forget
     // on [applicationScope]. Never consulted for decision-making in the VM — only invoked after a
     // successful launch of a candidate the pending token actually offered.
     private val recordResolutionChoice: RecordResolutionChoiceUseCase,
-    // AIL-5: executes a *confirmed* router-proposed LauncherAction (resolve → execute) via the same
-    // proven resolver/executor path. Only reached from confirmRoutedAction() — never on submit.
+    // The web chip's act (resolve → execute) via the same proven resolver/executor path. Since A4′ phase
+    // 3a deleted the router's confirm card, the chip is its only caller — never the model's path.
     private val executeAction: ExecuteActionUseCase,
     private val actionExecutor: ActionExecutor,
-    // AIL-5: read-only lookup of a proposed action's descriptor (its risk drives needsConfirmation in
-    // RouteCommandUseCase; here it supplies the optional permissionGate for the education flow).
-    private val actionCatalog: ActionCatalog,
     // Domain interfaces — injected from :app via Hilt. No feature→data edge.
     private val usageHistoryRepository: UsageHistoryRepository,
     private val featureFlagRepository: FeatureFlagRepository,
@@ -89,7 +85,7 @@ class LauncherViewModel @Inject constructor(
     // command path. The launcher core never depends on it — when unavailable the mic is hidden.
     private val speechInputSource: SpeechInputSource,
     // AIL-6: drives the home status line (● online / ○ offline). Domain port — the VM stays
-    // Android-free; reachability signals whether the cloud router/assistant is available.
+    // Android-free; reachability signals whether the cloud model/assistant is available.
     private val connectivityChecker: ConnectivityChecker,
     // DS-6B Task 9: the sanctioned production addition — the opt-in prayer context for the Home
     // strip. Its own [prayerContext] StateFlow is cold + WhileSubscribed, so nothing calculates on
@@ -106,8 +102,8 @@ class LauncherViewModel @Inject constructor(
     private val agentSessionStore: AgentSessionStore,
     // A4′ phase 3a: the interpretation card's «Выполнить» starts the model's plan through the engine.
     private val startAgentSession: StartAgentSessionUseCase,
-    // Task 10 / A1': read-only lookup of a registered tool's descriptor, the same shape and the same
-    // reason [actionCatalog] is here. The surface must be able to say where an EXTERNAL tool's effect
+    // Task 10 / A1': read-only lookup of a registered tool's descriptor (the shape the deleted router's
+    // `ActionCatalog` lookup had here). The surface must be able to say where an EXTERNAL tool's effect
     // goes (`DOC-ILM-2`), and provenance lives on the descriptor — a plan step carries the tool's id
     // and its risk, not its level or effect. The registry is a domain port, so the VM stays
     // Android-free and no feature -> data edge appears.
@@ -333,7 +329,6 @@ class LauncherViewModel @Inject constructor(
     private val commandSession: LauncherCommandSession = LauncherCommandSession(
         resolveCommand = resolveCommand,
         executeAction = executeAction,
-        actionCatalog = actionCatalog,
         universalInputRouter = UniversalInputRouter,
         savedStateHandle = savedStateHandle,
         appLaunch = appLaunch,
@@ -348,7 +343,6 @@ class LauncherViewModel @Inject constructor(
     val commandInput: StateFlow<String> get() = commandSession.input
     val inputResults: StateFlow<HomeInputResults> get() = commandSession.liveResults
     val commandFeedback: StateFlow<CommandFeedback> get() = commandSession.feedback
-    val pendingRoutedAction: StateFlow<PendingRoutedAction?> get() = commandSession.pendingRoutedAction
 
     /** A4′ phase 3a: the model's reading, shown before anything runs (spec §7.12.3 condition 1). */
     val interpretation: StateFlow<Interpretation?> get() = commandSession.interpretation
@@ -422,6 +416,10 @@ class LauncherViewModel @Inject constructor(
     }
 
     fun onSuggestionClicked(suggestion: Suggestion) {
+        // A4′ phase 3a (Task 11, hole H8): a suggestion is the user going somewhere else — a screen, an
+        // app — so a command still waiting on the model is abandoned here, for every branch below. The app
+        // branch calls it again through onAppClicked; a second call finds nothing pending.
+        commandSession.supersedeWaitingCommand()
         val app = (uiState.value as? UiState.Success)
             ?.data
             ?.apps
@@ -442,6 +440,9 @@ class LauncherViewModel @Inject constructor(
     /** Tap-to-launch from the grid (or from an ambiguity suggestion): the app is already known, */
     /** so launch it directly through the executor — no matching needed. Does not touch input. */
     fun onAppClicked(app: InstalledApp) {
+        // A4′ phase 3a (T9 m2): the user opened an app — a command still waiting on the model is abandoned,
+        // or its late answer would navigate away from the app or stand a card over it.
+        commandSession.supersedeWaitingCommand()
         appLaunch.launch(
             packageName = app.packageName,
             activityName = app.activityName,
@@ -467,16 +468,6 @@ class LauncherViewModel @Inject constructor(
             return
         }
         voiceInput.start(languageTag)
-    }
-
-    /** Execute the pending router proposal (AIL-5) — see [LauncherCommandSession.confirm]. */
-    fun confirmRoutedAction() {
-        commandSession.confirm()
-    }
-
-    /** Dismiss the pending router proposal without executing — see [LauncherCommandSession.cancel]. */
-    fun cancelRoutedAction() {
-        commandSession.cancel()
     }
 
     fun runInterpretation() = commandSession.runInterpretation()

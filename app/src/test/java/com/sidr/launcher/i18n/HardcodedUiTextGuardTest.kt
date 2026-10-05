@@ -76,11 +76,10 @@ class HardcodedUiTextGuardTest {
      * 2. **The hidden dev console** (~12 literals: the 7-tap wordmark arm, the `//dev-mode` toggle,
      *    `outcomeSummary` labels) - a debug surface, not product; `outcomeSummary` values are pipeline
      *    state names, more useful stable than translated. F3's case-insensitive sink match additionally
-     *    catches `RISK_CONFIRM_LABEL = "CONFIRM"` in the same file - spec §7.1 enumerated locked
+     *    caught `RISK_CONFIRM_LABEL = "CONFIRM"` in the same file - spec §7.1 enumerated locked
      *    vocabulary (the DF-4 gate-risk chip, deliberately identical in every locale), not a miss to
-     *    extract: `riskLabel` is born in the command pipeline, so resolving it to a resource needs the
-     *    full spec §8 typed-value refactor through `PendingRoutedAction` + `ConfirmActionCard` + their
-     *    tests, well outside a fix round. One exemption entry covers both reasons for this one file.
+     *    extract. That constant left with the router's confirm card in A4′ phase 3a (D3), so today the
+     *    entry stands on the dev console alone; its second reason is kept below as the record.
      *    Task 4 / A0 (Этап 4) moved this whole surface out of `LauncherViewModel.kt` into
      *    `LauncherCommandSession.kt`; the exemption key moved with it - same code, same reasons.
      */

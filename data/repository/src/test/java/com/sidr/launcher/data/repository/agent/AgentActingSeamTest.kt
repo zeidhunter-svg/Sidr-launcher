@@ -5,10 +5,10 @@ import android.content.Intent
 import android.provider.AlarmClock
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import com.sidr.launcher.core.testing.FakeActionCatalog
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeAliasStore
-import com.sidr.launcher.core.testing.FakeCommandPlanner
+import com.sidr.launcher.core.testing.FakeMentionBinder
+import com.sidr.launcher.core.testing.FakeModelPlanner
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
@@ -142,7 +142,7 @@ class AgentActingSeamTest {
     private lateinit var store: RoomAgentSessionStore
 
     /** The one dependency of [RouteCommandUseCase] that can leave the device. */
-    private val modelPlanner = FakeCommandPlanner()
+    private val modelPlanner = FakeModelPlanner()
 
     /** Every intent the Tier-0 worker issues, in order. Empty is an assertion, not an absence. */
     private val launched = mutableListOf<Intent>()
@@ -263,8 +263,8 @@ class AgentActingSeamTest {
             confidencePolicy = DefaultIntentConfidencePolicy(),
             recordingScope = CoroutineScope(SupervisorJob()),
         ),
-        planner = modelPlanner,
-        catalog = FakeActionCatalog(),
+        modelPlanner = modelPlanner,
+        binder = FakeMentionBinder(),
         featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = localOnly)),
         providerConfigRepository = configuredProvider(),
         connectivityChecker = FakeConnectivityChecker(initiallyOnline = online),
@@ -571,7 +571,7 @@ class AgentActingSeamTest {
     }
 
     /**
-     * **Non-vacuity for every `planCallCount == 0` above.** The same [FakeCommandPlanner] instance,
+     * **Non-vacuity for every `planCallCount == 0` above.** The same [FakeModelPlanner] instance,
      * built by the same [routeUseCase] wiring, *does* record a command on the path where consulting a
      * model is correct. Without this, a zero call count would be a fact about a disconnected fake.
      */
@@ -595,6 +595,11 @@ class AgentActingSeamTest {
      * The first assertion is what makes this a reproduction rather than a restatement: the vocabulary
      * *did* claim the text for `uninstall_app`; only [AppTargetResolver] declined. Changing the routing
      * is **A4′'s** (`CLAUDE.md`, A1′ residual (3)), not this task's.
+     *
+     * **After A4′ phase 3a (D3) it is still named, not closed** (spec §7.12.3): the fall-through now
+     * reaches the bridge's `ModelPlanner` at step 7, which is a routing rule (ADR 1/4) rather than a
+     * store accident, and binding answers the user instead of running anything — but the decision to
+     * send the raw text is still made by an unresolved name. Its address is 3b or the owner.
      */
     @Test
     fun `R14-39 - an unresolvable target makes a matched tool command fall through to the cloud model`() =

@@ -17,7 +17,7 @@ interface IntentMatcher {
  * [MatcherSource.AI] is intentionally absent to prevent the two-port invariant from
  * being silently violated. The local ONNX NLU classifier (formerly `NLU`) was removed in the
  * agentic-restart Этап 0.3 (ADR 2/4 — OQ#1/#2 closed); understanding past FastPath now routes to
- * the model planner (`CommandPlanner`), a different port, not a matcher source.
+ * the bridge's model planner (`ModelPlanner`, A4′ phase 3a), a different port, not a matcher source.
  */
 enum class MatcherSource { RULE_BASED }
 

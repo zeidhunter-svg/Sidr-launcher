@@ -4,12 +4,12 @@ import com.sidr.launcher.domain.action.LauncherAction
 import com.sidr.launcher.domain.result.OperationResult
 
 /**
- * Use case (AIL-5): executes a **confirmed** router-proposed [LauncherAction], returning a
- * [CommandOutcome] for the UI.
+ * Use case (AIL-5): executes a [LauncherAction], returning a [CommandOutcome].
  *
- * This is the execution counterpart to AIL-4's routing: the LLM router surfaces a proposal
- * ([CommandOutcome.RoutedAction]) that is **never** auto-executed (Fork R4); once the user confirms
- * (or one-taps a SAFE proposal), the ViewModel calls here to actually run it.
+ * It was born as the execution half of the AIL-4 router's confirm card; the router was deleted in A4′
+ * phase 3a (D3). Two callers remain, neither of them the model's path: the `in_app` tool worker
+ * (`SystemIntentToolWorker`), which the engine reaches only below the consent checkpoint, and the web
+ * route chip, which the USER points at a destination (`OneModelPathGuardTest`).
  *
  * It maps each [LauncherAction] family to a [LauncherIntent] and resolves + executes it through the
  * **unchanged** [IntentActionResolver] + [ActionExecutor] — the same proven path the rule pipeline

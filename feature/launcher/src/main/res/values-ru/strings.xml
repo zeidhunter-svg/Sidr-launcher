@@ -51,12 +51,6 @@
     <string name="launcher_setup_nudge_body">Установите Sidr в качестве launcher\'а по умолчанию, затем вводите текст или ищите в поле выше, чтобы открывать приложения.</string>
     <string name="launcher_setup_nudge_action">Сделать по умолчанию</string>
 
-    <string name="launcher_confirm_execute_title">Выполнить?</string>
-    <string name="launcher_confirm_will_run">Будет выполнено: %1$s</string>
-    <string name="launcher_confirm_confirm">Подтвердить</string>
-    <string name="launcher_safe_proposal_description">Безопасное предложение. Всё равно ожидает вашего подтверждения.</string>
-    <string name="launcher_safe_proposal_run">Выполнить</string>
-
     <string name="launcher_drawer_title">Все приложения</string>
     <string name="launcher_drawer_back">Назад</string>
     <string name="launcher_drawer_ask_assistant">Спросить ассистента: «%1$s»</string>

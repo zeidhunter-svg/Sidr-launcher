@@ -130,6 +130,20 @@ class LauncherViewModel @Inject constructor(
         _navigationEvents.trySend(NavigationEvent.NavigateTo(route))
     }
 
+    /**
+     * A user gesture on Home that opens another screen — the ASK chip, the prayer strip's details
+     * (A4′ phase 3a, Task 11 fix round 1, review m2). The user has gone somewhere else, so a command still
+     * waiting on the model is abandoned first; left running, its slow answer would queue a navigation of
+     * its own (`OpenAssistant`) that fires the next time Home collects events, or put a card up behind the
+     * screen the user chose. Deliberately NOT [navigateTo]: that is also the path the command session's
+     * `onNavigate` takes for an outcome's OWN navigation, from inside the command's coroutine, and the
+     * session must never cancel the command it is applying.
+     */
+    fun navigateByUser(route: String) {
+        commandSession.supersedeWaitingCommand()
+        navigateTo(route)
+    }
+
     fun navigateBack() {
         _navigationEvents.trySend(NavigationEvent.NavigateBack)
     }

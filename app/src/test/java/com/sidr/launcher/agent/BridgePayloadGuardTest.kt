@@ -91,7 +91,18 @@ import org.junit.Test
  *    learned choices (binder): planted, asserted absent from every body, each with a control proving it
  *    was read on the device;
  *  - three it holds NO port to — prayer location, calendar, usage history: asserted absent, and held
- *    STRUCTURALLY by `the bridge's classes take no port to prayer, calendar or usage data`.
+ *    STRUCTURALLY by `the bridge's classes take no port to prayer, calendar or usage data`. Their
+ *    sentinels are planted nowhere — there is nowhere to plant them — so the scan of the bodies is not
+ *    what holds these three; the signature scan is.
+ *
+ * **What a red here proves about WHICH source leaked** (Task 11 fix round 1, review m4). The alias and
+ * learned-choice targets (`net.fixture.zantor` / «Zantor», `net.fixture.tessar.one` / `.two`) are also
+ * installed apps — they have to be, or the binder could not bind them. So a red naming
+ * `alias table: net.fixture.zantor` or `learned choices: net.fixture.tessar.two` (mutation M11d's
+ * message) proves that the BOUND value leaked, not which store it came from. What singles out a source
+ * is the sentinel only that source holds: «плимдорф» / `net.fixture.plimdorf` for the alias table,
+ * «фальмира» / `net.fixture.falmira` for learned choices, «Vemblic» / `net.fixture.vemblic` for the app
+ * list — each never typed and never bound, so it can only reach a body by that store being read whole.
  *
  * **Why «Pellix» stays although Task 10 renamed it in its own tests (R14-43).** There the label and the
  * package were both EXPECTED values on a rendered card, and a substring check could pass on the wrong

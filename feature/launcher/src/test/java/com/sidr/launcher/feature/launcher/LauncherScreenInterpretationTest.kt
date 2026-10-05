@@ -1,9 +1,12 @@
 package com.sidr.launcher.feature.launcher
 
+import android.net.Uri
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.SavedStateHandle
+import com.sidr.launcher.core.common.navigation.NavigationEvent
+import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.core.testing.FakeActionCatalog
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeAgentSessionStore
@@ -63,14 +66,19 @@ import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -206,6 +214,50 @@ class LauncherScreenInterpretationTest {
         compose.waitForIdle()
 
         compose.onNodeWithText("The model asks: почему небо синее").assertExists()
+    }
+
+    /**
+     * Task 11 fix round 1 (review m2): the ASK chip is the user taking the command to the assistant while
+     * the model is still reading it. The chip's own navigation happens and the command is abandoned — its
+     * slow answer (the assistant with the question) would otherwise queue a SECOND navigation, which fires
+     * into the assistant again the next time Home collects its events. Driven through the real screen,
+     * because the chip's wiring lives in [LauncherScreen], not in the ViewModel.
+     */
+    @Test
+    fun `the ASK chip abandons a command still waiting on the model`() {
+        var answered = false
+        val vm = show(
+            CommandRouteStep {
+                delay(10_000)
+                answered = true
+                CommandOutcome.OpenAssistant("почему небо синее")
+            },
+        )
+        val navigations = mutableListOf<NavigationEvent>()
+        val collector = CoroutineScope(dispatcher + Job())
+        collector.launch { vm.navigationEvents.collect { navigations += it } }
+        vm.onCommandChanged("почему небо синее")
+        vm.onCommandSubmitted("почему небо синее")
+        scheduler.advanceTimeBy(1_000)
+        scheduler.runCurrent()
+        compose.waitForIdle()
+        assertTrue("the command is still waiting on the model", vm.thinking.value)
+
+        compose.onNodeWithText("ASK").performClick()
+        compose.waitForIdle()
+        assertFalse("the wait goes at the tap, not when the abandoned answer would have come", vm.thinking.value)
+
+        scheduler.advanceTimeBy(20_000)
+        scheduler.runCurrent()
+        compose.waitForIdle()
+
+        assertEquals(
+            "only the chip's own navigation",
+            listOf<NavigationEvent>(NavigationEvent.NavigateTo(Routes.Assistant.routeFor(Uri.encode("почему небо синее")))),
+            navigations,
+        )
+        assertFalse("the model call itself was cancelled, not merely ignored", answered)
+        collector.cancel()
     }
 
     private fun buildViewModel(route: CommandRouteStep): LauncherViewModel {

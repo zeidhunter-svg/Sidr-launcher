@@ -306,12 +306,22 @@ internal class LauncherCommandSession(
 
     /**
      * A4′ phase 3a, Task 11 (Task 9 review m2): a gesture that does something ELSE abandons a command
-     * still waiting on the model — the WEB chip ([submitWebSearch]) and a tap on an app
-     * (`LauncherViewModel.onAppClicked`). Left running, the slow answer would land over what the user
-     * just did: `OpenAssistant(question)` navigates away from the app they opened, a card stands over the
+     * still waiting on the model. Left running, the slow answer would land over what the user just did:
+     * `OpenAssistant(question)` navigates away from the app or screen they opened, a card stands over the
      * search they chose. The command's coroutine is cancelled, the model call with it, and the wait goes.
+     * Its callers, all of them:
+     *  - the WEB chip — [submitWebSearch], here;
+     *  - a tap on an app, from the grid or an ambiguity candidate — `LauncherViewModel.onAppClicked`;
+     *  - every suggestion tap, before its branch — `LauncherViewModel.onSuggestionClicked` (its app branch
+     *    reaches `onAppClicked` and calls again, finding nothing pending);
+     *  - the ASK chip and the prayer strip's details, from `LauncherScreen` — `LauncherViewModel.navigateByUser`.
      * [submitSite] needs no call: it is a [submit], which supersedes on its own. [onChanged] and
      * [cancelThinking] keep their own lines, written out where they are.
+     *
+     * NAMED, not built: a switch of the bottom tab leaves Home without passing through the ViewModel
+     * (`AppNavHost`), and the mic's permission-education route and the «Set up provider» button still call
+     * `navigateTo` — a command waiting on the model survives those three: its outcome is still applied,
+     * and a navigation it carries fires when Home collects its events again.
      */
     internal fun supersedeWaitingCommand() {
         pending?.cancel()

@@ -181,7 +181,7 @@ fun LauncherScreen(
             HomePrayerStrip(
                 visible = !inputResults.active && !devConsoleOn,
                 summary = prayerContext.toHomePrayerSummaryUi(),
-                onOpenDetails = { viewModel.navigateTo(Routes.PrayerDetail.ROUTE) },
+                onOpenDetails = { viewModel.navigateByUser(Routes.PrayerDetail.ROUTE) },
             )
 
             // DS-4: Universal Input replaces the legacy SidrCommandPrompt. Submit drives the existing
@@ -213,7 +213,7 @@ fun LauncherScreen(
                         hasSiteRoute = inputResults.chips.contains(RouteChipKind.SITE),
                         onWeb = { viewModel.submitWebSearch(commandInput) },
                         onAsk = {
-                            viewModel.navigateTo(Routes.Assistant.routeFor(Uri.encode(commandInput.trim())))
+                            viewModel.navigateByUser(Routes.Assistant.routeFor(Uri.encode(commandInput.trim())))
                         },
                         onSite = { viewModel.submitSite(commandInput) },
                     )

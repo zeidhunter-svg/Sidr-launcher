@@ -7,9 +7,16 @@ import java.io.File
 
 /**
  * Criterion 14 (spec §7.12.6): one model path. The router is gone from production code, and nothing the
- * model proposes that acts can bypass the engine — the one direct execution left in the launcher is the
- * web chip, which the USER points at a destination (spec §7.12.3: FastPath and the route chips are not
- * the model's path). Comments are stripped: history may name the router; code may not.
+ * model proposes that acts can bypass the engine — the one direct execution of a `LauncherAction` left in
+ * the launcher is the web chip, which the USER points at a destination (spec §7.12.3: FastPath and the
+ * route chips are not the model's path). Comments are stripped: history may name the router; code may not.
+ *
+ * **What "direct execution" means here, and what it does not** (Task 11 fix round 1, review m3). The
+ * claim is about `LauncherAction`s executed through `ExecuteActionUseCase` — the path the deleted router's
+ * confirm card used. It is NOT that the launcher executes nothing else directly: a tap on an app in the
+ * grid, on a suggestion or on an ambiguity candidate, and FastPath's learned AutoLaunch, launch an app the
+ * user (or the user's own learned choice) named, through `LauncherAppLaunch` and the `ActionExecutor` —
+ * user-chosen app launches, not a model's step, and not scanned here.
  *
  * **What the stripping cannot see, named rather than implied absent** (Task 11, hole H7). The comment
  * stripper is two regexes, not a lexer. A block-comment opener (slash, star) inside a string literal —
@@ -53,7 +60,7 @@ class OneModelPathGuardTest {
     }
 
     @Test
-    fun `the launcher executes an action directly in exactly one place, the web chip`() {
+    fun `the launcher executes a LauncherAction directly in exactly one place, the web chip`() {
         val launcher = File(repoRoot, "feature/launcher/src/main")
         val calls = launcher.walkTopDown().filter { it.isFile && it.extension == "kt" }.flatMap { file ->
             Regex("""executeAction\.execute\(""").findAll(strip(file.readText())).map { file.name }
@@ -64,13 +71,47 @@ class OneModelPathGuardTest {
         val chip = session.substringAfter("fun submitWebSearch(").substringBefore("\n    fun ")
         assertTrue("the one call is the web chip's", chip.contains("executeAction.execute("))
 
-        // Task 11 ruling on hole H6: the call regex above sees only the literal `executeAction.execute(`.
-        // A second path written `executeAction.let { it.execute(…) }`, `executeAction::execute`, or by
-        // handing the field to a helper would slip past it. So the FIELD is counted instead, as a whole
-        // word in the comment-stripped code: its declaration and the chip's one call, nothing else. The word
-        // boundary makes every use count whatever follows it (`.`, `::`, `?.`, `)`, `,`) and keeps a longer
-        // identifier from counting (`reexecuteAction`); the type `ExecuteActionUseCase` differs in case.
-        val fieldUses = Regex("""\bexecuteAction\b""").findAll(strip(session)).count()
-        assertEquals("`executeAction`: the declaration and the web chip's one call", 2, fieldUses)
+        // Task 11 holes H6 and m3: the call regex above sees only the literal `executeAction.execute(` —
+        // `executeAction.let { it.execute(…) }`, `executeAction::execute`, an alias or a helper slips past it,
+        // and it reads one file's field name. So the scan is keyed on the TYPE instead, across every file of
+        // `feature/launcher/src/main`:
+        //  (1) every identifier DECLARED as an `ExecuteActionUseCase` (`name: ExecuteActionUseCase`) is found,
+        //      whatever it is called and whichever class holds it, and every whole-word use of it in that
+        //      file's stripped code is counted. The word boundary counts a use whatever follows it (`.`, `::`,
+        //      `?.`, `)`, `,`) and keeps a longer identifier (`reexecuteAction`) from counting. Expected: the
+        //      session declares it and calls it once (the chip, 2); the ViewModel declares it and hands it to
+        //      the session (`executeAction = executeAction`, 3) — and no other file holds one;
+        //  (2) the type's own name is counted per file too (import + declared type = 2 each), so an instance
+        //      built inline, cast to, or aliased in a file that declares no identifier of the type is seen.
+        // Keyed on the type rather than on two field names because a renamed field, or a third holder,
+        // would leave a name-keyed count silently reading nothing.
+        // Keyed by the path under `src/main`, not the bare file name: two classes of the same name in two
+        // packages must not collapse into one entry.
+        val sources = launcher.walkTopDown().filter { it.isFile && it.extension == "kt" }
+            .associate { it.relativeTo(launcher).invariantSeparatorsPath to strip(it.readText()) }
+        val sessionPath = "java/com/sidr/launcher/feature/launcher/LauncherCommandSession.kt"
+        val viewModelPath = "java/com/sidr/launcher/feature/launcher/LauncherViewModel.kt"
+        val declared = Regex("""\b(\w+)\s*:\s*ExecuteActionUseCase\b""")
+        val identifierUses = sources.mapNotNull { (name, code) ->
+            val identifiers = declared.findAll(code).map { it.groupValues[1] }.toSet()
+            if (identifiers.isEmpty()) {
+                null
+            } else {
+                name to identifiers.sumOf { id -> Regex("""\b${Regex.escape(id)}\b""").findAll(code).count() }
+            }
+        }.toMap()
+        assertEquals(
+            "every use of an ExecuteActionUseCase-typed identifier: declared and called once in the session, " +
+                "declared and handed over in the ViewModel",
+            mapOf(sessionPath to 2, viewModelPath to 3),
+            identifierUses,
+        )
+        val typeMentions = sources.mapValues { (_, code) -> Regex("""\bExecuteActionUseCase\b""").findAll(code).count() }
+            .filterValues { it > 0 }
+        assertEquals(
+            "the type is imported and declared in these two files only",
+            mapOf(sessionPath to 2, viewModelPath to 2),
+            typeMentions,
+        )
     }
 }

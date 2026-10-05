@@ -1,8 +1,9 @@
 package com.sidr.launcher.domain.action
 
 /**
- * Port: the registered set of [ActionDescriptor]s the router (AIL-4) and UI (AIL-5) can enumerate and
- * look up by [ActionId].
+ * Port: the registered set of [ActionDescriptor]s, enumerated and looked up by [ActionId]. Its readers
+ * today are `SystemIntentToolSource` (the `in_app` tool projection) and the learned-choice decorator;
+ * the AIL-4 router and AIL-5 confirm UI it was first written for were deleted in A4′ phase 3a.
  *
  * Kept an interface in `domain` per the hard rule (interfaces here, implementations in the data
  * layer). The

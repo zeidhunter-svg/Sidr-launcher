@@ -671,6 +671,9 @@ delta.
 > `:domain` 529. → T10 **1680**, T11 **1654**.
 > **T10: 1691** = 1680 + 11 (controller rulings on the implementer's test holes, all `:feature:launcher`, 254; detail under
 > Task 10 Step 6) → T11 **1665**.
+> **T11: 1669** = 1665 + 4 (controller rulings: T9's m2 +2, H2 +1 `:domain`, H8 +1) → review fix **1670** (+1, the ASK
+> chip); `:domain` 512 · `:data:repository` 432 · `:feature:launcher` 254 · `:app` 76 · `:data:ai-cloud` 40. T12 and T13
+> add no test.
 
 - Task 11 is the only task whose total falls: −41 removed (P4) and +15 added (`:domain` +6, `:app` +8,
   `:feature:launcher` +1; the migrated tests keep their counts) → **1670 − 26 = 1644**. With F3a-B (b)
@@ -7653,6 +7656,16 @@ class OfferedToolIdsFreezeGuardTest {
   - `tools/gate.sh --scoped :app:testDebugUnitTest` → `76` (68 + 5 + 2 + 1);
   - `:core:testing` compiles with `FakeCommandPlanner` gone; `:consumer:jvm` unchanged (72).
 
+  > **Measured in execution (2026-10-05):** these numbers came from pre-T4 bases. The module DELTAS held exactly; on the
+  > tree of the day (T10, 1691) they read `:domain` 529 → **511**, `:data:ai-cloud` 51 → **40**, `:data:repository`
+  > 433 → **432**, `:feature:launcher` 254 → **250**, `:app` 68 → **76**. On top of that, controller rulings added
+  > `:feature:launcher` +2 (T9's deferred m2 — the WEB chip and a grid tap supersede a command still waiting on the
+  > model), `:domain` +1 (H2 — `Binding.Unavailable` → `Failed(Generic)`) and `:feature:launcher` +1 (H8 — a suggestion
+  > tap supersedes) → **1669**. The review's fix round added +1 `:feature:launcher` (the ASK chip, screen level) → **1670**.
+  > Step 4 missed one file: `LauncherScreenInterpretationTest` (Task 10) also passes `actionCatalog =` and loses it.
+  > The brief's line addresses had drifted (`RoutedAction` `:65-77`; `LauncherViewModel` `:79-81`, `:351`, `:472-480`;
+  > `LauncherScreen` `:114`, `:253-271`, `:741-780`); the quoted texts matched.
+
 - [ ] **Step 11: mutations — twelve.**
 
 | # | File · plant: old → new | Proves | Predicted `FAILED ::` |
@@ -7673,12 +7686,53 @@ class OfferedToolIdsFreezeGuardTest {
   (M11g and M11i plant a new file: restore with `rm -f "$F"` and `test ! -e "$F" && echo RESTORED`.
   `:domain` compiles M11g; M11i compiles in `:domain` too — an unused interface.)
 
+> **Measured in execution (2026-10-05) — M11a–M11l PROVED, with four rows corrected by reading before the run and confirmed
+> by it.** **M11b** reddens nine `:domain` tests, not four: also `BridgeValidatorTest > a registered tool outside the
+> offering is rejected before anything runs` and four `BridgeModelPlannerTest` tests (`an invalid answer is asked again
+> exactly once…`, `a rejected id gets the same retry text…`, `a second invalid answer is unreadable…`, `the ceiling covers
+> both attempts`) — the bridge fixtures register `set_app_alias` and a shortcut, which the plant offers; one of the nine
+> fails with `IndexOutOfBoundsException` (a retry request never sent), behavioural, not a compile error. **M11e** adds
+> `> a rejected id gets the same retry text…` (three in `:domain`). **M11l** adds `:data:repository` —
+> `FastPathOverflowSeamTest > a search whose conjunction joins two nouns is still run by FastPath and the model is not
+> asked` (`Executed` is decided; with step 4 gone it reaches step 7); `:feature:launcher` measured green. **M11d** also
+> reddens `:domain` test (a) once H1 pins `lastCommand`; its XML message names `installed apps: net.fixture.lumora`,
+> `alias table: net.fixture.zantor`, `learned choices: net.fixture.tessar.two` in all three transport forms. Task 9's
+> **M9h** lost its anchor (`_pendingRoutedAction.value = null` is deleted here) — re-anchored on
+> `        _interpretation.value = null\n        when (outcome) {\n` → `        when (outcome) {\n`.
+>
+> Eleven more plants, from two controller rulings and the implementer's hunt for tests that cannot fail, each PROVED with
+> exactly its own red:
+>
+> | # | What it removes | Red |
+> |---|---|---|
+> | M11-R1 | a forbidden term («functions»→«locations», same length) in the DEVICE header of the offering's fixed text | `:domain` `BridgeRenderingTest > the offering is grouped by namespace…`; `:app` `BridgePayloadGuardTest > the catalog part…` (message `a denylisted term in the offering's fixed text … [location]`) |
+> | R2a / R2b | the supersede call in the WEB chip / in a grid tap | `LauncherViewModelTest > the web chip supersedes…` / `> a tap on an app supersedes…` |
+> | H1a / H1b | the trim of the command at step 7 / `GoalShape.Free` | `RouteCommandUseCaseTest > a model plan becomes an interpretation…` |
+> | H2 | `Binding.Unavailable -> ruleOutcome` | `> an unreadable app list is said as a failure, not hidden behind FastPath's answer` (new) |
+> | H3 | one fixed reason for every `Unavailable` | `> an unavailable model is said so, with its reason` (now total over the enum) |
+> | H4 | `"~ " +` before the command in the user message | `:app` controls test; `:data:ai-cloud` two transport tests |
+> | H5 | a `() -> UsageHistoryRepository` port (erased type) | `> the bridge's classes take no port to prayer, calendar or usage data` (generic signatures now read) |
+> | H6 | `executeAction.let { it.execute(…) }` beside the chip | `OneModelPathGuardTest > the launcher executes a LauncherAction directly in exactly one place, the web chip` |
+> | H8 | the supersede call in a suggestion tap | `LauncherViewModelTest > a suggestion that opens a screen supersedes…` (new) |
+>
+> Task review fix round (`8b338a9`): F1-ASK and F1-ENTRY (the ASK chip back on `navigateTo` / `navigateByUser` without the
+> supersede) → `LauncherScreenInterpretationTest > the ASK chip abandons a command still waiting on the model`; F1-M3
+> (`executeAction.let { it.execute(…) }` in the ViewModel) and M11h/H6 against the guard rewritten on the
+> `ExecuteActionUseCase` type → the renamed `OneModelPathGuardTest` test. **F1-PRAYER is not proved by design**: the
+> prayer-details call site goes through `navigateByUser` and no test holds it — reachable during a wait when «Продолжить»
+> reroutes a model plan with an empty buffer (named, deferred).
+
 - [ ] **Step 12: boundary gate from a cleared tree** (`./gradlew --stop` first). Expected `GATE GREEN`,
   `TOTAL tests=1644`: `:domain` **509** · `:consumer:jvm` **72** · `:data:repository` **430** ·
   `:feature:launcher` **234** · `:app` **76** · the other eight **323** (`:data:ai-cloud` **39**). **The
   floor (1560) does not see the 41 deletions; the per-module numbers do** — a module short of its number
   is a red result whatever the total says. Also run `:app:assembleRelease --rerun-tasks` once: the router
   left the release graph (and `checkOwnerReviewedLocaleStrings` stays green — no Class B key moved).
+
+  > **Measured in execution (2026-10-05):** GATE GREEN **1669** at `9ecbcf1` (`:domain` 512 · `:consumer:jvm` 72 ·
+  > `:data:repository` 432 · `:feature:launcher` 253 · `:app` 76 · the other eight 324, `:data:ai-cloud` 40), then
+  > **1670** after the review fix `8b338a9` (`:feature:launcher` 254). `:app:assembleRelease --rerun-tasks` green,
+  > `checkOwnerReviewedLocaleStrings` ran. The deep reviewer re-ran the boundary gate itself: 1669, identical.
 
 - [ ] **Step 13: commit (controller).**
 

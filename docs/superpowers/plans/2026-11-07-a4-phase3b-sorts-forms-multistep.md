@@ -5,7 +5,7 @@
 > checkbox (`- [ ]`) syntax for tracking.
 
 > **Status: written 2026-11-07, reviewed once on 2026-11-08 against the tree and the spec, every finding
-> applied (§0.11). Not started.** Branch `launcher--7`, base `4138c1f`, gate baseline **1673 / 0 / 0**
+> applied (§0.11). Approved by the owner 2026-11-08, together with §0.1's two refinements. Not started.** Branch `launcher--7`, base `4138c1f`, gate baseline **1673 / 0 / 0**
 > (measured at the start of this session: boundary `tools/gate.sh`, cleared tree, `557 executed`, per
 > module exactly as 3a closed).
 > - **Spec:** [A4′ §7 — §7.12 governs, scope §7.12.4 «3b»](../specs/2026-09-21-a4-runtime-design.md), as

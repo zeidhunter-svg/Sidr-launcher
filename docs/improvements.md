@@ -508,7 +508,11 @@ translator server and the standalone product — a track of their own, by ADR (I
 
 > Framing only — analysis later; each idea goes through its own `brainstorm → spec → plan`. Remarks in
 > brackets are the agent's first reaction, not a decision. Anchor: ADR "2026-11-07 — Two principles of the
-> agentic OS".
+> agentic OS" and its addendum: Sidr is **an open-world operating system — open in capability, closed at the
+> boundaries**. "Open world" is native to an AI agent on the **understanding** side (language has no closed
+> command list; missing knowledge is "unknown", not "false") and unnatural on the **execution** side (the
+> model is probabilistic, the world is adversarial — injection through content); so the gates are built,
+> they do not arise by themselves.
 
 ### M. Sidr as a platform — layers, not a list of apps
 
@@ -534,12 +538,16 @@ the user's behalf — the user's last tap (→ K).
 A chat (and more broadly a "local social network") that Sidr users share with each other. (First reaction:
 invite-only circles instead of a public feed — removes most of the moderation burden; end-to-end encryption
 and peer-to-peer delivery with minimal "blind" relays; identity — keys, verified by QR; the distinguishing
-capability — agent↔agent: "my agent arranges it with yours" under both owners' consent.)
+capability — agent↔agent: "my agent arranges it with yours" under both owners' consent — e.g. two agents
+agree on a meeting time, each within the limits its owner allowed; going fully serverless is not possible —
+phones are switched off, networks block direct connections — but a relay carries ciphertext only.)
 
 ### P. News feed — region and topics of the user's choice
 
 A window or a strip on the home screen where world news runs automatically; the user picks the region and
 the events. (First reaction: a source on every headline and a mark on any generated summary — `DOC-ILM-5`;
 moving text must be pausable — accessibility, WCAG 2.2.2; fetching news reveals interests to the server —
-take generic feeds and filter on the device; off by default so the home screen stays calm; the agent tie-in —
-"what's new in Bishkek?".)
+take generic feeds and filter on the device; off by default so the home screen stays calm; a right-to-left
+ticker reads worse than a calm card feed or a widget that refreshes rarely; sources are visible to the user
+and changeable by them; the agent tie-in — "what's new in Bishkek?", "more on the third one", "follow this
+topic".)

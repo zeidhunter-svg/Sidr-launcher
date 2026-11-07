@@ -551,3 +551,17 @@ take generic feeds and filter on the device; off by default so the home screen s
 ticker reads worse than a calm card feed or a widget that refreshes rarely; sources are visible to the user
 and changeable by them; the agent tie-in — "what's new in Bishkek?", "more on the third one", "follow this
 topic".)
+
+### Q. A multi-layered open-world system — the Sidr ontology
+
+The owner's amendment to the formula: *an open multi-layered system built on the laws of the real world
+(mathematics, physics, computer science); closed at the boundary of each layer.* Spheres (ocean, atmosphere,
+space) do not cross their bounds, yet form one whole governed from one core; layers are visible to each
+other, some are invisible; the subject — the person — moves between layers. Refinements from the discussion:
+- a boundary is a **membrane**, not a wall: a pair of layers has two relations — **visibility** and
+  **permeability**;
+- the core is a **law**, the same in every layer, not a ruler; so the number of layers is unbounded;
+- **no layer is invisible to its owner** — invisibility only towards agents, models and other people;
+- resonance with the doctrine: *barzakh* (55:19–20), *mizan* (55:7–9), orbits (36:40).
+
+Draft of concepts and axioms (Russian): [`docs/governing/sidr-ontology-v0.1.md`](governing/sidr-ontology-v0.1.md).

@@ -628,8 +628,8 @@ below is recorded in its own ADR.
   unreviewed draft (owner, 2026-11-07).
   **(7)** `README.md`, `docs/roadmap.md`, `docs/agentic-os-architecture.md` and both master plans still
   name the deleted router (the lines, among them, in `§HANDOFF`) — follow-ups, each under its own change
-  control. ADR «Два принципа» expected the Master Plan to reference it at this close — not done (the
-  Master Plan has its own change control) → owner.
+  control. ADR «Два принципа» is referenced from the Master Plan's header (added after the close, owner
+  decision 2026-11-07).
 - **`CODE-GREEN`, not `DEVICE-ACCEPTED`:** DS-5's own acceptance checklist has never been run
   (since 2026-07-13); I18N-1 was verified only by agent-driven `adb`/`uiautomator` — its offline path, live
   TalkBack, fontScale 2.0, and the system per-app-language picker are untested. DS-6B is `CLOSED` (owner

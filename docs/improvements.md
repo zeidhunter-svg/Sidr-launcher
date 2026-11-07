@@ -501,3 +501,45 @@ declarations); (2) the translator as a capability via BYOK; (3) the environments
 reconciliation, generations, palette; first consumers: first launch (H), then "Children", "Care" (L) and
 the full-access window; (4) identity — A3 and A5 (K); (5) multi-agent support and the browser (J); the
 translator server and the standalone product — a track of their own, by ADR (I).
+
+---
+
+## Part 5 — Owner ideas 2026-11-07: recorded conceptually, not analysed
+
+> Framing only — analysis later; each idea goes through its own `brainstorm → spec → plan`. Remarks in
+> brackets are the agent's first reaction, not a decision. Anchor: ADR "2026-11-07 — Two principles of the
+> agentic OS".
+
+### M. Sidr as a platform — layers, not a list of apps
+
+Owner: a full, broad platform — its own secure anonymous messenger, chat, social network, browser,
+translator, a programming workspace; devices — smartphone, PC, "satellites" (to clarify: satellite
+connectivity or wearable companion devices), IoT. The agent's proposed layering: (1) the agent core with a
+finite set of gates; (2) the user's device mesh — one identity, sync without a third-party cloud in the
+middle; (3) the world as tool sources — apps, the web, IoT via Matter/Thread, MCP; (4) communication
+human↔human and agent↔agent — a client of an open protocol, never home-made cryptography; (5) surfaces —
+browser (→ J), translator as a capability of the local model (→ I), a programmer's workspace on the PC,
+chat. (Selection criterion — maximum agent capability per unit of own infrastructure; a public social
+network is the riskiest direction: moderation, liability, anonymity.)
+
+### N. A local model and the user's personal space
+
+A model that knows the user's "workspace and character" (books, work, sites) and writes messages in their
+style. Analysed in the track plan's `§HANDOFF` ("Candidate for a separate block"): knowledge — an on-device
+personal index; character — an editable profile; weight fine-tuning — only for style, and later; sending on
+the user's behalf — the user's last tap (→ K).
+
+### O. Sidr network — a chat shared between Sidr users
+
+A chat (and more broadly a "local social network") that Sidr users share with each other. (First reaction:
+invite-only circles instead of a public feed — removes most of the moderation burden; end-to-end encryption
+and peer-to-peer delivery with minimal "blind" relays; identity — keys, verified by QR; the distinguishing
+capability — agent↔agent: "my agent arranges it with yours" under both owners' consent.)
+
+### P. News feed — region and topics of the user's choice
+
+A window or a strip on the home screen where world news runs automatically; the user picks the region and
+the events. (First reaction: a source on every headline and a mark on any generated summary — `DOC-ILM-5`;
+moving text must be pausable — accessibility, WCAG 2.2.2; fetching news reveals interests to the server —
+take generic feeds and filter on the device; off by default so the home screen stays calm; the agent tie-in —
+"what's new in Bishkek?".)

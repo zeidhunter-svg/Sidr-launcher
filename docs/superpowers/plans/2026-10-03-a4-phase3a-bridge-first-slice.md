@@ -7796,6 +7796,13 @@ measurement as an open owner item — the plan does not choose for the owner.
   corpus, the providers OpenRouter routed to that day — the routing changes).
 - [ ] **Step 4:** boundary gate from a cleared tree — expected `GATE GREEN`, `TOTAL tests=1644` (no test
   pins the numbers; `BridgeModelPlannerTest` builds its own budgets).
+
+  > **Measured in execution (2026-11-07):** the run was executed by the agent at the owner's request, models chosen by
+  > the agent (seven, via OpenRouter), corpus = B15's 24 lines + 8, labels an unreviewed draft; 672 lines, $0.46.
+  > Rule 1 → `PROMPT_ONLY` (222/224; RESPONSE_FORMAT 0/32 on Haiku and Sonnet, FORCED_TOOL 0/32 on Sonnet and Llama —
+  > `REQUEST_REJECTED`); rule 2 → **50 000 ms** (qwen3.7-flash p90 31 635 × 1.5); rule 3 → **4 096** (deepseek-v4.1-flash
+  > and qwen3.7-flash cut at 2 048 tokens, all reasoning). Gate **1670** (the chain's total since T11 — not 1644).
+  > Task review I1: the pair 50 s × 4 096 was never measured together — named in the ADR, re-run is the owner's option.
 - [ ] **Step 5: commit (controller).**
 
 ```bash

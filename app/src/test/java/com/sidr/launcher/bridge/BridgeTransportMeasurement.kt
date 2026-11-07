@@ -156,8 +156,9 @@ class BridgeTransportMeasurement {
          * The planner's ceiling for the measurement. `BridgeModelPlanner` wraps the WHOLE planning, the one
          * retry included, in `withTimeoutOrNull(ceilingMs)`; with `BridgeBudget.Default` (50 s since the
          * 2026-11-07 run, 45 s when this was written) a 60 s answer would be cut and recorded as `timed_out`
-         * at the default ceiling, so p90 could never exceed it and rule 2 would be fed a truncated number. Two attempts × the socket cap, so one silent wait up to the cap is
-         * observed rather than cut. Not a strict bound: connect time and body transfer count against the
+         * at the default ceiling, so p90 could never exceed it and rule 2 would be fed a truncated number.
+         * Two attempts × the socket cap, so one silent wait up to the cap is observed rather than cut.
+         * Not a strict bound: connect time and body transfer count against the
          * ceiling too, so a slow first attempt followed by a long retry can still meet it — that row reads
          * `timed_out`, and its `ms` says how long it ran.
          */

@@ -6,14 +6,17 @@ package com.sidr.launcher.domain.ai.bridge
  * [maxOutputTokens] bounds each answer. The transport's socket is bounded by the same [ceilingMs] per
  * attempt (`bridgeHttpClient`), so the socket never ends a wait the ceiling still allows.
  *
- * **Fixed on 2026-11-07 by the owner's measurement** (ADR «2026-10-05 — A4′ ф3a», the addendum «по
- * замеру»): seven models through OpenRouter, `PROMPT_ONLY`, largest p90 31 635 ms (`qwen/qwen3.7-flash`),
- * × 1.5 rounded up to 5 000 ms → 50 s; below the 90 s cap. 4 096 tokens because two `PROMPT_ONLY` lines
- * (`deepseek/deepseek-v4.1-flash`, `qwen/qwen3.7-flash`) ended `finish=length` with 2 048 completion
- * tokens, all of them hidden reasoning. That is the answer to the spec's question: hidden reasoning IS
- * counted inside the token limit, so [maxOutputTokens] is the one named limit that bounds reasoning and
- * output together. A separate reasoning cap (provider-specific, e.g. OpenRouter's `reasoning.max_tokens`)
- * is not built — unmeasured, named for 3b. No test pins these two numbers: reverting them would pass the
+ * **Fixed on 2026-11-07 by the owner's measurement** (ADR «2026-10-05 — A4′ ф3a: один модельный путь…»,
+ * the addendum «по замеру»): seven models through OpenRouter, `PROMPT_ONLY`, largest p90 31 635 ms
+ * (`qwen/qwen3.7-flash`), × 1.5 rounded up to 5 000 ms → 50 s; below the 90 s cap. 4 096 tokens because
+ * two `PROMPT_ONLY` lines (`deepseek/deepseek-v4.1-flash`, `qwen/qwen3.7-flash`) ended `finish=length`
+ * with 2 048 completion tokens, all of them reasoning. For those two models, on that day's routing, hidden
+ * reasoning is shown to count inside the token limit — the answer to the spec's question; for the other
+ * five the data is only consistent with it (reasoning ≤ completion on every line, none reached the limit).
+ * So [maxOutputTokens] is the one named limit that bounds reasoning and output together. A separate
+ * reasoning cap (provider-specific, e.g. OpenRouter's `reasoning.max_tokens`) is not built — unmeasured,
+ * named for 3b. **The pair was never measured together:** the ceiling was derived at 2 048 tokens, and at
+ * 4 096 a reasoning attempt can run longer. No test pins these two numbers: reverting them would pass the
  * gate (the ADR addendum says so). The budget on ACTIONS (`RuntimeBudget`) is a different thing and does
  * not change.
  */

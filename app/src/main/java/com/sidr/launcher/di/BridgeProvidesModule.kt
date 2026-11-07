@@ -41,7 +41,10 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object BridgeProvidesModule {
 
-    /** The transport form (D2, b′). The prompt form until the owner's measurement chooses (Task 12). */
+    /**
+     * The transport form (D2, b′). The prompt form, chosen by the 2026-11-07 measurement: 222 of 224 usable
+     * answers against 159 and 138, and the only form no model rejected (ADR addendum «по замеру»).
+     */
     val DEFAULT_TRANSPORT_MODE: BridgeTransportMode = BridgeTransportMode.PROMPT_ONLY
 
     @Provides

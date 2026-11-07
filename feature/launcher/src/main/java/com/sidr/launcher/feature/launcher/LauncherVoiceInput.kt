@@ -15,10 +15,14 @@ import kotlinx.coroutines.launch
  * The `micInputEnabled` preference gate and the `isAvailable()`-unavailable feedback stay in
  * `LauncherViewModel` (they read [com.sidr.launcher.domain.preferences.UserPreferences] and write
  * `commandFeedback`, both ViewModel-owned state this class has no access to) — only the recognizer
- * collection loop moves here. The three callbacks are the exact three side effects the original
+ * collection loop moves here. The three callbacks began as the exact three side effects the original
  * `collect { }` block performed inline (`setCommandInput` on Partial/Final, `onCommandSubmitted` on
  * Final, and the `CommandFeedback.VoiceError` write on Error); wiring them at construction keeps
  * `start(languageTag)`'s public signature identical to the original `startVoiceInput(languageTag)`.
+ * What `LauncherViewModel` wires into them today differs: since A4′ phase 3a a Partial goes through the
+ * edit path, `LauncherCommandSession.onChanged` (Task 9 review m1), and so does a Final, which then
+ * submits — `onChanged` then `submit` (final review M1) — so either one dismisses a standing
+ * interpretation card and abandons a command still waiting on the model, as typing does.
  *
  * Task 4 / A0, Ruling R7: a `state: StateFlow<SpeechRecognitionState>` this class also exposed had no
  * consumer — the three callbacks above are how every state transition already reaches the ViewModel;

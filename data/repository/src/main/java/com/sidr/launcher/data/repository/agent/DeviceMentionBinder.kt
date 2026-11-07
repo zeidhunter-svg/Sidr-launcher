@@ -38,9 +38,15 @@ import javax.inject.Inject
  * row's `arg` once known, the user's words into its `labelArg`. [AppTargetResolver.candidates] answers —
  * it never guesses and consults aliases; two candidates are a choice for the USER before any card.
  *
- * **Learned choices answer for `launch_app` only**, with FastPath's own key and policy — a confident one
- * binds without asking, a weak one is offered first. `uninstall_app` and `open_app_info` never read
- * them: consent learned for opening an app is not consent for removing it (`AppTargetResolver`).
+ * **Learned choices answer for `launch_app` only**, with FastPath's policy and the same key FORMULA — a
+ * confident one binds without asking, a weak one is offered first. `uninstall_app` and `open_app_info`
+ * never read them: consent learned for opening an app is not consent for removing it
+ * (`AppTargetResolver`). The formula is FastPath's, the input is not: FastPath slots the whole command,
+ * this binder the model's mention, and `LaunchSlotExtractor` strips English verbs only. So the two paths
+ * share a learned choice only for an English verb-led command («open tessar» → `tessar` on both, the
+ * model's mention being the user's word); a `ru`/`tr` command («открой tessar») keys FastPath on the
+ * whole phrase, and a choice learned on one path is not seen by the other. That fails safe — the user
+ * is asked again, nothing is guessed.
  *
  * Nothing here reaches the model: `RouteCommandUseCase` calls this after the model has answered, and
  * returns what it finds to the screen.

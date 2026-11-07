@@ -167,6 +167,22 @@ class SystemIntentToolWorkerTest {
         assertTrue(actionExecutor.executedActions.isEmpty())
     }
 
+    /**
+     * Final review A3: the address is the MODEL's, and `ACTION_VIEW` opens whatever app claims a scheme —
+     * a payment or a deep link, not a page. FastPath's `UrlDetector` never sees this path, so the worker,
+     * below the consent card, is where the web-only rule holds: anything but `http`/`https` fails closed
+     * and nothing is opened. Each form here is refused by the scheme check alone — none is blank.
+     */
+    @Test
+    fun `a url that is not http or https fails closed and opens nothing`() = runTest {
+        listOf("quillpay://ostravel", "quillpay:ostravel", "ostravel.example/lectures").forEach { url ->
+            val result = executor().invoke(ResolvedInvocation(InAppToolIds.OPEN_URL, mapOf("url" to url)))
+
+            assertEquals("'$url' must fail closed", ToolResult.Failed(CommandFailure.Generic), result)
+        }
+        assertTrue("nothing reached the action path", actionExecutor.executedActions.isEmpty())
+    }
+
     @Test
     fun `a pinned launch opens the pinned package even when two apps share the label`() = runTest {
         apps.appsToReturn = listOf(

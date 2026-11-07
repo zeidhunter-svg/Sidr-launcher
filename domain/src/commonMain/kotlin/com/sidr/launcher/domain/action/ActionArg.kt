@@ -2,9 +2,10 @@ package com.sidr.launcher.domain.action
 
 /**
  * The value type of an [ActionArg]. MVP is string-only — every current family takes a single free-text
- * argument (an app query, a search query, a URL). Kept as an enum (rather than assumed) so AIL-4's
- * strict arg validation has a type to check against, and so richer types (ENUM/INT/…) can be added
- * without breaking the [ActionDescriptor] contract.
+ * argument (an app query, a search query, a URL). Kept as an enum (rather than assumed) so
+ * `InvocationValidator` has a type to compare when a step binds an argument to an earlier step's output
+ * — a comparison that is vacuous while this enum has one value, and stated as such there — and so
+ * richer types (ENUM/INT/…) can be added without breaking the [ActionDescriptor] contract.
  */
 enum class ArgType {
     STRING,

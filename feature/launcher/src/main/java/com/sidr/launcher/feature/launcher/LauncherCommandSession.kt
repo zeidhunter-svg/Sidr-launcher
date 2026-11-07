@@ -253,8 +253,10 @@ internal class LauncherCommandSession(
      * Web-search route chip (AIL-3): the user has chosen the destination, so the chip dispatches the
      * act — [LauncherAction.WebSearch] through [ExecuteActionUseCase], with the same [applyOutcome]
      * handling and the same dev-console line. No new executor path. Since A4′ phase 3a this is the one
-     * place the launcher executes an action directly (`OneModelPathGuardTest`): the USER points it at a
-     * destination, so it is not the model's path (spec §7.12.3).
+     * direct execution of a [LauncherAction] through [ExecuteActionUseCase] in the launcher
+     * (`OneModelPathGuardTest`): the USER points it at a destination, so it is not the model's path (spec
+     * §7.12.3). It is not the only thing the launcher runs directly — app taps, suggestions and a learned
+     * AutoLaunch start apps through [LauncherAppLaunch] — but those are launches the user chose.
      *
      * **Why it no longer goes through the command pipeline** (A4′ phase 1). It used to prefix the buffer
      * with `search` and [submit] it, so FastPath re-scored the user's choice as if it were a typed
@@ -315,6 +317,9 @@ internal class LauncherCommandSession(
      *  - every suggestion tap, before its branch — `LauncherViewModel.onSuggestionClicked` (its app branch
      *    reaches `onAppClicked` and calls again, finding nothing pending);
      *  - the ASK chip and the prayer strip's details, from `LauncherScreen` — `LauncherViewModel.navigateByUser`.
+     *    The prayer-details half is wired, and held by no test (plant F1-PRAYER stays green). It is
+     *    reachable during a wait: the strip hides while the field holds text, but «Продолжить» on a
+     *    model-written plan re-routes its goal with the field empty.
      * [submitSite] needs no call: it is a [submit], which supersedes on its own. [onChanged] and
      * [cancelThinking] keep their own lines, written out where they are.
      *
@@ -446,12 +451,16 @@ internal class LauncherCommandSession(
      */
     fun runInterpretation() {
         when (val reading = _interpretation.value ?: return) {
-            is Interpretation.Navigate -> applyOutcome(
-                when (reading.destination) {
-                    SidrDestination.LAUNCHER_SETTINGS -> CommandOutcome.OpenSettings
-                    SidrDestination.APP_GRID -> CommandOutcome.ShowApps
-                },
-            )
+            is Interpretation.Navigate -> when (reading.destination) {
+                SidrDestination.LAUNCHER_SETTINGS -> applyOutcome(CommandOutcome.OpenSettings)
+                // Final review A1: the card promises the app grid, and `ShowApps` alone only clears the
+                // field — Home draws favourites, the full list is the drawer's own route. FastPath's own
+                // «apps» → `ShowApps` is not changed here (its twin no-op is named at the phase close).
+                SidrDestination.APP_GRID -> {
+                    applyOutcome(CommandOutcome.ShowApps)
+                    onNavigate(Routes.AppDrawer.ROUTE)
+                }
+            }
             is Interpretation.Act -> {
                 val plan = reading.plan() ?: return // a pick is still owed
                 _interpretation.value = null

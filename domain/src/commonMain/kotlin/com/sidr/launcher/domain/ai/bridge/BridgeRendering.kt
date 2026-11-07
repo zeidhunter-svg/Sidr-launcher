@@ -5,7 +5,8 @@ package com.sidr.launcher.domain.ai.bridge
  * offering text, the JSON schema, and the four retry notes. What leaves the device is exactly the
  * user's command, this text, and the generation limits (`OutboundContextPolicy.AllowedContext`
  * `USER_COMMAND`, `STATIC_SYSTEM_PROMPT`, `AUTHORED_TOOL_SCHEMA`, `GENERATION_LIMITS` — the last two
- * from Task 11; until then this object has no caller in production).
+ * since Task 11). Its production callers are `BridgeModelPlanner` (the request and the retry note) and
+ * `BridgeValidator` (the answer kinds).
  *
  * **b′ (owner decision D2):** the answer form is strict-compatible — every field required, `null`
  * instead of "optional", nothing extra — whether or not the transport sends the schema. The schema is

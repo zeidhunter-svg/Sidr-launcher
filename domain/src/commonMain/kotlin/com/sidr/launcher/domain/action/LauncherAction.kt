@@ -20,8 +20,9 @@ sealed interface LauncherAction {
     /** The registered family this instance belongs to. */
     val id: ActionId
 
-    /** Launch an installed app matching [query] (unresolved display-name query, not a package). */
     /**
+     * Launch an installed app matching [query] (unresolved display-name query, not a package).
+     *
      * [packageName] pins the launch to one installed package (A4′ phase 3a): the device binds the
      * model's word for an app BEFORE the interpretation card, and two apps can share a label, so the
      * pick has to survive to execution. `null` — every path but the bridge's — resolves [query] by
@@ -51,7 +52,12 @@ sealed interface LauncherAction {
         override val id: ActionId = ActionIds.SHOW_APPS
     }
 
-    /** Open [url] in a browser (AIL-2). URL safety/normalization is enforced before this is built. */
+    /**
+     * Open [url] in a browser (AIL-2). Nothing in this type checks [url]; its builder must. Today that is
+     * `SystemIntentToolWorker` (`open_url`, the model's address), which admits only `http://`/`https://`.
+     * FastPath's typed URLs are checked and normalized by `UrlDetector` and reach the executor as
+     * `LauncherIntent.OpenUrlIntent`, not as this type.
+     */
     data class OpenUrl(val url: String) : LauncherAction {
         override val id: ActionId get() = ActionIds.OPEN_URL
     }

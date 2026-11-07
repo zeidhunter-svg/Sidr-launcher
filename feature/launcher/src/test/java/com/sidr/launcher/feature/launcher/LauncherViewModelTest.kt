@@ -2666,6 +2666,34 @@ class LauncherViewModelTest {
         assertEquals("the card leaves once its screen opens", null, vm.interpretation.value)
     }
 
+    /**
+     * Final review A1: the card for the model's reading of the app grid promises the app grid. Home draws
+     * favourites only — the full list is the drawer's own route — so «Выполнить» must navigate there;
+     * clearing the field alone leaves the user on Home with the card gone and no grid.
+     */
+    @Test
+    fun `a navigation reading of the app grid opens the drawer only on Run`() = runTest(testDispatcher) {
+        val vm = answering(CommandOutcome.Interpreted(Interpretation.Navigate(SidrDestination.APP_GRID)))
+        // A plain scope on the test dispatcher, not `backgroundScope` — see subscribeToPrayerContext.
+        val navigations = mutableListOf<NavigationEvent>()
+        val collector = CoroutineScope(testDispatcher + Job())
+        collector.launch { vm.navigationEvents.collect { navigations += it } }
+        vm.onCommandSubmitted("покажи все приложения")
+        advanceUntilIdle()
+        assertEquals("nothing navigated before Run", emptyList<NavigationEvent>(), navigations)
+
+        vm.runInterpretation()
+        advanceUntilIdle()
+
+        assertEquals(
+            "Run opens the drawer, and only the drawer",
+            listOf<NavigationEvent>(NavigationEvent.NavigateTo(Routes.AppDrawer.ROUTE)),
+            navigations,
+        )
+        assertEquals("the card leaves once its screen opens", null, vm.interpretation.value)
+        collector.cancel()
+    }
+
     /** «Отмена» on a pick card learns nothing — not even from a later tap on a former candidate. */
     @Test
     fun `a dismissed pick card leaves nothing to learn from a later tap`() = runTest(testDispatcher) {
@@ -2768,6 +2796,47 @@ class LauncherViewModelTest {
         assertEquals("открой tess", vm.commandInput.value)
         assertEquals(null, vm.interpretation.value)
     }
+
+    /**
+     * Final review M1 (Review Focus 2's class): a recognizer may deliver a Final with no Partial before
+     * it. That is still a new command, so the card standing for the old one goes at the Final — not when
+     * the new command's answer lands, which for the model is seconds later, the old card one tap from
+     * running all that while. The dictated text is still the command that runs.
+     */
+    @Test
+    fun `a dictated Final with no Partial dismisses the standing interpretation before its answer lands`() =
+        runTest(testDispatcher) {
+            val asked = mutableListOf<String>()
+            val vm = buildViewModel(
+                route = CommandRouteStep { text ->
+                    asked += text
+                    if (text == "найди lumora в магазине") {
+                        CommandOutcome.Interpreted(storeStepReading())
+                    } else {
+                        delay(10_000)
+                        CommandOutcome.LowConfidence
+                    }
+                },
+            )
+            vm.onCommandSubmitted("найди lumora в магазине")
+            advanceUntilIdle()
+            assertEquals("the card is up before the dictation", storeStepReading(), vm.interpretation.value)
+
+            fakeSpeech.scriptedStates = listOf(
+                SpeechRecognitionState.Ready,
+                SpeechRecognitionState.Final("открой vemblic"),
+            )
+            vm.startVoiceInput()
+            advanceTimeBy(1_000)
+            runCurrent()
+            assertTrue("the dictated command is still waiting on its answer", vm.thinking.value)
+
+            assertEquals("no card for the old command while the new one waits", null, vm.interpretation.value)
+
+            advanceUntilIdle()
+            assertEquals("the dictated text is the command that ran", listOf("найди lumora в магазине", "открой vemblic"), asked)
+            assertEquals(CommandFeedback.LowConfidence, vm.commandFeedback.value)
+        }
 
     /** End to end through the real route: the model's reading waits on the card; «Выполнить» starts it. */
     @Test

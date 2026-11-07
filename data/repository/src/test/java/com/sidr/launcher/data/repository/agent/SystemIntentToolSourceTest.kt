@@ -14,9 +14,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * A0 registers exactly two tools, both projected from the real `ActionCatalog`. The projection is
- * deliberately narrow: registering all seven families would hand the planner capabilities the slice
- * has not gated or traced.
+ * The `in_app` source registers exactly four tools, all projected from the real `ActionCatalog`: A0's
+ * two (`launch_app`, `play_store_search`) and, since A4′ phase 3a, `web_search` and `open_url`. The
+ * projection is still deliberately narrow: the three navigation families (settings, assistant, app
+ * grid) are not tools — they are answers of the model.
  */
 class SystemIntentToolSourceTest {
 

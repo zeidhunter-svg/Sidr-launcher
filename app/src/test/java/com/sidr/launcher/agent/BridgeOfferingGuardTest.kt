@@ -36,7 +36,11 @@ class BridgeOfferingGuardTest {
     }
 
     companion object {
-        /** The outbound contract's ids (ADR 2, owner fork F3a-B). Written out, never derived from a source. */
+        /**
+         * The ids offered today (ADR 2, owner fork F3a-B) — the equality list a new tool edits. Written
+         * out, never derived from a source. Which of them are FROZEN is `OfferedToolIdsFreezeGuardTest`'s
+         * own list, not this one.
+         */
         val OFFERED_NINETEEN: Set<String> = setOf(
             "launch_app", "play_store_search", "web_search", "open_url",
             "set_timer", "open_system_settings", "set_alarm", "uninstall_app", "show_alarms", "open_camera",

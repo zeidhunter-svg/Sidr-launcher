@@ -40,6 +40,12 @@ class SystemIntentToolWorker @Inject constructor(
     /**
      * Each tool reads its OWN argument (`query`, or `url` for `open_url`), trimmed once; a blank or
      * missing one fails closed before the action path. An unregistered tool never reaches it either.
+     *
+     * `open_url` also fails closed on any address that is not `http://` or `https://` (scheme compared
+     * case-insensitively; final review A3). The address is the MODEL's, and the action path ends in
+     * `ACTION_VIEW`, which opens whatever app claims the scheme — `quillpay://…` is a payment or a deep
+     * link, not a page. FastPath's `UrlDetector` guards only the typed path and never sees this one, so
+     * the tool path holds the rule here, in the execution layer below the consent card.
      */
     private fun actionFor(invocation: ResolvedInvocation): LauncherAction? {
         fun arg(name: String): String? = invocation.args[name]?.trim()?.takeIf { it.isNotEmpty() }
@@ -49,12 +55,15 @@ class SystemIntentToolWorker @Inject constructor(
             }
             ToolIds.PLAY_STORE_SEARCH -> arg("query")?.let { LauncherAction.PlayStoreSearch(it) }
             InAppToolIds.WEB_SEARCH -> arg("query")?.let { LauncherAction.WebSearch(it) }
-            InAppToolIds.OPEN_URL -> arg("url")?.let { LauncherAction.OpenUrl(it) }
+            InAppToolIds.OPEN_URL -> arg("url")?.takeIf(::isWebAddress)?.let { LauncherAction.OpenUrl(it) }
             // An unregistered tool never reaches the action path. Tested with a query in hand, so the
             // blank-argument guard above cannot answer for this branch.
             else -> null
         }
     }
+
+    private fun isWebAddress(url: String): Boolean =
+        WEB_SCHEMES.any { url.startsWith(it, ignoreCase = true) }
 
     /**
      * `launch_app` reports `resolved_query` on every result it can carry an output on — the query the
@@ -81,5 +90,10 @@ class SystemIntentToolWorker @Inject constructor(
         // The two projected families cannot produce any other outcome. Failing closed rather than
         // adding branches keeps this adapter honest about what it actually maps.
         else -> ToolResult.Failed(CommandFailure.Generic)
+    }
+
+    private companion object {
+        /** The only schemes `open_url` hands to the browser — the same allow-list as `UrlDetector`'s. */
+        val WEB_SCHEMES = listOf("http://", "https://")
     }
 }

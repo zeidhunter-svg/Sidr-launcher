@@ -375,7 +375,10 @@ class LauncherViewModel @Inject constructor(
         // flow closes on Final, so this never cancels the command onFinal submits.)
         onPartial = { text -> commandSession.onChanged(text) },
         onFinal = { text ->
-            commandSession.setCommandInput(text)
+            // Final review M1: a recognizer may deliver a Final with no Partial before it, so the Final
+            // rides the edit path too — the card for the previous command goes now, not when this one's
+            // answer lands. The edit runs BEFORE the submit, so it cancels only what was already waiting.
+            commandSession.onChanged(text)
             // Same entry point as the keyboard's IME "Done" / submit.
             commandSession.submit(text)
         },
@@ -512,9 +515,15 @@ class LauncherViewModel @Inject constructor(
     /**
      * Pick a paused plan back up. The engine re-evaluates, so a pending checkpoint returns.
      *
-     * No [leaveAgentSurface] here, and none in [confirmAgentStep] either: every state either of them
-     * can reach still *draws* a surface, and each of those carries its own «закрыть» — `Cancelled`,
-     * the one invisible state, is reachable only by an explicit cancel or a refusal.
+     * No [leaveAgentSurface] here, and none in [confirmAgentStep] either. Every state the engine can
+     * reach from them still *draws* a surface, and each of those carries its own «закрыть» — `Cancelled`,
+     * the one invisible state, is reachable only by an explicit cancel or a refusal. The exception is
+     * «Продолжить» on a model-written plan (A4′ phase 3a, `Resumption.NeedsRoute`): the session is
+     * closed and the surface goes, and its goal is submitted through the command route afresh — what
+     * the user sees next is that command's own outcome (a wait, a card, a feedback line). Calling
+     * [leaveAgentSurface] there would be wrong, not merely unneeded: its edit would cancel that command.
+     * A resume the store fails also takes the surface down (`LauncherAgentSession.continueSession`'s
+     * `null` branch) and puts nothing in its place — named, not handled here.
      */
     fun continueAgentSession() {
         agentSession.continueSession()
@@ -543,9 +552,9 @@ class LauncherViewModel @Inject constructor(
      * there is no second flag to reset, which is why clearing it is sufficient and why the fix is the
      * same call the input's own ✕ makes (`onCommandChanged("")`).
      *
-     * It rides the ordinary edit path on purpose: that also drops stale feedback, any pending router
-     * card and the ambiguity learning token, so leaving the agent surface is byte-for-byte the state
-     * a user reaches by clearing the field by hand.
+     * It rides the ordinary edit path on purpose: that also drops stale feedback, any interpretation
+     * card, a command still waiting on the model, and the ambiguity learning token, so leaving the agent
+     * surface is byte-for-byte the state a user reaches by clearing the field by hand.
      */
     private fun leaveAgentSurface() {
         commandSession.onChanged("")

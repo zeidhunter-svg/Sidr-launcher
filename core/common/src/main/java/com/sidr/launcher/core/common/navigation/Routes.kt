@@ -104,10 +104,12 @@ sealed class Routes {
     }
 
     /**
-     * The App Drawer (full installed-apps list). Registered as a real destination in Block X3;
-     * the home's "All apps" affordance navigates here already in X2, so until X3 wires the
-     * `composable(...)`, [com.sidr.launcher.core.common.navigation.NavigationEvent] safe-fallback
-     * returns to [Launcher] (acceptable interim behaviour).
+     * The App Drawer (full installed-apps list) — the only screen that shows every installed app; Home
+     * draws favourites. Registered in `AppNavHost` as the "Apps" TAB ROOT (2026-07-12), reached two
+     * ways: the bottom tab bar, and — since A4′ phase 3a (final review A1) — «Выполнить» on the model's
+     * `app_grid` reading (`LauncherCommandSession.runInterpretation`), which sends a plain
+     * [NavigationEvent.NavigateTo], so the drawer is pushed over Home rather than switched to as a tab.
+     * FastPath's own «apps» command does not navigate here.
      */
     object AppDrawer : Routes() {
         const val ROUTE = "app_drawer"

@@ -4,8 +4,15 @@
 > (recommended) or `superpowers:executing-plans` to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
-> **Status: written 2026-10-03, reviewed once on 2026-10-04 against the tree and the spec, every finding
-> applied (§0.11). The owner's three forks answered 2026-10-04 (§0.1). Not started.**
+> **Status: EXECUTED 2026-10-04 … 2026-11-07 — `CODE-GREEN` at 1673 / 0 / 0** (boundary `tools/gate.sh`,
+> cleared tree, 557 executed; the plan predicted 1644). The record — commits, the measured gate chain (also
+> under §0.8 below), execution findings, controller rulings, the final review and its fix `f6aa141`, the
+> owner's answers of 2026-11-07 and what is named at close — is in `§HANDOFF` of the track plan, «Фаза 3a
+> A4′». The body below is left as written except where execution corrected it in place («Measured in
+> execution» notes).
+>
+> Original status line: **written 2026-10-03, reviewed once on 2026-10-04 against the tree and the spec, every
+> finding applied (§0.11). The owner's three forks answered 2026-10-04 (§0.1). Not started.**
 > - Branch `launcher--7`, base `fe495cd`, gate baseline **1560 / 0 / 0**.
 > - **Spec:** [§7 in full — §7.12 (owner amendment D1–D3, accepted 2026-10-03) governs wherever it
 >   differs from the rest of §7 — plus §9, §10, §11 of
@@ -674,6 +681,8 @@ delta.
 > **T11: 1669** = 1665 + 4 (controller rulings: T9's m2 +2, H2 +1 `:domain`, H8 +1) → review fix **1670** (+1, the ASK
 > chip); `:domain` 512 · `:data:repository` 432 · `:feature:launcher` 254 · `:app` 76 · `:data:ai-cloud` 40. T12 and T13
 > add no test.
+> **T12: 1670. T13: 1673** — T13's own steps add none, but the final whole-branch review's fix round (`f6aa141`) added
+> three (A1 and M1 `:feature:launcher` 256, A3 `:data:repository` 433). **The floor is 1673**, not 1644.
 
 - Task 11 is the only task whose total falls: −41 removed (P4) and +15 added (`:domain` +6, `:app` +8,
   `:feature:launcher` +1; the migrated tests keep their counts) → **1670 − 26 = 1644**. With F3a-B (b)
@@ -7868,6 +7877,19 @@ EOF
   `CommandPlanner`, «router-off») and `docs/roadmap.md` (`:22`, `:36`, `:98` — the router as the AI core)
   still name the router — each is a follow-up with its own change control (the last two found by the plan
   review).
+  > **Measured in execution (2026-11-07):** the floor is **1673**, not 1644 (Step 2: boundary GATE GREEN at
+  > `f6aa141`, 557 executed — `:domain` 512 · `:consumer:jvm` 72 · `:data:repository` 433 · `:feature:launcher` 256 ·
+  > `:app` 76 · other eight 324); the +29 over the plan are tests controller rulings and review rounds added, each in
+  > `§HANDOFF`. Step 3's machinery check ran as written (1673 GREEN → 1674 `GATE RED`/`BELOW BASELINE` → 1673
+  > GREEN). Step 1, the final review (`reviewer-deep`, `beff4da..56166d3`): 0 Critical, **4 Important** — A1 the
+  > model's `app_grid` reading did not open the drawer; A2 the freeze guard had no red set of its own; A3 `open_url`
+  > sent a model-written URL to `ACTION_VIEW` with no scheme check; A4 `DOC-AML-1`'s main cell over-claimed — all
+  > fixed in **`f6aa141`** with M1 (voice Final) and a KDoc sweep; four mutations proved. **E13-1:** the fix brief's
+  > two-file A2 plant also reddens `DoctrineGuardTest` (the id is a literal in `AgentSessionPresentation.kt` too); the
+  > proving plant is the complete three-file rename. Step 7 named, did not edit, the router mentions — more than the
+  > lines listed above; among them `README.md` `:138`, `:175`, `:193`, `:212–214`, `:231–236`, the agentic master plan
+  > `:427`, `:542`, `docs/agentic-os-architecture.md` `:243`, the DS master plan `:1232`, `docs/roadmap.md` `:91`, `:194`
+  > (full list in `§HANDOFF`).
 - [ ] **Step 8: propose the commit to the owner (R7)** — do not make it without the owner's yes:
 
 ```bash

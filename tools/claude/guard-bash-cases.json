@@ -1,0 +1,27 @@
+[
+  { "expect": "block", "why": "простейшая форма",              "cmd": "git push" },
+  { "expect": "block", "why": "с remote и ветвью",             "cmd": "git push origin launcher--7" },
+  { "expect": "block", "why": "опция со значением отдельным словом — на ней провалилась v1", "cmd": "git -C /home/Suleiman/Sidr-launcher push --force" },
+  { "expect": "block", "why": "опция без значения",            "cmd": "git --no-pager push" },
+  { "expect": "block", "why": "-P-аргументы ПЕРЕД задачей — чего не может правило deny", "cmd": "./gradlew -Porg.gradle.java.installations.paths=/x --console=plain :app:connectedAndroidTest" },
+  { "expect": "block", "why": "вариант задачи с Debug в середине", "cmd": "./gradlew :data:repository:connectedDebugAndroidTest" },
+  { "expect": "block", "why": "агрегирующая задача",           "cmd": "./gradlew connectedCheck" },
+  { "expect": "block", "why": "сокращение camelCase",          "cmd": "./gradlew cAT" },
+  { "expect": "block", "why": "маскировка кода возврата",      "cmd": "./gradlew :domain:jvmTest | tail -5" },
+  { "expect": "block", "why": "то же через head и 2>&1 — одиночный & не должен рвать сегмент", "cmd": "./gradlew :app:testDebugUnitTest 2>&1 | head -40" },
+
+  { "expect": "pass",  "why": "штатный гейт",                  "cmd": "tools/gate.sh" },
+  { "expect": "pass",  "why": "scoped-прогон гейта",           "cmd": "tools/gate.sh --scoped :app:testDebugUnitTest" },
+  { "expect": "pass",  "why": "точность: слово приклеено к =", "cmd": "git log --grep=push" },
+  { "expect": "pass",  "why": "обычное чтение истории",        "cmd": "git log --oneline -5" },
+  { "expect": "pass",  "why": "коммит разрешён, запрещена публикация", "cmd": "git commit -m \"feat: x\"" },
+  { "expect": "pass",  "why": "индексация",                    "cmd": "git add -A" },
+  { "expect": "pass",  "why": "ловушка регистра: cat не cAT",  "cmd": "cat tools/gate.sh" },
+  { "expect": "pass",  "why": "санкционированный путь к инструментальным тестам", "cmd": "adb shell am instrument -w com.sidr.launcher.test/androidx.test.runner.AndroidJUnitRunner" },
+  { "expect": "pass",  "why": "обычный юнит-прогон",           "cmd": "./gradlew :domain:jvmTest" },
+  { "expect": "pass",  "why": "труба в grep ничего не маскирует", "cmd": "./gradlew :app:testDebugUnitTest | grep FAILED" },
+  { "expect": "pass",  "why": "предписанное чтение базы агента", "cmd": "tools/device/pull-agent-db.sh" },
+  { "expect": "pass",  "why": "adb push не имеет отношения к git", "cmd": "adb push /tmp/x /sdcard/x" },
+  { "expect": "pass",  "why": "регрессия: v1 ложно блокировала запись этого файла — git и push на разных строках, ни одно не вызов", "cmd": "cat > .claude/settings.local.json <<'J'\n      \"Bash(adb push *)\",\n      \"Bash(git add *)\"\nJ" },
+  { "expect": "pass",  "why": "упоминание задачи в тексте без вызова gradle", "cmd": "echo 'правило про connectedAndroidTest описано в ADR'" }
+]

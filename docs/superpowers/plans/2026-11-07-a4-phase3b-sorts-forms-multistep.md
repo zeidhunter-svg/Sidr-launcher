@@ -486,6 +486,9 @@ delta is corrections inside the same fifteen tasks — no task, port or closed t
   with the first ask and the retry` (2); `OpenAiCompatibleBridgeTransportTest`: `a reasoning cap is sent to
   OpenRouter as reasoning.max_tokens` · `no reasoning cap sends no reasoning object` · `a reasoning cap is
   never sent to another provider` (base URL `https://api.quillmere.example/v1`) (3).
+  *Measured in execution (E1-F1):* a JVM method name cannot hold `.` — the first test is
+  `… as reasoning max_tokens`. *(E1-F2)* «ADR 2» in Step 5 is 3a's second ADR «2026-10-05 — один модельный
+  путь…», which holds the «по замеру» addendum — not ADR 2/4.
 - [ ] **Step 2:** scoped `:domain:jvmTest`, `:data:ai-cloud:testDebugUnitTest` → red.
 - [ ] **Step 3:** implement; `BridgeBudget`'s KDoc: the re-measure, П2, the switch, B-16, and «pinned by
   `the shipped budget is the re-measured pair`, which a legitimate re-measure edits».

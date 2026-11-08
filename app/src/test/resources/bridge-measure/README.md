@@ -16,6 +16,12 @@ anything else is refused before Gradle starts.
   `act` (should become a plan), `question` (should go to the assistant), `nav` (a Sidr screen),
   `other`. The B15 corpus is a good start; the labels are the owner's.
 - The base URL defaults to `https://openrouter.ai/api/v1`; override with `SIDR_MEASURE_BASE_URL`.
+- Two switches, environment variables validated by the harness before any request (phase 3b; the
+  script's arguments are unchanged): `SIDR_MEASURE_MODES` — a comma list of `PROMPT_ONLY`,
+  `RESPONSE_FORMAT`, `FORCED_TOOL` (default: all three); `SIDR_MEASURE_REASONING` — `off`, `on` or
+  `off,on` (default `off`). `on` sends the reasoning cap `BridgeBudget.Default.maxOutputTokens / 2`,
+  which goes to `openrouter.ai` only, so `on` with another base URL is refused. An unknown or repeated
+  value is refused. The dry run prints both; every `line` and `summary` carries `reasoning=off|on`.
 - The key is read from `SIDR_MEASURE_API_KEY` and is never printed, logged or written.
 
 Output: `BRIDGE-MEASURE ::` lines in `build/bridge-measure.log`, and the full per-line report in

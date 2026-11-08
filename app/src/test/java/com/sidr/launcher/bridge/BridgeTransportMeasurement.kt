@@ -36,6 +36,14 @@ import java.io.File
  * median and p90 time, truncations, whether hidden reasoning was reported, and how many `question`
  * lines went to the assistant against how many became a web search. Correctness is the owner's to
  * judge from the per-line report — nothing here decides it.
+ *
+ * Two switches, read from the environment and validated here, before any request (phase 3b, B-14 — the
+ * script's argument parsing is untouched): `SIDR_MEASURE_MODES`, a comma list of [BridgeTransportMode]
+ * names (default: all three), and `SIDR_MEASURE_REASONING` — `off`, `on` or `off,on` (default `off`;
+ * fork 3b-H). `on` passes the reasoning cap `BridgeBudget.Default.maxOutputTokens / 2`, which the
+ * transport sends only to OpenRouter (B-16) — so `on` against any other base URL is refused rather than
+ * recorded as a cap that never left. An unknown or repeated value is refused. Every `line` and `summary`
+ * says which setting it ran under (`reasoning=off|on`).
  */
 class BridgeTransportMeasurement {
 
@@ -47,6 +55,7 @@ class BridgeTransportMeasurement {
     private data class Row(
         val model: String,
         val mode: BridgeTransportMode,
+        val reasoning: Reasoning,
         val label: String,
         val command: String,
         val result: ModelPlanning,
@@ -66,14 +75,29 @@ class BridgeTransportMeasurement {
         check(key.isNotEmpty()) { "BRIDGE-MEASURE :: refused - SIDR_MEASURE_API_KEY did not reach the test JVM" }
         check(corpus.isNotEmpty()) { "BRIDGE-MEASURE :: refused - no corpus lines in src/test/resources/bridge-measure/corpus.tsv" }
         check(models.isNotEmpty()) { "BRIDGE-MEASURE :: refused - pass -Psidr.measureModels=a,b" }
+        val modes = switchOf("SIDR_MEASURE_MODES", BridgeTransportMode.entries) { name -> BridgeTransportMode.entries.find { it.name == name } }
+        val reasonings = switchOf("SIDR_MEASURE_REASONING", listOf(Reasoning.OFF)) { word -> Reasoning.entries.find { it.word == word } }
+        check(Reasoning.ON !in reasonings || OpenAiCompatibleBridgeTransport.acceptsReasoningCap(baseUrl)) {
+            "BRIDGE-MEASURE :: refused - SIDR_MEASURE_REASONING=on is sent only to ${OpenAiCompatibleBridgeTransport.REASONING_CAP_HOST} (B-16); SIDR_MEASURE_BASE_URL is another host"
+        }
 
         val registry = ProductionGraph.federation().registry
         val descriptions = AuthoredToolDescriptions()
         val offered = BridgeFilter.offeringOf(registry, descriptions).tools.size
-        // Built BEFORE the dry-run return, so the dry run prints the budget the live run would pass.
-        val budget = BridgeBudget(ceilingMs = MEASURE_CEILING_MS, maxOutputTokens = BridgeBudget.Default.maxOutputTokens)
+        // Built BEFORE the dry-run return, so the dry run prints the budgets the live run would pass.
+        val budgets = reasonings.associateWith { reasoning ->
+            BridgeBudget(
+                ceilingMs = MEASURE_CEILING_MS,
+                maxOutputTokens = BridgeBudget.Default.maxOutputTokens,
+                reasoningMaxTokens = if (reasoning == Reasoning.ON) REASONING_ON_MAX_TOKENS else null,
+            )
+        }
         if (System.getProperty("sidr.measureDryRun") == "true") {
-            println("BRIDGE-MEASURE :: dry-run key=present corpus=${corpus.size} models=$models modes=${BridgeTransportMode.entries} offering=$offered ceiling=${budget.ceilingMs}")
+            println(
+                "BRIDGE-MEASURE :: dry-run key=present corpus=${corpus.size} models=$models modes=$modes " +
+                    "reasoning=${reasonings.map { it.word }} reasoning_on_max_tokens=$REASONING_ON_MAX_TOKENS " +
+                    "offering=$offered ceiling=$MEASURE_CEILING_MS",
+            )
             return@runBlocking
         }
 
@@ -90,15 +114,17 @@ class BridgeTransportMeasurement {
 
         models.forEach { model ->
             val config = FakeAiProviderConfigRepository(AiProviderConfig(provider, baseUrl, AiModelId(model)))
-            BridgeTransportMode.entries.forEach { mode ->
-                val rows = corpus.map { (label, command) ->
-                    val recording = Recording(OpenAiCompatibleBridgeTransport(client, store, config, Dispatchers.IO, mode))
-                    val started = System.nanoTime()
-                    val result = BridgeModelPlanner(registry, descriptions, recording, budget).plan(command)
-                    Row(model, mode, label, command, result, recording.replies.toList(), (System.nanoTime() - started) / 1_000_000)
+            modes.forEach { mode ->
+                budgets.forEach { (reasoning, budget) ->
+                    val rows = corpus.map { (label, command) ->
+                        val recording = Recording(OpenAiCompatibleBridgeTransport(client, store, config, Dispatchers.IO, mode))
+                        val started = System.nanoTime()
+                        val result = BridgeModelPlanner(registry, descriptions, recording, budget).plan(command)
+                        Row(model, mode, reasoning, label, command, result, recording.replies.toList(), (System.nanoTime() - started) / 1_000_000)
+                    }
+                    rows.forEach { emit(lineOf(it)) }
+                    emit(summaryOf(model, mode, reasoning, rows))
                 }
-                rows.forEach { emit(lineOf(it)) }
-                emit(summaryOf(model, mode, rows))
             }
         }
         client.close()
@@ -118,13 +144,13 @@ class BridgeTransportMeasurement {
     private fun lineOf(row: Row): String {
         val step = (row.result as? ModelPlanning.Proposed)?.step
         val meta = row.replies.lastOrNull()?.let { (it as? TransportReply.Answer)?.meta ?: (it as? TransportReply.Unparseable)?.meta }
-        return "BRIDGE-MEASURE :: line model=${row.model} mode=${row.mode} label=${row.label} kind=${kindOf(row.result)} " +
+        return "BRIDGE-MEASURE :: line model=${row.model} mode=${row.mode} reasoning=${row.reasoning.word} label=${row.label} kind=${kindOf(row.result)} " +
             "tool=${step?.tool?.value ?: "-"} args=${step?.args ?: "-"} attempts=${row.replies.size} ms=${row.ms} " +
             "finish=${meta?.finishReason ?: "-"} completion_tokens=${meta?.completionTokens ?: "-"} " +
             "reasoning_tokens=${meta?.reasoningTokens ?: "-"} command=${row.command}"
     }
 
-    private fun summaryOf(model: String, mode: BridgeTransportMode, rows: List<Row>): String {
+    private fun summaryOf(model: String, mode: BridgeTransportMode, reasoning: Reasoning, rows: List<Row>): String {
         val n = rows.size
         val parsedFirst = rows.count { it.replies.firstOrNull() is TransportReply.Answer }
         val usable = rows.count { it.result !is ModelPlanning.Unavailable }
@@ -138,24 +164,43 @@ class BridgeTransportMeasurement {
         val p90 = if (n == 0) null else sorted[(9 * n + 9) / 10 - 1]
         val metas = rows.flatMap { row -> row.replies.mapNotNull { (it as? TransportReply.Answer)?.meta ?: (it as? TransportReply.Unparseable)?.meta } }
         val truncated = metas.count { it.finishReason == "length" }
-        val reasoning = metas.count { (it.reasoningTokens ?: 0) > 0 }
+        val reasoningReported = metas.count { (it.reasoningTokens ?: 0) > 0 }
         val questions = rows.filter { it.label == "question" }
         val toAssistant = questions.count { it.result is ModelPlanning.ToAssistant }
         val toSearch = questions.count { (it.result as? ModelPlanning.Proposed)?.step?.tool?.value == "web_search" }
-        return "BRIDGE-MEASURE :: summary model=$model mode=$mode n=$n parsed_first=$parsedFirst/$n usable=$usable/$n " +
+        return "BRIDGE-MEASURE :: summary model=$model mode=$mode reasoning=${reasoning.word} n=$n parsed_first=$parsedFirst/$n usable=$usable/$n " +
             "retried=$retried timed_out=$timedOut median_ms=${median ?: "-"} p90_ms=${p90 ?: "-"} truncated=$truncated " +
-            "reasoning_reported=$reasoning questions_to_assistant=$toAssistant/${questions.size} " +
+            "reasoning_reported=$reasoningReported questions_to_assistant=$toAssistant/${questions.size} " +
             "questions_to_web_search=$toSearch/${questions.size}"
     }
 
+    /** `SIDR_MEASURE_REASONING`'s two values (fork 3b-H). */
+    private enum class Reasoning(val word: String) { OFF("off"), ON("on") }
+
+    /**
+     * A switch: unset or blank → [default]; otherwise a comma list, each trimmed value read by [parse].
+     * An unknown, empty or repeated value refuses the run — here, before any request is made.
+     */
+    private fun <T> switchOf(name: String, default: List<T>, parse: (String) -> T?): List<T> {
+        val raw = System.getenv(name)?.takeIf { it.isNotBlank() } ?: return default
+        val values = raw.split(',').map { it.trim() }
+        val parsed = values.map { value -> checkNotNull(parse(value)) { "BRIDGE-MEASURE :: refused - $name has an unknown value '$value'" } }
+        check(parsed.distinct().size == parsed.size) { "BRIDGE-MEASURE :: refused - $name repeats a value" }
+        return parsed
+    }
+
     private companion object {
+        /** `SIDR_MEASURE_REASONING=on`: half the shipped output limit — derived, not a new number (plan §0.3). */
+        val REASONING_ON_MAX_TOKENS = BridgeBudget.Default.maxOutputTokens / 2
+
         /** The socket cap of Task 12 rule 2: one attempt may be silent this long before the socket ends it. */
         const val MEASURE_SOCKET_MS = 90_000L
 
         /**
          * The planner's ceiling for the measurement. `BridgeModelPlanner` wraps the WHOLE planning, the one
-         * retry included, in `withTimeoutOrNull(ceilingMs)`; with `BridgeBudget.Default` (50 s since the
-         * 2026-11-07 run, 45 s when this was written) a 60 s answer would be cut and recorded as `timed_out`
+         * retry included, in `withTimeoutOrNull(ceilingMs)`; with `BridgeBudget.Default` (45 s when this was
+         * written, 50 s after the 2026-11-07 run, 45 s again since the 2026-11-07b re-measure) a 60 s answer
+         * would be cut and recorded as `timed_out`
          * at the default ceiling, so p90 could never exceed it and rule 2 would be fed a truncated number.
          * Two attempts × the socket cap, so one silent wait up to the cap is observed rather than cut.
          * Not a strict bound: connect time and body transfer count against the

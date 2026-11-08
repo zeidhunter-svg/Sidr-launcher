@@ -33,12 +33,14 @@ class BridgeModelPlanner(
             command = command,
             retryNote = null,
             maxOutputTokens = budget.maxOutputTokens,
+            reasoningMaxTokens = budget.reasoningMaxTokens,
         )
         val firstReply = transport.ask(first)
         val error = when (val judged = judge(firstReply, offering, command)) {
             is Judged.Done -> return judged.planning
             is Judged.Retry -> judged.error
         }
+        // The first ask plus the closed code's note: both limits, the reasoning cap included, travel unchanged.
         val retry = first.copy(retryNote = BridgeRendering.retryNote(error))
         return when (val judged = judge(transport.ask(retry), offering, command)) {
             is Judged.Done -> judged.planning

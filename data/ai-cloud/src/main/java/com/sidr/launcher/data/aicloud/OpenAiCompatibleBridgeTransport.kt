@@ -41,6 +41,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
+import java.net.URI
 
 /**
  * How the answer's shape reaches the provider (D2, b′; spec §7.12.2). The shape is the same in all
@@ -76,7 +77,9 @@ fun bridgeHttpClient(socketTimeoutMs: Long): HttpClient = HttpClient(Android) {
  *  - the key comes only from [SecureSecretStore], goes only into the `Authorization` header, and is
  *    never logged nor put in a reply (`DOC-AML-3`).
  * The body is exactly the [BridgeRequest]'s parts in the mode's form; this class adds nothing of the
- * device. Errors use the assistant engine's vocabulary ([AiError]) so the two surfaces stop disagreeing.
+ * device. Its one subtraction: the optional reasoning cap goes out as `reasoning.max_tokens` only when
+ * the base URL's host is OpenRouter ([acceptsReasoningCap], B-16), and is dropped unsent for any other.
+ * Errors use the assistant engine's vocabulary ([AiError]) so the two surfaces stop disagreeing.
  */
 class OpenAiCompatibleBridgeTransport(
     private val httpClient: HttpClient,
@@ -118,7 +121,9 @@ class OpenAiCompatibleBridgeTransport(
             is OperationResult.Failure -> null
         } ?: return TransportReply.Failed(AiError.MissingCredentials)
 
-        val body = encode(request, config.modelId.value.trim())
+        // B-16: the reasoning cap reaches OpenRouter only; for any other host it is dropped here, unsent.
+        val reasoningCap = request.reasoningMaxTokens?.takeIf { acceptsReasoningCap(baseUrl) }
+        val body = encode(request, config.modelId.value.trim(), reasoningCap)
         val response = httpClient.post(baseUrl.removeSuffix("/") + "/chat/completions") {
             header(HttpHeaders.Authorization, "Bearer $key")
             contentType(ContentType.Application.Json)
@@ -131,7 +136,7 @@ class OpenAiCompatibleBridgeTransport(
         return decode(response.bodyAsText())
     }
 
-    private fun encode(request: BridgeRequest, model: String): String = buildJsonObject {
+    private fun encode(request: BridgeRequest, model: String, reasoningCap: Int?): String = buildJsonObject {
         put("model", model)
         putJsonArray("messages") {
             addJsonObject {
@@ -146,6 +151,7 @@ class OpenAiCompatibleBridgeTransport(
         }
         put("max_tokens", request.maxOutputTokens)
         put("stream", false)
+        reasoningCap?.let { cap -> putJsonObject("reasoning") { put("max_tokens", cap) } }
         when (mode) {
             BridgeTransportMode.PROMPT_ONLY -> Unit
             BridgeTransportMode.RESPONSE_FORMAT -> putJsonObject("response_format") {
@@ -240,6 +246,19 @@ class OpenAiCompatibleBridgeTransport(
         const val SCHEMA_NAME = "sidr_answer"
         const val TOOL_NAME = "submit_answer"
         const val TOOL_DESCRIPTION = "Submit your one answer in the required form."
+
+        /** The one host the reasoning cap is sent to (B-16): the one provider the measurement covers. */
+        const val REASONING_CAP_HOST = "openrouter.ai"
+
+        /**
+         * B-16: whether [baseUrl]'s host is OpenRouter. The host is PARSED and compared whole — never a
+         * prefix or a substring of the URL, so `openrouter.ai.<elsewhere>` and `openrouter.ai@<elsewhere>`
+         * are other providers; case is ignored only because a host's case is (RFC 3986 §3.2.2). A URL that
+         * does not parse is not OpenRouter. Public for the measurement harness, which refuses
+         * `SIDR_MEASURE_REASONING=on` against any other host rather than record a cap that was never sent.
+         */
+        fun acceptsReasoningCap(baseUrl: String): Boolean =
+            runCatching { URI(baseUrl.trim()).host }.getOrNull()?.equals(REASONING_CAP_HOST, ignoreCase = true) == true
 
         private val strict = Json { isLenient = false }
     }

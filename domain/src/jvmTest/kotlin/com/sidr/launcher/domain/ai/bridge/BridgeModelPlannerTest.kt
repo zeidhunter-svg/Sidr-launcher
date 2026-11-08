@@ -155,4 +155,24 @@ class BridgeModelPlannerTest {
 
         assertEquals(777, transport.requests.single().maxOutputTokens)
     }
+
+    /**
+     * The shipped numbers are the 2026-11-07b re-measure's (ADR addendum «Повторный замер «50 с × 4 096»
+     * (2026-11-07b)»), with the reasoning cap OFF until phase 3b's own measurement decides it (fork 3b-H).
+     * A legitimate re-measure edits this line; a silent revert of the constants no longer passes the gate.
+     */
+    @Test
+    fun `the shipped budget is the re-measured pair`() {
+        assertEquals(BridgeBudget(45_000L, 4_096, null), BridgeBudget.Default)
+    }
+
+    /** Fork 3b-H: the cap is a generation limit of the budget, so the one retry carries it as the first ask did. */
+    @Test
+    fun `the reasoning cap travels with the first ask and the retry`() = runTest {
+        val transport = FakeBridgeTransport(listOf(notOffered, valid))
+
+        planner(transport, BridgeBudget(ceilingMs = 45_000, maxOutputTokens = 4_096, reasoningMaxTokens = 1_234)).plan(command)
+
+        assertEquals(listOf<Int?>(1_234, 1_234), transport.requests.map { it.reasoningMaxTokens })
+    }
 }

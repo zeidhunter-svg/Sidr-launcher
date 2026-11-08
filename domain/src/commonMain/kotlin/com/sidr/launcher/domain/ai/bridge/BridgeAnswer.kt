@@ -31,7 +31,9 @@ sealed interface TransportReply {
 /**
  * Exactly what may leave the device (B-4): the system text (instruction + offering), the schema text
  * (sent only in the transport's schema forms), the user's command verbatim, an optional static retry
- * note, and the generation limit.
+ * note, and the generation limits — [maxOutputTokens] and the optional [reasoningMaxTokens] (fork 3b-H),
+ * numbers of ours (`GENERATION_LIMITS`), never anything of the user's world. The transport sends the
+ * reasoning cap to OpenRouter only (B-16).
  */
 data class BridgeRequest(
     val system: String,
@@ -39,6 +41,7 @@ data class BridgeRequest(
     val command: String,
     val retryNote: String?,
     val maxOutputTokens: Int,
+    val reasoningMaxTokens: Int? = null,
 )
 
 /** The bridge's own transport — its own path, not `GenerativeAiEngine` (spec §7.12.2). Never throws. */

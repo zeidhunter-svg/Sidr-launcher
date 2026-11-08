@@ -55,6 +55,7 @@ class OpenAiCompatibleBridgeTransportTest {
         baseUrl = "https://api.example.com/v1",
         modelId = AiModelId("fixture-model"),
     )
+    private val openRouter = config.copy(baseUrl = "https://openrouter.ai/api/v1")
     private val jsonHeaders = headersOf(HttpHeaders.ContentType, "application/json")
     private val schema = """{"type":"object","additionalProperties":false,"required":["kind"],"properties":{"kind":{"type":"string"}}}"""
     private val request = BridgeRequest(
@@ -290,6 +291,51 @@ class OpenAiCompatibleBridgeTransportTest {
         assertEquals("Bearer sk-SNTL-KEY", sentHeaders.first()[HttpHeaders.Authorization])
         assertFalse(bodies.any { it.contains("sk-SNTL-KEY") })
         assertFalse(refused.toString().contains("sk-SNTL-KEY"))
+    }
+
+    /**
+     * Fork 3b-H, B-16: the one provider the measurement covers gets the cap as `reasoning.max_tokens` — in
+     * its own field, and nothing more. (The name has no dot: a JVM method name cannot carry one.)
+     */
+    @Test
+    fun `a reasoning cap is sent to OpenRouter as reasoning max_tokens`() = runTest {
+        transport(cfg = openRouter).ask(request.copy(reasoningMaxTokens = 1_234))
+
+        val sent = sentJson()
+        assertEquals(setOf("model", "messages", "max_tokens", "stream", "reasoning"), sent.keys)
+        assertEquals(Json.parseToJsonElement("""{"max_tokens":1234}"""), sent.getValue("reasoning"))
+        assertEquals("512", sent.getValue("max_tokens").jsonPrimitive.content)
+    }
+
+    /** The switch is OFF by default (`BridgeBudget.Default`): even OpenRouter then gets the 3a body, unchanged. */
+    @Test
+    fun `no reasoning cap sends no reasoning object`() = runTest {
+        transport(cfg = openRouter).ask(request)
+
+        assertEquals(setOf("model", "messages", "max_tokens", "stream"), sentJson().keys)
+    }
+
+    /**
+     * B-16: an endpoint that does not know the field may refuse the whole request (OpenAI answers an
+     * unknown field with 400 → `REQUEST_REJECTED`), so no other provider ever receives it. The HOST is
+     * what is compared: a look-alike host and a userinfo prefix are other providers too.
+     */
+    @Test
+    fun `a reasoning cap is never sent to another provider`() = runTest {
+        val elsewhere = listOf(
+            "https://api.quillmere.example/v1",
+            "https://openrouter.ai.quillmere.example/v1",
+            "https://openrouter.ai@quillmere.example/v1",
+        )
+
+        elsewhere.forEach { baseUrl ->
+            transport(cfg = config.copy(baseUrl = baseUrl)).ask(request.copy(reasoningMaxTokens = 1_234))
+        }
+
+        assertEquals(elsewhere.size, bodies.size)
+        bodies.forEachIndexed { i, body ->
+            assertEquals(elsewhere[i], setOf("model", "messages", "max_tokens", "stream"), Json.parseToJsonElement(body).jsonObject.keys)
+        }
     }
 
     @Test

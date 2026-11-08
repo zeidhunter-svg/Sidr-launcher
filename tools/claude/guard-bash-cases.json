@@ -9,6 +9,13 @@
   { "expect": "block", "why": "сокращение camelCase",          "cmd": "./gradlew cAT" },
   { "expect": "block", "why": "маскировка кода возврата",      "cmd": "./gradlew :domain:jvmTest | tail -5" },
   { "expect": "block", "why": "то же через head и 2>&1 — одиночный & не должен рвать сегмент", "cmd": "./gradlew :app:testDebugUnitTest 2>&1 | head -40" },
+  { "expect": "block", "why": "удаление пакета, простейшая форма", "cmd": "adb uninstall com.sidr.launcher" },
+  { "expect": "block", "why": "опция устройства перед uninstall", "cmd": "adb -s R58R12345 uninstall com.sidr.launcher" },
+  { "expect": "block", "why": "pm uninstall через shell",      "cmd": "adb shell pm uninstall --user 0 com.sidr.launcher" },
+  { "expect": "block", "why": "очистка данных",                "cmd": "adb shell pm clear com.sidr.launcher" },
+  { "expect": "block", "why": "cmd package вместо pm",         "cmd": "adb shell cmd package clear com.sidr.launcher" },
+  { "expect": "block", "why": "pm clear в кавычках после ; — хвост после резки начинается с pm", "cmd": "adb shell 'pm list packages; pm clear com.sidr.launcher'" },
+  { "expect": "block", "why": "чужой пакет — телефон личный",  "cmd": "adb uninstall org.telegram.messenger" },
 
   { "expect": "pass",  "why": "штатный гейт",                  "cmd": "tools/gate.sh" },
   { "expect": "pass",  "why": "scoped-прогон гейта",           "cmd": "tools/gate.sh --scoped :app:testDebugUnitTest" },
@@ -23,5 +30,9 @@
   { "expect": "pass",  "why": "предписанное чтение базы агента", "cmd": "tools/device/pull-agent-db.sh" },
   { "expect": "pass",  "why": "adb push не имеет отношения к git", "cmd": "adb push /tmp/x /sdcard/x" },
   { "expect": "pass",  "why": "регрессия: v1 ложно блокировала запись этого файла — git и push на разных строках, ни одно не вызов", "cmd": "cat > .claude/settings.local.json <<'J'\n      \"Bash(adb push *)\",\n      \"Bash(git add *)\"\nJ" },
-  { "expect": "pass",  "why": "упоминание задачи в тексте без вызова gradle", "cmd": "echo 'правило про connectedAndroidTest описано в ADR'" }
+  { "expect": "pass",  "why": "упоминание задачи в тексте без вызова gradle", "cmd": "echo 'правило про connectedAndroidTest описано в ADR'" },
+  { "expect": "pass",  "why": "установка поверх сохраняет данные", "cmd": "adb install -r app/build/outputs/apk/debug/app-debug.apk" },
+  { "expect": "pass",  "why": "uninstall внутри имени файла — не токен", "cmd": "adb install -r /tmp/no-uninstall.apk" },
+  { "expect": "pass",  "why": "чтение списка пакетов",          "cmd": "adb shell pm list packages | grep sidr" },
+  { "expect": "pass",  "why": "поиск текста про pm clear без adb", "cmd": "grep -rn \"pm clear\" docs/" }
 ]

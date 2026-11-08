@@ -6,6 +6,7 @@ import com.sidr.launcher.data.aicloud.OpenAiCompatibleBridgeTransport
 import com.sidr.launcher.data.aicloud.bridgeHttpClient
 import com.sidr.launcher.data.repository.agent.AuthoredToolDescriptions
 import com.sidr.launcher.data.repository.agent.DeviceMentionBinder
+import com.sidr.launcher.data.repository.text.IcuTextFolding
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.ai.AiProviderConfigRepository
 import com.sidr.launcher.domain.ai.bridge.BridgeBudget
@@ -19,6 +20,7 @@ import com.sidr.launcher.domain.connectivity.ConnectivityChecker
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.security.SecureSecretStore
+import com.sidr.launcher.domain.text.TextFolding
 import com.sidr.launcher.domain.tool.ToolRegistry
 import dagger.Module
 import dagger.Provides
@@ -67,13 +69,23 @@ object BridgeProvidesModule {
     @Singleton
     fun provideToolDescriptions(impl: AuthoredToolDescriptions): ToolDescriptions = impl
 
+    /**
+     * The device's one text folding (phase 3b, B-1): ICU's word segments over the shared character
+     * folding. The bridge's derivability compares by it; it is bound here, once, so that whatever else on
+     * the device asks "is this the same word?" injects the same answer.
+     */
+    @Provides
+    @Singleton
+    fun provideTextFolding(): TextFolding = IcuTextFolding
+
     @Provides
     @Singleton
     fun provideModelPlanner(
         registry: ToolRegistry,
         descriptions: ToolDescriptions,
         transport: BridgeTransport,
-    ): ModelPlanner = BridgeModelPlanner(registry, descriptions, transport, BridgeBudget.Default)
+        folding: TextFolding,
+    ): ModelPlanner = BridgeModelPlanner(registry, descriptions, transport, BridgeBudget.Default, folding)
 
     @Provides
     @Singleton

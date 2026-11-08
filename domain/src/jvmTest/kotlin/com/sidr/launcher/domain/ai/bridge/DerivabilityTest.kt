@@ -40,6 +40,30 @@ class DerivabilityTest {
         assertFalse(Derivability.isDerivable("mvoral", "aç İmvoral"))
     }
 
+    /**
+     * The Arabic mark defect (B-1): a harakah is a combining mark, not a letter, so the old split cut
+     * «سِنْدَاف» into [س, ن, د, اف] and a model that wrote the vowelled form — or a user who typed it —
+     * never matched the plain word. Folding drops the harakat before words are split.
+     */
+    @Test
+    fun `a vowelled arabic mention is derivable from an unvowelled command`() {
+        assertTrue(Derivability.isDerivable("سِنْدَاف", "افتح سنداف"))
+        assertTrue(Derivability.isDerivable("سنداف", "افتح سِنْدَاف"))
+    }
+
+    /**
+     * «Vemblic'i» is ONE word the user typed (Turkish accusative after an apostrophe), not «Vemblic» +
+     * «i». Derivability stays exact (B-17): the user's whole form is derivable, the bare stem — another
+     * form — is not, and neither is the suffix as if it were a word of its own.
+     */
+    @Test
+    fun `an apostrophe form is one word for derivability`() {
+        assertTrue(Derivability.isDerivable("Vemblic'i", "Vemblic'i aç"))
+        assertTrue(Derivability.isDerivable("Vemblic’i", "Vemblic'i aç"))
+        assertFalse(Derivability.isDerivable("Vemblic", "Vemblic'i aç"))
+        assertFalse(Derivability.isDerivable("i", "Vemblic'i aç"))
+    }
+
     @Test
     fun `a blank mention is not derivable`() {
         assertFalse(Derivability.isDerivable("  ", "открой lumora"))

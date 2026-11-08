@@ -52,6 +52,7 @@ import com.sidr.launcher.domain.memory.resolution.ResolvedTarget
 import com.sidr.launcher.domain.memory.resolution.fingerprintOf
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.security.SecretKeys
+import com.sidr.launcher.domain.text.PlainTextFolding
 import com.sidr.launcher.domain.tool.ArgSource
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -216,6 +217,9 @@ class BridgePayloadGuardTest {
                 Dispatchers.Unconfined,
                 mode,
             ),
+            // Not `provideTextFolding()`: off Robolectric `android.icu` is the android.jar stub. The folding
+            // reads the model's reply only and adds nothing to a request, so the payload under guard is the same.
+            PlainTextFolding,
         ),
         binder = BridgeProvidesModule.provideMentionBinder(
             DeviceMentionBinder(AppTargetResolver(apps(), aliases()), ToolArgumentSorts(), learned(), DefaultResolutionPreferencePolicy()),

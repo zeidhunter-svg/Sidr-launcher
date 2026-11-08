@@ -2,6 +2,8 @@ package com.sidr.launcher.domain.ai.bridge
 
 import com.sidr.launcher.domain.ai.AiError
 import com.sidr.launcher.domain.intent.ModelUnavailableReason
+import com.sidr.launcher.domain.text.PlainTextFolding
+import com.sidr.launcher.domain.text.TextFolding
 import com.sidr.launcher.domain.tool.ToolRegistry
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -13,12 +15,16 @@ import kotlinx.coroutines.withTimeoutOrNull
  *
  * It binds nothing and knows nothing of the device: binding runs after it returns
  * (`RouteCommandUseCase` step 7, `MentionBinder`), so nothing binding finds can reach a retry.
+ *
+ * [folding] is what derivability compares the model's mention and the command by (phase 3b, B-1): the
+ * platform's own — Android passes `IcuTextFolding`; the default segments nothing.
  */
 class BridgeModelPlanner(
     private val registry: ToolRegistry,
     private val descriptions: ToolDescriptions,
     private val transport: BridgeTransport,
     private val budget: BridgeBudget = BridgeBudget.Default,
+    private val folding: TextFolding = PlainTextFolding,
 ) : ModelPlanner {
 
     override suspend fun plan(command: String): ModelPlanning =
@@ -51,7 +57,7 @@ class BridgeModelPlanner(
     private fun judge(reply: TransportReply, offering: BridgeOffering, command: String): Judged = when (reply) {
         is TransportReply.Failed -> Judged.Done(ModelPlanning.Unavailable(reasonOf(reply.error)))
         is TransportReply.Unparseable -> Judged.Retry(BridgeError.SHAPE)
-        is TransportReply.Answer -> when (val verdict = BridgeValidator.validate(reply.answer, offering, registry, command)) {
+        is TransportReply.Answer -> when (val verdict = BridgeValidator.validate(reply.answer, offering, registry, command, folding)) {
             is Verdict.Valid -> Judged.Done(verdict.planning)
             is Verdict.Rejected -> Judged.Retry(verdict.error)
         }

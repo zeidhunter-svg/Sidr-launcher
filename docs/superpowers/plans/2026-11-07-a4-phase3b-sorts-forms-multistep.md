@@ -556,6 +556,13 @@ object PlainTextFolding : TextFolding                              // segments =
 - [ ] **Step 2:** scoped `:domain:jvmTest`, `:data:repository:testDebugUnitTest`, `:consumer:jvm:test` → red.
 - [ ] **Step 3:** implement. **If Robolectric's ICU lacks the CJK/Thai dictionaries** (hypothesis), the two
   segmentation tests become a named limit in the task record, not a weakened assertion.
+  > **Measured in execution (2026-11-08, E2-F1).** The hypothesis was wrong in direction: Robolectric's
+  > ICU 72.1 carries both dictionaries (Thai passes; `打开设置`, `打开相机`, `打开地图` split into dictionary
+  > words). `打开微信` → `[打开, 微, 信]` — `微信` (also a real app, R14-43) is not a dictionary word. Fixture
+  > → `打开设置` → `["打开", "设置"]`. **Named limit:** a CJK app name absent from ICU's dictionary
+  > segments into single characters, so a whole-word match over `words()` cannot see it as one word
+  > (Task 4; aliases cover it, as for transliteration, §0.6). Also measured: `BridgePayloadGuardTest:209`
+  > calls `BridgeProvidesModule.provideModelPlanner` directly — passes `PlainTextFolding` (compile-follow).
 - [ ] **Step 4:** scoped green.
 - [ ] **Step 5: mutations**
 

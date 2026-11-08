@@ -1,5 +1,7 @@
 package com.sidr.launcher.domain.ai.bridge
 
+import com.sidr.launcher.domain.text.PlainTextFolding
+import com.sidr.launcher.domain.text.TextFolding
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolRegistry
 
@@ -14,7 +16,8 @@ sealed interface Verdict {
  *    it requires, and no argument it does not take;
  *  - **membership in the offering** — not in the federation: `set_app_alias` and `shortcut:…` are
  *    registered and `SAFE`, the engine would not stop them, and `B13` would rest on one render filter;
- *  - **derivability** — an argument the description marks as a mention holds the user's own words.
+ *  - **derivability** — an argument the description marks as a mention holds the user's own words,
+ *    compared after the platform's [TextFolding] (exact after folding, phase 3b B-17).
  * The verdict tells `UNKNOWN_TOOL` from `NOT_OFFERED` for the device's own use; the retry text that goes
  * out deliberately does NOT (`BridgeRendering.retryNote`), since a differing note would tell the model
  * whether an id it proposed is registered on this phone. Binding happens after this, and its outcome
@@ -22,9 +25,15 @@ sealed interface Verdict {
  */
 object BridgeValidator {
 
-    fun validate(answer: RawAnswer, offering: BridgeOffering, registry: ToolRegistry, command: String): Verdict =
+    fun validate(
+        answer: RawAnswer,
+        offering: BridgeOffering,
+        registry: ToolRegistry,
+        command: String,
+        folding: TextFolding = PlainTextFolding,
+    ): Verdict =
         when (answer.kind?.trim()) {
-            BridgeRendering.KIND_PLAN -> validatePlan(answer.step, offering, registry, command)
+            BridgeRendering.KIND_PLAN -> validatePlan(answer.step, offering, registry, command, folding)
             BridgeRendering.KIND_ASSISTANT -> answer.question.nonBlank()
                 ?.let { Verdict.Valid(ModelPlanning.ToAssistant(it)) }
                 ?: Verdict.Rejected(BridgeError.SHAPE)
@@ -38,7 +47,13 @@ object BridgeValidator {
             else -> Verdict.Rejected(BridgeError.SHAPE)
         }
 
-    private fun validatePlan(step: RawStep?, offering: BridgeOffering, registry: ToolRegistry, command: String): Verdict {
+    private fun validatePlan(
+        step: RawStep?,
+        offering: BridgeOffering,
+        registry: ToolRegistry,
+        command: String,
+        folding: TextFolding,
+    ): Verdict {
         val toolText = step?.tool?.trim().orEmpty()
         if (step == null || toolText.isEmpty()) return Verdict.Rejected(BridgeError.SHAPE)
         val id = ToolId(toolText)
@@ -58,11 +73,11 @@ object BridgeValidator {
                 if (arg.required) return Verdict.Rejected(BridgeError.SHAPE)
                 continue
             }
-            if (arg.mention && !Derivability.isDerivable(value, command)) {
+            if (arg.mention && !Derivability.isDerivable(value, command, folding)) {
                 return Verdict.Rejected(BridgeError.UNDERIVABLE_MENTION)
             }
             values[arg.name] = value
-            origins[arg.name] = Derivability.originOf(value, command)
+            origins[arg.name] = Derivability.originOf(value, command, folding)
         }
         return Verdict.Valid(
             ModelPlanning.Proposed(ProposedStep(id, values, origins, offered.descriptor.risk, offered.descriptor.effect)),

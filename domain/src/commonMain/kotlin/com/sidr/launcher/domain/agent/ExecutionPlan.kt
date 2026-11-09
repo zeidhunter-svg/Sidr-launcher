@@ -88,11 +88,16 @@ fun ExecutionPlan.isModelProposed(): Boolean = steps.any { it.rationale == StepR
 /**
  * What a DETERMINISTIC planner answers. Three variants since A4′ phase 3b (plan §0.2 B-6):
  *  - [Planned] — a plan to run;
- *  - [NoPlan] — this planner claims nothing in the goal. At `RouteCommandUseCase` step 2b it falls
- *    through to the cloud model, and that is right only because it now means exactly that — no
- *    registered tool claimed the text, or a second goal rides in a target's words (B-15) — and never
- *    "a tool claimed it and its target did not resolve", which it also meant from A1″ Task 6b until
- *    this phase (R14-39);
+ *  - [NoPlan] — this planner has no answer it can give for the goal. At `RouteCommandUseCase` step 2b
+ *    it falls through to the cloud model. It no longer means "a tool claimed it and its target did not
+ *    resolve", which it also meant from A1″ Task 6b until this phase (R14-39) — that is [Unresolved]
+ *    now. It means "no registered tool claimed the text", or "a second goal rides in a target's words"
+ *    (B-15, on purpose — the model plans both). **It also still means three cases in which a tool DID
+ *    claim the text**, each a defect class older than this phase and each still reaching step 7, named
+ *    rather than implied away: the claimed tool is not in the registry (withheld — e.g. for a permission
+ *    the process does not hold); the vocabulary and the descriptor disagree about a required argument's
+ *    NAME (`ToolMatchPlanner`); the plan does not validate against the registry
+ *    (`StartAgentSessionUseCase.planning` maps it to `NoPlan`);
  *  - [Unresolved] — a tool claimed the goal and its target needs the user ([UnresolvedTarget]). It never
  *    reaches step 7: step 2b answers it on the device (R14-39, closed).
  *
@@ -125,9 +130,13 @@ sealed interface PlanningResult {
  * decided what left the device. Now the device answers it: «нет такого приложения», a pick, or an
  * honest failure — and nothing reaches step 7.
  *
- * [pending] is the one step the planner built, **without** [arg] and without [labelArg]. It does not
- * validate as written — its target is missing — so nothing can start it by mistake; [bind] is the one
- * way to finish it. [words] are what the user typed for the target, as the vocabulary handed them over
+ * [pending] is the one step the planner built, **without** [arg] and without [labelArg]; [bind] is the
+ * one way to finish it. **When [arg] is a REQUIRED argument it does not validate as written** — its
+ * target is missing — so nothing can start it by mistake. That holds for every app-sorted argument
+ * reachable at step 2b today (`uninstall_app`, `open_app_info`, `set_app_alias` all declare `app`
+ * required). An OPTIONAL app-sorted argument whose words did not resolve would leave a pending step that
+ * DOES validate — a step with no target; no such tool is reachable at 2b (`launch_app`'s optional `app`
+ * is never selected by the vocabulary), named so the next one is not added unawares. [words] are what the user typed for the target, as the vocabulary handed them over
  * (normalised, never the raw span). [sort] is what [words] were meant to be (`ArgSorts.APP` is the only
  * sort with a producer in phase 3b's Task 5; Task 6 adds the others).
  *

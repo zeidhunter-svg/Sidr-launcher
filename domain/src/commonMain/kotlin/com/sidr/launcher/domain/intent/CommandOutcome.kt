@@ -79,8 +79,9 @@ sealed interface CommandOutcome {
 
     /**
      * A registered tool claimed the command at routing step 2b and its target is the user's to pick
-     * (A4′ phase 3b, fork 3b-E; plan §0.2 B-7): two apps answer the words, or one is only offered — a
-     * word form, or a name found inside extra words. **Not an interpretation card** — the model read
+     * (A4′ phase 3b, fork 3b-E; plan §0.2 B-7): two or more apps answer the words exactly, or one or
+     * more are only OFFERED (`UnresolvedTarget.confirm`) — a word form (an edge pair such as «Плинта» /
+     * «Плинт» offers both), or a name found inside extra words. **Not an interpretation card** — the model read
      * nothing here — and not FastPath's launch list ([NeedsConfirmation], whose tap launches): a tap
      * binds the package through [UnresolvedTarget.bind] and starts the session directly, through the
      * engine, which gates the step by its risk. Never produced with an empty candidate list.

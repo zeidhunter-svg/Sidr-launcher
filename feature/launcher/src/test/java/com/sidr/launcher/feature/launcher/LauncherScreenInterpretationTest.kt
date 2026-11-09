@@ -41,6 +41,7 @@ import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.StepRationale
 import com.sidr.launcher.domain.agent.TemplatePlanner
+import com.sidr.launcher.domain.agent.UnresolvedTarget
 import com.sidr.launcher.domain.ai.bridge.Interpretation
 import com.sidr.launcher.domain.ai.bridge.PrincipalId
 import com.sidr.launcher.domain.ai.bridge.ValueOrigin
@@ -55,7 +56,9 @@ import com.sidr.launcher.domain.memory.resolution.CommandRouteStep
 import com.sidr.launcher.domain.memory.resolution.DefaultResolutionPreferencePolicy
 import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
 import com.sidr.launcher.domain.memory.resolution.ResolveCommandWithPreferenceUseCase
+import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.prayer.GetPrayerContextUseCase
+import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolIds
@@ -258,6 +261,51 @@ class LauncherScreenInterpretationTest {
         )
         assertFalse("the model call itself was cancelled, not merely ignored", answered)
         collector.cancel()
+    }
+
+    /**
+     * A4′ phase 3b, controller ruling E5-R3 (review M2): **the screen half of the 2b target pick.** The
+     * ViewModel tests hold the state; only this holds that [LauncherScreen] draws it — without the draw
+     * block a `ChooseTarget` clears the feedback line and the user sees nothing at all. The pick is drawn
+     * by `AppChoiceList` (label and package per candidate), it is NOT the interpretation card, and a tap
+     * on a candidate starts the session through the engine, the package and the typed words bound.
+     * Compared whole and literally (English, the default test locale). `launch_app` stands in for the
+     * one A0 tool here that declares an `app` argument; its fixture risk `CONFIRM` stops the engine at
+     * consent, so nothing is invoked.
+     */
+    @Test
+    fun `a 2b target pick on the screen is drawn, and a tap on a candidate starts the session`() {
+        val target = UnresolvedTarget(
+            goal = AgentGoal("удали приложение tessar", GoalShape.Free("удали приложение tessar")),
+            pending = PlanStep(0, ToolInvocation(ToolIds.LAUNCH_APP), ActionRiskLevel.CONFIRM, StepPrecondition.None, StepRationale.GOAL_DIRECT),
+            arg = "app",
+            labelArg = "query",
+            sort = ArgSorts.APP,
+            words = "tessar",
+            candidates = listOf(InstalledApp("net.fixture.tessar.one", "Tessar"), InstalledApp("net.fixture.tessar.two", "Tessar")),
+            confirm = false,
+        )
+        val vm = show(CommandRouteStep { CommandOutcome.ChooseTarget(target) })
+
+        vm.onCommandSubmitted("удали приложение tessar")
+        compose.waitForIdle()
+        compose.onNodeWithText("Which app is \"tessar\"?").assertExists()
+        compose.onNodeWithText("Tessar (net.fixture.tessar.one)").assertExists()
+        compose.onNodeWithText("Here is how I understood it").assertDoesNotExist()
+        assertTrue("drawing the pick starts nothing", agentStore.saved.isEmpty())
+
+        compose.onNodeWithText("Tessar (net.fixture.tessar.two)").performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("Which app is \"tessar\"?").assertDoesNotExist()
+        assertEquals(
+            ToolInvocation(
+                ToolIds.LAUNCH_APP,
+                mapOf("app" to ArgSource.Literal("net.fixture.tessar.two"), "query" to ArgSource.Literal("tessar")),
+            ),
+            agentStore.saved.first().plan.steps.single().invocation,
+        )
+        assertEquals("one session, started by the tap", 1, agentStore.saved.map { it.id }.distinct().size)
     }
 
     private fun buildViewModel(route: CommandRouteStep): LauncherViewModel {

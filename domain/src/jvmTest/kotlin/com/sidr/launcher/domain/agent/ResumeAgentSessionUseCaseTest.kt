@@ -4,7 +4,9 @@ import com.sidr.launcher.core.testing.FakeAgentSessionStore
 import com.sidr.launcher.core.testing.FakeToolExecutor
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ObservedFact
 import com.sidr.launcher.domain.tool.ToolId
@@ -276,5 +278,49 @@ class ResumeAgentSessionUseCaseTest {
         assertEquals(ExecutionState.Completed, after.state)
         assertEquals(listOf(webSearch), tools.invocations.map { it.id })
         assertEquals(0, planner.calls)
+    }
+
+    /**
+     * A4′ phase 3b, controller ruling E5-R1 (review I1). A session that started from a 2b pick — two
+     * «Tessar», the user tapped the second — stopped at its consent card and outlived its process.
+     * Nothing acted, so «Продолжить» looks again. The goal, as typed, still needs the pick: the fresh look
+     * answers `Unresolved`. Ending it `Failed` would throw the user's choice away and trace a failure
+     * where nothing failed. So, like a model plan, it goes back to the ROUTE, where step 2b asks again.
+     * The planner IS asked — a goal that now binds by itself must still plan afresh (F2-3.1) — and the
+     * stale session is left for the route layer to close.
+     */
+    @Test
+    fun `a paused 2b pick goes back to the route and is asked again`() = runTest {
+        val command = "удали приложение tessar"
+        val target = UnresolvedTarget(
+            goal = AgentGoal(command, GoalShape.Free(command)),
+            pending = PlanStep(0, ToolInvocation(ToolIds.LAUNCH_APP), ActionRiskLevel.CONFIRM, StepPrecondition.None, StepRationale.GOAL_DIRECT),
+            arg = "app",
+            labelArg = "query",
+            sort = ArgSorts.APP,
+            words = "tessar",
+            candidates = listOf(InstalledApp("net.fixture.tessar.one", "Tessar"), InstalledApp("net.fixture.tessar.two", "Tessar")),
+            confirm = false,
+        )
+        var asked = 0
+        val claims = object : Planner {
+            override suspend fun plan(request: PlanningRequest, registry: ToolRegistry): PlanningResult {
+                asked++
+                return PlanningResult.Unresolved(target)
+            }
+        }
+        val picked = checkNotNull(target.bind("net.fixture.tessar.two"))
+        val started = (StartAgentSessionUseCase(claims, store, ids, registry).startPlanned(target.goal, picked) as OperationResult.Success).value
+        val tools = FakeToolExecutor(emptyList())
+        runner(tools).run(checkNotNull(started))
+        check(store.active.state == ExecutionState.AwaitingConsent)
+        val paused = store.active.pausedForRestore().also { store.save(it) }
+
+        val result = resume(tools, claims).resume(paused)
+
+        assertEquals(OperationResult.Success(Resumption.NeedsRoute(target.goal)), result)
+        assertEquals("the fresh look was taken", 1, asked)
+        assertTrue("nothing was performed", tools.invocations.isEmpty())
+        assertEquals("the stale session is the route layer's to close", paused, store.active)
     }
 }

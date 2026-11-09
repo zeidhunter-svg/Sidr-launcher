@@ -154,10 +154,12 @@ data class AgentSession(
      *
      * One predicate for two readers: `ResumeAgentSessionUseCase` acts on it, and the paused card picks
      * its body by it (F2-3.2), so the card cannot promise one thing while the button does another.
-     * When this is true but the fresh look finds NO plan (`start.plan(paused.goal)` returns `null`),
-     * the stale session ends [ExecutionState.Failed] instead of continuing (owner decision 2026-10-03,
-     * M1(b); final review N5/T4 M1) — the card then reads «План не удалось завершить», not a promise
-     * of a fresh look that a stale continuation would have broken.
+     * When this is true but the fresh look finds NO plan (`start.planning(paused.goal)` answers
+     * `NoPlan`), the stale session ends [ExecutionState.Failed] instead of continuing (owner decision
+     * 2026-10-03, M1(b); final review N5/T4 M1) — the card then reads «План не удалось завершить», not a
+     * promise of a fresh look that a stale continuation would have broken. When the fresh look finds a
+     * target the user must pick again (`Unresolved`, a 2b pick — A4′ phase 3b, E5-R1), the goal goes back
+     * to the route, which asks again; the look is still fresh, so the card's promise holds.
      */
     fun replansOnResume(): Boolean =
         state == ExecutionState.Paused &&

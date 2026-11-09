@@ -249,8 +249,9 @@ class Tier0IntentToolWorker @Inject constructor(
      *    call cannot remove anything and that is known before it is made. Without this check, a
      *    dispatch that returned normally would come back as this arm's success, [ToolResult.HandedOff] (since A4′ phase 0,
      *    Task 5 — [ToolResult.Effected] before it): "outcome unknown" for an outcome already known,
-     *    where the answer `DOC-ILM-3` requires is [ToolResult.Failed]. It is a second line of defence — `ToolMatchPlanner` answers `NoPlan` when resolution fails, so a
-     *    blank should never arrive — and second lines are kept, not argued away;
+     *    where the answer `DOC-ILM-3` requires is [ToolResult.Failed]. It is a second line of defence — a target that did not resolve never becomes a plan
+     *    (`ToolMatchPlanner` answers `PlanningResult.Unresolved`, and only a tap on an offered package
+     *    binds it), so a blank should never arrive — and second lines are kept, not argued away;
      *  - **our own package** (owner condition 4, 2026-09-18): uninstalling Sidr mid-session kills the
      *    surface the session is running on. [ownPackageName] is injected rather than read from a
      *    `Context` here, so this is an ordinary equality a unit test can state.

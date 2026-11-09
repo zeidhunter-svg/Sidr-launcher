@@ -211,8 +211,15 @@ class Tier0IntentToolSource @Inject constructor(
         // NAME for this tool id (a dedicated branch, not the `singleOrNull()` single-literal path, which
         // cannot render two values), so the consent card reads e.g. "Remove telegram
         // (org.telegram.messenger)" — both what the user said and what will actually be removed;
-        // (3) exact resolution or decline — `AppTargetResolver` returns `null` to decline and the
-        // planner turns that into `NoPlan`, so no card is ever drawn for an unresolved name;
+        // (3) exact resolution or decline — no consent card is ever drawn for a name that did not
+        // resolve: the planner answers `PlanningResult.Unresolved` (since A4′ phase 3b; `NoPlan` before
+        // it, which fell through to the cloud model — R14-39), and step 2b answers that on the device
+        // with no plan. **Since phase 3b the condition also admits a candidate the device OFFERED** — a
+        // word form, or a name found inside extra words (`confirm = true`), or one of two exact matches —
+        // **and the user bound by a tap** (`UnresolvedTarget.bind`), before the consent card, which then
+        // names that package. Only the whole words naming one app exactly — a label or an alias — bind
+        // without the user; an offered candidate is never bound by the device alone. An owner item at
+        // the phase close;
         // (4) our own package is refused — `Tier0IntentToolWorker.uninstallApp`; (5) the wording says
         // the precondition is CHECKED BEFORE THE CALL and never that a refusal is DETECTED (rows
         // 16/28/32: `startActivity` returns normally and throws nothing whether the uninstaller

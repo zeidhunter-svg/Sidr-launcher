@@ -59,9 +59,10 @@ class StartAgentSessionUseCase(
         }
 
     /**
-     * [planning]'s plan, for a caller that has no user to ask — [start] and `ResumeAgentSessionUseCase`'s
-     * fresh look. A target the user must pick is not a plan here: [PlanningResult.Unresolved] is `null`,
-     * so a resumed session whose goal no longer binds by itself ends rather than guessing.
+     * [planning]'s plan, for a caller that has no user to ask — [start] (step 2's A0 plan). A target the
+     * user must pick is not a plan here: [PlanningResult.Unresolved] is `null`, never a guess.
+     * `ResumeAgentSessionUseCase` does NOT read this: since controller ruling E5-R1 it reads [planning], so
+     * that a resumed 2b pick goes back to the route instead of ending `Failed` as a "no plan" would.
      */
     suspend fun plan(goal: AgentGoal): ExecutionPlan? =
         // Exhaustive with no `else` (spec §3 0.0), the second half of this file's address.

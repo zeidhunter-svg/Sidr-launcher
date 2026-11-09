@@ -405,7 +405,10 @@ B-15, B-17 first) are listed at close; (4) the doctrine-matrix edits of Tasks 5,
 *Measured in execution: Task 4's ruling E4-P2 (one `AppSortResolverTest` pin) moves every column from T4 on by
 +1 (T4 1716), and Task 5's ruling E5-P1 (an unreadable target list at 2b, two tests: `:domain` +1,
 `:data:repository` +1) by +2 more from T5 on — T5 measured **1728** (`:domain` 543, `:data:repository` 448,
-`:feature:launcher` 259); T6 … T13 read 1734 … 1790 until the next deviation.*
+`:feature:launcher` 259); Task 5's review round (rulings E5-R1: a paused 2b pick goes back to the route on
+resume; E5-R3: the 2b pick is drawn) adds `:domain` +1 and `:feature:launcher` +1 — T5 measured **1730**
+(`:domain` 544, `:data:repository` 448, `:feature:launcher` 260); T6 … T13 read 1736 … 1792 until the next
+deviation.*
 
 The other eight move only in `:data:ai-cloud` (40 → 43 → 45). Tasks 14 and 15 add no test (Task 1's
 budget pin is edited in Task 14). **No task deletes a test.** Existing tests **rewritten at constant

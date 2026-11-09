@@ -51,8 +51,12 @@ sealed interface AppCandidates {
  * otherwise this would send an uninstall intent at nothing and the caller would report an effect over
  * emptiness (review finding M3, spec §7.6/§7.7).
  *
- * **Aliases that cannot be read are [AppCandidates.Unavailable]**, not "no alias": an alias may name a
- * different app than the label does, so answering from labels alone would be a guess.
+ * **An alias `find` that fails is [AppCandidates.Unavailable]**, not "no alias": an alias may name a
+ * different app than the label does, so answering from labels alone would be a guess. That holds for
+ * `find` only. Caveat E4-F2: the production alias list (`AliasStoreImpl.observeAll`) swallows its errors
+ * and emits an empty list. So when the list read fails in production, word forms of aliases silently
+ * vanish — nothing is offered for them. Exact aliases still bind through `find`. The `observeAll`-throws
+ * branch below answers `Unavailable` only for a store that does throw.
  */
 class AppTargetResolver @Inject constructor(
     private val apps: InstalledAppsRepository,

@@ -127,11 +127,24 @@ class AppTargetResolverTest {
         assertEquals(AppCandidates.One(zantor), resolver.candidates("Кварцелот"))
     }
 
+    /**
+     * Both reads the answer rests on. The app list failing is the first half. The second half is the
+     * alias read failing while the apps read fine — task 4 review I1, ruling E4-F1. An alias may name a
+     * different app than the label does, so answering from the label would be a guess on an irreversible
+     * `uninstall_app`. The pre-phase-3b fall-through would answer `One(zantor)` here through the label, so
+     * this half tells the two shapes apart. `FakeAliasStore.failReads` fails `find` only; its `observeAll`
+     * still answers, so the read that decides is the one under test.
+     */
     @Test
     fun `a repository failure is unavailable, not an empty answer`() = runTest {
         val resolver = AppTargetResolver(FailingApps, EmptyAliases, PlainTextFolding)
 
         assertEquals(AppCandidates.Unavailable, resolver.candidates("tessar"))
+
+        val aliasesFail = AppTargetResolver(FakeApps(listOf(zantor)), FakeAliasStore(failReads = true), PlainTextFolding)
+
+        assertEquals(AppCandidates.Unavailable, aliasesFail.candidates("zantor"))
+        assertNull(aliasesFail.resolve("zantor"))
     }
 
     // --- word forms (A4′ phase 3b, fork 3b-G; plan §0.2 B-2): a form is offered, never bound ---

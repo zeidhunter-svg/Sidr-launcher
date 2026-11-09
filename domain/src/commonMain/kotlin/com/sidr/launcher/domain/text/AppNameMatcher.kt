@@ -31,9 +31,11 @@ data class WindowMatch(val match: NameMatch, val whole: Boolean)
  * The constants are **chosen, not measured** (B-2). A wrong value costs one question, never a bind,
  * because an edge match is only ever offered.
  *
- * **Two uses, never mixed** (§0.1 refinement): [matchWhole] — the whole name, for the bridge's mention and
- * FastPath; [matchWindows] — windows of the user's words, for step 2b only, where a window short of the
- * words is a confirmation, never a bind (phase 1's F1-2: the extra words may name another app).
+ * **Two uses** (§0.1 refinement):
+ *  - [matchWhole] — wherever a whole name is matched: the bridge's mention today, step 2b's first look at
+ *    the whole slot (`AppTargetResolver.windows`, wired in Task 5), and FastPath from Task 7;
+ *  - [matchWindows] — windows of the user's words, for step 2b only (Task 5). A window short of the words
+ *    is a confirmation, never a bind (phase 1's F1-2: the extra words may name another app).
  *
  * **Named limits, not tested:**
  *  - **CJK.** Lengths count UTF-16 code units, and an ICU-segmented CJK label may come apart into single

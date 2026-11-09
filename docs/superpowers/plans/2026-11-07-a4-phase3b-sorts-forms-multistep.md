@@ -402,6 +402,11 @@ B-15, B-17 first) are listed at close; (4) the doctrine-matrix edits of Tasks 5,
 | the other eight | 324 | 327 | 327 | 327 | 327 | 327 | 327 | 327 | 329 | 329 | 329 | 329 | 329 | 329 |
 | **total** | **1673** | 1678 | 1690 | 1700 | 1715 | 1725 | 1731 | 1738 | 1746 | 1754 | 1759 | 1770 | 1777 | **1787** |
 
+*Measured in execution: Task 4's ruling E4-P2 (one `AppSortResolverTest` pin) moves every column from T4 on by
++1 (T4 1716), and Task 5's ruling E5-P1 (an unreadable target list at 2b, two tests: `:domain` +1,
+`:data:repository` +1) by +2 more from T5 on — T5 measured **1728** (`:domain` 543, `:data:repository` 448,
+`:feature:launcher` 259); T6 … T13 read 1734 … 1790 until the next deviation.*
+
 The other eight move only in `:data:ai-cloud` (40 → 43 → 45). Tasks 14 and 15 add no test (Task 1's
 budget pin is edited in Task 14). **No task deletes a test.** Existing tests **rewritten at constant
 count** are listed in §0.9 and in each task.
@@ -800,6 +805,16 @@ data class CommandOutcome.ChooseTarget(val target: UnresolvedTarget) : CommandOu
 | M5c | the `SecondGoal` check removed | `:data:repository` — `> a second goal in the slot goes to the model…` only |
 | M5d | `ChooseTarget` handled by setting an interpretation card | `:feature:launcher` — `> a 2b target pick starts the agent session directly` |
 | M5e | `CompositePlanner` asks the next planner after `Unresolved` | `:domain` — `> an unresolved answer stops the composite` only |
+| M5f *(E5-P1)* | `ToolMatchPlanner` maps the resolver's `Unavailable` to `NoPlan` | `:data:repository` — `> an unreadable app list is an unreadable unresolved target, never NoPlan` only |
+
+*Measured in execution (Task 5, rulings E5-P1, E5-F5): two tests beyond this task's list pin an unreadable
+target list (`RouteCommandUseCaseTest > an unreadable 2b target fails on the device and the model is never
+asked`, `ToolMatchPlannerTest > an unreadable app list is …`; answered `Failed(Generic)`, as step 7 answers
+`Binding.Unavailable`). Three red sets are wider than the table: M5a also reds `:domain` `> a 2b pick starts
+the session on the tap…` and `:feature:launcher` both new `LauncherViewModelTest` tests (they drive the real
+route); M5b also reds the second-goal test (its control half is an `Unresolved`), the E5-P1 test and the
+flipped `AgentActingSeamTest` test; M5e also reds the flipped seam test in `:data:repository` (the production
+composite's closing `NoPlan` erases a trailing `Unresolved`).*
 
 - [ ] **Step 6:** boundary gate → **1725**. **Step 7: commit** — `feat(agentic-6/A4' ф3b): R14-39 закрыт — неразрешённая цель на 2b отвечается на устройстве, наружу не уходит`.
   `DOC-ADL-3`'s cell gains `> an unresolved 2b target is answered on the device…` (matrix journal, same commit).

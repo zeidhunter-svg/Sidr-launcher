@@ -23,6 +23,7 @@ import com.sidr.launcher.domain.ai.bridge.AppChoice
 import com.sidr.launcher.domain.ai.bridge.Interpretation
 import com.sidr.launcher.domain.ai.bridge.SidrDestination
 import com.sidr.launcher.domain.ai.bridge.ValueOrigin
+import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolId
@@ -63,7 +64,14 @@ internal fun InterpretationArea(
         is Interpretation.Act -> {
             val choice = interpretation.choice
             if (choice != null) {
-                AppChoiceList(choice = choice, onChoose = onChoose, onDismiss = onDismiss, modifier = modifier)
+                AppChoiceList(
+                    mention = choice.mention,
+                    candidates = choice.candidates,
+                    confirm = choice.confirm,
+                    onChoose = onChoose,
+                    onDismiss = onDismiss,
+                    modifier = modifier,
+                )
             } else {
                 SidrActionProposal(
                     title = sidrString(R.string.launcher_interpretation_title),
@@ -120,18 +128,30 @@ private fun ModelValues(interpretation: Interpretation.Act) {
 /**
  * Condition 2: label AND package (two apps can share a label); a tap binds that one and launches nothing.
  * A word form offered as ONE app (phase 3b, fork 3b-G: [AppChoice.confirm]) asks «did you mean» with that
- * app's label; a confirmation over two or more apps keeps the «which app» title (E4-P7).
+ * app's label; a confirmation over two or more apps keeps the «which app» title (E4-P7, E5-P6).
+ *
+ * **Two callers, one list** (phase 3b, B-7): the card's pick ([AppChoice], the model's mention) and step
+ * 2b's target pick (`UnresolvedTarget`, the user's own words), drawn from `LauncherScreen`. The list knows
+ * neither: it shows [mention] and [candidates] and reports the tapped package — what a tap BINDS is the
+ * caller's, so neither caller's binding is spelled here.
  */
 @Composable
-private fun AppChoiceList(choice: AppChoice, onChoose: (String) -> Unit, onDismiss: () -> Unit, modifier: Modifier) {
+internal fun AppChoiceList(
+    mention: String,
+    candidates: List<InstalledApp>,
+    confirm: Boolean,
+    onChoose: (String) -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Column(modifier = modifier.fillMaxWidth().padding(horizontal = Spacing.lg, vertical = Spacing.sm)) {
-        val title = if (choice.confirm && choice.candidates.size == 1) {
-            sidrString(R.string.launcher_interpretation_did_you_mean, choice.candidates.single().label)
+        val title = if (confirm && candidates.size == 1) {
+            sidrString(R.string.launcher_interpretation_did_you_mean, candidates.single().label)
         } else {
-            sidrString(R.string.launcher_interpretation_choose_app, choice.mention)
+            sidrString(R.string.launcher_interpretation_choose_app, mention)
         }
         SidrText(text = title, role = SidrTextRole.HUMAN_TITLE)
-        choice.candidates.forEach { app ->
+        candidates.forEach { app ->
             SidrText(
                 text = sidrString(R.string.launcher_interpretation_candidate, app.label, app.packageName),
                 role = SidrTextRole.HUMAN_BODY,

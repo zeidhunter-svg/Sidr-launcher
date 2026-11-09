@@ -45,6 +45,7 @@ import com.sidr.launcher.domain.agent.TemplatePlanner
 import com.sidr.launcher.domain.agent.UndoAgentSessionUseCase
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
 import com.sidr.launcher.domain.intent.CommandFailure
+import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
@@ -528,7 +529,7 @@ class AgentActingSeamTest {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Parity, and the fall-through that is not parity (R14-39).
+    // Parity, and the fall-through that was not parity (R14-39, closed in A4′ phase 3b).
     // ---------------------------------------------------------------------------------------------
 
     /**
@@ -586,24 +587,23 @@ class AgentActingSeamTest {
     }
 
     /**
-     * **R14-39, pinned as current behaviour — not endorsed.**
+     * **R14-39, closed** (A4′ phase 3b, fork 3b-E; `DOC-ADL-3`). Pinned here since A1″ Task 12 as the
+     * fall-through it was: from Task 6b until this phase, `NoPlan` at step 2b had a second meaning — not
+     * only "nothing matched" but "a registered tool matched and its target could not be resolved" — and
+     * `RouteCommandUseCase` could not tell the two apart, so a command a tool had claimed
+     * **deterministically** fell through to steps (5)–(7) and its raw text went to the cloud model.
      *
-     * Since Task 6b, `NoPlan` at step 2b has a second meaning: not only "nothing matched" but also "a
-     * registered tool matched and its target could not be resolved". `RouteCommandUseCase` cannot tell
-     * the two apart, so a command a tool claimed **deterministically** falls through to steps (5)–(7)
-     * and the raw text is sent to the cloud model.
+     * Now the planner answers `Unresolved` and step 2b answers it on the device, so this test pins the
+     * opposite: «нет такого приложения» in the user's own word, no session, and the model never asked
+     * — with a provider configured and the network up, the state in which the fall-through was live.
      *
-     * The first assertion is what makes this a reproduction rather than a restatement: the vocabulary
-     * *did* claim the text for `uninstall_app`; only [AppTargetResolver] declined. Changing the routing
-     * is **A4′'s** (`CLAUDE.md`, A1′ residual (3)), not this task's.
-     *
-     * **After A4′ phase 3a (D3) it is still named, not closed** (spec §7.12.3): the fall-through now
-     * reaches the bridge's `ModelPlanner` at step 7, which is a routing rule (ADR 1/4) rather than a
-     * store accident, and binding answers the user instead of running anything — but the decision to
-     * send the raw text is still made by an unresolved name. Its address is 3b or the owner.
+     * The first assertion is still what makes this a reproduction rather than a restatement: the
+     * vocabulary *did* claim the text for `uninstall_app`; only [AppTargetResolver] found nothing. The
+     * non-vacuity of the zero is `the outbound seam is live when nothing in the vocabulary claims the
+     * text`, above, over the same wiring.
      */
     @Test
-    fun `R14-39 - an unresolvable target makes a matched tool command fall through to the cloud model`() =
+    fun `R14-39 closed - an unresolvable target of a matched tool is answered on the device, the model never asked`() =
         runTest {
             assertEquals(
                 "the premise: the vocabulary must claim this text, or this test proves nothing",
@@ -613,9 +613,10 @@ class AgentActingSeamTest {
 
             val outcome = routeUseCase(federation()).route(GOAL_UNINSTALL_UNKNOWN)
 
-            assertTrue("no session may be started: $outcome", outcome !is CommandOutcome.AgentSessionStarted)
-            assertEquals(1, modelPlanner.planCallCount)
-            assertEquals(GOAL_UNINSTALL_UNKNOWN, modelPlanner.lastCommand)
+            assertEquals(CommandOutcome.Message(CommandMessage.NoAppFound(UNKNOWN_LABEL)), outcome)
+            assertEquals("the model was asked about a target the device had claimed", 0, modelPlanner.planCallCount)
+            assertNull("an outbound payload was recorded: ${modelPlanner.lastCommand}", modelPlanner.lastCommand)
+            assertEquals("nothing may be left at rest", null, (store.active() as OperationResult.Success).value)
         }
 
     // ---------------------------------------------------------------------------------------------
@@ -690,7 +691,8 @@ class AgentActingSeamTest {
 
         const val GOAL_UNINSTALL = "удали приложение $TARGET_LABEL"
         const val GOAL_UNINSTALL_OWN = "удали приложение $OWN_LABEL"
-        const val GOAL_UNINSTALL_UNKNOWN = "удали приложение pangolin"
+        const val UNKNOWN_LABEL = "pangolin"
+        const val GOAL_UNINSTALL_UNKNOWN = "удали приложение $UNKNOWN_LABEL"
         const val GOAL_ALIAS = "называй $TARGET_LABEL как $ALIAS_PHRASE"
         const val GOAL_ALARM = "поставь будильник на 7:30"
 

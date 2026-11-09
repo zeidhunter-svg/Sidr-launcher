@@ -103,7 +103,11 @@ class SelectionDeclineMeasurement {
         /** Selector declined: nothing claimed the text at all. → vocabulary gap, not a protocol. */
         DECLINE_NO_MATCH,
 
-        /** Selector matched; the planner refused. `R14-39`: this is the one that reaches the cloud. */
+        /**
+         * Selector matched; the planner refused. `R14-39`: until A4′ phase 3b this was the one that reached
+         * the cloud; since then the planner answers it `Unresolved` and step 2b answers it on the device.
+         * A second goal in the target's words (`NoPlan`, B-15) still lands here and does reach the model.
+         */
         DECLINE_UNRESOLVED_TARGET,
 
         /** Selector matched; a required argument was absent or blank. */

@@ -1,16 +1,23 @@
 package com.sidr.launcher.data.repository.agent
 
+import com.sidr.launcher.core.testing.FakeAliasStore
+import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.domain.action.ActionArg
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.PlanningRequest
 import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.StepRationale
+import com.sidr.launcher.domain.agent.UnresolvedTarget
+import com.sidr.launcher.domain.model.InstalledApp
+import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.sort.SortedArg
+import com.sidr.launcher.domain.text.PlainTextFolding
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolAdapter
@@ -19,6 +26,7 @@ import com.sidr.launcher.domain.tool.ToolDurability
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolFederation
 import com.sidr.launcher.domain.tool.ToolId
+import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.tool.ToolWorker
@@ -54,8 +62,8 @@ class ToolMatchPlannerTest {
      * Every test that uses this planner names a tool with no `app` argument and no APP row in the
      * production [CatalogArgumentSorts] (`set_timer` and `set_alarm` carry DURATION and CLOCK_TIME rows
      * since phase 3b, which `appArgOf` does not answer for), so `appArgOf` returns `null` and resolution
-     * must never be consulted at all — a decline here would turn those plans into `NoPlan` and say so
-     * loudly.
+     * must never be consulted at all — a decline here would turn those plans into `Unresolved` (since
+     * A4′ phase 3b; `NoPlan` before it) and say so loudly.
      */
     private val planner =
         ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()), appTargetsOf(), CatalogArgumentSorts())
@@ -293,9 +301,12 @@ class ToolMatchPlannerTest {
     }
 
     /**
-     * `AppTargetResolver.resolve` returns `null` to **decline**, never "use the raw text". The decline
-     * has to land before a plan exists: a plan is what a consent card is drawn from, so a plan built
-     * on an unresolved name would ask the user to confirm an act whose target is not yet known.
+     * The resolver **declines**, never "use the raw text". The decline has to land before a plan
+     * exists: a plan is what a consent card is drawn from, so a plan built on an unresolved name would
+     * ask the user to confirm an act whose target is not yet known. Since A4′ phase 3b (R14-39 closed)
+     * the decline is [PlanningResult.Unresolved] with no candidates — answered on the device by step
+     * 2b — where it used to be `NoPlan`, which fell through to the cloud model. Still no plan, so still
+     * no consent card.
      *
      * The second half is the **non-vacuity** check, and it is here rather than in a comment: the very
      * same goal text, vocabulary, descriptor and registry *do* produce a plan once the resolver knows
@@ -303,14 +314,13 @@ class ToolMatchPlannerTest {
      * its two halves is whether resolution succeeded.
      */
     @Test
-    fun `an unresolvable app name yields NoPlan, so nothing is ever consented to`() = runTest {
+    fun `an unresolvable app name is unresolved, never a plan, so nothing is ever consented to`() = runTest {
         val registry = registryWith(appToolDescriptor("app", "app_label"))
 
-        assertEquals(
-            PlanningResult.NoPlan,
-            ToolMatchPlanner(appSelector, appTargetsOf(), appSorts)
-                .plan(PlanningRequest(free("удали приложение нечто")), registry),
-        )
+        val declined = ToolMatchPlanner(appSelector, appTargetsOf(), appSorts)
+            .plan(PlanningRequest(free("удали приложение нечто")), registry)
+        assertTrue("an unresolved name is answered on the device, not planned: $declined", declined is PlanningResult.Unresolved)
+        assertEquals(emptyList<InstalledApp>(), (declined as PlanningResult.Unresolved).target.candidates)
 
         assertTrue(
             ToolMatchPlanner(appSelector, appTargetsOf("Нечто" to "com.example.nechto"), appSorts)
@@ -395,5 +405,139 @@ class ToolMatchPlannerTest {
 
         val step = (result as PlanningResult.Planned).plan.steps.single()
         assertEquals(ArgSource.Literal("telegram"), step.invocation.args["app"])
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // A4′ phase 3b, Task 5 — R14-39 closed. Once the vocabulary has claimed a target, the planner
+    // answers it on the device: `Unresolved` (nothing found, several, a form or a window to confirm,
+    // or a list that could not be read), never `NoPlan`, which step 2b hands to the cloud model. Only
+    // a second goal in the target's words still goes to the model (B-15).
+    //
+    // Fixtures (R14-43): «Миравин», «Lumora», the two «Tessar», and «вельтрикс» — a word no fixture
+    // labels. Every assertion is an equality over the whole answer.
+    // ---------------------------------------------------------------------------------------------
+
+    private val removeDescriptor = appToolDescriptor("app", "app_label")
+
+    /** What the planner hands step 2b for [text]: the step without its target, the words typed for it. */
+    private fun claimed(
+        text: String,
+        words: String,
+        candidates: List<InstalledApp>,
+        confirm: Boolean,
+        unreadable: Boolean = false,
+    ) = PlanningResult.Unresolved(
+        UnresolvedTarget(
+            goal = free(text),
+            pending = PlanStep(
+                index = 0,
+                invocation = ToolInvocation(appTool, emptyMap()),
+                risk = removeDescriptor.risk,
+                precondition = StepPrecondition.None,
+                rationale = StepRationale.GOAL_DIRECT,
+            ),
+            arg = "app",
+            labelArg = "app_label",
+            sort = ArgSorts.APP,
+            words = words,
+            candidates = candidates,
+            confirm = confirm,
+            unreadable = unreadable,
+        ),
+    )
+
+    /**
+     * The first assertion is the premise: the vocabulary claims the text — so `NoPlan` here would be
+     * the R14-39 fall-through, not "nothing matched".
+     */
+    @Test
+    fun `a claimed target that resolves to nothing is unresolved, not NoPlan`() = runTest {
+        val text = "удали приложение вельтрикс"
+        assertEquals(appTool, appSelector.select(text)?.id)
+
+        val result = ToolMatchPlanner(appSelector, appTargetsOf("Lumora" to "net.fixture.lumora"), appSorts)
+            .plan(PlanningRequest(free(text)), registryWith(removeDescriptor))
+
+        assertEquals(claimed(text, "вельтрикс", emptyList(), confirm = false), result)
+    }
+
+    /**
+     * Fork 3b-E as refined in plan §0.1: «a window equal to the whole slot → plan; a window shorter
+     * than the slot → confirm». The extra word may be politeness or may name another app (phase 1's
+     * F1-2: «lumora studio»), so a target found inside extra words is OFFERED — never bound, least of
+     * all for an irreversible act. The control is the same name typed alone, which plans.
+     */
+    @Test
+    fun `a target inside extra words is offered by windows, to confirm`() = runTest {
+        val planner = ToolMatchPlanner(appSelector, appTargetsOf("Миравин" to "net.fixture.miravin"), appSorts)
+        val text = "удали приложение миравин пожалуйста"
+
+        val result = planner.plan(PlanningRequest(free(text)), registryWith(removeDescriptor))
+
+        assertEquals(
+            claimed(text, "миравин пожалуйста", listOf(InstalledApp("net.fixture.miravin", "Миравин")), confirm = true),
+            result,
+        )
+        val whole = planner.plan(PlanningRequest(free("удали приложение миравин")), registryWith(removeDescriptor))
+        assertEquals(
+            ArgSource.Literal("net.fixture.miravin"),
+            (whole as PlanningResult.Planned).plan.steps.single().invocation.args["app"],
+        )
+    }
+
+    /** Controller ruling E5-P3: two exact answers are the user's choice — `Several`, never a guess, never `NoPlan`. */
+    @Test
+    fun `two candidates are an unresolved target with both`() = runTest {
+        val tessars = listOf(InstalledApp("net.fixture.tessar.one", "Tessar"), InstalledApp("net.fixture.tessar.two", "Tessar"))
+        val planner = ToolMatchPlanner(
+            appSelector,
+            appTargetsOf("Tessar" to "net.fixture.tessar.one", "Tessar" to "net.fixture.tessar.two"),
+            appSorts,
+        )
+        val text = "удали приложение tessar"
+
+        val result = planner.plan(PlanningRequest(free(text)), registryWith(removeDescriptor))
+
+        assertEquals(claimed(text, "tessar", tessars, confirm = false), result)
+    }
+
+    /**
+     * B-15: phase 1's `SecondGoal` check runs on the target's words BEFORE the windows. Without it the
+     * window «lumora» would be offered and «проверь почту» silently dropped; the model, which plans
+     * several steps, gets the command instead. The control — the same name with words that carry no
+     * second goal — is what proves the windows would have found it.
+     */
+    @Test
+    fun `a second goal in the slot goes to the model, not to windows`() = runTest {
+        val planner = ToolMatchPlanner(appSelector, appTargetsOf("Lumora" to "net.fixture.lumora"), appSorts)
+        val text = "удали приложение lumora и проверь почту"
+        assertEquals(appTool, appSelector.select(text)?.id)
+
+        assertEquals(PlanningResult.NoPlan, planner.plan(PlanningRequest(free(text)), registryWith(removeDescriptor)))
+
+        val polite = "удали приложение lumora пожалуйста"
+        assertEquals(
+            claimed(polite, "lumora пожалуйста", listOf(InstalledApp("net.fixture.lumora", "Lumora")), confirm = true),
+            planner.plan(PlanningRequest(free(polite)), registryWith(removeDescriptor)),
+        )
+    }
+
+    /**
+     * Controller ruling E5-P1: the app list could not be read. The device does not know whether the app
+     * is there, so this is neither "not found" nor a reason to ask the model — it is an `Unresolved`
+     * marked unreadable, which step 2b answers as a failure.
+     */
+    @Test
+    fun `an unreadable app list is an unreadable unresolved target, never NoPlan`() = runTest {
+        val unreadable = AppTargetResolver(
+            apps = FakeInstalledAppsRepository().apply { errorToReturn = OperationError.UnknownError("unreadable") },
+            aliases = FakeAliasStore(),
+            folding = PlainTextFolding,
+        )
+        val text = "удали приложение lumora"
+
+        val result = ToolMatchPlanner(appSelector, unreadable, appSorts).plan(PlanningRequest(free(text)), registryWith(removeDescriptor))
+
+        assertEquals(claimed(text, "lumora", emptyList(), confirm = false, unreadable = true), result)
     }
 }

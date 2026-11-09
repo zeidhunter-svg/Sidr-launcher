@@ -5,6 +5,8 @@ import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.domain.action.LauncherAction
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
+import com.sidr.launcher.domain.agent.UnresolvedTarget
+import com.sidr.launcher.domain.agent.bind
 import com.sidr.launcher.domain.ai.bridge.Interpretation
 import com.sidr.launcher.domain.ai.bridge.SidrDestination
 import com.sidr.launcher.domain.ai.bridge.choose
@@ -142,12 +144,19 @@ internal class LauncherCommandSession(
     // The package the user picked on the card's list, recorded as a learned choice at «Выполнить».
     private var pickedPackage: String? = null
 
+    // ── The 2b target pick (A4′ phase 3b, fork 3b-E; plan §0.2 B-7) — transient, like the card, and
+    // NOT the card: the model read nothing here. A tap binds and starts the session directly.
+    private val _targetPick = MutableStateFlow<UnresolvedTarget?>(null)
+    val targetPick: StateFlow<UnresolvedTarget?> = _targetPick
+
     fun onChanged(text: String) {
         setCommandInput(text)
         // Editing a new command clears stale feedback and any interpretation card standing for the old one.
         _feedback.value = CommandFeedback.None
         _interpretation.value = null
         pickedPackage = null
+        // A 2b pick stands for the old text as much as a card does (phase 3b).
+        _targetPick.value = null
         // A4′ phase 3a, Task 9 review I1 (Review Focus 2, in flight): an edit also abandons a command
         // still waiting on its answer. Left running, its late answer would put up a card for text the
         // user has already left — one tap from running on a SAFE step. Every caller is a user gesture
@@ -247,6 +256,7 @@ internal class LauncherCommandSession(
         CommandOutcome.ClearInput -> "cleared"
         is CommandOutcome.AgentSessionStarted -> "→ agent ${outcome.id.value}"
         is CommandOutcome.Interpreted -> "? interpretation"
+        is CommandOutcome.ChooseTarget -> "? ${outcome.target.candidates.size} targets"
     }
 
     /**
@@ -352,8 +362,10 @@ internal class LauncherCommandSession(
     // ── CommandOutcome → UI — exhaustive when, no else branch ──────────────
     // Add a new branch here whenever CommandOutcome gains a new variant.
     fun applyOutcome(outcome: CommandOutcome) {
-        // Any new outcome dismisses a stale interpretation card; the Interpreted branch re-arms it below.
+        // Any new outcome dismisses a stale interpretation card and a stale 2b pick; the Interpreted and
+        // ChooseTarget branches re-arm their own below.
         _interpretation.value = null
+        _targetPick.value = null
         when (outcome) {
             CommandOutcome.Empty ->
                 _feedback.value = CommandFeedback.EmptyInput
@@ -425,6 +437,16 @@ internal class LauncherCommandSession(
                 appLaunch.rememberLearningToken((outcome.interpretation as? Interpretation.Act)?.choice?.learning)
                 _interpretation.value = outcome.interpretation
             }
+
+            // A4′ phase 3b (B-7, R14-39 closed): a target step 2b claimed and could not bind waits on the
+            // device's own pick list — not on the interpretation card, and not on FastPath's launch list,
+            // whose tap launches. Nothing is learned from it: 2b's tools never read a learned launch
+            // choice (B-3), so no learning token is armed and none is left from before.
+            is CommandOutcome.ChooseTarget -> {
+                _feedback.value = CommandFeedback.None
+                appLaunch.rememberLearningToken(null)
+                _targetPick.value = outcome.target
+            }
         }
     }
 
@@ -475,6 +497,32 @@ internal class LauncherCommandSession(
                 }
             }
         }
+    }
+
+    /**
+     * A tap on a 2b pick (spec criterion 15, second half): the domain's one binding function writes the
+     * package and the user's words into the pending step ([bind], controller ruling E5-P2 — not re-spelled
+     * here), and the session starts at once through `startPlanned` — no interpretation card in between.
+     * The engine gates the step by its risk, so `uninstall_app` still stops at its consent card. The pick
+     * is taken down BEFORE the start, so a second tap finds nothing to start; a package that was not
+     * offered changes nothing.
+     */
+    fun chooseTarget(packageName: String) {
+        val target = _targetPick.value ?: return
+        val plan = target.bind(packageName) ?: return
+        _targetPick.value = null
+        scope.launch {
+            val started = (startAgentSession.startPlanned(target.goal, plan) as? OperationResult.Success)?.value
+            applyOutcome(
+                if (started != null) CommandOutcome.AgentSessionStarted(started.id)
+                else CommandOutcome.Failed(CommandFailure.Generic),
+            )
+        }
+    }
+
+    /** «Отмена» on a 2b pick: nothing starts. */
+    fun dismissTargetPick() {
+        _targetPick.value = null
     }
 
     /** «Отмена» on the card: nothing runs, nothing is learned. */

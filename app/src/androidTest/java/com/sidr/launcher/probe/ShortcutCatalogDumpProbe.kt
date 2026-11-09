@@ -84,8 +84,9 @@ class ShortcutCatalogDumpProbe {
      * exactly the apps `AppTargetResolver` would see.
      *
      * Without it the decline category "a tool matched but its target did not resolve" — `R14-39`, the
-     * one whose consequence is that the raw command text reaches the cloud model on a goal a registered
-     * tool had already claimed — cannot be told apart from "nothing matched at all". Those two feed
+     * one whose consequence was, until A4′ phase 3b closed it, that the raw command text reached the
+     * cloud model on a goal a registered tool had already claimed — cannot be told apart from "nothing
+     * matched at all". Those two feed
      * different decisions, so collapsing them would make the measurement answer a question nobody asked.
      *
      * Labels, not just package names: the resolver matches on a normalized **label** and falls back to

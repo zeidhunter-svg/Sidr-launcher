@@ -2,7 +2,9 @@ package com.sidr.launcher.domain.ai.router
 
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
+import com.sidr.launcher.domain.agent.UnresolvedTarget
 import com.sidr.launcher.domain.ai.AiProviderConfigRepository
 import com.sidr.launcher.domain.ai.bridge.Binding
 import com.sidr.launcher.domain.ai.bridge.Interpretation
@@ -16,6 +18,7 @@ import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.sort.ArgSorts
 import kotlinx.coroutines.flow.first
 
 /**
@@ -37,12 +40,15 @@ import kotlinx.coroutines.flow.first
  *    "open X" and found no such app. Not "any Message", not "anything that did not execute";
  *    widening the list is a separate decision for a later block.
  * 2b. **A goal FastPath could not decide at all ⇒ offer it to the deterministic planner** (A1' Task
- *    9). The same [StartAgentSessionUseCase], the same fail-open shape as step 2, and this gate
- *    learns **nothing** about tools: it hands over the raw command as a [GoalShape.Free] goal and the
- *    planner answers. A `NoPlan` — the state of the world for any text with no registered tool behind
- *    it — leaves `ruleOutcome` untouched and the whole chain below runs exactly as it did before.
- *    `StartAgentSessionUseCase.start` returns `Success(null)` *before* it touches the store on
- *    `NoPlan` and on an unrunnable plan, so an unrecognised command persists nothing.
+ *    9). The same [StartAgentSessionUseCase], and this gate learns **nothing** about tools: it hands
+ *    over the raw command as a [GoalShape.Free] goal and the planner answers. A plan starts a session.
+ *    A `NoPlan` — the state of the world for any text with no registered tool behind it — leaves
+ *    `ruleOutcome` untouched and the whole chain below runs exactly as it did before. **An
+ *    `Unresolved` is answered here, on the device, and never goes further** (A4′ phase 3b, R14-39
+ *    closed): a registered tool claimed the text and its target did not bind by itself, so the user
+ *    gets «нет такого приложения» in their own words, a pick ([CommandOutcome.ChooseTarget]), or — the
+ *    app list unreadable — a generic failure; the model is not asked. `StartAgentSessionUseCase.planning`
+ *    persists nothing, so an unrecognised or unresolved command leaves no `goal_text` row behind.
  * 3. **`localOnlyMode` on ⇒ byte-for-byte FastPath parity** — the planner is never consulted and
  *    nothing leaves the device. A FastPath hit returns untouched; a miss says so plainly
  *    ([CommandMessage.UnderstandingLocalOnly]) instead of claiming the command was unknown.
@@ -71,15 +77,24 @@ import kotlinx.coroutines.flow.first
  * **Step 2b sits above step 3 too, and that does not weaken the chain either.** Step 2b is the one
  * branch above step 3 that *is* keyed on an undecided outcome, so the argument above (about step 2)
  * does not cover it and it needs its own. It holds for a different reason: **step 2b reports none of
- * the three causes.** It has exactly two exits — a [CommandOutcome.AgentSessionStarted], or a
- * fall-through that changes nothing — so it can neither produce one of the three messages nor
- * suppress another branch's. Whichever of steps 3, 5 and 6 a command was going to reach, it still
- * reaches, with the same message; the only commands step 2b removes from that chain are the ones a
- * registered tool matched, and those never reach it at all. Two tests hold the two exits
- * separately: `all three causes at once - only the outermost is reported` holds the fall-through —
- * it runs with the default [com.sidr.launcher.domain.agent.TemplatePlanner], which answers `NoPlan`
- * to [GoalShape.Free], and it passed unmodified across this change — while `a matching tool starts
- * an agent session even in local-only mode` holds the [CommandOutcome.AgentSessionStarted] exit.
+ * the three causes.** Its exits are a [CommandOutcome.AgentSessionStarted], the three device answers
+ * to an `Unresolved` (A4′ phase 3b: [CommandMessage.NoAppFound], [CommandOutcome.ChooseTarget],
+ * [CommandOutcome.Failed]) — none of them one of the three messages — or a fall-through that changes
+ * nothing; so it can neither produce one of the three nor suppress another branch's. Whichever of
+ * steps 3, 5 and 6 a command was going to reach, it still reaches, with the same message; the only
+ * commands step 2b removes from that chain are the ones a registered tool matched, and those never
+ * reach it at all. The exits are held separately: `all three causes at once - only the outermost is
+ * reported` holds the fall-through — it runs with the default
+ * [com.sidr.launcher.domain.agent.TemplatePlanner], which answers `NoPlan` to [GoalShape.Free], and it
+ * passed unmodified across both changes — `a matching tool starts an agent session even in local-only
+ * mode` holds the [CommandOutcome.AgentSessionStarted] exit, and `an unresolved 2b target is answered
+ * on the device and the model is never asked`, `an unreadable 2b target fails on the device…` and `a
+ * 2b pick starts the session on the tap…` hold the three device answers.
+ *
+ * **An `Unresolved` answered above step 3 is `DOC-ADL-3` applied, not bent.** It consults no model and
+ * transmits nothing — in local-only mode it replaces the "understanding is local-only" line with the
+ * honest answer about the target, which is a deterministic path changing an outcome FastPath did not
+ * decide, exactly what the rule's 2026-08-22 amendment permits.
  *
  * Steps 2 and 2b are disjoint by construction, not by ordering: `NoAppFound` is a decided
  * [CommandOutcome.Message], so `isUndecided()` is false for it and a `NoAppFound` that failed open at
@@ -147,14 +162,25 @@ class RouteCommandUseCase(
         // is deterministic and offline, so no model is consulted and nothing leaves the device. That
         // is precisely what DOC-ADL-3 permits since its 2026-08-22 amendment.
         //
-        // Nothing is persisted when nothing matches: `StartAgentSessionUseCase.start` returns
-        // `Success(null)` before it touches the store on `NoPlan` and on an unrunnable plan, so an
-        // unrecognised command does not leave a `goal_text` row behind for every miss.
+        // Nothing is persisted unless a plan starts: `planning` writes nothing, and `startPlanned`
+        // refuses an unrunnable plan before it touches the store, so an unrecognised command does not
+        // leave a `goal_text` row behind for every miss. A store failure on a real plan still falls
+        // through, as it always has (A1′ residual (3), named, owned elsewhere).
         if (ruleOutcome.isUndecided()) {
             val trimmed = rawInput.trim()
-            val started = startAgentSession.start(AgentGoal(text = trimmed, shape = GoalShape.Free(trimmed)))
-            if (started is OperationResult.Success && started.value != null) {
-                return CommandOutcome.AgentSessionStarted(started.value)
+            val goal = AgentGoal(text = trimmed, shape = GoalShape.Free(trimmed))
+            // Exhaustive with no `else` — this is one of `PlanningResult`'s addresses (its KDoc).
+            when (val planned = startAgentSession.planning(goal)) {
+                is PlanningResult.Planned -> {
+                    val started = startAgentSession.startPlanned(goal, planned.plan)
+                    if (started is OperationResult.Success && started.value != null) {
+                        return CommandOutcome.AgentSessionStarted(started.value.id)
+                    }
+                }
+                // R14-39 closed (A4′ phase 3b, fork 3b-E): a target the vocabulary claimed is answered
+                // HERE and never reaches step 7 — whatever the local state, whatever the network.
+                is PlanningResult.Unresolved -> return answerOnDevice(planned.target)
+                PlanningResult.NoPlan -> Unit // nothing claimed it: the chain below, exactly as before
             }
         }
 
@@ -197,6 +223,21 @@ class RouteCommandUseCase(
             // Finding (c) of the A1″ acceptance: a broken key or a dead endpoint is said, not hidden.
             is ModelPlanning.Unavailable -> CommandOutcome.Message(CommandMessage.UnderstandingModelUnavailable(answer.reason))
         }
+    }
+
+    /**
+     * Step 2b's answer to a target a registered tool claimed and could not bind (A4′ phase 3b). The
+     * order is the order of what the device knows: it could not read its list ([UnresolvedTarget.unreadable]
+     * — said as step 7 says `Binding.Unavailable`, controller ruling E5-P1); it found candidates — the
+     * user picks; it found nothing for an app — «нет такого приложения» in the user's words. A sort with
+     * no candidates other than an app has no producer yet (phase 3b's Task 6 gives it its own message);
+     * until then it is a generic failure — honest, and never step 7.
+     */
+    private fun answerOnDevice(target: UnresolvedTarget): CommandOutcome = when {
+        target.unreadable -> CommandOutcome.Failed(CommandFailure.Generic)
+        target.candidates.isNotEmpty() -> CommandOutcome.ChooseTarget(target)
+        target.sort == ArgSorts.APP -> CommandOutcome.Message(CommandMessage.NoAppFound(target.words))
+        else -> CommandOutcome.Failed(CommandFailure.Generic)
     }
 
     /**

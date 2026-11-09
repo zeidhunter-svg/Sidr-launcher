@@ -1,6 +1,9 @@
 package com.sidr.launcher.domain.agent
 
 import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.model.InstalledApp
+import com.sidr.launcher.domain.sort.ArgSort
+import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ObservedFact
 import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolResult
@@ -83,14 +86,27 @@ data class ExecutionPlan(val steps: List<PlanStep>) {
 fun ExecutionPlan.isModelProposed(): Boolean = steps.any { it.rationale == StepRationale.MODEL_PROPOSED }
 
 /**
- * **Adding a variant here is a two-address edit, and both addresses are compile errors by
- * construction** (A4' phase 0, spec §3 0.0):
- *  - `CompositePlanner.plan` — where a non-`Planned` result used to become `NoPlan` silently;
- *  - `StartAgentSessionUseCase.plan` — where a non-`Planned` result used to become `Success(null)`.
+ * What a DETERMINISTIC planner answers. Three variants since A4′ phase 3b (plan §0.2 B-6):
+ *  - [Planned] — a plan to run;
+ *  - [NoPlan] — this planner claims nothing in the goal. At `RouteCommandUseCase` step 2b it falls
+ *    through to the cloud model, and that is right only because it now means exactly that — no
+ *    registered tool claimed the text, or a second goal rides in a target's words (B-15) — and never
+ *    "a tool claimed it and its target did not resolve", which it also meant from A1″ Task 6b until
+ *    this phase (R14-39);
+ *  - [Unresolved] — a tool claimed the goal and its target needs the user ([UnresolvedTarget]). It never
+ *    reaches step 7: step 2b answers it on the device (R14-39, closed).
  *
- * Neither conversion was wrong while two variants existed; both were answers given in advance for a
- * variant nobody had written. `NoPlan` at `RouteCommandUseCase` step 2b falls through to the cloud
- * model, so the cost of that silence is measured and doctrinal, not stylistic — see R14-39.
+ * **Adding a variant here is a multi-address edit, and every address is a compile error by
+ * construction** (A4' phase 0, spec §3 0.0, which built them for exactly the day [Unresolved] arrived):
+ *  - `CompositePlanner.plan` — where a non-`Planned` result used to become `NoPlan` silently; it now
+ *    stops on [Unresolved], since a claimed target is the composite's answer;
+ *  - `StartAgentSessionUseCase.planning` and `.plan` — where a non-`Planned` result used to become
+ *    `Success(null)`; `planning` passes [Unresolved] through, `plan` (resume's reader) reads it as none;
+ *  - `RouteCommandUseCase` step 2b — the `when` over `planning`, in `domain/ai/router`.
+ *
+ * Neither phase 0 conversion was wrong while two variants existed; both were answers given in advance
+ * for a variant nobody had written, and `NoPlan` at step 2b falling through to the cloud model is what
+ * made their silence doctrinal rather than stylistic.
  *
  * No test holds this and none can: a sealed interface admits subclasses only from its own
  * compilation unit, and `jvmTest` is not `commonMain`. The compiler is the enforcement; this
@@ -99,6 +115,62 @@ fun ExecutionPlan.isModelProposed(): Boolean = steps.any { it.rationale == StepR
 sealed interface PlanningResult {
     data class Planned(val plan: ExecutionPlan) : PlanningResult
     data object NoPlan : PlanningResult
+    data class Unresolved(val target: UnresolvedTarget) : PlanningResult
+}
+
+/**
+ * A target a deterministic planner recognised and could not bind by itself — the answer that closes
+ * R14-39 (A4′ phase 3b, fork 3b-E as refined in plan §0.1; spec §7.12.3). Step 2b used to receive it
+ * as [PlanningResult.NoPlan] and send the raw command to the cloud model, so one unresolved name
+ * decided what left the device. Now the device answers it: «нет такого приложения», a pick, or an
+ * honest failure — and nothing reaches step 7.
+ *
+ * [pending] is the one step the planner built, **without** [arg] and without [labelArg]. It does not
+ * validate as written — its target is missing — so nothing can start it by mistake; [bind] is the one
+ * way to finish it. [words] are what the user typed for the target, as the vocabulary handed them over
+ * (normalised, never the raw span). [sort] is what [words] were meant to be (`ArgSorts.APP` is the only
+ * sort with a producer in phase 3b's Task 5; Task 6 adds the others).
+ *
+ * [candidates] empty: nothing on the device answers to [words] — or, when [unreadable], the device
+ * could not be asked. Non-empty: the user picks; [confirm] is `true` when they are OFFERED rather than
+ * matched — a word form (3b-G), or a window of the words short of the whole (3b-E: «a window equal to
+ * the whole slot → plan; a window shorter than the slot → confirm»).
+ *
+ * [unreadable] (controller ruling E5-P1): the app list or the alias store could not be read. Not "not
+ * found" — that would be a lie, the app may be installed — and not a reason to ask the model, which
+ * would let a disk error decide what leaves the device. Step 2b answers it as step 7 answers
+ * `Binding.Unavailable`: a generic failure.
+ */
+data class UnresolvedTarget(
+    val goal: AgentGoal,
+    val pending: PlanStep,
+    val arg: String,
+    val labelArg: String?,
+    val sort: ArgSort,
+    val words: String,
+    val candidates: List<InstalledApp>,
+    val confirm: Boolean,
+    val unreadable: Boolean = false,
+)
+
+/**
+ * The tap on a pick (controller ruling E5-P2): [packageName] into [UnresolvedTarget.arg], the user's
+ * [UnresolvedTarget.words] into [UnresolvedTarget.labelArg] when the tool has one, and the one-step
+ * plan `StartAgentSessionUseCase.startPlanned` receives. `null` when [packageName] was not offered — a
+ * tap binds nothing it was not asked about.
+ *
+ * **The one place this binding is spelled.** `RouteCommandUseCaseTest` and the launcher's command
+ * session both call it, so the surface cannot bind differently from what the domain test holds. No
+ * interpretation card stands between the tap and the session (spec criterion 15, second half): the user
+ * chose the act by typing it and the target by tapping it. The engine still gates the step by its risk,
+ * so a `CONFIRM` tool stops at its own consent card naming the package that will be acted on.
+ */
+fun UnresolvedTarget.bind(packageName: String): ExecutionPlan? {
+    if (candidates.none { it.packageName == packageName }) return null
+    val label = labelArg?.let { mapOf(it to ArgSource.Literal(words)) }.orEmpty()
+    val args = pending.invocation.args + (arg to ArgSource.Literal(packageName)) + label
+    // Index 0: the one step of a one-step plan (`ExecutionPlan`'s invariant), whatever the planner wrote.
+    return ExecutionPlan(listOf(pending.copy(index = 0, invocation = pending.invocation.copy(args = args))))
 }
 
 /**

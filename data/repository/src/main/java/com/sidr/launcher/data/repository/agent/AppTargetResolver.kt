@@ -76,11 +76,15 @@ class AppTargetResolver @Inject constructor(
     }
 
     /**
-     * Step 2b's search (phase 3b, fork 3b-E as refined in §0.1; called from Task 5): the whole slot first,
-     * exactly as [candidates]; if nothing answers it, the longest windows of its words that match a label
-     * ([AppNameMatcher.matchWindows]). **A window short of the slot is never [AppCandidates.One]** — the
-     * extra words may name another app (phase 1's F1-2) — so it is a [AppCandidates.Confirm], as is any
-     * form. Aliases answer the whole slot only.
+     * Step 2b's search (phase 3b, fork 3b-E as refined in §0.1), read by `ToolMatchPlanner`: the whole
+     * slot first, exactly as [candidates]; if nothing answers it, the longest windows of its words that
+     * match a label ([AppNameMatcher.matchWindows]). **A window short of the slot is never
+     * [AppCandidates.One]** — the extra words may name another app (phase 1's F1-2) — so it is a
+     * [AppCandidates.Confirm], as is any form. Every answer but [AppCandidates.One] reaches the user on the
+     * device (`PlanningResult.Unresolved`), never the model. **Aliases answer the whole slot only**
+     * (controller ruling E5-P5, a named limit, not built): «телега пожалуйста» does not reach the alias
+     * «телега» through a window — it is answered from labels, and an alias-only name inside extra words is
+     * «not found».
      */
     suspend fun windows(slot: String): AppCandidates {
         val normalized = CommandNormalizer.normalize(slot)
@@ -100,7 +104,11 @@ class AppTargetResolver @Inject constructor(
         }
     }
 
-    /** One package or nothing — the shape `ToolMatchPlanner` (step 2b) has always declined on. A form binds nothing. */
+    /**
+     * One package or nothing — the shape step 2b declined on until phase 3b, when `ToolMatchPlanner` moved
+     * to [windows] so that a decline reaches the user instead of the model. No production caller is left;
+     * kept for its tests and the shape it pins. A form binds nothing.
+     */
     suspend fun resolve(query: String): String? =
         (candidates(query) as? AppCandidates.One)?.app?.packageName
 

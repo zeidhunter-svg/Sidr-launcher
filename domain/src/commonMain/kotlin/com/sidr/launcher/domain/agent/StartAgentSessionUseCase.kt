@@ -8,7 +8,9 @@ import com.sidr.launcher.domain.trace.ExecutionTrace
 import com.sidr.launcher.domain.trace.TraceEvent
 
 /**
- * Goal -> plan -> a persisted `Running` session. `NoPlan` returns `null` and writes nothing.
+ * Goal -> plan -> a persisted `Running` session. `NoPlan` returns `null` and writes nothing; so does
+ * `Unresolved` (A4′ phase 3b) — a target the user must pick is not a plan, and step 2b reads it through
+ * [planning], never through [start].
  *
  * **The plan is validated here too, not only before every step** (review finding F10, 2026-08-23).
  * Spec §4.2 and §6.2 both say the shape check "runs at plan time **and** again before every step";
@@ -39,19 +41,35 @@ class StartAgentSessionUseCase(
     }
 
     /**
-     * The first attempt's plan for [goal] if it is runnable against the registry NOW; persists
-     * nothing. The request carries no prior observations: a first attempt has observed nothing, and
-     * since owner fork F2-3.1 re-planning after a failure is phase 3's (spec §6.4, amended).
+     * The first attempt's answer for [goal], persisting nothing (A4′ phase 3b, plan §0.2 B-6) — what
+     * `RouteCommandUseCase` step 2b reads, because it must tell the three answers apart: [PlanningResult.Planned]
+     * only when the plan is runnable against the registry NOW (an unrunnable one is [PlanningResult.NoPlan],
+     * the fail-open [start] has always given it); [PlanningResult.Unresolved] passed through untouched —
+     * the target is the user's to pick, and nothing is validated or written before the pick. The request
+     * carries no prior observations: a first attempt has observed nothing, and since owner fork F2-3.1
+     * re-planning after a failure is phase 3's (spec §6.4, amended).
      */
-    suspend fun plan(goal: AgentGoal): ExecutionPlan? {
-        // Exhaustive with no `else` (spec §3 0.0). Whoever adds a third variant must decide here what a
-        // session-less answer means for it, and the compiler is what makes them.
-        val plan = when (val planned = planner.plan(PlanningRequest(goal), registry)) {
-            is PlanningResult.Planned -> planned.plan
-            PlanningResult.NoPlan -> return null
+    suspend fun planning(goal: AgentGoal): PlanningResult =
+        // Exhaustive with no `else` (spec §3 0.0): a fourth variant must decide here what it means
+        // before a session exists, and the compiler is what makes its author decide.
+        when (val planned = planner.plan(PlanningRequest(goal), registry)) {
+            is PlanningResult.Planned -> if (isRunnable(planned.plan)) planned else PlanningResult.NoPlan
+            is PlanningResult.Unresolved -> planned
+            PlanningResult.NoPlan -> PlanningResult.NoPlan
         }
-        return plan.takeIf(::isRunnable)
-    }
+
+    /**
+     * [planning]'s plan, for a caller that has no user to ask — [start] and `ResumeAgentSessionUseCase`'s
+     * fresh look. A target the user must pick is not a plan here: [PlanningResult.Unresolved] is `null`,
+     * so a resumed session whose goal no longer binds by itself ends rather than guessing.
+     */
+    suspend fun plan(goal: AgentGoal): ExecutionPlan? =
+        // Exhaustive with no `else` (spec §3 0.0), the second half of this file's address.
+        when (val planned = planning(goal)) {
+            is PlanningResult.Planned -> planned.plan
+            is PlanningResult.Unresolved -> null
+            PlanningResult.NoPlan -> null
+        }
 
     /**
      * Persists a `Running` session for [plan] and returns it — a plan the caller built itself (an

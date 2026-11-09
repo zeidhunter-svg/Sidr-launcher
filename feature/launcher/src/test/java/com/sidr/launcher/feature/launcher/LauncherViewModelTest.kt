@@ -19,10 +19,12 @@ import com.sidr.launcher.core.testing.FakePrayerCalculator
 import com.sidr.launcher.core.testing.FakePrayerPreferencesRepository
 import com.sidr.launcher.core.testing.FakePrayerScheduleCache
 import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
+import com.sidr.launcher.core.testing.NoOpIntentMatcher
 import androidx.lifecycle.SavedStateHandle
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
 import com.sidr.launcher.domain.ai.bridge.AppChoice
 import com.sidr.launcher.domain.ai.bridge.Interpretation
+import com.sidr.launcher.domain.ai.bridge.ModelPlanner
 import com.sidr.launcher.domain.ai.bridge.ModelPlanning
 import com.sidr.launcher.domain.ai.bridge.PrincipalId
 import com.sidr.launcher.domain.ai.bridge.ProposedStep
@@ -44,6 +46,9 @@ import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.PlanStep
+import com.sidr.launcher.domain.agent.Planner
+import com.sidr.launcher.domain.agent.PlanningRequest
+import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RuntimeBudget
@@ -51,6 +56,7 @@ import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.StepRationale
 import com.sidr.launcher.domain.agent.TemplatePlanner
+import com.sidr.launcher.domain.agent.UnresolvedTarget
 import com.sidr.launcher.domain.memory.alias.Alias
 import com.sidr.launcher.domain.memory.alias.AliasTarget
 import com.sidr.launcher.domain.memory.alias.ResolvedCommandStep
@@ -125,7 +131,9 @@ import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolOutput
+import com.sidr.launcher.domain.tool.ToolRegistry
 import com.sidr.launcher.domain.tool.ToolResult
+import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.trace.ExecutionTrace
 import com.sidr.launcher.domain.trace.TraceEvent
 import com.sidr.launcher.feature.launcher.agent.DynamicToolLabels
@@ -2971,5 +2979,121 @@ class LauncherViewModelTest {
         )
         assertFalse("the model call itself was cancelled, not merely ignored", answered)
         collector.cancel()
+    }
+
+    // ── A4′ phase 3b, Task 5: a 2b target pick — R14-39 closed (plan §0.2 B-7) ──────────────────
+
+    /**
+     * A pending `launch_app` step — the one tool in [agentRegistry] that declares an `app` argument —
+     * whose target is the user's to pick. The step carries the fixture risk `CONFIRM` so the engine stops
+     * at consent and nothing is invoked, as `uninstall_app`'s would; which tool it is, is incidental.
+     */
+    private fun tessarTarget(command: String = "удали приложение tessar") = UnresolvedTarget(
+        goal = AgentGoal(command, GoalShape.Free(command)),
+        pending = PlanStep(0, ToolInvocation(ToolIds.LAUNCH_APP), ActionRiskLevel.CONFIRM, StepPrecondition.None, StepRationale.GOAL_DIRECT),
+        arg = "app",
+        labelArg = "query",
+        sort = ArgSorts.APP,
+        words = "tessar",
+        candidates = listOf(tessarOne, tessarTwo),
+        confirm = false,
+    )
+
+    /** A model that answers only after ten seconds: a command that reached it would show the wait at 300 ms. */
+    private class SlowModel : ModelPlanner {
+        var asked = 0
+            private set
+
+        override suspend fun plan(command: String): ModelPlanning {
+            asked++
+            delay(10_000)
+            return ModelPlanning.Declined
+        }
+    }
+
+    /**
+     * The REAL route over a deterministic planner that claims exactly [target]'s goal, as
+     * `ToolMatchPlanner` claims a tool's text — so the outcome the surface receives is the one step 2b
+     * produces, and a 2b that fell through would reach [model].
+     */
+    private fun claimingRoute(target: UnresolvedTarget, model: ModelPlanner): RouteCommandUseCase {
+        val claims = object : Planner {
+            override suspend fun plan(request: PlanningRequest, registry: ToolRegistry): PlanningResult =
+                if (request.goal == target.goal) PlanningResult.Unresolved(target) else PlanningResult.NoPlan
+        }
+        return RouteCommandUseCase(
+            handleUserCommand = HandleUserCommandUseCase(
+                matcher = NoOpIntentMatcher(),
+                resolver = IntentActionResolver(fakeRepo),
+                executor = fakeExecutor,
+                confidencePolicy = DefaultIntentConfidencePolicy(),
+                recordingScope = CoroutineScope(testDispatcher + SupervisorJob()),
+            ),
+            modelPlanner = model,
+            binder = FakeMentionBinder(),
+            featureFlagRepository = fakeFlagRepo,
+            providerConfigRepository = configuredProvider(),
+            connectivityChecker = FakeConnectivityChecker(),
+            startAgentSession = StartAgentSessionUseCase(claims, fakeAgentStore, agentIds, agentRegistry),
+        )
+    }
+
+    /**
+     * Spec criterion 15, second half; B-7: a 2b pick is the device's own question — never an
+     * interpretation card, never FastPath's launch list. The tap binds the package and the user's words
+     * through the domain's one binding function and starts the session directly, through the engine,
+     * which stops the `CONFIRM` step at its consent card.
+     */
+    @Test
+    fun `a 2b target pick starts the agent session directly`() = runTest(testDispatcher) {
+        val target = tessarTarget()
+        val model = SlowModel()
+        val vm = buildViewModel(route = CommandRouteStep { claimingRoute(target, model).route(it) })
+
+        vm.onCommandSubmitted("удали приложение tessar")
+        advanceUntilIdle()
+
+        assertEquals(target, vm.targetPick.value)
+        assertEquals("a 2b pick is not an interpretation card", null, vm.interpretation.value)
+        assertTrue("nothing starts before the tap", fakeAgentStore.saved.isEmpty())
+
+        vm.chooseTarget("net.fixture.tessar.two")
+        advanceUntilIdle()
+
+        assertEquals(null, vm.targetPick.value)
+        assertEquals("the tap starts the session with no card in between", null, vm.interpretation.value)
+        assertEquals(target.goal, fakeAgentStore.saved.first().goal)
+        assertEquals(
+            ToolInvocation(
+                ToolIds.LAUNCH_APP,
+                mapOf("app" to ArgSource.Literal("net.fixture.tessar.two"), "query" to ArgSource.Literal("tessar")),
+            ),
+            fakeAgentStore.saved.first().plan.steps.single().invocation,
+        )
+        assertEquals(ExecutionState.AwaitingConsent, vm.agentSessionState.value?.state)
+        assertEquals("the model was never asked", 0, model.asked)
+        assertTrue(fakeExecutor.executedActions.isEmpty())
+    }
+
+    /**
+     * R14-39 closed, seen from the surface: a target nothing on the device answers to reads «нет такого
+     * приложения» in the user's words at once. Had step 2b fallen through, [SlowModel] would still be
+     * thinking a second later — the wait would be up and the line empty.
+     */
+    @Test
+    fun `a 2b target that is not found reads no such app with no wait`() = runTest(testDispatcher) {
+        val target = tessarTarget("удали приложение вельтрикс").copy(words = "вельтрикс", candidates = emptyList())
+        val model = SlowModel()
+        val vm = buildViewModel(route = CommandRouteStep { claimingRoute(target, model).route(it) })
+
+        vm.onCommandSubmitted("удали приложение вельтрикс")
+        advanceTimeBy(1_000)
+
+        assertEquals(CommandFeedback.Domain(CommandMessage.NoAppFound("вельтрикс")), vm.commandFeedback.value)
+        assertFalse("the device answered — there was nothing to wait for", vm.thinking.value)
+        assertEquals(0, model.asked)
+        assertEquals(null, vm.targetPick.value)
+        assertEquals(null, vm.interpretation.value)
+        assertTrue(fakeAgentStore.saved.isEmpty())
     }
 }

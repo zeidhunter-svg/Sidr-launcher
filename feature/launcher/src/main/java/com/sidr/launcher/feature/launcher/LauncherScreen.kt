@@ -108,6 +108,7 @@ fun LauncherScreen(
     val inputResults by viewModel.inputResults.collectAsStateWithLifecycle()
     val prayerContext by viewModel.prayerContext.collectAsStateWithLifecycle()
     val interpretation by viewModel.interpretation.collectAsStateWithLifecycle()
+    val targetPick by viewModel.targetPick.collectAsStateWithLifecycle()
     val thinking by viewModel.thinking.collectAsStateWithLifecycle()
     val devConsoleOn by viewModel.devConsoleOn.collectAsStateWithLifecycle()
     val consoleLines by viewModel.consoleLines.collectAsStateWithLifecycle()
@@ -242,6 +243,19 @@ fun LauncherScreen(
                     onRun = viewModel::runInterpretation,
                     onDismiss = viewModel::dismissInterpretation,
                     onChoose = viewModel::chooseInterpretationApp,
+                )
+            }
+
+            // A4′ phase 3b (B-7, R14-39 closed): a target step 2b claimed and could not bind — the
+            // device's own question, on the card's pick list but not on the card. A tap starts the
+            // session; the engine's consent card follows for a CONFIRM tool.
+            targetPick?.let { target ->
+                AppChoiceList(
+                    mention = target.words,
+                    candidates = target.candidates,
+                    confirm = target.confirm,
+                    onChoose = viewModel::chooseTarget,
+                    onDismiss = viewModel::dismissTargetPick,
                 )
             }
 

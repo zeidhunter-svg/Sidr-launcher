@@ -18,6 +18,7 @@ import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StepUndo
 import com.sidr.launcher.domain.agent.UndoAgentSessionUseCase
+import com.sidr.launcher.domain.agent.UnresolvedTarget
 import com.sidr.launcher.domain.ai.bridge.Interpretation
 import com.sidr.launcher.domain.history.UsageHistoryRepository
 import com.sidr.launcher.domain.memory.alias.ResolveCommandWithAliasUseCase
@@ -364,6 +365,9 @@ class LauncherViewModel @Inject constructor(
     /** A4′ phase 3a: a command has not answered within 300 ms — the model is being asked. */
     val thinking: StateFlow<Boolean> get() = commandSession.thinking
 
+    /** A4′ phase 3b (B-7): a target step 2b claimed, waiting on the user's pick — not an interpretation card. */
+    val targetPick: StateFlow<UnresolvedTarget?> get() = commandSession.targetPick
+
     // Этап 4 / A0: extracted to LauncherVoiceInput — see startVoiceInput() below for the wiring. The
     // callbacks forward-reference [commandSession] the same way [appLaunch]'s onFeedback does above.
     private val voiceInput = LauncherVoiceInput(
@@ -492,6 +496,10 @@ class LauncherViewModel @Inject constructor(
     fun dismissInterpretation() = commandSession.dismissInterpretation()
 
     fun chooseInterpretationApp(packageName: String) = commandSession.chooseApp(packageName)
+
+    fun chooseTarget(packageName: String) = commandSession.chooseTarget(packageName)
+
+    fun dismissTargetPick() = commandSession.dismissTargetPick()
 
     fun cancelThinking() = commandSession.cancelThinking()
 

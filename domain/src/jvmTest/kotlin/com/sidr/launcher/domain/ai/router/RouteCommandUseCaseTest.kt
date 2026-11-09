@@ -10,6 +10,7 @@ import com.sidr.launcher.core.testing.FakeMentionBinder
 import com.sidr.launcher.core.testing.FakeModelPlanner
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.core.testing.configuredProvider
+import com.sidr.launcher.domain.action.ActionArg
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.AgentSessionId
@@ -24,6 +25,8 @@ import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.StepRationale
 import com.sidr.launcher.domain.agent.TemplatePlanner
+import com.sidr.launcher.domain.agent.UnresolvedTarget
+import com.sidr.launcher.domain.agent.bind
 import com.sidr.launcher.domain.ai.bridge.Binding
 import com.sidr.launcher.domain.ai.bridge.Interpretation
 import com.sidr.launcher.domain.ai.bridge.ModelPlanning
@@ -42,14 +45,21 @@ import com.sidr.launcher.domain.intent.ModelUnavailableReason
 import com.sidr.launcher.domain.intent.SimpleCommand
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.preferences.FeatureFlags
+import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.tool.ArgSource
+import com.sidr.launcher.domain.tool.ToolDescriptor
+import com.sidr.launcher.domain.tool.ToolDurability
 import com.sidr.launcher.domain.tool.ToolEffect
+import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
+import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolRegistry
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -107,6 +117,7 @@ class RouteCommandUseCaseTest {
     private fun useCase(
         localOnly: Boolean = false,
         agentPlanner: Planner = TemplatePlanner(),
+        agentRegistry: ToolRegistry = toolRegistry,
     ): RouteCommandUseCase = RouteCommandUseCase(
         handleUserCommand = HandleUserCommandUseCase(
             matcher = matcher,
@@ -120,7 +131,7 @@ class RouteCommandUseCaseTest {
         featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = localOnly)),
         providerConfigRepository = provider,
         connectivityChecker = connectivity,
-        startAgentSession = StartAgentSessionUseCase(agentPlanner, agentStore, agentIds, toolRegistry),
+        startAgentSession = StartAgentSessionUseCase(agentPlanner, agentStore, agentIds, agentRegistry),
     )
 
     private fun driveUnknown() {
@@ -670,5 +681,130 @@ class RouteCommandUseCaseTest {
 
         assertEquals(CommandOutcome.Failed(CommandFailure.Generic), outcome)
         assertEquals(1, planner.planCallCount)
+    }
+
+    // --- A4′ phase 3b, Task 5: R14-39 closed — a target step 2b claimed is answered on the device ----
+
+    /**
+     * A tool shaped like `uninstall_app` — a required app argument, an optional label, `CONFIRM` — but
+     * test-local: what is under test is the route's answer to an [UnresolvedTarget], whichever planner
+     * produced it. The production planner's half is `ToolMatchPlannerTest`'s; the seam end to end is
+     * `AgentActingSeamTest`'s R14-39 test.
+     */
+    private val removeAppTool = ToolDescriptor(
+        id = ToolId("fixture_remove_app"),
+        level = ToolLevels.SYSTEM_INTENT,
+        effect = ToolEffect.EXTERNAL,
+        argSchema = listOf(
+            ActionArg("app", description = "The package to remove"),
+            ActionArg("app_label", required = false, description = "The words the user typed for it"),
+        ),
+        risk = ActionRiskLevel.CONFIRM,
+        durability = ToolDurability.DURABLE,
+    )
+    private val removeRegistry = FakeToolRegistry(listOf(removeAppTool))
+    private val tessarOne = InstalledApp("net.fixture.tessar.one", "Tessar")
+    private val tessarTwo = InstalledApp("net.fixture.tessar.two", "Tessar")
+
+    private fun removeTarget(
+        command: String,
+        words: String,
+        candidates: List<InstalledApp>,
+        unreadable: Boolean = false,
+    ) = UnresolvedTarget(
+        goal = AgentGoal(command, GoalShape.Free(command)),
+        pending = PlanStep(0, ToolInvocation(removeAppTool.id), removeAppTool.risk, StepPrecondition.None, StepRationale.GOAL_DIRECT),
+        arg = "app",
+        labelArg = "app_label",
+        sort = ArgSorts.APP,
+        words = words,
+        candidates = candidates,
+        confirm = false,
+        unreadable = unreadable,
+    )
+
+    /** A deterministic planner that claims exactly [target]'s goal, as `ToolMatchPlanner` claims a tool's text. */
+    private fun claims(target: UnresolvedTarget): Planner = object : Planner {
+        override suspend fun plan(request: PlanningRequest, registry: ToolRegistry): PlanningResult =
+            if (request.goal == target.goal) PlanningResult.Unresolved(target) else PlanningResult.NoPlan
+    }
+
+    /**
+     * **R14-39 closed** (A4′ phase 3b, fork 3b-E; `DOC-ADL-3`). A registered tool claimed the command
+     * deterministically and its target resolved to nothing. Until this task that was `NoPlan`, and
+     * `NoPlan` at 2b falls through to step 7: the raw command left the device because one name did not
+     * resolve. Now the device answers in the user's own words and the model is never asked.
+     *
+     * The second half is the control: the same wiring, a text no planner claims, and the model IS asked
+     * — so the zero above is a fact about the route, not about a disconnected fake.
+     */
+    @Test
+    fun `an unresolved 2b target is answered on the device and the model is never asked`() = runTest {
+        driveUnknown()
+        val target = removeTarget("удали приложение вельтрикс", words = "вельтрикс", candidates = emptyList())
+        val route = useCase(agentPlanner = claims(target), agentRegistry = removeRegistry)
+
+        assertEquals(
+            CommandOutcome.Message(CommandMessage.NoAppFound("вельтрикс")),
+            route.route("удали приложение вельтрикс"),
+        )
+        assertEquals("the model was asked about a target the device had claimed", 0, planner.planCallCount)
+        assertTrue("nothing is persisted for a target nobody picked", agentStore.saved.isEmpty())
+
+        route.route("do a barrel roll")
+
+        assertEquals("the control: an unclaimed text does reach the model", 1, planner.planCallCount)
+        assertEquals("do a barrel roll", planner.lastCommand)
+    }
+
+    /**
+     * Controller ruling E5-P1. The app list (or the alias store) could not be read, so the device does
+     * not know whether the app is there: «нет такого приложения» would be a lie, and falling through
+     * would let a disk error decide what leaves the device. It is answered exactly as step 7 answers
+     * `Binding.Unavailable` — a generic failure — with no new message (`CommandFailure` is frozen).
+     */
+    @Test
+    fun `an unreadable 2b target fails on the device and the model is never asked`() = runTest {
+        driveUnknown()
+        val target = removeTarget("удали приложение вельтрикс", "вельтрикс", emptyList(), unreadable = true)
+
+        val outcome = useCase(agentPlanner = claims(target), agentRegistry = removeRegistry).route("удали приложение вельтрикс")
+
+        assertEquals(CommandOutcome.Failed(CommandFailure.Generic), outcome)
+        assertEquals(0, planner.planCallCount)
+        assertTrue(agentStore.saved.isEmpty())
+    }
+
+    /**
+     * Plan §0.2 B-7, spec criterion 15 (second half): a pick at 2b is the device's own question, not a
+     * reading of the model — so it is [CommandOutcome.ChooseTarget], never an interpretation card, and
+     * nothing starts before the tap. The tap is [bind] (controller ruling E5-P2 — the one function that
+     * writes the package and the user's words into the pending step) and then `startPlanned`, exactly
+     * what the launcher's command session does; the engine still gates the `CONFIRM` step by its risk.
+     */
+    @Test
+    fun `a 2b pick starts the session on the tap, without an interpretation card`() = runTest {
+        driveUnknown()
+        val target = removeTarget("удали приложение tessar", "tessar", listOf(tessarOne, tessarTwo))
+
+        val outcome = useCase(agentPlanner = claims(target), agentRegistry = removeRegistry).route("удали приложение tessar")
+
+        assertEquals(CommandOutcome.ChooseTarget(target), outcome)
+        assertEquals(0, planner.planCallCount)
+        assertTrue("nothing starts before the tap", agentStore.saved.isEmpty())
+
+        assertNull("a package that was not offered binds nothing", target.bind("net.fixture.zantor"))
+        val plan = checkNotNull(target.bind(tessarTwo.packageName))
+        val started = StartAgentSessionUseCase(claims(target), agentStore, agentIds, removeRegistry)
+            .startPlanned(target.goal, plan)
+
+        assertEquals(target.goal, checkNotNull((started as OperationResult.Success).value).goal)
+        assertEquals(
+            ToolInvocation(
+                removeAppTool.id,
+                mapOf("app" to ArgSource.Literal("net.fixture.tessar.two"), "app_label" to ArgSource.Literal("tessar")),
+            ),
+            agentStore.saved.single().plan.steps.single().invocation,
+        )
     }
 }

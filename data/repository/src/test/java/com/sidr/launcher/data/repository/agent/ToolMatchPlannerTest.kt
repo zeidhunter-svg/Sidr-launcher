@@ -51,9 +51,11 @@ class ToolMatchPlannerTest {
 
     /**
      * `appTargetsOf()` is a resolver over an **empty** installed list, so it declines every query.
-     * Every test that uses this planner names a tool with no `app` argument and no row in the
-     * production [CatalogArgumentSorts], so resolution must never be consulted at all — a decline here
-     * would turn those plans into `NoPlan` and say so loudly.
+     * Every test that uses this planner names a tool with no `app` argument and no APP row in the
+     * production [CatalogArgumentSorts] (`set_timer` and `set_alarm` carry DURATION and CLOCK_TIME rows
+     * since phase 3b, which `appArgOf` does not answer for), so `appArgOf` returns `null` and resolution
+     * must never be consulted at all — a decline here would turn those plans into `NoPlan` and say so
+     * loudly.
      */
     private val planner =
         ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()), appTargetsOf(), CatalogArgumentSorts())
@@ -329,9 +331,10 @@ class ToolMatchPlannerTest {
     }
 
     /**
-     * Resolution is keyed on a declared sort row: a tool with no row — `set_timer` has none in the
-     * production [CatalogArgumentSorts] — never reaches the resolver, which is why the class-level
-     * `planner` can carry a resolver that declines everything and still plan a timer.
+     * Resolution is keyed on a declared APP row: a tool with no APP row — `set_timer`'s only row in the
+     * production [CatalogArgumentSorts] is its DURATION row, so `appArgOf` returns `null` — never reaches
+     * the resolver, which is why the class-level `planner` can carry a resolver that declines everything
+     * and still plan a timer.
      */
     @Test
     fun `a tool with no app argument is untouched by resolution`() = runTest {

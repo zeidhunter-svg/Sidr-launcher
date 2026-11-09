@@ -33,9 +33,9 @@ import javax.inject.Inject
 /**
  * The bridge's [MentionBinder] on Android (spec §7.12.1, §7.12.3 condition 2; plan §0.2 B-3).
  *
- * For a tool with an app sort ([ToolArgumentSorts]) the model's word for the app
+ * For a tool with an app-sorted argument ([CatalogArgumentSorts.appArgOf]) the model's word for the app
  * ([AuthoredToolDescriptions.MENTION_ARG]) leaves the model-facing name: the package goes into the
- * row's `arg` once known, the user's words into its `labelArg`. [AppTargetResolver.candidates] answers —
+ * row's argument once known, the user's words into its `labelArg`. [AppTargetResolver.candidates] answers —
  * it never guesses and consults aliases; two candidates are a choice for the USER before any card.
  *
  * **Learned choices answer for `launch_app` only**, with FastPath's policy and the same key FORMULA — a
@@ -53,43 +53,44 @@ import javax.inject.Inject
  */
 class DeviceMentionBinder @Inject constructor(
     private val appTargets: AppTargetResolver,
-    private val sorts: ToolArgumentSorts,
+    private val sorts: CatalogArgumentSorts,
     private val preferences: ResolutionPreferenceStore,
     private val policy: ResolutionPreferencePolicy,
 ) : MentionBinder {
 
     override suspend fun bind(goal: AgentGoal, proposed: ProposedStep): Binding {
-        val sort = sorts.appBindingFor(proposed.tool)
+        val sort = sorts.appArgOf(proposed.tool)
         val mention = proposed.args[AuthoredToolDescriptions.MENTION_ARG]
         if (sort == null || mention == null) {
             return Binding.Bound(act(goal, proposed, proposed.args, proposed.origins, choice = null))
         }
+        val (appArg, sorted) = sort
         val words = (proposed.args - AuthoredToolDescriptions.MENTION_ARG) +
-            listOfNotNull(sort.labelArg?.let { it to mention })
+            listOfNotNull(sorted.labelArg?.let { it to mention })
         val wordOrigins = (proposed.origins - AuthoredToolDescriptions.MENTION_ARG) +
-            listOfNotNull(sort.labelArg?.let { it to ValueOrigin.SaidBy(PrincipalId.USER) })
+            listOfNotNull(sorted.labelArg?.let { it to ValueOrigin.SaidBy(PrincipalId.USER) })
 
         return when (val found = appTargets.candidates(mention)) {
             AppCandidates.None -> Binding.NotFound(mention)
             AppCandidates.Unavailable -> Binding.Unavailable
             is AppCandidates.One -> Binding.Bound(
-                act(goal, proposed, words + (sort.arg to found.app.packageName), wordOrigins + (sort.arg to ValueOrigin.Ours), choice = null),
+                act(goal, proposed, words + (appArg to found.app.packageName), wordOrigins + (appArg to ValueOrigin.Ours), choice = null),
             )
-            is AppCandidates.Several -> Binding.Bound(several(goal, proposed, sort, mention, found.apps, words, wordOrigins))
+            is AppCandidates.Several -> Binding.Bound(several(goal, proposed, appArg, mention, found.apps, words, wordOrigins))
         }
     }
 
     private suspend fun several(
         goal: AgentGoal,
         proposed: ProposedStep,
-        sort: AppArgumentBinding,
+        appArg: String,
         mention: String,
         apps: List<InstalledApp>,
         words: Map<String, String>,
         origins: Map<String, ValueOrigin>,
     ): Interpretation.Act {
         if (proposed.tool != ToolIds.LAUNCH_APP) {
-            return act(goal, proposed, words, origins, AppChoice(sort.arg, mention, apps, learning = null))
+            return act(goal, proposed, words, origins, AppChoice(appArg, mention, apps, learning = null))
         }
         val candidates = CandidateSet(apps.map { ResolvedTarget.App(it.packageName) })
         val key = CapabilityKey(ActionIds.LAUNCH_APP, LaunchSlotExtractor.slotOf(CommandNormalizer.normalize(mention)))
@@ -104,16 +105,16 @@ class DeviceMentionBinder @Inject constructor(
         return when (val decision = policy.decide(preference, candidates, proposed.risk)) {
             is ResolutionDecision.AutoResolve -> {
                 val target = when (val t = decision.target) { is ResolvedTarget.App -> t.packageName }
-                act(goal, proposed, words + (sort.arg to target), origins + (sort.arg to ValueOrigin.Ours), choice = null)
+                act(goal, proposed, words + (appArg to target), origins + (appArg to ValueOrigin.Ours), choice = null)
             }
             is ResolutionDecision.RankFirst -> {
                 val first = when (val t = decision.target) { is ResolvedTarget.App -> t.packageName }
-                act(goal, proposed, words, origins, AppChoice(sort.arg, mention, apps.sortedByDescending { it.packageName == first }, token))
+                act(goal, proposed, words, origins, AppChoice(appArg, mention, apps.sortedByDescending { it.packageName == first }, token))
             }
-            ResolutionDecision.NoPreference -> act(goal, proposed, words, origins, AppChoice(sort.arg, mention, apps, token))
+            ResolutionDecision.NoPreference -> act(goal, proposed, words, origins, AppChoice(appArg, mention, apps, token))
             is ResolutionDecision.Stale -> {
                 preferences.delete(key, ResolutionContext.None) // best-effort prune, as FastPath's decorator does
-                act(goal, proposed, words, origins, AppChoice(sort.arg, mention, apps, token))
+                act(goal, proposed, words, origins, AppChoice(appArg, mention, apps, token))
             }
         }
     }

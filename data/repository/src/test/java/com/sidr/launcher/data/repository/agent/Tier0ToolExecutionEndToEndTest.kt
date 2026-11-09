@@ -150,7 +150,7 @@ class Tier0ToolExecutionEndToEndTest {
             planner = CompositePlanner(
                 listOf(
                     TemplatePlanner(),
-                    ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()), appTargetsOf(), ToolArgumentSorts()),
+                    ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()), appTargetsOf(), CatalogArgumentSorts()),
                 ),
             ),
             store = store,

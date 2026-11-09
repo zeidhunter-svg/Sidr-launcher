@@ -20,9 +20,9 @@ sealed interface Undo {
 
 /**
  * Port: which registered tool undoes which. **A parallel port, never a field on [ToolDescriptor]** —
- * the phase 0 precedent (`ToolArgumentSorts`); seventeen production files read the descriptor. Each
- * consumer implements its own: `:data:repository` for the launcher's tools, `:consumer:jvm` for the
- * sandbox. A tool an implementation does not know is [Undo.NotUndoable] — a missing answer is never
+ * the phase 0 precedent (`CatalogArgumentSorts`, behind the `ArgumentSorts` port since 3b); seventeen
+ * production files read the descriptor. Each consumer implements its own: `:data:repository` for the
+ * launcher's tools, `:consumer:jvm` for the sandbox. A tool an implementation does not know is [Undo.NotUndoable] — a missing answer is never
  * "nothing to undo".
  *
  * **Read by compensation only, never by the engine** (spec §6.3): an inverse the gate could see is an

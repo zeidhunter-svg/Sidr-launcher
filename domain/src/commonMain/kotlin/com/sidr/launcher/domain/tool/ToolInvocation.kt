@@ -37,8 +37,8 @@ data class ResolvedInvocation(val id: ToolId, val args: Map<String, String> = em
 /**
  * What a tool produced for later steps. Keys must appear in the tool's [ToolDescriptor.outputSchema].
  *
- * Values are opaque strings in A0 — richer types wait for a real consumer, exactly as `ArgType` already
- * does for inputs.
+ * Values are opaque strings, and stay so: `ArgType` is `STRING` for good (ADR «2026-11-07 — A4′ ф3b: сорт
+ * — отдельная ось; F6 закрыт») — what a value MEANS is a sort, declared beside the descriptor.
  */
 data class ToolOutput(val values: Map<String, String> = emptyMap())
 

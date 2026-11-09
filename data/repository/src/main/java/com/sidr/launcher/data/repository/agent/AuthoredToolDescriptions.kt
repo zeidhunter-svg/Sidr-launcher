@@ -22,7 +22,7 @@ import javax.inject.Inject
  * The three `launcher_memory` tools have no row: they are never offered (spec §7.5), and a missing
  * description is a second reason they could not be (`BridgeFilter` offers only described tools).
  *
- * Two constructors, the [ToolArgumentSorts] shape: production takes no argument, a test may state rows.
+ * Two constructors, the [CatalogArgumentSorts] shape: production takes no argument, a test may state rows.
  */
 class AuthoredToolDescriptions internal constructor(
     private val rows: Map<ToolId, ToolDescription>,

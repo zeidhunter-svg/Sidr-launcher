@@ -2,6 +2,8 @@ package com.sidr.launcher.data.repository.agent
 
 import com.sidr.launcher.data.repository.action.DefaultActionCatalog
 import com.sidr.launcher.data.repository.agent.memory.MemoryToolSource
+import com.sidr.launcher.domain.sort.ArgSorts
+import com.sidr.launcher.domain.sort.SortedArg
 import com.sidr.launcher.domain.tool.ToolDescriptor
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -21,7 +23,7 @@ class ToolArgumentSortGuardTest {
     fun `every production tool declaring an app argument has a sort row`() {
         val offenders = productionAuthoredDescriptors()
             .filter { d -> d.argSchema.any { it.name == "app" } }
-            .filter { ToolArgumentSorts().appBindingFor(it.id) == null }
+            .filter { CatalogArgumentSorts().sortOf(it.id, "app")?.sort != ArgSorts.APP }
             .map { it.id.value }
 
         assertEquals(
@@ -35,17 +37,42 @@ class ToolArgumentSortGuardTest {
     @Test
     fun `no sort row names an argument its tool does not declare`() {
         val descriptors = productionAuthoredDescriptors().associateBy { it.id }
-        val orphans = ToolArgumentSorts().rows().mapNotNull { (id, binding) ->
-            val names = descriptors[id]?.argSchema?.map { it.name } ?: return@mapNotNull "${id.value}: no such tool"
-            when {
-                binding.arg !in names -> "${id.value}: arg `${binding.arg}` is not declared"
-                binding.labelArg != null && binding.labelArg !in names ->
-                    "${id.value}: labelArg `${binding.labelArg}` is not declared"
-                else -> null
+        val orphans = CatalogArgumentSorts().all().flatMap { (id, args) ->
+            val names = descriptors[id]?.argSchema?.map { it.name } ?: return@flatMap listOf("${id.value}: no such tool")
+            args.mapNotNull { (arg, sorted) ->
+                when {
+                    arg !in names -> "${id.value}: arg `$arg` is not declared"
+                    sorted.labelArg != null && sorted.labelArg !in names ->
+                        "${id.value}: labelArg `${sorted.labelArg}` is not declared"
+                    else -> null
+                }
             }
         }
 
         assertEquals(emptyList<String>(), orphans)
+    }
+
+    /**
+     * Phase 3b (fork 3b-C): the three pure sorts are declared on the arguments they read. Asserted as the
+     * whole non-app part of the catalog, by equality — a row on the wrong argument, a row missing, or a
+     * row nobody asked for all go red here. That each names a DECLARED argument is the test above; that
+     * each sort has a resolver is `SortRegistryGuardTest` (`:app`). No caller resolves these rows yet —
+     * the wiring is phase 3b's next tasks.
+     */
+    @Test
+    fun `duration, clock time and url arguments are declared`() {
+        val nonApp = CatalogArgumentSorts().all()
+            .mapValues { (_, args) -> args.filterValues { it.sort != ArgSorts.APP } }
+            .filterValues { it.isNotEmpty() }
+
+        assertEquals(
+            mapOf(
+                Tier0ToolIds.SET_TIMER to mapOf("duration" to SortedArg(ArgSorts.DURATION, labelArg = null)),
+                Tier0ToolIds.SET_ALARM to mapOf("time" to SortedArg(ArgSorts.CLOCK_TIME, labelArg = null)),
+                InAppToolIds.OPEN_URL to mapOf("url" to SortedArg(ArgSorts.URL, labelArg = null)),
+            ),
+            nonApp,
+        )
     }
 
     /**

@@ -15,8 +15,8 @@ import com.sidr.launcher.data.aicloud.BridgeTransportMode
 import com.sidr.launcher.data.aicloud.OpenAiCompatibleBridgeTransport
 import com.sidr.launcher.data.repository.agent.AppTargetResolver
 import com.sidr.launcher.data.repository.agent.AuthoredToolDescriptions
+import com.sidr.launcher.data.repository.agent.CatalogArgumentSorts
 import com.sidr.launcher.data.repository.agent.DeviceMentionBinder
-import com.sidr.launcher.data.repository.agent.ToolArgumentSorts
 import com.sidr.launcher.data.repository.agent.shortcut.AppShortcut
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolIds
 import com.sidr.launcher.di.BridgeProvidesModule
@@ -222,7 +222,7 @@ class BridgePayloadGuardTest {
             PlainTextFolding,
         ),
         binder = BridgeProvidesModule.provideMentionBinder(
-            DeviceMentionBinder(AppTargetResolver(apps(), aliases()), ToolArgumentSorts(), learned(), DefaultResolutionPreferencePolicy()),
+            DeviceMentionBinder(AppTargetResolver(apps(), aliases()), CatalogArgumentSorts(), learned(), DefaultResolutionPreferencePolicy()),
         ),
         featureFlagRepository = FakeFeatureFlagRepository(),
         providerConfigRepository = configuredProvider(),

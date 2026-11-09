@@ -36,9 +36,9 @@ class AuthoredToolDescriptionsTest {
     /** The binder reads ONE name; every app-sort tool must speak it, and nothing else may. */
     @Test
     fun `an app-sort tool takes exactly one mention, under the name the binder reads`() {
-        val sorts = ToolArgumentSorts()
+        val sorts = CatalogArgumentSorts()
         descriptions.rows().forEach { (id, description) ->
-            val expected = if (sorts.appBindingFor(id) != null) listOf(AuthoredToolDescriptions.MENTION_ARG) else emptyList()
+            val expected = if (sorts.appArgOf(id) != null) listOf(AuthoredToolDescriptions.MENTION_ARG) else emptyList()
             assertEquals(id.value, expected, description.args.filter { it.mention }.map { it.name })
         }
     }
@@ -59,15 +59,15 @@ class AuthoredToolDescriptionsTest {
      * The other direction (spec §7.12.1: the descriptions cover the arguments). A required argument the
      * model is never asked for and the device does not bind is one nobody can supply: the tool is still
      * offered — the filter needs only a row — and dead. The device-bound set is read from
-     * [ToolArgumentSorts], not written here.
+     * [CatalogArgumentSorts], not written here.
      */
     @Test
     fun `every required argument a tool declares is either asked of the model or bound by the device`() {
-        val sorts = ToolArgumentSorts()
+        val sorts = CatalogArgumentSorts()
         val uncovered = authored.flatMap { descriptor ->
             val description = descriptions.describe(descriptor.id) ?: return@flatMap emptyList()
             val asked = description.args.map { it.name }.toSet()
-            val bound = sorts.appBindingFor(descriptor.id)?.let { setOfNotNull(it.arg, it.labelArg) } ?: emptySet()
+            val bound = sorts.appArgOf(descriptor.id)?.let { (arg, sorted) -> setOfNotNull(arg, sorted.labelArg) } ?: emptySet()
             descriptor.argSchema
                 .filter { it.required && it.name !in asked && it.name !in bound }
                 .map { descriptor.id.value to it.name }

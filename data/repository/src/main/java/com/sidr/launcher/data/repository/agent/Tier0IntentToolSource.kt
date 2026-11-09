@@ -386,9 +386,9 @@ class Tier0IntentToolSource @Inject constructor(
         // tidiness.** Until A4′ phase 0 the reason was R14-37: `ToolMatchPlanner` resolved an argument
         // NAMED `app` regardless of `required`, so an optional `app` the vocabulary did not supply gave
         // `raw = ""`, `AppTargetResolver.resolve("")` → `null`, and `NoPlan` for EVERY goal, forever,
-        // with the suite green. That mechanism is gone: the planner now resolves only a tool with a row
-        // in `ToolArgumentSorts` (this one has one — `arg = "app"`, no label), and it reads `required`,
-        // leaving a declared, OPTIONAL, unsupplied argument absent instead of resolving it.
+        // with the suite green. That mechanism is gone: the planner now resolves only a tool with an
+        // app row in `CatalogArgumentSorts` (this one has one — `"app"`, no label), and it reads
+        // `required`, leaving a declared, OPTIONAL, unsupplied argument absent instead of resolving it.
         // `ToolArgumentSortGuardTest` holds the rows to the descriptors; `ToolMatchPlannerTest` holds
         // the `required` read. What the pin guards NOW is the other side of that fix: with
         // `required = false`, a trigger that supplied no `app` would PLAN — a `SAFE` step with no
@@ -406,8 +406,8 @@ class Tier0IntentToolSource @Inject constructor(
         // a row's `labelArg` is declared optional (`ToolArgumentSortGuardTest` checks only that it is
         // DECLARED), a required label would still make every goal `NoPlan`, and that direction is still
         // held per descriptor (`uninstall_app` in `Tier0IntentToolSourceTest`, `set_app_alias` in
-        // `MemoryToolSourceTest`). A typed argument kind is still the `ArgType` debt (spec §7.5); `F6`
-        // stays in force with its review appointed for phase 3 (spec §7.8).
+        // `MemoryToolSourceTest`). `F6` is closed by ADR in phase 3b (spec §7.8): `ArgType` stays
+        // `STRING` permanently and an argument's meaning is its sort, declared beside the descriptor.
         //
         // **`app_label` is deliberately NOT declared**, unlike `uninstall_app`. That tool needs both
         // because its `CONFIRM` card must name what the user said AND what will be removed. This tool

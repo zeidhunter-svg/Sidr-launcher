@@ -637,6 +637,12 @@ new sort costs zero edits in other modules (open value class).
   https is refused` (`ftp://…`, `quillmere.example`) (3); `ToolArgumentSortGuardTest > duration, clock time
   and url arguments are declared` (1); `SortRegistryGuardTest > every sort the catalog declares has a
   resolver in the production graph` (1).
+  *Measured in execution (2026-11-09):* *(E3-F1)* a JVM method name cannot hold `:` — the test is
+  `H colon MM and HH colon MM resolve`. *(E3-P1)* «33 references in 16 files» = 16 files besides the
+  definition (17 with it; one a KDoc mention in `commonMain` `ToolInverses.kt`). *(E3-P2)* the guard sees
+  «the production graph» by calling `SortProvidesModule`'s `@Provides` function with the production
+  `CatalogArgumentSorts()` (the `BridgePayloadGuardTest` precedent). Callers find the app argument through
+  one method, `CatalogArgumentSorts.appArgOf(tool)`; no other sort is resolved before Task 6.
 - [ ] **Step 2:** scoped → red. **Step 3:** implement; `Tier0IntentToolWorkerTest` and
   `SystemIntentToolWorkerTest` stay green untouched (they now prove the move). **Step 4:** scoped green.
   **Step 5:** the ADR.

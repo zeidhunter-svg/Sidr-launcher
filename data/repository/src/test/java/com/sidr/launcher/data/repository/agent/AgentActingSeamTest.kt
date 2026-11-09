@@ -229,7 +229,7 @@ class AgentActingSeamTest {
     private fun planner() = CompositePlanner(
         listOf(
             TemplatePlanner(),
-            ToolMatchPlanner(ToolSelector(ToolVocabulary(), shortcutSource), appTargets, ToolArgumentSorts()),
+            ToolMatchPlanner(ToolSelector(ToolVocabulary(), shortcutSource), appTargets, CatalogArgumentSorts()),
         ),
     )
 
@@ -447,8 +447,9 @@ class AgentActingSeamTest {
 
     /**
      * The third acting family, and the one that proves `app` resolution is applied only where a tool
-     * declares it — a `ToolArgumentSorts` row since A4′ phase 0 (before that, an argument NAMED `app`)
-     * — rather than to every tool: `set_alarm` has neither, so its literal survives untouched all the
+     * declares it — an app row in `CatalogArgumentSorts` since A4′ phase 0 (before that, an argument
+     * NAMED `app`) — rather than to every tool: `set_alarm` has neither (its row since phase 3b is a
+     * clock-time sort, which step 2b does not resolve yet), so its literal survives untouched all the
      * way into the clock intent.
      */
     @Test

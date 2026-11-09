@@ -165,8 +165,8 @@ class Tier0IntentToolSourceTest {
      * resolution branch keyed on the argument being **named** `app`, never on `required`, so an
      * optional `app` the vocabulary did not supply gave `raw = ""`, `AppTargetResolver.resolve("")`
      * declined, and the planner answered `NoPlan` for every goal, forever, with the suite green
-     * (R14-37). That branch is gone: the planner resolves only a tool with a row in
-     * [ToolArgumentSorts] and reads `required`, leaving a declared, optional, unsupplied argument
+     * (R14-37). That branch is gone: the planner resolves only a tool with an app row in
+     * [CatalogArgumentSorts] and reads `required`, leaving a declared, optional, unsupplied argument
      * absent — held by `ToolMatchPlannerTest`'s
      * `an optional app argument the vocabulary did not supply does not kill the plan`, with the rows
      * held to the descriptors by `ToolArgumentSortGuardTest`. This test is no longer the whole of the
@@ -201,7 +201,7 @@ class Tier0IntentToolSourceTest {
         assertEquals(
             "open_app_info's `app` must stay required. Until A4' phase 0 the reason was R14-37 " +
                 "(ToolMatchPlanner resolved an argument NAMED app regardless of `required`); since " +
-                "then the planner resolves only tools with a ToolArgumentSorts row and reads " +
+                "then the planner resolves only tools with a CatalogArgumentSorts app row and reads " +
                 "`required`, so with required=false a trigger that supplied no app would PLAN a " +
                 "target-less SAFE step and the worker would return Failed on the blank package, " +
                 "instead of the planner declining before any plan exists. MEASURED 2026-09-20 " +

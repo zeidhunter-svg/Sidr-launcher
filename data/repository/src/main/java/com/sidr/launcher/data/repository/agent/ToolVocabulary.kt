@@ -421,7 +421,7 @@ class ToolVocabulary internal constructor(val entries: List<Entry>) {
             // descriptor argument the matched remainder fills (and, since an entry with an `argName`
             // refuses a bare trigger, why «app info» alone matches nothing); it opts nothing into
             // resolution. Since A4′ phase 0 `ToolMatchPlanner` resolves an app only for a tool with a
-            // `ToolArgumentSorts` row — this one has one — and it reads `required`; why the
+            // `CatalogArgumentSorts` app row — this one has one — and it reads `required`; why the
             // descriptor's `required = true` is written out and pinned by its own test is said on the
             // descriptor. Until then resolution keyed on the argument NAME regardless of `required`
             // (R14-37).

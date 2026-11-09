@@ -34,15 +34,17 @@ import javax.inject.Inject
  * KDoc for the free-text limitation that implies — and this planner only checks that a required
  * argument is *present*. Whether "10 minutes" is
  * a readable duration is the worker's question, and a tool whose value cannot be read fails closed
- * there (`Tier0IntentToolWorker.parseSeconds`). The consequence, named rather than implied: a goal like
- * "timer for the meeting" produces a plan that fails at the worker instead of falling through to the
- * model. Closing that needs an argument type richer than `ArgType.STRING` — the A0.5 finding spec
- * §10.4 already records — not a second parser here.
+ * there (the worker reads it through `DurationSort.secondsOf`). The consequence, named rather than
+ * implied: a goal like "timer for the meeting" produces a plan that fails at the worker instead of
+ * being refused before the session. Closing that is the duration SORT's resolver at this step (phase
+ * 3b's wiring tasks; the catalog already declares the row, [CatalogArgumentSorts]) — not a richer
+ * `ArgType`, which stays `STRING` for good (ADR «… сорт — отдельная ось; F6 закрыт»), and not a second
+ * parser here.
  *
  * **An argument the tool DECLARES to carry an app is resolved to a package HERE, above the consent
  * checkpoint** (review finding C4, owner decision 2026-09-18; fork F5, «consent fires before argument
- * binding»). Which argument that is, if any, is read from [ToolArgumentSorts] — never from the
- * argument's spelling (A4′ phase 0, spec §3 0.4). `AgentExecutor` evaluates `checkpointFor` before it
+ * binding»). Which argument that is, if any, is read from [CatalogArgumentSorts.appArgOf] — never from
+ * the argument's spelling (A4′ phase 0, spec §3 0.4). `AgentExecutor` evaluates `checkpointFor` before it
  * ever reaches `toolExecutor.invoke`, so anything a **worker** resolves is resolved *after* the user
  * has already consented: the card for «удали telegram»
  * could then only echo the words typed, while the package that would actually be uninstalled did not
@@ -58,12 +60,13 @@ import javax.inject.Inject
  * in by declaring an argument literally named `app` — `const val APP_ARG`, a sort implemented by
  * comparing strings, which keyed on the name and never on `required` (R14-37: an OPTIONAL `app` the
  * vocabulary did not supply answered `NoPlan` for every goal, with the suite green). Now a tool opts in
- * only through its row in [ToolArgumentSorts]: [AppArgumentBinding.arg] names the argument to resolve,
- * and [AppArgumentBinding.labelArg], when the row names one **and** the descriptor declares it, receives
- * the raw text the user typed, so a surface can show both what was said and what it resolved to. Three
- * consequences, stated rather than discovered later:
- *  - a tool with **no row** is passed through untouched — an argument named `app` earns no resolution
- *    by its spelling, and a missing row resolves nothing rather than guessing;
+ * only through an app-sorted row in [CatalogArgumentSorts]: the row's argument name is the argument to
+ * resolve, and its [com.sidr.launcher.domain.sort.SortedArg.labelArg], when the row names one **and**
+ * the descriptor declares it, receives the raw text the user typed, so a surface can show both what was
+ * said and what it resolved to. Rows of other sorts (duration, clock time, URL) are not read here yet
+ * — the wiring is phase 3b's next tasks. Three consequences, stated rather than discovered later:
+ *  - a tool with **no app row** is passed through untouched — an argument named `app` earns no
+ *    resolution by its spelling, and a missing row resolves nothing rather than guessing;
  *  - a declared argument that is **optional** and that the vocabulary did not supply stays absent:
  *    nothing to resolve, nothing to decline (a **required** one never arrives blank — the
  *    required-argument check has already declined);
@@ -73,9 +76,9 @@ import javax.inject.Inject
  * What holds the rows to the descriptors is a test, not the type system: `ToolArgumentSortGuardTest`
  * checks both directions over the production authored sources — every tool declaring an argument named
  * `app` has a row (the bridge from the old convention, which is why that test still reads the name), and
- * no row names an argument its tool does not declare. A typed argument kind — the one thing that would
- * make this a contract rather than a catalog — is the `ArgType` debt (spec §7.5); `F6` stays in force
- * with its review appointed for phase 3 (spec §7.8), and `ArgType` is deliberately **not** widened here.
+ * no row names an argument its tool does not declare. `F6` is closed by ADR in phase 3b (spec §7.8):
+ * `ArgType` stays `STRING` permanently, and what an argument MEANS is its sort, declared in the catalog
+ * beside the descriptor — so this stays a catalog held by a test, by decision rather than by debt.
  *
  * **Selection now also covers third-party names.** [ToolSelector] (Task 10) chooses between our
  * authored, localized vocabulary and a dynamic `app_shortcut` name, declining rather than guessing when
@@ -86,7 +89,7 @@ import javax.inject.Inject
 class ToolMatchPlanner @Inject constructor(
     private val selector: ToolSelector,
     private val appTargets: AppTargetResolver,
-    private val sorts: ToolArgumentSorts,
+    private val sorts: CatalogArgumentSorts,
 ) : Planner {
 
     override suspend fun plan(request: PlanningRequest, registry: ToolRegistry): PlanningResult {
@@ -114,21 +117,22 @@ class ToolMatchPlanner @Inject constructor(
         // never on `required`, so a descriptor declaring an OPTIONAL `app` returned `NoPlan` for
         // every goal, forever, with a green suite. Both halves are fixed here — the sort is
         // declared, and an absent optional value is a value that was not needed.
-        val binding = sorts.appBindingFor(descriptor.id)
-        val appArg = binding?.arg?.let { name -> descriptor.argSchema.firstOrNull { it.name == name } }
+        val binding = sorts.appArgOf(descriptor.id)
+        val appArg = binding?.first?.let { name -> descriptor.argSchema.firstOrNull { it.name == name } }
 
         val resolvedArgs = buildMap<String, String> {
             putAll(match.args)
             if (binding != null && appArg != null) {
-                val raw = match.args[binding.arg].orEmpty()
+                val (argName, sorted) = binding
+                val raw = match.args[argName].orEmpty()
                 if (raw.isBlank() && !appArg.required) {
                     // Declared, optional, and the vocabulary supplied nothing. There is nothing to
                     // resolve and nothing to decline: an absent optional argument is absent.
-                    remove(binding.arg)
+                    remove(argName)
                 } else {
                     val target = appTargets.resolve(raw) ?: return PlanningResult.NoPlan
-                    put(binding.arg, target)
-                    binding.labelArg
+                    put(argName, target)
+                    sorted.labelArg
                         ?.takeIf { label -> descriptor.argSchema.any { it.name == label } }
                         ?.let { put(it, raw) }
                 }

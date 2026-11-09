@@ -71,7 +71,7 @@ class DeviceMentionBinderTest {
         val aliases = FakeAliasStore().apply {
             runBlocking { upsert(Alias("телега", AliasTarget.App("net.fixture.zantor"), createdAtEpochMs = 0L)) }
         }
-        return DeviceMentionBinder(AppTargetResolver(repo, aliases), ToolArgumentSorts(), store, DefaultResolutionPreferencePolicy())
+        return DeviceMentionBinder(AppTargetResolver(repo, aliases), CatalogArgumentSorts(), store, DefaultResolutionPreferencePolicy())
     }
 
     private fun Binding.act(): Interpretation.Act = (this as Binding.Bound).interpretation
@@ -188,8 +188,8 @@ class DeviceMentionBinderTest {
 
     /**
      * The model is asked for an app under the names our descriptions give it, and the binder reads the
-     * name [AuthoredToolDescriptions.MENTION_ARG] of a tool [ToolArgumentSorts] has a row for. Were the
-     * two to diverge, the binder would pass the step through unbound — the tool offered and dead, every
+     * name [AuthoredToolDescriptions.MENTION_ARG] of a tool [CatalogArgumentSorts] has an app row for. Were
+     * the two to diverge, the binder would pass the step through unbound — the tool offered and dead, every
      * per-tool test green. Read over the PRODUCTION descriptions and sorts, not a list in this file.
      *
      * Behavioural rather than a comparison of names, which `AuthoredToolDescriptionsTest > an app-sort
@@ -200,10 +200,10 @@ class DeviceMentionBinderTest {
      */
     @Test
     fun `every app mention the model is asked for is one the binder reads, and every bindable tool asks for one`() = runTest {
-        val sorts = ToolArgumentSorts()
+        val sorts = CatalogArgumentSorts()
         val described = AuthoredToolDescriptions().rows()
 
-        val silent = described.filter { (id, description) -> sorts.appBindingFor(id) != null && description.args.none { it.mention } }
+        val silent = described.filter { (id, description) -> sorts.appArgOf(id) != null && description.args.none { it.mention } }
         assertEquals(emptySet<ToolId>(), silent.keys)
 
         val mentions = described.flatMap { (id, description) -> description.args.filter { it.mention }.map { id to it.name } }
@@ -211,9 +211,9 @@ class DeviceMentionBinderTest {
         assertTrue(mentions.isNotEmpty())
 
         val unread = mentions.filterNot { (id, name) ->
-            val sort = sorts.appBindingFor(id) ?: return@filterNot false
+            val (appArg, sort) = sorts.appArgOf(id) ?: return@filterNot false
             fun expected(packageName: String, words: String) =
-                mapOf(sort.arg to ArgSource.Literal(packageName)) + listOfNotNull(sort.labelArg?.let { it to ArgSource.Literal(words) })
+                mapOf(appArg to ArgSource.Literal(packageName)) + listOfNotNull(sort.labelArg?.let { it to ArgSource.Literal(words) })
 
             val one = binder(listOf(lumora)).bind(goal, proposed(id, name to "lumora")).act()
             val several = binder(listOf(tessarOne, tessarTwo)).bind(goal, proposed(id, name to "tessar")).act()

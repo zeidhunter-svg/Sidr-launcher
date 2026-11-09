@@ -9,6 +9,8 @@ import com.sidr.launcher.domain.agent.PlanningRequest
 import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.StepRationale
+import com.sidr.launcher.domain.sort.ArgSorts
+import com.sidr.launcher.domain.sort.SortedArg
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolAdapter
@@ -50,11 +52,11 @@ class ToolMatchPlannerTest {
     /**
      * `appTargetsOf()` is a resolver over an **empty** installed list, so it declines every query.
      * Every test that uses this planner names a tool with no `app` argument and no row in the
-     * production [ToolArgumentSorts], so resolution must never be consulted at all — a decline here
+     * production [CatalogArgumentSorts], so resolution must never be consulted at all — a decline here
      * would turn those plans into `NoPlan` and say so loudly.
      */
     private val planner =
-        ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()), appTargetsOf(), ToolArgumentSorts())
+        ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()), appTargetsOf(), CatalogArgumentSorts())
 
     /** The production shape: the Tier-0 source seen through the federation, not directly. */
     private val registry = ToolFederation(
@@ -199,7 +201,7 @@ class ToolMatchPlannerTest {
     // touches `ToolVocabulary.DEFAULT_ENTRIES`, because a production trigger is owner-visible and one
     // invented in a planner test could silently claim a verb FastPath already owns. What is under
     // test is the planner's treatment of an argument its tool DECLARES to carry an app — through a
-    // [ToolArgumentSorts] row ([appSorts]), since A4′ phase 0; before that, through the spelling
+    // [CatalogArgumentSorts] row ([appSorts]), since A4′ phase 0; before that, through the spelling
     // `app` alone, which is the convention the last two tests below pin as gone.
     // ---------------------------------------------------------------------------------------------
 
@@ -221,8 +223,8 @@ class ToolMatchPlannerTest {
     )
 
     /** The synthetic tool's own sort row — production data stays free of `test_app_tool`. */
-    private val appSorts = ToolArgumentSorts(
-        mapOf(appTool to AppArgumentBinding(arg = "app", labelArg = "app_label")),
+    private val appSorts = CatalogArgumentSorts(
+        mapOf(appTool to mapOf("app" to SortedArg(ArgSorts.APP, labelArg = "app_label"))),
     )
 
     /**
@@ -328,7 +330,7 @@ class ToolMatchPlannerTest {
 
     /**
      * Resolution is keyed on a declared sort row: a tool with no row — `set_timer` has none in the
-     * production [ToolArgumentSorts] — never reaches the resolver, which is why the class-level
+     * production [CatalogArgumentSorts] — never reaches the resolver, which is why the class-level
      * `planner` can carry a resolver that declines everything and still plan a timer.
      */
     @Test
@@ -380,7 +382,7 @@ class ToolMatchPlannerTest {
         val planner = ToolMatchPlanner(
             appSelector,
             appTargetsOf("Telegram" to "org.telegram.messenger"),
-            ToolArgumentSorts(),
+            CatalogArgumentSorts(),
         )
 
         val result = planner.plan(

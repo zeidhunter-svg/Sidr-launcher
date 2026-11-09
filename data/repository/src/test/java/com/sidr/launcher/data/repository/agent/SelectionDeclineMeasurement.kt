@@ -9,6 +9,7 @@ import com.sidr.launcher.data.repository.agent.shortcut.AppShortcut
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutCatalog
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolSource
 import com.sidr.launcher.data.repository.intent.RuleBasedIntentMatcher
+import com.sidr.launcher.data.repository.text.IcuTextFolding
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.PlanningRequest
@@ -161,7 +162,7 @@ class SelectionDeclineMeasurement {
         val shortcutSource = shortcutSourceOf(dynamicNames)
         val vocabulary = ToolVocabulary()
         val selector = ToolSelector(vocabulary, shortcutSource)
-        val appTargets = AppTargetResolver(appsRepo, FakeAliasStore())
+        val appTargets = AppTargetResolver(appsRepo, FakeAliasStore(), IcuTextFolding)
         val planner = ToolMatchPlanner(selector, appTargets, CatalogArgumentSorts())
         val registry = federation(shortcutSource).registry
         val rows = corpus.map { phrase ->

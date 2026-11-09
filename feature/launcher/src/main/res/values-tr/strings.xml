@@ -84,6 +84,7 @@
     <string name="launcher_interpretation_show_apps">Tüm uygulamaları göster</string>
     <string name="launcher_interpretation_choose_app">\"%1$s\" hangi uygulama?</string>
     <string name="launcher_interpretation_candidate">%1$s (%2$s)</string>
+    <string name="launcher_interpretation_did_you_mean">«%1$s» mı demek istediniz?</string>
     <string name="launcher_thinking">Ne demek istediğinizi anlamaya çalışıyorum…</string>
     <string name="launcher_model_unavailable_credentials">Yapay zekâ sağlayıcısının anahtarı bulunamadı veya kabul edilmedi.</string>
     <string name="launcher_model_unavailable_request_rejected">Yapay zekâ sağlayıcısı isteği reddetti. Sağlayıcı ayarlarını kontrol edin.</string>

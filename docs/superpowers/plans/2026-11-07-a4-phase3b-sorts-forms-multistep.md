@@ -100,10 +100,12 @@ with these values replaced:
   - word forms: alias «кварцелот» typed «кварцелота»; «Миравин» (`net.fixture.miravin`) typed «миравину»;
     «Vemblic» typed «Vemblic'i»; Arabic «سنداف» (`net.fixture.sindaf`) typed «بالسنداف» and vowelled
     «سِنْدَاف»;
-  - an edge pair that must stay a choice: «Плинта» (`net.fixture.plinta`) and «Плинтарь»
-    (`net.fixture.wexdor`), typed «плинту». The two **labels** share a substring on purpose — the edge
-    rule is what is under test; every assertion over them is an equality of package lists, never a
-    `contains`;
+  - an edge pair that must stay a choice: «Плинта» (`net.fixture.plinta`) and «Плинт»
+    (`net.fixture.wexdor`), typed «плинту» (accusative of the one, dative of the other). The two **labels**
+    share a substring on purpose — the edge rule is what is under test; every assertion over them is an
+    equality of package lists, never a `contains`. *Measured in execution (Task 4, ruling E4-P1): the
+    plan's «Плинтарь» fails clause (i)'s ratio (3·5 = 15 < 2·8 = 16) — the rule is right, «плинтарь» has
+    no form «плинту»; the fixture changed, B-2 did not;*
   - a window pair: «Velmo» (`net.fixture.velmo`) and the two-word «Velmo Pad» (`net.fixture.quarnet`);
   - durations «10 dakika», «полчасика» (unreadable); time «7:30»; URLs `HTTPS://Quillmere.example/Path`
     and `https://quillmere.example/a b`;
@@ -131,7 +133,7 @@ with these values replaced:
 Five input classes the spec implies but no criterion names, each likely to bite a person, each pinned
 by a test in the task that owns the code.
 
-1. **A word form that fits two apps** — «плинту» with «Плинта» and «Плинтарь» installed. Binding either
+1. **A word form that fits two apps** — «плинту» with «Плинта» and «Плинт» installed (E4-P1). Binding either
    would be a guess. → Task 4, `AppNameMatcherTest > edge matches on two apps are both offered, never one picked`.
 2. **A reference to an output that never arrives** — the model writes «find orvelle.txt, then delete it»,
    and the find finds nothing. Nothing may be deleted, and the plan must end saying why.
@@ -196,7 +198,9 @@ close** (§0.11 B1):
 - **B-3 · A confirmation is learned through the existing learned-choice store and policy** (streak ≥ 3
   auto-resolves) — no new store, no new constant. Launch only; destructive tools never read it.
 - **B-4 · One key for a learned launch choice on every path:** `LearnedChoiceKeys.launch(name, folding)` =
-  `CapabilityKey(launch_app, folding.fold(LaunchSlotExtractor.slotOf(name)))`, `name` = the app name the
+  `CapabilityKey(launch_app, folding.fold(LaunchSlotExtractor.slotOf(CommandNormalizer.normalize(name))))` *(Measured in
+  execution, E4-F3: `normalize` before `slotOf`, which documents normalised input; keeps 3a's keys byte-identical
+  for unmarked names)*, `name` = the app name the
   path extracted (FastPath `displayNameQuery`, the bridge's mention). Old `ru`/`tr` rows keyed on the
   whole phrase stop matching: asked again (safe, no migration).
 - **B-5 · Duration and clock-time sorts validate, they do not rewrite** (the worker reads the user's
@@ -715,7 +719,7 @@ object LearnedChoiceKeys { fun launch(name: String, folding: TextFolding): Capab
   by edge` (`Vemblic'i` → `Edge([Vemblic])`) · `an arabic prefix and vowel marks match` (`بالسنداف` →
   `Edge`; `سِنْدَاف` → `Exact`) · `a stem shorter than three letters never matches by edge` · `a fragment of a
   longer word is not a form` (`lum` vs «Lumora» → `None`) · `edge matches on two apps are both offered, never
-  one picked` (`плинту` → `Edge([Плинта, Плинтарь])`) · `a whole name with extra words is no whole match`
+  one picked` (`плинту` → `Edge([Плинта, Плинт])`, E4-P1) · `a whole name with extra words is no whole match`
   (`lumora studio` vs «Lumora» → `None`) · `windows go longest first and mark a short window` (`velmo pad` →
   `Exact([Velmo Pad]), whole`; `velmo пожалуйста` → `Exact([Velmo]), not whole`) (9);
   `AppTargetResolverTest`: `an alias in another form is offered for confirmation` (`кварцелота` →
@@ -730,13 +734,13 @@ object LearnedChoiceKeys { fun launch(name: String, folding: TextFolding): Capab
 
 | # | Plant | Predicted `FAILED ::` |
 |---|---|---|
-| M4a | `candidates` maps a single `Edge` to `One` | `:data:repository` — `> an edge label match is a confirmation…`, `> a word form becomes a one-app pick…` |
+| M4a | `candidates` maps a single `Edge` to `One` | `:data:repository` — `> an edge label match is a confirmation…`, `> a word form becomes a one-app pick…`, `AppSortResolverTest > each candidate answer maps to its sort resolution` *(Measured in execution, E4-F7: the third test is E4-P2's, added in execution; its `Confirm` row is a label edge)* |
 | M4b | `matchWhole` keeps the first app of an `Edge` list | `:domain` — `> edge matches on two apps are both offered…` only |
 | M4c | clause (ii) removed | `:domain` — `> an arabic prefix and vowel marks match` only |
 | M4d | the ratio condition removed | `:domain` — `> a fragment of a longer word is not a form` only |
 | M4e | `matchWindows` shortest first | `:domain` — `> windows go longest first…` only |
 | M4f | `matchWhole` accepts a label with fewer words than the text | `:domain` — `> a whole name with extra words is no whole match` only |
-| M4g | binder builds a learning token for `uninstall_app` too | `:data:repository` — `> a confirmed word form for launch…` only |
+| M4g | binder builds a learning token for `uninstall_app` too | `:data:repository` — `> a confirmed word form for launch…` only *(Measured in execution, E4-F7: planted on the confirm path only; a path-wide plant also reds 3a's `> uninstall never reads a learned choice`, since `Several` and `Confirm` share one gate)* |
 
 - [ ] **Step 6:** boundary gate → **1715** (`:domain` 538, `:data:repository` 442, `:feature:launcher` 257).
   **Step 7: commit** — `feat(agentic-6/A4' ф3b): один сопоставитель имён — целое имя в мосту, окна для 2b; форма слова — только на подтверждение`.

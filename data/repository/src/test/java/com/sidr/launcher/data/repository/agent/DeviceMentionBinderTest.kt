@@ -26,6 +26,7 @@ import com.sidr.launcher.domain.memory.resolution.ResolvedTarget
 import com.sidr.launcher.domain.memory.resolution.fingerprintOf
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.result.OperationError
+import com.sidr.launcher.domain.text.PlainTextFolding
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolId
@@ -49,6 +50,7 @@ class DeviceMentionBinderTest {
     private val zantor = InstalledApp(packageName = "net.fixture.zantor", label = "Zantor")
     private val tessarOne = InstalledApp(packageName = "net.fixture.tessar.one", label = "Tessar")
     private val tessarTwo = InstalledApp(packageName = "net.fixture.tessar.two", label = "Tessar")
+    private val miravin = InstalledApp(packageName = "net.fixture.miravin", label = "Миравин")
 
     private fun proposed(tool: ToolId, vararg args: Pair<String, String>, risk: ActionRiskLevel = ActionRiskLevel.SAFE) =
         ProposedStep(
@@ -71,7 +73,13 @@ class DeviceMentionBinderTest {
         val aliases = FakeAliasStore().apply {
             runBlocking { upsert(Alias("телега", AliasTarget.App("net.fixture.zantor"), createdAtEpochMs = 0L)) }
         }
-        return DeviceMentionBinder(AppTargetResolver(repo, aliases), CatalogArgumentSorts(), store, DefaultResolutionPreferencePolicy())
+        return DeviceMentionBinder(
+            AppTargetResolver(repo, aliases, PlainTextFolding),
+            CatalogArgumentSorts(),
+            store,
+            DefaultResolutionPreferencePolicy(),
+            PlainTextFolding,
+        )
     }
 
     private fun Binding.act(): Interpretation.Act = (this as Binding.Bound).interpretation
@@ -171,12 +179,70 @@ class DeviceMentionBinderTest {
         assertNull(act.choice!!.learning)
     }
 
-    /** Review Focus 5 and the limit spec §7.12.1 names: «телегу» is not the alias «телега». */
+    /**
+     * Rewritten in phase 3b (fork 3b-G) at constant count: 3a's limit — «телегу» is not the alias «телега»,
+     * so not found — is gone. A form of an alias is now offered for the user's confirmation, never bound;
+     * a word nothing on the device names is still not found, never guessed.
+     */
     @Test
-    fun `a word form that matches nothing is not found, never guessed`() = runTest {
-        val result = binder(listOf(zantor)).bind(goal, proposed(ToolIds.LAUNCH_APP, "app" to "телегу"))
+    fun `a word form of an alias is offered to confirm, and a word nothing names is not found`() = runTest {
+        val act = binder(listOf(zantor)).bind(goal, proposed(ToolIds.LAUNCH_APP, "app" to "телегу")).act()
 
-        assertEquals(Binding.NotFound("телегу"), result)
+        assertEquals(listOf(zantor), act.choice!!.candidates)
+        assertTrue(act.choice!!.confirm)
+        assertNull(act.step.invocation.args["app"])
+
+        val result = binder(listOf(zantor)).bind(goal, proposed(ToolIds.LAUNCH_APP, "app" to "вельтрикс"))
+        assertEquals(Binding.NotFound("вельтрикс"), result)
+    }
+
+    /** Fork 3b-G: «миравину» is a form of the label «Миравин» — a one-app pick the user confirms; nothing is bound yet. */
+    @Test
+    fun `a word form becomes a one-app pick marked to confirm`() = runTest {
+        val act = binder(listOf(lumora, miravin)).bind(goal, proposed(ToolIds.LAUNCH_APP, "app" to "миравину")).act()
+
+        assertEquals(listOf(miravin), act.choice!!.candidates)
+        assertEquals("app", act.choice!!.arg)
+        assertTrue(act.choice!!.confirm)
+        assertNull(act.step.invocation.args["app"])
+    }
+
+    /**
+     * Plan §0.2 B-3/B-4: a confirmation is a learned choice, for `launch_app` only. The token is keyed on
+     * the name (`LearnedChoiceKeys.launch`), and it is the key the store is READ by — a confident choice
+     * learned under it binds without asking. `uninstall_app` neither carries a token nor reads one, even
+     * with that confident choice in the store: consent learned for opening is not consent for removing.
+     */
+    @Test
+    fun `a confirmed word form for launch carries a learning token keyed on the name, for uninstall none`() = runTest {
+        val key = CapabilityKey(ActionIds.LAUNCH_APP, "телегу")
+
+        val offered = binder(listOf(zantor)).bind(goal, proposed(ToolIds.LAUNCH_APP, "app" to "телегу")).act()
+        assertEquals(key, offered.choice!!.learning!!.capabilityKey)
+        assertEquals(CandidateSet(listOf(ResolvedTarget.App("net.fixture.zantor"))), offered.choice!!.learning!!.candidateSet)
+
+        val confirmedThrice = FakeResolutionPreferenceStore().apply {
+            runBlocking {
+                upsert(
+                    ResolutionPreference(
+                        capabilityKey = key,
+                        context = ResolutionContext.None,
+                        preferredTarget = ResolvedTarget.App("net.fixture.zantor"),
+                        evidence = PreferenceEvidence(streak = 3, totalChoices = 3, lastChosenAtEpochMs = 1L),
+                        learnedInSetFingerprint = fingerprintOf(CandidateSet(listOf(ResolvedTarget.App("net.fixture.zantor")))),
+                    ),
+                )
+            }
+        }
+        val learned = binder(listOf(zantor), store = confirmedThrice).bind(goal, proposed(ToolIds.LAUNCH_APP, "app" to "телегу")).act()
+        assertNull(learned.choice)
+        assertEquals(ArgSource.Literal("net.fixture.zantor"), learned.step.invocation.args["app"])
+
+        val uninstall = binder(listOf(zantor), store = confirmedThrice)
+            .bind(goal, proposed(Tier0ToolIds.UNINSTALL_APP, "app" to "телегу", risk = ActionRiskLevel.CONFIRM)).act()
+        assertEquals(listOf(zantor), uninstall.choice!!.candidates)
+        assertTrue(uninstall.choice!!.confirm)
+        assertNull(uninstall.choice!!.learning)
     }
 
     @Test

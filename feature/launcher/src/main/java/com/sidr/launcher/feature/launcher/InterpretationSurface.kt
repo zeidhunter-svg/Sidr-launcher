@@ -117,11 +117,20 @@ private fun ModelValues(interpretation: Interpretation.Act) {
         }
 }
 
-/** Condition 2: label AND package (two apps can share a label); a tap binds that one and launches nothing. */
+/**
+ * Condition 2: label AND package (two apps can share a label); a tap binds that one and launches nothing.
+ * A word form offered as ONE app (phase 3b, fork 3b-G: [AppChoice.confirm]) asks «did you mean» with that
+ * app's label; a confirmation over two or more apps keeps the «which app» title (E4-P7).
+ */
 @Composable
 private fun AppChoiceList(choice: AppChoice, onChoose: (String) -> Unit, onDismiss: () -> Unit, modifier: Modifier) {
     Column(modifier = modifier.fillMaxWidth().padding(horizontal = Spacing.lg, vertical = Spacing.sm)) {
-        SidrText(text = sidrString(R.string.launcher_interpretation_choose_app, choice.mention), role = SidrTextRole.HUMAN_TITLE)
+        val title = if (choice.confirm && choice.candidates.size == 1) {
+            sidrString(R.string.launcher_interpretation_did_you_mean, choice.candidates.single().label)
+        } else {
+            sidrString(R.string.launcher_interpretation_choose_app, choice.mention)
+        }
+        SidrText(text = title, role = SidrTextRole.HUMAN_TITLE)
         choice.candidates.forEach { app ->
             SidrText(
                 text = sidrString(R.string.launcher_interpretation_candidate, app.label, app.packageName),

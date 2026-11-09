@@ -134,6 +134,29 @@ class InterpretationSurfaceTest {
         assertEquals(0, runs)
     }
 
+    /**
+     * Fork 3b-G: a word form is offered for confirmation as one app — the title asks «did you mean» with
+     * that app's label instead of «which app», and the tap binds that one exactly as the pick list does.
+     */
+    @Test
+    fun `a word-form pick asks did-you-mean with the one app`() {
+        val form = AppChoice(
+            arg = "app",
+            mention = "Vemblic'i",
+            candidates = listOf(InstalledApp(packageName = "net.fixture.vemblic", label = "Vemblic")),
+            learning = null,
+            confirm = true,
+        )
+        render(act("launch_app", "query", "Vemblic'i", ValueOrigin.SaidBy(PrincipalId.USER), form))
+
+        compose.onNodeWithText("Did you mean «Vemblic»?").assertExists()
+        compose.onNodeWithText("Which app is \"Vemblic'i\"?").assertDoesNotExist()
+        compose.onNodeWithText("Vemblic (net.fixture.vemblic)").performClick()
+
+        assertEquals(listOf("net.fixture.vemblic"), picks)
+        assertEquals(0, runs)
+    }
+
     @Test
     fun `the wait can be cancelled`() {
         var cancelled = 0

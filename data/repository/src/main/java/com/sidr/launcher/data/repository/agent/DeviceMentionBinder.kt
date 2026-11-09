@@ -1,6 +1,5 @@
 package com.sidr.launcher.data.repository.agent
 
-import com.sidr.launcher.domain.action.ActionIds
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.StepPrecondition
@@ -12,10 +11,8 @@ import com.sidr.launcher.domain.ai.bridge.MentionBinder
 import com.sidr.launcher.domain.ai.bridge.PrincipalId
 import com.sidr.launcher.domain.ai.bridge.ProposedStep
 import com.sidr.launcher.domain.ai.bridge.ValueOrigin
-import com.sidr.launcher.domain.intent.CommandNormalizer
 import com.sidr.launcher.domain.memory.resolution.CandidateSet
-import com.sidr.launcher.domain.memory.resolution.CapabilityKey
-import com.sidr.launcher.domain.memory.resolution.LaunchSlotExtractor
+import com.sidr.launcher.domain.memory.resolution.LearnedChoiceKeys
 import com.sidr.launcher.domain.memory.resolution.ResolutionContext
 import com.sidr.launcher.domain.memory.resolution.ResolutionDecision
 import com.sidr.launcher.domain.memory.resolution.ResolutionLearningToken
@@ -25,6 +22,7 @@ import com.sidr.launcher.domain.memory.resolution.ResolvedTarget
 import com.sidr.launcher.domain.memory.resolution.fingerprintOf
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.text.TextFolding
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
@@ -36,17 +34,18 @@ import javax.inject.Inject
  * For a tool with an app-sorted argument ([CatalogArgumentSorts.appArgOf]) the model's word for the app
  * ([AuthoredToolDescriptions.MENTION_ARG]) leaves the model-facing name: the package goes into the
  * row's argument once known, the user's words into its `labelArg`. [AppTargetResolver.candidates] answers —
- * it never guesses and consults aliases; two candidates are a choice for the USER before any card.
+ * it never guesses and consults aliases; two candidates are a choice for the USER before any card, and a
+ * word FORM of a name (phase 3b, fork 3b-G: «миравину» for «Миравин») is a pick of that one app marked
+ * [AppChoice.confirm] — «Вы имели в виду…?» — never a bind.
  *
- * **Learned choices answer for `launch_app` only**, with FastPath's policy and the same key FORMULA — a
- * confident one binds without asking, a weak one is offered first. `uninstall_app` and `open_app_info`
- * never read them: consent learned for opening an app is not consent for removing it
- * (`AppTargetResolver`). The formula is FastPath's, the input is not: FastPath slots the whole command,
- * this binder the model's mention, and `LaunchSlotExtractor` strips English verbs only. So the two paths
- * share a learned choice only for an English verb-led command («open tessar» → `tessar` on both, the
- * model's mention being the user's word); a `ru`/`tr` command («открой tessar») keys FastPath on the
- * whole phrase, and a choice learned on one path is not seen by the other. That fails safe — the user
- * is asked again, nothing is guessed.
+ * **Learned choices answer for `launch_app` only**, with FastPath's policy — a confident one binds
+ * without asking, a weak one is offered first — and for a confirmation exactly as for a choice between
+ * several (B-3): the same key, the same read, so a form confirmed three times binds without asking.
+ * `uninstall_app` and `open_app_info` neither carry a token nor read one: consent learned for opening an
+ * app is not consent for removing it (`AppTargetResolver`). The key is [LearnedChoiceKeys.launch] of the
+ * model's mention (B-4) — the app name, folded. Until FastPath keys on the name too (phase 3b, Task 7),
+ * a `ru`/`tr` command («открой tessar») keys FastPath on the whole phrase, and a choice learned on one
+ * path is not seen by the other. That fails safe — the user is asked again, nothing is guessed.
  *
  * Nothing here reaches the model: `RouteCommandUseCase` calls this after the model has answered, and
  * returns what it finds to the screen.
@@ -56,6 +55,7 @@ class DeviceMentionBinder @Inject constructor(
     private val sorts: CatalogArgumentSorts,
     private val preferences: ResolutionPreferenceStore,
     private val policy: ResolutionPreferencePolicy,
+    private val folding: TextFolding,
 ) : MentionBinder {
 
     override suspend fun bind(goal: AgentGoal, proposed: ProposedStep): Binding {
@@ -76,11 +76,13 @@ class DeviceMentionBinder @Inject constructor(
             is AppCandidates.One -> Binding.Bound(
                 act(goal, proposed, words + (appArg to found.app.packageName), wordOrigins + (appArg to ValueOrigin.Ours), choice = null),
             )
-            is AppCandidates.Several -> Binding.Bound(several(goal, proposed, appArg, mention, found.apps, words, wordOrigins))
+            is AppCandidates.Several -> Binding.Bound(choice(goal, proposed, appArg, mention, found.apps, words, wordOrigins, confirm = false))
+            is AppCandidates.Confirm -> Binding.Bound(choice(goal, proposed, appArg, mention, found.apps, words, wordOrigins, confirm = true))
         }
     }
 
-    private suspend fun several(
+    /** Several apps, or one word form to confirm ([confirm]): the user's pick, unless a learned launch choice answers. */
+    private suspend fun choice(
         goal: AgentGoal,
         proposed: ProposedStep,
         appArg: String,
@@ -88,12 +90,13 @@ class DeviceMentionBinder @Inject constructor(
         apps: List<InstalledApp>,
         words: Map<String, String>,
         origins: Map<String, ValueOrigin>,
+        confirm: Boolean,
     ): Interpretation.Act {
         if (proposed.tool != ToolIds.LAUNCH_APP) {
-            return act(goal, proposed, words, origins, AppChoice(appArg, mention, apps, learning = null))
+            return act(goal, proposed, words, origins, AppChoice(appArg, mention, apps, learning = null, confirm = confirm))
         }
         val candidates = CandidateSet(apps.map { ResolvedTarget.App(it.packageName) })
-        val key = CapabilityKey(ActionIds.LAUNCH_APP, LaunchSlotExtractor.slotOf(CommandNormalizer.normalize(mention)))
+        val key = LearnedChoiceKeys.launch(mention, folding)
         val token = ResolutionLearningToken(
             capabilityKey = key,
             context = ResolutionContext.None,
@@ -109,12 +112,12 @@ class DeviceMentionBinder @Inject constructor(
             }
             is ResolutionDecision.RankFirst -> {
                 val first = when (val t = decision.target) { is ResolvedTarget.App -> t.packageName }
-                act(goal, proposed, words, origins, AppChoice(appArg, mention, apps.sortedByDescending { it.packageName == first }, token))
+                act(goal, proposed, words, origins, AppChoice(appArg, mention, apps.sortedByDescending { it.packageName == first }, token, confirm))
             }
-            ResolutionDecision.NoPreference -> act(goal, proposed, words, origins, AppChoice(appArg, mention, apps, token))
+            ResolutionDecision.NoPreference -> act(goal, proposed, words, origins, AppChoice(appArg, mention, apps, token, confirm))
             is ResolutionDecision.Stale -> {
                 preferences.delete(key, ResolutionContext.None) // best-effort prune, as FastPath's decorator does
-                act(goal, proposed, words, origins, AppChoice(appArg, mention, apps, token))
+                act(goal, proposed, words, origins, AppChoice(appArg, mention, apps, token, confirm))
             }
         }
     }

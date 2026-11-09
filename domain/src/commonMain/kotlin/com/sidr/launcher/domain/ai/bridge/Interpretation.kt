@@ -32,16 +32,19 @@ sealed interface Interpretation {
 }
 
 /**
- * The model's word for an app names more than one installed app (spec §7.12.3 condition 2). A pick
- * writes the package into [arg] — it binds; it launches nothing. [learning] is the learned-choice token
- * for `launch_app` only (the same act as a launch); the command session records the choice at
- * «Выполнить», through the one gated record call (`LauncherAppLaunch.recordChoiceIfPending`).
+ * The model's word for an app names more than one installed app (spec §7.12.3 condition 2), or names one
+ * only as a word FORM (phase 3b, fork 3b-G: [confirm] = `true`, «Вы имели в виду…?»). A pick writes the
+ * package into [arg] — it binds; it launches nothing. A form is never bound without this pick. [learning]
+ * is the learned-choice token for `launch_app` only (the same act as a launch); the command session
+ * records the choice at «Выполнить», through the one gated record call
+ * (`LauncherAppLaunch.recordChoiceIfPending`) — so a confirmed form is learned like any other choice.
  */
 data class AppChoice(
     val arg: String,
     val mention: String,
     val candidates: List<InstalledApp>,
     val learning: ResolutionLearningToken?,
+    val confirm: Boolean = false,
 )
 
 /** The pick. [packageName] must be one of the candidates; anything else changes nothing (`null`). */

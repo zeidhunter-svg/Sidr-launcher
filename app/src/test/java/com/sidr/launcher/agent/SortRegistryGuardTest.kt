@@ -7,6 +7,7 @@ import com.sidr.launcher.data.repository.agent.AppTargetResolver
 import com.sidr.launcher.data.repository.agent.CatalogArgumentSorts
 import com.sidr.launcher.di.SortProvidesModule
 import com.sidr.launcher.domain.sort.ArgSort
+import com.sidr.launcher.domain.text.PlainTextFolding
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
@@ -27,7 +28,7 @@ class SortRegistryGuardTest {
     fun `every sort the catalog declares has a resolver in the production graph`() {
         val declared: Set<ArgSort> = CatalogArgumentSorts().all().values.flatMap { it.values }.map { it.sort }.toSet()
         val registered: Set<ArgSort> = SortProvidesModule.provideSortResolvers(
-            AppSortResolver(AppTargetResolver(FakeInstalledAppsRepository(), FakeAliasStore())),
+            AppSortResolver(AppTargetResolver(FakeInstalledAppsRepository(), FakeAliasStore(), PlainTextFolding)),
         ).keys
 
         // The control: "nothing missing" must not mean "nothing declared".

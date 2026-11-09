@@ -222,7 +222,13 @@ class BridgePayloadGuardTest {
             PlainTextFolding,
         ),
         binder = BridgeProvidesModule.provideMentionBinder(
-            DeviceMentionBinder(AppTargetResolver(apps(), aliases()), CatalogArgumentSorts(), learned(), DefaultResolutionPreferencePolicy()),
+            DeviceMentionBinder(
+                AppTargetResolver(apps(), aliases(), PlainTextFolding),
+                CatalogArgumentSorts(),
+                learned(),
+                DefaultResolutionPreferencePolicy(),
+                PlainTextFolding,
+            ),
         ),
         featureFlagRepository = FakeFeatureFlagRepository(),
         providerConfigRepository = configuredProvider(),

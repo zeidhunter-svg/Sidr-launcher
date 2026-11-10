@@ -46,9 +46,12 @@ import kotlinx.coroutines.flow.first
  *    `ruleOutcome` untouched and the whole chain below runs exactly as it did before. **An
  *    `Unresolved` is answered here, on the device, and never goes further** (A4′ phase 3b, R14-39
  *    closed): a registered tool claimed the text and its target did not bind by itself, so the user
- *    gets «нет такого приложения» in their own words, a pick ([CommandOutcome.ChooseTarget]), «не понял»
- *    in their own words for a value its sort could not read ([CommandMessage.ValueNotUnderstood], Task 6),
- *    or — the app list unreadable — a generic failure; the model is not asked. `StartAgentSessionUseCase.planning`
+ *    gets «нет такого приложения» in their own words, a pick ([CommandOutcome.ChooseTarget]), or — the
+ *    app list unreadable, or a value sort the device could not consult — a generic failure; the model is
+ *    not asked. **A VALUE the vocabulary claimed and its sort cannot read is not answered here**: the
+ *    planner gives `NoPlan` and the chain below runs as for any unclaimed text (controller ruling E6-R1,
+ *    phase 3b Task 6 — a value sort is a pure function of the command text, so nothing of the device
+ *    decides what is sent). `StartAgentSessionUseCase.planning`
  *    persists nothing, so an unrecognised or unresolved command leaves no `goal_text` row behind.
  * 3. **`localOnlyMode` on ⇒ byte-for-byte FastPath parity** — the planner is never consulted and
  *    nothing leaves the device. A FastPath hit returns untouched; a miss says so plainly
@@ -80,10 +83,10 @@ import kotlinx.coroutines.flow.first
  * **Step 2b sits above step 3 too, and that does not weaken the chain either.** Step 2b is the one
  * branch above step 3 that *is* keyed on an undecided outcome, so the argument above (about step 2)
  * does not cover it and it needs its own. It holds for a different reason: **step 2b reports none of
- * the three causes.** Its exits are a [CommandOutcome.AgentSessionStarted], the four device answers
- * to an `Unresolved` (A4′ phase 3b: [CommandMessage.NoAppFound], [CommandOutcome.ChooseTarget],
- * [CommandMessage.ValueNotUnderstood], [CommandOutcome.Failed]) — none of them one of the three
- * messages — or a fall-through that changes
+ * the three causes.** Its exits are a [CommandOutcome.AgentSessionStarted], the device answers to an
+ * `Unresolved` (A4′ phase 3b: [CommandMessage.NoAppFound], [CommandOutcome.ChooseTarget],
+ * [CommandOutcome.Failed], and the fail-safe [CommandMessage.ValueNotUnderstood] that no production
+ * planner produces since E6-R1) — none of them one of the three messages — or a fall-through that changes
  * nothing; so it can neither produce one of the three nor suppress another branch's. Whichever of
  * steps 3, 5 and 6 a command was going to reach, it still reaches, with the same message; the only
  * commands step 2b removes from that chain are the ones a registered tool matched, and those never
@@ -93,8 +96,8 @@ import kotlinx.coroutines.flow.first
  * passed unmodified across both changes — `a matching tool starts an agent session even in local-only
  * mode` holds the [CommandOutcome.AgentSessionStarted] exit, and `an unresolved 2b target is answered
  * on the device and the model is never asked`, `an unreadable 2b target fails on the device…`, `a
- * 2b pick starts the session on the tap…` and `not understood is said in the user's words` hold the
- * four device answers.
+ * 2b pick starts the session on the tap…` hold the three device answers a production planner can reach;
+ * `not understood is said in the user's words` holds the fail-safe.
  *
  * **An `Unresolved` answered above step 3 is `DOC-ADL-3` applied, not bent.** It consults no model and
  * transmits nothing — in local-only mode it replaces the "understanding is local-only" line with the
@@ -237,11 +240,15 @@ class RouteCommandUseCase(
     /**
      * Step 2b's answer to a target a registered tool claimed and could not bind (A4′ phase 3b). The
      * order is the order of what the device knows: it could not ask ([UnresolvedTarget.unreadable] — the
-     * app list unreadable, or a sort the device could not consult; said as step 7 says
+     * app list unreadable, or a value sort the device could not consult; said as step 7 says
      * `Binding.Unavailable`, controller ruling E5-P1); it found candidates — the user picks; it found
-     * nothing for an app — «нет такого приложения» in the user's words; and otherwise the target is a
-     * VALUE its sort could not read (`ToolMatchPlanner`, Task 6: «полчасика» is no duration) — «не понял»
-     * in the user's words ([CommandMessage.ValueNotUnderstood], controller ruling E6-P2). Never step 7.
+     * nothing for an app — «нет такого приложения» in the user's words. Never step 7.
+     *
+     * The last branch is a **fail-safe with no production producer since controller ruling E6-R1**: an
+     * empty, readable `Unresolved` of a value sort would be «не понял» in its words
+     * ([CommandMessage.ValueNotUnderstood], ruling E6-P2) rather than a generic failure — but
+     * `ToolMatchPlanner` answers a value its sort cannot read with `NoPlan`, which never reaches here. The
+     * branch stays so that a future planner which does produce one says something true.
      */
     private fun answerOnDevice(target: UnresolvedTarget): CommandOutcome = when {
         target.unreadable -> CommandOutcome.Failed(CommandFailure.Generic)

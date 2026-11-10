@@ -57,7 +57,9 @@ internal fun feedbackText(feedback: CommandFeedback): FeedbackText? = when (feed
             listOf(CommandExamples.OPEN_APP, CommandExamples.SEARCH_QUERY),
         )
         is CommandMessage.NoAppFound -> FeedbackText(R.string.launcher_feedback_no_app_found, listOf(m.query))
-        // A4′ phase 3b, Task 6: a value its sort could not read, said in the words given for it.
+        // A4′ phase 3b, Task 6: a value its sort could not read, said in the words written for it. A named
+        // limit (controller ruling E6-R2): at the bridge those may be the MODEL's words, quoted here with no
+        // model mark; a marked variant would be a sixth string key — the owner's decision.
         is CommandMessage.ValueNotUnderstood -> FeedbackText(R.string.launcher_message_value_not_understood, listOf(m.words))
         CommandMessage.ShowingAllApps -> FeedbackText(R.string.launcher_message_showing_all_apps)
         CommandMessage.AssistantComingSoon -> FeedbackText(R.string.launcher_message_assistant_soon)

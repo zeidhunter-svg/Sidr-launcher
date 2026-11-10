@@ -825,11 +825,14 @@ class RouteCommandUseCaseTest {
     )
 
     /**
-     * Plan Task 6, controller ruling E6-P2 (E5-F3). A registered tool claimed the command at 2b and the
-     * tool's duration sort could not read the words given for it: an [UnresolvedTarget] of a non-app
-     * sort with nobody to pick. Until this task that was a generic failure; it is now «не понял» in the
-     * user's OWN words — [UnresolvedTarget.words], not the whole command, compared by equality — answered
-     * on the device: the model is never asked and nothing is persisted.
+     * Plan Task 6, controller ruling E6-P2 (E5-F3) — **a fail-safe since controller ruling E6-R1.** An
+     * [UnresolvedTarget] of a non-app sort with nobody to pick, as a planner could hand it to 2b. No
+     * production planner does any more: `ToolMatchPlanner` answers a value its sort cannot read with
+     * `NoPlan` (`ToolMatchPlannerTest > an unreadable duration at 2b is left to the model`), so the test-local
+     * [claims] planner is what produces it here. What it holds is the route's answer, should one arrive:
+     * «не понял» in the user's OWN words — [UnresolvedTarget.words], not the whole command, compared by
+     * equality — on the device, rather than a generic failure; the model is not asked and nothing is
+     * persisted.
      */
     @Test
     fun `not understood is said in the user's words`() = runTest {
@@ -857,11 +860,12 @@ class RouteCommandUseCaseTest {
     /**
      * Plan Task 6, controller ruling E6-P2: the bridge's half. The model answered with a step, and the
      * device's binding could not read the value it wrote ([Binding.NotUnderstood]). The user is told in
-     * those words — and that is the end of it: a value the device cannot read is not a reason to ask the
+     * the words written for that argument — which at the bridge may be the MODEL's words (controller
+     * ruling E6-R2) — and that is the end of it: a value the device cannot read is not a reason to ask the
      * model again, and nothing the binding found goes back (D1). The model is asked exactly once.
      */
     @Test
-    fun `a value the bridge's binding did not understand is said in the user's words and the model is asked once`() = runTest {
+    fun `a value the bridge's binding did not understand is said in the words written for it and the model is asked once`() = runTest {
         driveUnknown()
         planner.answer = ModelPlanning.Proposed(
             ProposedStep(

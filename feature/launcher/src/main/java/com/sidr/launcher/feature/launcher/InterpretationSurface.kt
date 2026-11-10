@@ -111,7 +111,10 @@ internal fun ThinkingArea(onCancel: () -> Unit, modifier: Modifier = Modifier) {
 
 /**
  * Spec §7.12.1 / `DOC-MZN-2`: a value the MODEL produced, on a step whose effect leaves the phone (an
- * address, a search text), is shown as written. A value the user said needs no mark — it is theirs.
+ * address, a search text), is shown as the step carries it — for a search text that is as the model
+ * wrote it (trimmed); for an address it is the NORMALISED form (scheme lower-cased by the URL sort before the card,
+ * A4′ phase 3b Task 6), i.e. the address that will open. A value the user said needs no mark — it is
+ * theirs.
  */
 @Composable
 private fun ModelValues(interpretation: Interpretation.Act) {

@@ -20,7 +20,6 @@ import com.sidr.launcher.domain.agent.UnresolvedTarget
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
-import com.sidr.launcher.domain.sort.ArgSort
 import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.sort.SortedArg
 import com.sidr.launcher.domain.text.PlainTextFolding
@@ -553,33 +552,12 @@ class ToolMatchPlannerTest {
     // ---------------------------------------------------------------------------------------------
     // A4′ phase 3b, Task 6 — every sorted argument resolves HERE, before any session and any card,
     // through the registry of sort resolvers (`Map<ArgSort, SortResolver>`). A value its sort cannot
-    // read is `Unresolved` with nobody to pick — step 2b says «не понял» in the user's words — where
-    // until this task it planned and failed at the worker, after the session had started.
+    // read is `NoPlan` — left to the model, like any text no tool claimed (controller ruling E6-R1) —
+    // where until this task it planned, started a session and failed at the worker.
     //
-    // Fixtures (plan Global Constraints, 3b): «полчасика» (unreadable), «10 dakika», «7:30»; «25:99» is
-    // the controller's (ruling E6-P1). Every assertion is an equality over the whole answer.
+    // Fixtures (plan Global Constraints, 3b): «полчасика» (unreadable), «10 dakika», «7:30», «Lumora».
+    // Every assertion is an equality over the whole answer.
     // ---------------------------------------------------------------------------------------------
-
-    /** What the planner hands step 2b for a value [tool]'s sort could not read: the step without it, the words. */
-    private fun notUnderstood(text: String, tool: ToolId, arg: String, sort: ArgSort, words: String) =
-        PlanningResult.Unresolved(
-            UnresolvedTarget(
-                goal = free(text),
-                pending = PlanStep(
-                    index = 0,
-                    invocation = ToolInvocation(tool, emptyMap()),
-                    risk = ActionRiskLevel.SAFE,
-                    precondition = StepPrecondition.None,
-                    rationale = StepRationale.GOAL_DIRECT,
-                ),
-                arg = arg,
-                labelArg = null,
-                sort = sort,
-                words = words,
-                candidates = emptyList(),
-                confirm = false,
-            ),
-        )
 
     /** Step 2b starts a session through this use case; whatever it starts is in [store]. */
     private suspend fun startedBy(text: String, store: FakeAgentSessionStore) =
@@ -593,21 +571,19 @@ class ToolMatchPlannerTest {
         ).start(free(text))
 
     /**
-     * B-5 (the duration sort validates, it does not rewrite), fork 3b-C. The first assertion is the
-     * premise — the production vocabulary claims the text for `set_timer` — so the answer is about the
-     * VALUE, not about recognition. «полчасика» reads as no duration (`DurationSort`), and that is known
-     * before any session: no session starts and nothing is written. The control is a duration the sort
-     * reads, which plans with the words as written.
+     * Controller ruling E6-R1 (ADR 1/4 rules 1 and 3; B-5). The first assertion is the premise — the
+     * production vocabulary claims the text for `set_timer` — so `NoPlan` here is about the VALUE, not
+     * about recognition. «полчасика» reads as no duration (`DurationSort`), and the vocabulary is a latency
+     * path, not a filter on understanding: the command goes on down the route as one no tool claimed,
+     * and online the model reads the words. Nothing starts here and nothing is written. The control is a
+     * duration the sort reads, which plans with the words as written.
      */
     @Test
-    fun `an unreadable duration is not understood before any session`() = runTest {
+    fun `an unreadable duration at 2b is left to the model`() = runTest {
         val text = "поставь таймер на полчасика"
         assertEquals(Tier0ToolIds.SET_TIMER, ToolSelector(ToolVocabulary(), namesOf()).select(text)?.id)
 
-        assertEquals(
-            notUnderstood(text, Tier0ToolIds.SET_TIMER, "duration", ArgSorts.DURATION, "полчасика"),
-            planner.plan(PlanningRequest(free(text)), registry),
-        )
+        assertEquals(PlanningResult.NoPlan, planner.plan(PlanningRequest(free(text)), registry))
         val store = FakeAgentSessionStore()
         assertEquals(OperationResult.Success(null), startedBy(text, store))
         assertEquals(emptyList<Any>(), store.saved)
@@ -620,29 +596,29 @@ class ToolMatchPlannerTest {
     }
 
     /**
-     * Controller ruling E6-P1: the plan's «an upper-case url scheme is normalised at 2b» has no reachable
-     * address — the vocabulary has no `open_url` trigger (a typed URL is FastPath's `UrlDetector`), so the
-     * URL half of this task is held at the bridge (`DeviceMentionBinderTest`). Here, at the same count, the
-     * clock-time sort: «25:99» is no time of day (`ClockTimeSort`), known before any session. The control
-     * is «7:30», which plans as written.
+     * B-15 for value slots (review I1, closed by controller ruling E6-R1). The vocabulary claims the whole
+     * remainder as `set_alarm`'s time — the premise, asserted as the whole match — and a clock time
+     * refuses trailing words (`ClockTimeSort` is anchored `H:MM`), so «7:30 и открой lumora» reads as no
+     * time: `NoPlan`, and the model, which plans both goals, gets the command. Nothing is offered or
+     * started on the device for the first goal alone. The control is the first goal by itself, which plans.
      */
     @Test
-    fun `an unreadable clock time is not understood before any session`() = runTest {
-        val text = "поставь будильник на 25:99"
-        assertEquals(Tier0ToolIds.SET_ALARM, ToolSelector(ToolVocabulary(), namesOf()).select(text)?.id)
-
+    fun `a second goal in a value slot is left to the model`() = runTest {
+        val text = "поставь будильник на 7:30 и открой lumora"
         assertEquals(
-            notUnderstood(text, Tier0ToolIds.SET_ALARM, "time", ArgSorts.CLOCK_TIME, "25:99"),
-            planner.plan(PlanningRequest(free(text)), registry),
+            ToolMatch(Tier0ToolIds.SET_ALARM, mapOf("time" to "7:30 и открой lumora")),
+            ToolSelector(ToolVocabulary(), namesOf()).select(text),
         )
+
+        assertEquals(PlanningResult.NoPlan, planner.plan(PlanningRequest(free(text)), registry))
         val store = FakeAgentSessionStore()
         assertEquals(OperationResult.Success(null), startedBy(text, store))
         assertEquals(emptyList<Any>(), store.saved)
 
-        val readable = planner.plan(PlanningRequest(free("поставь будильник на 7:30")), registry)
+        val alone = planner.plan(PlanningRequest(free("поставь будильник на 7:30")), registry)
         assertEquals(
             mapOf("time" to ArgSource.Literal("7:30")),
-            (readable as PlanningResult.Planned).plan.steps.single().invocation.args,
+            (alone as PlanningResult.Planned).plan.steps.single().invocation.args,
         )
     }
 }

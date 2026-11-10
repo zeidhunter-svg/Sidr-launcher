@@ -383,7 +383,11 @@ B-15, B-17 first) are listed at close; (4) the doctrine-matrix edits of Tasks 5,
   несуществующее» to read «не нашёл…» with **no** model wait — online or not.
 - «поставь будильник на 7:30 и открой lumora» (online) is expected to show one card with two lines; Run is
   expected to set the alarm, then open the app.
-- «поставь таймер на полчасика» is expected to read «не понял «полчасика»» before any card.
+- «поставь таймер на полчасика» is expected, online, to reach the model (which may read it as 30 minutes) and,
+  local-only / without a provider / offline, to read that state's honest line — never a card the device could
+  not fill. *Measured in execution (Task 6 review, ruling E6-R1): the plan first predicted «не понял «полчасика»»
+  at 2b; that would make a deterministic miss a filter on understanding (ADR 1/4) and would also stop the line
+  above from ever reaching the model. «Не понял «…»» is now the bridge's answer only — owner item at close.*
 - «показать все приложения» (FastPath) is expected to open the app grid.
 - An Arabic command naming an installed app with a prefix («افتح بالسنداف»-shaped) is expected to ask
   «did you mean» (bridge path; no Arabic UI exists).
@@ -850,7 +854,12 @@ en «I didn't understand «%1$s».», ru «Не понял «%1$s».», tr ««%
   at the bridge only (the one path a URL arrives unbound). `RouteCommandUseCaseTest > not understood…` drives
   2b (`answerOnDevice`'s former `else -> Failed(Generic)`, E5-F3); step 7's `Binding.NotUnderstood` mapping
   got its own test, `> a value the bridge's binding did not understand is said in the user's words and the
-  model is asked once` — `:domain` +2, T6 **1737**.*
+  model is asked once` — `:domain` +2, T6 **1737**. Review round 1 (ruling E6-R1, review I1/I2): an unreadable
+  value at 2b is `NoPlan`, not `Unresolved` — the command goes on to steps 5–7 like any unclaimed one; the two
+  `ToolMatchPlannerTest` tests became `an unreadable duration at 2b is left to the model` and `a second goal in a
+  value slot is left to the model` («поставь будильник на 7:30 и открой lumora», B-15 for value slots) at the
+  same count; `answerOnDevice`'s value branch stays as a fail-safe no production planner reaches; the step-7
+  test reads `…said in the words written for it…` (E6-R2).*
 - [ ] **Step 2–4:** red → implement → green.
 - [ ] **Step 5: mutations**
 

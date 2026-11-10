@@ -106,7 +106,8 @@ class SelectionDeclineMeasurement {
         /**
          * Selector matched; the planner refused. `R14-39`: until A4′ phase 3b this was the one that reached
          * the cloud; since then the planner answers it `Unresolved` and step 2b answers it on the device.
-         * A second goal in the target's words (`NoPlan`, B-15) still lands here and does reach the model.
+         * A second goal in the target's words (`NoPlan`, B-15) still lands here and does reach the model,
+         * and so — since phase 3b's Task 6, ruling E6-R1 — does a value its sort cannot read (`NoPlan`).
          */
         DECLINE_UNRESOLVED_TARGET,
 

@@ -19,11 +19,16 @@ sealed interface CommandMessage {
     data class NoAppFound(val query: String) : CommandMessage
 
     /**
-     * A tool claimed the command and the device could not read [words] as the value that tool's argument
-     * needs — «полчасика» is not a duration, «25:99» is not a clock time, an address with a space in it
-     * is not an address (A4′ phase 3b, Task 6; spec §7.8, B-5). [words] are what was given for that one
-     * argument — at step 2b the user's own words, at the bridge the words the model wrote for it — never
-     * the whole command. Said on the device, before any card; the model is not asked again.
+     * The device could not read [words] as the value a tool's argument needs — «полчасика» is not a
+     * duration, «25:99» is not a clock time, an address with a space in it is not an address (A4′ phase
+     * 3b, Task 6; spec §7.8, B-5). [words] are what was written for that one argument, never the whole
+     * command. Said on the device, before any card; the model is not asked again.
+     *
+     * **Produced at the bridge** (`Binding.NotUnderstood`, step 7), where [words] are what the model wrote
+     * for the argument — possibly the user's words, possibly the model's own: the sentence quotes them
+     * with no model mark (controller ruling E6-R2, a named limit; a marked variant would be a sixth string
+     * key, the owner's decision). At step 2b it is only `RouteCommandUseCase`'s fail-safe: since ruling
+     * E6-R1 a value 2b cannot read is left to the model, and no production planner produces this there.
      */
     data class ValueNotUnderstood(val words: String) : CommandMessage
 

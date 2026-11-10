@@ -299,7 +299,8 @@ class DeviceMentionBinderTest {
      * it (`DurationSort`), and that is known BEFORE the card — not after «Выполнить», at the worker. The
      * answer is [Binding.NotUnderstood] carrying exactly the words written for that argument: an answer
      * for the user, not a report — this class holds no port to the model at all, and the route asks it
-     * once (`RouteCommandUseCaseTest > a value the bridge's binding did not understand…`). The control: a
+     * once (`RouteCommandUseCaseTest > a value the bridge's binding did not understand is said in the words
+     * written for it…`). The control: a
      * duration the sort reads binds as written (the sort validates, it does not rewrite).
      */
     @Test
@@ -317,8 +318,9 @@ class DeviceMentionBinderTest {
      * E3-F3's «before the card» half. Android's filter matching compares the scheme case-sensitively, so
      * `HTTPS://…` would reach no browser; the URL sort lower-cases the scheme ONLY — the host's case is
      * kept, by RFC 3986 — and the card shows the address that will be opened. A space inside is not an
-     * address: refused before the card, in the words the model wrote for it, untrimmed and unnormalised.
-     * Both compared by equality over the whole answer.
+     * address: refused before the card, in the words as they reach the binder (`BridgeValidator` has
+     * already trimmed them; the binder neither trims nor normalises a refused value). Both compared by
+     * equality over the whole answer.
      */
     @Test
     fun `a url the model wrote is normalised or refused before the card`() = runTest {

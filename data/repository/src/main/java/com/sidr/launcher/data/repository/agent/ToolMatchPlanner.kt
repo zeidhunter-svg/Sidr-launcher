@@ -44,13 +44,21 @@ import javax.inject.Inject
  * started a session and failed at the worker. Now each argument [CatalogArgumentSorts] declares with a
  * VALUE sort (duration, clock time, address) is read by the resolver the sort registry
  * (`Map<ArgSort, SortResolver>`, `SortProvidesModule` in `:app`) holds for it — the same pure sorts the
- * workers read after «Выполнить» — and a value that does not read is [PlanningResult.Unresolved] with
- * nobody to pick: step 2b says «не понял» in the user's words, no session starts, no card is drawn
- * (fork 3b-C, B-5; `valuesOf` has the rules). Not a richer `ArgType`, which stays `STRING` for good
- * (ADR «… сорт — отдельная ось; F6 закрыт»), and not a second parser here. The workers keep reading the
- * same values: a belt under this check, not a replacement for it. Reachable at 2b today: `set_timer`'s
- * duration and `set_alarm`'s clock time — the URL row is not, because no vocabulary entry claims
- * `open_url` (a typed address is FastPath's `UrlDetector`; controller ruling E6-P1).
+ * workers read after «Выполнить» (fork 3b-C, B-5; `valuesOf` has the rules). A value that reads binds as
+ * the sort gives it. **A value that does not read is `NoPlan` — left to the model** (controller ruling
+ * E6-R1; ADR 1/4 rules 1 and 3): the vocabulary is a latency path, not a filter on understanding, so
+ * «поставь таймер на пять минут» goes on to steps 3–7 like any text no tool claimed — the local-only,
+ * no-provider or offline line where one applies, the model online — rather than «не понял» from a
+ * parser that knows no number words. No session starts and no card is drawn here either way. R14-39's
+ * reason for answering a claimed TARGET on the device does not carry over to a value: a value sort is a
+ * pure function of the command text the model would receive anyway, so no device data decides what is
+ * sent. A value sort the device cannot consult — no resolver registered, [SortResolution.Unavailable],
+ * a [SortResolution.Choice] — fails closed instead (E6-F2): a broken registry is not a reason to send.
+ * Not a richer `ArgType`, which stays `STRING` for good (ADR «… сорт — отдельная ось; F6 закрыт»), and
+ * not a second parser here. The workers keep reading the same values: a belt under this check, not a
+ * replacement for it. Reachable at 2b today: `set_timer`'s duration and `set_alarm`'s clock time — the
+ * URL row is not, because no vocabulary entry claims `open_url` (a typed address is FastPath's
+ * `UrlDetector`; controller ruling E6-P1).
  *
  * **An argument the tool DECLARES to carry an app is resolved to a package HERE, above the consent
  * checkpoint** (review finding C4, owner decision 2026-09-18; fork F5, «consent fires before argument
@@ -80,12 +88,15 @@ import javax.inject.Inject
  *  - nothing → «нет такого приложения» in the user's words; the list unreadable → a failure, marked
  *    `unreadable` (controller ruling E5-P1).
  *
- * **One exception still reaches the model: a second goal in the target's words** (B-15). Phase 1's
- * `SecondGoal` check runs on the words BEFORE the windows — «удали приложение lumora и проверь почту» is
- * `NoPlan` — because a window would otherwise offer «Lumora» and silently drop «проверь почту», where the
- * model plans both. Two limits, named: aliases answer the whole words only, never a window (controller
- * ruling E5-P5 — «телега пожалуйста» does not reach the alias «телега»); and the check reads the app
- * argument only, not the other arguments of a tool.
+ * **A second goal in the target's words still reaches the model** (B-15). Phase 1's `SecondGoal`
+ * check runs on the words BEFORE the windows — «удали приложение lumora и проверь почту» is `NoPlan` —
+ * because a window would otherwise offer «Lumora» and silently drop «проверь почту», where the model
+ * plans both. Two limits, named: aliases answer the whole words only, never a window (controller ruling
+ * E5-P5 — «телега пожалуйста» does not reach the alias «телега»); and the check reads the app argument
+ * only. A second goal in a VALUE slot reaches the model by the value rule above instead, not by this
+ * check: each value parser refuses trailing words (a unit word with whitespace in it, an anchored `H:MM`,
+ * whitespace in an address), so «поставь будильник на 7:30 и открой lumora» reads as no clock time and
+ * is `NoPlan` (E6-R1).
  *
  * **The sort is a catalog row, not a string convention** (A4′ phase 0). Until then a descriptor opted
  * in by declaring an argument literally named `app` — `const val APP_ARG`, a sort implemented by
@@ -143,7 +154,8 @@ class ToolMatchPlanner @Inject constructor(
         if (required.any { match.args[it].isNullOrBlank() }) return PlanningResult.NoPlan
 
         // Every VALUE-sorted argument (a duration, a clock time, an address) is read HERE, through the
-        // sort registry, before any session and any card (A4′ phase 3b, Task 6) — see the class KDoc.
+        // sort registry, before any session and any card (A4′ phase 3b, Task 6); one that does not read
+        // is left to the model, `NoPlan` (E6-R1) — see the class KDoc.
         val args = when (val values = valuesOf(request, descriptor, match.args)) {
             is Values.Read -> values.args
             is Values.NotRead -> return values.answer
@@ -215,13 +227,14 @@ class ToolMatchPlanner @Inject constructor(
      *
      * [SortResolution.Resolved] replaces the words with the sort's value — the words themselves for a
      * duration or a clock time (they validate, they do not rewrite), the normalised address for a URL.
-     * Unreadable words are an [UnresolvedTarget] with nobody to pick, which step 2b says as «не понял»
-     * in them; so is [SortResolution.NotFound], which no value sort produces today and whose app-only
-     * sentence «нет такого приложения» would be wrong here. A sort with no resolver registered, the
-     * device unable to ask ([SortResolution.Unavailable]), or a [SortResolution.Choice] — which
-     * [UnresolvedTarget.candidates] (`InstalledApp`) cannot carry, and no value sort produces — fail
-     * closed as `unreadable`: a generic failure, never a guess, never the raw words passed on. A value
-     * sort's `labelArg` is neither read nor written: no value row declares one, which
+     * Unreadable words are [PlanningResult.NoPlan] — the command goes on down the route as one no tool
+     * claimed, and the model reads the words when it may be asked (controller ruling E6-R1; the class
+     * KDoc); so is [SortResolution.NotFound], which no value sort produces today. A sort with no resolver
+     * registered, the device unable to ask ([SortResolution.Unavailable]), or a [SortResolution.Choice] —
+     * which [UnresolvedTarget.candidates] (`InstalledApp`) cannot carry, and no value sort produces — fail
+     * closed as an `unreadable` [UnresolvedTarget] (E6-F2): a generic failure on the device, never a
+     * guess, never the raw words passed on, and not a reason to send. A value sort's `labelArg` is neither
+     * read nor written: no value row declares one, which
      * `ToolArgumentSortGuardTest > duration, clock time and url arguments are declared` holds by equality.
      */
     private suspend fun valuesOf(request: PlanningRequest, descriptor: ToolDescriptor, args: Map<String, String>): Values {
@@ -231,7 +244,8 @@ class ToolMatchPlanner @Inject constructor(
             if (descriptor.argSchema.none { it.name == name }) continue
             val words = read[name]
             if (words.isNullOrBlank()) continue
-            fun notRead(unreadable: Boolean) = Values.NotRead(
+            // E6-F2: the device could not consult the sort — answered on the device, never sent.
+            fun failClosed() = Values.NotRead(
                 PlanningResult.Unresolved(
                     UnresolvedTarget(
                         goal = request.goal,
@@ -242,23 +256,24 @@ class ToolMatchPlanner @Inject constructor(
                         words = words,
                         candidates = emptyList(),
                         confirm = false,
-                        unreadable = unreadable,
+                        unreadable = true,
                     ),
                 ),
             )
             when (val resolution = resolvers[sorted.sort]?.resolve(words) ?: SortResolution.Unavailable) {
                 is SortResolution.Resolved -> read = read + (name to resolution.value)
-                SortResolution.Unreadable, SortResolution.NotFound -> return notRead(unreadable = false)
-                SortResolution.Unavailable, is SortResolution.Choice -> return notRead(unreadable = true)
+                // E6-R1: words that do not read as the sort are the model's to read, like any unclaimed text.
+                SortResolution.Unreadable, SortResolution.NotFound -> return Values.NotRead(PlanningResult.NoPlan)
+                SortResolution.Unavailable, is SortResolution.Choice -> return failClosed()
             }
         }
         return Values.Read(read)
     }
 
-    /** [valuesOf]'s answer: every value read, or step 2b's answer for the first one that was not. */
+    /** [valuesOf]'s answer: every value read, or the planner's answer for the first one that was not. */
     private sealed interface Values {
         data class Read(val args: Map<String, String>) : Values
-        data class NotRead(val answer: PlanningResult.Unresolved) : Values
+        data class NotRead(val answer: PlanningResult) : Values
     }
 
     /**

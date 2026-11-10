@@ -58,6 +58,10 @@ import javax.inject.Inject
  * bound: `HTTPS://…` reaches the card as `https://…`, and «полчасика» or an address with a space in it
  * is [Binding.NotUnderstood] — said to the user, never a card that fails after «Выполнить». The app sort's
  * registry entry is not read here: the mention keeps its own binding above, with learned choices.
+ * **A named limit (controller ruling E6-R2):** the words [Binding.NotUnderstood] carries are what the
+ * MODEL wrote for the argument, and «Не понял «…».» quotes them with no model mark — they may be the
+ * user's words or the model's own («1.5 hours»). Nothing runs and nothing leaves; a model-marked variant
+ * would be a sixth string key, which is the owner's decision.
  *
  * Nothing here reaches the model: `RouteCommandUseCase` calls this after the model has answered, and
  * returns what it finds to the screen.
@@ -146,13 +150,16 @@ class DeviceMentionBinder @Inject constructor(
      * [SortResolver] (A4′ phase 3b, Task 6; fork 3b-C, B-5). The model writes these under the TOOL's own
      * argument names (`AuthoredToolDescriptions`: `duration`, `time`, `url`), so they are read where they
      * stand. The app sort is skipped — the mention has its own binding, with learned choices, below — and
-     * so is a value the model left absent or blank: nothing to read.
+     * so is a value the model left absent or blank: nothing to read — a skip that is unreachable at the
+     * bridge today, because `BridgeValidator` trims every value, drops a blank optional one and rejects a
+     * blank required one as `SHAPE` before this runs.
      *
      * [SortResolution.Resolved] replaces the words with the sort's value: the words themselves for a
      * duration or a clock time, the normalised address for a URL (scheme lower-cased, the rest kept), so
-     * the card shows what will run. Unreadable words are [Binding.NotUnderstood] carrying exactly what was
-     * written for that argument, untrimmed — the user is told, the model is not (this class has no port to
-     * it); so is [SortResolution.NotFound], which no value sort produces today and whose app-only answer
+     * the card shows what will run. Unreadable words are [Binding.NotUnderstood] carrying exactly what
+     * reached this class for that argument — the model's value as `BridgeValidator` passed it, i.e.
+     * already trimmed, otherwise unchanged — the user is told, the model is not (this class has no port
+     * to it); so is [SortResolution.NotFound], which no value sort produces today and whose app-only answer
      * [Binding.NotFound] would be wrong here. A sort with no resolver registered, the device unable to ask
      * ([SortResolution.Unavailable]), or a [SortResolution.Choice] — which [AppChoice] (`InstalledApp`)
      * cannot carry, and no value sort produces — fail closed as [Binding.Unavailable]: a generic failure,

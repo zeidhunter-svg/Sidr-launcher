@@ -16,8 +16,10 @@ import javax.inject.Inject
  * deliberate decision here rather than fall into a default — as [AppCandidates.Confirm] did.
  * `AppSortResolverTest` pins all five rows by equality.
  *
- * Registered for `ArgSorts.APP` by `SortProvidesModule` (`:app`); resolved by no caller until phase 3b's
- * wiring tasks, which is why routing is unchanged by this file.
+ * Registered for `ArgSorts.APP` by `SortProvidesModule` (`:app`). Since phase 3b's Task 6 the registry
+ * that holds it is injected into `ToolMatchPlanner` and `DeviceMentionBinder`, and **both skip this
+ * entry**: the app keeps its own searches there (windows at 2b; candidates with learned choices at the
+ * bridge), so routing still never calls [resolve] — said rather than implied.
  */
 class AppSortResolver @Inject constructor(
     private val targets: AppTargetResolver,

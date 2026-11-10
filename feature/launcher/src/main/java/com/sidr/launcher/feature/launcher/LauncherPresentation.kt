@@ -57,6 +57,8 @@ internal fun feedbackText(feedback: CommandFeedback): FeedbackText? = when (feed
             listOf(CommandExamples.OPEN_APP, CommandExamples.SEARCH_QUERY),
         )
         is CommandMessage.NoAppFound -> FeedbackText(R.string.launcher_feedback_no_app_found, listOf(m.query))
+        // A4′ phase 3b, Task 6: a value its sort could not read, said in the words given for it.
+        is CommandMessage.ValueNotUnderstood -> FeedbackText(R.string.launcher_message_value_not_understood, listOf(m.words))
         CommandMessage.ShowingAllApps -> FeedbackText(R.string.launcher_message_showing_all_apps)
         CommandMessage.AssistantComingSoon -> FeedbackText(R.string.launcher_message_assistant_soon)
         is CommandMessage.Verbatim -> FeedbackText(R.string.launcher_message_verbatim, listOf(m.text))

@@ -76,6 +76,18 @@ class LauncherPresentationTest {
         )
     }
 
+    /**
+     * A4′ phase 3b, Task 6: a value a tool's sort could not read («полчасика» is no duration) is said in
+     * the words given for it — the whole [FeedbackText] by equality, so a sentence without them goes red.
+     */
+    @Test
+    fun `a value not understood names the words`() {
+        assertEquals(
+            FeedbackText(R.string.launcher_message_value_not_understood, listOf("полчасика")),
+            feedbackText(CommandFeedback.Domain(CommandMessage.ValueNotUnderstood("полчасика"))),
+        )
+    }
+
     @Test fun verbatim_is_a_passthrough_seam() {
         val text = requireNotNull(feedbackText(CommandFeedback.Domain(CommandMessage.Verbatim("model said hi"))))
         assertEquals(R.string.launcher_message_verbatim, text.id)

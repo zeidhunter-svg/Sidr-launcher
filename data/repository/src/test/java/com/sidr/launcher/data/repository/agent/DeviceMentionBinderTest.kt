@@ -73,9 +73,11 @@ class DeviceMentionBinderTest {
         val aliases = FakeAliasStore().apply {
             runBlocking { upsert(Alias("телега", AliasTarget.App("net.fixture.zantor"), createdAtEpochMs = 0L)) }
         }
+        val appTargets = AppTargetResolver(repo, aliases, PlainTextFolding)
         return DeviceMentionBinder(
-            AppTargetResolver(repo, aliases, PlainTextFolding),
+            appTargets,
             CatalogArgumentSorts(),
+            sortResolversOf(appTargets),
             store,
             DefaultResolutionPreferencePolicy(),
             PlainTextFolding,
@@ -288,5 +290,42 @@ class DeviceMentionBinderTest {
                 several.choose(tessarTwo.packageName)?.step?.invocation?.args == expected(tessarTwo.packageName, "tessar")
         }
         assertEquals(emptyList<Pair<ToolId, String>>(), unread)
+    }
+
+    // --- A4′ phase 3b, Task 6: every sorted argument the model wrote resolves here, before the card ---
+
+    /**
+     * B-5, fork 3b-C. The model wrote the user's «полчасика» as `set_timer`'s duration; no duration reads
+     * it (`DurationSort`), and that is known BEFORE the card — not after «Выполнить», at the worker. The
+     * answer is [Binding.NotUnderstood] carrying exactly the words written for that argument: an answer
+     * for the user, not a report — this class holds no port to the model at all, and the route asks it
+     * once (`RouteCommandUseCaseTest > a value the bridge's binding did not understand…`). The control: a
+     * duration the sort reads binds as written (the sort validates, it does not rewrite).
+     */
+    @Test
+    fun `a duration the model wrote that the device cannot read is not understood, and nothing goes back to the model`() = runTest {
+        val result = binder(listOf(lumora)).bind(goal, proposed(Tier0ToolIds.SET_TIMER, "duration" to "полчасика"))
+
+        assertEquals(Binding.NotUnderstood("полчасика"), result)
+
+        val readable = binder(listOf(lumora)).bind(goal, proposed(Tier0ToolIds.SET_TIMER, "duration" to "10 dakika")).act()
+        assertEquals(mapOf("duration" to ArgSource.Literal("10 dakika")), readable.step.invocation.args)
+    }
+
+    /**
+     * Review Focus 5 (plan, «a URL the model wrote with an upper-case scheme or a space inside»); closes
+     * E3-F3's «before the card» half. Android's filter matching compares the scheme case-sensitively, so
+     * `HTTPS://…` would reach no browser; the URL sort lower-cases the scheme ONLY — the host's case is
+     * kept, by RFC 3986 — and the card shows the address that will be opened. A space inside is not an
+     * address: refused before the card, in the words the model wrote for it, untrimmed and unnormalised.
+     * Both compared by equality over the whole answer.
+     */
+    @Test
+    fun `a url the model wrote is normalised or refused before the card`() = runTest {
+        val normalised = binder(listOf(lumora)).bind(goal, proposed(InAppToolIds.OPEN_URL, "url" to "HTTPS://Quillmere.example/Path")).act()
+        assertEquals(mapOf("url" to ArgSource.Literal("https://Quillmere.example/Path")), normalised.step.invocation.args)
+
+        val refused = binder(listOf(lumora)).bind(goal, proposed(InAppToolIds.OPEN_URL, "url" to "https://quillmere.example/a b"))
+        assertEquals(Binding.NotUnderstood("https://quillmere.example/a b"), refused)
     }
 }

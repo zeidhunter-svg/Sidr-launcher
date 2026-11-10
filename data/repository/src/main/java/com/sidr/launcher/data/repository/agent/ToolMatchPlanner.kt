@@ -11,6 +11,10 @@ import com.sidr.launcher.domain.agent.StepRationale
 import com.sidr.launcher.domain.agent.UnresolvedTarget
 import com.sidr.launcher.domain.intent.SecondGoal
 import com.sidr.launcher.domain.model.InstalledApp
+import com.sidr.launcher.domain.sort.ArgSort
+import com.sidr.launcher.domain.sort.ArgSorts
+import com.sidr.launcher.domain.sort.SortResolution
+import com.sidr.launcher.domain.sort.SortResolver
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ToolDescriptor
 import com.sidr.launcher.domain.tool.ToolInvocation
@@ -33,17 +37,20 @@ import javax.inject.Inject
  * plan time, and `AgentExecutor` gates on `maxOf(step.risk, registry.find(...)?.risk ?: DANGEROUS)`
  * (A0 finding F2), so a tool that becomes riskier between planning and execution still stops.
  *
- * **It recognises; it does not validate the value.** [ToolSelector] hands the remainder over
- * **normalized** — lower-cased and whitespace-collapsed, never the raw span; see `ToolVocabulary`'s
- * KDoc for the free-text limitation that implies — and this planner only checks that a required
- * argument is *present*. Whether "10 minutes" is
- * a readable duration is the worker's question, and a tool whose value cannot be read fails closed
- * there (the worker reads it through `DurationSort.secondsOf`). The consequence, named rather than
- * implied: a goal like "timer for the meeting" produces a plan that fails at the worker instead of
- * being refused before the session. Closing that is the duration SORT's resolver at this step (phase
- * 3b's wiring tasks; the catalog already declares the row, [CatalogArgumentSorts]) — not a richer
- * `ArgType`, which stays `STRING` for good (ADR «… сорт — отдельная ось; F6 закрыт»), and not a second
- * parser here.
+ * **It recognises, and since phase 3b's Task 6 it reads every sorted value before any session.**
+ * [ToolSelector] hands the remainder over **normalized** — lower-cased and whitespace-collapsed, never
+ * the raw span; see `ToolVocabulary`'s KDoc for the free-text limitation that implies. Until Task 6 this
+ * planner only checked that a required argument was *present*, so «поставь таймер на полчасика» planned,
+ * started a session and failed at the worker. Now each argument [CatalogArgumentSorts] declares with a
+ * VALUE sort (duration, clock time, address) is read by the resolver the sort registry
+ * (`Map<ArgSort, SortResolver>`, `SortProvidesModule` in `:app`) holds for it — the same pure sorts the
+ * workers read after «Выполнить» — and a value that does not read is [PlanningResult.Unresolved] with
+ * nobody to pick: step 2b says «не понял» in the user's words, no session starts, no card is drawn
+ * (fork 3b-C, B-5; `valuesOf` has the rules). Not a richer `ArgType`, which stays `STRING` for good
+ * (ADR «… сорт — отдельная ось; F6 закрыт»), and not a second parser here. The workers keep reading the
+ * same values: a belt under this check, not a replacement for it. Reachable at 2b today: `set_timer`'s
+ * duration and `set_alarm`'s clock time — the URL row is not, because no vocabulary entry claims
+ * `open_url` (a typed address is FastPath's `UrlDetector`; controller ruling E6-P1).
  *
  * **An argument the tool DECLARES to carry an app is resolved to a package HERE, above the consent
  * checkpoint** (review finding C4, owner decision 2026-09-18; fork F5, «consent fires before argument
@@ -87,8 +94,9 @@ import javax.inject.Inject
  * only through an app-sorted row in [CatalogArgumentSorts]: the row's argument name is the argument to
  * resolve, and its [com.sidr.launcher.domain.sort.SortedArg.labelArg], when the row names one **and**
  * the descriptor declares it, receives the raw text the user typed, so a surface can show both what was
- * said and what it resolved to. Rows of other sorts (duration, clock time, URL) are not read here yet
- * — the wiring is phase 3b's next tasks. Three consequences, stated rather than discovered later:
+ * said and what it resolved to. Rows of the other sorts are read before this one, by `valuesOf` (see
+ * above); the app's search stays its own — windows, which the registry's app resolver does not run.
+ * Three consequences of the app row, stated rather than discovered later:
  *  - a tool with **no app row** is passed through untouched — an argument named `app` earns no
  *    resolution by its spelling, and a missing row resolves nothing rather than guessing;
  *  - a declared argument that is **optional** and that the vocabulary did not supply stays absent:
@@ -114,6 +122,7 @@ class ToolMatchPlanner @Inject constructor(
     private val selector: ToolSelector,
     private val appTargets: AppTargetResolver,
     private val sorts: CatalogArgumentSorts,
+    private val resolvers: Map<ArgSort, @JvmSuppressWildcards SortResolver>,
 ) : Planner {
 
     override suspend fun plan(request: PlanningRequest, registry: ToolRegistry): PlanningResult {
@@ -133,6 +142,13 @@ class ToolMatchPlanner @Inject constructor(
         val required = descriptor.argSchema.filter { it.required }.map { it.name }
         if (required.any { match.args[it].isNullOrBlank() }) return PlanningResult.NoPlan
 
+        // Every VALUE-sorted argument (a duration, a clock time, an address) is read HERE, through the
+        // sort registry, before any session and any card (A4′ phase 3b, Task 6) — see the class KDoc.
+        val args = when (val values = valuesOf(request, descriptor, match.args)) {
+            is Values.Read -> values.args
+            is Values.NotRead -> return values.answer
+        }
+
         // An app name becomes a package HERE — above the consent checkpoint, see the class KDoc.
         //
         // **What decides is the tool's DECLARED sort, not the argument's spelling** (A4' phase 0,
@@ -143,20 +159,20 @@ class ToolMatchPlanner @Inject constructor(
         // declared, and an absent optional value is a value that was not needed.
         val binding = sorts.appArgOf(descriptor.id)
         val appArg = binding?.first?.let { name -> descriptor.argSchema.firstOrNull { it.name == name } }
-        if (binding == null || appArg == null) return planned(descriptor, match.args)
+        if (binding == null || appArg == null) return planned(descriptor, args)
 
         val (argName, sorted) = binding
-        val raw = match.args[argName].orEmpty()
+        val raw = args[argName].orEmpty()
         // Declared, optional, and the vocabulary supplied nothing. There is nothing to resolve and
         // nothing to decline: an absent optional argument is absent.
-        if (raw.isBlank() && !appArg.required) return planned(descriptor, match.args - argName)
+        if (raw.isBlank() && !appArg.required) return planned(descriptor, args - argName)
 
         // B-15: a second goal in the target's words goes to the model, which plans both — never into a
         // window, which would offer the first app and drop the rest of the command (the class KDoc).
         if (SecondGoal.carriedBy(raw)) return PlanningResult.NoPlan
 
         val labelArg = sorted.labelArg?.takeIf { label -> descriptor.argSchema.any { it.name == label } }
-        val rest = match.args - argName
+        val rest = args - argName
 
         /** Answered by step 2b on the device; [UnresolvedTarget.bind] finishes [UnresolvedTarget.pending]. */
         fun unresolved(candidates: List<InstalledApp>, confirm: Boolean, unreadable: Boolean = false): PlanningResult {
@@ -189,6 +205,61 @@ class ToolMatchPlanner @Inject constructor(
 
     private fun planned(descriptor: ToolDescriptor, args: Map<String, String>): PlanningResult =
         PlanningResult.Planned(ExecutionPlan(listOf(stepOf(descriptor, args))))
+
+    /**
+     * Each argument [descriptor] declares with a VALUE sort, read through that sort's registered
+     * [SortResolver] (A4′ phase 3b, Task 6; fork 3b-C, B-5). The app sort is skipped: its search is the
+     * windows below, a 2b-only search the registry's app resolver does not run. An argument the
+     * descriptor does not declare is skipped too — [stepOf] drops it — and so is one the vocabulary left
+     * absent or blank: nothing to read (a required one never arrives blank, the check above declined).
+     *
+     * [SortResolution.Resolved] replaces the words with the sort's value — the words themselves for a
+     * duration or a clock time (they validate, they do not rewrite), the normalised address for a URL.
+     * Unreadable words are an [UnresolvedTarget] with nobody to pick, which step 2b says as «не понял»
+     * in them; so is [SortResolution.NotFound], which no value sort produces today and whose app-only
+     * sentence «нет такого приложения» would be wrong here. A sort with no resolver registered, the
+     * device unable to ask ([SortResolution.Unavailable]), or a [SortResolution.Choice] — which
+     * [UnresolvedTarget.candidates] (`InstalledApp`) cannot carry, and no value sort produces — fail
+     * closed as `unreadable`: a generic failure, never a guess, never the raw words passed on. A value
+     * sort's `labelArg` is neither read nor written: no value row declares one, which
+     * `ToolArgumentSortGuardTest > duration, clock time and url arguments are declared` holds by equality.
+     */
+    private suspend fun valuesOf(request: PlanningRequest, descriptor: ToolDescriptor, args: Map<String, String>): Values {
+        var read = args
+        for ((name, sorted) in sorts.all()[descriptor.id].orEmpty()) {
+            if (sorted.sort == ArgSorts.APP) continue
+            if (descriptor.argSchema.none { it.name == name }) continue
+            val words = read[name]
+            if (words.isNullOrBlank()) continue
+            fun notRead(unreadable: Boolean) = Values.NotRead(
+                PlanningResult.Unresolved(
+                    UnresolvedTarget(
+                        goal = request.goal,
+                        pending = stepOf(descriptor, read - name),
+                        arg = name,
+                        labelArg = null,
+                        sort = sorted.sort,
+                        words = words,
+                        candidates = emptyList(),
+                        confirm = false,
+                        unreadable = unreadable,
+                    ),
+                ),
+            )
+            when (val resolution = resolvers[sorted.sort]?.resolve(words) ?: SortResolution.Unavailable) {
+                is SortResolution.Resolved -> read = read + (name to resolution.value)
+                SortResolution.Unreadable, SortResolution.NotFound -> return notRead(unreadable = false)
+                SortResolution.Unavailable, is SortResolution.Choice -> return notRead(unreadable = true)
+            }
+        }
+        return Values.Read(read)
+    }
+
+    /** [valuesOf]'s answer: every value read, or step 2b's answer for the first one that was not. */
+    private sealed interface Values {
+        data class Read(val args: Map<String, String>) : Values
+        data class NotRead(val answer: PlanningResult.Unresolved) : Values
+    }
 
     /**
      * The one step this planner ever builds. An argument the schema does not declare is dropped rather

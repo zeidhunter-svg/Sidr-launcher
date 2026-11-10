@@ -18,6 +18,15 @@ sealed interface CommandMessage {
     /** No installed app matched [query]. */
     data class NoAppFound(val query: String) : CommandMessage
 
+    /**
+     * A tool claimed the command and the device could not read [words] as the value that tool's argument
+     * needs — «полчасика» is not a duration, «25:99» is not a clock time, an address with a space in it
+     * is not an address (A4′ phase 3b, Task 6; spec §7.8, B-5). [words] are what was given for that one
+     * argument — at step 2b the user's own words, at the bridge the words the model wrote for it — never
+     * the whole command. Said on the device, before any card; the model is not asked again.
+     */
+    data class ValueNotUnderstood(val words: String) : CommandMessage
+
     data object ShowingAllApps : CommandMessage
 
     data object AssistantComingSoon : CommandMessage

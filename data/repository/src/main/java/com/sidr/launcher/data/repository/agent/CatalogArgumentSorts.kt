@@ -24,12 +24,13 @@ import javax.inject.Inject
  * **A missing row is not "resolve it anyway"** ([ArgumentSorts]' rule): an argument with no row is
  * passed through as the vocabulary or the model produced it.
  *
- * **Who reads which rows — task 3 of phase 3b, said rather than implied.** The `DURATION`, `CLOCK_TIME`
- * and `URL` rows are DECLARED here and resolved by no caller yet: `ToolMatchPlanner` (step 2b),
- * `DeviceMentionBinder` (the bridge) and the description tests read only [appArgOf], so routing is
- * unchanged by this file until the wiring tasks (4–7) make every sorted argument go through its
- * resolver. Until then those values are checked at execution only: the workers read them through the
- * same pure sorts (`DurationSort`, `ClockTimeSort`, `UrlSort`).
+ * **Who reads which rows, said rather than implied.** Since phase 3b's Task 6 `ToolMatchPlanner` (step
+ * 2b) and `DeviceMentionBinder` (the bridge) read [all] and send every `DURATION`, `CLOCK_TIME` and `URL`
+ * value through the resolver the sort registry holds for it, before any session or card; the workers
+ * still read the same values through the same pure sorts (`DurationSort`, `ClockTimeSort`, `UrlSort`)
+ * after «Выполнить», as a second line. The `APP` rows are read through [appArgOf], by the same two
+ * callers and the description tests — the app keeps its own searches (windows at 2b, candidates with
+ * learned choices at the bridge), not the registry's app resolver.
  *
  * **Two constructors on purpose.** The `@Inject` one is production and takes no arguments, so Dagger
  * sees exactly what it saw before; the `internal` one lets a test state its own rows for a synthetic
@@ -55,8 +56,9 @@ class CatalogArgumentSorts internal constructor(
     override fun all(): Map<ToolId, Map<String, SortedArg>> = rows
 
     /**
-     * The one argument of [tool] that carries an app, with its declaration — the ONLY read phase 3a's
-     * callers make (step 2b's planner, the bridge's binder, the description tests). It looks for
+     * The one argument of [tool] that carries an app, with its declaration — the read step 2b's planner,
+     * the bridge's binder and the description tests make for the app (the two callers read the value
+     * sorts through [all] since phase 3b's Task 6). It looks for
      * [ArgSorts.APP] by value, so a tool whose only row is another sort (`set_timer`'s duration) answers
      * `null` here exactly as it did before that row existed.
      */
@@ -79,8 +81,8 @@ class CatalogArgumentSorts internal constructor(
             Tier0ToolIds.OPEN_APP_INFO to mapOf("app" to SortedArg(ArgSorts.APP, labelArg = null)),
             // A1″ phase 3a, Task 9. The agent changes its OWN memory, on explicit command.
             MemoryToolIds.SET_APP_ALIAS to mapOf("app" to SortedArg(ArgSorts.APP, labelArg = "app_label")),
-            // A4′ phase 3b, fork 3b-C: the three pure sorts. Declared here, resolved by no caller yet
-            // (see the class KDoc); the workers already read these values through the same sorts.
+            // A4′ phase 3b, fork 3b-C: the three pure sorts, resolved before any card by step 2b and the
+            // bridge since Task 6 (see the class KDoc); the workers read these values through the same sorts.
             Tier0ToolIds.SET_TIMER to mapOf("duration" to SortedArg(ArgSorts.DURATION, labelArg = null)),
             Tier0ToolIds.SET_ALARM to mapOf("time" to SortedArg(ArgSorts.CLOCK_TIME, labelArg = null)),
             InAppToolIds.OPEN_URL to mapOf("url" to SortedArg(ArgSorts.URL, labelArg = null)),

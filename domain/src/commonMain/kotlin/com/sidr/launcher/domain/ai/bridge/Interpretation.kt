@@ -65,15 +65,24 @@ fun Interpretation.Act.plan(): ExecutionPlan? = if (choice != null) null else Ex
 
 /**
  * Device-side binding of the model's words (spec §7.12.1, D1): a mention becomes a package on this
- * phone, or the user is asked. **Its outcome never goes back to the model** — it goes to the user (a
- * pick, an honest "no such app"); `RouteCommandUseCase` calls it after the model has answered.
+ * phone, or the user is asked; a value the tool's argument sort reads (a duration, a clock time, an
+ * address) is checked — or, for an address, normalised — before any card (A4′ phase 3b, Task 6). **Its
+ * outcome never goes back to the model** — it goes to the user (a pick, an honest "no such app", «не
+ * понял»); `RouteCommandUseCase` calls it after the model has answered.
  */
 interface MentionBinder {
     suspend fun bind(goal: AgentGoal, proposed: ProposedStep): Binding
 }
 
+/**
+ * What the device made of the model's step. [NotFound] is about an APP mention («нет такого
+ * приложения»); [NotUnderstood] is about a VALUE whose sort could not read [NotUnderstood.words] (phase
+ * 3b, Task 6) — the words the model wrote for that one argument, said to the user and never sent back;
+ * [Unavailable] — the device could not be asked (its app list could not be read).
+ */
 sealed interface Binding {
     data class Bound(val interpretation: Interpretation.Act) : Binding
     data class NotFound(val mention: String) : Binding
+    data class NotUnderstood(val words: String) : Binding
     data object Unavailable : Binding
 }

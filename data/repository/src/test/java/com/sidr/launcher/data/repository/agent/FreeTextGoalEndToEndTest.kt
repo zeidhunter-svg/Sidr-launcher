@@ -142,7 +142,7 @@ class FreeTextGoalEndToEndTest {
     private val planner = CompositePlanner(
         listOf(
             TemplatePlanner(),
-            ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()), appTargetsOf(), CatalogArgumentSorts()),
+            ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()), appTargetsOf(), CatalogArgumentSorts(), sortResolversOf()),
         ),
     )
 

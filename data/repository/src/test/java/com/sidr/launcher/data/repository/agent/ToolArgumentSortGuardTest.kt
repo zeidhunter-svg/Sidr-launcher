@@ -56,8 +56,10 @@ class ToolArgumentSortGuardTest {
      * Phase 3b (fork 3b-C): the three pure sorts are declared on the arguments they read. Asserted as the
      * whole non-app part of the catalog, by equality — a row on the wrong argument, a row missing, or a
      * row nobody asked for all go red here. That each names a DECLARED argument is the test above; that
-     * each sort has a resolver is `SortRegistryGuardTest` (`:app`). No caller resolves these rows yet —
-     * the wiring is phase 3b's next tasks.
+     * each sort has a resolver is `SortRegistryGuardTest` (`:app`). Since phase 3b's Task 6 step 2b
+     * (`ToolMatchPlanner`) and the bridge (`DeviceMentionBinder`) resolve these rows before any card —
+     * and read no `labelArg` on them, which is why the `labelArg = null` below is load-bearing: a value
+     * row that declared one would need a decision there, and goes red here first.
      */
     @Test
     fun `duration, clock time and url arguments are declared`() {

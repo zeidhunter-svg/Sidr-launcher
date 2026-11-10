@@ -12,6 +12,7 @@
     <string name="launcher_message_showing_all_apps">Показаны все приложения</string>
     <string name="launcher_message_assistant_soon">Ассистент скоро появится</string>
     <string name="launcher_message_verbatim">Модель спрашивает: %1$s</string>
+    <string name="launcher_message_value_not_understood">Не понял «%1$s».</string>
 
     <string name="launcher_failure_generic">Что-то пошло не так. Попробуйте снова.</string>
     <string name="launcher_failure_cant_open_app">Не удалось открыть приложение.</string>

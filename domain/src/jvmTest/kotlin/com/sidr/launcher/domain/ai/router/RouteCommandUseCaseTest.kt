@@ -807,4 +807,78 @@ class RouteCommandUseCaseTest {
             agentStore.saved.single().plan.steps.single().invocation,
         )
     }
+
+    // --- A4′ phase 3b, Task 6: a value its sort cannot read is said in the user's words, on the device ---
+
+    /**
+     * A tool shaped like `set_timer` — one required duration-sorted argument, `SAFE` — but test-local, as
+     * [removeAppTool] is: what is under test is the route's answer, whichever planner or binder produced
+     * it. The production halves are `ToolMatchPlannerTest`'s and `DeviceMentionBinderTest`'s.
+     */
+    private val countdownTool = ToolDescriptor(
+        id = ToolId("fixture_countdown"),
+        level = ToolLevels.SYSTEM_INTENT,
+        effect = ToolEffect.EXTERNAL,
+        argSchema = listOf(ActionArg("duration", description = "How long")),
+        risk = ActionRiskLevel.SAFE,
+        durability = ToolDurability.TRANSIENT,
+    )
+
+    /**
+     * Plan Task 6, controller ruling E6-P2 (E5-F3). A registered tool claimed the command at 2b and the
+     * tool's duration sort could not read the words given for it: an [UnresolvedTarget] of a non-app
+     * sort with nobody to pick. Until this task that was a generic failure; it is now «не понял» in the
+     * user's OWN words — [UnresolvedTarget.words], not the whole command, compared by equality — answered
+     * on the device: the model is never asked and nothing is persisted.
+     */
+    @Test
+    fun `not understood is said in the user's words`() = runTest {
+        driveUnknown()
+        val command = "поставь таймер на полчасика"
+        val target = UnresolvedTarget(
+            goal = AgentGoal(command, GoalShape.Free(command)),
+            pending = PlanStep(0, ToolInvocation(countdownTool.id), countdownTool.risk, StepPrecondition.None, StepRationale.GOAL_DIRECT),
+            arg = "duration",
+            labelArg = null,
+            sort = ArgSorts.DURATION,
+            words = "полчасика",
+            candidates = emptyList(),
+            confirm = false,
+        )
+
+        val outcome = useCase(agentPlanner = claims(target), agentRegistry = FakeToolRegistry(listOf(countdownTool)))
+            .route(command)
+
+        assertEquals(CommandOutcome.Message(CommandMessage.ValueNotUnderstood("полчасика")), outcome)
+        assertEquals("the model was asked about a value the device had claimed", 0, planner.planCallCount)
+        assertTrue("nothing is persisted for a value nobody could read", agentStore.saved.isEmpty())
+    }
+
+    /**
+     * Plan Task 6, controller ruling E6-P2: the bridge's half. The model answered with a step, and the
+     * device's binding could not read the value it wrote ([Binding.NotUnderstood]). The user is told in
+     * those words — and that is the end of it: a value the device cannot read is not a reason to ask the
+     * model again, and nothing the binding found goes back (D1). The model is asked exactly once.
+     */
+    @Test
+    fun `a value the bridge's binding did not understand is said in the user's words and the model is asked once`() = runTest {
+        driveUnknown()
+        planner.answer = ModelPlanning.Proposed(
+            ProposedStep(
+                tool = countdownTool.id,
+                args = mapOf("duration" to "полчасика"),
+                origins = mapOf("duration" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                risk = ActionRiskLevel.SAFE,
+                effect = ToolEffect.EXTERNAL,
+            ),
+        )
+        binder.binding = { _, _ -> Binding.NotUnderstood("полчасика") }
+
+        val outcome = useCase().route("заведи таймер на полчасика")
+
+        assertEquals(CommandOutcome.Message(CommandMessage.ValueNotUnderstood("полчасика")), outcome)
+        assertEquals(1, planner.planCallCount)
+        assertEquals(1, binder.bindCallCount)
+        assertTrue("nothing starts before «Выполнить», and there is nothing to run", agentStore.saved.isEmpty())
+    }
 }

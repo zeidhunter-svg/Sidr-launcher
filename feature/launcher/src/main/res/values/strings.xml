@@ -24,6 +24,8 @@
     <string name="launcher_message_showing_all_apps">Showing all apps</string>
     <string name="launcher_message_assistant_soon">Assistant coming soon</string>
     <string name="launcher_message_verbatim">The model asks: %1$s</string>
+    <!-- A4′ phase 3b, Task 6: a value a tool's sort could not read, in the words given for it. Class A, not locked. -->
+    <string name="launcher_message_value_not_understood">I didn\'t understand «%1$s».</string>
 
     <!-- Domain-named failures (CommandFailure) -->
     <string name="launcher_failure_generic">Something went wrong. Please try again.</string>

@@ -20,9 +20,11 @@ import javax.inject.Singleton
  * functions of the words. `ArgSorts.FILE` is the JVM sandbox's and is not registered here.
  *
  * `SortRegistryGuardTest` (`:app`) calls [provideSortResolvers] itself and fails if a declared sort has
- * no resolver. Injected by no caller yet — the wiring is phase 3b's next tasks; whoever injects it
- * writes `Map<ArgSort, @JvmSuppressWildcards SortResolver>`, since Kotlin emits a wildcard for the
- * value type in parameter position and Dagger would not match it.
+ * no resolver. Injected since phase 3b's Task 6 into `ToolMatchPlanner` (step 2b) and
+ * `DeviceMentionBinder` (the bridge), which resolve every value-sorted argument through it before any
+ * card and skip the app entry (each keeps its own app search). Both write
+ * `Map<ArgSort, @JvmSuppressWildcards SortResolver>`, since Kotlin emits a wildcard for the value type in
+ * parameter position and Dagger would not match it.
  */
 @Module
 @InstallIn(SingletonComponent::class)

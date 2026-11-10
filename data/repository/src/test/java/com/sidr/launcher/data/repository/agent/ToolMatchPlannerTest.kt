@@ -1,20 +1,26 @@
 package com.sidr.launcher.data.repository.agent
 
+import com.sidr.launcher.core.testing.FakeAgentSessionStore
 import com.sidr.launcher.core.testing.FakeAliasStore
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.domain.action.ActionArg
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentGoal
+import com.sidr.launcher.domain.agent.AgentSessionId
+import com.sidr.launcher.domain.agent.AgentSessionIdFactory
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.PlanningRequest
 import com.sidr.launcher.domain.agent.PlanningResult
+import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.StepRationale
 import com.sidr.launcher.domain.agent.UnresolvedTarget
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.result.OperationError
+import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.sort.ArgSort
 import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.sort.SortedArg
 import com.sidr.launcher.domain.text.PlainTextFolding
@@ -66,7 +72,7 @@ class ToolMatchPlannerTest {
      * A4′ phase 3b; `NoPlan` before it) and say so loudly.
      */
     private val planner =
-        ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()), appTargetsOf(), CatalogArgumentSorts())
+        ToolMatchPlanner(ToolSelector(ToolVocabulary(), namesOf()), appTargetsOf(), CatalogArgumentSorts(), sortResolversOf())
 
     /** The production shape: the Tier-0 source seen through the federation, not directly. */
     private val registry = ToolFederation(
@@ -288,7 +294,7 @@ class ToolMatchPlannerTest {
      */
     @Test
     fun `an app argument is bound as a package, with the raw text kept as the label`() = runTest {
-        val planner = ToolMatchPlanner(appSelector, appTargetsOf("Telegram" to "org.telegram.messenger"), appSorts)
+        val planner = ToolMatchPlanner(appSelector, appTargetsOf("Telegram" to "org.telegram.messenger"), appSorts, sortResolversOf())
 
         val planned = planner.plan(
             PlanningRequest(free("удали приложение telegram")),
@@ -317,13 +323,13 @@ class ToolMatchPlannerTest {
     fun `an unresolvable app name is unresolved, never a plan, so nothing is ever consented to`() = runTest {
         val registry = registryWith(appToolDescriptor("app", "app_label"))
 
-        val declined = ToolMatchPlanner(appSelector, appTargetsOf(), appSorts)
+        val declined = ToolMatchPlanner(appSelector, appTargetsOf(), appSorts, sortResolversOf())
             .plan(PlanningRequest(free("удали приложение нечто")), registry)
         assertTrue("an unresolved name is answered on the device, not planned: $declined", declined is PlanningResult.Unresolved)
         assertEquals(emptyList<InstalledApp>(), (declined as PlanningResult.Unresolved).target.candidates)
 
         assertTrue(
-            ToolMatchPlanner(appSelector, appTargetsOf("Нечто" to "com.example.nechto"), appSorts)
+            ToolMatchPlanner(appSelector, appTargetsOf("Нечто" to "com.example.nechto"), appSorts, sortResolversOf())
                 .plan(PlanningRequest(free("удали приложение нечто")), registry) is PlanningResult.Planned,
         )
     }
@@ -331,7 +337,7 @@ class ToolMatchPlannerTest {
     /** `app_label` is opt-in: a descriptor that does not declare it is not handed one. */
     @Test
     fun `a descriptor that declares only app gets the package and no label`() = runTest {
-        val planner = ToolMatchPlanner(appSelector, appTargetsOf("Telegram" to "org.telegram.messenger"), appSorts)
+        val planner = ToolMatchPlanner(appSelector, appTargetsOf("Telegram" to "org.telegram.messenger"), appSorts, sortResolversOf())
 
         val planned = planner.plan(PlanningRequest(free("удали приложение telegram")), registryWith(appToolDescriptor("app")))
 
@@ -341,10 +347,11 @@ class ToolMatchPlannerTest {
     }
 
     /**
-     * Resolution is keyed on a declared APP row: a tool with no APP row — `set_timer`'s only row in the
-     * production [CatalogArgumentSorts] is its DURATION row, so `appArgOf` returns `null` — never reaches
-     * the resolver, which is why the class-level `planner` can carry a resolver that declines everything
-     * and still plan a timer.
+     * App resolution is keyed on a declared APP row: a tool with no APP row — `set_timer`'s only row in
+     * the production [CatalogArgumentSorts] is its DURATION row, so `appArgOf` returns `null` — never
+     * reaches the app resolver, which is why the class-level `planner` can carry one that declines
+     * everything and still plan a timer. Since phase 3b's Task 6 the duration goes through the duration
+     * sort instead, which validates and does not rewrite (B-5): «10 minutes» arrives as written.
      */
     @Test
     fun `a tool with no app argument is untouched by resolution`() = runTest {
@@ -373,7 +380,7 @@ class ToolMatchPlannerTest {
     @Test
     fun `an optional app argument the vocabulary did not supply does not kill the plan`() = runTest {
         val descriptor = appToolDescriptor("app", optional = setOf("app"))
-        val planner = ToolMatchPlanner(bareAppSelector, appTargetsOf(), appSorts)
+        val planner = ToolMatchPlanner(bareAppSelector, appTargetsOf(), appSorts, sortResolversOf())
 
         val result = planner.plan(PlanningRequest(free("покажи приложение")), registryWith(descriptor))
 
@@ -396,6 +403,7 @@ class ToolMatchPlannerTest {
             appSelector,
             appTargetsOf("Telegram" to "org.telegram.messenger"),
             CatalogArgumentSorts(),
+            sortResolversOf(),
         )
 
         val result = planner.plan(
@@ -455,7 +463,7 @@ class ToolMatchPlannerTest {
         val text = "удали приложение вельтрикс"
         assertEquals(appTool, appSelector.select(text)?.id)
 
-        val result = ToolMatchPlanner(appSelector, appTargetsOf("Lumora" to "net.fixture.lumora"), appSorts)
+        val result = ToolMatchPlanner(appSelector, appTargetsOf("Lumora" to "net.fixture.lumora"), appSorts, sortResolversOf())
             .plan(PlanningRequest(free(text)), registryWith(removeDescriptor))
 
         assertEquals(claimed(text, "вельтрикс", emptyList(), confirm = false), result)
@@ -469,7 +477,7 @@ class ToolMatchPlannerTest {
      */
     @Test
     fun `a target inside extra words is offered by windows, to confirm`() = runTest {
-        val planner = ToolMatchPlanner(appSelector, appTargetsOf("Миравин" to "net.fixture.miravin"), appSorts)
+        val planner = ToolMatchPlanner(appSelector, appTargetsOf("Миравин" to "net.fixture.miravin"), appSorts, sortResolversOf())
         val text = "удали приложение миравин пожалуйста"
 
         val result = planner.plan(PlanningRequest(free(text)), registryWith(removeDescriptor))
@@ -493,6 +501,7 @@ class ToolMatchPlannerTest {
             appSelector,
             appTargetsOf("Tessar" to "net.fixture.tessar.one", "Tessar" to "net.fixture.tessar.two"),
             appSorts,
+            sortResolversOf(),
         )
         val text = "удали приложение tessar"
 
@@ -509,7 +518,7 @@ class ToolMatchPlannerTest {
      */
     @Test
     fun `a second goal in the slot goes to the model, not to windows`() = runTest {
-        val planner = ToolMatchPlanner(appSelector, appTargetsOf("Lumora" to "net.fixture.lumora"), appSorts)
+        val planner = ToolMatchPlanner(appSelector, appTargetsOf("Lumora" to "net.fixture.lumora"), appSorts, sortResolversOf())
         val text = "удали приложение lumora и проверь почту"
         assertEquals(appTool, appSelector.select(text)?.id)
 
@@ -536,8 +545,104 @@ class ToolMatchPlannerTest {
         )
         val text = "удали приложение lumora"
 
-        val result = ToolMatchPlanner(appSelector, unreadable, appSorts).plan(PlanningRequest(free(text)), registryWith(removeDescriptor))
+        val result = ToolMatchPlanner(appSelector, unreadable, appSorts, sortResolversOf()).plan(PlanningRequest(free(text)), registryWith(removeDescriptor))
 
         assertEquals(claimed(text, "lumora", emptyList(), confirm = false, unreadable = true), result)
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // A4′ phase 3b, Task 6 — every sorted argument resolves HERE, before any session and any card,
+    // through the registry of sort resolvers (`Map<ArgSort, SortResolver>`). A value its sort cannot
+    // read is `Unresolved` with nobody to pick — step 2b says «не понял» in the user's words — where
+    // until this task it planned and failed at the worker, after the session had started.
+    //
+    // Fixtures (plan Global Constraints, 3b): «полчасика» (unreadable), «10 dakika», «7:30»; «25:99» is
+    // the controller's (ruling E6-P1). Every assertion is an equality over the whole answer.
+    // ---------------------------------------------------------------------------------------------
+
+    /** What the planner hands step 2b for a value [tool]'s sort could not read: the step without it, the words. */
+    private fun notUnderstood(text: String, tool: ToolId, arg: String, sort: ArgSort, words: String) =
+        PlanningResult.Unresolved(
+            UnresolvedTarget(
+                goal = free(text),
+                pending = PlanStep(
+                    index = 0,
+                    invocation = ToolInvocation(tool, emptyMap()),
+                    risk = ActionRiskLevel.SAFE,
+                    precondition = StepPrecondition.None,
+                    rationale = StepRationale.GOAL_DIRECT,
+                ),
+                arg = arg,
+                labelArg = null,
+                sort = sort,
+                words = words,
+                candidates = emptyList(),
+                confirm = false,
+            ),
+        )
+
+    /** Step 2b starts a session through this use case; whatever it starts is in [store]. */
+    private suspend fun startedBy(text: String, store: FakeAgentSessionStore) =
+        StartAgentSessionUseCase(
+            planner,
+            store,
+            object : AgentSessionIdFactory {
+                override fun newId() = AgentSessionId("planner-test")
+            },
+            registry,
+        ).start(free(text))
+
+    /**
+     * B-5 (the duration sort validates, it does not rewrite), fork 3b-C. The first assertion is the
+     * premise — the production vocabulary claims the text for `set_timer` — so the answer is about the
+     * VALUE, not about recognition. «полчасика» reads as no duration (`DurationSort`), and that is known
+     * before any session: no session starts and nothing is written. The control is a duration the sort
+     * reads, which plans with the words as written.
+     */
+    @Test
+    fun `an unreadable duration is not understood before any session`() = runTest {
+        val text = "поставь таймер на полчасика"
+        assertEquals(Tier0ToolIds.SET_TIMER, ToolSelector(ToolVocabulary(), namesOf()).select(text)?.id)
+
+        assertEquals(
+            notUnderstood(text, Tier0ToolIds.SET_TIMER, "duration", ArgSorts.DURATION, "полчасика"),
+            planner.plan(PlanningRequest(free(text)), registry),
+        )
+        val store = FakeAgentSessionStore()
+        assertEquals(OperationResult.Success(null), startedBy(text, store))
+        assertEquals(emptyList<Any>(), store.saved)
+
+        val readable = planner.plan(PlanningRequest(free("10 dakika zamanlayıcı ayarla")), registry)
+        assertEquals(
+            mapOf("duration" to ArgSource.Literal("10 dakika")),
+            (readable as PlanningResult.Planned).plan.steps.single().invocation.args,
+        )
+    }
+
+    /**
+     * Controller ruling E6-P1: the plan's «an upper-case url scheme is normalised at 2b» has no reachable
+     * address — the vocabulary has no `open_url` trigger (a typed URL is FastPath's `UrlDetector`), so the
+     * URL half of this task is held at the bridge (`DeviceMentionBinderTest`). Here, at the same count, the
+     * clock-time sort: «25:99» is no time of day (`ClockTimeSort`), known before any session. The control
+     * is «7:30», which plans as written.
+     */
+    @Test
+    fun `an unreadable clock time is not understood before any session`() = runTest {
+        val text = "поставь будильник на 25:99"
+        assertEquals(Tier0ToolIds.SET_ALARM, ToolSelector(ToolVocabulary(), namesOf()).select(text)?.id)
+
+        assertEquals(
+            notUnderstood(text, Tier0ToolIds.SET_ALARM, "time", ArgSorts.CLOCK_TIME, "25:99"),
+            planner.plan(PlanningRequest(free(text)), registry),
+        )
+        val store = FakeAgentSessionStore()
+        assertEquals(OperationResult.Success(null), startedBy(text, store))
+        assertEquals(emptyList<Any>(), store.saved)
+
+        val readable = planner.plan(PlanningRequest(free("поставь будильник на 7:30")), registry)
+        assertEquals(
+            mapOf("time" to ArgSource.Literal("7:30")),
+            (readable as PlanningResult.Planned).plan.steps.single().invocation.args,
+        )
     }
 }

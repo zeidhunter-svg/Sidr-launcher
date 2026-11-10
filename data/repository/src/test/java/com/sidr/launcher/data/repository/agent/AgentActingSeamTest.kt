@@ -230,7 +230,7 @@ class AgentActingSeamTest {
     private fun planner() = CompositePlanner(
         listOf(
             TemplatePlanner(),
-            ToolMatchPlanner(ToolSelector(ToolVocabulary(), shortcutSource), appTargets, CatalogArgumentSorts()),
+            ToolMatchPlanner(ToolSelector(ToolVocabulary(), shortcutSource), appTargets, CatalogArgumentSorts(), sortResolversOf(appTargets)),
         ),
     )
 

@@ -408,7 +408,9 @@ B-15, B-17 first) are listed at close; (4) the doctrine-matrix edits of Tasks 5,
 `:feature:launcher` 259); Task 5's review round (rulings E5-R1: a paused 2b pick goes back to the route on
 resume; E5-R3: the 2b pick is drawn) adds `:domain` +1 and `:feature:launcher` +1 — T5 measured **1730**
 (`:domain` 544, `:data:repository` 448, `:feature:launcher` 260); T6 … T13 read 1736 … 1792 until the next
-deviation.*
+deviation. Task 6's ruling E6-P2 (step 7's `NotUnderstood` mapping gets its own `:domain` test) adds +1 more:
+T6 predicted **1737** (`:domain` 546, `:data:repository` 452, `:feature:launcher` 261); T7 … T13 then read
+1744 … 1793.*
 
 The other eight move only in `:data:ai-cloud` (40 → 43 → 45). Tasks 14 and 15 add no test (Task 1's
 budget pin is edited in Task 14). **No task deletes a test.** Existing tests **rewritten at constant
@@ -841,6 +843,14 @@ en «I didn't understand «%1$s».», ru «Не понял «%1$s».», tr ««%
   that the device cannot read is not understood, and nothing goes back to the model` · `a url the model wrote
   is normalised or refused before the card` (2); `RouteCommandUseCaseTest > not understood is said in the
   user's words` (1); `LauncherPresentationTest > a value not understood names the words` (1).
+  *Measured in execution (Task 6, rulings E6-P1, E6-P2): `ToolVocabulary` has no `open_url` entry — a typed URL
+  is FastPath's (`UrlDetector`), never 2b — so the 2b URL test had no reachable address; it is replaced at the
+  same count by `ToolMatchPlannerTest > an unreadable clock time is not understood before any session`
+  («поставь будильник на 25:99» → `Unresolved`, sort `CLOCK_TIME`). URL normalisation before the card is held
+  at the bridge only (the one path a URL arrives unbound). `RouteCommandUseCaseTest > not understood…` drives
+  2b (`answerOnDevice`'s former `else -> Failed(Generic)`, E5-F3); step 7's `Binding.NotUnderstood` mapping
+  got its own test, `> a value the bridge's binding did not understand is said in the user's words and the
+  model is asked once` — `:domain` +2, T6 **1737**.*
 - [ ] **Step 2–4:** red → implement → green.
 - [ ] **Step 5: mutations**
 
@@ -849,6 +859,8 @@ en «I didn't understand «%1$s».», ru «Не понял «%1$s».», tr ««%
 | M6a | binder passes a sorted argument through unresolved | `:data:repository` — both `DeviceMentionBinderTest` tests of this task |
 | M6b | 2b skips non-app sorts | `:data:repository` — both `ToolMatchPlannerTest` tests of this task |
 | M6c | `ValueNotUnderstood` rendered without the words | `:feature:launcher` — `> a value not understood names the words` only |
+| M6d | 2b's empty non-app `Unresolved` answered `Failed(Generic)` again (*measured in execution, E6-P2*) | `:domain` — `RouteCommandUseCaseTest > not understood is said in the user's words` only |
+| M6e | step 7 maps `Binding.NotUnderstood` → `Failed(Generic)` (*measured in execution, E6-P2*) | `:domain` — `RouteCommandUseCaseTest > a value the bridge's binding did not understand…` only |
 
 - [ ] **Step 6:** boundary gate → **1731**. **Step 7: commit** — `feat(agentic-6/A4' ф3b): сорта разрешаются до карточки — на 2b и в мосту`.
 

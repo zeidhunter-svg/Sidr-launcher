@@ -12,6 +12,7 @@
     <string name="launcher_message_showing_all_apps">Tüm uygulamalar gösteriliyor</string>
     <string name="launcher_message_assistant_soon">Asistan yakında geliyor</string>
     <string name="launcher_message_verbatim">Model soruyor: %1$s</string>
+    <string name="launcher_message_value_not_understood">«%1$s» anlaşılamadı.</string>
 
     <string name="launcher_failure_generic">Bir şeyler ters gitti. Lütfen tekrar deneyin.</string>
     <string name="launcher_failure_cant_open_app">Bu uygulama açılamadı.</string>

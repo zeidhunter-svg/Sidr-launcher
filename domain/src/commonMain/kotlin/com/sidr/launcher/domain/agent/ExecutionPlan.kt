@@ -136,18 +136,23 @@ sealed interface PlanningResult {
  * reachable at step 2b today (`uninstall_app`, `open_app_info`, `set_app_alias` all declare `app`
  * required). An OPTIONAL app-sorted argument whose words did not resolve would leave a pending step that
  * DOES validate — a step with no target; no such tool is reachable at 2b (`launch_app`'s optional `app`
- * is never selected by the vocabulary), named so the next one is not added unawares. [words] are what the user typed for the target, as the vocabulary handed them over
- * (normalised, never the raw span). [sort] is what [words] were meant to be (`ArgSorts.APP` is the only
- * sort with a producer in phase 3b's Task 5; Task 6 adds the others).
+ * is never selected by the vocabulary), named so the next one is not added unawares. The value-sorted
+ * arguments reachable at 2b (`set_timer`'s `duration`, `set_alarm`'s `time`) are required too. [words]
+ * are what the user typed for the target, as the vocabulary handed them over (normalised, never the raw
+ * span). [sort] is what [words] were meant to be: `ArgSorts.APP` (Task 5), or since phase 3b's Task 6 a
+ * VALUE sort whose resolver could not read them (`ArgSorts.DURATION`, `ArgSorts.CLOCK_TIME` at 2b today).
  *
- * [candidates] empty: nothing on the device answers to [words] — or, when [unreadable], the device
- * could not be asked. Non-empty: the user picks; [confirm] is `true` when they are OFFERED rather than
- * matched — a word form (3b-G), or a window of the words short of the whole (3b-E: «a window equal to
- * the whole slot → plan; a window shorter than the slot → confirm»).
+ * [candidates] empty: for an app, nothing on the device answers to [words]; for a value sort, [words] do
+ * not read as that sort («полчасика» is no duration) — step 2b says «не понял» in them; when
+ * [unreadable], the device could not be asked. Non-empty (an app only — the type is `InstalledApp`): the
+ * user picks; [confirm] is `true` when they are OFFERED rather than matched — a word form (3b-G), or a
+ * window of the words short of the whole (3b-E: «a window equal to the whole slot → plan; a window
+ * shorter than the slot → confirm»).
  *
- * [unreadable] (controller ruling E5-P1): the app list or the alias store could not be read. Not "not
- * found" — that would be a lie, the app may be installed — and not a reason to ask the model, which
- * would let a disk error decide what leaves the device. Step 2b answers it as step 7 answers
+ * [unreadable] (controller ruling E5-P1): the app list or the alias store could not be read — or, since
+ * Task 6, a value sort had no registered resolver, or answered with a choice this type cannot carry.
+ * Not "not found" — that would be a lie, the app may be installed — and not a reason to ask the model,
+ * which would let a disk error decide what leaves the device. Step 2b answers it as step 7 answers
  * `Binding.Unavailable`: a generic failure.
  */
 data class UnresolvedTarget(

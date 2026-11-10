@@ -13,6 +13,7 @@ import com.sidr.launcher.core.testing.FakeSecureSecretStore
 import com.sidr.launcher.core.testing.configuredProvider
 import com.sidr.launcher.data.aicloud.BridgeTransportMode
 import com.sidr.launcher.data.aicloud.OpenAiCompatibleBridgeTransport
+import com.sidr.launcher.data.repository.agent.AppSortResolver
 import com.sidr.launcher.data.repository.agent.AppTargetResolver
 import com.sidr.launcher.data.repository.agent.AuthoredToolDescriptions
 import com.sidr.launcher.data.repository.agent.CatalogArgumentSorts
@@ -20,6 +21,7 @@ import com.sidr.launcher.data.repository.agent.DeviceMentionBinder
 import com.sidr.launcher.data.repository.agent.shortcut.AppShortcut
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolIds
 import com.sidr.launcher.di.BridgeProvidesModule
+import com.sidr.launcher.di.SortProvidesModule
 import com.sidr.launcher.domain.action.ActionIds
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.AgentSessionIdFactory
@@ -225,6 +227,8 @@ class BridgePayloadGuardTest {
             DeviceMentionBinder(
                 AppTargetResolver(apps(), aliases(), PlainTextFolding),
                 CatalogArgumentSorts(),
+                // The production registry, by its own `@Provides` (phase 3b, Task 6) — the precedent above.
+                SortProvidesModule.provideSortResolvers(AppSortResolver(AppTargetResolver(apps(), aliases(), PlainTextFolding))),
                 learned(),
                 DefaultResolutionPreferencePolicy(),
                 PlainTextFolding,

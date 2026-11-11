@@ -5,7 +5,20 @@
 > digest); per-phase plans carry their own checklists.** This file is the status snapshot — if it
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
-> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-11-07
+> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-11-11
+> (**context hygiene, outside phase 3b — docs + one guard class**: `CLAUDE.md` 97 984 → ~42 000 bytes
+> (five verbatim rule sections ~24 KB, status sections ~18 KB; everything that left it is verbatim in the
+> appendix of ADR «2026-11-11 — Сжатие CLAUDE.md (гигиена контекста)» and at `b42b53b:CLAUDE.md`);
+> `ClaudeMdSizeGuardTest` (`:app`, two tests, ceiling 48 000 bytes, `CLAUDE.md` declared a `Test` input;
+> mutation-proved) — `:app` 77 → 79, so phase 3b's chain reads +2 from T7 on; `§HANDOFF` of the track plan
+> split into a 23 KB live part and a 208 KB verbatim archive
+> `docs/superpowers/plans/2026-08-18-agentic-track-restart-handoff-archive.md` (closed A4′ phases 0–3a and the
+> A1″ handoff under their original headings); the codegraph `UserPromptSubmit` hook measured — one
+> firing per user-turn despite two registrations, none of sixteen on a code question — and put behind a
+> filter (`tools/claude/codegraph-prompt-hook.sh`, commit `54ca8dd`); phase 3b's ledger split into a 16 KB
+> live state and a byte-identical archive. **Phase 3b untouched: Tasks 1–6 closed, Task 7 next, HEAD
+> `b42b53b`, gate 1737** (1739 expected at the next boundary run, not yet measured as one). The
+> `CLAUDE.md`/`§HANDOFF` commit is proposed to the owner, not made (governance files)); prior 2026-11-07
 > (**Этап 6 (A4′) phase 3a — the bridge, first slice — `CODE-GREEN` at 1673 / 0 failures** (boundary
 > `tools/gate.sh` at `f6aa141`, 557 executed, cleared tree: `:domain` 512 · `:consumer:jvm` 72 ·
 > `:data:repository` 433 · `:feature:launcher` 256 · `:app` 76 · other eight 324; the plan predicted 1644,
@@ -1679,26 +1692,38 @@ behaviour got worse on purpose: since a broken key now gets an honest message in
 alias decorator fills only `Unknown`, a bare alias phrase under a broken key reads «understanding
 unavailable» instead of launching (owner fork F3a-C (a), named).
 
+**Context hygiene (2026-11-11) claims nothing on a phone and nothing about tokens directly:** every number
+it reports is bytes (`wc -c`), not tokens — the harness has no counter; the hook filter is calibrated on
+one session (sixteen prompts) and is to be re-read after three; the `:app` 77 → 79 is a scoped-run count,
+not yet a boundary gate; and «no fact lost» rests on the verbatim appendix in the ADR plus
+`b42b53b:CLAUDE.md`, not on a sentence-by-sentence match (341 sentences differ in wording from their
+ADR, which a mechanical check cannot judge).
+
 ## Source of truth
 
 > **Re-based 2026-09-20 — this list had been stale since 2026-07-11 and pointed two tracks back.**
 
-- Current state + hard rules + gate (NOT a session digest since Этап 0.4): `CLAUDE.md`
+- Current state + hard rules + gate (NOT a session digest since Этап 0.4; re-compressed 2026-11-11 to ~42 KB with a size ceiling held by `ClaudeMdSizeGuardTest`): `CLAUDE.md`
 - Decisions log — **latest block ADR: «2026-09-19 — Этап 5.5 (A1″)», whose last section is the
   owner's device acceptance of 2026-09-20**. A4′ has no block ADR yet — it is written at the block's
   close, not per phase; inside it phase 3a wrote two ADRs, «2026-10-05 — A4′ ф3a: `ACTION_CATALOG_SCHEMA`
   → `AUTHORED_TOOL_SCHEMA`» and «2026-10-05 — A4′ ф3a: один модельный путь; исходящий контракт —
   девятнадцать `ToolId`» (with the 2026-11-07 addendum on the bridge's budget and transport). The latest
-  ADR of all is «2026-11-07 — Два принципа агентной ОС: защищённая открытость и локальное по умолчанию»
-  (docs only): `ai-context/decisions.md`
+  ADR of all is «2026-11-11 — Сжатие CLAUDE.md (гигиена контекста)» (docs + one guard class; carries the
+  verbatim appendix of everything compressed out of `CLAUDE.md`), after «2026-11-07 — Два принципа агентной
+  ОС: защищённая открытость и локальное по умолчанию» (docs only): `ai-context/decisions.md`
 - Architecture: `docs/architecture.md` · Roadmap: `docs/roadmap.md`
 - **Governing**: agentic Master Plan `docs/governing/sidr-agentic-master-plan-v1.0.md` · doctrine
   matrix (rules `DOC-*`) `docs/governing/sidr-doctrine-matrix-v1.0.md` · ontology v0.1
   `docs/governing/sidr-ontology-v0.1.md` — **a draft for discussion, not a decision**. Both master plans,
   `docs/agentic-os-architecture.md`, `docs/roadmap.md` and `README.md` still name the router deleted in
   A4′ phase 3a — follow-ups under their own change control, listed in `§HANDOFF` «Фаза 3a A4′»
-- **Active track plan** (stages, §0 protocol, `§HANDOFF` written for the next session):
-  `docs/superpowers/plans/2026-08-18-agentic-track-restart.md`
+- **Active track plan** (stages, §0 protocol, `§HANDOFF` written for the next session — since
+  2026-11-11 the **live** part only, 23 KB):
+  `docs/superpowers/plans/2026-08-18-agentic-track-restart.md`; the closed phase records (A4′ Фазы 0–3a,
+  the A1″ handoff, D1–D11) are verbatim under their original headings in
+  `docs/superpowers/plans/2026-08-18-agentic-track-restart-handoff-archive.md`, so «`§HANDOFF` «Фаза N A4′»»
+  resolves there
 - Last closed block: **A1″ (Этап 5.5), `CLOSED` 2026-09-20**; its spec
   `docs/superpowers/specs/2026-09-12-a1-second-tool-mass-and-selection-design.md`, its acceptance
   checklist `docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md` (run, with four of its
@@ -1712,7 +1737,7 @@ unavailable» instead of launching (owner fork F3a-C (a), named).
   plan `docs/superpowers/plans/2026-09-27-a4-phase2-partial-failure-and-undo.md`, record and the owner's
   answers of 2026-10-03 (M1(b), the `DOC-HMA-3` remainder marker) in `§HANDOFF` («Фаза 2 A4′»); **phase
   3a `CODE-GREEN` 2026-11-07**, plan `docs/superpowers/plans/2026-10-03-a4-phase3a-bridge-first-slice.md`,
-  record and the owner's answers of 2026-11-07 in `§HANDOFF` («Фаза 3a A4′»); phases 3b and 4 to go. Of the
+  record and the owner's answers of 2026-11-07 in `§HANDOFF` («Фаза 3a A4′», archive); **phase 3b in execution** since 2026-11-08 — plan `docs/superpowers/plans/2026-11-07-a4-phase3b-sorts-forms-multistep.md`, Tasks 1–6 of 15 closed at `b42b53b` (gate 1737), ledger `.superpowers/sdd/2026-11-07-a4-phase3b/progress.md` (git-ignored); phase 4 to go. Of the
   four findings A1″'s acceptance handed it, phase 0 **repaired (a) in code** (a cancelled uninstall
   claiming success), **named (b) excluded** from A4′ with its own address (the `HOME`-role grant a live
   process does not see — staleness layer 2, `ShortcutRefreshTrigger`), and phase 3a **closed (c) and (d)

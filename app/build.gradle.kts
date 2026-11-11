@@ -345,6 +345,12 @@ tasks.withType<Test>().configureEach {
         .withPropertyName("doctrineMatrix")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 
+    // Context hygiene, 2026-11-11. `ClaudeMdSizeGuardTest` reads the size of `CLAUDE.md` - the same
+    // silent-skip trap as the matrix above (an undeclared input is served FROM-CACHE after an edit).
+    inputs.file(rootProject.file("CLAUDE.md"))
+        .withPropertyName("claudeMd")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
     // A1' device-acceptance defect, 2026-09-10. `DeviceDatabaseReadGuardTest` scans the fenced code
     // blocks of every checklist under `docs/superpowers/plans` - same silent-skip trap as the matrix
     // above, and the same fix. The scan and this declaration are the SAME directory on purpose; a

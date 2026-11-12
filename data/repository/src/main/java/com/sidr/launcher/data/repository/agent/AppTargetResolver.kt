@@ -39,8 +39,8 @@ sealed interface AppCandidates {
  * [resolve] declines all of these the same way, silently, never by throwing.
  *
  * **Learned resolutions are deliberately not consulted, and this is a safety argument, not a scope
- * cut.** A learned choice is keyed by `CapabilityKey(ActionIds.LAUNCH_APP, query)` — consent the user
- * gave for *opening* an app. Reusing that preference to choose a target for `uninstall_app` would
+ * cut.** A learned choice is keyed by `LearnedChoiceKeys.launch(name, folding)` — a `launch_app` key,
+ * consent the user gave for *opening* an app. Reusing that preference to choose a target for `uninstall_app` would
  * transfer consent given for one act to a different, irreversible one. Aliases are different: an alias
  * is an explicit naming of an app (`set_app_alias`), not a preference about which action to take, so it
  * is consulted here and wins over a bare label match — exactly; a form of an alias («кварцелота») is

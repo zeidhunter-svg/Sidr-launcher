@@ -30,6 +30,7 @@ import com.sidr.launcher.domain.memory.resolution.DeleteLearnedChoiceUseCase
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.text.PlainTextFolding
 import com.sidr.launcher.domain.tool.ToolFederation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -71,6 +72,7 @@ internal object ProductionGraph {
                     deleteAlias = DeleteAliasUseCase(aliases),
                     deleteChoice = DeleteLearnedChoiceUseCase(FakeResolutionPreferenceStore()),
                     aliases = aliases,
+                    folding = PlainTextFolding,
                 )
             },
         )

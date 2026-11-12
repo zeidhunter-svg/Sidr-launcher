@@ -57,6 +57,7 @@ import com.sidr.launcher.domain.memory.alias.SaveAliasUseCase
 import com.sidr.launcher.domain.memory.resolution.DeleteLearnedChoiceUseCase
 import com.sidr.launcher.domain.preferences.FeatureFlags
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.text.PlainTextFolding
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolAdapter
@@ -221,6 +222,7 @@ class AgentActingSeamTest {
                     deleteAlias = DeleteAliasUseCase(aliasStore),
                     deleteChoice = DeleteLearnedChoiceUseCase(preferenceStore),
                     aliases = aliasStore,
+                    folding = PlainTextFolding,
                 ),
             ),
         ),

@@ -1,6 +1,5 @@
 package com.sidr.launcher.data.repository.agent.memory
 
-import com.sidr.launcher.domain.action.ActionIds
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.CommandNormalizer
 import com.sidr.launcher.domain.memory.alias.AliasStore
@@ -9,10 +8,11 @@ import com.sidr.launcher.domain.memory.alias.DeleteAliasUseCase
 import com.sidr.launcher.domain.memory.alias.MAX_ALIAS_PHRASE_LENGTH
 import com.sidr.launcher.domain.memory.alias.SaveAliasUseCase
 import com.sidr.launcher.domain.memory.alias.appPackageOrNull
-import com.sidr.launcher.domain.memory.resolution.CapabilityKey
 import com.sidr.launcher.domain.memory.resolution.DeleteLearnedChoiceUseCase
+import com.sidr.launcher.domain.memory.resolution.LearnedChoiceKeys
 import com.sidr.launcher.domain.memory.resolution.ResolutionContext
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.text.TextFolding
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
@@ -58,6 +58,9 @@ class MemoryToolWorker @Inject constructor(
     private val deleteAlias: DeleteAliasUseCase,
     private val deleteChoice: DeleteLearnedChoiceUseCase,
     private val aliases: AliasStore,
+    // The device's one folding (A4′ phase 3b, Task 7 fix round; B-4): the forget key is the key FastPath
+    // and the bridge write. Injected — the single binding is `BridgeProvidesModule.provideTextFolding`.
+    private val folding: TextFolding,
 ) : ToolWorker {
 
     override suspend fun invoke(invocation: ResolvedInvocation): ToolResult = try {
@@ -113,14 +116,18 @@ class MemoryToolWorker @Inject constructor(
     }
 
     /**
-     * `CapabilityKey(ActionIds.LAUNCH_APP, phrase)` / `ResolutionContext.None` — v1's only learning
-     * family and its only context value (spec §7.6). A learned resolution is never used to resolve a
-     * package name for this tool: this binds the phrase the user gave for *forgetting*, it does not
-     * read or reuse whatever preference was actually stored under that key.
+     * [LearnedChoiceKeys.launch] of the phrase under the device's [folding], with `ResolutionContext.None`
+     * — `launch_app` is v1's only learning family and `None` its only context value (spec §7.6). It is the
+     * one key every path that learns a launch choice writes (A4′ phase 3b, B-4: FastPath on the name it
+     * extracted, the bridge on the model's mention), so forgetting «vemblic'i» deletes the row FastPath's
+     * confirmation of «Vemblic'i aç» wrote (`vemblici`); a raw-phrase key would miss it while the store
+     * still answered Success (Task 7 fix round, review I1). A learned resolution is never used to resolve a
+     * package name for this tool: this binds the phrase the user gave for *forgetting*, it does not read or
+     * reuse whatever preference was actually stored under that key.
      */
     private suspend fun forgetLearnedChoice(args: Map<String, String>): ToolResult {
         val phrase = args["phrase"].orEmpty()
-        val key = CapabilityKey(ActionIds.LAUNCH_APP, phrase)
+        val key = LearnedChoiceKeys.launch(phrase, folding)
         return when (deleteChoice.delete(key, ResolutionContext.None)) {
             is OperationResult.Success -> ToolResult.Effected()
             is OperationResult.Failure -> ToolResult.Failed(CommandFailure.Generic)

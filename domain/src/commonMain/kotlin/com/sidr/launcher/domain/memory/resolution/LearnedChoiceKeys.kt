@@ -19,8 +19,10 @@ import com.sidr.launcher.domain.text.TextFolding
  *    `displayNameQuery`: «открой tessar» keys `tessar`;
  *  - the device binding of the model's mention (`DeviceMentionBinder`): the mention «tessar» keys `tessar`.
  *  So a choice learned on one path is the one the other reads (`DeviceMentionBinderTest > a choice learned
- *  by FastPath for «открой tessar» is the one the bridge reads for «tessar»`). Step 2b keys no launch
- *  choice at all.
+ *  by FastPath for «открой tessar» is the one the bridge reads for «tessar»`). `forget_learned_choice`
+ *  (`MemoryToolWorker`) deletes by this key of the phrase it is given, so it removes the row those paths
+ *  wrote («vemblic'i» → `vemblici`; `MemoryToolWorkerTest > forget_learned_choice deletes the very key
+ *  FastPath wrote for a confirmed word form`). Step 2b keys no launch choice at all.
  *
  * Launch only: a choice learned for OPENING an app is never a key for removing one (B-3). Rows FastPath
  * learned before Task 7 under a `ru`/`tr` whole phrase («открой tessar») no longer match: the user is asked

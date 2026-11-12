@@ -1,25 +1,43 @@
 package com.sidr.launcher.data.repository.agent.memory
 
+import com.sidr.launcher.core.testing.FakeActionCatalog
+import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeAliasStore
+import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
+import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
+import com.sidr.launcher.data.repository.intent.RuleBasedIntentMatcher
 import com.sidr.launcher.domain.action.ActionIds
 import com.sidr.launcher.domain.intent.CommandNormalizer
+import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
+import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
+import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.memory.alias.Alias
 import com.sidr.launcher.domain.memory.alias.AliasStore
 import com.sidr.launcher.domain.memory.alias.AliasTarget
 import com.sidr.launcher.domain.memory.alias.DeleteAliasUseCase
 import com.sidr.launcher.domain.memory.alias.SaveAliasUseCase
 import com.sidr.launcher.domain.memory.resolution.CapabilityKey
+import com.sidr.launcher.domain.memory.resolution.DefaultResolutionPreferencePolicy
 import com.sidr.launcher.domain.memory.resolution.DeleteLearnedChoiceUseCase
+import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
 import com.sidr.launcher.domain.memory.resolution.ResolutionContext
 import com.sidr.launcher.domain.memory.resolution.ResolutionPreference
 import com.sidr.launcher.domain.memory.resolution.ResolutionPreferenceStore
+import com.sidr.launcher.domain.memory.resolution.ResolveCommandWithPreferenceUseCase
+import com.sidr.launcher.domain.memory.resolution.ResolvedCommand
+import com.sidr.launcher.domain.memory.resolution.ResolvedTarget
+import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolOutput
+import com.sidr.launcher.domain.text.PlainTextFolding
 import com.sidr.launcher.domain.tool.ToolResult
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -128,6 +146,7 @@ class MemoryToolWorkerTest {
         deleteAlias = DeleteAliasUseCase(aliasStore),
         deleteChoice = DeleteLearnedChoiceUseCase(preferenceStore),
         aliases = aliasStore,
+        folding = PlainTextFolding,
     )
 
     @Test
@@ -210,6 +229,64 @@ class MemoryToolWorkerTest {
             listOf(CapabilityKey(ActionIds.LAUNCH_APP, "банк") to ResolutionContext.None),
             store.deleted,
         )
+    }
+
+    /** A real (stateful) store that also remembers every key written and deleted — the cross-path evidence. */
+    private class KeyRecordingPreferenceStore(
+        private val inner: FakeResolutionPreferenceStore = FakeResolutionPreferenceStore(),
+    ) : ResolutionPreferenceStore by inner {
+        val upserted = mutableListOf<CapabilityKey>()
+        val deleted = mutableListOf<CapabilityKey>()
+
+        override suspend fun upsert(preference: ResolutionPreference) =
+            inner.upsert(preference).also { upserted += preference.capabilityKey }
+
+        override suspend fun delete(key: CapabilityKey, context: ResolutionContext) =
+            inner.delete(key, context).also { deleted += key }
+    }
+
+    /**
+     * A4′ phase 3b, Task 7 fix round (review I1, controller ruling E7-R1; plan §0.2 B-4 «one key on every
+     * path»). FastPath — the real [RuleBasedIntentMatcher] and resolver — reads «Vemblic'i aç» as a word
+     * form of the installed «Vemblic» and only offers it; the production decorator arms its token and the
+     * VM's own recording use case stores the user's confirmation. Then «forget the choice for Vemblic'i»
+     * reaches this worker with the phrase as step 2b's vocabulary hands it (normalised only). The worker
+     * must delete exactly the key that was written — the fold drops the apostrophe between two letters, so
+     * a raw-phrase key would miss the row, the store would still answer Success, the tool would report
+     * Effected, and the choice would keep auto-launching. The control proves the fixture discriminates: the
+     * written key is not the raw phrase's.
+     */
+    @Test
+    fun `forget_learned_choice deletes the very key FastPath wrote for a confirmed word form`() = runTest {
+        val store = KeyRecordingPreferenceStore()
+        val vemblic = InstalledApp("net.fixture.vemblic", "Vemblic")
+        val fastPath = HandleUserCommandUseCase(
+            matcher = RuleBasedIntentMatcher(),
+            resolver = IntentActionResolver(FakeInstalledAppsRepository().apply { appsToReturn = listOf(vemblic) }, PlainTextFolding),
+            executor = FakeActionExecutor(),
+            confidencePolicy = DefaultIntentConfidencePolicy(),
+            recordingScope = CoroutineScope(SupervisorJob()),
+        )
+        val decorator = ResolveCommandWithPreferenceUseCase(
+            route = { fastPath.handle(it) },
+            store = store,
+            policy = DefaultResolutionPreferencePolicy(),
+            catalog = FakeActionCatalog(),
+            folding = PlainTextFolding,
+        )
+        val token = (decorator.resolve("Vemblic'i aç") as ResolvedCommand.Outcome).learningToken!!
+        RecordResolutionChoiceUseCase(store).record(
+            token.capabilityKey, token.context, ResolvedTarget.App(vemblic.packageName), token.candidateSet,
+        )
+        val written = store.upserted.single()
+
+        val result = memoryWorker(preferenceStore = store)
+            .invoke(ResolvedInvocation(MemoryToolIds.FORGET_LEARNED_CHOICE, mapOf("phrase" to "vemblic'i")))
+
+        assertNotEquals("the control: the fold changed the key", CapabilityKey(ActionIds.LAUNCH_APP, "vemblic'i"), written)
+        assertEquals(listOf(written), store.deleted)
+        assertEquals(emptyList<ResolutionPreference>(), store.observeAll().first())
+        assertEquals(ToolResult.Effected(), result)
     }
 
     @Test
@@ -347,6 +424,7 @@ class MemoryToolWorkerTest {
             deleteAlias = DeleteAliasUseCase(store),
             deleteChoice = DeleteLearnedChoiceUseCase(RecordingPreferenceStore()),
             aliases = store,
+            folding = PlainTextFolding,
         )
 
         val result = worker.invoke(

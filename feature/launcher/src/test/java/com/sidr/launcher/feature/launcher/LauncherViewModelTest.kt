@@ -2759,6 +2759,12 @@ class LauncherViewModelTest {
         vm.onAppClicked(miravin)
         advanceUntilIdle()
         assertEquals(listOf<ExecutableAction>(ExecutableAction.LaunchAppAction("net.fixture.miravin")), fakeExecutor.executedActions)
+        // B-3 (review M1): the confirming tap is recorded exactly like a pick among several — one row, keyed
+        // on the name typed (`LearnedChoiceKeys.launch("миравину", …)`), pointing at the confirmed app.
+        assertEquals(
+            listOf(CapabilityKey(ActionIds.LAUNCH_APP, "миравину") to ResolvedTarget.App("net.fixture.miravin")),
+            fakeResolutionStore.observeAll().first().map { it.capabilityKey to it.preferredTarget },
+        )
 
         fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent("плинту")
         vm.onCommandSubmitted("открой плинту")

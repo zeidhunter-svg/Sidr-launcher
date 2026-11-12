@@ -1,0 +1,80 @@
+package com.sidr.launcher.agent
+
+import com.sidr.launcher.core.testing.FakeActionCatalog
+import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
+import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
+import com.sidr.launcher.data.repository.text.IcuTextFolding
+import com.sidr.launcher.di.BridgeProvidesModule
+import com.sidr.launcher.di.IntentProvidesModule
+import com.sidr.launcher.di.MemoryProvidesModule
+import com.sidr.launcher.domain.action.ActionIds
+import com.sidr.launcher.domain.intent.CommandOutcome
+import com.sidr.launcher.domain.intent.ExecutableAction
+import com.sidr.launcher.domain.intent.LauncherIntent
+import com.sidr.launcher.domain.memory.resolution.CapabilityKey
+import com.sidr.launcher.domain.memory.resolution.CommandRouteStep
+import com.sidr.launcher.domain.memory.resolution.DefaultResolutionPreferencePolicy
+import com.sidr.launcher.domain.memory.resolution.ResolvedCommand
+import com.sidr.launcher.domain.model.InstalledApp
+import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.text.TextFolding
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
+import org.junit.Test
+
+/**
+ * **The device has one answer to "is this the same word?", and every path that asks gets it** (A4′ phase
+ * 3b, B-1; controller ruling E4-P3). Since Task 7 that answer decides FastPath's launch (a word form is a
+ * question, not «no such app») and the key of every learned launch choice, besides step 2b's target and the
+ * bridge's mention — so a `PlainTextFolding` bound in production would silently change all four, and no
+ * other test would notice: every per-path test passes its own folding.
+ *
+ * Read the `BridgePayloadGuardTest` way — by calling the modules' own `@Provides` functions, which is what
+ * Hilt reaches:
+ *  - the binding is ICU's ([BridgeProvidesModule.provideTextFolding]);
+ *  - the two FastPath collaborators the modules build BY HAND — the resolver
+ *    ([IntentProvidesModule.provideIntentActionResolver]) and the learned-choice decorator
+ *    ([MemoryProvidesModule.provideResolveCommandWithPreferenceUseCase]) — fold by the folding they are
+ *    GIVEN, not by their `PlainTextFolding` default. A distinguishing folding proves it: under it every
+ *    text is one and the same word, so «zantor» finds «Lumora» and every key is that word.
+ *
+ * Step 2b (`AppTargetResolver`) and the bridge's binder (`DeviceMentionBinder`) take the folding through
+ * `@Inject`, so the one binding is the only thing Hilt can hand them; `provideModelPlanner` passes its own
+ * parameter (read in the source, not run here — the planner needs a transport).
+ */
+class TextFoldingBindingGuardTest {
+
+    private val oneWord = object : TextFolding {
+        override fun fold(text: String): String = SAME_WORD
+        override fun words(text: String): List<String> = listOf(SAME_WORD)
+    }
+
+    @Test
+    fun `the device folds by ICU, and FastPath's resolver and learned-choice key are built with that folding`() = runTest {
+        assertSame(IcuTextFolding, BridgeProvidesModule.provideTextFolding())
+
+        val apps = FakeInstalledAppsRepository().apply { appsToReturn = listOf(InstalledApp("net.fixture.lumora", "Lumora")) }
+        val resolver = IntentProvidesModule.provideIntentActionResolver(apps, oneWord)
+        assertEquals(
+            OperationResult.Success(ExecutableAction.LaunchAppAction("net.fixture.lumora")),
+            resolver.resolve(LauncherIntent.LaunchAppIntent("zantor")),
+        )
+
+        val tessars = listOf(InstalledApp("net.fixture.tessar.one", "Tessar"), InstalledApp("net.fixture.tessar.two", "Tessar"))
+        val decorator = MemoryProvidesModule.provideResolveCommandWithPreferenceUseCase(
+            route = CommandRouteStep { CommandOutcome.NeedsConfirmation(tessars, query = "tessar") },
+            store = FakeResolutionPreferenceStore(),
+            policy = DefaultResolutionPreferencePolicy(),
+            catalog = FakeActionCatalog(),
+            folding = oneWord,
+        )
+        val asked = decorator.resolve("открой tessar") as ResolvedCommand.Outcome
+        assertEquals(CapabilityKey(ActionIds.LAUNCH_APP, SAME_WORD), asked.learningToken!!.capabilityKey)
+    }
+
+    private companion object {
+        /** Invented (R14-43): no app, alias or command in any fixture contains it. */
+        const val SAME_WORD = "gurmvex"
+    }
+}

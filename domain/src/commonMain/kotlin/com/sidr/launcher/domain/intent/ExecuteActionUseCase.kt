@@ -12,10 +12,10 @@ import com.sidr.launcher.domain.result.OperationResult
  * route chip, which the USER points at a destination (`OneModelPathGuardTest`).
  *
  * It maps each [LauncherAction] family to a [LauncherIntent] and resolves + executes it through the
- * **unchanged** [IntentActionResolver] + [ActionExecutor] — the same proven path the rule pipeline
- * uses ([HandleUserCommandUseCase]); the routing/execution semantics are intentionally identical
- * (ambiguity → [CommandOutcome.NeedsConfirmation], not-found → [CommandOutcome.Message], nav families
- * never touch the executor). No new executor surface is introduced. Never throws to the UI: a
+ * same [IntentActionResolver] + [ActionExecutor] the rule pipeline uses ([HandleUserCommandUseCase]);
+ * the routing/execution semantics are intentionally identical (ambiguity — since A4′ phase 3b Task 7
+ * also a word form only offered — → [CommandOutcome.NeedsConfirmation], not-found →
+ * [CommandOutcome.Message], nav families never touch the executor). No new executor surface is introduced. Never throws to the UI: a
  * resolver/executor technical failure becomes [CommandOutcome.Failed] with a safe message.
  */
 class ExecuteActionUseCase(
@@ -55,7 +55,7 @@ class ExecuteActionUseCase(
         is ExecutableAction.PlayStoreSearchAction,
         -> mapExecution(executor.execute(action))
 
-        is ExecutableAction.AmbiguousAppAction -> CommandOutcome.NeedsConfirmation(action.candidates)
+        is ExecutableAction.AmbiguousAppAction -> CommandOutcome.NeedsConfirmation(action.candidates, action.query, action.confirm)
         is ExecutableAction.ShowMessageAction -> CommandOutcome.Message(action.message)
         ExecutableAction.OpenLauncherSettingsAction -> CommandOutcome.OpenSettings
         ExecutableAction.NoOpAction -> CommandOutcome.NoOp

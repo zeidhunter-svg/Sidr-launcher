@@ -72,7 +72,9 @@ object BridgeProvidesModule {
     /**
      * The device's one text folding (phase 3b, B-1): ICU's word segments over the shared character
      * folding. The bridge's derivability compares by it; it is bound here, once, so that whatever else on
-     * the device asks "is this the same word?" injects the same answer.
+     * the device asks "is this the same word?" injects the same answer — since Task 7 that includes
+     * FastPath's resolver and learned-choice key, besides step 2b's target and the bridge's binder.
+     * Pinned by `TextFoldingBindingGuardTest`.
      */
     @Provides
     @Singleton

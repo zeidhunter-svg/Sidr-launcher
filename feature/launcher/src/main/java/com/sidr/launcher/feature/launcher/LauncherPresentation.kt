@@ -111,7 +111,15 @@ internal fun feedbackText(feedback: CommandFeedback): FeedbackText? = when (feed
         is SuggestedIntent.PlayStoreSearch -> FeedbackText(R.string.launcher_suggest_play_store, listOf(i.query))
         SuggestedIntent.Unknown -> FeedbackText(R.string.launcher_suggest_unknown)
     }
-    is CommandFeedback.Ambiguous -> FeedbackText(R.string.launcher_feedback_ambiguous)
+    // A4′ phase 3b, Task 7 (B-7; controller ruling E4-P7/E5-P6): one app offered for a word form is asked
+    // by name — «Вы имели в виду «Миравин»?», the interpretation surface's own sentence; several apps, offered
+    // or not, keep the list's header. Either way a tap on the list LAUNCHES (the act it confirms is a launch).
+    is CommandFeedback.Ambiguous ->
+        if (feedback.confirm && feedback.candidates.size == 1) {
+            FeedbackText(R.string.launcher_interpretation_did_you_mean, listOf(feedback.candidates.single().label))
+        } else {
+            FeedbackText(R.string.launcher_feedback_ambiguous)
+        }
 }
 
 /**

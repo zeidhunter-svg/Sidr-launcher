@@ -181,6 +181,43 @@ class IntentActionResolverTest {
         assertEquals(ExecutableAction.ShowMessageAction(CommandMessage.NoAppFound("tessar")), action)
     }
 
+    // --- LaunchAppIntent: the whole-name matcher (A4′ phase 3b, Task 7; forks 3b-D/3b-G, B-2) ---
+
+    /**
+     * «миравину» is a FORM of the installed label «Миравин» (a case ending, `AppNameMatcher`'s clause (i)).
+     * FastPath offers that one app for the user's confirmation and launches nothing; before Task 7 it
+     * compared whole lower-cased labels, and the form read «no such app». Compared by equality of the
+     * whole action.
+     */
+    @Test fun `a word form of an installed label asks for confirmation`() = runTest {
+        val miravin = InstalledApp("net.fixture.miravin", "Миравин")
+        fakeRepo.appsToReturn = listOf(InstalledApp("net.fixture.lumora", "Lumora"), miravin)
+
+        val action = resolveSuccess(LauncherIntent.LaunchAppIntent("миравину"))
+
+        assertEquals(
+            ExecutableAction.AmbiguousAppAction(query = "миравину", candidates = listOf(miravin), confirm = true),
+            action,
+        )
+    }
+
+    /**
+     * The edge pair «Плинта» / «Плинт» (phase 3b fixtures): «плинт» is the label of one app and a form of
+     * the other's. An exact label wins over every edge match (`AppNameMatcher.matchWhole`), so it still
+     * launches without asking — a word form elsewhere on the device never turns an exact name into a
+     * question. The two labels share a substring on purpose; the assertion is an equality of the action.
+     */
+    @Test fun `an exact label still launches without asking`() = runTest {
+        fakeRepo.appsToReturn = listOf(
+            InstalledApp("net.fixture.plinta", "Плинта"),
+            InstalledApp("net.fixture.wexdor", "Плинт", activityName = ".Main"),
+        )
+
+        val action = resolveSuccess(LauncherIntent.LaunchAppIntent("Плинт"))
+
+        assertEquals(ExecutableAction.LaunchAppAction("net.fixture.wexdor", ".Main"), action)
+    }
+
     // --- helpers ---
 
     private suspend fun resolveSuccess(intent: LauncherIntent): ExecutableAction {

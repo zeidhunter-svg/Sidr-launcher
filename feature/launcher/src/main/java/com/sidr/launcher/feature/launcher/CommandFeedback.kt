@@ -40,8 +40,12 @@ sealed interface CommandFeedback {
     /** A medium-confidence suggestion the user can confirm by editing/re-submitting. */
     data class Suggestion(val intent: SuggestedIntent) : CommandFeedback
 
-    /** An ambiguous query — render [candidates] as tappable suggestions (tap → launch). */
-    data class Ambiguous(val candidates: List<InstalledApp>) : CommandFeedback
+    /**
+     * An ambiguous query — render [candidates] as tappable suggestions (tap → launch). [confirm] (A4′ phase
+     * 3b, Task 7): the apps are only OFFERED for a word form of their labels; with one of them the title
+     * asks for it by name (`LauncherPresentation.feedbackText`).
+     */
+    data class Ambiguous(val candidates: List<InstalledApp>, val confirm: Boolean = false) : CommandFeedback
 }
 
 /**

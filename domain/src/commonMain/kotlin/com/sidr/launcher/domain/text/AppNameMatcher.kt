@@ -32,8 +32,9 @@ data class WindowMatch(val match: NameMatch, val whole: Boolean)
  * because an edge match is only ever offered.
  *
  * **Two uses** (§0.1 refinement):
- *  - [matchWhole] — wherever a whole name is matched: the bridge's mention today, step 2b's first look at
- *    the whole slot (`AppTargetResolver.windows`, wired in Task 5), and FastPath from Task 7;
+ *  - [matchWhole] — wherever a whole name is matched: the bridge's mention, step 2b's first look at the
+ *    whole slot (`AppTargetResolver.windows`, wired in Task 5), and FastPath's launch
+ *    (`IntentActionResolver`, Task 7);
  *  - [matchWindows] — windows of the user's words, for step 2b only (Task 5). A window short of the words
  *    is a confirmation, never a bind (phase 1's F1-2: the extra words may name another app).
  *

@@ -47,9 +47,10 @@ import javax.inject.Inject
  * several (B-3): the same key, the same read, so a form confirmed three times binds without asking.
  * `uninstall_app` and `open_app_info` neither carry a token nor read one: consent learned for opening an
  * app is not consent for removing it (`AppTargetResolver`). The key is [LearnedChoiceKeys.launch] of the
- * model's mention (B-4) — the app name, folded. Until FastPath keys on the name too (phase 3b, Task 7),
- * a `ru`/`tr` command («открой tessar») keys FastPath on the whole phrase, and a choice learned on one
- * path is not seen by the other. That fails safe — the user is asked again, nothing is guessed.
+ * model's mention (B-4) — the app name, folded — the same key FastPath writes for the name it extracted
+ * (phase 3b, Task 7): a choice learned for «открой tessar» on FastPath is the one read here for the
+ * mention «tessar» (`DeviceMentionBinderTest > a choice learned by FastPath for «открой tessar» is the one
+ * the bridge reads for «tessar»`).
  *
  * **Every VALUE the model wrote is read before the card, too** (phase 3b, Task 6; fork 3b-C, B-5; the
  * plan's Review Focus 5). Each argument [CatalogArgumentSorts] declares with a value sort — `set_timer`'s

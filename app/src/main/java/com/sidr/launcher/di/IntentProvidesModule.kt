@@ -12,6 +12,7 @@ import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.intent.IntentConfidencePolicy
 import com.sidr.launcher.domain.intent.IntentMatcher
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
+import com.sidr.launcher.domain.text.TextFolding
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -44,11 +45,17 @@ object IntentProvidesModule {
     @Singleton
     fun provideConfidencePolicy(): IntentConfidencePolicy = DefaultIntentConfidencePolicy()
 
+    /**
+     * FastPath's app names are matched by the device's one [TextFolding] (A4′ phase 3b, Task 7): the
+     * binding `BridgeProvidesModule.provideTextFolding` makes once, injected here and passed on — never a
+     * second binding, never the resolver's `PlainTextFolding` default (`TextFoldingBindingGuardTest`).
+     */
     @Provides
     @Singleton
     fun provideIntentActionResolver(
         repository: InstalledAppsRepository,
-    ): IntentActionResolver = IntentActionResolver(repository)
+        folding: TextFolding,
+    ): IntentActionResolver = IntentActionResolver(repository, folding)
 
     /**
      * Executes a `LauncherAction` over the same resolver/executor path the rule pipeline uses. Since A4′

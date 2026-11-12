@@ -30,8 +30,14 @@ sealed interface CommandOutcome {
     /** A user-facing message: HELP examples, "not found", or [ExecutableAction.ShowMessageAction]. */
     data class Message(val message: CommandMessage) : CommandOutcome
 
-    /** Query matched 2+ apps — render [candidates] as tappable suggestions; nothing executed. */
-    data class NeedsConfirmation(val candidates: List<InstalledApp>) : CommandOutcome
+    /**
+     * FastPath's launch list — render [candidates] as tappable suggestions whose tap LAUNCHES; nothing
+     * executed. The name matched 2+ apps, or [confirm] (A4′ phase 3b, Task 7): it is only a word FORM of
+     * their labels — «Вы имели в виду…?». [query] is the app name the path extracted (FastPath's
+     * `displayNameQuery`), which keys a learned choice (`LearnedChoiceKeys.launch`, B-4); a confirmation
+     * is learned exactly like a choice (B-3).
+     */
+    data class NeedsConfirmation(val candidates: List<InstalledApp>, val query: String, val confirm: Boolean = false) : CommandOutcome
 
     /** Medium confidence (0.50..<0.85) — suggest/confirm, do not auto-execute. */
     data class Suggest(val intent: LauncherIntent, val confidence: Float) : CommandOutcome

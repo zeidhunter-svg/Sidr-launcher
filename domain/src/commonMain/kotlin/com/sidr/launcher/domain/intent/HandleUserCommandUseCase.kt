@@ -140,7 +140,7 @@ class HandleUserCommandUseCase(
         -> mapExecution(executor.execute(action))
 
         // Routing outcomes — never executed.
-        is ExecutableAction.AmbiguousAppAction -> CommandOutcome.NeedsConfirmation(action.candidates)
+        is ExecutableAction.AmbiguousAppAction -> CommandOutcome.NeedsConfirmation(action.candidates, action.query, action.confirm)
         is ExecutableAction.ShowMessageAction -> CommandOutcome.Message(action.message)
         ExecutableAction.OpenLauncherSettingsAction -> CommandOutcome.OpenSettings
         ExecutableAction.NoOpAction -> CommandOutcome.NoOp

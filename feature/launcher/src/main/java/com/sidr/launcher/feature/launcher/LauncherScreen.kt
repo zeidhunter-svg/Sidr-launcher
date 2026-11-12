@@ -747,7 +747,8 @@ private fun CommandFeedbackArea(
     val resolved = feedbackText(feedback)
     when {
         // Ambiguity reads as a clarification prompt, not an error (spec §8): a quiet "Did you mean:"
-        // header over the candidate list. A candidate launches only on an explicit tap.
+        // header over the candidate list — or, for one app offered for a word form (A4′ phase 3b, Task 7),
+        // «Did you mean «X»?»; `feedbackText` picks which. A candidate launches only on an explicit tap.
         feedback is CommandFeedback.Ambiguous -> Column(
             modifier = modifier
                 .fillMaxWidth()

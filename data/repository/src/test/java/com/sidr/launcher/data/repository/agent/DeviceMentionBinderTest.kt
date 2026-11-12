@@ -1,8 +1,13 @@
 package com.sidr.launcher.data.repository.agent
 
+import com.sidr.launcher.core.testing.FakeActionCatalog
+import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeAliasStore
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
+import com.sidr.launcher.data.repository.intent.RuleBasedIntentMatcher
+import com.sidr.launcher.domain.action.ActionCategory
+import com.sidr.launcher.domain.action.ActionDescriptor
 import com.sidr.launcher.domain.action.ActionIds
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentGoal
@@ -14,14 +19,21 @@ import com.sidr.launcher.domain.ai.bridge.PrincipalId
 import com.sidr.launcher.domain.ai.bridge.ProposedStep
 import com.sidr.launcher.domain.ai.bridge.ValueOrigin
 import com.sidr.launcher.domain.ai.bridge.choose
+import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
+import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
+import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.memory.alias.Alias
 import com.sidr.launcher.domain.memory.alias.AliasTarget
 import com.sidr.launcher.domain.memory.resolution.CandidateSet
 import com.sidr.launcher.domain.memory.resolution.CapabilityKey
 import com.sidr.launcher.domain.memory.resolution.DefaultResolutionPreferencePolicy
 import com.sidr.launcher.domain.memory.resolution.PreferenceEvidence
+import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
 import com.sidr.launcher.domain.memory.resolution.ResolutionContext
 import com.sidr.launcher.domain.memory.resolution.ResolutionPreference
+import com.sidr.launcher.domain.memory.resolution.ResolutionPreferenceStore
+import com.sidr.launcher.domain.memory.resolution.ResolveCommandWithPreferenceUseCase
+import com.sidr.launcher.domain.memory.resolution.ResolvedCommand
 import com.sidr.launcher.domain.memory.resolution.ResolvedTarget
 import com.sidr.launcher.domain.memory.resolution.fingerprintOf
 import com.sidr.launcher.domain.model.InstalledApp
@@ -31,6 +43,8 @@ import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -63,7 +77,7 @@ class DeviceMentionBinderTest {
 
     private fun binder(
         apps: List<InstalledApp>,
-        store: FakeResolutionPreferenceStore = FakeResolutionPreferenceStore(),
+        store: ResolutionPreferenceStore = FakeResolutionPreferenceStore(),
         appsFail: Boolean = false,
     ): DeviceMentionBinder {
         val repo = FakeInstalledAppsRepository().apply {
@@ -245,6 +259,64 @@ class DeviceMentionBinderTest {
         assertEquals(listOf(zantor), uninstall.choice!!.candidates)
         assertTrue(uninstall.choice!!.confirm)
         assertNull(uninstall.choice!!.learning)
+    }
+
+    /** A store that remembers every key read and written — the evidence the cross-path test compares. */
+    private class RecordingPreferenceStore(
+        private val inner: FakeResolutionPreferenceStore = FakeResolutionPreferenceStore(),
+    ) : ResolutionPreferenceStore by inner {
+        val found = mutableListOf<CapabilityKey>()
+        val upserted = mutableListOf<CapabilityKey>()
+
+        override suspend fun find(key: CapabilityKey, context: ResolutionContext) =
+            inner.find(key, context).also { found += key }
+
+        override suspend fun upsert(preference: ResolutionPreference) =
+            inner.upsert(preference).also { upserted += preference.capabilityKey }
+    }
+
+    /**
+     * Plan §0.2 B-4 across two paths, with every layer that decides the key real (plan review S9): FastPath
+     * — the real [RuleBasedIntentMatcher] and resolver — answers «открой tessar» with a choice between the
+     * two «Tessar»; the production decorator builds its learning token; the VM's own recording use case
+     * stores the user's pick; and the binder, reading the model's mention «tessar», asks the store. One
+     * recording store sees both, and the key the binder READS is the key FastPath WROTE. Before Task 7
+     * FastPath keyed «открой tessar» and the bridge «tessar»: a choice learned on one path was never seen
+     * by the other. `RouteCommandUseCase` sits between FastPath and the decorator in production and
+     * returns this decided outcome unchanged. The last assertion is what the key is for: the pick FastPath
+     * learned is the one the bridge offers first.
+     */
+    @Test
+    fun `a choice learned by FastPath for «открой tessar» is the one the bridge reads for «tessar»`() = runTest {
+        val store = RecordingPreferenceStore()
+        val fastPath = HandleUserCommandUseCase(
+            matcher = RuleBasedIntentMatcher(),
+            resolver = IntentActionResolver(FakeInstalledAppsRepository().apply { appsToReturn = listOf(tessarOne, tessarTwo) }),
+            executor = FakeActionExecutor(),
+            confidencePolicy = DefaultIntentConfidencePolicy(),
+            recordingScope = CoroutineScope(SupervisorJob()),
+        )
+        val decorator = ResolveCommandWithPreferenceUseCase(
+            route = { fastPath.handle(it) },
+            store = store,
+            policy = DefaultResolutionPreferencePolicy(),
+            catalog = FakeActionCatalog(
+                listOf(ActionDescriptor(ActionIds.LAUNCH_APP, "Open app", "", ActionCategory.APP, ActionRiskLevel.SAFE)),
+            ),
+        )
+
+        val token = (decorator.resolve("открой tessar") as ResolvedCommand.Outcome).learningToken!!
+        RecordResolutionChoiceUseCase(store).record(
+            token.capabilityKey, token.context, ResolvedTarget.App(tessarTwo.packageName), token.candidateSet,
+        )
+        val written = store.upserted.single()
+        store.found.clear()
+        val act = binder(listOf(tessarOne, tessarTwo), store = store)
+            .bind(goal, proposed(ToolIds.LAUNCH_APP, "app" to "tessar")).act()
+
+        assertEquals(CapabilityKey(ActionIds.LAUNCH_APP, "tessar"), written)
+        assertEquals(listOf(written), store.found)
+        assertEquals(listOf(tessarTwo, tessarOne), act.choice!!.candidates)
     }
 
     @Test

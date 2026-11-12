@@ -112,6 +112,7 @@ import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.intent.SearchTarget
+import com.sidr.launcher.domain.intent.SimpleCommand
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.prayer.CalculationMethodId
 import com.sidr.launcher.domain.prayer.GetPrayerContextUseCase
@@ -2700,6 +2701,72 @@ class LauncherViewModelTest {
         )
         assertEquals("the card leaves once its screen opens", null, vm.interpretation.value)
         collector.cancel()
+    }
+
+    /**
+     * Fork 3b-F: FastPath's «apps» promises the app grid too, and Home draws favourites only — the full list
+     * is the drawer's own route. Until Task 7 FastPath's `ShowApps` only cleared the field (3a's final review
+     * A1 fixed the bridge's card alone); now the one outcome opens the drawer, exactly once, on every path —
+     * the card's «Выполнить» above goes through the same branch.
+     */
+    @Test
+    fun `FastPath show apps opens the app grid`() = runTest(testDispatcher) {
+        fakeMatcher.intentToReturn = LauncherIntent.SimpleCommandIntent(SimpleCommand.SHOW_APPS)
+        fakeMatcher.confidenceToReturn = 0.95f
+        val vm = buildViewModel()
+        // A plain scope on the test dispatcher, not `backgroundScope` — see subscribeToPrayerContext.
+        val navigations = mutableListOf<NavigationEvent>()
+        val collector = CoroutineScope(testDispatcher + Job())
+        collector.launch { vm.navigationEvents.collect { navigations += it } }
+
+        vm.onCommandChanged("show apps")
+        vm.onCommandSubmitted("show apps")
+        advanceUntilIdle()
+
+        assertEquals(listOf<NavigationEvent>(NavigationEvent.NavigateTo(Routes.AppDrawer.ROUTE)), navigations)
+        assertEquals("", vm.commandInput.value)
+        assertEquals(CommandFeedback.None, vm.commandFeedback.value)
+        assertEquals(0, fakeExecutor.callCount)
+        collector.cancel()
+    }
+
+    /**
+     * Forks 3b-D/3b-G on FastPath (B-2, B-7): «миравину» is a form of the installed «Миравин», so FastPath
+     * asks «Вы имели в виду «Миравин»?» over a one-app list — nothing runs before the tap, and the tap
+     * LAUNCHES, because the act it confirms is a launch. Controller ruling E4-P7/E5-P6: the did-you-mean
+     * title is for ONE offered app only; the control — the edge pair «Плинта» / «Плинт», both offered for
+     * «плинту» — keeps the list's own header. The pair's labels share a substring on purpose; every value
+     * is compared by equality.
+     */
+    @Test
+    fun `a FastPath word form shows did-you-mean`() = runTest(testDispatcher) {
+        val miravin = InstalledApp("net.fixture.miravin", "Миравин")
+        val plinta = InstalledApp("net.fixture.plinta", "Плинта")
+        val plint = InstalledApp("net.fixture.wexdor", "Плинт")
+        fakeRepo.appsToReturn = listOf(InstalledApp("net.fixture.lumora", "Lumora"), miravin, plinta, plint)
+        fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent("миравину")
+        fakeMatcher.confidenceToReturn = 0.90f
+        val vm = buildViewModel()
+
+        vm.onCommandSubmitted("открой миравину")
+        advanceUntilIdle()
+
+        val offered = vm.commandFeedback.value
+        assertEquals(CommandFeedback.Ambiguous(listOf(miravin), confirm = true), offered)
+        assertEquals(FeedbackText(R.string.launcher_interpretation_did_you_mean, listOf("Миравин")), feedbackText(offered))
+        assertEquals("nothing runs before the tap", 0, fakeExecutor.callCount)
+
+        vm.onAppClicked(miravin)
+        advanceUntilIdle()
+        assertEquals(listOf<ExecutableAction>(ExecutableAction.LaunchAppAction("net.fixture.miravin")), fakeExecutor.executedActions)
+
+        fakeMatcher.intentToReturn = LauncherIntent.LaunchAppIntent("плинту")
+        vm.onCommandSubmitted("открой плинту")
+        advanceUntilIdle()
+
+        val pair = vm.commandFeedback.value
+        assertEquals(CommandFeedback.Ambiguous(listOf(plinta, plint), confirm = true), pair)
+        assertEquals(FeedbackText(R.string.launcher_feedback_ambiguous), feedbackText(pair))
     }
 
     /** «Отмена» on a pick card learns nothing — not even from a later tap on a former candidate. */

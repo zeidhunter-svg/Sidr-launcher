@@ -382,7 +382,7 @@ internal class LauncherCommandSession(
                 _feedback.value = CommandFeedback.Domain(outcome.message)
 
             is CommandOutcome.NeedsConfirmation ->
-                _feedback.value = CommandFeedback.Ambiguous(outcome.candidates)
+                _feedback.value = CommandFeedback.Ambiguous(outcome.candidates, outcome.confirm)
 
             is CommandOutcome.Suggest ->
                 _feedback.value = CommandFeedback.Suggestion(suggestedIntentFor(outcome.intent))
@@ -410,9 +410,13 @@ internal class LauncherCommandSession(
                 onNavigate(Routes.Settings.ROUTE)
             }
 
+            // Fork 3b-F (A4′ phase 3b, Task 7): the app grid is the drawer's own route — Home draws
+            // favourites only — so «apps» opens it, in ONE place for every path: FastPath's own «apps» and
+            // the card's «Выполнить» for a reading of the grid both arrive here, and navigate once.
             CommandOutcome.ShowApps -> {
                 setCommandInput("")
                 _feedback.value = CommandFeedback.None
+                onNavigate(Routes.AppDrawer.ROUTE)
             }
 
             CommandOutcome.ClearInput -> {
@@ -475,13 +479,9 @@ internal class LauncherCommandSession(
         when (val reading = _interpretation.value ?: return) {
             is Interpretation.Navigate -> when (reading.destination) {
                 SidrDestination.LAUNCHER_SETTINGS -> applyOutcome(CommandOutcome.OpenSettings)
-                // Final review A1: the card promises the app grid, and `ShowApps` alone only clears the
-                // field — Home draws favourites, the full list is the drawer's own route. FastPath's own
-                // «apps» → `ShowApps` is not changed here (its twin no-op is named at the phase close).
-                SidrDestination.APP_GRID -> {
-                    applyOutcome(CommandOutcome.ShowApps)
-                    onNavigate(Routes.AppDrawer.ROUTE)
-                }
+                // Final review A1, then phase 3b Task 7 (fork 3b-F): the card promises the app grid, and
+                // `ShowApps` itself opens the drawer now — the one navigate, shared with FastPath's «apps».
+                SidrDestination.APP_GRID -> applyOutcome(CommandOutcome.ShowApps)
             }
             is Interpretation.Act -> {
                 val plan = reading.plan() ?: return // a pick is still owed

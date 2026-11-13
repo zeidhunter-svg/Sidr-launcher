@@ -1,5 +1,7 @@
 package com.sidr.launcher.domain.ai.bridge
 
+import com.sidr.launcher.domain.agent.RuntimeBudget
+
 /**
  * Everything the bridge says to the model, from ONE offering (spec §7.12.2): the instruction, the
  * offering text (with the reference sentence when the offering describes an output, B-8), the JSON
@@ -25,19 +27,21 @@ object BridgeRendering {
 
     /**
      * How many steps a plan may have, as the instruction and the schema say it and the validator holds it
-     * (fork 3b-B). ONE in Task 8: the answer form is `steps`, and `RouteCommandUseCase` step 7 still takes a
-     * single step — Task 9 opens the cap.
+     * (fork 3b-B): the ENGINE's own cap, [RuntimeBudget.Default]'s `maxSteps`, since phase 3b Task 9 (one in
+     * Task 8's interim). Not `const`, since it reads the engine's value; [INSTRUCTION] is not `const`
+     * either, for that reason alone.
      */
-    const val MAX_STEPS_OFFERED: Int = 1
+    val MAX_STEPS_OFFERED: Int = RuntimeBudget.Default.maxSteps
 
     /**
      * Static and context-free; scanned against `FORBIDDEN_CONTEXT_TERMS` with [REFERENCE_SENTENCE] and the
      * retry notes. The answer form is `steps` since phase 3b Task 8 (fork 3b-B), from one to
      * [MAX_STEPS_OFFERED], each step `{"tool", "args"}` in an array (`steps = [{…}]`, controller ruling
      * E8-I1: under `PROMPT_ONLY` the model sees no schema); it never mentions references (B-8 — those are
-     * the offering's). 1 161 characters — `ToolSchemaWeightTest`.
+     * the offering's). 1 161 characters — `ToolSchemaWeightTest` (the cap's «1» → «8» in Task 9 is one
+     * character for one).
      */
-    const val INSTRUCTION: String =
+    val INSTRUCTION: String =
         "You read one request typed into Sidr, an Android home screen, and say what it asks for. You see " +
             "only the request and the tools listed below; you know nothing else about this phone. Reply with " +
             "ONLY one JSON object, without prose or code fences, of exactly this form:\n" +

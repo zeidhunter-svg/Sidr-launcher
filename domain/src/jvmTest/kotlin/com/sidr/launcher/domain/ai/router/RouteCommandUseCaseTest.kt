@@ -561,12 +561,79 @@ class RouteCommandUseCaseTest {
         val outcome = useCase().route("  найди lumora в магазине  ")
 
         val act = (outcome as CommandOutcome.Interpreted).interpretation as Interpretation.Act
-        assertEquals(ToolIds.PLAY_STORE_SEARCH, act.step.invocation.id)
+        assertEquals(ToolIds.PLAY_STORE_SEARCH, act.steps.single().invocation.id)
         assertEquals("the model is asked the trimmed command", "найди lumora в магазине", planner.lastCommand)
         assertEquals(
             AgentGoal(text = "найди lumora в магазине", shape = GoalShape.Free("найди lumora в магазине")),
             act.goal,
         )
+        assertTrue("nothing is started before «Выполнить»", agentStore.saved.isEmpty())
+    }
+
+    /**
+     * Fork 3b-B, A4′ phase 3b Task 9: a reading of two steps is handed to the binder WHOLE, once, and comes
+     * back as ONE card carrying both steps in order — and still nothing is started (condition 1). The
+     * binder is the fake's default (every step bound as the model wrote it), so the card is what the route
+     * made of the whole reading; the expected card is spelled out, by equality. The plan is RUNNABLE in
+     * [toolRegistry] — every step gives its required `query`, no reference — so a start, had step 7 tried
+     * one, would pass `startPlanned`'s check and be saved: the empty store is evidence (finding E9-M1).
+     */
+    @Test
+    fun `a two-step model reading is one card and nothing is started`() = runTest {
+        driveUnknown()
+        planner.answer = ModelPlanning.Proposed(
+            listOf(
+                ProposedStep(
+                    tool = ToolIds.PLAY_STORE_SEARCH,
+                    args = mapOf("query" to "lumora"),
+                    origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                    risk = ActionRiskLevel.CONFIRM,
+                    effect = ToolEffect.EXTERNAL,
+                ),
+                ProposedStep(
+                    tool = ToolIds.LAUNCH_APP,
+                    args = mapOf("query" to "vemblic"),
+                    origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                    risk = ActionRiskLevel.SAFE,
+                    effect = ToolEffect.LOCAL,
+                ),
+            ),
+        )
+
+        val outcome = useCase().route("найди lumora и открой vemblic")
+
+        assertEquals(
+            CommandOutcome.Interpreted(
+                Interpretation.Act(
+                    goal = AgentGoal(text = "найди lumora и открой vemblic", shape = GoalShape.Free("найди lumora и открой vemblic")),
+                    steps = listOf(
+                        PlanStep(
+                            index = 0,
+                            invocation = ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.Literal("lumora"))),
+                            risk = ActionRiskLevel.CONFIRM,
+                            precondition = StepPrecondition.None,
+                            rationale = StepRationale.MODEL_PROPOSED,
+                        ),
+                        PlanStep(
+                            index = 1,
+                            invocation = ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal("vemblic"))),
+                            risk = ActionRiskLevel.SAFE,
+                            precondition = StepPrecondition.None,
+                            rationale = StepRationale.MODEL_PROPOSED,
+                        ),
+                    ),
+                    origins = mapOf(
+                        0 to mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                        1 to mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                    ),
+                    effects = mapOf(0 to ToolEffect.EXTERNAL, 1 to ToolEffect.LOCAL),
+                    choices = emptyList(),
+                ),
+            ),
+            outcome,
+        )
+        assertEquals("the whole reading is bound in one call", 1, binder.bindCallCount)
+        assertEquals("the model is asked once", 1, planner.planCallCount)
         assertTrue("nothing is started before «Выполнить»", agentStore.saved.isEmpty())
     }
 

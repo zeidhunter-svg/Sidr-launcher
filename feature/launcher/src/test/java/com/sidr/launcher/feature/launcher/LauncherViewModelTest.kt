@@ -26,6 +26,7 @@ import com.sidr.launcher.domain.ai.bridge.AppChoice
 import com.sidr.launcher.domain.ai.bridge.Interpretation
 import com.sidr.launcher.domain.ai.bridge.ModelPlanner
 import com.sidr.launcher.domain.ai.bridge.ModelPlanning
+import com.sidr.launcher.domain.ai.bridge.PendingChoice
 import com.sidr.launcher.domain.ai.bridge.PrincipalId
 import com.sidr.launcher.domain.ai.bridge.ProposedStep
 import com.sidr.launcher.domain.ai.bridge.SidrDestination
@@ -2465,16 +2466,18 @@ class LauncherViewModelTest {
 
     private fun storeStepReading() = Interpretation.Act(
         goal = AgentGoal("найди lumora в магазине", GoalShape.Free("найди lumora в магазине")),
-        step = PlanStep(
-            index = 0,
-            invocation = ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.Literal("lumora"))),
-            risk = ActionRiskLevel.CONFIRM,
-            precondition = StepPrecondition.None,
-            rationale = StepRationale.MODEL_PROPOSED,
+        steps = listOf(
+            PlanStep(
+                index = 0,
+                invocation = ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.Literal("lumora"))),
+                risk = ActionRiskLevel.CONFIRM,
+                precondition = StepPrecondition.None,
+                rationale = StepRationale.MODEL_PROPOSED,
+            ),
         ),
-        origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
-        effect = ToolEffect.EXTERNAL,
-        choice = null,
+        origins = mapOf(0 to mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER))),
+        effects = mapOf(0 to ToolEffect.EXTERNAL),
+        choices = emptyList(),
     )
 
     private val tessarOne = InstalledApp("net.fixture.tessar.one", "Tessar")
@@ -2484,25 +2487,32 @@ class LauncherViewModelTest {
         val candidates = CandidateSet(listOf(ResolvedTarget.App(tessarOne.packageName), ResolvedTarget.App(tessarTwo.packageName)))
         return Interpretation.Act(
             goal = AgentGoal("открой tessar", GoalShape.Free("открой tessar")),
-            step = PlanStep(
-                index = 0,
-                invocation = ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal("tessar"))),
-                risk = ActionRiskLevel.SAFE,
-                precondition = StepPrecondition.None,
-                rationale = StepRationale.MODEL_PROPOSED,
+            steps = listOf(
+                PlanStep(
+                    index = 0,
+                    invocation = ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal("tessar"))),
+                    risk = ActionRiskLevel.SAFE,
+                    precondition = StepPrecondition.None,
+                    rationale = StepRationale.MODEL_PROPOSED,
+                ),
             ),
-            origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
-            effect = ToolEffect.EXTERNAL,
-            choice = AppChoice(
-                arg = "app",
-                mention = "tessar",
-                candidates = listOf(tessarOne, tessarTwo),
-                learning = ResolutionLearningToken(
-                    capabilityKey = CapabilityKey(ActionIds.LAUNCH_APP, "tessar"),
-                    context = ResolutionContext.None,
-                    candidateSet = candidates,
-                    fingerprint = fingerprintOf(candidates),
-                    isAppAmbiguityFlow = true,
+            origins = mapOf(0 to mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER))),
+            effects = mapOf(0 to ToolEffect.EXTERNAL),
+            choices = listOf(
+                PendingChoice(
+                    step = 0,
+                    choice = AppChoice(
+                        arg = "app",
+                        mention = "tessar",
+                        candidates = listOf(tessarOne, tessarTwo),
+                        learning = ResolutionLearningToken(
+                            capabilityKey = CapabilityKey(ActionIds.LAUNCH_APP, "tessar"),
+                            context = ResolutionContext.None,
+                            candidateSet = candidates,
+                            fingerprint = fingerprintOf(candidates),
+                            isAppAmbiguityFlow = true,
+                        ),
+                    ),
                 ),
             ),
         )
@@ -2566,8 +2576,8 @@ class LauncherViewModelTest {
         advanceUntilIdle()
 
         val bound = vm.interpretation.value as Interpretation.Act
-        assertEquals(null, bound.choice)
-        assertEquals(ArgSource.Literal("net.fixture.tessar.two"), bound.step.invocation.args["app"])
+        assertEquals(emptyList<PendingChoice>(), bound.choices)
+        assertEquals(ArgSource.Literal("net.fixture.tessar.two"), bound.steps.single().invocation.args["app"])
         assertTrue(fakeExecutor.executedActions.isEmpty())
         assertTrue(fakeAgentStore.saved.isEmpty())
     }

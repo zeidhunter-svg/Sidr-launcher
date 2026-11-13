@@ -13,6 +13,7 @@ import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.StepRationale
 import com.sidr.launcher.domain.ai.bridge.AppChoice
 import com.sidr.launcher.domain.ai.bridge.Interpretation
+import com.sidr.launcher.domain.ai.bridge.PendingChoice
 import com.sidr.launcher.domain.ai.bridge.PrincipalId
 import com.sidr.launcher.domain.ai.bridge.SidrDestination
 import com.sidr.launcher.domain.ai.bridge.ValueOrigin
@@ -57,16 +58,18 @@ class InterpretationSurfaceTest {
     ) =
         Interpretation.Act(
             goal = AgentGoal("fixture goal", GoalShape.Free("fixture goal")),
-            step = PlanStep(
-                index = 0,
-                invocation = ToolInvocation(ToolId(tool), mapOf(arg to ArgSource.Literal(value))),
-                risk = risk,
-                precondition = StepPrecondition.None,
-                rationale = StepRationale.MODEL_PROPOSED,
+            steps = listOf(
+                PlanStep(
+                    index = 0,
+                    invocation = ToolInvocation(ToolId(tool), mapOf(arg to ArgSource.Literal(value))),
+                    risk = risk,
+                    precondition = StepPrecondition.None,
+                    rationale = StepRationale.MODEL_PROPOSED,
+                ),
             ),
-            origins = mapOf(arg to origin),
-            effect = ToolEffect.EXTERNAL,
-            choice = choice,
+            origins = mapOf(0 to mapOf(arg to origin)),
+            effects = mapOf(0 to ToolEffect.EXTERNAL),
+            choices = listOfNotNull(choice?.let { PendingChoice(step = 0, choice = it) }),
         )
 
     private val twoAppsSharingALabel = AppChoice(

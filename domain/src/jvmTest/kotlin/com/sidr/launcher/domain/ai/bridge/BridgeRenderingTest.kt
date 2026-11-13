@@ -1,6 +1,7 @@
 package com.sidr.launcher.domain.ai.bridge
 
 import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.agent.RuntimeBudget
 import com.sidr.launcher.domain.ai.OutboundContextPolicy
 import com.sidr.launcher.domain.tool.ToolDescriptor
 import com.sidr.launcher.domain.tool.ToolDurability
@@ -18,6 +19,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -109,6 +111,26 @@ class BridgeRenderingTest {
         // above cannot pass by comparing two empty lists.
         assertEquals(listOf("fixture_quill", "fixture_ledger", "fixture_parcel"), schemaTools)
         assertEquals(listOf("app", "duration"), schemaArgs)
+    }
+
+    /**
+     * Fork 3b-B (A4′ phase 3b Task 9; carries R8-m3): an answer holds from one step to the ENGINE's cap,
+     * [RuntimeBudget.Default]'s `maxSteps` — the schema's `steps` says it, and so does the instruction's
+     * sentence, so what the model is told and what `BridgeValidator` holds are one number. The sentence is
+     * matched whole, with its digits between fixed words, so no other count can contain it.
+     */
+    @Test
+    fun `the schema allows one to maxSteps steps`() {
+        val steps = Json.parseToJsonElement(BridgeRendering.schemaJson(fixtureOffering())).jsonObject
+            .getValue("properties").jsonObject.getValue("steps").jsonObject
+
+        assertEquals(JsonArray(listOf(JsonPrimitive("array"), JsonPrimitive("null"))), steps.getValue("type"))
+        assertEquals(JsonPrimitive(1), steps.getValue("minItems"))
+        assertEquals(JsonPrimitive(RuntimeBudget.Default.maxSteps), steps.getValue("maxItems"))
+        assertTrue(
+            "the instruction states the same cap",
+            BridgeRendering.INSTRUCTION.contains("A plan has from one to ${RuntimeBudget.Default.maxSteps} steps, in order."),
+        )
     }
 
     /** Strict-compatible (D2, b′): every object closes its properties and requires every one of them. */

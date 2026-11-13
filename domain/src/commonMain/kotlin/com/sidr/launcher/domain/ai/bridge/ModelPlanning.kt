@@ -60,8 +60,8 @@ data class ProposedStep(
 sealed interface ModelPlanning {
     /**
      * The plan's steps, in order, every one validated (fork 3b-B). Never empty; at most
-     * `BridgeRendering.MAX_STEPS_OFFERED` — one until Task 9 opens the cap, so `RouteCommandUseCase`
-     * step 7 takes the single step.
+     * `BridgeRendering.MAX_STEPS_OFFERED` — the engine's `RuntimeBudget.Default.maxSteps` since phase 3b
+     * Task 9 — and `RouteCommandUseCase` step 7 hands all of them to the binder, for one card.
      */
     data class Proposed(val steps: List<ProposedStep>) : ModelPlanning
     data class ToAssistant(val question: String) : ModelPlanning

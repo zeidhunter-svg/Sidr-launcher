@@ -2,15 +2,15 @@ package com.sidr.launcher.data.repository.agent
 
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.PlanStep
-import com.sidr.launcher.domain.agent.StepPrecondition
-import com.sidr.launcher.domain.agent.StepRationale
 import com.sidr.launcher.domain.ai.bridge.AppChoice
 import com.sidr.launcher.domain.ai.bridge.Binding
 import com.sidr.launcher.domain.ai.bridge.Interpretation
 import com.sidr.launcher.domain.ai.bridge.MentionBinder
+import com.sidr.launcher.domain.ai.bridge.PendingChoice
 import com.sidr.launcher.domain.ai.bridge.PrincipalId
 import com.sidr.launcher.domain.ai.bridge.ProposedStep
 import com.sidr.launcher.domain.ai.bridge.ValueOrigin
+import com.sidr.launcher.domain.ai.bridge.toPlanStep
 import com.sidr.launcher.domain.memory.resolution.CandidateSet
 import com.sidr.launcher.domain.memory.resolution.LearnedChoiceKeys
 import com.sidr.launcher.domain.memory.resolution.ResolutionContext
@@ -27,9 +27,8 @@ import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.sort.SortResolution
 import com.sidr.launcher.domain.sort.SortResolver
 import com.sidr.launcher.domain.text.TextFolding
-import com.sidr.launcher.domain.tool.ArgSource
+import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolIds
-import com.sidr.launcher.domain.tool.ToolInvocation
 import javax.inject.Inject
 
 /**
@@ -64,6 +63,16 @@ import javax.inject.Inject
  * user's words or the model's own («1.5 hours»). Nothing runs and nothing leaves; a model-marked variant
  * would be a sixth string key, which is the owner's decision.
  *
+ * **A reading of several steps is bound whole** (phase 3b Task 9; fork 3b-B, §7.12.3 condition 2): each
+ * step in plan order, exactly as one step is bound above — values first, then the app mention, learned
+ * choices for `launch_app` only — and the first step that is not bound ([Binding.NotFound],
+ * [Binding.NotUnderstood], [Binding.Unavailable]) is the answer for the whole reading: no card for the
+ * steps that did bind. Otherwise one [Interpretation.Act] carries every step, its origins and effect keyed
+ * by the step's position, and every owed pick as a [PendingChoice] in step order — each launch pick with
+ * its own learning token (B-19, the binder's half). The plan's steps are built by the domain's one
+ * conversion, [toPlanStep], so a reference the model wrote reaches the plan as `ArgSource.FromStep`; on
+ * Android no authored tool describes an output yet (B-8), so none arrives here today.
+ *
  * Nothing here reaches the model: `RouteCommandUseCase` calls this after the model has answered, and
  * returns what it finds to the screen.
  */
@@ -76,17 +85,36 @@ class DeviceMentionBinder @Inject constructor(
     private val folding: TextFolding,
 ) : MentionBinder {
 
-    override suspend fun bind(goal: AgentGoal, proposed: ProposedStep): Binding {
+    override suspend fun bind(goal: AgentGoal, steps: List<ProposedStep>): Binding {
+        val bound = steps.mapIndexed { index, proposed ->
+            when (val step = bindStep(index, proposed)) {
+                is StepBinding.Bound -> step
+                is StepBinding.Refused -> return step.binding
+            }
+        }
+        return Binding.Bound(
+            Interpretation.Act(
+                goal = goal,
+                steps = bound.map { it.step },
+                origins = bound.associate { it.step.index to it.origins },
+                effects = bound.associate { it.step.index to it.effect },
+                choices = bound.mapNotNull { step -> step.choice?.let { PendingChoice(step.step.index, it) } },
+            ),
+        )
+    }
+
+    /** One step at plan position [index], bound exactly as a one-step reading always was. */
+    private suspend fun bindStep(index: Int, proposed: ProposedStep): StepBinding {
         // Every VALUE the model wrote for a sorted argument is read on the device first (A4′ phase 3b,
         // Task 6) — through the sort registry, before any card; see the class KDoc.
         val args = when (val values = valuesOf(proposed)) {
             is Values.Read -> values.args
-            is Values.NotRead -> return values.binding
+            is Values.NotRead -> return StepBinding.Refused(values.binding)
         }
         val sort = sorts.appArgOf(proposed.tool)
         val mention = args[AuthoredToolDescriptions.MENTION_ARG]
         if (sort == null || mention == null) {
-            return Binding.Bound(act(goal, proposed, args, proposed.origins, choice = null))
+            return step(index, proposed, args, proposed.origins, choice = null)
         }
         val (appArg, sorted) = sort
         val words = (args - AuthoredToolDescriptions.MENTION_ARG) +
@@ -95,19 +123,18 @@ class DeviceMentionBinder @Inject constructor(
             listOfNotNull(sorted.labelArg?.let { it to ValueOrigin.SaidBy(PrincipalId.USER) })
 
         return when (val found = appTargets.candidates(mention)) {
-            AppCandidates.None -> Binding.NotFound(mention)
-            AppCandidates.Unavailable -> Binding.Unavailable
-            is AppCandidates.One -> Binding.Bound(
-                act(goal, proposed, words + (appArg to found.app.packageName), wordOrigins + (appArg to ValueOrigin.Ours), choice = null),
-            )
-            is AppCandidates.Several -> Binding.Bound(choice(goal, proposed, appArg, mention, found.apps, words, wordOrigins, confirm = false))
-            is AppCandidates.Confirm -> Binding.Bound(choice(goal, proposed, appArg, mention, found.apps, words, wordOrigins, confirm = true))
+            AppCandidates.None -> StepBinding.Refused(Binding.NotFound(mention))
+            AppCandidates.Unavailable -> StepBinding.Refused(Binding.Unavailable)
+            is AppCandidates.One ->
+                step(index, proposed, words + (appArg to found.app.packageName), wordOrigins + (appArg to ValueOrigin.Ours), choice = null)
+            is AppCandidates.Several -> choice(index, proposed, appArg, mention, found.apps, words, wordOrigins, confirm = false)
+            is AppCandidates.Confirm -> choice(index, proposed, appArg, mention, found.apps, words, wordOrigins, confirm = true)
         }
     }
 
     /** Several apps, or one word form to confirm ([confirm]): the user's pick, unless a learned launch choice answers. */
     private suspend fun choice(
-        goal: AgentGoal,
+        index: Int,
         proposed: ProposedStep,
         appArg: String,
         mention: String,
@@ -115,9 +142,9 @@ class DeviceMentionBinder @Inject constructor(
         words: Map<String, String>,
         origins: Map<String, ValueOrigin>,
         confirm: Boolean,
-    ): Interpretation.Act {
+    ): StepBinding.Bound {
         if (proposed.tool != ToolIds.LAUNCH_APP) {
-            return act(goal, proposed, words, origins, AppChoice(appArg, mention, apps, learning = null, confirm = confirm))
+            return step(index, proposed, words, origins, AppChoice(appArg, mention, apps, learning = null, confirm = confirm))
         }
         val candidates = CandidateSet(apps.map { ResolvedTarget.App(it.packageName) })
         val key = LearnedChoiceKeys.launch(mention, folding)
@@ -132,16 +159,16 @@ class DeviceMentionBinder @Inject constructor(
         return when (val decision = policy.decide(preference, candidates, proposed.risk)) {
             is ResolutionDecision.AutoResolve -> {
                 val target = when (val t = decision.target) { is ResolvedTarget.App -> t.packageName }
-                act(goal, proposed, words + (appArg to target), origins + (appArg to ValueOrigin.Ours), choice = null)
+                step(index, proposed, words + (appArg to target), origins + (appArg to ValueOrigin.Ours), choice = null)
             }
             is ResolutionDecision.RankFirst -> {
                 val first = when (val t = decision.target) { is ResolvedTarget.App -> t.packageName }
-                act(goal, proposed, words, origins, AppChoice(appArg, mention, apps.sortedByDescending { it.packageName == first }, token, confirm))
+                step(index, proposed, words, origins, AppChoice(appArg, mention, apps.sortedByDescending { it.packageName == first }, token, confirm))
             }
-            ResolutionDecision.NoPreference -> act(goal, proposed, words, origins, AppChoice(appArg, mention, apps, token, confirm))
+            ResolutionDecision.NoPreference -> step(index, proposed, words, origins, AppChoice(appArg, mention, apps, token, confirm))
             is ResolutionDecision.Stale -> {
                 preferences.delete(key, ResolutionContext.None) // best-effort prune, as FastPath's decorator does
-                act(goal, proposed, words, origins, AppChoice(appArg, mention, apps, token, confirm))
+                step(index, proposed, words, origins, AppChoice(appArg, mention, apps, token, confirm))
             }
         }
     }
@@ -188,23 +215,18 @@ class DeviceMentionBinder @Inject constructor(
         data class NotRead(val binding: Binding) : Values
     }
 
-    private fun act(
-        goal: AgentGoal,
+    /** [bindStep]'s answer: the step bound (a pick may still be owed on it), or the reading's answer for all of it. */
+    private sealed interface StepBinding {
+        data class Bound(val step: PlanStep, val origins: Map<String, ValueOrigin>, val effect: ToolEffect, val choice: AppChoice?) : StepBinding
+        data class Refused(val binding: Binding) : StepBinding
+    }
+
+    /** The plan's step through the domain's one conversion ([toPlanStep], controller ruling E9-P3). */
+    private fun step(
+        index: Int,
         proposed: ProposedStep,
-        args: Map<String, String>,
+        words: Map<String, String>,
         origins: Map<String, ValueOrigin>,
         choice: AppChoice?,
-    ) = Interpretation.Act(
-        goal = goal,
-        step = PlanStep(
-            index = 0,
-            invocation = ToolInvocation(proposed.tool, args.mapValues { (_, value) -> ArgSource.Literal(value) }),
-            risk = proposed.risk,
-            precondition = StepPrecondition.None,
-            rationale = StepRationale.MODEL_PROPOSED,
-        ),
-        origins = origins,
-        effect = proposed.effect,
-        choice = choice,
-    )
+    ) = StepBinding.Bound(proposed.toPlanStep(index, words), origins, proposed.effect, choice)
 }

@@ -1,6 +1,7 @@
 package com.sidr.launcher.domain.ai.bridge
 
 import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.agent.RuntimeBudget
 import com.sidr.launcher.domain.ai.bridge.BridgeFixtures.answer
 import com.sidr.launcher.domain.ai.bridge.BridgeFixtures.chainOffering
 import com.sidr.launcher.domain.ai.bridge.BridgeFixtures.chainRegistry
@@ -25,12 +26,11 @@ class BridgeValidatorTest {
         BridgeValidator.validate(answer, offering, registry, command)
 
     /**
-     * Over the reference offering, with room for two steps (controller ruling E8-P1): until Task 9 the
-     * production cap is one step, and a two-step plan would be refused on its size before any check below
-     * could be judged on its own.
+     * Over the reference offering, at the production cap (the engine's `maxSteps` since Task 9, controller
+     * ruling E9-P2): a two-step plan is within it, so each check below is judged on its own.
      */
     private fun validateChain(answer: RawAnswer) =
-        BridgeValidator.validate(answer, chainOffering, chainRegistry, "открой lumora", maxSteps = 2)
+        BridgeValidator.validate(answer, chainOffering, chainRegistry, "открой lumora")
 
     private val sieve = step("fixture_sieve", "name" to RawArg.Text("lumora"), "label" to null)
 
@@ -233,17 +233,32 @@ class BridgeValidatorTest {
     }
 
     /**
-     * Task 8's interim (controller ruling E8-P2): the form is `steps`, the offering advertises at most
-     * [BridgeRendering.MAX_STEPS_OFFERED] — one until Task 9 — and a longer plan is refused here, at the
-     * production default. `RouteCommandUseCase` step 7 takes `steps.single()`; this refusal is what keeps
-     * it from throwing. The plan is [chained], which the first multi-step test above reads as valid when
-     * two steps are allowed — so its size, and nothing else, is what refuses it.
+     * Fork 3b-B, controller ruling E9-P1: the cap is the engine's own — [RuntimeBudget.Default]'s
+     * `maxSteps`, which the instruction and the schema also say ([BridgeRendering.MAX_STEPS_OFFERED]) —
+     * and it is judged on both sides of the bound at the production default. Every step is [sieve], valid
+     * on its own, so the size and nothing else decides. Rewritten at constant count from Task 8's interim
+     * `> a plan with more steps than offered is rejected` (two steps refused while the cap was one).
      */
     @Test
-    fun `a plan with more steps than offered is rejected`() {
+    fun `more steps than the engine allows is rejected`() {
+        val most = RuntimeBudget.Default.maxSteps
+        val sieved = ProposedStep(
+            tool = ToolId("fixture_sieve"),
+            args = mapOf("name" to "lumora"),
+            origins = mapOf("name" to ValueOrigin.SaidBy(PrincipalId.USER)),
+            risk = ActionRiskLevel.SAFE,
+            effect = ToolEffect.EXTERNAL,
+        )
+
         assertEquals(
+            "exactly the engine's cap",
+            Verdict.Valid(ModelPlanning.Proposed(List(most) { sieved })),
+            BridgeValidator.validate(steps(*Array(most) { sieve }), chainOffering, chainRegistry, "открой lumora"),
+        )
+        assertEquals(
+            "one step over it",
             Verdict.Rejected(BridgeError.SHAPE),
-            BridgeValidator.validate(chained, chainOffering, chainRegistry, "открой lumora"),
+            BridgeValidator.validate(steps(*Array(most + 1) { sieve }), chainOffering, chainRegistry, "открой lumora"),
         )
     }
 }

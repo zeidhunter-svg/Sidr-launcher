@@ -435,10 +435,11 @@ internal class LauncherCommandSession(
 
             // A4′ phase 3a (condition 1): the model's reading waits on the card. A launch the user must
             // pick arms the learned-choice token; the pick binds and «Выполнить» records (B-3).
+            // Task 9's interim, closed by Task 10 (ruling E9-P4): only the HEAD owed pick's token is armed.
             is CommandOutcome.Interpreted -> {
                 _feedback.value = CommandFeedback.None
                 pickedPackage = null
-                appLaunch.rememberLearningToken((outcome.interpretation as? Interpretation.Act)?.choice?.learning)
+                appLaunch.rememberLearningToken((outcome.interpretation as? Interpretation.Act)?.choices?.firstOrNull()?.choice?.learning)
                 _interpretation.value = outcome.interpretation
             }
 

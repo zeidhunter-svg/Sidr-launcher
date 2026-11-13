@@ -29,6 +29,10 @@ import org.junit.Test
  * and offsets; the marginal cost is unchanged (25.10 — the offering text adds nothing when no tool
  * describes an output, B-8).
  *
+ * Re-measured in phase 3b Task 9, when the cap opened to the engine's (`RuntimeBudget.Default.maxSteps`,
+ * «from one to 1 steps» → «from one to 8 steps», one character for one): the instruction 1 161, fifteen
+ * tools 1 689, the marginal cost 25.10 — every pin where it was; none moved, no band changed.
+ *
  * `B3`'s conclusion stands on the real renderer: two hundred synthetic tools render to about 1 600
  * tokens — the prompt size was never the barrier.
  */

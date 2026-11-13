@@ -19,6 +19,7 @@ import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Sizes
 import com.sidr.launcher.core.ui.theme.Spacing
 import com.sidr.launcher.domain.action.requiresConsent
+import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.ai.bridge.AppChoice
 import com.sidr.launcher.domain.ai.bridge.Interpretation
 import com.sidr.launcher.domain.ai.bridge.SidrDestination
@@ -40,6 +41,10 @@ import com.sidr.launcher.core.ui.R as UiR
  * anchors in `SidrActionSafetyTest`) — so no `core/ui` component is added. It asks "is this what you
  * meant", not "do you allow the consequence": a `CONFIRM` step still stops at the engine's own consent
  * card after «Выполнить» (`DOC-ADL-1` untouched).
+ *
+ * **Task 9's interim, closed by Task 10** (A4′ phase 3b, controller ruling E9-P4): a reading may carry
+ * several steps since the bridge's cap opened, but this card still draws the HEAD step and the HEAD owed
+ * pick only; «Выполнить» runs the whole plan once no pick is owed.
  */
 @Composable
 internal fun InterpretationArea(
@@ -62,7 +67,8 @@ internal fun InterpretationArea(
             modifier = modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
         )
         is Interpretation.Act -> {
-            val choice = interpretation.choice
+            val choice = interpretation.choices.firstOrNull()?.choice
+            val head = interpretation.steps.first()
             if (choice != null) {
                 AppChoiceList(
                     mention = choice.mention,
@@ -75,11 +81,11 @@ internal fun InterpretationArea(
             } else {
                 SidrActionProposal(
                     title = sidrString(R.string.launcher_interpretation_title),
-                    description = interpretation.step.line(interpretation.goal.subject(), dynamicLabels),
-                    tone = if (requiresConsent(interpretation.step.risk)) SidrActionProposalTone.Confirm else SidrActionProposalTone.Safe,
+                    description = head.line(interpretation.goal.subject(), dynamicLabels),
+                    tone = if (requiresConsent(head.risk)) SidrActionProposalTone.Confirm else SidrActionProposalTone.Safe,
                     provenance = {
-                        ModelValues(interpretation)
-                        AgentStepProvenance(provenance[interpretation.step.invocation.id])
+                        ModelValues(head, interpretation.origins[head.index].orEmpty(), interpretation.effects[head.index])
+                        AgentStepProvenance(provenance[head.invocation.id])
                     },
                     onExecute = onRun,
                     onCancel = onDismiss,
@@ -117,12 +123,12 @@ internal fun ThinkingArea(onCancel: () -> Unit, modifier: Modifier = Modifier) {
  * theirs.
  */
 @Composable
-private fun ModelValues(interpretation: Interpretation.Act) {
-    if (interpretation.effect != ToolEffect.EXTERNAL) return
-    interpretation.origins
+private fun ModelValues(step: PlanStep, origins: Map<String, ValueOrigin>, effect: ToolEffect?) {
+    if (effect != ToolEffect.EXTERNAL) return
+    origins
         .filterValues { it == ValueOrigin.ModelGenerated }
         .keys
-        .mapNotNull { name -> (interpretation.step.invocation.args[name] as? ArgSource.Literal)?.value }
+        .mapNotNull { name -> (step.invocation.args[name] as? ArgSource.Literal)?.value }
         .forEach { value ->
             SidrText(text = sidrString(R.string.launcher_interpretation_model_value, value), role = SidrTextRole.PROVENANCE)
         }

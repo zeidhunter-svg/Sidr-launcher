@@ -1011,6 +1011,8 @@ without `acceptsRef` → `SHAPE`; a `Ref` must name a step `< this index` whose 
 
 - [ ] **Step 6:** boundary gate → **1754** (`:domain` 558, `:data:repository` 454). **Step 7: commit** — `feat(agentic-6/A4' ф3b): многошаговое толкование — привязка каждого шага до карточки`.
 
+*Measured in execution (Task 9, rulings E9-P1…P5, finding E9-M1): `> more steps than the engine allows is rejected` replaced Task 8's `> a plan with more steps than offered is rejected` at constant count (`maxSteps` → Valid, `maxSteps + 1` → `SHAPE`), and E8-P1's `maxSteps` parameter is gone; the ProposedStep → PlanStep conversion (refs → `FromStep`) is one function in `Interpretation.kt`, used by both binders; `MAX_STEPS_OFFERED` and `INSTRUCTION` are no longer `const`; the weight pins did not move. **What Task 10 inherits (interim E9-P4):** the card draws the head step and the head pick, and Run runs every step; the session arms the head pick's token only, so with two picks owed the last picked package is recorded against the first mention's token — Task 10 closes both, test-first. M9d cannot redden the route test (it reaches step 7 through the fake planner, not the validator); M9f (a start on `Bound`) is a designed mutation that holds the route test's «nothing is started» half, once its fixture was made runnable (E9-M1). Measured T9 **1764** (`:domain` 561 · `:data:repository` 457).*
+
 ---
 
 ## Task 10: the card for N steps; the consent card shows a resolved reference

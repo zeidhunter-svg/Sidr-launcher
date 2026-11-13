@@ -218,11 +218,12 @@ class RouteCommandUseCase(
         // «Выполнить» starts a session, through the engine.
         val command = rawInput.trim()
         return when (val answer = modelPlanner.plan(command)) {
-            // The answer form is `steps` since phase 3b Task 8; the bridge offers and admits ONE step until
-            // Task 9 (`BridgeRendering.MAX_STEPS_OFFERED`, held by `BridgeValidator`'s size check), so there is
-            // exactly one here — and no reference, which needs an earlier step.
+            // The answer form is `steps` since phase 3b Task 8; since Task 9 the bridge offers and admits up to
+            // the engine's own cap (`BridgeRendering.MAX_STEPS_OFFERED`, held by `BridgeValidator`'s size
+            // check). The binder takes the WHOLE reading: one card for all of its steps, or one answer — the
+            // first step it cannot bind — for all of them. Nothing is started here either way.
             is ModelPlanning.Proposed ->
-                when (val bound = binder.bind(AgentGoal(text = command, shape = GoalShape.Free(command)), answer.steps.single())) {
+                when (val bound = binder.bind(AgentGoal(text = command, shape = GoalShape.Free(command)), answer.steps)) {
                     is Binding.Bound -> CommandOutcome.Interpreted(bound.interpretation)
                     is Binding.NotFound -> CommandOutcome.Message(CommandMessage.NoAppFound(bound.mention))
                     // A4′ phase 3b, Task 6: a value its sort could not read is said in the words written for

@@ -128,16 +128,18 @@ class LauncherScreenInterpretationTest {
 
     private fun reading() = Interpretation.Act(
         goal = AgentGoal("kelmora goal", GoalShape.Free("kelmora goal")),
-        step = PlanStep(
-            index = 0,
-            invocation = ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.Literal("ostravel lectures"))),
-            risk = ActionRiskLevel.CONFIRM,
-            precondition = StepPrecondition.None,
-            rationale = StepRationale.MODEL_PROPOSED,
+        steps = listOf(
+            PlanStep(
+                index = 0,
+                invocation = ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.Literal("ostravel lectures"))),
+                risk = ActionRiskLevel.CONFIRM,
+                precondition = StepPrecondition.None,
+                rationale = StepRationale.MODEL_PROPOSED,
+            ),
         ),
-        origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
-        effect = ToolEffect.EXTERNAL,
-        choice = null,
+        origins = mapOf(0 to mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER))),
+        effects = mapOf(0 to ToolEffect.EXTERNAL),
+        choices = emptyList(),
     )
 
     private fun show(route: CommandRouteStep): LauncherViewModel {

@@ -426,11 +426,11 @@ class BridgePayloadGuardTest {
         assertTrue(federation.registry.all().any { it.id.value.startsWith(ShortcutToolIds.PREFIX) && "net.fixture.qorvath" in it.id.value })
         runs.forEach { run ->
             val bound = run.outcomes.map { (it as CommandOutcome.Interpreted).interpretation as Interpretation.Act }
-            fun pinned(index: Int) = (bound[index].step.invocation.args["app"] as? ArgSource.Literal)?.value
+            fun pinned(index: Int) = (bound[index].steps.single().invocation.args["app"] as? ArgSource.Literal)?.value
             assertEquals("${run.mode}: installed apps", "net.fixture.lumora", pinned(0))
             assertEquals("${run.mode}: alias table", "net.fixture.zantor", pinned(1))
             assertEquals("${run.mode}: learned choices", "net.fixture.tessar.two", pinned(2))
-            assertEquals("${run.mode}: a choice", listOf("net.fixture.pellix.one", "net.fixture.pellix.two"), bound[3].choice!!.candidates.map { it.packageName })
+            assertEquals("${run.mode}: a choice", listOf("net.fixture.pellix.one", "net.fixture.pellix.two"), bound[3].choices.single().choice.candidates.map { it.packageName })
             assertEquals(commands.size * 2, run.bodies.size)
             // Task 11 ruling on hole H4: the user slot of every body — first ask and retry alike — is
             // exactly the command that was being routed, as the user typed it (`USER_COMMAND`), and nothing

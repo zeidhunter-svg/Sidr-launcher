@@ -12,8 +12,9 @@ sealed interface Verdict {
 
 /**
  * The bridge's first line (spec §7.12.2). Its checks, all before `startPlanned`:
- *  - **shape** — a known kind with what it needs; a plan has from one to `maxSteps` steps
- *    ([BridgeRendering.MAX_STEPS_OFFERED] in production, one until Task 9), and EVERY step names a tool and
+ *  - **shape** — a known kind with what it needs; a plan has from one to
+ *    [BridgeRendering.MAX_STEPS_OFFERED] steps — the engine's own cap, `RuntimeBudget.Default.maxSteps`,
+ *    which the instruction and the schema also say (phase 3b Task 9) — and EVERY step names a tool and
  *    gives every argument it requires, and no argument it does not take;
  *  - **membership in the offering** — not in the federation: `set_app_alias` and `shortcut:…` are
  *    registered and `SAFE`, the engine would not stop them, and `B13` would rest on one render filter;
@@ -29,21 +30,15 @@ sealed interface Verdict {
  */
 object BridgeValidator {
 
-    /**
-     * [maxSteps] is the production cap unless a test states another (controller ruling E8-P1): with the cap
-     * at one, a two-step plan is refused on its size before the per-step and reference checks could each be
-     * judged on its own. Production callers pass nothing.
-     */
     fun validate(
         answer: RawAnswer,
         offering: BridgeOffering,
         registry: ToolRegistry,
         command: String,
         folding: TextFolding = PlainTextFolding,
-        maxSteps: Int = BridgeRendering.MAX_STEPS_OFFERED,
     ): Verdict =
         when (answer.kind?.trim()) {
-            BridgeRendering.KIND_PLAN -> validatePlan(answer.steps, offering, registry, command, folding, maxSteps)
+            BridgeRendering.KIND_PLAN -> validatePlan(answer.steps, offering, registry, command, folding)
             BridgeRendering.KIND_ASSISTANT -> answer.question.nonBlank()
                 ?.let { Verdict.Valid(ModelPlanning.ToAssistant(it)) }
                 ?: Verdict.Rejected(BridgeError.SHAPE)
@@ -63,12 +58,12 @@ object BridgeValidator {
         registry: ToolRegistry,
         command: String,
         folding: TextFolding,
-        maxSteps: Int,
     ): Verdict {
         if (steps.isNullOrEmpty()) return Verdict.Rejected(BridgeError.SHAPE)
-        // More steps than the instruction and the schema offered is not the required form (Task 8's
-        // interim: `RouteCommandUseCase` step 7 takes `steps.single()`, and this is what keeps it whole).
-        if (steps.size > maxSteps) return Verdict.Rejected(BridgeError.SHAPE)
+        // More steps than the instruction and the schema offered — the engine's own cap — is not the
+        // required form: `AgentExecutor` ends a session `Blocked` at that many steps, so a longer plan could
+        // never finish, and the card never shows one.
+        if (steps.size > BridgeRendering.MAX_STEPS_OFFERED) return Verdict.Rejected(BridgeError.SHAPE)
 
         // Every step as in 3a — shape, membership, derivability — in order; the first refusal is the plan's.
         val proposed = mutableListOf<ProposedStep>()

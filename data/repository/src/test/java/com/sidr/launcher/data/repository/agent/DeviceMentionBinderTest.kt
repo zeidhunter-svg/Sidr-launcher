@@ -12,9 +12,13 @@ import com.sidr.launcher.domain.action.ActionIds
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanStep
+import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.StepRationale
+import com.sidr.launcher.domain.ai.bridge.AppChoice
 import com.sidr.launcher.domain.ai.bridge.Binding
 import com.sidr.launcher.domain.ai.bridge.Interpretation
+import com.sidr.launcher.domain.ai.bridge.PendingChoice
 import com.sidr.launcher.domain.ai.bridge.PrincipalId
 import com.sidr.launcher.domain.ai.bridge.ProposedStep
 import com.sidr.launcher.domain.ai.bridge.ValueOrigin
@@ -30,6 +34,7 @@ import com.sidr.launcher.domain.memory.resolution.DefaultResolutionPreferencePol
 import com.sidr.launcher.domain.memory.resolution.PreferenceEvidence
 import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
 import com.sidr.launcher.domain.memory.resolution.ResolutionContext
+import com.sidr.launcher.domain.memory.resolution.ResolutionLearningToken
 import com.sidr.launcher.domain.memory.resolution.ResolutionPreference
 import com.sidr.launcher.domain.memory.resolution.ResolutionPreferenceStore
 import com.sidr.launcher.domain.memory.resolution.ResolveCommandWithPreferenceUseCase
@@ -43,6 +48,7 @@ import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
+import com.sidr.launcher.domain.tool.ToolInvocation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.runBlocking
@@ -66,13 +72,18 @@ class DeviceMentionBinderTest {
     private val tessarTwo = InstalledApp(packageName = "net.fixture.tessar.two", label = "Tessar")
     private val miravin = InstalledApp(packageName = "net.fixture.miravin", label = "Миравин")
 
-    private fun proposed(tool: ToolId, vararg args: Pair<String, String>, risk: ActionRiskLevel = ActionRiskLevel.SAFE) =
+    private fun proposed(
+        tool: ToolId,
+        vararg args: Pair<String, String>,
+        risk: ActionRiskLevel = ActionRiskLevel.SAFE,
+        effect: ToolEffect = ToolEffect.EXTERNAL,
+    ) =
         ProposedStep(
             tool = tool,
             args = mapOf(*args),
             origins = args.associate { (name, _) -> name to ValueOrigin.SaidBy(PrincipalId.USER) },
             risk = risk,
-            effect = ToolEffect.EXTERNAL,
+            effect = effect,
         )
 
     private fun binder(
@@ -119,80 +130,80 @@ class DeviceMentionBinderTest {
 
     @Test
     fun `a step without an app mention is bound as the model wrote it`() = runTest {
-        val act = binder(listOf(lumora)).bind(goal, proposed(InAppToolIds.WEB_SEARCH, "query" to "ostravel lectures")).act()
+        val act = binder(listOf(lumora)).bind(goal, listOf(proposed(InAppToolIds.WEB_SEARCH, "query" to "ostravel lectures"))).act()
 
-        assertEquals(mapOf("query" to ArgSource.Literal("ostravel lectures")), act.step.invocation.args)
-        assertEquals(StepRationale.MODEL_PROPOSED, act.step.rationale)
-        assertNull(act.choice)
+        assertEquals(mapOf("query" to ArgSource.Literal("ostravel lectures")), act.steps.single().invocation.args)
+        assertEquals(StepRationale.MODEL_PROPOSED, act.steps.single().rationale)
+        assertEquals(emptyList<PendingChoice>(), act.choices)
     }
 
     @Test
     fun `one candidate binds the package and keeps the user's words where the tool shows them`() = runTest {
-        val act = binder(listOf(lumora)).bind(goal, proposed(Tier0ToolIds.UNINSTALL_APP, "app" to "lumora", risk = ActionRiskLevel.CONFIRM)).act()
+        val act = binder(listOf(lumora)).bind(goal, listOf(proposed(Tier0ToolIds.UNINSTALL_APP, "app" to "lumora", risk = ActionRiskLevel.CONFIRM))).act()
 
         assertEquals(
             mapOf("app" to ArgSource.Literal("net.fixture.lumora"), "app_label" to ArgSource.Literal("lumora")),
-            act.step.invocation.args,
+            act.steps.single().invocation.args,
         )
         assertEquals(
             mapOf("app" to ValueOrigin.Ours, "app_label" to ValueOrigin.SaidBy(PrincipalId.USER)),
-            act.origins,
+            act.origins.getValue(0),
         )
     }
 
     @Test
     fun `launch_app is pinned to the package and keeps the words in query`() = runTest {
-        val act = binder(listOf(zantor)).bind(goal, proposed(ToolIds.LAUNCH_APP, "app" to "телега")).act()
+        val act = binder(listOf(zantor)).bind(goal, listOf(proposed(ToolIds.LAUNCH_APP, "app" to "телега"))).act()
 
         assertEquals(
             mapOf("query" to ArgSource.Literal("телега"), "app" to ArgSource.Literal("net.fixture.zantor")),
-            act.step.invocation.args,
+            act.steps.single().invocation.args,
         )
     }
 
     @Test
     fun `open_app_info takes the package only`() = runTest {
-        val act = binder(listOf(lumora)).bind(goal, proposed(Tier0ToolIds.OPEN_APP_INFO, "app" to "lumora")).act()
+        val act = binder(listOf(lumora)).bind(goal, listOf(proposed(Tier0ToolIds.OPEN_APP_INFO, "app" to "lumora"))).act()
 
-        assertEquals(mapOf("app" to ArgSource.Literal("net.fixture.lumora")), act.step.invocation.args)
+        assertEquals(mapOf("app" to ArgSource.Literal("net.fixture.lumora")), act.steps.single().invocation.args)
     }
 
     /** Criterion 17 (binder half): two candidates are a choice BEFORE any plan, and nothing is bound yet. */
     @Test
     fun `two candidates give a choice before any plan, and nothing is bound yet`() = runTest {
-        val act = binder(listOf(tessarOne, tessarTwo)).bind(goal, proposed(ToolIds.LAUNCH_APP, "app" to "tessar")).act()
+        val act = binder(listOf(tessarOne, tessarTwo)).bind(goal, listOf(proposed(ToolIds.LAUNCH_APP, "app" to "tessar"))).act()
 
-        assertEquals(listOf(tessarOne, tessarTwo), act.choice!!.candidates)
-        assertEquals("app", act.choice!!.arg)
-        assertNull(act.step.invocation.args["app"])
+        assertEquals(listOf(tessarOne, tessarTwo), act.choices.single().choice.candidates)
+        assertEquals("app", act.choices.single().choice.arg)
+        assertNull(act.steps.single().invocation.args["app"])
     }
 
     /** `launch_app` keeps learned choices (the same act — a launch): a confident one binds without asking. */
     @Test
     fun `launch_app's confident learned choice binds without asking`() = runTest {
         val act = binder(listOf(tessarOne, tessarTwo), store = learnedTessarTwo(streak = 3))
-            .bind(goal, proposed(ToolIds.LAUNCH_APP, "app" to "tessar")).act()
+            .bind(goal, listOf(proposed(ToolIds.LAUNCH_APP, "app" to "tessar"))).act()
 
-        assertNull(act.choice)
-        assertEquals(ArgSource.Literal("net.fixture.tessar.two"), act.step.invocation.args["app"])
+        assertEquals(emptyList<PendingChoice>(), act.choices)
+        assertEquals(ArgSource.Literal("net.fixture.tessar.two"), act.steps.single().invocation.args["app"])
     }
 
     @Test
     fun `a weaker learned choice is offered first, still as a choice`() = runTest {
         val act = binder(listOf(tessarOne, tessarTwo), store = learnedTessarTwo(streak = 1))
-            .bind(goal, proposed(ToolIds.LAUNCH_APP, "app" to "tessar")).act()
+            .bind(goal, listOf(proposed(ToolIds.LAUNCH_APP, "app" to "tessar"))).act()
 
-        assertEquals(listOf(tessarTwo, tessarOne), act.choice!!.candidates)
+        assertEquals(listOf(tessarTwo, tessarOne), act.choices.single().choice.candidates)
     }
 
     /** `AppTargetResolver`'s KDoc: consent learned for OPENING is not consent for REMOVING. */
     @Test
     fun `uninstall never reads a learned choice`() = runTest {
         val act = binder(listOf(tessarOne, tessarTwo), store = learnedTessarTwo(streak = 3))
-            .bind(goal, proposed(Tier0ToolIds.UNINSTALL_APP, "app" to "tessar", risk = ActionRiskLevel.CONFIRM)).act()
+            .bind(goal, listOf(proposed(Tier0ToolIds.UNINSTALL_APP, "app" to "tessar", risk = ActionRiskLevel.CONFIRM))).act()
 
-        assertEquals(listOf(tessarOne, tessarTwo), act.choice!!.candidates)
-        assertNull(act.choice!!.learning)
+        assertEquals(listOf(tessarOne, tessarTwo), act.choices.single().choice.candidates)
+        assertNull(act.choices.single().choice.learning)
     }
 
     /**
@@ -202,25 +213,25 @@ class DeviceMentionBinderTest {
      */
     @Test
     fun `a word form of an alias is offered to confirm, and a word nothing names is not found`() = runTest {
-        val act = binder(listOf(zantor)).bind(goal, proposed(ToolIds.LAUNCH_APP, "app" to "телегу")).act()
+        val act = binder(listOf(zantor)).bind(goal, listOf(proposed(ToolIds.LAUNCH_APP, "app" to "телегу"))).act()
 
-        assertEquals(listOf(zantor), act.choice!!.candidates)
-        assertTrue(act.choice!!.confirm)
-        assertNull(act.step.invocation.args["app"])
+        assertEquals(listOf(zantor), act.choices.single().choice.candidates)
+        assertTrue(act.choices.single().choice.confirm)
+        assertNull(act.steps.single().invocation.args["app"])
 
-        val result = binder(listOf(zantor)).bind(goal, proposed(ToolIds.LAUNCH_APP, "app" to "вельтрикс"))
+        val result = binder(listOf(zantor)).bind(goal, listOf(proposed(ToolIds.LAUNCH_APP, "app" to "вельтрикс")))
         assertEquals(Binding.NotFound("вельтрикс"), result)
     }
 
     /** Fork 3b-G: «миравину» is a form of the label «Миравин» — a one-app pick the user confirms; nothing is bound yet. */
     @Test
     fun `a word form becomes a one-app pick marked to confirm`() = runTest {
-        val act = binder(listOf(lumora, miravin)).bind(goal, proposed(ToolIds.LAUNCH_APP, "app" to "миравину")).act()
+        val act = binder(listOf(lumora, miravin)).bind(goal, listOf(proposed(ToolIds.LAUNCH_APP, "app" to "миравину"))).act()
 
-        assertEquals(listOf(miravin), act.choice!!.candidates)
-        assertEquals("app", act.choice!!.arg)
-        assertTrue(act.choice!!.confirm)
-        assertNull(act.step.invocation.args["app"])
+        assertEquals(listOf(miravin), act.choices.single().choice.candidates)
+        assertEquals("app", act.choices.single().choice.arg)
+        assertTrue(act.choices.single().choice.confirm)
+        assertNull(act.steps.single().invocation.args["app"])
     }
 
     /**
@@ -233,9 +244,9 @@ class DeviceMentionBinderTest {
     fun `a confirmed word form for launch carries a learning token keyed on the name, for uninstall none`() = runTest {
         val key = CapabilityKey(ActionIds.LAUNCH_APP, "телегу")
 
-        val offered = binder(listOf(zantor)).bind(goal, proposed(ToolIds.LAUNCH_APP, "app" to "телегу")).act()
-        assertEquals(key, offered.choice!!.learning!!.capabilityKey)
-        assertEquals(CandidateSet(listOf(ResolvedTarget.App("net.fixture.zantor"))), offered.choice!!.learning!!.candidateSet)
+        val offered = binder(listOf(zantor)).bind(goal, listOf(proposed(ToolIds.LAUNCH_APP, "app" to "телегу"))).act()
+        assertEquals(key, offered.choices.single().choice.learning!!.capabilityKey)
+        assertEquals(CandidateSet(listOf(ResolvedTarget.App("net.fixture.zantor"))), offered.choices.single().choice.learning!!.candidateSet)
 
         val confirmedThrice = FakeResolutionPreferenceStore().apply {
             runBlocking {
@@ -250,15 +261,15 @@ class DeviceMentionBinderTest {
                 )
             }
         }
-        val learned = binder(listOf(zantor), store = confirmedThrice).bind(goal, proposed(ToolIds.LAUNCH_APP, "app" to "телегу")).act()
-        assertNull(learned.choice)
-        assertEquals(ArgSource.Literal("net.fixture.zantor"), learned.step.invocation.args["app"])
+        val learned = binder(listOf(zantor), store = confirmedThrice).bind(goal, listOf(proposed(ToolIds.LAUNCH_APP, "app" to "телегу"))).act()
+        assertEquals(emptyList<PendingChoice>(), learned.choices)
+        assertEquals(ArgSource.Literal("net.fixture.zantor"), learned.steps.single().invocation.args["app"])
 
         val uninstall = binder(listOf(zantor), store = confirmedThrice)
-            .bind(goal, proposed(Tier0ToolIds.UNINSTALL_APP, "app" to "телегу", risk = ActionRiskLevel.CONFIRM)).act()
-        assertEquals(listOf(zantor), uninstall.choice!!.candidates)
-        assertTrue(uninstall.choice!!.confirm)
-        assertNull(uninstall.choice!!.learning)
+            .bind(goal, listOf(proposed(Tier0ToolIds.UNINSTALL_APP, "app" to "телегу", risk = ActionRiskLevel.CONFIRM))).act()
+        assertEquals(listOf(zantor), uninstall.choices.single().choice.candidates)
+        assertTrue(uninstall.choices.single().choice.confirm)
+        assertNull(uninstall.choices.single().choice.learning)
     }
 
     /** A store that remembers every key read and written — the evidence the cross-path test compares. */
@@ -312,16 +323,16 @@ class DeviceMentionBinderTest {
         val written = store.upserted.single()
         store.found.clear()
         val act = binder(listOf(tessarOne, tessarTwo), store = store)
-            .bind(goal, proposed(ToolIds.LAUNCH_APP, "app" to "tessar")).act()
+            .bind(goal, listOf(proposed(ToolIds.LAUNCH_APP, "app" to "tessar"))).act()
 
         assertEquals(CapabilityKey(ActionIds.LAUNCH_APP, "tessar"), written)
         assertEquals(listOf(written), store.found)
-        assertEquals(listOf(tessarTwo, tessarOne), act.choice!!.candidates)
+        assertEquals(listOf(tessarTwo, tessarOne), act.choices.single().choice.candidates)
     }
 
     @Test
     fun `an app list that cannot be read is unavailable, not "not found"`() = runTest {
-        val result = binder(emptyList(), appsFail = true).bind(goal, proposed(ToolIds.LAUNCH_APP, "app" to "lumora"))
+        val result = binder(emptyList(), appsFail = true).bind(goal, listOf(proposed(ToolIds.LAUNCH_APP, "app" to "lumora")))
 
         assertEquals(Binding.Unavailable, result)
     }
@@ -355,11 +366,11 @@ class DeviceMentionBinderTest {
             fun expected(packageName: String, words: String) =
                 mapOf(appArg to ArgSource.Literal(packageName)) + listOfNotNull(sort.labelArg?.let { it to ArgSource.Literal(words) })
 
-            val one = binder(listOf(lumora)).bind(goal, proposed(id, name to "lumora")).act()
-            val several = binder(listOf(tessarOne, tessarTwo)).bind(goal, proposed(id, name to "tessar")).act()
+            val one = binder(listOf(lumora)).bind(goal, listOf(proposed(id, name to "lumora"))).act()
+            val several = binder(listOf(tessarOne, tessarTwo)).bind(goal, listOf(proposed(id, name to "tessar"))).act()
 
-            one.step.invocation.args == expected(lumora.packageName, "lumora") &&
-                several.choose(tessarTwo.packageName)?.step?.invocation?.args == expected(tessarTwo.packageName, "tessar")
+            one.steps.single().invocation.args == expected(lumora.packageName, "lumora") &&
+                several.choose(tessarTwo.packageName)?.steps?.single()?.invocation?.args == expected(tessarTwo.packageName, "tessar")
         }
         assertEquals(emptyList<Pair<ToolId, String>>(), unread)
     }
@@ -377,12 +388,12 @@ class DeviceMentionBinderTest {
      */
     @Test
     fun `a duration the model wrote that the device cannot read is not understood, and nothing goes back to the model`() = runTest {
-        val result = binder(listOf(lumora)).bind(goal, proposed(Tier0ToolIds.SET_TIMER, "duration" to "полчасика"))
+        val result = binder(listOf(lumora)).bind(goal, listOf(proposed(Tier0ToolIds.SET_TIMER, "duration" to "полчасика")))
 
         assertEquals(Binding.NotUnderstood("полчасика"), result)
 
-        val readable = binder(listOf(lumora)).bind(goal, proposed(Tier0ToolIds.SET_TIMER, "duration" to "10 dakika")).act()
-        assertEquals(mapOf("duration" to ArgSource.Literal("10 dakika")), readable.step.invocation.args)
+        val readable = binder(listOf(lumora)).bind(goal, listOf(proposed(Tier0ToolIds.SET_TIMER, "duration" to "10 dakika"))).act()
+        assertEquals(mapOf("duration" to ArgSource.Literal("10 dakika")), readable.steps.single().invocation.args)
     }
 
     /**
@@ -396,10 +407,102 @@ class DeviceMentionBinderTest {
      */
     @Test
     fun `a url the model wrote is normalised or refused before the card`() = runTest {
-        val normalised = binder(listOf(lumora)).bind(goal, proposed(InAppToolIds.OPEN_URL, "url" to "HTTPS://Quillmere.example/Path")).act()
-        assertEquals(mapOf("url" to ArgSource.Literal("https://Quillmere.example/Path")), normalised.step.invocation.args)
+        val normalised = binder(listOf(lumora)).bind(goal, listOf(proposed(InAppToolIds.OPEN_URL, "url" to "HTTPS://Quillmere.example/Path"))).act()
+        assertEquals(mapOf("url" to ArgSource.Literal("https://Quillmere.example/Path")), normalised.steps.single().invocation.args)
 
-        val refused = binder(listOf(lumora)).bind(goal, proposed(InAppToolIds.OPEN_URL, "url" to "https://quillmere.example/a b"))
+        val refused = binder(listOf(lumora)).bind(goal, listOf(proposed(InAppToolIds.OPEN_URL, "url" to "https://quillmere.example/a b")))
         assertEquals(Binding.NotUnderstood("https://quillmere.example/a b"), refused)
+    }
+
+    // --- A4′ phase 3b, Task 9: a reading of several steps is bound whole, before the card ---
+
+    /**
+     * Fork 3b-B, §7.12.3 condition 2, B-19 (the binder's half): every step's app mention is bound before
+     * the card, each exactly as a one-step reading is. Step 0's one «Lumora» is pinned at once, with the
+     * user's words where `uninstall_app` shows them; step 1's two «Tessar» are a pick owed ON STEP 1,
+     * carrying that launch's own learning token. Origins and effects are each step's own — step 1 is
+     * planted `LOCAL` so that a mix-up of the two would show. Compared whole, by equality.
+     */
+    @Test
+    fun `each step's app mention is bound before the card`() = runTest {
+        val act = binder(listOf(lumora, tessarOne, tessarTwo)).bind(
+            goal,
+            listOf(
+                proposed(Tier0ToolIds.UNINSTALL_APP, "app" to "lumora", risk = ActionRiskLevel.CONFIRM),
+                proposed(ToolIds.LAUNCH_APP, "app" to "tessar", effect = ToolEffect.LOCAL),
+            ),
+        ).act()
+
+        val tessars = CandidateSet(listOf(ResolvedTarget.App("net.fixture.tessar.one"), ResolvedTarget.App("net.fixture.tessar.two")))
+        assertEquals(
+            Interpretation.Act(
+                goal = goal,
+                steps = listOf(
+                    PlanStep(
+                        index = 0,
+                        invocation = ToolInvocation(
+                            Tier0ToolIds.UNINSTALL_APP,
+                            mapOf("app" to ArgSource.Literal("net.fixture.lumora"), "app_label" to ArgSource.Literal("lumora")),
+                        ),
+                        risk = ActionRiskLevel.CONFIRM,
+                        precondition = StepPrecondition.None,
+                        rationale = StepRationale.MODEL_PROPOSED,
+                    ),
+                    PlanStep(
+                        index = 1,
+                        invocation = ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal("tessar"))),
+                        risk = ActionRiskLevel.SAFE,
+                        precondition = StepPrecondition.None,
+                        rationale = StepRationale.MODEL_PROPOSED,
+                    ),
+                ),
+                origins = mapOf(
+                    0 to mapOf("app" to ValueOrigin.Ours, "app_label" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                    1 to mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                ),
+                effects = mapOf(0 to ToolEffect.EXTERNAL, 1 to ToolEffect.LOCAL),
+                choices = listOf(
+                    PendingChoice(
+                        step = 1,
+                        choice = AppChoice(
+                            arg = "app",
+                            mention = "tessar",
+                            candidates = listOf(tessarOne, tessarTwo),
+                            learning = ResolutionLearningToken(
+                                capabilityKey = CapabilityKey(ActionIds.LAUNCH_APP, "tessar"),
+                                context = ResolutionContext.None,
+                                candidateSet = tessars,
+                                fingerprint = fingerprintOf(tessars),
+                                isAppAmbiguityFlow = true,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            act,
+        )
+    }
+
+    /**
+     * Controller ruling E9-P5: what the device cannot bind in ANY step answers for the whole reading —
+     * there is no card for the steps that did bind. Both unbound steps come SECOND, after a step that binds
+     * on its own (the control): an app nothing on the device names is not found; a duration the sort
+     * cannot read is not understood.
+     */
+    @Test
+    fun `one unknown app in any step means not found for the whole reading`() = runTest {
+        val launch = proposed(ToolIds.LAUNCH_APP, "app" to "lumora")
+        assertTrue("the control: the first step binds on its own", binder(listOf(lumora)).bind(goal, listOf(launch)) is Binding.Bound)
+
+        assertEquals(
+            "an app nothing names, in the second step",
+            Binding.NotFound("вельтрикс"),
+            binder(listOf(lumora)).bind(goal, listOf(launch, proposed(Tier0ToolIds.OPEN_APP_INFO, "app" to "вельтрикс"))),
+        )
+        assertEquals(
+            "a duration the sort cannot read, in the second step",
+            Binding.NotUnderstood("полчасика"),
+            binder(listOf(lumora)).bind(goal, listOf(launch, proposed(Tier0ToolIds.SET_TIMER, "duration" to "полчасика"))),
+        )
     }
 }

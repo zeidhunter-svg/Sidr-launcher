@@ -193,11 +193,11 @@ class BridgePayloadGuardTest {
         }
 
         private fun accepted(mention: String) =
-            """{"kind":"plan","step":{"tool":"launch_app","args":{"app":"$mention","duration":null,"query":null,"time":null,"url":null}},"question":null,"destination":null}"""
+            """{"kind":"plan","steps":[{"tool":"launch_app","args":{"app":"$mention","duration":null,"query":null,"time":null,"url":null}}],"question":null,"destination":null}"""
 
         companion object {
             const val REJECTED =
-                """{"kind":"plan","step":{"tool":"set_app_alias","args":{"app":"lumora","phrase":"SNTL-REJECTED-ECHO"}},"question":null,"destination":null}"""
+                """{"kind":"plan","steps":[{"tool":"set_app_alias","args":{"app":"lumora","phrase":"SNTL-REJECTED-ECHO"}}],"question":null,"destination":null}"""
         }
     }
 

@@ -2,11 +2,24 @@ package com.sidr.launcher.domain.ai.bridge
 
 import com.sidr.launcher.domain.ai.AiError
 
-/** One step as the transport read it — unvalidated, every field possibly absent. */
-data class RawStep(val tool: String?, val args: Map<String, String?>)
+/**
+ * One argument's value as the transport read it (A4′ phase 3b, Task 8). [Text] is words — a JSON string,
+ * number or boolean, as text. [Ref] names an output of an earlier step: the step's 0-based position in
+ * `steps` and the output's name — read, not judged; `BridgeValidator` decides whether it may stand (B-18).
+ */
+sealed interface RawArg {
+    data class Text(val value: String) : RawArg
+    data class Ref(val step: Int, val key: String) : RawArg
+}
 
-/** The answer object as the transport read it: plain values, judged by `BridgeValidator`. */
-data class RawAnswer(val kind: String?, val step: RawStep?, val question: String?, val destination: String?)
+/** One step as the transport read it — unvalidated, every field possibly absent; `null` is an absent value. */
+data class RawStep(val tool: String?, val args: Map<String, RawArg?>)
+
+/**
+ * The answer object as the transport read it: plain values, judged by `BridgeValidator`. [steps] is the
+ * plan's steps in order (fork 3b-B) — `null` when the answer gave none, empty when it gave an empty list.
+ */
+data class RawAnswer(val kind: String?, val steps: List<RawStep>?, val question: String?, val destination: String?)
 
 /**
  * What the provider reported about a reply, for the transport measurement (spec §7.12.2: «входят ли

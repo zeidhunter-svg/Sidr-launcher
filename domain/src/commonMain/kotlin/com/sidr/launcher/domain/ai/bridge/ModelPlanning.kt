@@ -32,8 +32,16 @@ sealed interface ValueOrigin {
 }
 
 /**
- * One step the model proposed, validated (shape, membership, derivability) and not yet bound. [args]
- * are MODEL-facing names (an app mention under `app`); the device maps them onto the tool.
+ * A validated reference (A4′ phase 3b, B-18): the value of an argument is the output [key] of the plan's
+ * step at 0-based position [step], which is always an EARLIER step whose tool describes [key].
+ */
+data class StepRef(val step: Int, val key: String)
+
+/**
+ * One step the model proposed, validated (shape, membership, derivability, references) and not yet
+ * bound. [args] are MODEL-facing names (an app mention under `app`); the device maps them onto the tool.
+ * [refs] holds the arguments given as a reference to an earlier step's output — never also in [args],
+ * and with no [origins] entry: their value is the device's, made by that earlier step.
  */
 data class ProposedStep(
     val tool: ToolId,
@@ -41,6 +49,7 @@ data class ProposedStep(
     val origins: Map<String, ValueOrigin>,
     val risk: ActionRiskLevel,
     val effect: ToolEffect,
+    val refs: Map<String, StepRef> = emptyMap(),
 )
 
 /**
@@ -49,7 +58,12 @@ data class ProposedStep(
  * the lesson `PlanningResult` paid for (spec §3 0.0).
  */
 sealed interface ModelPlanning {
-    data class Proposed(val step: ProposedStep) : ModelPlanning
+    /**
+     * The plan's steps, in order, every one validated (fork 3b-B). Never empty; at most
+     * `BridgeRendering.MAX_STEPS_OFFERED` — one until Task 9 opens the cap, so `RouteCommandUseCase`
+     * step 7 takes the single step.
+     */
+    data class Proposed(val steps: List<ProposedStep>) : ModelPlanning
     data class ToAssistant(val question: String) : ModelPlanning
     data class Navigate(val destination: SidrDestination) : ModelPlanning
 

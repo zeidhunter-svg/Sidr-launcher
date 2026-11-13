@@ -547,12 +547,14 @@ class RouteCommandUseCaseTest {
     fun `a model plan becomes an interpretation, and no session is started`() = runTest {
         driveUnknown()
         planner.answer = ModelPlanning.Proposed(
-            ProposedStep(
-                tool = ToolIds.PLAY_STORE_SEARCH,
-                args = mapOf("query" to "lumora"),
-                origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
-                risk = ActionRiskLevel.CONFIRM,
-                effect = ToolEffect.EXTERNAL,
+            listOf(
+                ProposedStep(
+                    tool = ToolIds.PLAY_STORE_SEARCH,
+                    args = mapOf("query" to "lumora"),
+                    origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                    risk = ActionRiskLevel.CONFIRM,
+                    effect = ToolEffect.EXTERNAL,
+                ),
             ),
         )
 
@@ -612,12 +614,14 @@ class RouteCommandUseCaseTest {
     @Test
     fun `the deterministic paths never get an interpretation card`() = runTest {
         planner.answer = ModelPlanning.Proposed(
-            ProposedStep(
-                tool = ToolIds.PLAY_STORE_SEARCH,
-                args = mapOf("query" to "lumora"),
-                origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
-                risk = ActionRiskLevel.CONFIRM,
-                effect = ToolEffect.EXTERNAL,
+            listOf(
+                ProposedStep(
+                    tool = ToolIds.PLAY_STORE_SEARCH,
+                    args = mapOf("query" to "lumora"),
+                    origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                    risk = ActionRiskLevel.CONFIRM,
+                    effect = ToolEffect.EXTERNAL,
+                ),
             ),
         )
 
@@ -642,12 +646,14 @@ class RouteCommandUseCaseTest {
     fun `a mention that matches no app says so and asks the model nothing more`() = runTest {
         driveUnknown()
         planner.answer = ModelPlanning.Proposed(
-            ProposedStep(
-                tool = ToolIds.LAUNCH_APP,
-                args = mapOf("app" to "телегу"),
-                origins = mapOf("app" to ValueOrigin.SaidBy(PrincipalId.USER)),
-                risk = ActionRiskLevel.SAFE,
-                effect = ToolEffect.EXTERNAL,
+            listOf(
+                ProposedStep(
+                    tool = ToolIds.LAUNCH_APP,
+                    args = mapOf("app" to "телегу"),
+                    origins = mapOf("app" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                    risk = ActionRiskLevel.SAFE,
+                    effect = ToolEffect.EXTERNAL,
+                ),
             ),
         )
         binder.binding = { _, _ -> Binding.NotFound("телегу") }
@@ -667,12 +673,14 @@ class RouteCommandUseCaseTest {
     fun `an unreadable app list is said as a failure, not hidden behind FastPath's answer`() = runTest {
         driveUnknown()
         planner.answer = ModelPlanning.Proposed(
-            ProposedStep(
-                tool = ToolIds.LAUNCH_APP,
-                args = mapOf("app" to "lumora"),
-                origins = mapOf("app" to ValueOrigin.SaidBy(PrincipalId.USER)),
-                risk = ActionRiskLevel.SAFE,
-                effect = ToolEffect.EXTERNAL,
+            listOf(
+                ProposedStep(
+                    tool = ToolIds.LAUNCH_APP,
+                    args = mapOf("app" to "lumora"),
+                    origins = mapOf("app" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                    risk = ActionRiskLevel.SAFE,
+                    effect = ToolEffect.EXTERNAL,
+                ),
             ),
         )
         binder.binding = { _, _ -> Binding.Unavailable }
@@ -868,12 +876,14 @@ class RouteCommandUseCaseTest {
     fun `a value the bridge's binding did not understand is said in the words written for it and the model is asked once`() = runTest {
         driveUnknown()
         planner.answer = ModelPlanning.Proposed(
-            ProposedStep(
-                tool = countdownTool.id,
-                args = mapOf("duration" to "полчасика"),
-                origins = mapOf("duration" to ValueOrigin.SaidBy(PrincipalId.USER)),
-                risk = ActionRiskLevel.SAFE,
-                effect = ToolEffect.EXTERNAL,
+            listOf(
+                ProposedStep(
+                    tool = countdownTool.id,
+                    args = mapOf("duration" to "полчасика"),
+                    origins = mapOf("duration" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                    risk = ActionRiskLevel.SAFE,
+                    effect = ToolEffect.EXTERNAL,
+                ),
             ),
         )
         binder.binding = { _, _ -> Binding.NotUnderstood("полчасика") }

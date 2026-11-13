@@ -970,6 +970,8 @@ without `acceptsRef` → `SHAPE`; a `Ref` must name a step `< this index` whose 
 - [ ] **Step 6:** boundary gate → **1746** (`:domain` 552, `:data:ai-cloud` 45, `:data:repository` 452).
   **Step 7: commit** — `feat(agentic-6/A4' ф3b): форма ответа моста — шаги и ссылки на выходы прежних шагов`.
 
+*Measured in execution (Task 8, rulings E8-P1, E8-P2, E8-I1): with `MAX_STEPS_OFFERED = 1` the size check rejects every two-step plan first, so M8a/M8c/M8d could not go red — `BridgeValidator.validate` takes `maxSteps` (default `MAX_STEPS_OFFERED`) and the four multi-step tests pass `2`; the interim refusal, which keeps step 7's `steps.single()` from throwing, got its own test `BridgeValidatorTest > a plan with more steps than offered is rejected` and mutation M8f (`:domain` +1); the plan line of `INSTRUCTION` says `steps = [{…}]` too (§0.11's «every «step»»: under `PROMPT_ONLY` no schema is sent). Pins: `INSTRUCTION` 1 140 → 1 161; `render(15)` 1 650..1 690 → 1 671..1 711. Measured T8 **1757** (`:domain` 556 · `:data:repository` 455 · `:data:ai-cloud` 45), the chain's earlier +10 plus this +1.*
+
 ---
 
 ## Task 9: binding a multi-step reading; the step cap opens to the engine's

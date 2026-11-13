@@ -16,6 +16,13 @@ data class OfferedTool(val descriptor: ToolDescriptor, val description: ToolDesc
  */
 data class BridgeOffering(val tools: List<OfferedTool>) {
     fun find(id: ToolId): OfferedTool? = tools.firstOrNull { it.descriptor.id == id }
+
+    /**
+     * Every output name the offered tools describe, distinct and sorted (A4′ phase 3b, Task 8) — what a
+     * reference's `key` may say. Empty means references do not exist for this offering: the prompt never
+     * mentions them and the schema has no reference form (B-8; empty on Android).
+     */
+    fun outputNames(): List<String> = tools.flatMap { it.description.outputs }.map { it.name }.distinct().sorted()
 }
 
 object BridgeFilter {

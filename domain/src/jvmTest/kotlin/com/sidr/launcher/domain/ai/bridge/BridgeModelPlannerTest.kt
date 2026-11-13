@@ -37,7 +37,7 @@ class BridgeModelPlannerTest {
 
         val result = planner(transport).plan(command)
 
-        assertEquals(ToolId("launch_app"), (result as ModelPlanning.Proposed).step.tool)
+        assertEquals(ToolId("launch_app"), (result as ModelPlanning.Proposed).steps.single().tool)
         assertEquals(1, transport.requests.size)
     }
 
@@ -48,7 +48,7 @@ class BridgeModelPlannerTest {
 
         val result = planner(transport).plan(command)
 
-        assertEquals(ToolId("launch_app"), (result as ModelPlanning.Proposed).step.tool)
+        assertEquals(ToolId("launch_app"), (result as ModelPlanning.Proposed).steps.single().tool)
         assertEquals(2, transport.requests.size)
         assertEquals(
             transport.requests[0].copy(retryNote = BridgeRendering.retryNote(BridgeError.NOT_OFFERED)),

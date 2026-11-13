@@ -8,6 +8,7 @@ import com.sidr.launcher.domain.ai.AiProviderConfig
 import com.sidr.launcher.domain.ai.AiProviderId
 import com.sidr.launcher.domain.ai.bridge.BridgeRequest
 import com.sidr.launcher.domain.ai.bridge.RawAnswer
+import com.sidr.launcher.domain.ai.bridge.RawArg
 import com.sidr.launcher.domain.ai.bridge.RawStep
 import com.sidr.launcher.domain.ai.bridge.ReplyMeta
 import com.sidr.launcher.domain.ai.bridge.TransportReply
@@ -96,17 +97,60 @@ class OpenAiCompatibleBridgeTransportTest {
 
     @Test
     fun `a JSON object answer is read into its fields`() = runTest {
-        val content = """{"kind":"plan","step":{"tool":"launch_app","args":{"app":"lumora","url":null}},"question":null,"destination":null}"""
+        val content = """{"kind":"plan","steps":[{"tool":"launch_app","args":{"app":"lumora","url":null}}],"question":null,"destination":null}"""
 
         val reply = transport(engine(completion(content))).ask(request)
 
         assertEquals(
             TransportReply.Answer(
-                RawAnswer("plan", RawStep("launch_app", mapOf("app" to "lumora", "url" to null)), null, null),
+                RawAnswer("plan", listOf(RawStep("launch_app", mapOf("app" to RawArg.Text("lumora"), "url" to null))), null, null),
                 ReplyMeta("stop", null, null),
             ),
             reply,
         )
+    }
+
+    /**
+     * Fork 3b-B: `steps` in order, and an argument that is a reference object read as a reference — never
+     * as text. The reply is [GOLDEN_STEPS_WITH_REFERENCE], the golden JSON the JVM transport is held by too
+     * (B-13: Task 13 copies it byte for byte into `:consumer:jvm`).
+     */
+    @Test
+    fun `steps and a reference object are read`() = runTest {
+        val reply = transport(engine(completion(GOLDEN_STEPS_WITH_REFERENCE))).ask(request)
+
+        assertEquals(
+            TransportReply.Answer(
+                RawAnswer(
+                    kind = "plan",
+                    steps = listOf(
+                        RawStep("fixture_sieve", mapOf("name" to RawArg.Text("lumora"), "label" to null)),
+                        RawStep("fixture_mortar", mapOf("target" to RawArg.Ref(step = 0, key = "kept"), "label" to null)),
+                    ),
+                    question = null,
+                    destination = null,
+                ),
+                ReplyMeta("stop", null, null),
+            ),
+            reply,
+        )
+    }
+
+    /**
+     * Controller ruling E8-P4: `from_step` is an integer JSON NUMBER. The string `"0"` is not one (a lenient
+     * read would turn the model's text into an index), nor is a fraction, a boolean or `null`. Each makes
+     * the reply unreadable — the shape-error class, answered by the one retry — never a guess.
+     */
+    @Test
+    fun `a reference with a non-integer step is unreadable`() = runTest {
+        val fromSteps = listOf("\"0\"", "0.5", "true", "null")
+
+        val replies = fromSteps.map { fromStep ->
+            val content = """{"kind":"plan","steps":[{"tool":"fixture_mortar","args":{"target":{"from_step":$fromStep,"key":"kept"},"label":null}}],"question":null,"destination":null}"""
+            transport(engine(completion(content))).ask(request)
+        }
+
+        assertEquals(fromSteps.map { TransportReply.Unparseable(ReplyMeta("stop", null, null)) }, replies)
     }
 
     @Test
@@ -348,6 +392,16 @@ class OpenAiCompatibleBridgeTransportTest {
     }
 
     private companion object {
-        const val DECLINE = """{"kind":"decline","step":null,"question":null,"destination":null}"""
+        const val DECLINE = """{"kind":"decline","steps":null,"question":null,"destination":null}"""
+
+        /**
+         * The golden reply of the answer form (A4′ phase 3b, Task 8; B-13, controller ruling E8-P5): two
+         * steps, words, nulls and one reference. `:consumer:jvm`'s transport duplicates this module's parse,
+         * and Task 13 copies THIS text, byte for byte, into its test — one golden, two parsers.
+         */
+        const val GOLDEN_STEPS_WITH_REFERENCE =
+            """{"kind":"plan","steps":[{"tool":"fixture_sieve","args":{"name":"lumora","label":null}},""" +
+                """{"tool":"fixture_mortar","args":{"target":{"from_step":0,"key":"kept"},"label":null}}],""" +
+                """"question":null,"destination":null}"""
     }
 }

@@ -14,7 +14,9 @@ anything else is refused before Gradle starts.
 
 - `corpus.tsv` — one command per line: `<label><TAB><command>`; `#` starts a comment. Labels:
   `act` (should become a plan), `question` (should go to the assistant), `nav` (a Sidr screen),
-  `other`. The B15 corpus is a good start; the labels are the owner's.
+  `multi` (asks for more than one act — the summary's `multi_steps_ge2=x/y` counts how many came back
+  as a plan of two steps or more; phase 3b), `other`. The B15 corpus is a good start; the labels are
+  the owner's. A plan's line reads `kind=plan:<n>`, `n` its number of steps.
 - The base URL defaults to `https://openrouter.ai/api/v1`; override with `SIDR_MEASURE_BASE_URL`.
 - Two switches, environment variables validated by the harness before any request (phase 3b; the
   script's arguments are unchanged): `SIDR_MEASURE_MODES` — a comma list of `PROMPT_ONLY`,

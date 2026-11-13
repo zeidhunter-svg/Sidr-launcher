@@ -2,16 +2,17 @@ package com.sidr.launcher.domain.ai.bridge
 
 /**
  * Everything the bridge says to the model, from ONE offering (spec §7.12.2): the instruction, the
- * offering text, the JSON schema, and the four retry notes. What leaves the device is exactly the
+ * offering text (with the reference sentence when the offering describes an output, B-8), the JSON
+ * schema, and the four retry notes. What leaves the device is exactly the
  * user's command, this text, and the generation limits (`OutboundContextPolicy.AllowedContext`
  * `USER_COMMAND`, `STATIC_SYSTEM_PROMPT`, `AUTHORED_TOOL_SCHEMA`, `GENERATION_LIMITS` — the last two
  * since Task 11). Its production callers are `BridgeModelPlanner` (the request and the retry note) and
- * `BridgeValidator` (the answer kinds).
+ * `BridgeValidator` (the answer kinds and the step cap).
  *
  * **b′ (owner decision D2):** the answer form is strict-compatible — every field required, `null`
  * instead of "optional", nothing extra — whether or not the transport sends the schema. The schema is
  * written here as text because `:domain` carries no serialization library; its shape is fixed and
- * ASCII-only (kinds, destinations, tool ids, argument names), and `BridgeRenderingTest` parses it.
+ * ASCII-only (kinds, destinations, tool ids, argument and output names), and `BridgeRenderingTest` parses it.
  */
 object BridgeRendering {
 
@@ -23,27 +24,51 @@ object BridgeRendering {
     val KINDS: List<String> = listOf(KIND_PLAN, KIND_ASSISTANT, KIND_NAVIGATE, KIND_CLARIFY, KIND_DECLINE)
 
     /**
-     * Static and context-free; the only bridge text scanned against `FORBIDDEN_CONTEXT_TERMS` (with the
-     * retry notes). One step per plan in 3a (plan §0.2 B-1). 1 140 characters — `ToolSchemaWeightTest`.
+     * How many steps a plan may have, as the instruction and the schema say it and the validator holds it
+     * (fork 3b-B). ONE in Task 8: the answer form is `steps`, and `RouteCommandUseCase` step 7 still takes a
+     * single step — Task 9 opens the cap.
+     */
+    const val MAX_STEPS_OFFERED: Int = 1
+
+    /**
+     * Static and context-free; scanned against `FORBIDDEN_CONTEXT_TERMS` with [REFERENCE_SENTENCE] and the
+     * retry notes. The answer form is `steps` since phase 3b Task 8 (fork 3b-B), from one to
+     * [MAX_STEPS_OFFERED], each step `{"tool", "args"}` in an array (`steps = [{…}]`, controller ruling
+     * E8-I1: under `PROMPT_ONLY` the model sees no schema); it never mentions references (B-8 — those are
+     * the offering's). 1 161 characters — `ToolSchemaWeightTest`.
      */
     const val INSTRUCTION: String =
         "You read one request typed into Sidr, an Android home screen, and say what it asks for. You see " +
             "only the request and the tools listed below; you know nothing else about this phone. Reply with " +
             "ONLY one JSON object, without prose or code fences, of exactly this form:\n" +
-            "{\"kind\": K, \"step\": S, \"question\": Q, \"destination\": D}\n" +
-            "\"plan\": the request is one action that one listed tool performs. step = {\"tool\": " +
-            "\"<tool id>\", \"args\": {...}}; question and destination are null.\n" +
-            "\"assistant\": the request is a question, or a wish to talk. question = the question; step and " +
+            "{\"kind\": K, \"steps\": S, \"question\": Q, \"destination\": D}\n" +
+            "\"plan\": the request is one action that one listed tool performs. steps = [{\"tool\": " +
+            "\"<tool id>\", \"args\": {...}}]; question and destination are null.\n" +
+            "\"assistant\": the request is a question, or a wish to talk. question = the question; steps and " +
             "destination are null.\n" +
             "\"navigate\": the request is to open a screen of Sidr itself. destination = " +
-            "\"launcher_settings\" (Sidr's own settings) or \"app_grid\" (all apps); step and question are " +
+            "\"launcher_settings\" (Sidr's own settings) or \"app_grid\" (all apps); steps and question are " +
             "null.\n" +
-            "\"clarify\": you must ask the user one short question first. question = that question; step and " +
+            "\"clarify\": you must ask the user one short question first. question = that question; steps and " +
             "destination are null.\n" +
-            "\"decline\": nothing listed fits. step, question and destination are null.\n" +
-            "A plan has exactly one step. An argument marked \"app\" must repeat the user's own words for the " +
-            "app exactly as they typed them, never a package name. Never invent a tool, an argument or a " +
-            "destination."
+            "\"decline\": nothing listed fits. steps, question and destination are null.\n" +
+            "A plan has from one to $MAX_STEPS_OFFERED steps, in order. An argument marked \"app\" must repeat the " +
+            "user's own words for the app exactly as they typed them, never a package name. Never invent a tool, " +
+            "an argument or a destination."
+
+    /**
+     * What a reference looks like (phase 3b, B-8, B-18). It lives in the OFFERING text, right after the
+     * argument names, and only when the offering describes an output ([BridgeOffering.outputNames]) — so the
+     * Android prompt, which describes none, never mentions references. Static, and scanned with the
+     * instruction (`BridgeRenderingTest`).
+     */
+    const val REFERENCE_SENTENCE: String =
+        "An argument marked \"ref\" may hold, instead of words, an output of an earlier step: " +
+            "{\"from_step\": <that step's position, counting from 0>, \"key\": \"<an output that step's tool lists>\"}."
+
+    /** The reference object's two fields, as [REFERENCE_SENTENCE] and the schema name them and the transport reads them. */
+    const val REF_FROM_STEP = "from_step"
+    const val REF_KEY = "key"
 
     /** The whole system text: the instruction, then — when anything is offered — the offering. */
     fun systemText(offering: BridgeOffering): String {
@@ -51,15 +76,24 @@ object BridgeRendering {
         return if (listed.isEmpty()) INSTRUCTION else "$INSTRUCTION\n\n$listed"
     }
 
-    /** The offering in our words, grouped by namespace; the ONLY offering-derived part of the prompt. */
+    /**
+     * The offering in our words, grouped by namespace; the ONLY offering-derived part of the prompt. When an
+     * offered tool describes an output (B-8), and only then, the text also carries [REFERENCE_SENTENCE], each
+     * such tool's `outputs`, and the `ref` marker on each argument that accepts a reference.
+     */
     fun offeringText(offering: BridgeOffering): String {
         val tools = ordered(offering)
         if (tools.isEmpty()) return ""
         val names = argNamesOf(offering)
+        val references = offering.outputNames().isNotEmpty()
         return buildString {
             append("Every argument name: ")
             append(if (names.isEmpty()) "(none)" else names.joinToString(", "))
             append(". Give \"args\" every one of these names: the value for each argument the chosen tool takes, null for the rest.")
+            if (references) {
+                append(' ')
+                append(REFERENCE_SENTENCE)
+            }
             ToolNamespace.entries.forEach { namespace ->
                 val inNamespace = tools.filter { it.description.namespace == namespace }
                 if (inNamespace.isEmpty()) return@forEach
@@ -74,27 +108,61 @@ object BridgeRendering {
                         append(" args: ")
                         append(
                             tool.description.args.joinToString(", ") { arg ->
-                                "${arg.name} (${markersOf(arg)}) — ${arg.description}"
+                                "${arg.name} (${markersOf(arg, references)}) — ${arg.description}"
                             },
                         )
+                    }
+                    if (tool.description.outputs.isNotEmpty()) {
+                        append(" outputs: ")
+                        append(tool.description.outputs.joinToString(", ") { output -> "${output.name} — ${output.description}" })
                     }
                 }
             }
         }
     }
 
-    /** The JSON schema of the answer, from the same offering and in the same order as [offeringText]. */
+    /**
+     * The JSON schema of the answer, from the same offering and in the same order as [offeringText].
+     * `steps` is an array of one to [MAX_STEPS_OFFERED] steps. An argument takes the reference form — words,
+     * `null`, or `{"from_step": integer, "key": one of the offering's output names}` — when some offered
+     * tool's argument of that name accepts a reference AND the offering describes an output (controller
+     * ruling E8-P3); otherwise it is `string | null`, so an offering without outputs renders its `args`
+     * exactly as in 3a. Which tool's argument accepts a reference is the validator's to judge, per tool.
+     */
     fun schemaJson(offering: BridgeOffering): String {
         val names = argNamesOf(offering)
         val nullableString = JsonText.obj("type" to JsonText.arr(listOf(JsonText.str("string"), JsonText.str("null"))))
+        val outputNames = offering.outputNames()
+        val referable = offering.tools.flatMap { it.description.args }.filter { it.acceptsRef }.map { it.name }.toSet()
+        val wordsOrReference = JsonText.obj(
+            "anyOf" to JsonText.arr(
+                listOf(
+                    JsonText.obj("type" to JsonText.str("string")),
+                    JsonText.obj("type" to JsonText.str("null")),
+                    JsonText.obj(
+                        "type" to JsonText.str("object"),
+                        "additionalProperties" to "false",
+                        "required" to JsonText.arr(listOf(JsonText.str(REF_FROM_STEP), JsonText.str(REF_KEY))),
+                        "properties" to JsonText.obj(
+                            REF_FROM_STEP to JsonText.obj("type" to JsonText.str("integer")),
+                            REF_KEY to JsonText.obj("type" to JsonText.str("string"), "enum" to JsonText.arr(outputNames.map(JsonText::str))),
+                        ),
+                    ),
+                ),
+            ),
+        )
         val args = JsonText.obj(
             "type" to JsonText.str("object"),
             "additionalProperties" to "false",
             "required" to JsonText.arr(names.map(JsonText::str)),
-            "properties" to JsonText.obj(*names.map { it to nullableString }.toTypedArray()),
+            "properties" to JsonText.obj(
+                *names.map { name ->
+                    name to if (outputNames.isNotEmpty() && name in referable) wordsOrReference else nullableString
+                }.toTypedArray(),
+            ),
         )
         val step = JsonText.obj(
-            "type" to JsonText.arr(listOf(JsonText.str("object"), JsonText.str("null"))),
+            "type" to JsonText.str("object"),
             "additionalProperties" to "false",
             "required" to JsonText.arr(listOf(JsonText.str("tool"), JsonText.str("args"))),
             "properties" to JsonText.obj(
@@ -108,10 +176,15 @@ object BridgeRendering {
         return JsonText.obj(
             "type" to JsonText.str("object"),
             "additionalProperties" to "false",
-            "required" to JsonText.arr(listOf("kind", "step", "question", "destination").map(JsonText::str)),
+            "required" to JsonText.arr(listOf("kind", "steps", "question", "destination").map(JsonText::str)),
             "properties" to JsonText.obj(
                 "kind" to JsonText.obj("type" to JsonText.str("string"), "enum" to JsonText.arr(KINDS.map(JsonText::str))),
-                "step" to step,
+                "steps" to JsonText.obj(
+                    "type" to JsonText.arr(listOf(JsonText.str("array"), JsonText.str("null"))),
+                    "minItems" to "1",
+                    "maxItems" to MAX_STEPS_OFFERED.toString(),
+                    "items" to step,
+                ),
                 "question" to nullableString,
                 "destination" to JsonText.obj(
                     "type" to JsonText.arr(listOf(JsonText.str("string"), JsonText.str("null"))),
@@ -145,8 +218,13 @@ object BridgeRendering {
         ToolNamespace.CONTENT -> "Content (the web and the app store):"
     }
 
-    private fun markersOf(arg: ModelArg): String =
-        listOfNotNull(if (arg.mention) "app" else null, if (arg.required) "required" else "optional").joinToString(", ")
+    /** `ref` only where references exist for this offering (B-8): with no output, an `acceptsRef` is silent. */
+    private fun markersOf(arg: ModelArg, references: Boolean): String =
+        listOfNotNull(
+            if (arg.mention) "app" else null,
+            if (arg.required) "required" else "optional",
+            if (references && arg.acceptsRef) "ref" else null,
+        ).joinToString(", ")
 }
 
 /** A minimal JSON writer for the schema's fixed shape — values passed in are already JSON text. */

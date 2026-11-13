@@ -22,6 +22,13 @@ import org.junit.Test
  * pinned below was computed before the code existed (plan §0.10) from the exact strings the plan
  * specifies; a mismatch is a finding about the renderer, not a band to widen.
  *
+ * Re-measured in phase 3b Task 8, when the answer form became `steps` (the form line, the plan line's
+ * `steps = [{…}]` — controller ruling E8-I1 —, the four «… are null» phrases, and «A plan has from one
+ * to 1 steps, in order.»): the instruction 1 140 → 1 161 characters (+21, as predicted from the edits
+ * before the run); fifteen tools 1 668 → 1 689, the band moved by the same 21 and kept its width (40)
+ * and offsets; the marginal cost is unchanged (25.10 — the offering text adds nothing when no tool
+ * describes an output, B-8).
+ *
  * `B3`'s conclusion stands on the real renderer: two hundred synthetic tools render to about 1 600
  * tokens — the prompt size was never the barrier.
  */
@@ -36,12 +43,12 @@ class ToolSchemaWeightTest {
 
         assertEquals(
             "BridgeRendering.INSTRUCTION changed length; re-measure and update the ADR rather than this pin",
-            1_140,
+            1_161,
             render(0).length,
         )
         val marginal = (render(120).length - render(2).length) / 118.0
         assertTrue("marginal per-tool cost drifted to $marginal (measured ~25.1)", marginal in 24.0..26.5)
-        assertTrue("15 tools render to ${render(15).length} (measured 1 668)", render(15).length in 1_650..1_690)
+        assertTrue("15 tools render to ${render(15).length} (measured 1 689)", render(15).length in 1_671..1_711)
     }
 
     private fun render(n: Int): String {

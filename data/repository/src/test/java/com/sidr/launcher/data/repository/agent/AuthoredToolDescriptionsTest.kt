@@ -1,6 +1,7 @@
 package com.sidr.launcher.data.repository.agent
 
 import com.sidr.launcher.data.repository.action.DefaultActionCatalog
+import com.sidr.launcher.domain.ai.bridge.ModelOutput
 import com.sidr.launcher.domain.tool.ToolId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -74,5 +75,25 @@ class AuthoredToolDescriptionsTest {
         }
 
         assertEquals(emptyList<Pair<String, String>>(), uncovered)
+    }
+
+    /**
+     * B-8 (A4′ phase 3b, Task 8): Android describes no tool output to the model, so the Android prompt never
+     * mentions references — the reference sentence, the `ref` marker and the schema's reference form all
+     * need an output in the offering (`BridgeRenderingTest`). Nor does any argument accept a reference: with
+     * nothing to name, one would be inert today and a silent widening the day an output is added. The JVM
+     * sandbox's descriptions declare theirs (Task 13).
+     */
+    @Test
+    fun `no authored tool describes an output on Android yet`() {
+        val rows = descriptions.rows()
+
+        assertEquals(emptyMap<ToolId, List<ModelOutput>>(), rows.mapValues { it.value.outputs }.filterValues { it.isNotEmpty() })
+        assertEquals(
+            emptyList<String>(),
+            rows.flatMap { (id, description) -> description.args.filter { it.acceptsRef }.map { "${id.value}.${it.name}" } },
+        )
+        // The control: the rows were read — all nineteen — so "none" cannot mean "nothing looked at".
+        assertEquals(19, rows.size)
     }
 }

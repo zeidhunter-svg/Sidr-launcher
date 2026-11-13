@@ -2924,12 +2924,14 @@ class LauncherViewModelTest {
     fun `a model plan through the real route waits on the card, and Run starts an engine session`() = runTest(testDispatcher) {
         val vm = buildBridgeViewModel(
             answer = ModelPlanning.Proposed(
-                ProposedStep(
-                    tool = ToolIds.PLAY_STORE_SEARCH,
-                    args = mapOf("query" to "lumora"),
-                    origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
-                    risk = ActionRiskLevel.CONFIRM,
-                    effect = ToolEffect.EXTERNAL,
+                listOf(
+                    ProposedStep(
+                        tool = ToolIds.PLAY_STORE_SEARCH,
+                        args = mapOf("query" to "lumora"),
+                        origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                        risk = ActionRiskLevel.CONFIRM,
+                        effect = ToolEffect.EXTERNAL,
+                    ),
                 ),
             ),
         )

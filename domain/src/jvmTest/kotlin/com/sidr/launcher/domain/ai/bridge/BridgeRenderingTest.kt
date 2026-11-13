@@ -17,20 +17,21 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 /**
  * The text that leaves the device for the model (spec §7.12.2–§7.12.3). Two halves, held apart:
- *  - the STATIC text — the instruction and the four retry notes — is the only text scanned against
- *    the denylist: the ids of our own tools legitimately contain `usage` and `location`, and narrowing
- *    the denylist for them is forbidden (spec §7.12.3 (3));
+ *  - the STATIC text — the instruction, the reference sentence (phase 3b, B-8) and the four retry
+ *    notes — is the only text scanned against the denylist: the ids of our own tools legitimately
+ *    contain `usage` and `location`, and narrowing the denylist for them is forbidden (spec §7.12.3 (3));
  *  - the OFFERING-derived text and the JSON schema must name one set — read off the schema's TEXT, so a
  *    tool that reached only the schema is seen (criterion 18).
  */
 class BridgeRenderingTest {
 
     private val staticTexts: List<String> =
-        listOf(BridgeRendering.INSTRUCTION) + BridgeError.entries.map(BridgeRendering::retryNote)
+        listOf(BridgeRendering.INSTRUCTION, BridgeRendering.REFERENCE_SENTENCE) + BridgeError.entries.map(BridgeRendering::retryNote)
 
     private fun descriptor(id: String, level: ToolLevel) = ToolDescriptor(
         id = ToolId(id),
@@ -92,7 +93,7 @@ class BridgeRenderingTest {
         val offering = fixtureOffering()
         val schema = Json.parseToJsonElement(BridgeRendering.schemaJson(offering)).jsonObject
         val stepProperties = schema.getValue("properties").jsonObject
-            .getValue("step").jsonObject.getValue("properties").jsonObject
+            .getValue("steps").jsonObject.getValue("items").jsonObject.getValue("properties").jsonObject
         val schemaTools = stepProperties.getValue("tool").jsonObject.getValue("enum").jsonArray
             .map { it.jsonPrimitive.content }
         val schemaArgs = stepProperties.getValue("args").jsonObject.getValue("properties").jsonObject.keys.toList()
@@ -150,5 +151,81 @@ class BridgeRenderingTest {
                 "- fixture_parcel: Find a parcel."
 
         assertEquals(expected, BridgeRendering.offeringText(fixtureOffering()))
+    }
+
+    /**
+     * B-8 and controller ruling E8-P3: references reach the model only when the offering describes an
+     * output — the outputs on each tool's line, the `ref` marker, the reference sentence, and the reference
+     * form in the schema all arrive together. An argument that accepts a reference with NO output in the
+     * offering changes nothing, byte for byte: a reference could name nothing. The key's enum is every
+     * output name in the offering, distinct and sorted.
+     */
+    @Test
+    fun `outputs and the reference sentence appear only when an offered tool describes an output`() {
+        fun offering(withOutputs: Boolean) = BridgeOffering(
+            listOf(
+                OfferedTool(
+                    descriptor("fixture_quill", ToolLevels.IN_APP),
+                    ToolDescription(
+                        ToolNamespace.LAUNCHER,
+                        "Open a quill.",
+                        listOf(ModelArg("app", "the app, in the user's own words", required = true, mention = true)),
+                    ),
+                ),
+                OfferedTool(
+                    descriptor("fixture_ledger", ToolLevels.SYSTEM_INTENT),
+                    ToolDescription(
+                        ToolNamespace.DEVICE,
+                        "Write the ledger.",
+                        listOf(ModelArg("duration", "how long", required = true, mention = false, acceptsRef = true)),
+                        outputs = if (withOutputs) listOf(ModelOutput("entry", "the line written")) else emptyList(),
+                    ),
+                ),
+                OfferedTool(
+                    descriptor("fixture_parcel", ToolLevels.IN_APP),
+                    ToolDescription(
+                        ToolNamespace.CONTENT,
+                        "Find a parcel.",
+                        emptyList(),
+                        outputs = if (withOutputs) listOf(ModelOutput("bundle", "the parcel found")) else emptyList(),
+                    ),
+                ),
+            ),
+        )
+
+        // Without an output: exactly the 3a text and schema of the same tools, though `duration` accepts a reference.
+        assertEquals(BridgeRendering.offeringText(fixtureOffering()), BridgeRendering.offeringText(offering(withOutputs = false)))
+        assertEquals(BridgeRendering.schemaJson(fixtureOffering()), BridgeRendering.schemaJson(offering(withOutputs = false)))
+        assertFalse(BridgeRendering.systemText(offering(withOutputs = false)).contains("from_step"))
+        assertFalse(BridgeRendering.schemaJson(offering(withOutputs = false)).contains("from_step"))
+
+        val expected =
+            "Every argument name: app, duration. Give \"args\" every one of these names: the value for " +
+                "each argument the chosen tool takes, null for the rest. An argument marked \"ref\" may hold, " +
+                "instead of words, an output of an earlier step: {\"from_step\": <that step's position, " +
+                "counting from 0>, \"key\": \"<an output that step's tool lists>\"}.\n" +
+                "\n" +
+                "Launcher (Sidr itself):\n" +
+                "- fixture_quill: Open a quill. args: app (app, required) — the app, in the user's own words\n" +
+                "\n" +
+                "Device (this phone's own functions):\n" +
+                "- fixture_ledger: Write the ledger. args: duration (required, ref) — how long outputs: entry — the line written\n" +
+                "\n" +
+                "Content (the web and the app store):\n" +
+                "- fixture_parcel: Find a parcel. outputs: bundle — the parcel found"
+        assertEquals(expected, BridgeRendering.offeringText(offering(withOutputs = true)))
+
+        val args = Json.parseToJsonElement(BridgeRendering.schemaJson(offering(withOutputs = true))).jsonObject
+            .getValue("properties").jsonObject.getValue("steps").jsonObject.getValue("items").jsonObject
+            .getValue("properties").jsonObject.getValue("args").jsonObject.getValue("properties")
+        assertEquals(
+            Json.parseToJsonElement(
+                """{"app":{"type":["string","null"]},""" +
+                    """"duration":{"anyOf":[{"type":"string"},{"type":"null"},{"type":"object","additionalProperties":false,""" +
+                    """"required":["from_step","key"],"properties":{"from_step":{"type":"integer"},""" +
+                    """"key":{"type":"string","enum":["bundle","entry"]}}}]}}""",
+            ),
+            args,
+        )
     }
 }

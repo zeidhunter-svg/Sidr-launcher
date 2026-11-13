@@ -33,9 +33,11 @@ import java.io.File
  * Per (model × mode × corpus line) it records the reading, the attempts, the wall time and what the
  * provider reported (finish reason, completion and reasoning tokens); per (model × mode) it summarises
  * the share parsed on the first try, the share usable after at most one retry, retries, timeouts, the
- * median and p90 time, truncations, whether hidden reasoning was reported, and how many `question`
- * lines went to the assistant against how many became a web search. Correctness is the owner's to
- * judge from the per-line report — nothing here decides it.
+ * median and p90 time, truncations, whether hidden reasoning was reported, how many `question`
+ * lines went to the assistant against how many became a web search, and (phase 3b, Task 8) how many
+ * `multi` lines came back as a plan of two steps or more. A plan's line reads `kind=plan:<n>`, its
+ * steps' tools and arguments joined by `+`. Correctness is the owner's to judge from the per-line
+ * report — nothing here decides it.
  *
  * Two switches, read from the environment and validated here, before any request (phase 3b, B-14 — the
  * script's argument parsing is untouched): `SIDR_MEASURE_MODES`, a comma list of [BridgeTransportMode]
@@ -133,7 +135,7 @@ class BridgeTransportMeasurement {
     }
 
     private fun kindOf(result: ModelPlanning): String = when (result) {
-        is ModelPlanning.Proposed -> "plan"
+        is ModelPlanning.Proposed -> "plan:${result.steps.size}"
         is ModelPlanning.ToAssistant -> "assistant"
         is ModelPlanning.Navigate -> "navigate:${result.destination.wire}"
         is ModelPlanning.Clarify -> "clarify"
@@ -142,10 +144,12 @@ class BridgeTransportMeasurement {
     }
 
     private fun lineOf(row: Row): String {
-        val step = (row.result as? ModelPlanning.Proposed)?.step
+        val steps = (row.result as? ModelPlanning.Proposed)?.steps
         val meta = row.replies.lastOrNull()?.let { (it as? TransportReply.Answer)?.meta ?: (it as? TransportReply.Unparseable)?.meta }
+        val tools = steps?.joinToString("+") { it.tool.value } ?: "-"
+        val args = steps?.joinToString("+") { step -> if (step.refs.isEmpty()) "${step.args}" else "${step.args}${step.refs}" } ?: "-"
         return "BRIDGE-MEASURE :: line model=${row.model} mode=${row.mode} reasoning=${row.reasoning.word} label=${row.label} kind=${kindOf(row.result)} " +
-            "tool=${step?.tool?.value ?: "-"} args=${step?.args ?: "-"} attempts=${row.replies.size} ms=${row.ms} " +
+            "tool=$tools args=$args attempts=${row.replies.size} ms=${row.ms} " +
             "finish=${meta?.finishReason ?: "-"} completion_tokens=${meta?.completionTokens ?: "-"} " +
             "reasoning_tokens=${meta?.reasoningTokens ?: "-"} command=${row.command}"
     }
@@ -167,11 +171,14 @@ class BridgeTransportMeasurement {
         val reasoningReported = metas.count { (it.reasoningTokens ?: 0) > 0 }
         val questions = rows.filter { it.label == "question" }
         val toAssistant = questions.count { it.result is ModelPlanning.ToAssistant }
-        val toSearch = questions.count { (it.result as? ModelPlanning.Proposed)?.step?.tool?.value == "web_search" }
+        val toSearch = questions.count { row -> (row.result as? ModelPlanning.Proposed)?.steps.orEmpty().any { it.tool.value == "web_search" } }
+        // Lines labelled `multi` ask for more than one act; how many came back as a plan of two steps or more.
+        val multi = rows.filter { it.label == "multi" }
+        val multiSteps = multi.count { ((it.result as? ModelPlanning.Proposed)?.steps?.size ?: 0) >= 2 }
         return "BRIDGE-MEASURE :: summary model=$model mode=$mode reasoning=${reasoning.word} n=$n parsed_first=$parsedFirst/$n usable=$usable/$n " +
             "retried=$retried timed_out=$timedOut median_ms=${median ?: "-"} p90_ms=${p90 ?: "-"} truncated=$truncated " +
             "reasoning_reported=$reasoningReported questions_to_assistant=$toAssistant/${questions.size} " +
-            "questions_to_web_search=$toSearch/${questions.size}"
+            "questions_to_web_search=$toSearch/${questions.size} multi_steps_ge2=$multiSteps/${multi.size}"
     }
 
     /** `SIDR_MEASURE_REASONING`'s two values (fork 3b-H). */

@@ -69,9 +69,57 @@ internal object BridgeFixtures {
 
     val offering: BridgeOffering get() = BridgeFilter.offeringOf(registry, descriptions)
 
+    /** A one-step plan whose arguments are words (or null) — the 3a form, read as the transport reads it. */
     fun plan(tool: String?, vararg args: Pair<String, String?>) =
-        RawAnswer(kind = BridgeRendering.KIND_PLAN, step = RawStep(tool, mapOf(*args)), question = null, destination = null)
+        steps(step(tool, *args.map { (name, value) -> name to value?.let(RawArg::Text) }.toTypedArray()))
+
+    /** One step as the transport reads it: each argument words, a reference, or null. */
+    fun step(tool: String?, vararg args: Pair<String, RawArg?>) = RawStep(tool, mapOf(*args))
+
+    /** A plan of these steps, in order. */
+    fun steps(vararg steps: RawStep) =
+        RawAnswer(kind = BridgeRendering.KIND_PLAN, steps = steps.toList(), question = null, destination = null)
 
     fun answer(kind: String?, question: String? = null, destination: String? = null) =
-        RawAnswer(kind = kind, step = null, question = question, destination = destination)
+        RawAnswer(kind = kind, steps = null, question = question, destination = destination)
+
+    /**
+     * A second, separate offering for references (A4′ phase 3b, Task 8; B-18): two tools that each describe
+     * an output, so a step can name an earlier one. Kept apart from [offering] so the 3a tests above read
+     * the same offering they always did. `label` is taken by both tools and accepts a reference in
+     * `fixture_sieve` ONLY — the validator must judge `acceptsRef` on the chosen tool, not on the name.
+     * Every word is invented (R14-43); the output names share no word with any argument name.
+     */
+    val chainRegistry = FakeToolRegistry(
+        listOf(
+            descriptor("fixture_sieve", ToolLevels.IN_APP, args = listOf("name", "label")),
+            descriptor("fixture_mortar", ToolLevels.IN_APP, args = listOf("target", "label")),
+        ),
+    )
+
+    val chainDescriptions = ToolDescriptions { id ->
+        when (id.value) {
+            "fixture_sieve" -> ToolDescription(
+                ToolNamespace.CONTENT,
+                "Sieve a name.",
+                listOf(
+                    ModelArg("name", "the name, in the user's own words", required = true, mention = true),
+                    ModelArg("label", "a label", required = false, mention = false, acceptsRef = true),
+                ),
+                outputs = listOf(ModelOutput("kept", "what the sieve kept")),
+            )
+            "fixture_mortar" -> ToolDescription(
+                ToolNamespace.CONTENT,
+                "Grind a target.",
+                listOf(
+                    ModelArg("target", "what to grind", required = true, mention = false, acceptsRef = true),
+                    ModelArg("label", "a label", required = false, mention = false),
+                ),
+                outputs = listOf(ModelOutput("ground", "what the mortar ground")),
+            )
+            else -> null
+        }
+    }
+
+    val chainOffering: BridgeOffering get() = BridgeFilter.offeringOf(chainRegistry, chainDescriptions)
 }

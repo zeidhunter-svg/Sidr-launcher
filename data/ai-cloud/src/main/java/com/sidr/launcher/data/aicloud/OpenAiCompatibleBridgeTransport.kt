@@ -2,9 +2,11 @@ package com.sidr.launcher.data.aicloud
 
 import com.sidr.launcher.domain.ai.AiError
 import com.sidr.launcher.domain.ai.AiProviderConfigRepository
+import com.sidr.launcher.domain.ai.bridge.BridgeRendering
 import com.sidr.launcher.domain.ai.bridge.BridgeRequest
 import com.sidr.launcher.domain.ai.bridge.BridgeTransport
 import com.sidr.launcher.domain.ai.bridge.RawAnswer
+import com.sidr.launcher.domain.ai.bridge.RawArg
 import com.sidr.launcher.domain.ai.bridge.RawStep
 import com.sidr.launcher.domain.ai.bridge.ReplyMeta
 import com.sidr.launcher.domain.ai.bridge.TransportReply
@@ -80,6 +82,11 @@ fun bridgeHttpClient(socketTimeoutMs: Long): HttpClient = HttpClient(Android) {
  * device. Its one subtraction: the optional reasoning cap goes out as `reasoning.max_tokens` only when
  * the base URL's host is OpenRouter ([acceptsReasoningCap], B-16), and is dropped unsent for any other.
  * Errors use the assistant engine's vocabulary ([AiError]) so the two surfaces stop disagreeing.
+ *
+ * The reply is read STRICTLY and judged elsewhere (`BridgeValidator`): one JSON object whose `steps` is an
+ * array of step objects (phase 3b, fork 3b-B), each argument words, `null`, or a reference object — and
+ * nothing else (controller ruling E8-P4). `:consumer:jvm` duplicates this parse (B-13); one golden reply,
+ * `OpenAiCompatibleBridgeTransportTest`'s `GOLDEN_STEPS_WITH_REFERENCE`, holds both.
  */
 class OpenAiCompatibleBridgeTransport(
     private val httpClient: HttpClient,
@@ -203,30 +210,54 @@ class OpenAiCompatibleBridgeTransport(
         return parseAnswer(text)?.let { TransportReply.Answer(it, meta) } ?: TransportReply.Unparseable(meta)
     }
 
-    /** Strict: after trimming and at most one code fence, the text must be ONE JSON object. */
+    /**
+     * Strict: after trimming and at most one code fence, the text must be ONE JSON object. `steps` absent
+     * or `null` is no steps; otherwise it must be an array of objects — anything else is unreadable.
+     */
     private fun parseAnswer(text: String): RawAnswer? = runCatching {
         val obj = strict.parseToJsonElement(unfenced(text.trim())).jsonObject
-        val step = when (val raw = obj["step"]) {
+        val steps = when (val raw = obj["steps"]) {
             null, JsonNull -> null
-            is JsonObject -> RawStep(
-                tool = (raw["tool"] as? JsonPrimitive)?.contentOrNull,
-                args = (raw["args"] as? JsonObject)?.mapValues { (_, value) -> argValue(value) } ?: emptyMap(),
-            )
+            is JsonArray -> raw.map { element -> stepOf(element as? JsonObject ?: return null) }
             else -> return null
         }
         RawAnswer(
             kind = (obj["kind"] as? JsonPrimitive)?.contentOrNull,
-            step = step,
+            steps = steps,
             question = (obj["question"] as? JsonPrimitive)?.contentOrNull,
             destination = (obj["destination"] as? JsonPrimitive)?.contentOrNull,
         )
     }.getOrNull()
 
-    /** A string, a number or a boolean is read as text; `null` is absent; anything else is unreadable. */
-    private fun argValue(value: JsonElement): String? = when (value) {
+    private fun stepOf(raw: JsonObject): RawStep = RawStep(
+        tool = (raw["tool"] as? JsonPrimitive)?.contentOrNull,
+        args = (raw["args"] as? JsonObject)?.mapValues { (_, value) -> argValue(value) } ?: emptyMap(),
+    )
+
+    /**
+     * A string, a number or a boolean is read as text; `null` is absent; an object is a reference or
+     * unreadable ([referenceOf]); anything else (an array) is unreadable.
+     */
+    private fun argValue(value: JsonElement): RawArg? = when (value) {
         JsonNull -> null
-        is JsonPrimitive -> value.content
-        else -> throw IllegalArgumentException("an argument must be a value or null")
+        is JsonPrimitive -> RawArg.Text(value.content)
+        is JsonObject -> referenceOf(value)
+        else -> throw IllegalArgumentException("an argument must be a value, a reference or null")
+    }
+
+    /**
+     * Controller ruling E8-P4: a reference is EXACTLY an object of two fields — `from_step`, an integer JSON
+     * number (never the string `"0"`, never a fraction), and `key`, a JSON string. Anything else is
+     * unreadable, the same class as any other non-value argument: read, never guessed. Whether the step and
+     * the key may stand is `BridgeValidator`'s judgement, not this one's.
+     */
+    private fun referenceOf(obj: JsonObject): RawArg.Ref {
+        require(obj.keys == setOf(BridgeRendering.REF_FROM_STEP, BridgeRendering.REF_KEY)) { "a reference has exactly two fields" }
+        val step = (obj[BridgeRendering.REF_FROM_STEP] as? JsonPrimitive)?.takeUnless { it.isString }?.content?.toIntOrNull()
+        val key = (obj[BridgeRendering.REF_KEY] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        requireNotNull(step) { "a reference's step is an integer number" }
+        requireNotNull(key) { "a reference's key is a string" }
+        return RawArg.Ref(step, key)
     }
 
     private fun unfenced(text: String): String {

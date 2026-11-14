@@ -57,7 +57,7 @@ class AuthoredToolDescriptions internal constructor(
             // Device — this phone's own functions. "Settings" here are the phone's.
             Tier0ToolIds.UNINSTALL_APP to device("Remove an app from this phone. The user is always asked first.", mention()),
             Tier0ToolIds.OPEN_APP_INFO to device("Show the system information screen of an installed app.", mention()),
-            Tier0ToolIds.SET_TIMER to device("Start a countdown timer.", text("duration", "how long, e.g. 10 minutes")),
+            Tier0ToolIds.SET_TIMER to device("Start a countdown timer.", text("duration", "a number and a unit, e.g. 30 minutes")),
             Tier0ToolIds.SET_ALARM to device("Set an alarm.", text("time", "the clock time, e.g. 7:30")),
             Tier0ToolIds.SHOW_ALARMS to device("Show the list of alarms."),
             Tier0ToolIds.OPEN_CAMERA to device("Open the camera."),

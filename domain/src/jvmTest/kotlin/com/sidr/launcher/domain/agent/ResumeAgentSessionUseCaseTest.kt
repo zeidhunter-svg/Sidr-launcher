@@ -155,6 +155,46 @@ class ResumeAgentSessionUseCaseTest {
         assertEquals(listOf(mapOf("query" to "вельтрикс")), tools.invocations.map { it.args })
     }
 
+    /**
+     * A4′ phase 3b, Task 12 — T4 M2 (phase 2's final review, deferred to the first multi-step plan). A
+     * handed-off step is an act whose outcome left the launcher: it may have happened. So a paused plan
+     * holding one — with nothing `Effected`, and no call in flight — is NOT planned afresh: that would hand
+     * the same act off a second time. It continues from its cursor, on the deterministic path. Without
+     * `HandedOff` in `replansOnResume` the planner would be asked and a new session started.
+     */
+    @Test
+    fun `a paused session holding a handed-off step is not planned afresh`() = runTest {
+        val launch = { index: Int, name: String ->
+            PlanStep(index, ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal(name))), ActionRiskLevel.SAFE, StepPrecondition.None, StepRationale.GOAL_DIRECT)
+        }
+        val paused = AgentSession(
+            id = AgentSessionId("s-handed-off"),
+            goal = goal,
+            plan = ExecutionPlan(listOf(launch(0, "лумора"), launch(1, "вельтрикс"))),
+            cursor = 1,
+            state = ExecutionState.Paused,
+            observations = mapOf(0 to ToolResult.HandedOff()),
+            consents = emptyMap(),
+            trace = ExecutionTrace(
+                listOf(
+                    TraceEvent.PlanCreated(2), TraceEvent.StepStarted(0), TraceEvent.ToolInvoked(0, ToolIds.LAUNCH_APP),
+                    TraceEvent.ToolObserved(0, ToolResult.HandedOff()), TraceEvent.SessionPaused,
+                ),
+            ),
+        )
+        store.save(paused)
+        val planner = CountingPlanner()
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
+
+        val result = resume(tools, planner).resume(paused)
+
+        // Read without a cast that could throw: a regression must fail HERE, as an assertion.
+        val after = ((result as OperationResult.Success).value as? Resumption.Ran)?.session
+        assertEquals("the goal is not planned again", 0, planner.calls)
+        assertEquals("the same session continues — no fresh one replaces it", AgentSessionId("s-handed-off"), after?.id)
+        assertEquals("only the step after the hand-off runs", listOf(mapOf("query" to "вельтрикс")), tools.invocations.map { it.args })
+    }
+
     /** Review Focus 3: the act may already have happened, so planning it again would perform it twice. */
     @Test
     fun `a call in flight at the pause is resumed, never planned again`() = runTest {

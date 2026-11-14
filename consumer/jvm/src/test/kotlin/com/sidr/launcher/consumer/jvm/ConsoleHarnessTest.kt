@@ -3,16 +3,25 @@ package com.sidr.launcher.consumer.jvm
 import com.sidr.launcher.consumer.jvm.plan.FilePlanner
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionIdFactory
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionStore
+import com.sidr.launcher.consumer.jvm.tool.SandboxKeys
+import com.sidr.launcher.consumer.jvm.tool.SandboxToolIds
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolSource
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolWorker
+import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentExecutor
 import com.sidr.launcher.domain.agent.AgentGoal
+import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
+import com.sidr.launcher.domain.agent.StepPrecondition
+import com.sidr.launcher.domain.agent.StepRationale
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolExecutor
+import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.trace.TraceEvent
 import kotlinx.coroutines.test.runTest
@@ -205,5 +214,50 @@ class ConsoleHarnessTest {
         assertFalse(log, log.contains("Undo outcome"))
         assertTrue(File(temp.root, "ledger.old").exists())
         assertFalse(File(temp.root, "ledger.txt").exists())
+    }
+
+    /**
+     * A4′ phase 3b, Task 12 — N2 on the JVM (plan §0.2 B-11: the harness already offers undo after every
+     * resolved state, so it follows the domain). A plan that renames `ledger.txt` and then asks to delete
+     * `other.txt` is refused at the delete's gate AFTER the rename acted: the outcome is `Cancelled`, and
+     * the harness now offers to undo the rename — and does it only on a yes.
+     *
+     * `FilePlanner` builds no such plan (no undoable step before a gate — plan §0.3 P8), so the plan is
+     * SEEDED through the store, exactly as the mid-call test above seeds its state; what is under test —
+     * the rename running, the gate, the refusal, the undo offer and the undo — is walked by the harness.
+     */
+    @Test
+    fun `a plan cancelled after a step acted offers undo`() = runTest {
+        val ledger = temp.newFile("ledger.txt").toPath().toRealPath()
+        val other = temp.newFile("other.txt").toPath().toRealPath()
+        val store = JvmAgentSessionStore(temp.root.toPath().resolve(".sidr-agent/session.json"))
+        val plan = ExecutionPlan(
+            listOf(
+                PlanStep(
+                    0,
+                    ToolInvocation(SandboxToolIds.RENAME_FILE, mapOf(SandboxKeys.PATH to ArgSource.Literal(ledger.toString()), SandboxKeys.NEW_NAME to ArgSource.Literal("ledger.old"))),
+                    ActionRiskLevel.SAFE, StepPrecondition.None, StepRationale.GOAL_DIRECT,
+                ),
+                PlanStep(
+                    1,
+                    ToolInvocation(SandboxToolIds.DELETE_FILE, mapOf(SandboxKeys.PATH to ArgSource.Literal(other.toString()))),
+                    ActionRiskLevel.DANGEROUS, StepPrecondition.None, StepRationale.GOAL_DIRECT,
+                ),
+            ),
+        )
+        val goal = AgentGoal("tidy the ledger", GoalShape.Free("tidy the ledger"))
+        val seeded = StartAgentSessionUseCase(FilePlanner(), store, JvmAgentSessionIdFactory(), SandboxToolSource())
+            .startPlanned(goal, plan)
+        assertTrue("the seed must be persisted, was $seeded", (seeded as OperationResult.Success).value != null)
+
+        val state = harness(mutableListOf("n", "y")).run("tidy the ledger")
+
+        val log = printed.joinToString("\n")
+        assertEquals(ExecutionState.Cancelled, state)
+        assertTrue("the refused delete did not run:\n$log", File(temp.root, "other.txt").exists())
+        assertTrue("undo is offered after the refusal:\n$log", log.contains("Undo what can be undone? [y/N]"))
+        assertTrue("the undo ran to its end:\n$log", log.contains("Undo outcome: Completed"))
+        assertTrue("the rename is put back", File(temp.root, "ledger.txt").exists())
+        assertFalse("the renamed file is gone", File(temp.root, "ledger.old").exists())
     }
 }

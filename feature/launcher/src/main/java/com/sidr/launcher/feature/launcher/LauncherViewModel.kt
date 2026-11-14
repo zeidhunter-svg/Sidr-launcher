@@ -526,8 +526,15 @@ class LauncherViewModel @Inject constructor(
 
     /**
      * The user refused it. The engine cancels the session; nothing further runs — and because
-     * `AgentSessionSurface` draws **nothing at all** for `Cancelled`, the surface leaves the screen
-     * on this path exactly as it does on [dismissAgentSession]. So it owes the same [leaveAgentSurface].
+     * `AgentSessionSurface` draws **nothing at all** for a plan cancelled before any step acted, the
+     * surface leaves the screen on this path exactly as it does on [dismissAgentSession]. So it owes the
+     * same [leaveAgentSurface].
+     *
+     * A plan refused AFTER a step acted (A4′ phase 3b, Task 12 — phase 2's N2, plan §0.2 B-11) keeps its
+     * finished card on screen instead: the session stays in [agentSessionState] (`Cancelled`), and the card
+     * says what acted and offers «Отменить» when it can be undone. The buffer is cleared all the same, so
+     * the home body is back under that card; its «Закрыть» is [dismissAgentSession] and its «Отменить»
+     * [undoAgentSession], as on every finished card.
      */
     fun denyAgentStep(stepIndex: Int) {
         agentSession.deny(stepIndex)
@@ -539,7 +546,8 @@ class LauncherViewModel @Inject constructor(
      *
      * No [leaveAgentSurface] here, and none in [confirmAgentStep] either. Every state the engine can
      * reach from them still *draws* a surface, and each of those carries its own «закрыть» — `Cancelled`,
-     * the one invisible state, is reachable only by an explicit cancel or a refusal. The exception is
+     * the one state drawn invisible (unless a step acted before it — N2, A4′ phase 3b Task 12, and then it
+     * carries its own «закрыть» too), is reachable only by an explicit cancel or a refusal. The exception is
      * «Продолжить» on a model-written plan (A4′ phase 3a, `Resumption.NeedsRoute`): the session is
      * closed and the surface goes, and its goal is submitted through the command route afresh — what
      * the user sees next is that command's own outcome (a wait, a card, a feedback line). Calling

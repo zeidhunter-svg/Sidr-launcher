@@ -38,8 +38,10 @@ import com.sidr.launcher.feature.launcher.R
  * `session.plan.steps` and the marked row from `session.cursor`, so a 2-step plan and a 7-step plan
  * differ in list length and in nothing else. There is no two-row special case anywhere below.
  *
- * `Cancelled` renders nothing at all — the ordinary command surface is the right thing to be looking
- * at once a plan has been called off.
+ * `Cancelled` before any step acted renders nothing at all — the ordinary command surface is the right
+ * thing to be looking at once a plan has been called off. `Cancelled` AFTER a step acted is a finished
+ * card (A4′ phase 3b, Task 12 — phase 2's N2, plan §0.2 B-11): what acted is real, so the card says what
+ * ran and offers to undo it.
  */
 @Composable
 internal fun AgentSessionSurface(
@@ -61,8 +63,9 @@ internal fun AgentSessionSurface(
     onRetryRemainder: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    // Null for exactly one state (Cancelled), which renders nothing; every other state has a title.
-    val title = session.state.title() ?: return
+    // Null for exactly one shape — Cancelled before any step acted — which renders nothing; every other
+    // state has a title, and so has a Cancelled session in which a step acted (N2, `title()`'s KDoc).
+    val title = session.title() ?: return
     val subject = session.goal.subject()
     val dismiss = SidrSurfaceAction(sidrString(R.string.launcher_agent_cancel), onDismiss)
     // «Отменить» exists only when at least one step can actually be undone; and when only part can,
@@ -248,7 +251,29 @@ internal fun AgentSessionSurface(
             secondaryAction = secondary,
         )
 
-        ExecutionState.Cancelled -> Unit
+        // A4′ phase 3b, Task 12 — N2, answered «partial» (plan §0.2 B-11, `DOC-ILM-4`; the owner may
+        // overturn). Reached only when a step acted (`title()` returned above otherwise): the user refused a
+        // later step. The `Completed` card's shape, not `SidrBlockedState`, whose body is required and would
+        // have to say who stopped it: the title alone says the plan stopped (R12-1), the step lines say what
+        // acted and what never ran, and the undo is what it is on every finished card. The secondary slot is
+        // `undo` only — «Повторить остаток» stays `Failed`/`Blocked`'s (`LauncherAgentSession.show`).
+        ExecutionState.Cancelled -> SidrResultSurface(
+            tone = SidrResultTone.Partial,
+            title = title,
+            modifier = modifier,
+            provenance = {
+                AgentPlanSteps(
+                    session = session,
+                    subject = subject,
+                    toolProvenance = toolProvenance,
+                    dynamicLabels = dynamicLabels,
+                )
+                AgentProvenance(session = session)
+                notUndoable?.let { SidrText(text = it, role = SidrTextRole.PROVENANCE) }
+            },
+            primaryAction = dismiss,
+            secondaryAction = undo,
+        )
     }
 }
 

@@ -430,12 +430,19 @@ internal fun provenanceLabelFor(level: ToolLevel, effect: ToolEffect): Int? {
 }
 
 /**
- * The title of the whole surface for the state it is in, or `null` for the one state that renders
- * nothing at all: a cancelled session hands the screen back to the ordinary command surface.
+ * The title of the whole surface for the state the session is in, or `null` for the one shape that
+ * renders nothing at all: a session cancelled before any step acted hands the screen back to the
+ * ordinary command surface.
+ *
+ * **A session cancelled AFTER a step acted is a finished card** (A4′ phase 3b, Task 12 — phase 2's N2,
+ * answered «partial», plan §0.2 B-11; the owner may overturn): what acted is real, and the card says so
+ * and offers to undo it. Its title is the `Blocked` one, «План остановлен» (controller ruling R12-1 — no
+ * new string key; the owner may overturn): the plan did stop part-way. The `Blocked` BODY is not used
+ * with it, because it says Sidr stopped the plan, and here the user did.
  */
 @Composable
 @ReadOnlyComposable
-internal fun ExecutionState.title(): String? = when (this) {
+internal fun AgentSession.title(): String? = when (state) {
     ExecutionState.Planning -> sidrString(R.string.launcher_agent_title)
     ExecutionState.Running -> sidrString(R.string.launcher_agent_running_title)
     ExecutionState.AwaitingConsent -> sidrString(R.string.launcher_agent_gate_title)
@@ -443,8 +450,17 @@ internal fun ExecutionState.title(): String? = when (this) {
     ExecutionState.Completed -> sidrString(R.string.launcher_agent_completed_title)
     ExecutionState.Failed -> sidrString(R.string.launcher_agent_failed_title)
     ExecutionState.Blocked -> sidrString(R.string.launcher_agent_blocked_title)
-    ExecutionState.Cancelled -> null
+    ExecutionState.Cancelled -> if (anyStepActed()) sidrString(R.string.launcher_agent_blocked_title) else null
 }
+
+/**
+ * A step of this session acted: its observation is `Effected`, or `HandedOff` (the act left the launcher
+ * and may have happened). Looks (`Observed`) and failures are not acts. The same reading as
+ * `AgentSession.replansOnResume`'s and `Compensation.review`'s — what the card of a `Cancelled` session
+ * is drawn on (A4′ phase 3b, Task 12, N2).
+ */
+internal fun AgentSession.anyStepActed(): Boolean =
+    observations.values.any { it is ToolResult.Effected || it is ToolResult.HandedOff }
 
 /**
  * Why the engine stopped -> which kind of boundary the gate announces. This is a mapping of typed
@@ -513,13 +529,15 @@ private fun ToolResult.stepState(): AgentStepState = when (this) {
  *    list (a named A0 limitation), so that half was wrong at the function and never drawn;
  *  - the same line answered CURRENT for the cursor step of a **terminal** session, because
  *    `AgentExecutor.perform` advances the cursor before `ended(...)` (found 2026-09-22, named in no
- *    document before this one). Also wrong at the function and not drawn today: `Failed` and
- *    `Blocked` draw no step lines, `Cancelled` draws nothing at all, and `Completed` — the one
- *    terminal surface that does draw them — is reached only once the cursor is past the last step,
+ *    document before this one). Also wrong at the function and not drawn at the time: `Failed` and
+ *    `Blocked` draw no step lines, `Cancelled` drew nothing at all, and `Completed` — then the one
+ *    terminal surface that drew them — is reached only once the cursor is past the last step,
  *    so no step sits at it.
  *
  * The two undrawn cases are corrected anyway, so that a future surface drawing the plan list in those
- * states cannot inherit them.
+ * states cannot inherit them. **That future arrived for `Cancelled`** (A4′ phase 3b, Task 12, N2): a plan
+ * refused after a step acted draws its plan list, and the refused step — at the cursor of a terminal
+ * session — reads [AgentStepState.PENDING], «не начат», by the correction made here in advance.
  *
  * The order is load-bearing and is not alphabetical: a recorded observation outranks any state, a
  * skipped step outranks the cursor, and only a step that is *at* the cursor is allowed to ask what

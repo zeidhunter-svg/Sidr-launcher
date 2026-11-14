@@ -136,11 +136,87 @@ class UndoAgentSessionUseCaseTest {
         assertEquals(emptyList<StepUndo>(), useCase(registry(ActionRiskLevel.SAFE)).review(cut))
     }
 
+    /**
+     * A4′ phase 3b, Task 12 — T3 m3 (phase 2's final review, deferred to the first multi-step plan). The
+     * cut rule withholds undo only for a plan the CLOCK stopped (`Blocked` with `HandedOff` at the step
+     * before the cursor, owner fork F2-1b). A plan that FINISHED with its last step handed off — the act
+     * left the launcher, nothing was cut — still offers the undoable step before it, and names the
+     * handed-off one as not undoable. Without the `Blocked` conjunct both would be withheld.
+     */
     @Test
-    fun `a cancelled, paused or unfinished session has nothing to undo`() = runTest {
+    fun `undo is still offered for a finished plan whose last step was handed off, when the clock did not stop it`() = runTest {
         val useCase = useCase(registry(ActionRiskLevel.SAFE))
-        for (state in listOf(ExecutionState.Cancelled, ExecutionState.Paused, ExecutionState.AwaitingConsent, ExecutionState.Running)) {
-            val session = finished(state)
+        for (state in listOf(ExecutionState.Completed, ExecutionState.Failed)) {
+            val handedOffLast = finished(state).let { done ->
+                done.copy(
+                    plan = ExecutionPlan(
+                        done.plan.steps + PlanStep(1, ToolInvocation(note, mapOf("name" to ArgSource.Literal("лумора"))), ActionRiskLevel.SAFE, StepPrecondition.None, StepRationale.GOAL_DIRECT),
+                    ),
+                    cursor = 2,
+                    observations = mapOf(0 to ToolResult.Effected(), 1 to ToolResult.HandedOff()),
+                )
+            }
+
+            assertEquals(
+                "review for $state",
+                listOf(
+                    StepUndo(1, Undo.NotUndoable),
+                    StepUndo(0, Undo.By(ToolInvocation(unnote, mapOf("name" to ArgSource.Literal("вельтрикс"))))),
+                ),
+                useCase.review(handedOffLast),
+            )
+        }
+    }
+
+    /**
+     * A4′ phase 3b, Task 12 — N2, answered «partial» (plan §0.2 B-11, `DOC-ILM-4`; the owner may overturn).
+     * The user refused step 1 at its consent card AFTER step 0 had acted: the plan ends `Cancelled`, and
+     * what step 0 did is real. It is offered for undo exactly as a part-way failure's is — and the
+     * refused step, which never ran, is not in the review. The undo is the inverse alone, in a new session.
+     */
+    @Test
+    fun `a plan cancelled after a step acted offers undo for what acted`() = runTest {
+        val useCase = useCase(registry(ActionRiskLevel.SAFE))
+        val refusedAfterActing = finished(ExecutionState.Cancelled).let { done ->
+            done.copy(
+                plan = ExecutionPlan(
+                    done.plan.steps + PlanStep(1, ToolInvocation(note, mapOf("name" to ArgSource.Literal("лумора"))), ActionRiskLevel.CONFIRM, StepPrecondition.None, StepRationale.GOAL_DIRECT),
+                ),
+                cursor = 1,
+                observations = mapOf(0 to ToolResult.Effected()),
+                consents = mapOf(1 to false),
+            )
+        }
+
+        assertEquals(
+            listOf(StepUndo(0, Undo.By(ToolInvocation(unnote, mapOf("name" to ArgSource.Literal("вельтрикс")))))),
+            useCase.review(refusedAfterActing),
+        )
+        val started = (useCase.undo(refusedAfterActing) as OperationResult.Success).value
+        assertEquals("the undo is a new session of the inverse alone", listOf(unnote), started?.plan?.steps?.map { it.invocation.id })
+    }
+
+    /**
+     * Rewritten at constant count by A4′ phase 3b, Task 12 (N2): `Cancelled` left the state loop — a
+     * cancelled plan in which a step acted now offers undo (above). What stays empty is a cancelled plan in
+     * which NOTHING acted: its one step was refused at consent, so there is nothing to undo, and nothing
+     * may be persisted for it.
+     */
+    @Test
+    fun `a paused or unfinished session, or one cancelled before anything acted, has nothing to undo`() = runTest {
+        val useCase = useCase(registry(ActionRiskLevel.SAFE))
+        val refusedBeforeActing = finished(ExecutionState.Cancelled).let { done ->
+            done.copy(
+                plan = ExecutionPlan(done.plan.steps.map { it.copy(risk = ActionRiskLevel.CONFIRM) }),
+                cursor = 0,
+                observations = emptyMap(),
+                consents = mapOf(0 to false),
+            )
+        }
+        val sessions = listOf(ExecutionState.Paused, ExecutionState.AwaitingConsent, ExecutionState.Running).map { finished(it) } +
+            refusedBeforeActing
+        for (session in sessions) {
+            val state = session.state
 
             assertEquals("review for $state", emptyList<StepUndo>(), useCase.review(session))
             assertNull("undo for $state", (useCase.undo(session) as OperationResult.Success).value)

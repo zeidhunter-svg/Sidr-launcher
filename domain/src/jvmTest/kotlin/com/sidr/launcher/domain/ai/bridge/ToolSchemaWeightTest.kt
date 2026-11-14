@@ -33,6 +33,12 @@ import org.junit.Test
  * «from one to 1 steps» → «from one to 8 steps», one character for one): the instruction 1 161, fifteen
  * tools 1 689, the marginal cost 25.10 — every pin where it was; none moved, no band changed.
  *
+ * Re-measured in Task 9's fix round 1 (finding I2, ruling E9-R2), when the plan line stopped defining a
+ * plan as ONE action («one action that one listed tool performs.» → «one or more actions of listed tools,
+ * in order, one step per action.», +26 characters): the instruction 1 161 → 1 187; fifteen tools
+ * 1 689 → 1 715, the band moved by the same 26 and kept its width (40) and offsets; the marginal cost
+ * unchanged (25.10).
+ *
  * `B3`'s conclusion stands on the real renderer: two hundred synthetic tools render to about 1 600
  * tokens — the prompt size was never the barrier.
  */
@@ -47,12 +53,12 @@ class ToolSchemaWeightTest {
 
         assertEquals(
             "BridgeRendering.INSTRUCTION changed length; re-measure and update the ADR rather than this pin",
-            1_161,
+            1_187,
             render(0).length,
         )
         val marginal = (render(120).length - render(2).length) / 118.0
         assertTrue("marginal per-tool cost drifted to $marginal (measured ~25.1)", marginal in 24.0..26.5)
-        assertTrue("15 tools render to ${render(15).length} (measured 1 689)", render(15).length in 1_671..1_711)
+        assertTrue("15 tools render to ${render(15).length} (measured 1 715)", render(15).length in 1_697..1_737)
     }
 
     private fun render(n: Int): String {

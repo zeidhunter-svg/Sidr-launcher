@@ -71,6 +71,8 @@ class DeviceMentionBinderTest {
     private val tessarOne = InstalledApp(packageName = "net.fixture.tessar.one", label = "Tessar")
     private val tessarTwo = InstalledApp(packageName = "net.fixture.tessar.two", label = "Tessar")
     private val miravin = InstalledApp(packageName = "net.fixture.miravin", label = "Миравин")
+    private val pellixOne = InstalledApp(packageName = "net.fixture.pellix.one", label = "Pellix")
+    private val pellixTwo = InstalledApp(packageName = "net.fixture.pellix.two", label = "Pellix")
 
     private fun proposed(
         tool: ToolId,
@@ -419,20 +421,25 @@ class DeviceMentionBinderTest {
     /**
      * Fork 3b-B, §7.12.3 condition 2, B-19 (the binder's half): every step's app mention is bound before
      * the card, each exactly as a one-step reading is. Step 0's one «Lumora» is pinned at once, with the
-     * user's words where `uninstall_app` shows them; step 1's two «Tessar» are a pick owed ON STEP 1,
-     * carrying that launch's own learning token. Origins and effects are each step's own — step 1 is
-     * planted `LOCAL` so that a mix-up of the two would show. Compared whole, by equality.
+     * user's words where `uninstall_app` shows them; step 1's two «Pellix» and step 2's two «Tessar» are
+     * two picks owed — in STEP ORDER, each on its own step and each carrying its own launch's learning
+     * token (keyed `LearnedChoiceKeys.launch` of its own mention: «pellix», «tessar»). Fix round 1
+     * (finding I1, ruling E9-R1): with one pick owed, an order or a shared token was never seen. Origins
+     * and effects are each step's own — step 1 is planted `LOCAL` between two `EXTERNAL` steps so that a
+     * mix-up would show. Compared whole, by equality.
      */
     @Test
     fun `each step's app mention is bound before the card`() = runTest {
-        val act = binder(listOf(lumora, tessarOne, tessarTwo)).bind(
+        val act = binder(listOf(lumora, pellixOne, pellixTwo, tessarOne, tessarTwo)).bind(
             goal,
             listOf(
                 proposed(Tier0ToolIds.UNINSTALL_APP, "app" to "lumora", risk = ActionRiskLevel.CONFIRM),
-                proposed(ToolIds.LAUNCH_APP, "app" to "tessar", effect = ToolEffect.LOCAL),
+                proposed(ToolIds.LAUNCH_APP, "app" to "pellix", effect = ToolEffect.LOCAL),
+                proposed(ToolIds.LAUNCH_APP, "app" to "tessar"),
             ),
         ).act()
 
+        val pellixes = CandidateSet(listOf(ResolvedTarget.App("net.fixture.pellix.one"), ResolvedTarget.App("net.fixture.pellix.two")))
         val tessars = CandidateSet(listOf(ResolvedTarget.App("net.fixture.tessar.one"), ResolvedTarget.App("net.fixture.tessar.two")))
         assertEquals(
             Interpretation.Act(
@@ -450,6 +457,13 @@ class DeviceMentionBinderTest {
                     ),
                     PlanStep(
                         index = 1,
+                        invocation = ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal("pellix"))),
+                        risk = ActionRiskLevel.SAFE,
+                        precondition = StepPrecondition.None,
+                        rationale = StepRationale.MODEL_PROPOSED,
+                    ),
+                    PlanStep(
+                        index = 2,
                         invocation = ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal("tessar"))),
                         risk = ActionRiskLevel.SAFE,
                         precondition = StepPrecondition.None,
@@ -459,11 +473,27 @@ class DeviceMentionBinderTest {
                 origins = mapOf(
                     0 to mapOf("app" to ValueOrigin.Ours, "app_label" to ValueOrigin.SaidBy(PrincipalId.USER)),
                     1 to mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                    2 to mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
                 ),
-                effects = mapOf(0 to ToolEffect.EXTERNAL, 1 to ToolEffect.LOCAL),
+                effects = mapOf(0 to ToolEffect.EXTERNAL, 1 to ToolEffect.LOCAL, 2 to ToolEffect.EXTERNAL),
                 choices = listOf(
                     PendingChoice(
                         step = 1,
+                        choice = AppChoice(
+                            arg = "app",
+                            mention = "pellix",
+                            candidates = listOf(pellixOne, pellixTwo),
+                            learning = ResolutionLearningToken(
+                                capabilityKey = CapabilityKey(ActionIds.LAUNCH_APP, "pellix"),
+                                context = ResolutionContext.None,
+                                candidateSet = pellixes,
+                                fingerprint = fingerprintOf(pellixes),
+                                isAppAmbiguityFlow = true,
+                            ),
+                        ),
+                    ),
+                    PendingChoice(
+                        step = 2,
                         choice = AppChoice(
                             arg = "app",
                             mention = "tessar",
@@ -485,9 +515,10 @@ class DeviceMentionBinderTest {
 
     /**
      * Controller ruling E9-P5: what the device cannot bind in ANY step answers for the whole reading —
-     * there is no card for the steps that did bind. Both unbound steps come SECOND, after a step that binds
-     * on its own (the control): an app nothing on the device names is not found; a duration the sort
-     * cannot read is not understood.
+     * there is no card for the steps that did bind. The first two unbound steps come SECOND, after a step
+     * that binds on its own (the control): an app nothing on the device names is not found; a duration the
+     * sort cannot read is not understood. Fix round 1 (finding M1, ruling E9-R3): when two steps cannot be
+     * bound, the FIRST refusal answers — step 0's unknown app, not step 1's unreadable value.
      */
     @Test
     fun `one unknown app in any step means not found for the whole reading`() = runTest {
@@ -503,6 +534,17 @@ class DeviceMentionBinderTest {
             "a duration the sort cannot read, in the second step",
             Binding.NotUnderstood("полчасика"),
             binder(listOf(lumora)).bind(goal, listOf(launch, proposed(Tier0ToolIds.SET_TIMER, "duration" to "полчасика"))),
+        )
+        assertEquals(
+            "the first refusal answers: an unknown app in step 0 before an unreadable value in step 1",
+            Binding.NotFound("вельтрикс"),
+            binder(listOf(lumora)).bind(
+                goal,
+                listOf(
+                    proposed(Tier0ToolIds.OPEN_APP_INFO, "app" to "вельтрикс"),
+                    proposed(Tier0ToolIds.SET_TIMER, "duration" to "полчасика"),
+                ),
+            ),
         )
     }
 }

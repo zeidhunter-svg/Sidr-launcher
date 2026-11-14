@@ -38,15 +38,16 @@ object BridgeRendering {
      * retry notes. The answer form is `steps` since phase 3b Task 8 (fork 3b-B), from one to
      * [MAX_STEPS_OFFERED], each step `{"tool", "args"}` in an array (`steps = [{…}]`, controller ruling
      * E8-I1: under `PROMPT_ONLY` the model sees no schema); it never mentions references (B-8 — those are
-     * the offering's). 1 161 characters — `ToolSchemaWeightTest` (the cap's «1» → «8» in Task 9 is one
-     * character for one).
+     * the offering's). 1 187 characters — `ToolSchemaWeightTest` (the cap's «1» → «8» in Task 9 is one
+     * character for one; since Task 9's fix round 1 the plan line defines a plan as one or more actions,
+     * in order, one step per action — it no longer contradicts the cap sentence, finding I2).
      */
     val INSTRUCTION: String =
         "You read one request typed into Sidr, an Android home screen, and say what it asks for. You see " +
             "only the request and the tools listed below; you know nothing else about this phone. Reply with " +
             "ONLY one JSON object, without prose or code fences, of exactly this form:\n" +
             "{\"kind\": K, \"steps\": S, \"question\": Q, \"destination\": D}\n" +
-            "\"plan\": the request is one action that one listed tool performs. steps = [{\"tool\": " +
+            "\"plan\": the request is one or more actions of listed tools, in order, one step per action. steps = [{\"tool\": " +
             "\"<tool id>\", \"args\": {...}}]; question and destination are null.\n" +
             "\"assistant\": the request is a question, or a wish to talk. question = the question; steps and " +
             "destination are null.\n" +

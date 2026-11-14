@@ -54,6 +54,7 @@ class SystemIntentToolContractTest {
         val toolId: ToolId,
         val installed: List<InstalledApp>,
         val branch: String,
+        val args: Map<String, String> = mapOf("query" to "убер"),
     )
 
     @Test
@@ -63,13 +64,20 @@ class SystemIntentToolContractTest {
             Case(ToolIds.LAUNCH_APP, emptyList(), branch = "Observed(APP_NOT_INSTALLED)"),
             Case(ToolIds.LAUNCH_APP, listOf(uber, uberClone), branch = "Observed(APP_AMBIGUOUS)"),
             Case(ToolIds.PLAY_STORE_SEARCH, listOf(uber), branch = "Effected"),
+            Case(InAppToolIds.WEB_SEARCH, listOf(uber), branch = "Effected"),
+            Case(
+                InAppToolIds.OPEN_URL,
+                listOf(uber),
+                branch = "Effected",
+                args = mapOf("url" to "https://quillmere.example/path?q=a&b=c"),
+            ),
         )
 
         cases.forEach { case ->
             apps.appsToReturn = case.installed
             actionExecutor.reset()
 
-            val result = executor().invoke(ResolvedInvocation(case.toolId, mapOf("query" to "убер")))
+            val result = executor().invoke(ResolvedInvocation(case.toolId, case.args))
             val declared = source.find(case.toolId)!!.outputSchema.map { it.name }.toSet()
 
             assertEquals("${case.toolId.value}: wrong branch for this world state", case.branch, result.branch())

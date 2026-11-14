@@ -3,14 +3,17 @@ package com.sidr.launcher.data.repository.agent
 import com.sidr.launcher.core.testing.FakeAliasStore
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.domain.model.InstalledApp
+import com.sidr.launcher.domain.text.PlainTextFolding
 
 /**
  * Shared by the three test files that build a [ToolMatchPlanner] (Task 6b, A1″ Phase 3a).
  *
- * [AppTargetResolver] is a concrete class over two ports rather than an interface, so a double is
- * built by faking its **inputs** rather than by subclassing it. That is the stronger fixture anyway:
- * every test that uses this runs the production resolution path — alias first, then a *unique* label
- * match, decline on everything else — instead of a stub that agrees with whatever the test wanted.
+ * [AppTargetResolver] is a concrete class over two ports and a text folding rather than an interface,
+ * so a double is built by faking its **inputs** rather than by subclassing it. That is the stronger
+ * fixture anyway: every test that uses this runs the production resolution path — alias first, then a
+ * *unique* exact whole-name match, a word form only offered, decline on everything else — instead of a
+ * stub that agrees with whatever the test wanted. The folding is the plain one: these tests run off
+ * Robolectric, where `android.icu` is the android.jar stub, and their names are space-separated.
  * `appTargetsOf()` with no arguments is therefore "nothing is installed", i.e. a resolver that
  * declines every query, which is exactly what a test about a tool with no `app` argument needs.
  *
@@ -25,4 +28,5 @@ internal fun appTargetsOf(vararg labelToPackage: Pair<String, String>): AppTarge
             }
         },
         aliases = FakeAliasStore(),
+        folding = PlainTextFolding,
     )

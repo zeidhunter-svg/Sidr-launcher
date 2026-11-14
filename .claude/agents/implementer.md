@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: Executes exactly one well-specified task from an approved implementation plan in this repo (files, signatures, and tests already defined in the task). Default executor for subagent-driven development on routine tasks.
+description: Executes exactly one well-specified task from an approved implementation plan in this repo (files, signatures, and tests already defined in the task). Default executor for subagent-driven development on routine tasks — the plan carries the complete code and the work is transcription plus TDD. A task with no complete code in the plan, a privacy/egress/consent/doctrine property mutations do not fully hold, a deletion of guarded code, a lifecycle/coroutine change, or a closed sum with exhaustive whens in several modules goes to implementer-critical.
 model: sonnet
 effort: high
 ---

@@ -59,17 +59,15 @@ import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.core.ui.component.AppTile
-import com.sidr.launcher.core.ui.component.SidrActionGate
-import com.sidr.launcher.core.ui.component.SidrActionGateType
-import com.sidr.launcher.core.ui.component.SidrActionProposal
-import com.sidr.launcher.core.ui.component.SidrActionProposalTone
 import com.sidr.launcher.core.ui.component.EmptyState
 import com.sidr.launcher.core.ui.component.ErrorState
+import com.sidr.launcher.core.ui.component.SidrErrorSurface
 import com.sidr.launcher.core.ui.component.SidrSectionHeader
 import com.sidr.launcher.core.ui.component.SidrPrayerSummary
 import com.sidr.launcher.core.ui.component.SidrPrayerTimeUi
 import com.sidr.launcher.core.ui.component.SidrRouteChip
 import com.sidr.launcher.core.ui.component.SidrScaffold
+import com.sidr.launcher.core.ui.component.SidrSurfaceAction
 import com.sidr.launcher.core.ui.component.SidrUniversalInput
 import com.sidr.launcher.core.ui.component.SidrUniversalInputState
 import com.sidr.launcher.core.ui.component.TopBarIcon
@@ -79,7 +77,6 @@ import com.sidr.launcher.core.ui.primitive.SidrTextRole
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Sizes
 import com.sidr.launcher.core.ui.theme.Spacing
-import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.permission.PermissionFeature
 import com.sidr.launcher.domain.suggestions.Suggestion
@@ -112,12 +109,17 @@ fun LauncherScreen(
     val showMic by viewModel.showMic.collectAsStateWithLifecycle()
     val inputResults by viewModel.inputResults.collectAsStateWithLifecycle()
     val prayerContext by viewModel.prayerContext.collectAsStateWithLifecycle()
-    val pendingRoutedAction by viewModel.pendingRoutedAction.collectAsStateWithLifecycle()
+    val interpretation by viewModel.interpretation.collectAsStateWithLifecycle()
+    val targetPick by viewModel.targetPick.collectAsStateWithLifecycle()
+    val thinking by viewModel.thinking.collectAsStateWithLifecycle()
     val devConsoleOn by viewModel.devConsoleOn.collectAsStateWithLifecycle()
     val consoleLines by viewModel.consoleLines.collectAsStateWithLifecycle()
     // Task 12 / A0: the agent runtime's session, if one is in flight or was restored at startup.
     val agentSession by viewModel.agentSessionState.collectAsStateWithLifecycle()
     val agentConfirming by viewModel.agentConfirming.collectAsStateWithLifecycle()
+    val agentUndoReview by viewModel.agentUndoReview.collectAsStateWithLifecycle()
+    val agentResumeFailed by viewModel.agentResumeFailed.collectAsStateWithLifecycle()
+    val agentRemainderOffered by viewModel.agentRemainderOffered.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     // First-run nudge (Block X6): whether this launcher is already the system default HOME app.
@@ -184,7 +186,7 @@ fun LauncherScreen(
             HomePrayerStrip(
                 visible = !inputResults.active && !devConsoleOn,
                 summary = prayerContext.toHomePrayerSummaryUi(),
-                onOpenDetails = { viewModel.navigateTo(Routes.PrayerDetail.ROUTE) },
+                onOpenDetails = { viewModel.navigateByUser(Routes.PrayerDetail.ROUTE) },
             )
 
             // DS-4: Universal Input replaces the legacy SidrCommandPrompt. Submit drives the existing
@@ -216,7 +218,7 @@ fun LauncherScreen(
                         hasSiteRoute = inputResults.chips.contains(RouteChipKind.SITE),
                         onWeb = { viewModel.submitWebSearch(commandInput) },
                         onAsk = {
-                            viewModel.navigateTo(Routes.Assistant.routeFor(Uri.encode(commandInput.trim())))
+                            viewModel.navigateByUser(Routes.Assistant.routeFor(Uri.encode(commandInput.trim())))
                         },
                         onSite = { viewModel.submitSite(commandInput) },
                     )
@@ -231,30 +233,40 @@ fun LauncherScreen(
                 onDismiss = viewModel::dismissFeedback,
             )
 
-            // AIL-5: a router-proposed action awaiting the user's go-ahead. CONFIRM-risk → the DF-4
-            // confirm card; SAFE → a one-tap accelerator. Neither auto-executes (R4). Confirm routes
-            // through the education flow first when the action declares a permission gate (inert in the
-            // MVP catalog — no family gates — but wired so a future gated family is safe by design).
-            pendingRoutedAction?.let { pending ->
-                val onConfirm: () -> Unit = {
-                    val gate = pending.permissionGate
-                    if (gate != null) {
-                        viewModel.navigateTo(Routes.PermissionEducation.routeFor(gate.name))
-                    } else {
-                        viewModel.confirmRoutedAction()
-                    }
-                }
-                PendingActionArea(
-                    pending = pending,
-                    onConfirm = onConfirm,
-                    onCancel = viewModel::cancelRoutedAction,
+            // A4′ phase 3a (spec §7.12.2): a command the model is reading shows the wait, with «Отмена».
+            if (thinking) {
+                ThinkingArea(onCancel = viewModel::cancelThinking)
+            }
+
+            // A4′ phase 3a (condition 1): the model's reading, before anything runs.
+            interpretation?.let { reading ->
+                InterpretationArea(
+                    interpretation = reading,
+                    provenance = viewModel.agentToolProvenance,
+                    dynamicLabels = viewModel.agentDynamicToolLabels,
+                    onRun = viewModel::runInterpretation,
+                    onDismiss = viewModel::dismissInterpretation,
+                    onChoose = viewModel::chooseInterpretationApp,
+                )
+            }
+
+            // A4′ phase 3b (B-7, R14-39 closed): a target step 2b claimed and could not bind — the
+            // device's own question, on the card's pick list but not on the card. A tap starts the
+            // session; the engine's consent card follows for a CONFIRM tool.
+            targetPick?.let { target ->
+                AppChoiceList(
+                    mention = target.words,
+                    candidates = target.candidates,
+                    confirm = target.confirm,
+                    onChoose = viewModel::chooseTarget,
+                    onDismiss = viewModel::dismissTargetPick,
                 )
             }
 
             // Task 12 / A0: the agent runtime's surface — one component per runtime state, rendered
-            // from what the session itself reported. It sits below the router's pending card because
+            // from what the session itself reported. It sits below the interpretation card because
             // the two are mutually exclusive in practice: a started session cleared the feedback and
-            // the pending card on its way in (see LauncherCommandSession.applyOutcome).
+            // the card on its way in (see LauncherCommandSession.applyOutcome).
             agentSession?.let { session ->
                 // A1″ fix round 1, finding 5 — both maps are `get()` on the ViewModel, deliberately
                 // (a `by lazy` froze them at the first session ever shown, which silently lost every
@@ -302,6 +314,18 @@ fun LauncherScreen(
                     onDeny = viewModel::denyAgentStep,
                     onContinue = viewModel::continueAgentSession,
                     onDismiss = viewModel::dismissAgentSession,
+                    undoReview = agentUndoReview,
+                    onUndo = viewModel::undoAgentSession,
+                    remainderOffered = agentRemainderOffered,
+                    onRetryRemainder = viewModel::retryAgentRemainder,
+                )
+            }
+            // A4′ phase 3b, Task 11 (fork 3b-F): «Продолжить» the store could not carry out is SAID, in the
+            // place the paused card stood — never a silent disappearance. «Закрыть» puts the launcher back at rest.
+            if (agentSession == null && agentResumeFailed) {
+                SidrErrorSurface(
+                    title = sidrString(R.string.launcher_agent_resume_failed),
+                    primaryAction = SidrSurfaceAction(sidrString(R.string.launcher_agent_cancel), viewModel::dismissAgentSession),
                 )
             }
 
@@ -718,48 +742,6 @@ private fun CommandConsole(
     }
 }
 
-// ── Router proposal confirmation (AIL-5) ─────────────────────────────────────
-
-/**
- * Renders a pending router proposal: the DS-3 [SidrActionGate] for a CONFIRM-risk action, or a
- * lighter one-tap [RouteChipRow] accelerator for a SAFE one. Both dispatch through [onConfirm]
- * (which the screen has already wrapped with the permission-gate check); the gate also exposes CANCEL.
- */
-@Composable
-private fun PendingActionArea(
-    pending: PendingRoutedAction,
-    onConfirm: () -> Unit,
-    onCancel: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    if (pending.requiresConfirmation) {
-        SidrActionGate(
-            type = SidrActionGateType.ExternalHandoff,
-            title = sidrString(R.string.launcher_confirm_execute_title),
-            // I18N-1 (spec §4/brief Step 2): the commandLine argument itself stays English - it's the
-            // command grammar echo, not translatable prose.
-            consequence = sidrString(R.string.launcher_confirm_will_run, pending.commandLine),
-            target = pending.commandLine,
-            confirmLabel = sidrString(R.string.launcher_confirm_confirm),
-            onConfirm = onConfirm,
-            onCancel = onCancel,
-            modifier = modifier,
-        )
-    } else {
-        // SAFE routed proposal — a one-tap accelerator, deliberately distinct from the CONFIRM gate.
-        // Still requires a deliberate tap (R4: nothing auto-executes).
-        SidrActionProposal(
-            title = pending.commandLine,
-            description = sidrString(R.string.launcher_safe_proposal_description),
-            tone = SidrActionProposalTone.Safe,
-            onExecute = onConfirm,
-            onCancel = onCancel,
-            executeLabel = sidrString(R.string.launcher_safe_proposal_run),
-            modifier = modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
-        )
-    }
-}
-
 // ── Command feedback ────────────────────────────────────────────────────────
 
 @Composable
@@ -779,7 +761,8 @@ private fun CommandFeedbackArea(
     val resolved = feedbackText(feedback)
     when {
         // Ambiguity reads as a clarification prompt, not an error (spec §8): a quiet "Did you mean:"
-        // header over the candidate list. A candidate launches only on an explicit tap.
+        // header over the candidate list — or, for one app offered for a word form (A4′ phase 3b, Task 7),
+        // «Did you mean «X»?»; `feedbackText` picks which. A candidate launches only on an explicit tap.
         feedback is CommandFeedback.Ambiguous -> Column(
             modifier = modifier
                 .fillMaxWidth()
@@ -804,12 +787,13 @@ private fun CommandFeedbackArea(
             }
         }
 
-        // Этап 4.0 (fork F1) — of the three "understanding unavailable" states this is the only one
-        // the user can fix right now, in one step, so it is the only one that carries an affordance.
-        // The other two are neutral statements on purpose: nagging someone to undo a deliberate
-        // local-only choice, or to conjure a network, is the manipulation DOC-HYA-1 forbids.
+        // Этап 4.0 (fork F1) — of the "understanding unavailable" states only those the provider
+        // screen can fix carry an affordance (`offersProviderSetup`): no provider at all, and, since
+        // A4′ phase 3a, a key the provider refused or a request it rejected. The rest are neutral
+        // statements on purpose: nagging someone to undo a deliberate local-only choice, or to conjure
+        // a network, is the manipulation DOC-HYA-1 forbids.
         feedback is CommandFeedback.Domain &&
-            feedback.message == CommandMessage.UnderstandingNeedsProvider -> Column(
+            feedback.message.offersProviderSetup() -> Column(
             modifier = modifier
                 .fillMaxWidth()
                 .padding(horizontal = Spacing.lg, vertical = Spacing.sm),

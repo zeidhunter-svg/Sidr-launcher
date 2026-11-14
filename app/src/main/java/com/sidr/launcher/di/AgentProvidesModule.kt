@@ -1,6 +1,7 @@
 package com.sidr.launcher.di
 
 import android.content.Context
+import com.sidr.launcher.core.common.di.IoDispatcher
 import com.sidr.launcher.data.repository.agent.APP_PACKAGE_NAME
 import com.sidr.launcher.data.repository.agent.ContextIntentLauncher
 import com.sidr.launcher.data.repository.agent.ContextPermissionPresence
@@ -11,6 +12,7 @@ import com.sidr.launcher.data.repository.agent.SystemIntentToolSource
 import com.sidr.launcher.data.repository.agent.SystemIntentToolWorker
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolWorker
+import com.sidr.launcher.data.repository.agent.ToolInverseCatalog
 import com.sidr.launcher.data.repository.agent.ToolMatchPlanner
 import com.sidr.launcher.data.repository.agent.memory.MemoryToolSource
 import com.sidr.launcher.data.repository.agent.memory.MemoryToolWorker
@@ -30,13 +32,16 @@ import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
 import com.sidr.launcher.domain.agent.CompositePlanner
 import com.sidr.launcher.domain.agent.Planner
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
+import com.sidr.launcher.domain.agent.ResumeAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RuntimeBudget
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.TemplatePlanner
+import com.sidr.launcher.domain.agent.UndoAgentSessionUseCase
 import com.sidr.launcher.domain.tool.ToolAdapter
 import com.sidr.launcher.domain.tool.ToolExecutor
 import com.sidr.launcher.domain.tool.ToolFederation
+import com.sidr.launcher.domain.tool.ToolInverses
 import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolRegistry
 import com.sidr.launcher.feature.launcher.agent.DynamicToolLabel
@@ -49,6 +54,7 @@ import dagger.hilt.components.SingletonComponent
 import java.util.UUID
 import javax.inject.Named
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineDispatcher
 
 /**
  * Wires the A0 agentic spike into the graph (Task 11): the two ports the engine talks to, the
@@ -235,6 +241,11 @@ object AgentProvidesModule {
     @Singleton
     fun provideToolExecutor(federation: ToolFederation): ToolExecutor = federation.executor
 
+    /** A4′ phase 2 (spec §6.2): how the launcher's tools are undone. Read by compensation only. */
+    @Provides
+    @Singleton
+    fun provideToolInverses(impl: ToolInverseCatalog): ToolInverses = impl
+
     /**
      * A0 bound the deterministic template planner alone. A1' composes it with the tool matcher so a
      * registered tool is reachable **without a goal shape of its own** — the alternative was one
@@ -267,10 +278,14 @@ object AgentProvidesModule {
     fun provideAgentExecutor(
         registry: ToolRegistry,
         toolExecutor: ToolExecutor,
+        @IoDispatcher ioDispatcher: CoroutineDispatcher,
     ): AgentExecutor = AgentExecutor(
         registry = registry,
         toolExecutor = toolExecutor,
         budget = RuntimeBudget.Default,
+        // A4′ phase 2 (F2-1): world calls leave the thread that drives the engine — on Android the
+        // main thread — so a parked binder call holds a pool thread and the budget can still fire.
+        worldContext = ioDispatcher,
     )
 
     @Provides
@@ -293,6 +308,21 @@ object AgentProvidesModule {
         executor: AgentExecutor,
         store: AgentSessionStore,
     ): RunAgentSessionUseCase = RunAgentSessionUseCase(executor = executor, store = store)
+
+    @Provides
+    @Singleton
+    fun provideResumeAgentSessionUseCase(
+        start: StartAgentSessionUseCase,
+        run: RunAgentSessionUseCase,
+    ): ResumeAgentSessionUseCase = ResumeAgentSessionUseCase(start = start, run = run)
+
+    @Provides
+    @Singleton
+    fun provideUndoAgentSessionUseCase(
+        start: StartAgentSessionUseCase,
+        inverses: ToolInverses,
+        registry: ToolRegistry,
+    ): UndoAgentSessionUseCase = UndoAgentSessionUseCase(start = start, inverses = inverses, registry = registry)
 
     @Provides
     @Singleton

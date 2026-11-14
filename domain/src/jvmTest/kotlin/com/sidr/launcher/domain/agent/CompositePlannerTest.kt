@@ -1,7 +1,11 @@
 package com.sidr.launcher.domain.agent
 
 import com.sidr.launcher.core.testing.FakeToolRegistry
+import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.tool.ObservedFact
+import com.sidr.launcher.domain.tool.ToolIds
+import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolRegistry
 import com.sidr.launcher.domain.tool.ToolResult
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -59,6 +63,41 @@ class CompositePlannerTest {
 
         assertEquals(PlanningResult.NoPlan, result)
         assertEquals(listOf("first", "second"), asked)
+    }
+
+    /**
+     * A4′ phase 3b, B-6 (R14-39 closed): a planner that CLAIMED the goal and could not bind its target
+     * has answered, and the answer is final. Asking on would let a later planner replace it — with a
+     * plan for a goal the first planner had already read differently, or, at the end of the list, with
+     * the loop's closing `NoPlan`, which is exactly the fall-through to the cloud model `Unresolved`
+     * exists to end. The third planner here would PLAN, so a composite that asked on returns a
+     * different answer and a longer question list, never the same one by accident.
+     */
+    @Test
+    fun `an unresolved answer stops the composite`() = runTest {
+        val asked = mutableListOf<String>()
+        val unresolved = PlanningResult.Unresolved(
+            UnresolvedTarget(
+                goal = goal,
+                pending = PlanStep(0, ToolInvocation(ToolIds.LAUNCH_APP), ActionRiskLevel.SAFE, StepPrecondition.None, StepRationale.GOAL_DIRECT),
+                arg = "app",
+                labelArg = null,
+                sort = ArgSorts.APP,
+                words = "x",
+                candidates = emptyList(),
+                confirm = false,
+            ),
+        )
+        val planners = listOf(
+            recording("silent", asked, PlanningResult.NoPlan),
+            recording("claiming", asked, unresolved),
+            recording("never", asked, PlanningResult.Planned(ExecutionPlan(emptyList()))),
+        )
+
+        val result = CompositePlanner(planners).plan(PlanningRequest(goal), registry)
+
+        assertEquals(unresolved, result)
+        assertEquals(listOf("silent", "claiming"), asked)
     }
 
     /**

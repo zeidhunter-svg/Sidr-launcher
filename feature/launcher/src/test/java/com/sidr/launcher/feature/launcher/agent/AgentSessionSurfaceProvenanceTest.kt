@@ -24,6 +24,7 @@ import com.sidr.launcher.domain.agent.TemplatePlanner
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolId
+import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.trace.ExecutionTrace
@@ -51,10 +52,21 @@ import org.robolectric.annotation.Config
  *
  * **Where the line is and is not visible.** [AgentSessionSurface] draws the plan list in `Running`,
  * `Paused` and `Completed`, and the consent card in `AwaitingConsent`; those four states are covered
- * below. `Planning` has no plan yet, and `Failed` / `Blocked` / `Cancelled` draw no steps at all —
- * pre-existing surface design this task does not change. In particular the plan list is still not
- * drawn under `AwaitingConsent` (a named A0 limitation in `CLAUDE.md`), which is why the consent card
- * carries its own provenance line for the one step it is asking about rather than relying on the list.
+ * below. `Planning` has no plan yet, and `Failed` / `Blocked` draw no steps at all — pre-existing
+ * surface design this task did not change. `Cancelled` before any step acted draws nothing; `Cancelled`
+ * after an act draws its plan list (A4′ phase 3b, Task 12 — phase 2's N2). In particular the plan list
+ * is still not drawn under `AwaitingConsent` (a named A0 limitation in `CLAUDE.md`), which is why the
+ * consent card carries its own provenance line for the one step it is asking about rather than relying
+ * on the list.
+ *
+ * **Named gap (A4′ phase 3b, Task 12 review M2): the `Cancelled`-after-an-act card's provenance is not
+ * covered.** That card draws the plan list through the same `AgentPlanSteps` — each step's provenance
+ * line, the refused step's included — and `AgentProvenance`. No test renders either provenance line on
+ * it: `AgentSessionSurfaceUndoTest`'s N2 test asserts its step lines, not their provenance, and passes
+ * no `toolProvenance`. So that arm passing no provenance, or dropping its `AgentProvenance`, would stay
+ * green. Reachable on Android today whenever a step acted before a refused one — Task 12's report names
+ * a multi-step model plan `launch_app` then a refused `uninstall_app`, both `EXTERNAL`. No test is added
+ * for it in that review round.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -259,7 +271,7 @@ class AgentSessionSurfaceProvenanceTest {
         render(
             timerSession(
                 ExecutionState.AwaitingConsent,
-                trace = listOf(TraceEvent.ConsentRequested(0, ConsentReason.RISK_LEVEL)),
+                trace = listOf(TraceEvent.ConsentRequested(0, setOf(ConsentReason.RISK_LEVEL))),
             ),
             external,
         )
@@ -355,7 +367,7 @@ class AgentSessionSurfaceProvenanceTest {
             state = ExecutionState.AwaitingConsent,
             observations = emptyMap(),
             consents = emptyMap(),
-            trace = ExecutionTrace(listOf(TraceEvent.ConsentRequested(0, ConsentReason.RISK_LEVEL))),
+            trace = ExecutionTrace(listOf(TraceEvent.ConsentRequested(0, setOf(ConsentReason.RISK_LEVEL)))),
         )
     }
 
@@ -378,5 +390,42 @@ class AgentSessionSurfaceProvenanceTest {
 
         compose.onNodeWithText("telegram", substring = true).assertExists()
         compose.onNodeWithText("com.example.msg", substring = true).assertExists()
+    }
+
+    /**
+     * A4′ phase 3a, Task 2. A launch the device pinned to a package (the binding pick, plan §0.2 B-3)
+     * names BOTH what the user called it and the package that will open — two apps can share the label.
+     * Fixture label and package share no substring (R14-43), so neither half can pass for the other.
+     */
+    @Test
+    fun `a pinned launch step names the app and the package it is pinned to`() {
+        val goal = AgentGoal("включи мне vemblic", GoalShape.Free("включи мне vemblic"))
+        val session = AgentSession(
+            id = AgentSessionId("s1"),
+            goal = goal,
+            plan = ExecutionPlan(
+                listOf(
+                    PlanStep(
+                        index = 0,
+                        invocation = ToolInvocation(
+                            ToolIds.LAUNCH_APP,
+                            mapOf("query" to ArgSource.Literal("Vemblic"), "app" to ArgSource.Literal("net.fixture.zantor")),
+                        ),
+                        risk = ActionRiskLevel.SAFE,
+                        precondition = StepPrecondition.None,
+                        rationale = StepRationale.GOAL_DIRECT,
+                    ),
+                ),
+            ),
+            cursor = 0,
+            state = ExecutionState.Running,
+            observations = emptyMap(),
+            consents = emptyMap(),
+            trace = ExecutionTrace(emptyList()),
+        )
+
+        render(session, emptyMap())
+
+        compose.onNodeWithText("Open Vemblic (net.fixture.zantor) — in progress").assertExists()
     }
 }

@@ -315,4 +315,26 @@ class RuleBasedIntentMatcherTest {
         assertTrue(best.intent is LauncherIntent.UnknownIntent)
         assertTrue(best.confidence < 0.50f)
     }
+
+    // --- A4′ phase 1 (spec §5.2): a search does not claim confidence for a goal it would discard ---
+
+    @Test fun `a search whose query carries a second goal does not claim a search's confidence`() = runTest {
+        val best = matcher.match("найди билеты в казань и закажи такси").best
+        val intent = best.intent as LauncherIntent.SearchIntent
+        assertEquals("билеты в казань и закажи такси", intent.query)
+        assertTrue("got ${best.confidence}", best.confidence < 0.50f)
+    }
+
+    @Test fun `a Turkish search whose first clause ends in a listed verb does not claim it either`() = runTest {
+        val best = matcher.match("haberleri oku ve pilav tarifi ara").best
+        assertTrue(best.intent is LauncherIntent.SearchIntent)
+        assertTrue("got ${best.confidence}", best.confidence < 0.50f)
+    }
+
+    /** Spec §5.2: «не понижаем весь рукав». A conjunction inside one query keeps the arm's 0.90. */
+    @Test fun `a search whose conjunction joins two nouns keeps a search's confidence`() = runTest {
+        val best = matcher.match("найди рецепт хлеба и соли").best
+        assertTrue(best.intent is LauncherIntent.SearchIntent)
+        assertTrue("got ${best.confidence}", best.confidence >= 0.85f)
+    }
 }

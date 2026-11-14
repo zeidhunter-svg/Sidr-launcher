@@ -10,7 +10,8 @@ import com.sidr.launcher.core.testing.FakeToolExecutor
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeAliasStore
-import com.sidr.launcher.core.testing.FakeCommandPlanner
+import com.sidr.launcher.core.testing.FakeMentionBinder
+import com.sidr.launcher.core.testing.FakeModelPlanner
 import com.sidr.launcher.core.testing.configuredProvider
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
@@ -130,21 +131,24 @@ class LauncherScreenPrayerStripTest {
             executor = AgentExecutor(agentRegistry, FakeToolExecutor(emptyList()), RuntimeBudget.Default),
             store = agentStore,
         )
+        // A4′ phase 3a: one instance for the route and for the card's «Выполнить», so both starts share
+        // one store and one id sequence.
+        val startAgentSession = StartAgentSessionUseCase(
+            planner = TemplatePlanner(),
+            store = agentStore,
+            ids = agentIds,
+            registry = agentRegistry,
+        )
         val routeUseCase = RouteCommandUseCase(
             handleUserCommand = useCase,
-            planner = FakeCommandPlanner(),
-            catalog = FakeActionCatalog(),
+            modelPlanner = FakeModelPlanner(),
+            binder = FakeMentionBinder(),
             featureFlagRepository = FakeFeatureFlagRepository(),
             // Этап 4.0: same reasoning as LauncherViewModelTest's baseline fixture — a configured
             // provider keeps this screen test testing the prayer strip, not the routing gate.
             providerConfigRepository = configuredProvider(),
             connectivityChecker = FakeConnectivityChecker(),
-            startAgentSession = StartAgentSessionUseCase(
-                planner = TemplatePlanner(),
-                store = agentStore,
-                ids = agentIds,
-                registry = agentRegistry,
-            ),
+            startAgentSession = startAgentSession,
         )
         val resolutionStore = FakeResolutionPreferenceStore()
         val preferenceResolver = ResolveCommandWithPreferenceUseCase(
@@ -167,7 +171,6 @@ class LauncherScreenPrayerStripTest {
                 executor = fakeExecutor,
             ),
             actionExecutor = fakeExecutor,
-            actionCatalog = FakeActionCatalog(),
             usageHistoryRepository = FakeUsageHistoryRepository(),
             featureFlagRepository = FakeFeatureFlagRepository(),
             userPreferencesRepository = FakeUserPreferencesRepository(),
@@ -179,7 +182,11 @@ class LauncherScreenPrayerStripTest {
             runAgentSession = runAgent,
             resolveAgentConsent = ResolveConsentUseCase(agentStore, runAgent),
             cancelAgentSession = CancelAgentSessionUseCase(agentStore),
+            resumeAgentSession = resumeOver(agentStore, runAgent, agentRegistry),
+            undoAgentSession = undoOver(agentStore, agentRegistry),
             agentSessionStore = agentStore,
+            startAgentSession = startAgentSession,
+            mentionBinder = FakeMentionBinder(),
             toolRegistry = agentRegistry,
             // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
             // and every step line renders exactly as it did before the dynamic arm existed.

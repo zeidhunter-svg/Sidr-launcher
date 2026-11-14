@@ -18,7 +18,12 @@ enum class ExecutionState {
 
 enum class ConsentReason { RISK_LEVEL, RISK_RAISED, MISSING_PERMISSION, DURABLE_EFFECT }
 
-data class ConsentCheckpoint(val stepIndex: Int, val reason: ConsentReason)
+/**
+ * Every reason the step at [stepIndex] must stop for — not the first one found (A4′ phase 2, spec
+ * §6.1, owner fork F2-2). One stop is one checkpoint and one trace event, however many reasons it has;
+ * never empty, because a step with no reason to stop gets no checkpoint at all.
+ */
+data class ConsentCheckpoint(val stepIndex: Int, val reasons: Set<ConsentReason>)
 
 /**
  * Loop bounds — and, since A4' phase 0, a **wall-clock** bound too.
@@ -28,36 +33,19 @@ data class ConsentCheckpoint(val stepIndex: Int, val reason: ConsentReason)
  * dispatcher's clock, which `runTest` makes virtual, so the domain stays clock-free in the sense
  * that mattered — nothing here calls `System.currentTimeMillis()` and no test depends on real time.
  *
- * **The cut is COOPERATIVE, not preemptive — say this plainly, because "closed" would overclaim
- * it.** `withTimeout` cancels only at a *cancellable suspension point* inside the block; it interrupts
- * a tool suspended on `delay`, a future network call, or a future MCP call — the shape
- * `AgentExecutorTest`'s wall-clock tests model. A tool blocked in **non-suspending** code is not
- * interrupted, and the budget only bounds it once it returns. Every shipped call that leaves the
- * launcher is a blocking call of that kind today, and so is the `:consumer:jvm` sandbox — so a
- * `set_timer` whose binder call hangs, or a sandbox file read stuck on I/O, is bounded by nothing
- * today. They come in two shapes, and the shapes differ in what a call that returns **after** the
- * deadline records. Both consequences below are **by reading** kotlinx.coroutines' semantics, not
- * measured:
- *  - **purely synchronous** — `ContextIntentLauncher.launch` calls `startActivity` in a plain `fun`
- *    (every Tier-0 tool), `ShortcutToolWorker` calls `startShortcut` the same way, and
- *    `SandboxToolWorker.invoke` does its file I/O on the caller's thread with no `withContext` at all.
- *    The block never suspends, and `withTimeout` hands back a value such a block returns even once
- *    the deadline has passed: the call keeps its **real** result, not [ToolResult.HandedOff];
- *  - **a blocking body inside `withContext(ioDispatcher)`** — `SystemIntentToolWorker` reaches the
- *    world this way twice: `InstalledAppsRepositoryImpl.getInstalledApps` (the `PackageManager`
- *    query every `launch_app` makes) and `AndroidActionExecutor.execute` (the `startActivity` of
- *    `launch_app` and `play_store_search`). `withContext` runs the body as a child coroutine of the
- *    timeout's scope; past the deadline that child is cancelled, the body still runs to its end, and
- *    when it returns its value is **discarded** — the child completes cancelled, and the engine
- *    records [ToolResult.HandedOff]. So a real `Observed(APP_NOT_INSTALLED)` from a `launch_app`
- *    whose app query outlived the deadline would be recorded `HandedOff`, and A0's store step, whose
- *    precondition asks for exactly that observation, would be skipped.
+ * **Since A4′ phase 2 the cut is the engine's, not the tool's** (owner fork F2-1, R14 closed).
+ * `AgentExecutor` runs the one world call in its own scope on an injected context and waits only until
+ * this budget; then it records [ToolResult.HandedOff] and ends the plan `Blocked` (fork F2-1b — a
+ * call it stopped waiting for may still be acting, so no second call starts). Measured on JVM before
+ * the choice (plan §0.2, probe 2): with a 2 000 ms block and a 300 ms budget, an interruptible and an
+ * uninterruptible block both came back at ~300 ms under this scheme; under the previous
+ * `withTimeout`-only shape both took the full 2 000 ms, and `runInterruptible` cut only the
+ * interruptible one. Binder calls were not measured — the phone was off-limits — and are, by
+ * reading, of the uninterruptible kind.
  *
- * In neither shape is the wait itself shortened. The A0 debt ("a hanging tool is bounded by nothing")
- * is therefore **narrowed, not closed**: closed for a suspending hang, latent for a synchronous one.
- * Extending interruption to synchronous world calls (a dedicated thread plus
- * `Thread.interrupt`/cancellation, or a cooperative check inside each worker) is an owner question at
- * phase close (controller ruling R14), not decided by this task.
+ * **What it still does not do, named:** it does not STOP the call. A parked call runs on in the
+ * background and may complete its act after `HandedOff` is recorded; that is exactly what
+ * `HandedOff` says. It bounds how long the ENGINE waits, not how long the world takes.
  *
  * The default is an order of magnitude above the slowest path measured on the SM-A325F: the A0 ADR
  * (`ai-context/decisions.md`, the Task 15 device-acceptance section) measured the `launch_app`
@@ -134,10 +122,18 @@ data class AgentSession(
      *  - **Layer 1 — the engine's own observations.** This continues from the persisted cursor and
      *    nothing re-plans, so an observation taken before the pause is acted on however stale it has
      *    become (A0 acceptance §12.8: a session that already observed `APP_NOT_INSTALLED` opens the
-     *    store even if the app was installed while the plan sat paused). **Addressed to phase 2**,
-     *    where re-planning on partial failure is the same mechanism and where
-     *    `PlanningRequest.priorObservations` is the input it needs — you cannot react to a re-check
-     *    without something that re-plans.
+     *    store even if the app was installed while the plan sat paused). **Built in phase 2** — not
+     *    here, in `ResumeAgentSessionUseCase`: a plan in which nothing has acted is planned afresh
+     *    ([replansOnResume]), and if that fresh look finds no plan the stale session ends
+     *    [ExecutionState.Failed] rather than continuing (owner decision 2026-10-03, M1(b)). **Since A4′
+     *    phase 3b (Task 11; fork 3b-A, plan §0.2 B-10)** a plan the MODEL wrote in which a step acted,
+     *    with no call in flight, does not continue from this cursor either: its remainder — the steps
+     *    after the last act — goes back for an interpretation card, every app re-bound on the device and
+     *    nothing run before «Выполнить» (`Resumption.NeedsCard`). What still continues from this cursor
+     *    on pre-pause observations, named and not closed: a deterministic plan that acted, an undo, and a
+     *    call in flight (resumed once, `DOC-HMA-1`). And inside a remainder, a finished step's recorded
+     *    output IS a pre-pause observation, used as recorded on purpose — re-running that act to read it
+     *    afresh would perform it twice; value arguments (a duration, a time, an address) are not re-read.
      *  - **Layer 2 — a source's own snapshot.** `ShortcutRefreshTrigger.start()` runs once per
      *    process and observes **shortcut** changes; a grant of the `android.app.role.HOME` role is
      *    not one, so the dynamic catalog stays empty until a restart (A1″ acceptance finding (b),
@@ -151,4 +147,72 @@ data class AgentSession(
      */
     fun resumed(): AgentSession =
         copy(state = ExecutionState.Running).record(TraceEvent.SessionResumed)
+
+    /**
+     * Whether «Продолжить» on this paused session plans the goal AFRESH rather than picking up at the
+     * cursor (A4′ phase 2, spec §6.4 as amended by owner fork F2-3.1; staleness layer 1, spec §3 0.3).
+     *
+     * True exactly when nothing can have acted yet, so looking again cannot do anything twice:
+     *  - no result is `Effected` or `HandedOff` — only looks (`Observed`) and failures;
+     *  - no call is in flight ([midStepInvocation]) — a call cut off by the process's death may have
+     *    acted, and resuming it once is what `DOC-HMA-1` requires;
+     *  - the plan is not an undo ([Compensation.isUndo]) — its goal is the original goal, and planning
+     *    it again would redo what it undoes.
+     *
+     * One predicate for two readers: `ResumeAgentSessionUseCase` acts on it, and the paused card picks
+     * its body by it (F2-3.2), so the card cannot promise one thing while the button does another.
+     * When this is true but the fresh look finds NO plan (`start.planning(paused.goal)` answers
+     * `NoPlan`), the stale session ends [ExecutionState.Failed] instead of continuing (owner decision
+     * 2026-10-03, M1(b); final review N5/T4 M1) — the card then reads «План не удалось завершить», not a
+     * promise of a fresh look that a stale continuation would have broken. When the fresh look finds a
+     * target the user must pick again (`Unresolved`, a 2b pick — A4′ phase 3b, E5-R1), the goal goes back
+     * to the route, which asks again; the look is still fresh, so the card's promise holds.
+     *
+     * **Where the promise no longer holds word for word, named** (A4′ phase 3b fix round 1, controller
+     * ruling E11-R4). When this is FALSE for a plan the MODEL wrote in which a step acted, with no call in
+     * flight, «Продолжить» does not pick up at the cursor: it shows the REMAINDER's interpretation card first
+     * (`Resumption.NeedsCard` — the steps after the last act, every app bound again on the device), and
+     * nothing runs before «Выполнить». The paused card still picks its body by this predicate, so it reads
+     * «Продолжите — и Sidr возьмётся с того места, где остановился» — true of where the rest begins, silent
+     * about the card that comes first. The strings are unchanged on purpose; a third body is the owner's.
+     */
+    fun replansOnResume(): Boolean =
+        state == ExecutionState.Paused &&
+            !Compensation.isUndo(plan) &&
+            midStepInvocation() == null &&
+            observations.values.none { it is ToolResult.Effected || it is ToolResult.HandedOff }
+}
+
+/**
+ * Whether the clock stopped this plan on a call that may still be acting (owner fork F2-1b): `Blocked`,
+ * with `HandedOff` at the step before the cursor. **One evidence for both secondary actions of a finished
+ * card** — «Отменить» (`UndoAgentSessionUseCase.review`) and «Повторить остаток»
+ * (`ResumeAgentSessionUseCase.remainder`, A4′ phase 3b fix round 1, controller ruling E11-R1): each is a
+ * world call, and starting one beside a call that may still act breaks the order the plan promised.
+ *
+ * It is not the only shape `AgentExecutor` produces with that pair: a step-budget stop after a genuine
+ * `HandedOff` ends there too (today unreachable on Android: a model plan is at most the budget's length).
+ * The direction is safe either way — both actions are withheld on the same evidence, an outcome that was
+ * never seen.
+ */
+internal fun AgentSession.cutCallMayStillAct(): Boolean =
+    state == ExecutionState.Blocked && observations[cursor - 1] is ToolResult.HandedOff
+
+/**
+ * The [TraceEvent.ToolInvoked] event of the step whose tool call has been decided but not yet
+ * performed, or `null` if [AgentSession] is not currently mid-step. Moved here from `AgentExecutor`
+ * in A4′ phase 2 so the resume rule ([AgentSession.replansOnResume]) reads the SAME predicate the
+ * engine does, rather than a copy.
+ *
+ * **It reads the last `ToolInvoked`, not the last trace event, and that difference is the whole
+ * behaviour** (review finding F1, 2026-08-23). The restart path appends [TraceEvent.SessionPaused] and
+ * [TraceEvent.SessionResumed] *after* the pending `ToolInvoked`; keyed on the trace tail the predicate
+ * answered `null` on exactly the shape it exists to recognise, and one granted consent paid for two
+ * executions (`DOC-HMA-1`). "The last `ToolInvoked` has no `ToolObserved` for its index" is the same
+ * predicate without the adjacency assumption.
+ */
+internal fun AgentSession.midStepInvocation(): TraceEvent.ToolInvoked? {
+    val last = trace.events.filterIsInstance<TraceEvent.ToolInvoked>().lastOrNull() ?: return null
+    val alreadyObserved = trace.events.any { it is TraceEvent.ToolObserved && it.index == last.index }
+    return if (alreadyObserved) null else last
 }

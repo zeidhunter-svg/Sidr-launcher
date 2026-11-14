@@ -1,8 +1,9 @@
 package com.sidr.launcher.domain.action
 
 /**
- * A concrete, routed action instance carrying its **semantic, still-unresolved** arguments — the value
- * type the AIL-4 router emits (`PlanResult.RoutedAction`) and the AIL-5 confirmation UI acts on.
+ * A concrete action instance carrying its **semantic, still-unresolved** arguments — the value type
+ * the `in_app` tool worker (`SystemIntentToolWorker`) and the web chip hand to `ExecuteActionUseCase`.
+ * The AIL-4 router that first emitted it was deleted in A4′ phase 3a; the model's steps are tools now.
  *
  * This is intentionally a **parallel** hierarchy to `ExecutableAction`, not a wrapper around it:
  * a routed [LaunchApp] carries the raw `query` ("telegram"), not a resolved package — resolution
@@ -19,8 +20,15 @@ sealed interface LauncherAction {
     /** The registered family this instance belongs to. */
     val id: ActionId
 
-    /** Launch an installed app matching [query] (unresolved display-name query, not a package). */
-    data class LaunchApp(val query: String) : LauncherAction {
+    /**
+     * Launch an installed app matching [query] (unresolved display-name query, not a package).
+     *
+     * [packageName] pins the launch to one installed package (A4′ phase 3a): the device binds the
+     * model's word for an app BEFORE the interpretation card, and two apps can share a label, so the
+     * pick has to survive to execution. `null` — every path but the bridge's — resolves [query] by
+     * label exactly as before.
+     */
+    data class LaunchApp(val query: String, val packageName: String? = null) : LauncherAction {
         override val id: ActionId get() = ActionIds.LAUNCH_APP
     }
 
@@ -44,7 +52,12 @@ sealed interface LauncherAction {
         override val id: ActionId = ActionIds.SHOW_APPS
     }
 
-    /** Open [url] in a browser (AIL-2). URL safety/normalization is enforced before this is built. */
+    /**
+     * Open [url] in a browser (AIL-2). Nothing in this type checks [url]; its builder must. Today that is
+     * `SystemIntentToolWorker` (`open_url`, the model's address), which admits only `http://`/`https://`.
+     * FastPath's typed URLs are checked and normalized by `UrlDetector` and reach the executor as
+     * `LauncherIntent.OpenUrlIntent`, not as this type.
+     */
     data class OpenUrl(val url: String) : LauncherAction {
         override val id: ActionId get() = ActionIds.OPEN_URL
     }

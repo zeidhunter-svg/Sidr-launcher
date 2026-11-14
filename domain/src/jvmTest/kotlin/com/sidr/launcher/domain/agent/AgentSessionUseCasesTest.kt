@@ -6,6 +6,8 @@ import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.sort.ArgSorts
+import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ObservedFact
 import com.sidr.launcher.domain.tool.ToolExecutor
 import com.sidr.launcher.domain.tool.ToolId
@@ -353,5 +355,70 @@ class AgentSessionUseCasesTest {
 
     private fun plannerOf(plan: ExecutionPlan) = object : Planner {
         override suspend fun plan(request: PlanningRequest, registry: ToolRegistry) = PlanningResult.Planned(plan)
+    }
+
+    /**
+     * A4′ phase 3b, B-6: `planning` is what step 2b reads, so it must keep the three answers apart.
+     * `Planned` only when the plan is runnable against the registry NOW — an unrunnable one is `NoPlan`,
+     * the same fail-open `start` has always given it. `Unresolved` passes through untouched: the target
+     * is the user's to pick, so nothing is persisted; and the session-less [StartAgentSessionUseCase.plan]
+     * (resume's reader) and [StartAgentSessionUseCase.start] read it as "no plan".
+     */
+    @Test
+    fun `planning returns Planned only for a runnable plan and passes Unresolved through`() = runTest {
+        val runnable = (TemplatePlanner().plan(PlanningRequest(goal), registry) as PlanningResult.Planned).plan
+        assertEquals(
+            PlanningResult.Planned(runnable),
+            StartAgentSessionUseCase(plannerOf(runnable), store, ids, registry).planning(goal),
+        )
+        assertEquals(
+            PlanningResult.NoPlan,
+            StartAgentSessionUseCase(plannerOf(ExecutionPlan(emptyList())), store, ids, registry).planning(goal),
+        )
+
+        val target = UnresolvedTarget(
+            goal = goal,
+            pending = PlanStep(
+                0,
+                ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal("убер"))),
+                ActionRiskLevel.SAFE,
+                StepPrecondition.None,
+                StepRationale.GOAL_DIRECT,
+            ),
+            arg = "app",
+            labelArg = null,
+            sort = ArgSorts.APP,
+            words = "убер",
+            candidates = emptyList(),
+            confirm = false,
+        )
+        val claiming = object : Planner {
+            override suspend fun plan(request: PlanningRequest, registry: ToolRegistry) = PlanningResult.Unresolved(target)
+        }
+        val start = StartAgentSessionUseCase(claiming, store, ids, registry)
+
+        assertEquals(PlanningResult.Unresolved(target), start.planning(goal))
+        assertNull("a session-less caller reads an unresolved target as no plan", start.plan(goal))
+        assertNull((start.start(goal) as OperationResult.Success).value)
+        assertTrue("nothing reaches disk before the user picks: ${store.saved}", store.saved.isEmpty())
+    }
+
+    /**
+     * A4′ phase 2: `startPlanned` is how a plan built outside the planner — an undo — reaches the
+     * store, and it validates exactly as `start` does (F10), so no caller can persist an unchecked
+     * plan.
+     */
+    @Test
+    fun `startPlanned refuses a plan the registry cannot run and persists nothing`() = runTest {
+        val unknown = ExecutionPlan(
+            listOf(
+                PlanStep(0, ToolInvocation(ToolId("fixture_unregistered")), ActionRiskLevel.SAFE, StepPrecondition.None, StepRationale.COMPENSATION),
+            ),
+        )
+
+        val started = StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry).startPlanned(goal, unknown)
+
+        assertNull((started as OperationResult.Success).value)
+        assertTrue(store.saved.isEmpty())
     }
 }

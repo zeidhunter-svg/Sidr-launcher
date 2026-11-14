@@ -170,9 +170,35 @@ class AgentSessionMappersTest {
     fun `every ConsentReason round-trips through a ConsentRequested event`() {
         ConsentReason.entries.forEach { reason ->
             assertEquals(
-                TraceEvent.ConsentRequested(0, reason),
+                TraceEvent.ConsentRequested(0, setOf(reason)),
                 read(trace = listOf(traceRow("ConsentRequested", 0, reason.name))).trace.events.single(),
             )
+        }
+    }
+
+    /**
+     * One set, one row: the reasons are written in declaration order whatever order the set was built
+     * in, so the same checkpoint never reads as two different rows. A row written before A4′ phase 2
+     * holds one name, and `every ConsentReason round-trips…` above is what reads it back.
+     */
+    @Test
+    fun `a ConsentRequested row lists its reasons in declaration order`() {
+        val session = read().copy(
+            trace = ExecutionTrace(
+                listOf(TraceEvent.ConsentRequested(0, setOf(ConsentReason.DURABLE_EFFECT, ConsentReason.RISK_LEVEL))),
+            ),
+        )
+
+        assertEquals(
+            "RISK_LEVEL,DURABLE_EFFECT",
+            AgentSessionMappers.toTraceEntities(session, now = 1L).single().detail,
+        )
+    }
+
+    @Test
+    fun `a ConsentRequested row with no reason at all is corrupt, not an empty checkpoint`() {
+        assertThrows(CorruptAgentRowException::class.java) {
+            read(trace = listOf(traceRow("ConsentRequested", 0, "")))
         }
     }
 
@@ -188,7 +214,7 @@ class AgentSessionMappersTest {
         TraceEvent.StepStarted(0),
         TraceEvent.StepSkipped(1, StepPrecondition.PreviousStepObserved(ObservedFact.APP_NOT_INSTALLED)),
         TraceEvent.StepRejected(1, RejectionReason.UNRESOLVED_ARG_SOURCE),
-        TraceEvent.ConsentRequested(1, ConsentReason.RISK_LEVEL),
+        TraceEvent.ConsentRequested(1, setOf(ConsentReason.RISK_LEVEL, ConsentReason.DURABLE_EFFECT)),
         TraceEvent.ConsentResolved(1, granted = true),
         TraceEvent.ToolInvoked(0, ToolIds.LAUNCH_APP),
         TraceEvent.ToolObserved(0, observed),

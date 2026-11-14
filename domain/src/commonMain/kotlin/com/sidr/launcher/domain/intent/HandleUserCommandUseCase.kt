@@ -14,7 +14,8 @@ import kotlinx.coroutines.launch
 /**
  * Use case: turns raw user command text into a single [CommandOutcome] for the UI.
  *
- * Pipeline: normalize → (empty?) → match → confidence gate → route → execute-when-safe.
+ * Pipeline: normalize → (empty?) → match → resolve a claimed launch → confidence gate → route →
+ * execute-when-safe.
  *
  * Invariants:
  * - Never throws to the UI. Technical failures from the resolver/executor become
@@ -24,6 +25,13 @@ import kotlinx.coroutines.launch
  *   [CommandOutcome.OpenSettings]), input clearing ([CommandOutcome.ClearInput]), grid display
  *   ([CommandOutcome.ShowApps]), ambiguity and "not found" never reach the [ActionExecutor].
  * - Low/medium confidence never auto-executes.
+ * - A claimed launch's confidence is EARNED, not assumed (A4′ phase 1, spec §5; owner forks F1-2,
+ *   F1-3). A launch whose app name does not resolve keeps its claim when that is a fact about the
+ *   world — "открой wattsupp", or an installed brand's variant that is not installed ("открой youtube
+ *   music"): `NoAppFound`, and `RouteCommandUseCase` step (2) offers the store, byte for byte as A0
+ *   shipped it. When the name carries a second goal ([SecondGoal]: "открой gmail и проверь почту"),
+ *   the parse folded two goals into one name and the claim is withdrawn:
+ *   [CommandOutcome.LowConfidence], undecided, so step 2b and the model get the command.
  */
 class HandleUserCommandUseCase(
     private val matcher: IntentMatcher,
@@ -51,14 +59,29 @@ class HandleUserCommandUseCase(
 
         val match = matcher.match(normalized)
         val intent = match.best.intent
-        val confidence = match.best.confidence
+
+        // A4′ phase 1 (spec §5; owner forks F1-2, F1-3): a launch the matcher claimed is RESOLVED
+        // before its confidence is believed. "открой gmail и проверь новые письма" is claimed at 0.90
+        // exactly like "открой gmail"; whether that 0.90 was earned depends on what the name resolved
+        // to. This is a read — nothing executes before the gate below — and its result is reused after
+        // the gate, so a launch still reads the installed apps exactly once.
+        val launchResolution = (intent as? LauncherIntent.LaunchAppIntent)
+            ?.takeIf { confidencePolicy.shouldAutoExecute(match.best.confidence) }
+            ?.let { resolver.resolve(it) }
+        val confidence =
+            if (launchResolution != null && overreaches(intent as LauncherIntent.LaunchAppIntent, launchResolution)) {
+                UNEARNED_LAUNCH_CONFIDENCE
+            } else {
+                match.best.confidence
+            }
 
         // Fire-and-forget: record on the injected scope so the I/O never delays the outcome.
         // Placed BEFORE the confidence gate so suggest, low-confidence and unknown matches are
-        // all captured. Never affects the outcome below.
+        // all captured. Never affects the outcome below. Since A4′ phase 1 the confidence recorded
+        // is the one the gate acts on, not the one the matcher claimed.
         recordingScope.launch { recordMatch(normalized, intent, confidence) }
 
-        // ── Confidence gate — runs before any resolution or execution ────────
+        // ── Confidence gate — runs before any execution ──────────────────────
         if (confidencePolicy.isLowConfidence(confidence)) {
             return when (intent) {
                 is LauncherIntent.UnknownIntent -> CommandOutcome.Unknown(intent.originalInput)
@@ -77,14 +100,32 @@ class HandleUserCommandUseCase(
             return routeSimpleCommand(intent.command)
         }
 
-        return when (val resolved = resolver.resolve(intent)) {
+        return when (val resolved = launchResolution ?: resolver.resolve(intent)) {
             is OperationResult.Failure -> CommandOutcome.Failed(CommandFailure.Generic)
             is OperationResult.Success -> routeAction(resolved.value)
         }
     }
 
+    /**
+     * A claimed launch whose app name did not resolve: is that a fact about the WORLD (no such app —
+     * keep `NoAppFound`, and A0's store plan) or about the PARSE (FastPath folded a second goal into
+     * the app name)? Only a second goal says "the parse" (owner fork F1-3, 2026-09-26). An installed
+     * brand followed by more words — "открой youtube music", or "google maps" on a phone that labels
+     * Maps «Карты» — is the world: the user named a variant that is not installed, and A0's store offer
+     * is the right answer. Consulted only after the whole name failed to resolve, so an installed app
+     * whose own label reads like a second goal ("Pack and Send") still launches (owner fork F1-2).
+     */
+    private fun overreaches(
+        intent: LauncherIntent.LaunchAppIntent,
+        resolution: OperationResult<ExecutableAction>,
+    ): Boolean {
+        val shown = (resolution as? OperationResult.Success)?.value as? ExecutableAction.ShowMessageAction
+        if (shown?.message !is CommandMessage.NoAppFound) return false
+        return SecondGoal.carriedBy(intent.displayNameQuery)
+    }
+
     private fun routeSimpleCommand(command: SimpleCommand): CommandOutcome = when (command) {
-        SimpleCommand.OPEN_ASSISTANT -> CommandOutcome.OpenAssistant
+        SimpleCommand.OPEN_ASSISTANT -> CommandOutcome.OpenAssistant(question = null)
         SimpleCommand.SHOW_APPS -> CommandOutcome.ShowApps
         SimpleCommand.CLEAR -> CommandOutcome.ClearInput
         SimpleCommand.HELP -> CommandOutcome.Message(CommandMessage.Help)
@@ -99,7 +140,7 @@ class HandleUserCommandUseCase(
         -> mapExecution(executor.execute(action))
 
         // Routing outcomes — never executed.
-        is ExecutableAction.AmbiguousAppAction -> CommandOutcome.NeedsConfirmation(action.candidates)
+        is ExecutableAction.AmbiguousAppAction -> CommandOutcome.NeedsConfirmation(action.candidates, action.query, action.confirm)
         is ExecutableAction.ShowMessageAction -> CommandOutcome.Message(action.message)
         ExecutableAction.OpenLauncherSettingsAction -> CommandOutcome.OpenSettings
         ExecutableAction.NoOpAction -> CommandOutcome.NoOp
@@ -140,6 +181,18 @@ class HandleUserCommandUseCase(
         } catch (_: Throwable) {
             // Swallow — history is non-critical; the command already has its outcome.
         }
+    }
+
+    private companion object {
+        /**
+         * What a launch verb whose app name cannot be used earns — the value `RuleBasedIntentMatcher`
+         * already gives a launch verb with no app name. Below `DefaultIntentConfidencePolicy`'s suggest
+         * threshold (0.50), so the gate answers `LowConfidence`: undecided, never `Suggest`. That holds
+         * for the only policy production binds (`IntentProvidesModule.provideConfidencePolicy`); a
+         * policy whose suggest threshold sat at or below this value would turn it into a suggestion to
+         * launch a name that does not resolve — named here, not guarded.
+         */
+        const val UNEARNED_LAUNCH_CONFIDENCE = 0.30f
     }
 
     private fun LauncherIntent.toMatchType(): IntentMatchType = when (this) {

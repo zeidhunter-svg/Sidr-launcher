@@ -1,6 +1,6 @@
 # Manifest SidrOS
 
-> **Status: draft of principles, 2026-09-13.** Not a plan and not a spec: this states *what the system
+> **Status: draft of principles, 2026-09-13; §19–20 added by the owner's decision on 2026-10-03.** Not a plan and not a spec: this states *what the system
 > is*, not what gets built and when. Engineering consequences live in [improvements.md](improvements.md),
 > Part 3. Russian original: [manifest-sidros.md](manifest-sidros.md) — that is the authored version;
 > this is its translation. Governing status arrives only by the owner's decision; until then this
@@ -172,6 +172,21 @@ verifiable**, and that is a direction of development rather than a detail of tes
 What the system learned about a person is stored as rows with provenance and retention: preferences,
 aliases, environments, cached programs, stated facts. Every row can be viewed, corrected, deleted and
 carried elsewhere. A model cannot be asked to forget and then checked; a row can.
+
+## 19. The user is not necessarily a human
+
+An intent may come from a person or from an agent — yours on another device, someone else's, a service.
+So the kernel's first question is not "what to do" but **"on whose behalf"**. Every action is attributed
+to a principal and a chain of delegation, and the gate is the same for all: the same risk gets the same
+gate, whoever proposed it. A machine acts only within what a human delegated to it — usually an
+environment — and cannot raise its own rights. An agent with no human mandate is not a user but a
+background loop, and that is forbidden.
+
+## 20. The device is any device
+
+The kernel does not know which device it runs on: a phone, a computer and everything else differ only in
+their sources of capabilities. One engine, the same gates, the same trace. Devices may address one another
+through agents — and then each is, to the other, just another principal (§19).
 
 ---
 

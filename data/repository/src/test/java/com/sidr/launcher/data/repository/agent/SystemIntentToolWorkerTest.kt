@@ -4,6 +4,7 @@ import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.domain.intent.ActionExecutionResult
 import com.sidr.launcher.domain.intent.CommandFailure
+import com.sidr.launcher.domain.intent.ExecutableAction
 import com.sidr.launcher.domain.intent.ExecuteActionUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.model.InstalledApp
@@ -94,7 +95,7 @@ class SystemIntentToolWorkerTest {
     fun `an unregistered tool id fails closed and never reaches the action path`() = runTest {
         apps.appsToReturn = listOf(InstalledApp(packageName = "com.uber", label = "убер", activityName = "Main"))
 
-        val result = executor().invoke(ResolvedInvocation(ToolId("web_search"), mapOf("query" to "убер")))
+        val result = executor().invoke(ResolvedInvocation(ToolId("open_settings"), mapOf("query" to "убер")))
 
         assertTrue(result is ToolResult.Failed)
         assertEquals(0, actionExecutor.executedActions.size)
@@ -130,5 +131,70 @@ class SystemIntentToolWorkerTest {
         val result = executor().invoke(ResolvedInvocation(ToolIds.LAUNCH_APP, mapOf("query" to "убер")))
 
         assertTrue(result is ToolResult.Failed)
+    }
+
+    /**
+     * A4′ phase 3a, Task 1 (spec §7.12.3): the router's two actions with an executor become tools. The
+     * worker reads each tool's OWN argument — `query` for a search, `url` for an address — through the
+     * same unchanged `ExecuteActionUseCase` chain the launch has always used.
+     */
+    @Test
+    fun `a web search effects with the query it was given and declares no output`() = runTest {
+        val result = executor().invoke(
+            ResolvedInvocation(InAppToolIds.WEB_SEARCH, mapOf("query" to "ostravel lectures")),
+        )
+
+        assertEquals(ToolResult.Effected(), result)
+        val search = actionExecutor.executedActions.single() as ExecutableAction.OpenSearchAction
+        assertEquals("ostravel lectures", search.query)
+    }
+
+    @Test
+    fun `opening a url opens that address, never a search for it`() = runTest {
+        val url = "https://quillmere.example/path?q=a&b=c"
+
+        val result = executor().invoke(ResolvedInvocation(InAppToolIds.OPEN_URL, mapOf("url" to url)))
+
+        assertEquals(ToolResult.Effected(), result)
+        assertEquals(listOf(ExecutableAction.OpenUrlAction(url)), actionExecutor.executedActions)
+    }
+
+    @Test
+    fun `a blank url fails closed and never reaches the action path`() = runTest {
+        val result = executor().invoke(ResolvedInvocation(InAppToolIds.OPEN_URL, mapOf("url" to "  ")))
+
+        assertEquals(ToolResult.Failed(CommandFailure.Generic), result)
+        assertTrue(actionExecutor.executedActions.isEmpty())
+    }
+
+    /**
+     * Final review A3: the address is the MODEL's, and `ACTION_VIEW` opens whatever app claims a scheme —
+     * a payment or a deep link, not a page. FastPath's `UrlDetector` never sees this path, so the worker,
+     * below the consent card, is where the web-only rule holds: anything but `http`/`https` fails closed
+     * and nothing is opened. Each form here is refused by the scheme check alone — none is blank.
+     */
+    @Test
+    fun `a url that is not http or https fails closed and opens nothing`() = runTest {
+        listOf("quillpay://ostravel", "quillpay:ostravel", "ostravel.example/lectures").forEach { url ->
+            val result = executor().invoke(ResolvedInvocation(InAppToolIds.OPEN_URL, mapOf("url" to url)))
+
+            assertEquals("'$url' must fail closed", ToolResult.Failed(CommandFailure.Generic), result)
+        }
+        assertTrue("nothing reached the action path", actionExecutor.executedActions.isEmpty())
+    }
+
+    @Test
+    fun `a pinned launch opens the pinned package even when two apps share the label`() = runTest {
+        apps.appsToReturn = listOf(
+            InstalledApp(packageName = "com.a", label = "убер", activityName = "Main"),
+            InstalledApp(packageName = "com.b", label = "убер", activityName = "Main"),
+        )
+
+        val result = executor().invoke(
+            ResolvedInvocation(ToolIds.LAUNCH_APP, mapOf("query" to "убер", "app" to "com.b")),
+        )
+
+        assertEquals(ToolResult.Effected(ToolOutput(mapOf("resolved_query" to "убер"))), result)
+        assertEquals(listOf(ExecutableAction.LaunchAppAction("com.b", "Main")), actionExecutor.executedActions)
     }
 }

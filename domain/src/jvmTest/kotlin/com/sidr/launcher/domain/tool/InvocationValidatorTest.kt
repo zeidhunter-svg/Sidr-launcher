@@ -8,7 +8,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * A0's fail-closed argument gate, modeled on `ProposalValidator`. It runs before **every** step, not
+ * A0's fail-closed argument gate, modeled on the router's `ProposalValidator` (deleted in A4′ phase 3a;
+ * its model-side twin is now the bridge's `BridgeValidator`). It runs before **every** step, not
  * once at planning time: a plan can outlive a process restart, and by the time it resumes the app may
  * be gone or a permission revoked.
  *

@@ -190,7 +190,7 @@ internal object AgentSessionMappers {
                     is StepPrecondition.PreviousStepObserved -> p.fact.name
                 }
                 is TraceEvent.StepRejected -> event.index to event.reason.name
-                is TraceEvent.ConsentRequested -> event.index to event.reason.name
+                is TraceEvent.ConsentRequested -> event.index to encodeConsentReasons(event.reasons)
                 is TraceEvent.ConsentResolved -> event.index to event.granted.toString()
                 is TraceEvent.ToolInvoked -> event.index to event.toolId.value
                 // The result is NOT repeated here — it is on the step row's observation columns, so
@@ -361,7 +361,7 @@ internal object AgentSessionMappers {
             row.detail?.let { StepPrecondition.PreviousStepObserved(readFact(it)) } ?: StepPrecondition.None,
         )
         "StepRejected" -> TraceEvent.StepRejected(row.requireStepIndex(), readRejection(row.requireDetail()))
-        "ConsentRequested" -> TraceEvent.ConsentRequested(row.requireStepIndex(), readConsentReason(row.requireDetail()))
+        "ConsentRequested" -> TraceEvent.ConsentRequested(row.requireStepIndex(), readConsentReasons(row.requireDetail()))
         "ConsentResolved" -> TraceEvent.ConsentResolved(row.requireStepIndex(), readBoolean(row.requireDetail()))
         "ToolInvoked" -> TraceEvent.ToolInvoked(row.requireStepIndex(), ToolId(row.requireDetail()))
         // Read back from the step row rather than from this row: the observation columns are the one
@@ -428,6 +428,8 @@ internal object AgentSessionMappers {
     private fun readRationale(raw: String): StepRationale = when (raw) {
         StepRationale.GOAL_DIRECT.name -> StepRationale.GOAL_DIRECT
         StepRationale.APP_NOT_INSTALLED_FALLBACK.name -> StepRationale.APP_NOT_INSTALLED_FALLBACK
+        StepRationale.COMPENSATION.name -> StepRationale.COMPENSATION
+        StepRationale.MODEL_PROPOSED.name -> StepRationale.MODEL_PROPOSED
         else -> throw CorruptAgentRowException("unknown step rationale \"$raw\"")
     }
 
@@ -448,4 +450,16 @@ internal object AgentSessionMappers {
         ConsentReason.DURABLE_EFFECT.name -> ConsentReason.DURABLE_EFFECT
         else -> throw CorruptAgentRowException("unknown consent reason \"$raw\"")
     }
+
+    /**
+     * Every reason a step stopped for (A4′ phase 2, F2-2), comma-joined in DECLARATION order, so one
+     * set is always one row. `detail` is TEXT, so the format widened without a migration: a row
+     * written before phase 2 holds one name and reads back as a one-reason set.
+     */
+    private fun encodeConsentReasons(reasons: Set<ConsentReason>): String =
+        ConsentReason.entries.filter { it in reasons }.joinToString(",") { it.name }
+
+    /** An empty or unknown name throws through [readConsentReason] — an empty checkpoint is corrupt. */
+    private fun readConsentReasons(raw: String): Set<ConsentReason> =
+        raw.split(',').map { readConsentReason(it) }.toSet()
 }

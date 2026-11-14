@@ -97,4 +97,21 @@ class FilePlannerTest {
         }
         assertEquals(PlanningResult.NoPlan, planner.plan(PlanningRequest(goal("remove stale.lock")), partial))
     }
+
+    @Test
+    fun `a rename goal plans find-then-rename, binding the found path`() = runTest {
+        val planned = FilePlanner().plan(
+            PlanningRequest(AgentGoal("rename ledger.txt to ledger.old", GoalShape.Free("rename ledger.txt to ledger.old"))),
+            SandboxToolSource(),
+        ) as PlanningResult.Planned
+
+        assertEquals(
+            listOf(SandboxToolIds.WORKSPACE_INFO, SandboxToolIds.FIND_FILE, SandboxToolIds.RENAME_FILE),
+            planned.plan.steps.map { it.invocation.id },
+        )
+        assertEquals(
+            mapOf(SandboxKeys.PATH to ArgSource.FromStep(1, SandboxKeys.RESOLVED_PATH), SandboxKeys.NEW_NAME to ArgSource.Literal("ledger.old")),
+            planned.plan.steps[2].invocation.args,
+        )
+    }
 }

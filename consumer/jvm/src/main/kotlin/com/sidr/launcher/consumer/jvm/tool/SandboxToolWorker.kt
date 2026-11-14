@@ -48,6 +48,7 @@ class SandboxToolWorker(private val root: Path) : ToolWorker {
             )
             SandboxToolIds.FIND_FILE -> findFile(invocation)
             SandboxToolIds.DELETE_FILE -> deleteFile(invocation)
+            SandboxToolIds.RENAME_FILE -> renameFile(invocation)
             // A tool this executor does not implement must not silently succeed. The registry and the
             // executor are separate objects, so "registered but unimplemented" is a reachable state.
             else -> ToolResult.Failed(CommandFailure.Generic)
@@ -101,6 +102,32 @@ class SandboxToolWorker(private val root: Path) : ToolWorker {
         } else {
             ToolResult.Failed(CommandFailure.Generic)
         }
+    }
+
+    /**
+     * A4′ phase 2. Renames within one directory. Refuses a new name that is a path — a rename that
+     * could also move is a move, and a move can leave the sandbox — and does not rename over an
+     * existing file *outside* a check-then-rename (TOCTOU) window: `Files.move` without
+     * `REPLACE_EXISTING` checks for the target's absence and then renames, so a file created at the
+     * target between that check and the rename can still be overwritten; the exception it throws when
+     * the check does catch an existing target is `FileAlreadyExistsException`, which [invoke]'s catch
+     * turns into `Failed`. The same limit as the sandbox's path-based containment generally (A0.5
+     * residual 3) — this refusal is load-bearing for undo outside that window, not unconditionally.
+     */
+    private fun renameFile(invocation: ResolvedInvocation): ToolResult {
+        val source = contained(invocation.args[SandboxKeys.PATH].orEmpty())
+            ?: return ToolResult.Failed(CommandFailure.Generic)
+        val newName = invocation.args[SandboxKeys.NEW_NAME].orEmpty()
+        if (newName.isBlank() || newName.contains('/') || newName.contains('\\') || newName == "." || newName == "..") {
+            return ToolResult.Failed(CommandFailure.Generic)
+        }
+        if (!Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) return ToolResult.Failed(CommandFailure.Generic)
+        val target = source.resolveSibling(newName)
+        if (contained(target.toString()) == null) return ToolResult.Failed(CommandFailure.Generic)
+        Files.move(source, target)
+        return ToolResult.Effected(
+            ToolOutput(mapOf(SandboxKeys.RENAMED_PATH to target.toString(), SandboxKeys.PREVIOUS_NAME to source.fileName.toString())),
+        )
     }
 
     private fun canonicalRoot(): Path = root.toAbsolutePath().normalize().toRealPath()

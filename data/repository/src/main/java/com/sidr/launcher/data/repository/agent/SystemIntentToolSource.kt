@@ -13,13 +13,28 @@ import com.sidr.launcher.domain.tool.ToolRegistry
 import javax.inject.Inject
 
 /**
+ * The ids of the two router actions projected as tools in A4′ phase 3a (spec §7.12.3). Identity C:
+ * each id is DERIVED from its `ActionId` at this one expression, never copied into a second literal —
+ * the seven `ActionIds` values stay frozen byte for byte (ADR 3/4), and these two are those values.
+ * Public so `:app`'s guards can name them, as they name `Tier0ToolIds`.
+ */
+object InAppToolIds {
+    val WEB_SEARCH: ToolId = ToolId(ActionIds.WEB_SEARCH.value)
+    val OPEN_URL: ToolId = ToolId(ActionIds.OPEN_URL.value)
+}
+
+/**
  * A0's single tool source: a projection of the existing [ActionCatalog] into the two tools this slice
  * registers. The registry is a list of sources; A1' turns it into a federation by adding adapters
  * beside this one, or discards the projection and grows the catalog — **A0 decides neither**, and the
  * mapping lives here, in thirty lines of adapter, precisely so both remain cheap.
  *
- * Only two of the seven families are projected. Registering all seven would hand the planner
- * capabilities this slice has neither gated, traced, nor accepted on a device.
+ * Four of the seven families are projected since A4′ phase 3a. The argument that kept this at two —
+ * "registering all seven would hand the planner capabilities this slice has neither gated, traced, nor
+ * accepted on a device" — lapses for `web_search` and `open_url` only as its three parts are met (spec
+ * §7.12.3): the gate is the engine's, with their risk pinned by `DoctrineGuardTest.declaredRisk`; the
+ * trace is the engine's; the acceptance is the block's checklist. It still holds for `open_settings`,
+ * `open_assistant` and `show_apps`, which are answers of the model, not tools.
  *
  * `launch_app` alone declares [RESOLVED_QUERY_OUTPUT] (F6, Task 5b): it is the only step-0 tool the A0
  * plan ever binds a later step to, and an output is a property of the tool, not of the catalog family
@@ -32,8 +47,13 @@ class SystemIntentToolSource @Inject constructor(
 
     private val projected: List<ToolDescriptor> by lazy {
         listOfNotNull(
-            project(ActionIds.LAUNCH_APP, outputSchema = RESOLVED_QUERY_OUTPUT),
+            project(ActionIds.LAUNCH_APP, extraArgs = PIN_INPUT, outputSchema = RESOLVED_QUERY_OUTPUT),
             project(ActionIds.PLAY_STORE_SEARCH),
+            // A4′ phase 3a (spec §7.12.3, D3): the router's two other actions with an executor. The
+            // three navigation families (settings, assistant, app grid) are NOT projected — they
+            // change what is on screen, not the world, and stay variants of the model's answer.
+            project(ActionIds.WEB_SEARCH),
+            project(ActionIds.OPEN_URL),
         )
     }
 
@@ -43,6 +63,7 @@ class SystemIntentToolSource @Inject constructor(
 
     private fun project(
         actionId: ActionId,
+        extraArgs: List<ActionArg> = emptyList(),
         outputSchema: List<ActionArg> = emptyList(),
     ): ToolDescriptor? {
         val descriptor = catalog.descriptor(actionId) ?: return null
@@ -54,7 +75,7 @@ class SystemIntentToolSource @Inject constructor(
             // Both projected families reach another app. No projected tool is LOCAL today; the LOCAL
             // value is carried by `:consumer:jvm`'s sandbox. Named, not implied absent (spec §6.4).
             effect = ToolEffect.EXTERNAL,
-            argSchema = descriptor.argSchema,
+            argSchema = descriptor.argSchema + extraArgs,
             outputSchema = outputSchema,
             risk = descriptor.risk,
             // Neither A0 tool writes durable state: launching an app and opening a store page both
@@ -75,6 +96,17 @@ class SystemIntentToolSource @Inject constructor(
 
         val RESOLVED_QUERY_OUTPUT = listOf(
             ActionArg(RESOLVED_QUERY, description = "The query this launch resolved against"),
+        )
+
+        /**
+         * `launch_app`'s pin (A4′ phase 3a, plan §0.2 B-3). A property of the TOOL, like
+         * [RESOLVED_QUERY] — `ActionDescriptor` has no such argument. Optional: every path but the
+         * bridge leaves it out, and the device, never the model, fills it (`DeviceMentionBinder`).
+         */
+        internal const val PIN_ARG = "app"
+
+        val PIN_INPUT = listOf(
+            ActionArg(PIN_ARG, required = false, description = "The package this launch is pinned to"),
         )
     }
 }

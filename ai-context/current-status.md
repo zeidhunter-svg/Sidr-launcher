@@ -5,7 +5,76 @@
 > digest); per-phase plans carry their own checklists.** This file is the status snapshot — if it
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
-> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-09-26
+> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-11-11
+> (**context hygiene, outside phase 3b — docs + one guard class**: `CLAUDE.md` 97 984 → ~42 000 bytes
+> (five verbatim rule sections ~24 KB, status sections ~18 KB; everything that left it is verbatim in the
+> appendix of ADR «2026-11-11 — Сжатие CLAUDE.md (гигиена контекста)» and at `b42b53b:CLAUDE.md`);
+> `ClaudeMdSizeGuardTest` (`:app`, two tests, ceiling 48 000 bytes, `CLAUDE.md` declared a `Test` input;
+> mutation-proved) — `:app` 77 → 79, so phase 3b's chain reads +2 from T7 on; `§HANDOFF` of the track plan
+> split into a 23 KB live part and a 208 KB verbatim archive
+> `docs/superpowers/plans/2026-08-18-agentic-track-restart-handoff-archive.md` (closed A4′ phases 0–3a and the
+> A1″ handoff under their original headings); the codegraph `UserPromptSubmit` hook measured — one
+> firing per user-turn despite two registrations, none of sixteen on a code question — and put behind a
+> filter (`tools/claude/codegraph-prompt-hook.sh`, commit `54ca8dd`); phase 3b's ledger split into a 16 KB
+> live state and a byte-identical archive. **Phase 3b untouched: Tasks 1–6 closed, Task 7 next, HEAD
+> `b42b53b`, gate 1737** (1739 expected at the next boundary run, not yet measured as one). The
+> `CLAUDE.md`/`§HANDOFF` commit is proposed to the owner, not made (governance files)); prior 2026-11-07
+> (**Этап 6 (A4′) phase 3a — the bridge, first slice — `CODE-GREEN` at 1673 / 0 failures** (boundary
+> `tools/gate.sh` at `f6aa141`, 557 executed, cleared tree: `:domain` 512 · `:consumer:jvm` 72 ·
+> `:data:repository` 433 · `:feature:launcher` 256 · `:app` 76 · other eight 324; the plan predicted 1644,
+> the +29 are tests controller rulings and review rounds added), plan `24c6b3a`, code commits
+> `abeb6d6`…`d5843dc`, the final-review fix `f6aa141`; the closing docs commit is proposed to the owner
+> (R7). **No device round, by design.** **One model path** (D3): a FastPath miss past the three gates
+> reaches `RouteCommandUseCase` step 7, where the bridge's `ModelPlanner` reads the command and our own
+> descriptions of the nineteen offered tools — nothing of the phone (D1, held by `BridgePayloadGuardTest`
+> for the four private sources the bridge graph reads, structurally for three more); the device binds the
+> model's app mention after the answer; the result is an **interpretation card** that runs nothing before
+> «Выполнить», then only through the engine. A question opens the Assistant prefilled and unsent, and a
+> model failure names one of six reasons — A1″ acceptance findings (c) and (d) closed in code. The AIL-4
+> router is **deleted** (−41 tests); `ALLOWED` swapped `ACTION_CATALOG_SCHEMA` for `AUTHORED_TOOL_SCHEMA`
+> by ADR; the nineteen offered `ToolId` values are frozen. Budget by the 2026-11-07 measurement
+> (`PROMPT_ONLY`, 50 s, 4 096 tokens; run by the agent at the owner's request, labels the agent's draft);
+> the pair was never measured together and the owner ruled the re-run **needed, as the first step of
+> 3b**. The final review found four Important defects, all fixed in `f6aa141`. Eighteen unjudged `tr`
+> strings (seventeen new keys, one changed) join the block's Turkish review. R14-39 is narrowed, not closed. Full record: `§HANDOFF` of the
+> track plan, subsection «Фаза 3a A4′»; ADRs «2026-10-05 — A4′ ф3a: …» (two) and, beside the phase,
+> «2026-11-07 — Два принципа агентной ОС» plus the draft ontology `docs/governing/sidr-ontology-v0.1.md`**);
+> prior 2026-10-03
+> (**Этап 6 (A4′) phase 2 — partial failure and undo — `CODE-GREEN` at 1560 / 0 failures** (boundary
+> `tools/gate.sh` at `6bc76a4`, 557 executed, cleared tree: `:domain` 480 · `:consumer:jvm` 72 ·
+> `:data:repository` 410 · `:feature:launcher` 216 · `:app` 66 · other eight 316; the same 1560 again at
+> `180df26`), plan `a3a7366`, code commits `fc4282d`…`fe1bd8c`, the final-review fix `6bc76a4` and the
+> owner's M1(b) `180df26`; the closing docs commit is proposed to the owner and made after he agrees
+> (R7). **No device round, by design.** **R14 is closed in code**
+> (owner fork F2-1): the one world call runs in its own scope on an injected IO context, and the engine
+> stops *waiting* at the wall-clock budget, records `HandedOff` and ends the plan `Blocked` — world calls
+> left the main thread with it. A consent stop carries a **set** of reasons (F2-2), so `DURABLE_EFFECT`
+> is no longer inert for `CONFIRM+` and the uninstall card's chip reads `DESTRUCTIVE`. «Продолжить» on
+> a paused plan in which nothing has acted plans the goal afresh as a **new** session (F2-3.1): A0's
+> §12.8 is reachable by the user's own path and fixed in code for such a plan. «Отменить» on a finished
+> card runs what can be undone as a **new** session through the same gates and names what cannot
+> (F2-3.3); compensable today: two of the three `launcher_memory` tools, one step at a time; no gate
+> lowered (spec §6.3). `:consumer:jvm` undoes a partial failure on real files (`rename_file`).
+> `DOC-HMA-3` names its tests and carries a phase-3 remainder marker (owner, 2026-10-03). Gate 1560, not
+> the plan's 1556: every task matched its prediction, and +4 came from three test commits review rounds
+> added. The owner answered **M1** on 2026-10-03 with (b): when the fresh look on «Продолжить» finds no
+> plan, the stale session ends `Failed` («План не удалось завершить») instead of continuing from its
+> cursor — done in `180df26`, spec §6.4 amended. Three new unjudged `tr` strings join the block's
+> Turkish review. Full record: `§HANDOFF` of
+> the track plan, subsection «Фаза 2 A4′»**); prior 2026-09-26
+> (**Этап 6 (A4′) phase 1 — FastPath overflow — `CODE-GREEN` at 1485 / 0 failures** (boundary
+> `tools/gate.sh`, 557 executed, cleared tree: `:domain` 455 · `:consumer:jvm` 57 · `:data:repository`
+> 394 · `:feature:launcher` 202 · `:app` 61 · other eight 316), code commits `7106653`…`eb86c3c` plus the
+> final-review fix `bffa146` (the WEB route chip is no longer re-scored by FastPath). **No
+> device round, by design.** FastPath no longer claims 0.90 for a command whose remainder carries a
+> second goal (`SecondGoal`, a closed «conjunction + listed verb» vocabulary): such a search or an
+> unresolvable launch is left undecided and reaches step 2b and the model; A0's launch→store plan is
+> kept byte for byte. `B15`: `HANDLED_BY_FASTPATH` 13 → 6, `PLANNED` still 0. New doctrine row
+> `DOC-NYH-4` (31 rules). The owner decided every open item of phase 0 and of the phase-1 plan
+> (R14 → a task in phase 2's plan; the Turkish review and the `SecondGoal` homonyms → A4′'s
+> acceptance); one privacy question stays open — whether `intent_match` should stop keeping launch
+> text verbatim. Full record: `§HANDOFF` of the track plan, subsection «Фаза 1
+> A4′»**); earlier the same day
 > (**Этап 6 (A4′) phase 0 — engine preconditions — `CODE-GREEN` at 1463 / 0 failures** (boundary
 > `tools/gate.sh` at `be07399`, 557 executed, cleared tree: `:domain` 445 · `:consumer:jvm` 57 ·
 > `:data:repository` 384 · `:feature:launcher` 200 · `:app` 61 · other eight 316), sixteen commits
@@ -729,7 +798,8 @@ Full record, including the evidence and the five consequences: ADR "2026-08-21 �
 - **Everything else the revision found is parked in `§HANDOFF`, not built:** `LauncherApps` + app
   shortcuts as a runtime-discovered tool source (unused in the repo today; available at minSdk 28
   because Sidr is the default launcher), tool selection before the planner (`CatalogSchemaRenderer`
-  renders the whole catalog — fine at seven tools, impossible at two hundred), Tier-0 system intents,
+  renders the whole catalog — fine at seven tools, impossible at two hundred; deleted with the router in
+  A4′ phase 3a, whose bridge renders a level-filtered offering), Tier-0 system intents,
   the planner's router-sized budget, the agent's missing "body" (foreground service + assist role),
   outbound context by reference, and BYOK as the real distribution ceiling.
 - **Zero code changed.** `git diff --stat` is `.md` files only; no gate run is claimed because no source
@@ -1241,6 +1311,11 @@ top of this file and decisions.md "2026-08-10 — DS-7 Memory Surfaces + S2-2 Ex
 
 ## Project reframed (2026-07-05) — three stages
 
+> *Historical section.* The LLM action router it describes (`CommandPlanner`, its confirm card, the
+> `PlanResult`/`ProposalValidator`/`CatalogSchemaRenderer` family, `LlmCommandPlanner`) was **deleted in
+> A4′ phase 3a** (2026-10-05, ADR «2026-10-05 — A4′ ф3a: один модельный путь…»); the model path is now the
+> bridge — see the header. «Router-off» became `localOnlyMode` in Этап 4.0.
+
 Owner reframed the project into **Stage 1 — AI Launcher (MVP, now)** → **Stage 2 — AI Framework** →
 **Stage 3 — Agentic OS** (ADR "2026-07-05 — Project reframed into three stages"). The Phase 0–9 + Phase
 UX foundation below is **done and device-accepted**. The **Stage-1 AI-Launcher MVP is now CLOSED
@@ -1563,7 +1638,8 @@ replacement on LiteRT/LiteRT-LM is a new design, ADR 2/4); voice `Ready`/`Partia
 (since 2026-07-13) and **I18N-1 was verified only by agent-driven `adb`/`uiautomator`** — its offline
 path, live TalkBack, fontScale 2.0 and the system per-app-language picker are untested.
 *(Real assistant streaming against a live provider — done Round 3, and re-confirmed 2026-09-20 during
-the A1″ acceptance, which also exercised the model **planner** path end to end.)*
+the A1″ acceptance, which also exercised the AIL-4 router's **planner** path end to end — deleted in A4′
+phase 3a; the bridge has not been seen on a phone.)*
 
 **A4′ phase 0 (2026-09-26) is `CODE-GREEN` only, and everything it changes on screen is a hypothesis
 until A4′'s one acceptance at its end:** the three new step words and the handed-off `Completed` title
@@ -1575,22 +1651,79 @@ with the 2026-08-23 A0 review round, whose device re-check (A2 and §12.5 of
 phone) is still open. In particular, **that a cancelled uninstall no longer reads as success has not
 been seen on a phone.** The wall-clock budget is not claimed to bound today's workers — its cut is
 cooperative and every shipped world call blocks; the two shapes are in `§HANDOFF` question 1 (owner
-question R14).
+question R14 — answered 2026-09-26: extend the interruption, as a task in phase 2's plan). *Re-based
+2026-10-03:* phase 2 did it in code — the engine now stops **waiting** at the budget for a blocked call
+too. Still not claimed: that the **act** stops (a call parked in native code may still act after the
+cut, which is what `HandedOff` records), that binder behaves as the JVM probe's FIFO did (binder was
+never measured), or any of it on a phone.
+
+**A4′ phase 1 (2026-09-26) is `CODE-GREEN` only, too.** That «открой gmail и проверь новые письма»
+no longer offers a store search and «найди билеты … и сделай бронь» no longer opens the browser has
+not been seen on a phone, nor has the WEB chip's direct web search; what the user sees instead is a
+hypothesis list in the phase plan §0.6 and `§HANDOFF` «Фаза 1 A4′». And
+one sentence of the Master Plan's DoD is **knowingly false** until A4′ closes (owner decision
+2026-09-26): «router-off / offline / no-key behave as today» — in local-only mode such a command used
+to start an A0 session and now answers «Не распознано локально».
+
+**A4′ phase 2 (2026-10-03) is `CODE-GREEN` only, too — nothing of it has been seen on a phone.** Not
+the uninstall card's `DESTRUCTIVE` chip, not the paused card's «Sidr проверит план заново» body, not
+§12.8 on the user's own path (install the app while the plan waits, then «Продолжить»), not «Отменить»
+and the card it leaves, not the step a budget cut ends on; world calls moved off the main thread with
+no visible change **expected** — by reading, not measured. What the user would see is a hypothesis list
+in `§HANDOFF` «Фаза 2 A4′». The 2026-08-23 A0 re-check checklist still predicts §12.8's **pre**-phase-2
+behaviour; the block's acceptance checklist has to re-derive it. Undo is claimed for exactly two of the
+three `launcher_memory` tools, one step at a time, and only while the card is on screen; a plan that has
+already acted still resumes on its pre-pause observations (→ phase 3b); and that a plan whose fresh look
+finds no plan now ends «План не удалось завершить» (owner decision M1(b), `180df26`) has not been seen on
+a phone either.
+
+**A4′ phase 3a (2026-11-07) is `CODE-GREEN` only — nothing of the bridge has been seen on a phone.** Not
+the wait and the interpretation card, not the choice between two same-named apps, not the question
+opened prefilled in the Assistant, not the six «model unavailable» lines, not «Выполнить» on «show all
+apps» opening the app drawer; the hypothesis list is in the phase plan §0.7 and `§HANDOFF` «Фаза 3a A4′».
+Not claimed: that the bridge's numbers (`PROMPT_ONLY`, 50 s, 4 096) hold as a pair — the ceiling was
+derived at 2 048 tokens, the re-run is 3b's first step — or that any test pins them; that the model sends
+a question to the Assistant (held by one measurement, 31 of 35, not by a test); that the bridge ceiling
+interrupts a blocking read (it is cooperative); that every private source has a planted sentinel (four
+do, three are held only by a structural scan); that `open_url` hands Android only a clean web address
+(it refuses every non-`http`/`https` scheme, but the check is case-insensitive and passes the URL
+unchanged, and whitespace inside it is not refused); that R14-39 is closed (narrowed). And one
+behaviour got worse on purpose: since a broken key now gets an honest message instead of `Unknown`, and the
+alias decorator fills only `Unknown`, a bare alias phrase under a broken key reads «understanding
+unavailable» instead of launching (owner fork F3a-C (a), named).
+
+**Context hygiene (2026-11-11) claims nothing on a phone and nothing about tokens directly:** every number
+it reports is bytes (`wc -c`), not tokens — the harness has no counter; the hook filter is calibrated on
+one session (sixteen prompts) and is to be re-read after three; the `:app` 77 → 79 is a scoped-run count,
+not yet a boundary gate; and «no fact lost» rests on the verbatim appendix in the ADR plus
+`b42b53b:CLAUDE.md`, not on a sentence-by-sentence match (341 sentences differ in wording from their
+ADR, which a mechanical check cannot judge).
 
 ## Source of truth
 
 > **Re-based 2026-09-20 — this list had been stale since 2026-07-11 and pointed two tracks back.**
 
-- Current state + hard rules + gate (NOT a session digest since Этап 0.4): `CLAUDE.md`
+- Current state + hard rules + gate (NOT a session digest since Этап 0.4; re-compressed 2026-11-11 to ~42 KB with a size ceiling held by `ClaudeMdSizeGuardTest`): `CLAUDE.md`
 - Decisions log — **latest block ADR: «2026-09-19 — Этап 5.5 (A1″)», whose last section is the
-  owner's device acceptance of 2026-09-20**; the latest ADR of all is «2026-09-20 — Две строки
-  доктрины» (docs only). A4′ has no ADR yet — it is written at the block's close, not per phase:
-  `ai-context/decisions.md`
+  owner's device acceptance of 2026-09-20**. A4′ has no block ADR yet — it is written at the block's
+  close, not per phase; inside it phase 3a wrote two ADRs, «2026-10-05 — A4′ ф3a: `ACTION_CATALOG_SCHEMA`
+  → `AUTHORED_TOOL_SCHEMA`» and «2026-10-05 — A4′ ф3a: один модельный путь; исходящий контракт —
+  девятнадцать `ToolId`» (with the 2026-11-07 addendum on the bridge's budget and transport). The latest
+  ADR of all is «2026-11-11 — Сжатие CLAUDE.md (гигиена контекста)» (docs + one guard class; carries the
+  verbatim appendix of everything compressed out of `CLAUDE.md`), after «2026-11-07 — Два принципа агентной
+  ОС: защищённая открытость и локальное по умолчанию» (docs only): `ai-context/decisions.md`
 - Architecture: `docs/architecture.md` · Roadmap: `docs/roadmap.md`
 - **Governing**: agentic Master Plan `docs/governing/sidr-agentic-master-plan-v1.0.md` · doctrine
-  matrix (rules `DOC-*`) `docs/governing/sidr-doctrine-matrix-v1.0.md`
-- **Active track plan** (stages, §0 protocol, `§HANDOFF` written for the next session):
-  `docs/superpowers/plans/2026-08-18-agentic-track-restart.md`
+  matrix (rules `DOC-*`) `docs/governing/sidr-doctrine-matrix-v1.0.md` · ontology v0.1
+  `docs/governing/sidr-ontology-v0.1.md` — **a draft for discussion, not a decision**. Both master plans,
+  `docs/agentic-os-architecture.md`, `docs/roadmap.md` and `README.md` still name the router deleted in
+  A4′ phase 3a — follow-ups under their own change control, listed in `§HANDOFF` «Фаза 3a A4′»
+- **Active track plan** (stages, §0 protocol, `§HANDOFF` written for the next session — since
+  2026-11-11 the **live** part only, 23 KB):
+  `docs/superpowers/plans/2026-08-18-agentic-track-restart.md`; the closed phase records (A4′ Фазы 0–3a,
+  the A1″ handoff, D1–D11) are verbatim under their original headings in
+  `docs/superpowers/plans/2026-08-18-agentic-track-restart-handoff-archive.md`, so «`§HANDOFF` «Фаза N A4′»»
+  resolves there
 - Last closed block: **A1″ (Этап 5.5), `CLOSED` 2026-09-20**; its spec
   `docs/superpowers/specs/2026-09-12-a1-second-tool-mass-and-selection-design.md`, its acceptance
   checklist `docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md` (run, with four of its
@@ -1598,10 +1731,18 @@ question R14).
 - Active block: **A4′ runtime (Этап 6)** — spec
   `docs/superpowers/specs/2026-09-21-a4-runtime-design.md` (owner-approved 2026-09-21); **phase 0
   `CODE-GREEN` 2026-09-26**, plan `docs/superpowers/plans/2026-09-22-a4-phase0-engine-preconditions.md`,
-  record and open owner items in the track plan's `§HANDOFF` («Фаза 0 A4′»); phases 1–4 to go. Of the
+  record in the track plan's `§HANDOFF` («Фаза 0 A4′»); **phase 1 `CODE-GREEN` 2026-09-26**, plan
+  `docs/superpowers/plans/2026-09-26-a4-phase1-fastpath-overflow.md`, record and the owner's answers
+  to every open item of both phases in `§HANDOFF` («Фаза 1 A4′»); **phase 2 `CODE-GREEN` 2026-10-03**,
+  plan `docs/superpowers/plans/2026-09-27-a4-phase2-partial-failure-and-undo.md`, record and the owner's
+  answers of 2026-10-03 (M1(b), the `DOC-HMA-3` remainder marker) in `§HANDOFF` («Фаза 2 A4′»); **phase
+  3a `CODE-GREEN` 2026-11-07**, plan `docs/superpowers/plans/2026-10-03-a4-phase3a-bridge-first-slice.md`,
+  record and the owner's answers of 2026-11-07 in `§HANDOFF` («Фаза 3a A4′», archive); **phase 3b in execution** since 2026-11-08 — plan `docs/superpowers/plans/2026-11-07-a4-phase3b-sorts-forms-multistep.md`, Tasks 1–6 of 15 closed at `b42b53b` (gate 1737), ledger `.superpowers/sdd/2026-11-07-a4-phase3b/progress.md` (git-ignored); phase 4 to go. Of the
   four findings A1″'s acceptance handed it, phase 0 **repaired (a) in code** (a cancelled uninstall
   claiming success), **named (b) excluded** from A4′ with its own address (the `HOME`-role grant a live
-  process does not see — staleness layer 2, `ShortcutRefreshTrigger`), and did not touch (c) or (d).
+  process does not see — staleness layer 2, `ShortcutRefreshTrigger`), and phase 3a **closed (c) and (d)
+  in code** (a model failure names its reason; a question opens the Assistant prefilled) — none of it seen
+  on a phone.
 
 ## Keeping this file honest
 

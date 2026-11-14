@@ -3,16 +3,32 @@ package com.sidr.launcher.consumer.jvm
 import com.sidr.launcher.consumer.jvm.plan.FilePlanner
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionIdFactory
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionStore
+import com.sidr.launcher.consumer.jvm.tool.SandboxKeys
+import com.sidr.launcher.consumer.jvm.tool.SandboxToolIds
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolSource
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolWorker
+import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentExecutor
 import com.sidr.launcher.domain.agent.AgentGoal
+import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
+import com.sidr.launcher.domain.agent.StepPrecondition
+import com.sidr.launcher.domain.agent.StepRationale
+import com.sidr.launcher.domain.ai.bridge.BridgeRequest
+import com.sidr.launcher.domain.ai.bridge.BridgeTransport
+import com.sidr.launcher.domain.ai.bridge.RawAnswer
+import com.sidr.launcher.domain.ai.bridge.RawArg
+import com.sidr.launcher.domain.ai.bridge.RawStep
+import com.sidr.launcher.domain.ai.bridge.ReplyMeta
+import com.sidr.launcher.domain.ai.bridge.TransportReply
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolExecutor
+import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.trace.TraceEvent
 import kotlinx.coroutines.test.runTest
@@ -23,6 +39,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
 
 class ConsoleHarnessTest {
 
@@ -35,6 +53,156 @@ class ConsoleHarnessTest {
         out = { printed += it },
         ask = { answers.removeFirstOrNull() },
     )
+
+    /** The harness with a model behind it: [transport] answers every ask the bridge makes. */
+    private fun harness(answers: MutableList<String>, transport: BridgeTransport) = ConsoleHarness(
+        root = temp.root.toPath(),
+        out = { printed += it },
+        ask = { answers.removeFirstOrNull() },
+        transport = transport,
+    )
+
+    /** A fake transport: the same reply to every ask, each request kept. No network, no environment. */
+    private class ScriptedTransport(private val reply: TransportReply) : BridgeTransport {
+        val requests = mutableListOf<BridgeRequest>()
+
+        override suspend fun ask(request: BridgeRequest): TransportReply {
+            requests += request
+            return reply
+        }
+    }
+
+    /**
+     * The model's reading of «find orvelle.txt and delete it» (Review Focus 2): `find_file(name = "orvelle.txt")`,
+     * then `delete_file(path ← step 0's resolved_path)` — the reference form `:data:ai-cloud` and this module's
+     * transport both read. Every other argument name of the offering is given `null`, as the prompt asks.
+     */
+    private val findThenDelete = TransportReply.Answer(
+        RawAnswer(
+            kind = "plan",
+            steps = listOf(
+                RawStep("find_file", mapOf("name" to RawArg.Text("orvelle.txt"), "new_name" to null, "path" to null)),
+                RawStep("delete_file", mapOf("name" to null, "new_name" to null, "path" to RawArg.Ref(step = 0, key = "resolved_path"))),
+            ),
+            question = null,
+            destination = null,
+        ),
+        ReplyMeta.NONE,
+    )
+
+    /** Every regular file under the sandbox, outside the harness's own session store, with its bytes. */
+    private fun tree(): Map<String, List<Byte>> {
+        val root = temp.root.toPath()
+        return Files.walk(root).use { stream ->
+            stream.filter { Files.isRegularFile(it) && !root.relativize(it).startsWith(STORE_DIR) }
+                .toList()
+                .associate { root.relativize(it).toString() to Files.readAllBytes(it).toList() }
+        }
+    }
+
+    /**
+     * A4′ phase 3b, Task 13 — the JVM consumer's model path (B-12, B-13): `ask <goal>` goes to the SAME bridge
+     * `:domain` holds, over this consumer's offering (the sandbox level); its answer is validated, bound on
+     * this computer (the root by the device), printed as a card, and only a `y` to the card starts it through
+     * `startPlanned` — after which the engine's consent prompt is the one the deterministic path has always had.
+     */
+    @Test
+    fun `a free goal goes through the model, the card, then the engine`() = runTest {
+        val orvelle = temp.newFile("orvelle.txt").toPath().toRealPath()
+        temp.newFile("pallimer.md")
+        val sandbox = temp.root.toPath().toRealPath()
+        val transport = ScriptedTransport(findThenDelete)
+
+        val state = harness(mutableListOf("y", "y"), transport).run("ask find orvelle.txt and delete it")
+
+        assertEquals(ExecutionState.Completed, state)
+        assertEquals(listOf("find orvelle.txt and delete it"), transport.requests.map { it.command })
+        val card = listOf(
+            "The model's reading of \"find orvelle.txt and delete it\":",
+            "  0. find_file(query=orvelle.txt [user], root=$sandbox [device]) — risk SAFE",
+            "  1. delete_file(path ← step 0 resolved_path) — risk DANGEROUS",
+            "Run this plan? [y/N]",
+        )
+        val at = printed.indexOf(card.first())
+        assertTrue("the card is printed:\n${printed.joinToString("\n")}", at >= 0)
+        assertEquals(card, printed.subList(at, minOf(printed.size, at + card.size)))
+        assertTrue("the engine starts only after the card", printed.indexOf("  PlanCreated(stepCount=2)") > at)
+        assertTrue("the consent prompt names the file found", printed.contains("  Arguments: path=$orvelle"))
+        assertFalse("the file the model named is deleted", File(temp.root, "orvelle.txt").exists())
+        assertTrue("nothing else is touched", File(temp.root, "pallimer.md").exists())
+    }
+
+    /**
+     * Task 13 fix round 1 (review I1): «nothing runs before a `y` to the card». The refused reading is one that
+     * WOULD act with no further question — `rename_file` is `SAFE`, so the engine's consent gate would not stop
+     * it — so an «n» the harness ignored would show up as a renamed file, a started session and a different
+     * state. The card is asserted printed first (the file named in words is bound on this computer, through
+     * the file sort), so the refusal is the card's and not an earlier stop.
+     */
+    @Test
+    fun `a refused card starts nothing`() = runTest {
+        val orvelle = temp.newFile("orvelle.txt").toPath().toRealPath()
+        orvelle.toFile().writeText("SNTL-UNTOUCHED-ORVELLE")
+        val before = tree()
+        val transport = ScriptedTransport(
+            TransportReply.Answer(
+                RawAnswer(
+                    kind = "plan",
+                    steps = listOf(
+                        RawStep("rename_file", mapOf("name" to null, "new_name" to RawArg.Text("quembly.txt"), "path" to RawArg.Text("orvelle.txt"))),
+                    ),
+                    question = null,
+                    destination = null,
+                ),
+                ReplyMeta.NONE,
+            ),
+        )
+
+        val state = harness(mutableListOf("n"), transport).run("ask rename orvelle.txt to quembly.txt")
+
+        val card = listOf(
+            "The model's reading of \"rename orvelle.txt to quembly.txt\":",
+            "  0. rename_file(path=$orvelle [device], new_name=quembly.txt [user]) — risk SAFE",
+            "Run this plan? [y/N]",
+        )
+        val at = printed.indexOf(card.first())
+        assertTrue("the card is printed:\n${printed.joinToString("\n")}", at >= 0)
+        assertEquals(card, printed.subList(at, minOf(printed.size, at + card.size)))
+        assertEquals(ExecutionState.Cancelled, state)
+        assertEquals("the model is asked once", 1, transport.requests.size)
+        assertEquals("no session is started", emptyList<String>(), printed.filter { it.startsWith("  PlanCreated") })
+        assertEquals(before, tree())
+        assertEquals(
+            "the store holds no session",
+            OperationResult.Success(null),
+            JvmAgentSessionStore(temp.root.toPath().resolve(".sidr-agent/session.json")).active(),
+        )
+    }
+
+    /**
+     * Review Focus 2: «find orvelle.txt, then delete it», and the find finds nothing. The plan validates and
+     * STARTS (it is a well-formed plan; nothing is known about the sandbox before it runs), the user even says
+     * `y` at the gate — and nothing is deleted: the delete's reference has no value, the step is rejected, and
+     * the outcome says so. The tree is compared byte for byte, outside the harness's own session store.
+     */
+    @Test
+    fun `a delete bound to a find that found nothing deletes nothing`() = runTest {
+        temp.newFile("pallimer.md").writeText("SNTL-UNTOUCHED-PALLIMER")
+        File(temp.newFolder("kestun"), "brask.txt").writeText("SNTL-UNTOUCHED-BRASK")
+        val before = tree()
+
+        val state = harness(mutableListOf("y", "y"), ScriptedTransport(findThenDelete)).run("ask find orvelle.txt and delete it")
+
+        assertTrue("the plan validates and starts:\n${printed.joinToString("\n")}", printed.contains("  PlanCreated(stepCount=2)"))
+        assertTrue("the find ran", printed.contains("  ToolInvoked(0, find_file)"))
+        assertTrue(
+            "the gate says the delete cannot be bound",
+            printed.contains("  Arguments: not bindable (UNRESOLVED_ARG_SOURCE) — this step would fail rather than act."),
+        )
+        assertTrue("the outcome names the unresolved binding", printed.contains("  StepRejected(1, UNRESOLVED_ARG_SOURCE)"))
+        assertEquals(ExecutionState.Failed, state)
+        assertEquals(before, tree())
+    }
 
     @Test
     fun `a granted run completes and prints the whole trace`() = runTest {
@@ -171,5 +339,89 @@ class ConsoleHarnessTest {
             Regex("ToolInvoked\\(0,").findAll(log).count(),
         )
         assertEquals(ExecutionState.Completed, state)
+    }
+
+    @Test
+    fun `after a rename the harness offers undo, and undo puts the name back`() = runTest {
+        temp.newFile("ledger.txt")
+
+        val state = harness(mutableListOf("y")).run("rename ledger.txt to ledger.old")
+
+        assertEquals(ExecutionState.Completed, state)
+        val log = printed.joinToString("\n")
+        assertTrue(log, log.contains("Undo outcome: Completed"))
+        assertTrue(File(temp.root, "ledger.txt").exists())
+        assertFalse(File(temp.root, "ledger.old").exists())
+    }
+
+    /**
+     * I1 (fix round 1): "undo is never automatic" (spec §6.3) was asserted only in prose — the only
+     * harness undo test answers "y", and every older test runs a `remove` plan with nothing undoable,
+     * so `offerUndo` returns before ever reaching `ask()`. This is the first test that answers "n" to
+     * an actually-undoable outcome: without the gate at `ConsoleHarness.offerUndo`, the rename would be
+     * undone anyway.
+     */
+    @Test
+    fun `after a rename the harness never undoes without a yes`() = runTest {
+        temp.newFile("ledger.txt")
+
+        val state = harness(mutableListOf("n")).run("rename ledger.txt to ledger.old")
+
+        assertEquals(ExecutionState.Completed, state)
+        val log = printed.joinToString("\n")
+        assertTrue(log, log.contains("Undo what can be undone? [y/N]"))
+        assertFalse(log, log.contains("Undo outcome"))
+        assertTrue(File(temp.root, "ledger.old").exists())
+        assertFalse(File(temp.root, "ledger.txt").exists())
+    }
+
+    /**
+     * A4′ phase 3b, Task 12 — N2 on the JVM (plan §0.2 B-11: the harness already offers undo after every
+     * resolved state, so it follows the domain). A plan that renames `ledger.txt` and then asks to delete
+     * `other.txt` is refused at the delete's gate AFTER the rename acted: the outcome is `Cancelled`, and
+     * the harness now offers to undo the rename — and does it only on a yes.
+     *
+     * `FilePlanner` builds no such plan (no undoable step before a gate — plan §0.3 P8), so the plan is
+     * SEEDED through the store, exactly as the mid-call test above seeds its state; what is under test —
+     * the rename running, the gate, the refusal, the undo offer and the undo — is walked by the harness.
+     */
+    @Test
+    fun `a plan cancelled after a step acted offers undo`() = runTest {
+        val ledger = temp.newFile("ledger.txt").toPath().toRealPath()
+        val other = temp.newFile("other.txt").toPath().toRealPath()
+        val store = JvmAgentSessionStore(temp.root.toPath().resolve(".sidr-agent/session.json"))
+        val plan = ExecutionPlan(
+            listOf(
+                PlanStep(
+                    0,
+                    ToolInvocation(SandboxToolIds.RENAME_FILE, mapOf(SandboxKeys.PATH to ArgSource.Literal(ledger.toString()), SandboxKeys.NEW_NAME to ArgSource.Literal("ledger.old"))),
+                    ActionRiskLevel.SAFE, StepPrecondition.None, StepRationale.GOAL_DIRECT,
+                ),
+                PlanStep(
+                    1,
+                    ToolInvocation(SandboxToolIds.DELETE_FILE, mapOf(SandboxKeys.PATH to ArgSource.Literal(other.toString()))),
+                    ActionRiskLevel.DANGEROUS, StepPrecondition.None, StepRationale.GOAL_DIRECT,
+                ),
+            ),
+        )
+        val goal = AgentGoal("tidy the ledger", GoalShape.Free("tidy the ledger"))
+        val seeded = StartAgentSessionUseCase(FilePlanner(), store, JvmAgentSessionIdFactory(), SandboxToolSource())
+            .startPlanned(goal, plan)
+        assertTrue("the seed must be persisted, was $seeded", (seeded as OperationResult.Success).value != null)
+
+        val state = harness(mutableListOf("n", "y")).run("tidy the ledger")
+
+        val log = printed.joinToString("\n")
+        assertEquals(ExecutionState.Cancelled, state)
+        assertTrue("the refused delete did not run:\n$log", File(temp.root, "other.txt").exists())
+        assertTrue("undo is offered after the refusal:\n$log", log.contains("Undo what can be undone? [y/N]"))
+        assertTrue("the undo ran to its end:\n$log", log.contains("Undo outcome: Completed"))
+        assertTrue("the rename is put back", File(temp.root, "ledger.txt").exists())
+        assertFalse("the renamed file is gone", File(temp.root, "ledger.old").exists())
+    }
+
+    private companion object {
+        /** The harness's own session store inside the sandbox (`ConsoleHarness`: `.sidr-agent/session.json`). */
+        val STORE_DIR: Path = Path.of(".sidr-agent")
     }
 }

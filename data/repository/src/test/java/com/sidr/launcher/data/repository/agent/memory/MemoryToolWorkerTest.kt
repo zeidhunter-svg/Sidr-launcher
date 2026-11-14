@@ -1,23 +1,43 @@
 package com.sidr.launcher.data.repository.agent.memory
 
+import com.sidr.launcher.core.testing.FakeActionCatalog
+import com.sidr.launcher.core.testing.FakeActionExecutor
+import com.sidr.launcher.core.testing.FakeAliasStore
+import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
+import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
+import com.sidr.launcher.data.repository.intent.RuleBasedIntentMatcher
 import com.sidr.launcher.domain.action.ActionIds
 import com.sidr.launcher.domain.intent.CommandNormalizer
+import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
+import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
+import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.memory.alias.Alias
 import com.sidr.launcher.domain.memory.alias.AliasStore
 import com.sidr.launcher.domain.memory.alias.AliasTarget
 import com.sidr.launcher.domain.memory.alias.DeleteAliasUseCase
 import com.sidr.launcher.domain.memory.alias.SaveAliasUseCase
 import com.sidr.launcher.domain.memory.resolution.CapabilityKey
+import com.sidr.launcher.domain.memory.resolution.DefaultResolutionPreferencePolicy
 import com.sidr.launcher.domain.memory.resolution.DeleteLearnedChoiceUseCase
+import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
 import com.sidr.launcher.domain.memory.resolution.ResolutionContext
 import com.sidr.launcher.domain.memory.resolution.ResolutionPreference
 import com.sidr.launcher.domain.memory.resolution.ResolutionPreferenceStore
+import com.sidr.launcher.domain.memory.resolution.ResolveCommandWithPreferenceUseCase
+import com.sidr.launcher.domain.memory.resolution.ResolvedCommand
+import com.sidr.launcher.domain.memory.resolution.ResolvedTarget
+import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.ResolvedInvocation
+import com.sidr.launcher.domain.tool.ToolOutput
+import com.sidr.launcher.domain.text.PlainTextFolding
 import com.sidr.launcher.domain.tool.ToolResult
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -125,6 +145,8 @@ class MemoryToolWorkerTest {
         save = SaveAliasUseCase(aliasStore),
         deleteAlias = DeleteAliasUseCase(aliasStore),
         deleteChoice = DeleteLearnedChoiceUseCase(preferenceStore),
+        aliases = aliasStore,
+        folding = PlainTextFolding,
     )
 
     @Test
@@ -209,6 +231,64 @@ class MemoryToolWorkerTest {
         )
     }
 
+    /** A real (stateful) store that also remembers every key written and deleted — the cross-path evidence. */
+    private class KeyRecordingPreferenceStore(
+        private val inner: FakeResolutionPreferenceStore = FakeResolutionPreferenceStore(),
+    ) : ResolutionPreferenceStore by inner {
+        val upserted = mutableListOf<CapabilityKey>()
+        val deleted = mutableListOf<CapabilityKey>()
+
+        override suspend fun upsert(preference: ResolutionPreference) =
+            inner.upsert(preference).also { upserted += preference.capabilityKey }
+
+        override suspend fun delete(key: CapabilityKey, context: ResolutionContext) =
+            inner.delete(key, context).also { deleted += key }
+    }
+
+    /**
+     * A4′ phase 3b, Task 7 fix round (review I1, controller ruling E7-R1; plan §0.2 B-4 «one key on every
+     * path»). FastPath — the real [RuleBasedIntentMatcher] and resolver — reads «Vemblic'i aç» as a word
+     * form of the installed «Vemblic» and only offers it; the production decorator arms its token and the
+     * VM's own recording use case stores the user's confirmation. Then «forget the choice for Vemblic'i»
+     * reaches this worker with the phrase as step 2b's vocabulary hands it (normalised only). The worker
+     * must delete exactly the key that was written — the fold drops the apostrophe between two letters, so
+     * a raw-phrase key would miss the row, the store would still answer Success, the tool would report
+     * Effected, and the choice would keep auto-launching. The control proves the fixture discriminates: the
+     * written key is not the raw phrase's.
+     */
+    @Test
+    fun `forget_learned_choice deletes the very key FastPath wrote for a confirmed word form`() = runTest {
+        val store = KeyRecordingPreferenceStore()
+        val vemblic = InstalledApp("net.fixture.vemblic", "Vemblic")
+        val fastPath = HandleUserCommandUseCase(
+            matcher = RuleBasedIntentMatcher(),
+            resolver = IntentActionResolver(FakeInstalledAppsRepository().apply { appsToReturn = listOf(vemblic) }, PlainTextFolding),
+            executor = FakeActionExecutor(),
+            confidencePolicy = DefaultIntentConfidencePolicy(),
+            recordingScope = CoroutineScope(SupervisorJob()),
+        )
+        val decorator = ResolveCommandWithPreferenceUseCase(
+            route = { fastPath.handle(it) },
+            store = store,
+            policy = DefaultResolutionPreferencePolicy(),
+            catalog = FakeActionCatalog(),
+            folding = PlainTextFolding,
+        )
+        val token = (decorator.resolve("Vemblic'i aç") as ResolvedCommand.Outcome).learningToken!!
+        RecordResolutionChoiceUseCase(store).record(
+            token.capabilityKey, token.context, ResolvedTarget.App(vemblic.packageName), token.candidateSet,
+        )
+        val written = store.upserted.single()
+
+        val result = memoryWorker(preferenceStore = store)
+            .invoke(ResolvedInvocation(MemoryToolIds.FORGET_LEARNED_CHOICE, mapOf("phrase" to "vemblic'i")))
+
+        assertNotEquals("the control: the fold changed the key", CapabilityKey(ActionIds.LAUNCH_APP, "vemblic'i"), written)
+        assertEquals(listOf(written), store.deleted)
+        assertEquals(emptyList<ResolutionPreference>(), store.observeAll().first())
+        assertEquals(ToolResult.Effected(), result)
+    }
+
     @Test
     fun `a store failure is Failed, never Effected`() = runTest {
         val worker = memoryWorker(aliasStore = FailingAliasStore)
@@ -250,10 +330,12 @@ class MemoryToolWorkerTest {
     }
 
     /**
-     * `AliasStore.delete` reports no row count, so the worker cannot distinguish "removed one" from
-     * "there was none". `Effected` here means THE OPERATION RAN, not THAT SOMETHING WAS REMOVED — this
-     * worker's own KDoc says exactly that sentence, and this test is what keeps the limitation a
-     * documented property rather than a reader's inference.
+     * Since A4′ phase 2 the worker itself CAN tell "removed one" from "there was none" — it reads the
+     * alias before deleting it and reports what it pointed at in [MemoryToolKeys.PREVIOUS_APP], blank
+     * for "there was none" (see `forget_app_alias reports the app the removed alias pointed at` below
+     * and `ToolInverseCatalog`, which reads exactly that field to decide whether there is anything to
+     * undo). What this test still holds is narrower: `Effected` on its own, with no output inspected,
+     * means THE OPERATION RAN, not THAT SOMETHING WAS REMOVED.
      */
     @Test
     fun `forgetting a phrase that was never stored is still Effected`() = runTest {
@@ -273,6 +355,117 @@ class MemoryToolWorkerTest {
         val result = worker.invoke(
             ResolvedInvocation(com.sidr.launcher.domain.tool.ToolId("not_a_memory_tool")),
         )
+
+        assertTrue(result is ToolResult.Failed)
+    }
+
+    // --- A4′ phase 2: what an undo needs, reported by the act itself (spec §6.2, plan §0.3 P7) ---
+
+    private class FindFailingAliasStore : AliasStore {
+        val upserted = mutableListOf<Alias>()
+        override suspend fun find(phrase: String): OperationResult<Alias?> =
+            OperationResult.Failure(OperationError.UnknownError("io"))
+        override suspend fun upsert(alias: Alias): OperationResult<Unit> {
+            upserted += alias
+            return OperationResult.Success(Unit)
+        }
+        override suspend fun delete(phrase: String): OperationResult<Unit> = OperationResult.Success(Unit)
+        override fun observeAll(): Flow<List<Alias>> = MutableStateFlow(emptyList())
+    }
+
+    @Test
+    fun `set_app_alias reports the key it wrote and that nothing was there before`() = runTest {
+        val result = memoryWorker().invoke(
+            ResolvedInvocation(MemoryToolIds.SET_APP_ALIAS, mapOf("app" to "net.fixture.quill", "phrase" to "вельтрикс")),
+        )
+
+        assertEquals(
+            ToolResult.Effected(ToolOutput(mapOf(MemoryToolKeys.STORED_PHRASE to "вельтрикс", MemoryToolKeys.PREVIOUS_APP to ""))),
+            result,
+        )
+    }
+
+    /** Review Focus 2: `save` is an upsert, so this is the alias an undo must point back to. */
+    @Test
+    fun `set_app_alias reports the app an overwritten alias pointed at`() = runTest {
+        val store = RecordingAliasStore().apply {
+            upserted += Alias("вельтрикс", AliasTarget.App("net.fixture.parcel"), createdAtEpochMs = 0L)
+        }
+
+        val result = memoryWorker(aliasStore = store).invoke(
+            ResolvedInvocation(MemoryToolIds.SET_APP_ALIAS, mapOf("app" to "net.fixture.quill", "phrase" to "вельтрикс")),
+        )
+
+        assertEquals(
+            ToolResult.Effected(ToolOutput(mapOf(MemoryToolKeys.STORED_PHRASE to "вельтрикс", MemoryToolKeys.PREVIOUS_APP to "net.fixture.parcel"))),
+            result,
+        )
+    }
+
+    @Test
+    fun `forget_app_alias reports the app the removed alias pointed at`() = runTest {
+        val store = RecordingAliasStore().apply {
+            upserted += Alias("вельтрикс", AliasTarget.App("net.fixture.parcel"), createdAtEpochMs = 0L)
+        }
+
+        val result = memoryWorker(aliasStore = store).invoke(
+            ResolvedInvocation(MemoryToolIds.FORGET_APP_ALIAS, mapOf("phrase" to "вельтрикс")),
+        )
+
+        assertEquals(ToolResult.Effected(ToolOutput(mapOf(MemoryToolKeys.PREVIOUS_APP to "net.fixture.parcel"))), result)
+    }
+
+    /** An act whose undo cannot be told honestly is not taken. */
+    @Test
+    fun `a prior alias that cannot be read writes nothing`() = runTest {
+        val store = FindFailingAliasStore()
+        val worker = MemoryToolWorker(
+            save = SaveAliasUseCase(store),
+            deleteAlias = DeleteAliasUseCase(store),
+            deleteChoice = DeleteLearnedChoiceUseCase(RecordingPreferenceStore()),
+            aliases = store,
+            folding = PlainTextFolding,
+        )
+
+        val result = worker.invoke(
+            ResolvedInvocation(MemoryToolIds.SET_APP_ALIAS, mapOf("app" to "net.fixture.quill", "phrase" to "вельтрикс")),
+        )
+
+        assertTrue(result is ToolResult.Failed)
+        assertEquals(0, store.upserted.size)
+    }
+
+    /**
+     * Fix round 1, I1: `FakeAliasStore(failWrites = true)` reads succeed and writes fail, so
+     * `setAppAlias` reaches its `aliasTargetOf` read (which succeeds, reporting no prior alias) and only
+     * then hits `save.save(...)`, which fails. The existing `a store failure is Failed, never Effected`
+     * test uses a store whose READ also fails, so it never reached this branch — this is the one that
+     * does.
+     */
+    @Test
+    fun `a failed alias write is Failed, never Effected, even when the prior alias was read`() = runTest {
+        val store = FakeAliasStore(failWrites = true)
+        val worker = memoryWorker(aliasStore = store)
+
+        val result = worker.invoke(
+            ResolvedInvocation(MemoryToolIds.SET_APP_ALIAS, mapOf("app" to "net.fixture.quill", "phrase" to "вельтрикс")),
+        )
+
+        assertTrue(result is ToolResult.Failed)
+    }
+
+    /**
+     * Fix round 1, I1: same gap for `forgetAppAlias`'s delete-failure branch. The alias is seeded first
+     * so the (succeeding) read finds a target, and only the delete itself fails.
+     */
+    @Test
+    fun `a failed alias delete is Failed, never Effected, even when the alias was read`() = runTest {
+        val store = FakeAliasStore()
+        store.upsert(Alias("вельтрикс", AliasTarget.App("net.fixture.parcel"), createdAtEpochMs = 0L))
+        store.failWrites = true
+        val worker = memoryWorker(aliasStore = store)
+
+        val result = worker.invoke(ResolvedInvocation(MemoryToolIds.FORGET_APP_ALIAS, mapOf("phrase" to "вельтрикс")))
 
         assertTrue(result is ToolResult.Failed)
     }

@@ -5,10 +5,10 @@ import android.content.Intent
 import android.provider.AlarmClock
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import com.sidr.launcher.core.testing.FakeActionCatalog
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeAliasStore
-import com.sidr.launcher.core.testing.FakeCommandPlanner
+import com.sidr.launcher.core.testing.FakeMentionBinder
+import com.sidr.launcher.core.testing.FakeModelPlanner
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
@@ -17,6 +17,7 @@ import com.sidr.launcher.core.testing.NoOpIntentMatcher
 import com.sidr.launcher.core.testing.configuredProvider
 import com.sidr.launcher.data.repository.action.DefaultActionCatalog
 import com.sidr.launcher.data.repository.agent.memory.MemoryToolIds
+import com.sidr.launcher.data.repository.agent.memory.MemoryToolKeys
 import com.sidr.launcher.data.repository.agent.memory.MemoryToolSource
 import com.sidr.launcher.data.repository.agent.memory.MemoryToolWorker
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutCatalog
@@ -41,23 +42,28 @@ import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RuntimeBudget
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.TemplatePlanner
+import com.sidr.launcher.domain.agent.UndoAgentSessionUseCase
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
 import com.sidr.launcher.domain.intent.CommandFailure
+import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
+import com.sidr.launcher.domain.memory.alias.Alias
 import com.sidr.launcher.domain.memory.alias.AliasTarget
 import com.sidr.launcher.domain.memory.alias.DeleteAliasUseCase
 import com.sidr.launcher.domain.memory.alias.SaveAliasUseCase
 import com.sidr.launcher.domain.memory.resolution.DeleteLearnedChoiceUseCase
 import com.sidr.launcher.domain.preferences.FeatureFlags
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.text.PlainTextFolding
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolAdapter
 import com.sidr.launcher.domain.tool.ToolFederation
 import com.sidr.launcher.domain.tool.ToolLevels
+import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.tool.ToolWorker
 import com.sidr.launcher.domain.trace.TraceEvent
@@ -138,7 +144,7 @@ class AgentActingSeamTest {
     private lateinit var store: RoomAgentSessionStore
 
     /** The one dependency of [RouteCommandUseCase] that can leave the device. */
-    private val modelPlanner = FakeCommandPlanner()
+    private val modelPlanner = FakeModelPlanner()
 
     /** Every intent the Tier-0 worker issues, in order. Empty is an assertion, not an absence. */
     private val launched = mutableListOf<Intent>()
@@ -215,6 +221,8 @@ class AgentActingSeamTest {
                     save = SaveAliasUseCase(aliasStore),
                     deleteAlias = DeleteAliasUseCase(aliasStore),
                     deleteChoice = DeleteLearnedChoiceUseCase(preferenceStore),
+                    aliases = aliasStore,
+                    folding = PlainTextFolding,
                 ),
             ),
         ),
@@ -224,7 +232,7 @@ class AgentActingSeamTest {
     private fun planner() = CompositePlanner(
         listOf(
             TemplatePlanner(),
-            ToolMatchPlanner(ToolSelector(ToolVocabulary(), shortcutSource), appTargets, ToolArgumentSorts()),
+            ToolMatchPlanner(ToolSelector(ToolVocabulary(), shortcutSource), appTargets, CatalogArgumentSorts(), sortResolversOf(appTargets)),
         ),
     )
 
@@ -258,8 +266,8 @@ class AgentActingSeamTest {
             confidencePolicy = DefaultIntentConfidencePolicy(),
             recordingScope = CoroutineScope(SupervisorJob()),
         ),
-        planner = modelPlanner,
-        catalog = FakeActionCatalog(),
+        modelPlanner = modelPlanner,
+        binder = FakeMentionBinder(),
         featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = localOnly)),
         providerConfigRepository = configuredProvider(),
         connectivityChecker = FakeConnectivityChecker(initiallyOnline = online),
@@ -324,8 +332,8 @@ class AgentActingSeamTest {
         checkNotNull(session)
         assertEquals(ExecutionState.AwaitingConsent, session.state)
         assertEquals(
-            "the stop must be recorded as a risk-level checkpoint on step 0",
-            listOf(TraceEvent.ConsentRequested(0, ConsentReason.RISK_LEVEL)),
+            "the stop must carry every reason on step 0 — risk, and irreversibility (A4′ phase 2, F2-2)",
+            listOf(TraceEvent.ConsentRequested(0, setOf(ConsentReason.RISK_LEVEL, ConsentReason.DURABLE_EFFECT))),
             session.trace.events.filterIsInstance<TraceEvent.ConsentRequested>(),
         )
 
@@ -369,7 +377,7 @@ class AgentActingSeamTest {
 
             assertEquals(
                 listOf(
-                    TraceEvent.ConsentRequested(0, ConsentReason.RISK_LEVEL),
+                    TraceEvent.ConsentRequested(0, setOf(ConsentReason.RISK_LEVEL, ConsentReason.DURABLE_EFFECT)),
                     TraceEvent.ConsentResolved(0, granted = true),
                     TraceEvent.ToolInvoked(0, Tier0ToolIds.UNINSTALL_APP),
                     // Same change as above: the trace must record what the worker actually returned.
@@ -429,7 +437,11 @@ class AgentActingSeamTest {
             session.trace.events.none { it is TraceEvent.ConsentRequested },
         )
         assertEquals(MemoryToolIds.SET_APP_ALIAS, session.plan.steps.single().invocation.id)
-        assertEquals(ToolResult.Effected(), session.observations[0])
+        assertEquals(
+            // A4′ phase 2 (F2-3.3): the alias tool reports the key it wrote and what it replaced.
+            ToolResult.Effected(ToolOutput(mapOf(MemoryToolKeys.STORED_PHRASE to ALIAS_PHRASE, MemoryToolKeys.PREVIOUS_APP to ""))),
+            session.observations[0],
+        )
 
         val stored = aliasStore.observeAll().first().single()
         assertEquals(ALIAS_PHRASE, stored.phrase)
@@ -438,8 +450,9 @@ class AgentActingSeamTest {
 
     /**
      * The third acting family, and the one that proves `app` resolution is applied only where a tool
-     * declares it — a `ToolArgumentSorts` row since A4′ phase 0 (before that, an argument NAMED `app`)
-     * — rather than to every tool: `set_alarm` has neither, so its literal survives untouched all the
+     * declares it — an app row in `CatalogArgumentSorts` since A4′ phase 0 (before that, an argument
+     * NAMED `app`) — rather than to every tool: `set_alarm` has neither (its row since phase 3b is a
+     * clock-time sort, which step 2b does not resolve yet), so its literal survives untouched all the
      * way into the clock intent.
      */
     @Test
@@ -518,7 +531,7 @@ class AgentActingSeamTest {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Parity, and the fall-through that is not parity (R14-39).
+    // Parity, and the fall-through that was not parity (R14-39, closed in A4′ phase 3b).
     // ---------------------------------------------------------------------------------------------
 
     /**
@@ -552,13 +565,17 @@ class AgentActingSeamTest {
         val (_, session) = routeAndRun(GOAL_ALIAS, federation(), localOnly = true, online = false)
 
         assertEquals(ExecutionState.Completed, checkNotNull(session).state)
-        assertEquals(ToolResult.Effected(), session.observations[0])
+        assertEquals(
+            // A4′ phase 2 (F2-3.3): the alias tool reports the key it wrote and what it replaced.
+            ToolResult.Effected(ToolOutput(mapOf(MemoryToolKeys.STORED_PHRASE to ALIAS_PHRASE, MemoryToolKeys.PREVIOUS_APP to ""))),
+            session.observations[0],
+        )
         assertEquals(0, modelPlanner.planCallCount)
         assertNull(modelPlanner.lastCommand)
     }
 
     /**
-     * **Non-vacuity for every `planCallCount == 0` above.** The same [FakeCommandPlanner] instance,
+     * **Non-vacuity for every `planCallCount == 0` above.** The same [FakeModelPlanner] instance,
      * built by the same [routeUseCase] wiring, *does* record a command on the path where consulting a
      * model is correct. Without this, a zero call count would be a fact about a disconnected fake.
      */
@@ -572,19 +589,23 @@ class AgentActingSeamTest {
     }
 
     /**
-     * **R14-39, pinned as current behaviour — not endorsed.**
+     * **R14-39, closed** (A4′ phase 3b, fork 3b-E; `DOC-ADL-3`). Pinned here since A1″ Task 12 as the
+     * fall-through it was: from Task 6b until this phase, `NoPlan` at step 2b had a second meaning — not
+     * only "nothing matched" but "a registered tool matched and its target could not be resolved" — and
+     * `RouteCommandUseCase` could not tell the two apart, so a command a tool had claimed
+     * **deterministically** fell through to steps (5)–(7) and its raw text went to the cloud model.
      *
-     * Since Task 6b, `NoPlan` at step 2b has a second meaning: not only "nothing matched" but also "a
-     * registered tool matched and its target could not be resolved". `RouteCommandUseCase` cannot tell
-     * the two apart, so a command a tool claimed **deterministically** falls through to steps (5)–(7)
-     * and the raw text is sent to the cloud model.
+     * Now the planner answers `Unresolved` and step 2b answers it on the device, so this test pins the
+     * opposite: «нет такого приложения» in the user's own word, no session, and the model never asked
+     * — with a provider configured and the network up, the state in which the fall-through was live.
      *
-     * The first assertion is what makes this a reproduction rather than a restatement: the vocabulary
-     * *did* claim the text for `uninstall_app`; only [AppTargetResolver] declined. Changing the routing
-     * is **A4′'s** (`CLAUDE.md`, A1′ residual (3)), not this task's.
+     * The first assertion is still what makes this a reproduction rather than a restatement: the
+     * vocabulary *did* claim the text for `uninstall_app`; only [AppTargetResolver] found nothing. The
+     * non-vacuity of the zero is `the outbound seam is live when nothing in the vocabulary claims the
+     * text`, above, over the same wiring.
      */
     @Test
-    fun `R14-39 - an unresolvable target makes a matched tool command fall through to the cloud model`() =
+    fun `R14-39 closed - an unresolvable target of a matched tool is answered on the device, the model never asked`() =
         runTest {
             assertEquals(
                 "the premise: the vocabulary must claim this text, or this test proves nothing",
@@ -594,9 +615,10 @@ class AgentActingSeamTest {
 
             val outcome = routeUseCase(federation()).route(GOAL_UNINSTALL_UNKNOWN)
 
-            assertTrue("no session may be started: $outcome", outcome !is CommandOutcome.AgentSessionStarted)
-            assertEquals(1, modelPlanner.planCallCount)
-            assertEquals(GOAL_UNINSTALL_UNKNOWN, modelPlanner.lastCommand)
+            assertEquals(CommandOutcome.Message(CommandMessage.NoAppFound(UNKNOWN_LABEL)), outcome)
+            assertEquals("the model was asked about a target the device had claimed", 0, modelPlanner.planCallCount)
+            assertNull("an outbound payload was recorded: ${modelPlanner.lastCommand}", modelPlanner.lastCommand)
+            assertEquals("nothing may be left at rest", null, (store.active() as OperationResult.Success).value)
         }
 
     // ---------------------------------------------------------------------------------------------
@@ -619,6 +641,43 @@ class AgentActingSeamTest {
         assertTrue("the same text must plan when the permission is held: $available", available is PlanningResult.Planned)
     }
 
+    // --- A4′ phase 2, spec §6.2 / §10 criterion 5: compensation on launcher_memory, end to end ---
+
+    private fun undoUseCase(federation: ToolFederation) =
+        UndoAgentSessionUseCase(startUseCase(federation), ToolInverseCatalog(), federation.registry)
+
+    /**
+     * The whole chain the pieces are tested for separately: a typed alias command runs through the
+     * REAL memory worker, which reports what it wrote; the REAL catalog turns that into an inverse; the
+     * inverse runs as a new session through the real engine and the Room store; the alias is gone.
+     */
+    @Test
+    fun `an alias set by a typed command is undone through the real worker, catalog, engine and store`() = runTest {
+        val federation = federation()
+        val (_, finished) = routeAndRun(GOAL_ALIAS, federation)
+        assertEquals(ExecutionState.Completed, checkNotNull(finished).state)
+
+        val undoing = (undoUseCase(federation).undo(finished) as OperationResult.Success).value!!
+        val undone = (runUseCase(federation).run(undoing) as OperationResult.Success).value
+
+        assertEquals(ExecutionState.Completed, undone.state)
+        assertEquals(emptyList<Alias>(), aliasStore.observeAll().first())
+    }
+
+    /** Review Focus 2, end to end: the older alias comes back, it is not deleted with ours. */
+    @Test
+    fun `an alias that replaced an older one is pointed back by undo, not forgotten`() = runTest {
+        aliasStore.upsert(Alias(ALIAS_PHRASE, AliasTarget.App("net.fixture.parcel"), createdAtEpochMs = 0L))
+        val federation = federation()
+        val (_, finished) = routeAndRun(GOAL_ALIAS, federation)
+        check(aliasStore.observeAll().first().single().target == AliasTarget.App(TARGET_PACKAGE))
+
+        val undoing = (undoUseCase(federation).undo(checkNotNull(finished)) as OperationResult.Success).value!!
+        runUseCase(federation).run(undoing)
+
+        assertEquals(AliasTarget.App("net.fixture.parcel"), aliasStore.observeAll().first().single().target)
+    }
+
     private companion object {
         /**
          * **No two of these share a substring, and none of the packages occurs in any goal text.**
@@ -634,7 +693,8 @@ class AgentActingSeamTest {
 
         const val GOAL_UNINSTALL = "удали приложение $TARGET_LABEL"
         const val GOAL_UNINSTALL_OWN = "удали приложение $OWN_LABEL"
-        const val GOAL_UNINSTALL_UNKNOWN = "удали приложение pangolin"
+        const val UNKNOWN_LABEL = "pangolin"
+        const val GOAL_UNINSTALL_UNKNOWN = "удали приложение $UNKNOWN_LABEL"
         const val GOAL_ALIAS = "называй $TARGET_LABEL как $ALIAS_PHRASE"
         const val GOAL_ALARM = "поставь будильник на 7:30"
 

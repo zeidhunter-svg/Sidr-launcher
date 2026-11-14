@@ -95,4 +95,17 @@ class MemoryToolSourceTest {
 
         assertNull(source.find(ToolId("not_a_memory_tool")))
     }
+
+    /** A4′ phase 2: the alias tools report what an undo needs (plan §0.3 P7); the third reports nothing. */
+    @Test
+    fun `the two alias tools declare what an undo needs, and forget_learned_choice declares nothing`() {
+        val source = MemoryToolSource()
+
+        assertEquals(
+            listOf(MemoryToolKeys.STORED_PHRASE, MemoryToolKeys.PREVIOUS_APP),
+            source.find(MemoryToolIds.SET_APP_ALIAS)!!.outputSchema.map { it.name },
+        )
+        assertEquals(listOf(MemoryToolKeys.PREVIOUS_APP), source.find(MemoryToolIds.FORGET_APP_ALIAS)!!.outputSchema.map { it.name })
+        assertEquals(emptyList<String>(), source.find(MemoryToolIds.FORGET_LEARNED_CHOICE)!!.outputSchema.map { it.name })
+    }
 }

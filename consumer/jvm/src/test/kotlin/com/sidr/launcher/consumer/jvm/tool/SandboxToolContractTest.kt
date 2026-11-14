@@ -59,6 +59,12 @@ class SandboxToolContractTest {
                 { temp.newFile("delete-me.lock") },
                 "Effected",
             ),
+            Case(
+                SandboxToolIds.RENAME_FILE,
+                mapOf(SandboxKeys.PATH to File(temp.root, "ledger.txt").absolutePath, SandboxKeys.NEW_NAME to "ledger.old"),
+                { temp.newFile("ledger.txt") },
+                "Effected",
+            ),
         )
 
         cases.forEach { case ->

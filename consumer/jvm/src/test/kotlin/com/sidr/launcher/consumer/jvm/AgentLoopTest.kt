@@ -3,33 +3,47 @@ package com.sidr.launcher.consumer.jvm
 import com.sidr.launcher.consumer.jvm.plan.FilePlanner
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionIdFactory
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionStore
+import com.sidr.launcher.consumer.jvm.tool.SandboxKeys
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolIds
+import com.sidr.launcher.consumer.jvm.tool.SandboxToolInverses
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolSource
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolWorker
+import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentExecutor
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.ConsentReason
+import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.PlanningRequest
 import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
+import com.sidr.launcher.domain.agent.StepPrecondition
+import com.sidr.launcher.domain.agent.StepRationale
+import com.sidr.launcher.domain.agent.StepUndo
+import com.sidr.launcher.domain.agent.UndoAgentSessionUseCase
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ObservedFact
 import com.sidr.launcher.domain.tool.RejectionReason
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolExecutor
+import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolResult
+import com.sidr.launcher.domain.tool.Undo
 import com.sidr.launcher.domain.trace.TraceEvent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.nio.file.Files
 
 /**
  * The block's actual claim: one goal passes `goal → plan → gate → tool → observe → tool → result →
@@ -77,11 +91,16 @@ class AgentLoopTest {
         assertEquals(2, paused.cursor)
         assertTrue("nothing was deleted before consent", file.exists())
         assertTrue(
-            // `checkpointFor`'s first branch since 2026-08-23 is `maxOf(PlanStep.risk, registry.risk)
-            // >= CONFIRM` (A0 finding F2). DANGEROUS takes it either way, and the reason is RISK_LEVEL
-            // rather than DURABLE_EFFECT — spec §11.3's recorded finding, not a defect to fix here.
-            "the gate names the risk level, not durability — DANGEROUS takes checkpointFor's first branch",
-            paused.trace.events.contains(TraceEvent.ConsentRequested(2, ConsentReason.RISK_LEVEL)),
+            // A0.5 recorded that DANGEROUS took checkpointFor's first branch, so the gate named the
+            // risk and never the durability (spec §11.3). A4′ phase 2 (F2-2) records every reason:
+            // risk, the rise from the two SAFE steps that ran, and irreversibility.
+            "the gate names every reason delete_file stops for",
+            paused.trace.events.contains(
+                TraceEvent.ConsentRequested(
+                    2,
+                    setOf(ConsentReason.RISK_LEVEL, ConsentReason.RISK_RAISED, ConsentReason.DURABLE_EFFECT),
+                ),
+            ),
         )
         assertTrue(
             "step 1 bound its path from step 0's output",
@@ -313,5 +332,68 @@ class AgentLoopTest {
             listOf("APP_NOT_INSTALLED", "APP_AMBIGUOUS"),
             ObservedFact.entries.map { it.name },
         )
+    }
+
+    // --- A4′ phase 2, spec §6.5 as amended: failed part-way → undo what it did, on real files ----
+
+    private fun renameStep(index: Int, path: String, newName: String) = PlanStep(
+        index,
+        ToolInvocation(SandboxToolIds.RENAME_FILE, mapOf(SandboxKeys.PATH to ArgSource.Literal(path), SandboxKeys.NEW_NAME to ArgSource.Literal(newName))),
+        ActionRiskLevel.SAFE, StepPrecondition.None, StepRationale.GOAL_DIRECT,
+    )
+
+    private fun undo(store: JvmAgentSessionStore) = UndoAgentSessionUseCase(
+        StartAgentSessionUseCase(FilePlanner(), store, JvmAgentSessionIdFactory(), registry),
+        SandboxToolInverses(),
+        registry,
+    )
+
+    @Test
+    fun `a plan that failed part-way is undone for what it did, and only for that`() = runTest {
+        val store = store()
+        val ledger = temp.newFile("ledger.txt").toPath().toRealPath()
+        val absent = temp.root.toPath().toRealPath().resolve("absent.txt")
+        val plan = ExecutionPlan(listOf(renameStep(0, ledger.toString(), "ledger.old"), renameStep(1, absent.toString(), "absent.old")))
+        val goal = AgentGoal("tidy the ledger", GoalShape.Free("tidy the ledger"))
+
+        val started = StartAgentSessionUseCase(FilePlanner(), store, JvmAgentSessionIdFactory(), registry).startPlanned(goal, plan).value()!!
+        val finished = RunAgentSessionUseCase(executor(), store).run(started).value()
+        assertTrue("step 1 must have failed", finished.observations[1] is ToolResult.Failed)
+        assertTrue(Files.exists(ledger.resolveSibling("ledger.old")))
+
+        val undoing = undo(store).undo(finished).value()!!
+        val undone = RunAgentSessionUseCase(executor(), store).run(undoing).value()
+
+        assertEquals(ExecutionState.Completed, undone.state)
+        assertEquals(1, undoing.plan.steps.size)
+        assertTrue(Files.exists(ledger))
+        assertFalse(Files.exists(ledger.resolveSibling("ledger.old")))
+    }
+
+    @Test
+    fun `an irreversible step is named and never compensated, whatever came before it`() = runTest {
+        val store = store()
+        val ledger = temp.newFile("ledger.txt").toPath().toRealPath()
+        val other = temp.newFile("other.txt").toPath().toRealPath()
+        val plan = ExecutionPlan(
+            listOf(
+                renameStep(0, ledger.toString(), "ledger.old"),
+                PlanStep(1, ToolInvocation(SandboxToolIds.DELETE_FILE, mapOf(SandboxKeys.PATH to ArgSource.Literal(other.toString()))), ActionRiskLevel.DANGEROUS, StepPrecondition.None, StepRationale.GOAL_DIRECT),
+            ),
+        )
+        val goal = AgentGoal("tidy the ledger", GoalShape.Free("tidy the ledger"))
+        val run = RunAgentSessionUseCase(executor(), store)
+        val started = StartAgentSessionUseCase(FilePlanner(), store, JvmAgentSessionIdFactory(), registry).startPlanned(goal, plan).value()!!
+        val atGate = run.run(started).value()
+        val finished = ResolveConsentUseCase(store, run).resolve(atGate.id, 1, granted = true).value()!!
+
+        val review = undo(store).review(finished)
+        assertEquals(StepUndo(1, Undo.NotUndoable), review.first())
+        assertTrue(review[1].undo is Undo.By)
+
+        run.run(undo(store).undo(finished).value()!!)
+
+        assertTrue(Files.exists(ledger))
+        assertFalse("a deleted file stays deleted", Files.exists(other))
     }
 }

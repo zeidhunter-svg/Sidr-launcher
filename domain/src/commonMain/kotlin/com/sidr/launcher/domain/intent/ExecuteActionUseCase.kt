@@ -4,18 +4,18 @@ import com.sidr.launcher.domain.action.LauncherAction
 import com.sidr.launcher.domain.result.OperationResult
 
 /**
- * Use case (AIL-5): executes a **confirmed** router-proposed [LauncherAction], returning a
- * [CommandOutcome] for the UI.
+ * Use case (AIL-5): executes a [LauncherAction], returning a [CommandOutcome].
  *
- * This is the execution counterpart to AIL-4's routing: the LLM router surfaces a proposal
- * ([CommandOutcome.RoutedAction]) that is **never** auto-executed (Fork R4); once the user confirms
- * (or one-taps a SAFE proposal), the ViewModel calls here to actually run it.
+ * It was born as the execution half of the AIL-4 router's confirm card; the router was deleted in A4′
+ * phase 3a (D3). Two callers remain, neither of them the model's path: the `in_app` tool worker
+ * (`SystemIntentToolWorker`), which the engine reaches only below the consent checkpoint, and the web
+ * route chip, which the USER points at a destination (`OneModelPathGuardTest`).
  *
  * It maps each [LauncherAction] family to a [LauncherIntent] and resolves + executes it through the
- * **unchanged** [IntentActionResolver] + [ActionExecutor] — the same proven path the rule pipeline
- * uses ([HandleUserCommandUseCase]); the routing/execution semantics are intentionally identical
- * (ambiguity → [CommandOutcome.NeedsConfirmation], not-found → [CommandOutcome.Message], nav families
- * never touch the executor). No new executor surface is introduced. Never throws to the UI: a
+ * same [IntentActionResolver] + [ActionExecutor] the rule pipeline uses ([HandleUserCommandUseCase]);
+ * the routing/execution semantics are intentionally identical (ambiguity — since A4′ phase 3b Task 7
+ * also a word form only offered — → [CommandOutcome.NeedsConfirmation], not-found →
+ * [CommandOutcome.Message], nav families never touch the executor). No new executor surface is introduced. Never throws to the UI: a
  * resolver/executor technical failure becomes [CommandOutcome.Failed] with a safe message.
  */
 class ExecuteActionUseCase(
@@ -26,12 +26,12 @@ class ExecuteActionUseCase(
     suspend fun execute(action: LauncherAction): CommandOutcome = when (action) {
         // Navigation / UI-only families — resolved by the ViewModel, never the executor.
         LauncherAction.OpenSettings -> CommandOutcome.OpenSettings
-        is LauncherAction.OpenAssistant -> CommandOutcome.OpenAssistant
+        is LauncherAction.OpenAssistant -> CommandOutcome.OpenAssistant(question = action.prompt)
         LauncherAction.ShowApps -> CommandOutcome.ShowApps
 
         // Side-effecting families — build the semantic intent, resolve (query → executable), execute.
         is LauncherAction.LaunchApp ->
-            resolveAndRoute(LauncherIntent.LaunchAppIntent(action.query))
+            resolveAndRoute(LauncherIntent.LaunchAppIntent(action.query, action.packageName))
         is LauncherAction.WebSearch ->
             resolveAndRoute(LauncherIntent.SearchIntent(action.query))
         is LauncherAction.OpenUrl ->
@@ -55,7 +55,7 @@ class ExecuteActionUseCase(
         is ExecutableAction.PlayStoreSearchAction,
         -> mapExecution(executor.execute(action))
 
-        is ExecutableAction.AmbiguousAppAction -> CommandOutcome.NeedsConfirmation(action.candidates)
+        is ExecutableAction.AmbiguousAppAction -> CommandOutcome.NeedsConfirmation(action.candidates, action.query, action.confirm)
         is ExecutableAction.ShowMessageAction -> CommandOutcome.Message(action.message)
         ExecutableAction.OpenLauncherSettingsAction -> CommandOutcome.OpenSettings
         ExecutableAction.NoOpAction -> CommandOutcome.NoOp

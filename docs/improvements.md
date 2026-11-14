@@ -339,3 +339,229 @@ then invoke a tool" and "invoke two tools".
 
 **The real risk is not technical:** a synthesizer ships no new visible capability by itself. So it
 belongs not in a block of its own but inside the one that ships multi-step goals — A4′.
+
+---
+
+## Part 4 — Owner ideas, raised 2026-10-03, discussed but not designed
+
+> Raised during the brainstorm for phase 3 of block A4′. The same day's architectural context — the
+> "blind planner", environments as desired state, "build the system you like", the full-access window —
+> is in the note [2026-10-03-agent-architecture-discussion-design.md](superpowers/specs/2026-10-03-agent-architecture-discussion-design.md)
+> (status: under discussion, Russian). Here: five ideas with the agent's analysis; none is scheduled.
+
+### H. Interface constructor — everyone assembles their own shell
+
+**The idea as raised.** Every user assembles the system for themselves — not the core but the interface
+and design: where the buttons, the search bar and the windows sit. Possibly right at the start, on first
+launch.
+
+**What it is architecturally.** The core is fixed, the shell is yours — as on Linux, one kernel and
+many desktop environments. A layout is a **declaration** (new type: "layout declaration"), not pixels:
+the screen is a few zones (top, main area, bottom/dock, side panels, overlay layer); each holds an
+ordered list of palette elements (command bar, app grid, widgets, agent card, note, scene, prayer strip)
+with a size S/M/L, an alignment and a density. Design-system rules compute the geometry — like a tiling
+window manager (i3, sway): the human says "what goes where", the manager computes the pixels.
+
+**Why zones and not a free canvas.** Pixels do not carry over to another screen, break accessibility
+and are unreadable to the agent; zones carry over (geometry is recomputed), hold accessibility at any
+font scale and can be edited by the agent as data ("move search to the bottom, make the clock bigger").
+This does not contradict B.1 ("the agent chooses, the system places"): that argument is against the
+**model** controlling geometry; here the **human** controls the meaning of the layout, and the system
+still computes the geometry.
+
+**What it looks like.** Edit mode on long-press: drag between zones, size S/M/L, hide, "put it back"
+(generations — entry B, note §7). By text or voice, the agent edits the declaration: diff preview,
+consent. **Each environment has its own layout.** First launch is three big choices with a live
+preview, **without AI** (no provider key exists yet on first launch): where the command bar goes (top or
+bottom — the most consequential choice: the bottom suits the thumb on large phones), density (large /
+normal / dense), what the home screen holds (apps / widgets / minimum); caption: "everything can be
+changed at any time". Later: "describe it in words" and "bring my system over" (entry A). First launch
+is **the first consumer of the environment mechanism**, not a separate onboarding code path.
+
+**Guards — no layout can break them:** (1) the entry to the agent (the command bar) is always reachable,
+at least by a gesture; (2) the consent card and consequences are visible above everything
+(`DOC-NYH-2`, `DOC-MZN-2`); (3) accessibility — touch targets ≥ 48 dp, contrast, font scale; (4) the exit
+from restricted environments (entry L) is reachable by whoever is entitled to it; (5) the prayer strip,
+when shown, obeys `DOC-SKN-3`; whether a user may remove it entirely is a doctrine question for the
+owner.
+
+**"Windows".** On the phone, other apps' windows are laid out by the system (Sidr can only ask for split
+screen, and not everywhere); Sidr's windows are its own panels, pages and cards. On the PC (the second
+consumer) the same zone language describes real windows.
+
+**Cost.** A design-system block of its own: ADR, owner decision, accessibility review, a Roborazzi
+matrix (layouts × screens × font scale) — the DS §8.4 procedure. The layout engine follows the same
+discipline as `ToolRegistry`: closed vocabulary, validation, a single renderer.
+
+**Precedents** (from memory): Nova / Lawnchair / Niagara — grid and dock, by hand; KWGT/KLWP — a free
+per-pixel builder, powerful and brittle; Home Up in Good Lock — on Samsung's privileges. **Not seen:**
+one declarative layout language edited by both the human and the agent, per environment, portable to
+another phone and to the PC, with generations and guards.
+
+### I. Translator — multi-stage, cloud, on our own server at the user's choice
+
+**The idea as raised.** Our own built-in, highly accurate translator: multi-stage, cloud-based, through
+a backend; both as a built-in app and as a separate product. **Our own server — yes, but only at the
+user's choice** (owner, 2026-10-03).
+
+**What it is architecturally.** A server pipeline is the right place for quality: draft translation →
+refinement by a model with the task's context → back-translation to detect meaning drift → the user's
+glossary ("always translate X as Y" — identity data, entry A) and **canonical** translations for sacred
+and legal texts (manifesto §12, `DOC-ILM-5`: what must be exact is never generated; the source is shown)
+→ confidence marks and alternatives for ambiguous words (`DOC-NYH-1`). Inside Sidr the translator is **a
+capability in the registry plus a surface element**, not only an app: a "Paris" environment uses it from
+day one.
+
+**How "at the user's choice" works.** By default Sidr **does not contact its own server at all**:
+translation goes through the user's BYOK model and/or on device. The Sidr server is switched on by an
+explicit choice that states what is sent and what is kept. So "Sidr sends nothing about you" stays true
+by default, and once switched on, the outbound receipt (note §6, mechanism 6) shows what went to the
+server.
+
+**Cost — Sidr's first server of its own, and it changes three things:** (1) **a new outbound
+recipient** — today text goes only to the BYOK provider the user chose; the Sidr server is a recipient of
+a different kind: an ADR on `OutboundContextPolicy` (new: per-recipient policy) and a guard per
+recipient; (2) Sidr becomes **a data processor** — a retention policy ("we keep nothing"), security,
+legal obligations; (3) **a separate product is a separate business**: accounts, billing, an API, model
+costs. Offline and for private text, an on-device fallback translation. Translating **someone else's**
+incoming text through the cloud sends third-party content out: on device, or explicitly marked.
+
+**Place in the queue.** The capability can come early, right after the bridge (via BYOK); the server and
+the standalone product — a track of their own, by ADR.
+
+### J. Agentic browser — filters unwanted content, adapts to the user
+
+**The idea as raised.** Our own agentic browser that blocks unwanted content and adapts to the user's
+character.
+
+**An advantage the others do not have.** The agentic browsers of 2025 (from memory — Perplexity Comet,
+ChatGPT Atlas) became the prime target of **indirect prompt injection**: a page dictated actions to the
+agent. Privilege separation (note §8) closes this by construction: the agent that reads pages **has no
+phone tools**, and everything it reads is labelled "third-party". The formula: **an agentic browser a
+page cannot hijack.**
+
+**What it looks like.** The engine is the system's (WebView or GeckoView); we do not write one.
+Filtering in three layers: ads and trackers (known lists, deterministic); content categories (strict in
+a children's environment, entry L); **the user's values** — for Sidr's audience a filter by Islamic
+norms is natural (browsers for Muslims exist — from memory, SalamWeb — but without an agent and without
+privilege separation). **Transparency is mandatory:** what was filtered and why is visible and can be
+overridden; hidden filtering, however well meant, turns "fitted to your character" into a bubble chosen
+for the user.
+
+**Cost.** Fetching pages from the phone is a new network channel that `OutboundContextPolicy` (a policy
+for requests to the model) does not cover — it needs a policy of its own (note §14); it needs the
+research agent and multi-agent support. The researcher's output is shown as **curated** — with its
+source (`DOC-ILM-5`); this block is the addressee of that rule's debt. **Place in the queue:** after
+environments and multi-agent support.
+
+### K. The system as an imprint of the person
+
+**The idea as raised.** The whole system adapts to the user's character and carries a kind of imprint
+of their personality.
+
+**What it rests on.** Manifesto §18, "identity is data, not weights", and entry A (the portable
+snapshot): preferences, aliases, environments, layouts, glossary, cached programs — rows with provenance
+and retention. Entries H–J and L are its expressions.
+
+**The condition without which the idea is dangerous: a mirror, not a shadow.** The user can always see
+"what Sidr thinks about me", correct it and delete it (`DOC-AML-5`). Hidden adaptation to character is
+the road to manipulation and engagement-farming, which `DOC-HYA-1` forbids. Inferences about character
+never leave the device (`DOC-AML-4`; note §6 — the model never sees the user's world).
+
+### L. Care — the elderly and children
+
+**The idea as raised.** Apply it for convenience, including monitoring the health of the elderly,
+children, and so on.
+
+**The central question is manifesto §19: on whose behalf.** There are **two principals with different
+interests** here: the one who cares and the one cared for.
+
+| | done right | never |
+|---|---|---|
+| elderly | a "Care" environment: large, voice-first ("call my daughter"), medication, a help button; the relative receives **signals, not data** ("no activity for 12 hours") — with the elderly person's own consent and right to revoke | covert monitoring — that is stalkerware: banned by Google Play, and degrading |
+| children | a "Children" environment: allowed apps, a strict browser (J); **exit only by a parent's biometrics** | — |
+| health | steps and heart rate from Health Connect (from a watch); wording of "wellbeing", not "diagnosis" | diagnostic claims: Sidr would become a regulated medical device (EU MDR, FDA) |
+
+**A finding: one mechanism in two directions.** The full-access window (note §7.2) and the
+"Children" / "Care" environments are all environments with **authenticated entry and exit**: the first
+elevates (only the owner may enter), the others restrict (only a parent or carer may leave). One
+construct, not three features.
+
+**Cost.** Signals to a relative are a new outbound channel (to someone else's device — naturally through
+the relative's Sidr, manifesto §20), with its own policy and ADR; health data is the most sensitive
+storage category; regulation and the consent of two principals are questions of doctrine and law, to be
+answered **before** design.
+
+### How H–L relate, and in what order
+
+All five are **environments and capabilities on one foundation**. Built as separate features before the
+environment mechanism, they would become special-case code that is not declarative and will be
+rewritten. The order the agent proposes: (1) the bridge — A4′ phase 3 (without it the model cannot write
+declarations); (2) the translator as a capability via BYOK; (3) the environments block — declaration,
+reconciliation, generations, palette; first consumers: first launch (H), then "Children", "Care" (L) and
+the full-access window; (4) identity — A3 and A5 (K); (5) multi-agent support and the browser (J); the
+translator server and the standalone product — a track of their own, by ADR (I).
+
+---
+
+## Part 5 — Owner ideas 2026-11-07: recorded conceptually, not analysed
+
+> Framing only — analysis later; each idea goes through its own `brainstorm → spec → plan`. Remarks in
+> brackets are the agent's first reaction, not a decision. Anchor: ADR "2026-11-07 — Two principles of the
+> agentic OS" and its addendum: Sidr is **an open-world operating system — open in capability, closed at the
+> boundaries**. "Open world" is native to an AI agent on the **understanding** side (language has no closed
+> command list; missing knowledge is "unknown", not "false") and unnatural on the **execution** side (the
+> model is probabilistic, the world is adversarial — injection through content); so the gates are built,
+> they do not arise by themselves.
+
+### M. Sidr as a platform — layers, not a list of apps
+
+Owner: a full, broad platform — its own secure anonymous messenger, chat, social network, browser,
+translator, a programming workspace; devices — smartphone, PC, "satellites" (to clarify: satellite
+connectivity or wearable companion devices), IoT. The agent's proposed layering: (1) the agent core with a
+finite set of gates; (2) the user's device mesh — one identity, sync without a third-party cloud in the
+middle; (3) the world as tool sources — apps, the web, IoT via Matter/Thread, MCP; (4) communication
+human↔human and agent↔agent — a client of an open protocol, never home-made cryptography; (5) surfaces —
+browser (→ J), translator as a capability of the local model (→ I), a programmer's workspace on the PC,
+chat. (Selection criterion — maximum agent capability per unit of own infrastructure; a public social
+network is the riskiest direction: moderation, liability, anonymity.)
+
+### N. A local model and the user's personal space
+
+A model that knows the user's "workspace and character" (books, work, sites) and writes messages in their
+style. Analysed in the track plan's `§HANDOFF` ("Candidate for a separate block"): knowledge — an on-device
+personal index; character — an editable profile; weight fine-tuning — only for style, and later; sending on
+the user's behalf — the user's last tap (→ K).
+
+### O. Sidr network — a chat shared between Sidr users
+
+A chat (and more broadly a "local social network") that Sidr users share with each other. (First reaction:
+invite-only circles instead of a public feed — removes most of the moderation burden; end-to-end encryption
+and peer-to-peer delivery with minimal "blind" relays; identity — keys, verified by QR; the distinguishing
+capability — agent↔agent: "my agent arranges it with yours" under both owners' consent — e.g. two agents
+agree on a meeting time, each within the limits its owner allowed; going fully serverless is not possible —
+phones are switched off, networks block direct connections — but a relay carries ciphertext only.)
+
+### P. News feed — region and topics of the user's choice
+
+A window or a strip on the home screen where world news runs automatically; the user picks the region and
+the events. (First reaction: a source on every headline and a mark on any generated summary — `DOC-ILM-5`;
+moving text must be pausable — accessibility, WCAG 2.2.2; fetching news reveals interests to the server —
+take generic feeds and filter on the device; off by default so the home screen stays calm; a right-to-left
+ticker reads worse than a calm card feed or a widget that refreshes rarely; sources are visible to the user
+and changeable by them; the agent tie-in — "what's new in Bishkek?", "more on the third one", "follow this
+topic".)
+
+### Q. A multi-layered open-world system — the Sidr ontology
+
+The owner's amendment to the formula: *an open multi-layered system built on the laws of the real world
+(mathematics, physics, computer science); closed at the boundary of each layer.* Spheres (ocean, atmosphere,
+space) do not cross their bounds, yet form one whole governed from one core; layers are visible to each
+other, some are invisible; the subject — the person — moves between layers. Refinements from the discussion:
+- a boundary is a **membrane**, not a wall: a pair of layers has two relations — **visibility** and
+  **permeability**;
+- the core is a **law**, the same in every layer, not a ruler; so the number of layers is unbounded;
+- **no layer is invisible to its owner** — invisibility only towards agents, models and other people;
+- resonance with the doctrine: *barzakh* (55:19–20), *mizan* (55:7–9), orbits (36:40).
+
+Draft of concepts and axioms (Russian): [`docs/governing/sidr-ontology-v0.1.md`](governing/sidr-ontology-v0.1.md).

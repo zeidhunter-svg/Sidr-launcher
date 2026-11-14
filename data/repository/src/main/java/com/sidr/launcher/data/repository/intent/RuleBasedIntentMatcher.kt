@@ -6,6 +6,7 @@ import com.sidr.launcher.domain.intent.IntentMatcher
 import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.intent.MatcherSource
 import com.sidr.launcher.domain.intent.SearchTarget
+import com.sidr.launcher.domain.intent.SecondGoal
 import com.sidr.launcher.domain.intent.SimpleCommand
 import com.sidr.launcher.domain.intent.UrlClassification
 import com.sidr.launcher.domain.intent.UrlDetector
@@ -20,7 +21,8 @@ import com.sidr.launcher.domain.intent.UrlDetector
  *     (AIL-2, Q2): when the verb argument is a high-confidence URL, "open <url>" opens the site
  *     instead of launching an app.
  *  1b. Install verb (en/ru prefix, tr suffix) — Play Store search (AIL-2, Q3).
- *  2. Search verb (en/ru prefix, tr suffix).
+ *  2. Search verb (en/ru prefix, tr suffix). A query carrying a second goal (`SecondGoal`, A4′
+ *     phase 1) is classified at 0.30, not 0.90: the intent is still a search, the claim is withdrawn.
  *  3. Settings bare keywords (no verb).
  *  4. Simple command table.
  *  5. Bare URL / site (AIL-2, R6): high-confidence URL → OpenUrlIntent; domain-shaped but
@@ -173,10 +175,16 @@ class RuleBasedIntentMatcher : IntentMatcher {
                 input.removeSuffix(" $verb").trim()
             }
             return if (query.isNotEmpty()) {
+                // A4′ phase 1 (spec §5.2): a query that carries a second goal would hand that goal to
+                // the search engine as words ("… и закажи такси"). It is not claimed — 0.30, the value
+                // this matcher gives a verb it cannot use — so the use case answers `LowConfidence`
+                // and routing offers the command to the tool planner and the model. The INTENT does
+                // not change: what the words say is still a search; only the confidence is withdrawn.
+                val secondGoal = SecondGoal.carriedBy(query)
                 Classification(
                     LauncherIntent.SearchIntent(query = query, target = SearchTarget.WEB),
-                    0.90f,
-                    "search verb '$verb' → query '$query'",
+                    if (secondGoal) 0.30f else 0.90f,
+                    if (secondGoal) "search verb '$verb' → query '$query' carries a second goal" else "search verb '$verb' → query '$query'",
                 )
             } else {
                 Classification(

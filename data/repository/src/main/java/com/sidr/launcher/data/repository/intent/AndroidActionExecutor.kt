@@ -80,8 +80,10 @@ class AndroidActionExecutor @Inject constructor(
     }
 
     private fun openUrl(action: ExecutableAction.OpenUrlAction): ActionExecutionResult {
-        // The URL is already scheme-checked + normalized upstream (UrlDetector); ACTION_VIEW on an
-        // http(s) URI hands off to a browser. Never fired for non-http(s) schemes.
+        // The URL is scheme-checked upstream, and nothing here checks it again: on the typed path by
+        // FastPath's UrlDetector (which also normalizes it), on the tool path (`open_url`, the model's
+        // address) by SystemIntentToolWorker, which refuses anything but http:// / https://. ACTION_VIEW
+        // on an http(s) URI hands off to a browser (or an app that verified that link).
         return viewUrl(action.url, CommandFailure.CantOpenUrl)
     }
 

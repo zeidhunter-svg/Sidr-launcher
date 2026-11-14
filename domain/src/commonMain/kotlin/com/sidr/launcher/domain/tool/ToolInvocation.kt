@@ -37,8 +37,8 @@ data class ResolvedInvocation(val id: ToolId, val args: Map<String, String> = em
 /**
  * What a tool produced for later steps. Keys must appear in the tool's [ToolDescriptor.outputSchema].
  *
- * Values are opaque strings in A0 — richer types wait for a real consumer, exactly as `ArgType` already
- * does for inputs.
+ * Values are opaque strings, and stay so: `ArgType` is `STRING` for good (ADR «2026-11-07 — A4′ ф3b: сорт
+ * — отдельная ось; F6 закрыт») — what a value MEANS is a sort, declared beside the descriptor.
  */
 data class ToolOutput(val values: Map<String, String> = emptyMap())
 
@@ -74,7 +74,9 @@ sealed interface ToolResult {
      *    could be false, and the only irreversible one, so this is where `DOC-ILM-3` (the trace is
      *    1:1 with reality) and `DOC-ILM-4` (a partial result is shown as partial) both bit.
      *  - a step cut by [com.sidr.launcher.domain.agent.RuntimeBudget.maxStepWallClockMs] — the call
-     *    was made, we stopped waiting, and the side effect may well have happened.
+     *    was made, we stopped waiting, and the side effect may well have happened (or, for a call
+     *    parked in native code, may still happen: since A4′ phase 2 the engine stops waiting rather
+     *    than waiting the call out, and ends the plan there).
      *
      * **This is not `ObservedFact` growing.** That type stays frozen at two values (A0.5's
      * record-don't-fix decision, held by `CoreVocabularyFreezeGuardTest`): `uninstall_app` has no

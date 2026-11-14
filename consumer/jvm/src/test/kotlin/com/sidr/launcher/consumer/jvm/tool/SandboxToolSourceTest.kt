@@ -54,11 +54,20 @@ class SandboxToolSourceTest {
     }
 
     @Test
-    fun `the registry holds exactly these three and nothing else`() {
+    fun `the registry holds exactly these four and nothing else`() {
         assertEquals(
-            listOf("workspace_info", "find_file", "delete_file"),
+            listOf("workspace_info", "find_file", "delete_file", "rename_file"),
             source.all().map { it.id.value },
         )
         assertNull(source.find(ToolId("launch_app")))
+    }
+
+    @Test
+    fun `rename_file is SAFE and TRANSIENT, takes a path and a bare name, and reports what an undo needs`() {
+        val d = source.find(SandboxToolIds.RENAME_FILE)!!
+        assertEquals(listOf(SandboxKeys.PATH, SandboxKeys.NEW_NAME), d.argSchema.map { it.name })
+        assertEquals(listOf(SandboxKeys.RENAMED_PATH, SandboxKeys.PREVIOUS_NAME), d.outputSchema.map { it.name })
+        assertEquals(ActionRiskLevel.SAFE, d.risk)
+        assertEquals(ToolDurability.TRANSIENT, d.durability)
     }
 }

@@ -9,12 +9,18 @@ import com.sidr.launcher.core.common.di.ApplicationScope
 import com.sidr.launcher.core.common.di.IoDispatcher
 import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
-import com.sidr.launcher.domain.action.ActionCatalog
 import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.AgentSessionStore
 import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
+import com.sidr.launcher.domain.agent.ResumeAgentSessionUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
+import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
+import com.sidr.launcher.domain.agent.StepUndo
+import com.sidr.launcher.domain.agent.UndoAgentSessionUseCase
+import com.sidr.launcher.domain.agent.UnresolvedTarget
+import com.sidr.launcher.domain.ai.bridge.Interpretation
+import com.sidr.launcher.domain.ai.bridge.MentionBinder
 import com.sidr.launcher.domain.history.UsageHistoryRepository
 import com.sidr.launcher.domain.memory.alias.ResolveCommandWithAliasUseCase
 import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
@@ -61,19 +67,16 @@ import javax.inject.Inject
 class LauncherViewModel @Inject constructor(
     private val installedAppsRepository: InstalledAppsRepository,
     // S2-2 Task 8: alias resolution wraps S2-1's learned-resolution decorator. It only fills Unknown,
-    // so no-alias and every non-Unknown outcome stay byte-for-byte on the existing rule/router path.
+    // so no-alias and every non-Unknown outcome stay byte-for-byte on the existing rule/model path.
     private val resolveCommand: ResolveCommandWithAliasUseCase,
     // S2-1 Task 11: records an explicit candidate choice from the app-ambiguity flow, fire-and-forget
     // on [applicationScope]. Never consulted for decision-making in the VM — only invoked after a
     // successful launch of a candidate the pending token actually offered.
     private val recordResolutionChoice: RecordResolutionChoiceUseCase,
-    // AIL-5: executes a *confirmed* router-proposed LauncherAction (resolve → execute) via the same
-    // proven resolver/executor path. Only reached from confirmRoutedAction() — never on submit.
+    // The web chip's act (resolve → execute) via the same proven resolver/executor path. Since A4′ phase
+    // 3a deleted the router's confirm card, the chip is its only caller — never the model's path.
     private val executeAction: ExecuteActionUseCase,
     private val actionExecutor: ActionExecutor,
-    // AIL-5: read-only lookup of a proposed action's descriptor (its risk drives needsConfirmation in
-    // RouteCommandUseCase; here it supplies the optional permissionGate for the education flow).
-    private val actionCatalog: ActionCatalog,
     // Domain interfaces — injected from :app via Hilt. No feature→data edge.
     private val usageHistoryRepository: UsageHistoryRepository,
     private val featureFlagRepository: FeatureFlagRepository,
@@ -84,7 +87,7 @@ class LauncherViewModel @Inject constructor(
     // command path. The launcher core never depends on it — when unavailable the mic is hidden.
     private val speechInputSource: SpeechInputSource,
     // AIL-6: drives the home status line (● online / ○ offline). Domain port — the VM stays
-    // Android-free; reachability signals whether the cloud router/assistant is available.
+    // Android-free; reachability signals whether the cloud model/assistant is available.
     private val connectivityChecker: ConnectivityChecker,
     // DS-6B Task 9: the sanctioned production addition — the opt-in prayer context for the Home
     // strip. Its own [prayerContext] StateFlow is cold + WhileSubscribed, so nothing calculates on
@@ -96,9 +99,16 @@ class LauncherViewModel @Inject constructor(
     private val runAgentSession: RunAgentSessionUseCase,
     private val resolveAgentConsent: ResolveConsentUseCase,
     private val cancelAgentSession: CancelAgentSessionUseCase,
+    private val resumeAgentSession: ResumeAgentSessionUseCase,
+    private val undoAgentSession: UndoAgentSessionUseCase,
     private val agentSessionStore: AgentSessionStore,
-    // Task 10 / A1': read-only lookup of a registered tool's descriptor, the same shape and the same
-    // reason [actionCatalog] is here. The surface must be able to say where an EXTERNAL tool's effect
+    // A4′ phase 3a: the interpretation card's «Выполнить» starts the model's plan through the engine.
+    private val startAgentSession: StartAgentSessionUseCase,
+    // A4′ phase 3b, Task 11 (fork 3b-A): the remainder of a model plan that acted is bound again on the
+    // device before its card. A domain port — `:app` binds `DeviceMentionBinder`; no feature -> data edge.
+    private val mentionBinder: MentionBinder,
+    // Task 10 / A1': read-only lookup of a registered tool's descriptor (the shape the deleted router's
+    // `ActionCatalog` lookup had here). The surface must be able to say where an EXTERNAL tool's effect
     // goes (`DOC-ILM-2`), and provenance lives on the descriptor — a plan step carries the tool's id
     // and its risk, not its level or effect. The registry is a domain port, so the VM stays
     // Android-free and no feature -> data edge appears.
@@ -123,6 +133,20 @@ class LauncherViewModel @Inject constructor(
 
     fun navigateTo(route: String) {
         _navigationEvents.trySend(NavigationEvent.NavigateTo(route))
+    }
+
+    /**
+     * A user gesture on Home that opens another screen — the ASK chip, the prayer strip's details
+     * (A4′ phase 3a, Task 11 fix round 1, review m2). The user has gone somewhere else, so a command still
+     * waiting on the model is abandoned first; left running, its slow answer would queue a navigation of
+     * its own (`OpenAssistant`) that fires the next time Home collects events, or put a card up behind the
+     * screen the user chose. Deliberately NOT [navigateTo]: that is also the path the command session's
+     * `onNavigate` takes for an outcome's OWN navigation, from inside the command's coroutine, and the
+     * session must never cancel the command it is applying.
+     */
+    fun navigateByUser(route: String) {
+        commandSession.supersedeWaitingCommand()
+        navigateTo(route)
     }
 
     fun navigateBack() {
@@ -258,12 +282,20 @@ class LauncherViewModel @Inject constructor(
     // because that class takes it: `applyOutcome`'s AgentSessionStarted branch hands it the id of the
     // session Task 11's cut already started and persisted. The dependency is one-way, CommandSession
     // -> AgentSession; nothing here reads the command pipeline.
-    private val agentSession = LauncherAgentSession(
+    private val agentSession: LauncherAgentSession = LauncherAgentSession(
         runSession = runAgentSession,
         resolveConsent = resolveAgentConsent,
         cancelSession = cancelAgentSession,
         store = agentSessionStore,
         scope = viewModelScope,
+        resumeSession = resumeAgentSession,
+        undoSession = undoAgentSession,
+        // A4′ phase 3a (condition 4): forward-references [commandSession], declared below — legal for the
+        // same reason as [appLaunch]'s onFeedback: the lambda runs only after construction.
+        onReroute = { text -> commandSession.submit(text) },
+        // A4′ phase 3b, Task 11 (fork 3b-A): the remainder of a model plan that acted goes to the
+        // interpretation card, bound again on the device — the same forward reference as [onReroute].
+        onRemainder = { goal, plan -> commandSession.showRemainder(goal, plan) },
     )
 
     /** The agent runtime's current session, or null when none is on screen. */
@@ -271,6 +303,15 @@ class LauncherViewModel @Inject constructor(
 
     /** Whether a consent decision is in flight — bound to the gate's `confirming`. */
     val agentConfirming: StateFlow<Boolean> get() = agentSession.confirming
+
+    /** What «Отменить» would undo on the agent card now on screen (A4′ phase 2). */
+    val agentUndoReview: StateFlow<List<StepUndo>> get() = agentSession.undoReview
+
+    /** A4′ phase 3b, Task 11: «Продолжить» could not be carried out — the store failed (see [LauncherAgentSession.resumeFailed]). */
+    val agentResumeFailed: StateFlow<Boolean> get() = agentSession.resumeFailed
+
+    /** A4′ phase 3b, Task 11: whether the finished model-plan card on screen offers «Повторить остаток». */
+    val agentRemainderOffered: StateFlow<Boolean> get() = agentSession.remainderOffered
 
     /**
      * Task 10 / A1'. The registry's provenance, projected to the two fields the surface may see, so the
@@ -316,13 +357,14 @@ class LauncherViewModel @Inject constructor(
     private val commandSession: LauncherCommandSession = LauncherCommandSession(
         resolveCommand = resolveCommand,
         executeAction = executeAction,
-        actionCatalog = actionCatalog,
         universalInputRouter = UniversalInputRouter,
         savedStateHandle = savedStateHandle,
         appLaunch = appLaunch,
         appList = appList,
         devConsole = devConsole,
         agentSession = agentSession,
+        startAgentSession = startAgentSession,
+        binder = mentionBinder,
         scope = viewModelScope,
         onNavigate = { route -> navigateTo(route) },
     )
@@ -330,16 +372,31 @@ class LauncherViewModel @Inject constructor(
     val commandInput: StateFlow<String> get() = commandSession.input
     val inputResults: StateFlow<HomeInputResults> get() = commandSession.liveResults
     val commandFeedback: StateFlow<CommandFeedback> get() = commandSession.feedback
-    val pendingRoutedAction: StateFlow<PendingRoutedAction?> get() = commandSession.pendingRoutedAction
+
+    /** A4′ phase 3a: the model's reading, shown before anything runs (spec §7.12.3 condition 1). */
+    val interpretation: StateFlow<Interpretation?> get() = commandSession.interpretation
+
+    /** A4′ phase 3a: a command has not answered within 300 ms — the model is being asked. */
+    val thinking: StateFlow<Boolean> get() = commandSession.thinking
+
+    /** A4′ phase 3b (B-7): a target step 2b claimed, waiting on the user's pick — not an interpretation card. */
+    val targetPick: StateFlow<UnresolvedTarget?> get() = commandSession.targetPick
 
     // Этап 4 / A0: extracted to LauncherVoiceInput — see startVoiceInput() below for the wiring. The
     // callbacks forward-reference [commandSession] the same way [appLaunch]'s onFeedback does above.
     private val voiceInput = LauncherVoiceInput(
         speechInputSource = speechInputSource,
         scope = viewModelScope,
-        onPartial = { text -> commandSession.setCommandInput(text) },
+        // Task 9 review m1: a partial is the user dictating a new command, so it rides the same edit
+        // path as typing — it dismisses a standing interpretation card and abandons a command still
+        // waiting on its answer. (A partial cannot follow the Final it belongs to: the recognizer's
+        // flow closes on Final, so this never cancels the command onFinal submits.)
+        onPartial = { text -> commandSession.onChanged(text) },
         onFinal = { text ->
-            commandSession.setCommandInput(text)
+            // Final review M1: a recognizer may deliver a Final with no Partial before it, so the Final
+            // rides the edit path too — the card for the previous command goes now, not when this one's
+            // answer lands. The edit runs BEFORE the submit, so it cancels only what was already waiting.
+            commandSession.onChanged(text)
             // Same entry point as the keyboard's IME "Done" / submit.
             commandSession.submit(text)
         },
@@ -394,6 +451,10 @@ class LauncherViewModel @Inject constructor(
     }
 
     fun onSuggestionClicked(suggestion: Suggestion) {
+        // A4′ phase 3a (Task 11, hole H8): a suggestion is the user going somewhere else — a screen, an
+        // app — so a command still waiting on the model is abandoned here, for every branch below. The app
+        // branch calls it again through onAppClicked; a second call finds nothing pending.
+        commandSession.supersedeWaitingCommand()
         val app = (uiState.value as? UiState.Success)
             ?.data
             ?.apps
@@ -414,6 +475,9 @@ class LauncherViewModel @Inject constructor(
     /** Tap-to-launch from the grid (or from an ambiguity suggestion): the app is already known, */
     /** so launch it directly through the executor — no matching needed. Does not touch input. */
     fun onAppClicked(app: InstalledApp) {
+        // A4′ phase 3a (T9 m2): the user opened an app — a command still waiting on the model is abandoned,
+        // or its late answer would navigate away from the app or stand a card over it.
+        commandSession.supersedeWaitingCommand()
         appLaunch.launch(
             packageName = app.packageName,
             activityName = app.activityName,
@@ -441,15 +505,17 @@ class LauncherViewModel @Inject constructor(
         voiceInput.start(languageTag)
     }
 
-    /** Execute the pending router proposal (AIL-5) — see [LauncherCommandSession.confirm]. */
-    fun confirmRoutedAction() {
-        commandSession.confirm()
-    }
+    fun runInterpretation() = commandSession.runInterpretation()
 
-    /** Dismiss the pending router proposal without executing — see [LauncherCommandSession.cancel]. */
-    fun cancelRoutedAction() {
-        commandSession.cancel()
-    }
+    fun dismissInterpretation() = commandSession.dismissInterpretation()
+
+    fun chooseInterpretationApp(packageName: String) = commandSession.chooseApp(packageName)
+
+    fun chooseTarget(packageName: String) = commandSession.chooseTarget(packageName)
+
+    fun dismissTargetPick() = commandSession.dismissTargetPick()
+
+    fun cancelThinking() = commandSession.cancelThinking()
 
     // ── Agent runtime (Task 12 / A0) — thin delegations, exactly like the pairs above ──────
 
@@ -460,8 +526,15 @@ class LauncherViewModel @Inject constructor(
 
     /**
      * The user refused it. The engine cancels the session; nothing further runs — and because
-     * `AgentSessionSurface` draws **nothing at all** for `Cancelled`, the surface leaves the screen
-     * on this path exactly as it does on [dismissAgentSession]. So it owes the same [leaveAgentSurface].
+     * `AgentSessionSurface` draws **nothing at all** for a plan cancelled before any step acted, the
+     * surface leaves the screen on this path exactly as it does on [dismissAgentSession]. So it owes the
+     * same [leaveAgentSurface].
+     *
+     * A plan refused AFTER a step acted (A4′ phase 3b, Task 12 — phase 2's N2, plan §0.2 B-11) keeps its
+     * finished card on screen instead: the session stays in [agentSessionState] (`Cancelled`), and the card
+     * says what acted and offers «Отменить» when it can be undone. The buffer is cleared all the same, so
+     * the home body is back under that card; its «Закрыть» is [dismissAgentSession] and its «Отменить»
+     * [undoAgentSession], as on every finished card.
      */
     fun denyAgentStep(stepIndex: Int) {
         agentSession.deny(stepIndex)
@@ -471,12 +544,36 @@ class LauncherViewModel @Inject constructor(
     /**
      * Pick a paused plan back up. The engine re-evaluates, so a pending checkpoint returns.
      *
-     * No [leaveAgentSurface] here, and none in [confirmAgentStep] either: every state either of them
-     * can reach still *draws* a surface, and each of those carries its own «закрыть» — `Cancelled`,
-     * the one invisible state, is reachable only by an explicit cancel or a refusal.
+     * No [leaveAgentSurface] here, and none in [confirmAgentStep] either. Every state the engine can
+     * reach from them still *draws* a surface, and each of those carries its own «закрыть» — `Cancelled`,
+     * the one state drawn invisible (unless a step acted before it — N2, A4′ phase 3b Task 12, and then it
+     * carries its own «закрыть» too), is reachable only by an explicit cancel or a refusal. The exception is
+     * «Продолжить» on a model-written plan (A4′ phase 3a, `Resumption.NeedsRoute`): the session is
+     * closed and the surface goes, and its goal is submitted through the command route afresh — what
+     * the user sees next is that command's own outcome (a wait, a card, a feedback line). Calling
+     * [leaveAgentSurface] there would be wrong, not merely unneeded: its edit would cancel that command.
+     * The same holds for «Продолжить» on a model-written plan that ACTED (A4′ phase 3b, Task 11,
+     * `Resumption.NeedsCard`): the session is closed and its remainder comes back as the interpretation
+     * card, bound again on the device — an edit here would take that card down. A resume the store fails
+     * takes the session's surface down and says so in its place (`LauncherAgentSession.continueSession`'s
+     * `null` branch, [agentResumeFailed]); its «Закрыть» is [dismissAgentSession].
      */
     fun continueAgentSession() {
         agentSession.continueSession()
+    }
+
+    /**
+     * «Повторить остаток» on a finished `Failed`/`Blocked` model-plan card (A4′ phase 3b, Task 11): its
+     * remainder comes back as the interpretation card — see [LauncherAgentSession.retryRemainder]. No
+     * [leaveAgentSurface], for the reason [continueAgentSession] gives.
+     */
+    fun retryAgentRemainder() {
+        agentSession.retryRemainder()
+    }
+
+    /** Undo what the finished plan on screen did, as far as it can be undone — see [LauncherAgentSession.undo]. */
+    fun undoAgentSession() {
+        agentSession.undo()
     }
 
     /** Clear the agent surface and delete the session. */
@@ -497,9 +594,9 @@ class LauncherViewModel @Inject constructor(
      * there is no second flag to reset, which is why clearing it is sufficient and why the fix is the
      * same call the input's own ✕ makes (`onCommandChanged("")`).
      *
-     * It rides the ordinary edit path on purpose: that also drops stale feedback, any pending router
-     * card and the ambiguity learning token, so leaving the agent surface is byte-for-byte the state
-     * a user reaches by clearing the field by hand.
+     * It rides the ordinary edit path on purpose: that also drops stale feedback, any interpretation
+     * card, a command still waiting on the model, and the ambiguity learning token, so leaving the agent
+     * surface is byte-for-byte the state a user reaches by clearing the field by hand.
      */
     private fun leaveAgentSurface() {
         commandSession.onChanged("")

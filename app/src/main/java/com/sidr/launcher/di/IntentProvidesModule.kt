@@ -12,6 +12,7 @@ import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.intent.IntentConfidencePolicy
 import com.sidr.launcher.domain.intent.IntentMatcher
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
+import com.sidr.launcher.domain.text.TextFolding
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -33,7 +34,8 @@ object IntentProvidesModule {
      * Этап 0.3 — the ONNX secondary is gone (agentic-restart ADR 2/4); the unqualified [IntentMatcher]
      * binds directly to [RuleBasedIntentMatcher]. FastPath stays a latency optimization, not the
      * understanding boundary (see CLAUDE.md Hard rules) — everything past a FastPath miss is routed by
-     * `RouteCommandUseCase`/`CommandPlanner`, not by this binding.
+     * `RouteCommandUseCase` and, at its step 7, the bridge's `ModelPlanner` (A4′ phase 3a), not by this
+     * binding.
      */
     @Provides
     @Singleton
@@ -43,15 +45,22 @@ object IntentProvidesModule {
     @Singleton
     fun provideConfidencePolicy(): IntentConfidencePolicy = DefaultIntentConfidencePolicy()
 
+    /**
+     * FastPath's app names are matched by the device's one [TextFolding] (A4′ phase 3b, Task 7): the
+     * binding `BridgeProvidesModule.provideTextFolding` makes once, injected here and passed on — never a
+     * second binding, never the resolver's `PlainTextFolding` default (`TextFoldingBindingGuardTest`).
+     */
     @Provides
     @Singleton
     fun provideIntentActionResolver(
         repository: InstalledAppsRepository,
-    ): IntentActionResolver = IntentActionResolver(repository)
+        folding: TextFolding,
+    ): IntentActionResolver = IntentActionResolver(repository, folding)
 
     /**
-     * AIL-5 — executes a *confirmed* router-proposed `LauncherAction` over the same resolver/executor
-     * path the rule pipeline uses. Only reached after the user confirms/one-taps a proposal.
+     * Executes a `LauncherAction` over the same resolver/executor path the rule pipeline uses. Since A4′
+     * phase 3a deleted the router's confirm card, its callers are the `in_app` tool worker (below the
+     * engine's consent checkpoint) and the web route chip (a destination the user chose).
      */
     @Provides
     @Singleton

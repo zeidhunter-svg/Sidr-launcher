@@ -26,9 +26,14 @@ sealed interface ExecutableAction {
 
     data object NoOpAction : ExecutableAction
 
-    /** Returned when a query matches 2+ apps; Block D renders candidates as tappable suggestions. */
+    /**
+     * Returned when a query matches 2+ apps, or — [confirm] (A4′ phase 3b, Task 7; B-2) — when it is only a
+     * word FORM of one or more labels («миравину» for «Миравин»): those apps are offered, never launched.
+     * Block D renders [candidates] as tappable suggestions; [query] is the name as the user wrote it.
+     */
     data class AmbiguousAppAction(
         val query: String,
         val candidates: List<InstalledApp>,
+        val confirm: Boolean = false,
     ) : ExecutableAction
 }

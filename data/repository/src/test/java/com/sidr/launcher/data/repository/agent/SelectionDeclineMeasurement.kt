@@ -9,6 +9,7 @@ import com.sidr.launcher.data.repository.agent.shortcut.AppShortcut
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutCatalog
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolSource
 import com.sidr.launcher.data.repository.intent.RuleBasedIntentMatcher
+import com.sidr.launcher.data.repository.text.IcuTextFolding
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.PlanningRequest
@@ -102,7 +103,12 @@ class SelectionDeclineMeasurement {
         /** Selector declined: nothing claimed the text at all. → vocabulary gap, not a protocol. */
         DECLINE_NO_MATCH,
 
-        /** Selector matched; the planner refused. `R14-39`: this is the one that reaches the cloud. */
+        /**
+         * Selector matched; the planner refused. `R14-39`: until A4′ phase 3b this was the one that reached
+         * the cloud; since then the planner answers it `Unresolved` and step 2b answers it on the device.
+         * A second goal in the target's words (`NoPlan`, B-15) still lands here and does reach the model,
+         * and so — since phase 3b's Task 6, ruling E6-R1 — does a value its sort cannot read (`NoPlan`).
+         */
         DECLINE_UNRESOLVED_TARGET,
 
         /** Selector matched; a required argument was absent or blank. */
@@ -161,8 +167,8 @@ class SelectionDeclineMeasurement {
         val shortcutSource = shortcutSourceOf(dynamicNames)
         val vocabulary = ToolVocabulary()
         val selector = ToolSelector(vocabulary, shortcutSource)
-        val appTargets = AppTargetResolver(appsRepo, FakeAliasStore())
-        val planner = ToolMatchPlanner(selector, appTargets, ToolArgumentSorts())
+        val appTargets = AppTargetResolver(appsRepo, FakeAliasStore(), IcuTextFolding)
+        val planner = ToolMatchPlanner(selector, appTargets, CatalogArgumentSorts(), sortResolversOf(appTargets))
         val registry = federation(shortcutSource).registry
         val rows = corpus.map { phrase ->
             val executor = FakeActionExecutor()

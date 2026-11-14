@@ -1,7 +1,8 @@
 package com.sidr.launcher.domain.intent
 
-import com.sidr.launcher.domain.action.LauncherAction
 import com.sidr.launcher.domain.agent.AgentSessionId
+import com.sidr.launcher.domain.agent.UnresolvedTarget
+import com.sidr.launcher.domain.ai.bridge.Interpretation
 import com.sidr.launcher.domain.model.InstalledApp
 
 /**
@@ -29,8 +30,14 @@ sealed interface CommandOutcome {
     /** A user-facing message: HELP examples, "not found", or [ExecutableAction.ShowMessageAction]. */
     data class Message(val message: CommandMessage) : CommandOutcome
 
-    /** Query matched 2+ apps — render [candidates] as tappable suggestions; nothing executed. */
-    data class NeedsConfirmation(val candidates: List<InstalledApp>) : CommandOutcome
+    /**
+     * FastPath's launch list — render [candidates] as tappable suggestions whose tap LAUNCHES; nothing
+     * executed. The name matched 2+ apps, or [confirm] (A4′ phase 3b, Task 7): it is only a word FORM of
+     * their labels — «Вы имели в виду…?». [query] is the app name the path extracted (FastPath's
+     * `displayNameQuery`), which keys a learned choice (`LearnedChoiceKeys.launch`, B-4); a confirmation
+     * is learned exactly like a choice (B-3).
+     */
+    data class NeedsConfirmation(val candidates: List<InstalledApp>, val query: String, val confirm: Boolean = false) : CommandOutcome
 
     /** Medium confidence (0.50..<0.85) — suggest/confirm, do not auto-execute. */
     data class Suggest(val intent: LauncherIntent, val confidence: Float) : CommandOutcome
@@ -44,8 +51,13 @@ sealed interface CommandOutcome {
     /** A technical failure occurred; [failure] is safe to display (no PII/stack). */
     data class Failed(val failure: CommandFailure) : CommandOutcome
 
-    /** Navigate to the assistant — the ViewModel maps this to its navigation Channel. */
-    data object OpenAssistant : CommandOutcome
+    /**
+     * Navigate to the assistant — the ViewModel maps this to its navigation Channel. [question], when
+     * present, is put into the assistant's input UNSENT (A4′ phase 3a, spec §7.12.3 condition 3): the
+     * model judged the command a question, and the user's «отправить» is the confirmation of that
+     * reading. `null` opens it empty, as FastPath's "assistant" always has.
+     */
+    data class OpenAssistant(val question: String?) : CommandOutcome
 
     /** Navigate to launcher settings — the ViewModel maps this to its navigation Channel. */
     data object OpenSettings : CommandOutcome
@@ -57,23 +69,28 @@ sealed interface CommandOutcome {
     data object ClearInput : CommandOutcome
 
     /**
-     * The LLM router (AIL-4) proposed a registered [action] for a low-confidence / natural-language
-     * command. Per Fork R4 it is **never auto-executed**: [needsConfirmation] (`true` for a
-     * [com.sidr.launcher.domain.action.ActionRiskLevel.CONFIRM] action, `false` for `SAFE`) tells the
-     * UI whether to require an explicit confirm card or offer a one-tap suggestion. [confidence] is the
-     * model's advisory 0..1. The confirmation card + execution wiring land in AIL-5; AIL-4 surfaces it
-     * display-safely only.
-     */
-    data class RoutedAction(
-        val action: LauncherAction,
-        val confidence: Float,
-        val needsConfirmation: Boolean,
-    ) : CommandOutcome
-
-    /**
      * A goal FastPath decided but did not achieve — the app does not exist — has been handed to the
      * agent, and [id] identifies the session now in flight. The command surface stops rendering a
      * message and starts rendering session state.
      */
     data class AgentSessionStarted(val id: AgentSessionId) : CommandOutcome
+
+    /**
+     * The model's reading of a command, bound to this device and shown BEFORE anything runs (A4′ phase
+     * 3a, spec §7.12.3 condition 1) — the interpretation card. Nothing here executes: only the user's
+     * «Выполнить» starts a session, through the engine, which gates it by risk like any plan. It replaced
+     * the deleted router's proposal outcome (A4′ phase 3a, D3).
+     */
+    data class Interpreted(val interpretation: Interpretation) : CommandOutcome
+
+    /**
+     * A registered tool claimed the command at routing step 2b and its target is the user's to pick
+     * (A4′ phase 3b, fork 3b-E; plan §0.2 B-7): two or more apps answer the words exactly, or one or
+     * more are only OFFERED (`UnresolvedTarget.confirm`) — a word form (an edge pair such as «Плинта» /
+     * «Плинт» offers both), or a name found inside extra words. **Not an interpretation card** — the model read
+     * nothing here — and not FastPath's launch list ([NeedsConfirmation], whose tap launches): a tap
+     * binds the package through [UnresolvedTarget.bind] and starts the session directly, through the
+     * engine, which gates the step by its risk. Never produced with an empty candidate list.
+     */
+    data class ChooseTarget(val target: UnresolvedTarget) : CommandOutcome
 }

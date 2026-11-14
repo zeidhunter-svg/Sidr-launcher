@@ -11,8 +11,15 @@ import com.sidr.launcher.domain.tool.ToolExecutor
 import com.sidr.launcher.domain.tool.ToolRegistry
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.trace.TraceEvent
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withTimeout
 
 /**
@@ -58,6 +65,15 @@ class AgentExecutor(
     private val registry: ToolRegistry,
     private val toolExecutor: ToolExecutor,
     private val budget: RuntimeBudget = RuntimeBudget.Default,
+    /**
+     * Where the one call to the world runs (A4′ phase 2, owner fork F2-1). Production passes an IO
+     * dispatcher — `:app` its `@IoDispatcher`, `:consumer:jvm` `Dispatchers.IO` in `Main.kt` — so a
+     * call parked in native code holds a pool thread, not the thread driving the engine (on Android,
+     * the main thread). The default keeps the call on the caller's dispatcher, and every test that
+     * drives this engine under `runTest` needs exactly that: there, a call on a real dispatcher loses
+     * to virtual time and is cut at once (plan §0.2, probe 3).
+     */
+    private val worldContext: CoroutineContext = EmptyCoroutineContext,
 ) {
 
     /** One full transition: decide the next step, then (if one was cleared to run) perform it. */
@@ -116,7 +132,7 @@ class AgentExecutor(
         val granted = when {
             checkpoint == null -> session
             session.consents[next.index] == null -> return session
-                .record(TraceEvent.ConsentRequested(next.index, checkpoint.reason))
+                .record(TraceEvent.ConsentRequested(next.index, checkpoint.reasons))
                 .copy(state = ExecutionState.AwaitingConsent)
             session.consents[next.index] == false -> return session
                 .recordConsent(next.index, granted = false)
@@ -222,22 +238,37 @@ class AgentExecutor(
         //
         // It is below the checkpoint by construction, and ToolExecutorCallSiteGuardTest fails the build
         // if a second call site ever appears.
+        //
+        // A4′ phase 2 (owner fork F2-1, R14): the call runs in its OWN scope on [worldContext], and
+        // the engine waits for it only until the budget. A call parked in non-suspending code — every
+        // binder call Android makes, every JVM file operation — can be interrupted by nothing
+        // (measured, plan §0.2 probe 2); it can only stop being waited for. `withTimeout` around a call
+        // in the caller's own context did neither: it sat out the whole block and then kept or
+        // discarded the result depending on the call's shape.
+        val call = CoroutineScope(currentCoroutineContext().minusKey(Job) + worldContext + SupervisorJob())
+            .async { toolExecutor.invoke(resolved) }
+        var cut = false
         val result = try {
-            withTimeout(budget.maxStepWallClockMs) { toolExecutor.invoke(resolved) }
+            withTimeout(budget.maxStepWallClockMs) { call.await() }
         } catch (e: TimeoutCancellationException) {
             // FIRST, and the order IS the behaviour: TimeoutCancellationException IS a
             // CancellationException, so placing this after the rethrow below would send the timeout
             // up as parent cancellation and kill the session instead of bounding the step.
             //
             // `HandedOff` rather than `Failed`, for the same reason `uninstall_app` reports it: the
-            // call was made and we stopped waiting. The side effect may have happened. `Failed`
-            // would claim knowledge in the other direction, and the whole point of the fourth value
-            // is that this engine stops claiming outcomes it cannot see.
+            // call was made and we stopped waiting. The side effect may have happened — for a parked
+            // call it may still happen after this line — and `Failed` would claim knowledge in the
+            // other direction.
+            cut = true
             ToolResult.HandedOff()
         } catch (e: CancellationException) {
             throw e // never swallow parent cancellation
         } catch (e: Exception) {
             ToolResult.Failed(CommandFailure.Generic)
+        } finally {
+            // A no-op for a call that finished. For one we stopped waiting for: a suspending call
+            // stops here; a parked one runs to its end on its own thread and its result is dropped.
+            call.cancel()
         }
 
         val observed = session
@@ -247,37 +278,14 @@ class AgentExecutor(
                 observations = session.observations + (invoked.index to result),
             )
 
-        return if (result is ToolResult.Failed && observed.trailingFailures() >= budget.maxConsecutiveFailures) {
-            observed.ended(ExecutionState.Failed)
-        } else {
-            observed
+        return when {
+            // Owner fork F2-1b: a cut call may still be acting. Starting another world call now would
+            // put two in flight and break the order the plan promised, so the plan stops here.
+            cut -> observed.ended(ExecutionState.Blocked)
+            result is ToolResult.Failed && observed.trailingFailures() >= budget.maxConsecutiveFailures ->
+                observed.ended(ExecutionState.Failed)
+            else -> observed
         }
-    }
-
-    /**
-     * The [TraceEvent.ToolInvoked] event of the step whose tool call has been decided but not yet
-     * performed, or `null` if [AgentSession] is not currently mid-step.
-     *
-     * **It reads the last `ToolInvoked`, not the last trace event, and that difference is the whole
-     * behaviour** (review finding F1, 2026-08-23). The only path a mid-step session takes back into
-     * this engine is the restart one, and that path appends [TraceEvent.SessionPaused] and
-     * [TraceEvent.SessionResumed] *after* the pending `ToolInvoked` before the engine ever sees the
-     * session again. Keyed on the trace **tail**, the predicate therefore answered `null` on exactly
-     * the shape it exists to recognise: [prepare] did not short-circuit, re-cleared the same step,
-     * appended a second `StepStarted` + `ToolInvoked`, and [perform] then ran the pending call from
-     * the duplicate rather than from the original. Two `ToolInvoked` against one `ToolObserved` is
-     * not a trace that is 1:1 with reality (`DOC-ILM-3`), and on a step whose consent was already
-     * granted it is one confirmation authorising two executions (`DOC-HMA-1`).
-     *
-     * "The last `ToolInvoked` has no `ToolObserved` for its index" is the same predicate without the
-     * adjacency assumption: [perform] records `ToolObserved` for every step it clears — including the
-     * re-resolution failure below — so an unmatched `ToolInvoked` means the process died during the
-     * call and nothing else.
-     */
-    private fun AgentSession.midStepInvocation(): TraceEvent.ToolInvoked? {
-        val last = trace.events.filterIsInstance<TraceEvent.ToolInvoked>().lastOrNull() ?: return null
-        val alreadyObserved = trace.events.any { it is TraceEvent.ToolObserved && it.index == last.index }
-        return if (alreadyObserved) null else last
     }
 
     private fun isSatisfied(
@@ -293,47 +301,43 @@ class AgentExecutor(
     }
 
     /**
-     * Four triggers, all fail-safe. [ConsentReason.MISSING_PERMISSION] fires whenever a tool merely
-     * *declares* a gate: consulting the real grant state would put `PermissionChecker` inside the
-     * engine, and stopping unconditionally is the conservative half of that.
+     * Four triggers, all fail-safe — and since A4′ phase 2 (spec §6.1, owner fork F2-2) **every one
+     * that holds is recorded**, not the first. Until then this was a `when` whose first branch,
+     * `requiresConsent(risk)`, shadowed the rest: `uninstall_app` (CONFIRM and DURABLE) stopped for
+     * its risk and its irreversibility was never written down — exactly the risk band where it matters
+     * (A0.5's finding, spec §3 0.2(2)). Reordering the branches was not a fix: A1″'s M1a went red
+     * precisely because the stop's reason is load-bearing.
+     *
+     * [ConsentReason.MISSING_PERMISSION] fires whenever a tool merely *declares* a gate: consulting
+     * the real grant state would put `PermissionChecker` inside the engine, and stopping unconditionally
+     * is the conservative half of that.
+     *
+     * [ConsentReason.RISK_RAISED] is a claim about a transition, so it needs a step that already ran
+     * before this one. Measured against a default of SAFE, it would stamp every first CONFIRM step with
+     * a "rise" from a step that never existed.
      *
      * **Every input is read through [effectiveRisk], not off the plan** (review finding F2,
-     * 2026-08-23). `permissionGate` and `durability` were always read from the live registry while
-     * `risk` came from the persisted [PlanStep] alone, and nothing re-checks risk on resume —
-     * `InvocationValidator.validate` covers tool identity, argument schema, output schema and types,
-     * and deliberately knows nothing about risk. A plan written when a tool was `SAFE` therefore kept
-     * running it as `SAFE` after a build that declared it `CONFIRM`: no checkpoint, no
-     * `ConsentRequested`, the tool straight to the world. Taking the higher of the two closes it in
-     * the direction that cannot be wrong.
+     * 2026-08-23): a plan written when a tool was `SAFE` must still stop after a build that declared
+     * it `CONFIRM`, and the higher of plan and registry closes that in the direction that cannot be
+     * wrong.
      *
-     * **Coverage, corrected by the A0 Task 14 review (2026-08-22) — this KDoc used to say the branch
-     * was "unit-tested", and it is not.** Neither A0 tool declares a gate or is `DURABLE`, and no test
-     * anywhere constructs a `ToolDescriptor` that does, so [ConsentReason.MISSING_PERMISSION] and
-     * [ConsentReason.DURABLE_EFFECT] have **zero** coverage: fail-safe by construction, unproven by
-     * test. [ConsentReason.RISK_RAISED] is untested as well, and today unreachable — with
-     * `SAFE < CONFIRM < DANGEROUS`, any upward transition lands on CONFIRM or DANGEROUS and the first
-     * branch takes it. It goes live the moment a level is inserted below CONFIRM, which is A1′'s
-     * business; whoever inserts it writes the case with it. Tracked as `D11` in `§HANDOFF`.
+     * Coverage (D11, `§HANDOFF`): since phase 2, `AgentExecutorTest` builds a descriptor with a gate
+     * and one that is `DURABLE`, and drives the A0 store step past a SAFE step that ran — all four
+     * triggers are now exercised.
      */
     private fun checkpointFor(session: AgentSession, step: PlanStep): ConsentCheckpoint? {
         val descriptor = registry.find(step.invocation.id)
         val risk = effectiveRisk(step)
-        val previousRisk = session.plan.steps
+        val ran = session.plan.steps
             .filter { it.index < step.index && session.observations.containsKey(it.index) }
-            .maxOfOrNull { effectiveRisk(it) }
-            ?: ActionRiskLevel.SAFE
 
-        return when {
-            requiresConsent(risk) ->
-                ConsentCheckpoint(step.index, ConsentReason.RISK_LEVEL)
-            risk > previousRisk ->
-                ConsentCheckpoint(step.index, ConsentReason.RISK_RAISED)
-            descriptor?.permissionGate != null ->
-                ConsentCheckpoint(step.index, ConsentReason.MISSING_PERMISSION)
-            descriptor?.durability == ToolDurability.DURABLE ->
-                ConsentCheckpoint(step.index, ConsentReason.DURABLE_EFFECT)
-            else -> null
+        val reasons = buildSet {
+            if (requiresConsent(risk)) add(ConsentReason.RISK_LEVEL)
+            if (ran.isNotEmpty() && risk > ran.maxOf { effectiveRisk(it) }) add(ConsentReason.RISK_RAISED)
+            if (descriptor?.permissionGate != null) add(ConsentReason.MISSING_PERMISSION)
+            if (descriptor?.durability == ToolDurability.DURABLE) add(ConsentReason.DURABLE_EFFECT)
         }
+        return if (reasons.isEmpty()) null else ConsentCheckpoint(step.index, reasons)
     }
 
     /**

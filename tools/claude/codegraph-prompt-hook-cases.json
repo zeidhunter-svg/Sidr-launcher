@@ -1,0 +1,15 @@
+[
+  {"expect":"skip","why":"сообщение другой сессии приходит как user-turn","prompt":"Another Claude session sent a message: <agent-message from=\"a0c3\">ToolSelector done</agent-message>"},
+  {"expect":"skip","why":"уведомление о фоновой задаче","prompt":"<task-notification><task-id>x</task-id><status>completed</status></task-notification>"},
+  {"expect":"skip","why":"системное напоминание после компакта","prompt":"<system-reminder>context</system-reminder>"},
+  {"expect":"skip","why":"вставленный бриф сессии исследуется руками","prompt":"<pasted_content id=\"c4bd\">Сессия: задача 7, ToolArgumentSorts</pasted_content>"},
+  {"expect":"skip","why":"загрузка навыка","prompt":"Base directory for this skill: /home/x/.claude/plugins/cache/y"},
+  {"expect":"skip","why":"концептуальный вопрос без идентификатора","prompt":"как оптимизировать затрату токенов?"},
+  {"expect":"skip","why":"одно заглавное слово — не CamelCase","prompt":"Что сделать с Gradle?"},
+  {"expect":"skip","why":"пустой промт","prompt":""},
+  {"expect":"run","why":"CamelCase с двумя горбами","prompt":"где ToolSelector решает ничью?"},
+  {"expect":"run","why":"snake_case идентификатор","prompt":"почему uninstall_app возвращает HandedOff"},
+  {"expect":"run","why":"путь к файлу .kt","prompt":"прочитай data/repository/src/main/.../ToolVocabulary.kt"},
+  {"expect":"run","why":"фрагмент в обратных кавычках","prompt":"что делает `requiresConsent`?"},
+  {"expect":"run","why":"имя пакета","prompt":"что лежит в com.sidr.launcher.domain.tool"}
+]

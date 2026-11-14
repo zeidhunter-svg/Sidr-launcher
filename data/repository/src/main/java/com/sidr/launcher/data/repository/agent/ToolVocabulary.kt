@@ -48,8 +48,16 @@ data class ToolMatch(val id: ToolId, val args: Map<String, String>)
  *
  * **A trigger FastPath already claims is a capability that exists only in this table.** FastPath runs
  * first and `RouteCommandUseCase` only builds a `GoalShape.Free` goal for a command it left undecided,
- * so a trigger colliding with a FastPath verb never reaches the planner. Six of the triggers this task's
- * brief proposed were dead on exactly that rule, Turkish entirely so:
+ * so a trigger colliding with a FastPath verb does not reach the planner as itself. Since A4′ phase 1
+ * FastPath leaves a command it claimed by its verb undecided when the rest carries a second goal —
+ * the launch arm (an app name that does not resolve) and the search arm (a query) alike — but the text
+ * then still carries the FastPath verb where FastPath claims it: first in `en`/`ru`, last in `tr`.
+ * `Entry.matchIn` anchors a prefix trigger at the start of the text and a suffix trigger at its end, so a
+ * trigger could match such a text through that verb only by beginning with an `en`/`ru` FastPath verb
+ * or ending with a `tr` one, and no entry here does: [ToolVocabularyReachabilityTest] builds each
+ * trigger's sample command with the trigger at that same end and requires FastPath to leave it
+ * unclaimed. Six of the triggers this task's brief proposed were dead on exactly that rule, Turkish
+ * entirely so:
  *  - `"open system settings"` / `"открой настройки системы"` — the `LAUNCH_VERBS` prefixes `"open"` /
  *    `"открой"` take them first, so they arrive as an app launch. The verbless `"system settings"` and
  *    `"системные настройки"` carry the same meaning and survive.
@@ -413,7 +421,7 @@ class ToolVocabulary internal constructor(val entries: List<Entry>) {
             // descriptor argument the matched remainder fills (and, since an entry with an `argName`
             // refuses a bare trigger, why «app info» alone matches nothing); it opts nothing into
             // resolution. Since A4′ phase 0 `ToolMatchPlanner` resolves an app only for a tool with a
-            // `ToolArgumentSorts` row — this one has one — and it reads `required`; why the
+            // `CatalogArgumentSorts` app row — this one has one — and it reads `required`; why the
             // descriptor's `required = true` is written out and pinned by its own test is said on the
             // descriptor. Until then resolution keyed on the argument NAME regardless of `required`
             // (R14-37).

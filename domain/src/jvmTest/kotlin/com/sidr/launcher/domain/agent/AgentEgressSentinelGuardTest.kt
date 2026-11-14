@@ -1,19 +1,19 @@
 package com.sidr.launcher.domain.agent
 
-import com.sidr.launcher.core.testing.FakeActionCatalog
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeAgentSessionStore
-import com.sidr.launcher.core.testing.FakeCommandPlanner
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeIntentMatcher
+import com.sidr.launcher.core.testing.FakeMentionBinder
+import com.sidr.launcher.core.testing.FakeModelPlanner
 import com.sidr.launcher.core.testing.FakeToolExecutor
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.core.testing.configuredProvider
-import com.sidr.launcher.domain.ai.router.PlanResult
+import com.sidr.launcher.domain.ai.bridge.ModelPlanning
+import com.sidr.launcher.domain.ai.bridge.SidrDestination
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
-import com.sidr.launcher.domain.action.LauncherAction
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
@@ -38,17 +38,20 @@ import org.junit.Test
  * intents. This proves it rather than asserting it — a sentinel planted in the goal text must reach no
  * outbound channel, in every state including the ones where a model *would* have been consulted.
  *
- * When A4' adds a model planner, this test is where its outbound path has to be reconciled with
- * `OutboundContextPolicy` — it will fail first, which is the point.
+ * A4′ phase 3a added the model planner (`ModelPlanner`, asked at `RouteCommandUseCase` step 7 only);
+ * this test is where its outbound path is reconciled with the agent branch: the branch still returns
+ * before step 7, so the seam is never asked on it. What the bridge sends when it IS asked is
+ * `BridgePayloadGuardTest`'s subject (`:app`), read off the payload.
  *
  * **Which channel this watches, and why it is the only one.** The agent branch is entered from
  * [RouteCommandUseCase], and that use case takes exactly one dependency that can leave the device: a
- * [com.sidr.launcher.domain.ai.router.CommandPlanner]. It takes **no** `GenerativeAiEngine` — the
+ * [com.sidr.launcher.domain.ai.bridge.ModelPlanner] (its `MentionBinder` binds on the device, after the
+ * model has answered, and sends nothing back). It takes **no** `GenerativeAiEngine` — the
  * assistant's transport is a different contour entirely — so wiring a `FakeGenerativeAiEngine` here
  * and asserting it recorded nothing would be a fake connected to no seam, which records zero calls no
  * matter what the code under test does. That is the definition of a vacuous assertion, and this test
  * deliberately does not make it. The *structural* half of the claim — that the engine cannot name
- * `GenerativeAiEngine`, `CommandPlanner`, Ktor or an `HttpClient` at all — is held mechanically by
+ * `GenerativeAiEngine`, `ModelPlanner`, `BridgeTransport`, Ktor or an `HttpClient` at all — is held mechanically by
  * `AgentVocabularyGuardTest` over `domain/agent` and `domain/tool`. Between them the two guards cover
  * both halves: nothing may be reachable, and what is reachable is never called.
  *
@@ -74,7 +77,7 @@ class AgentEgressSentinelGuardTest {
     private val provider = configuredProvider()
 
     /** The one outbound seam [RouteCommandUseCase] has. Every assertion below is about this object. */
-    private val modelPlanner = FakeCommandPlanner()
+    private val modelPlanner = FakeModelPlanner()
 
     private val agentStore = FakeAgentSessionStore()
     private val registry = FakeToolRegistry.withA0Tools()
@@ -97,8 +100,8 @@ class AgentEgressSentinelGuardTest {
             confidencePolicy = DefaultIntentConfidencePolicy(),
             recordingScope = CoroutineScope(SupervisorJob()),
         ),
-        planner = modelPlanner,
-        catalog = FakeActionCatalog(),
+        modelPlanner = modelPlanner,
+        binder = FakeMentionBinder(),
         featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = localOnly)),
         providerConfigRepository = provider,
         connectivityChecker = connectivity,
@@ -212,7 +215,7 @@ class AgentEgressSentinelGuardTest {
 
     /**
      * Non-vacuity, half two — the assertion this guard would be worthless without. The same
-     * [FakeCommandPlanner] instance, constructed by the same [useCase] wiring, DOES record the sentinel
+     * [FakeModelPlanner] instance, constructed by the same [useCase] wiring, DOES record the sentinel
      * when FastPath decides nothing and a model is legitimately consulted. So a zero call count in the
      * six tests above is a fact about the agent branch, not about a fake that was never connected.
      */
@@ -221,7 +224,7 @@ class AgentEgressSentinelGuardTest {
         matcher.intentToReturn = LauncherIntent.UnknownIntent(originalInput = sentinel, reason = "x")
         matcher.confidenceToReturn = 0.0f
         connectivity.online = true
-        modelPlanner.resultToReturn = PlanResult.RoutedAction(LauncherAction.ShowApps, 0.9f)
+        modelPlanner.answer = ModelPlanning.Navigate(SidrDestination.APP_GRID)
 
         useCase(localOnly = false).route("сделай $sentinel")
 

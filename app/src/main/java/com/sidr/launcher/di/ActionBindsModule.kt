@@ -10,8 +10,9 @@ import javax.inject.Singleton
 
 /**
  * Binds the [ActionCatalog] port to the AIL-2 [DefaultActionCatalog] (lives in :data:repository).
- * Nothing injects the catalog on the runtime path yet — the AIL-4 router and AIL-5 confirmation UI
- * consume it — but binding it now validates the graph and keeps the registration additive.
+ * Injected into `SystemIntentToolSource` (the `in_app` tool projection the federation holds) and into
+ * the learned-choice decorator (`MemoryProvidesModule`); the AIL-4 router and AIL-5 confirm UI that
+ * first consumed it were deleted in A4′ phase 3a.
  */
 @Module
 @InstallIn(SingletonComponent::class)

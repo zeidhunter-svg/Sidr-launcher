@@ -130,7 +130,7 @@ class JvmAgentSessionStoreTest {
                     TraceEvent.ToolObserved(2, ToolResult.Failed(CommandFailure.CantOpenUrl)),
                     TraceEvent.StepSkipped(1, StepPrecondition.PreviousStepObserved(ObservedFact.APP_NOT_INSTALLED)),
                     TraceEvent.StepRejected(1, RejectionReason.UNRESOLVED_ARG_SOURCE),
-                    TraceEvent.ConsentRequested(2, ConsentReason.RISK_LEVEL),
+                    TraceEvent.ConsentRequested(2, setOf(ConsentReason.RISK_LEVEL, ConsentReason.RISK_RAISED, ConsentReason.DURABLE_EFFECT)),
                     TraceEvent.ConsentResolved(2, granted = false),
                     TraceEvent.SessionPaused,
                     TraceEvent.SessionResumed,
@@ -419,5 +419,34 @@ class JvmAgentSessionStoreTest {
 
         assertFalse("a terminal session must leave no complete copy behind", Files.exists(orphan))
         assertFalse(Files.exists(file))
+    }
+
+    /**
+     * A file written before A4′ phase 2 carries `"reason": "RISK_LEVEL"` where it now carries a
+     * `reasons` list. The fixture is produced by saving the new form and rewriting it to the old one,
+     * so the test cannot pass on a file that never contained the new form.
+     */
+    @Test
+    fun `a session file written before reasons were a list still reads its one reason`() = runTest {
+        store().save(
+            session(
+                state = ExecutionState.AwaitingConsent,
+                trace = ExecutionTrace(
+                    listOf(TraceEvent.PlanCreated(3), TraceEvent.ConsentRequested(2, setOf(ConsentReason.RISK_LEVEL))),
+                ),
+            ),
+        )
+        val file = temp.root.toPath().resolve("session.json")
+        val current = Files.readString(file)
+        val legacy = Regex(""""reasons"\s*:\s*\[\s*"RISK_LEVEL"\s*]""").replace(current, """"reason": "RISK_LEVEL"""")
+        check(legacy != current) { "the fixture must contain the new form before it is rewritten:\n$current" }
+        Files.writeString(file, legacy)
+
+        val read = store().active().value()!!
+
+        assertEquals(
+            listOf(TraceEvent.ConsentRequested(2, setOf(ConsentReason.RISK_LEVEL))),
+            read.trace.events.filterIsInstance<TraceEvent.ConsentRequested>(),
+        )
     }
 }

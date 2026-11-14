@@ -3,6 +3,7 @@ package com.sidr.launcher.feature.launcher
 import androidx.annotation.StringRes
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.CommandMessage
+import com.sidr.launcher.domain.intent.ModelUnavailableReason
 import com.sidr.launcher.domain.voice.SpeechRecognitionError
 
 /**
@@ -56,17 +57,32 @@ internal fun feedbackText(feedback: CommandFeedback): FeedbackText? = when (feed
             listOf(CommandExamples.OPEN_APP, CommandExamples.SEARCH_QUERY),
         )
         is CommandMessage.NoAppFound -> FeedbackText(R.string.launcher_feedback_no_app_found, listOf(m.query))
+        // A4′ phase 3b, Task 6: a value its sort could not read, said in the words written for it. A named
+        // limit (controller ruling E6-R2): at the bridge those may be the MODEL's words, quoted here with no
+        // model mark; a marked variant would be a sixth string key — the owner's decision.
+        is CommandMessage.ValueNotUnderstood -> FeedbackText(R.string.launcher_message_value_not_understood, listOf(m.words))
         CommandMessage.ShowingAllApps -> FeedbackText(R.string.launcher_message_showing_all_apps)
         CommandMessage.AssistantComingSoon -> FeedbackText(R.string.launcher_message_assistant_soon)
         is CommandMessage.Verbatim -> FeedbackText(R.string.launcher_message_verbatim, listOf(m.text))
-        // Этап 4.0 — the three mutually exclusive reasons understanding is unavailable. Each names a
-        // different fix, which is the whole point of not collapsing them back into one line.
+        // Этап 4.0 — the mutually exclusive reasons understanding is unavailable (three, and since
+        // A4′ phase 3a a fourth, [UnderstandingModelUnavailable], with six causes of its own). Each
+        // names a different fix, which is the whole point of not collapsing them back into one line.
         CommandMessage.UnderstandingLocalOnly ->
             FeedbackText(R.string.launcher_understanding_local_only)
         CommandMessage.UnderstandingNeedsProvider ->
             FeedbackText(R.string.launcher_understanding_needs_provider)
         CommandMessage.UnderstandingNeedsNetwork ->
             FeedbackText(R.string.launcher_understanding_needs_network)
+        is CommandMessage.UnderstandingModelUnavailable -> FeedbackText(
+            when (m.reason) {
+                ModelUnavailableReason.CREDENTIALS -> R.string.launcher_model_unavailable_credentials
+                ModelUnavailableReason.REQUEST_REJECTED -> R.string.launcher_model_unavailable_request_rejected
+                ModelUnavailableReason.PROVIDER_FAILING -> R.string.launcher_model_unavailable_provider_failing
+                ModelUnavailableReason.TIMED_OUT -> R.string.launcher_model_unavailable_timed_out
+                ModelUnavailableReason.NETWORK -> R.string.launcher_model_unavailable_network
+                ModelUnavailableReason.UNREADABLE -> R.string.launcher_model_unavailable_unreadable
+            },
+        )
     }
     is CommandFeedback.Failure -> when (feedback.failure) {
         CommandFailure.Generic -> FeedbackText(R.string.launcher_failure_generic)
@@ -95,7 +111,26 @@ internal fun feedbackText(feedback: CommandFeedback): FeedbackText? = when (feed
         is SuggestedIntent.PlayStoreSearch -> FeedbackText(R.string.launcher_suggest_play_store, listOf(i.query))
         SuggestedIntent.Unknown -> FeedbackText(R.string.launcher_suggest_unknown)
     }
-    is CommandFeedback.Ambiguous -> FeedbackText(R.string.launcher_feedback_ambiguous)
+    // A4′ phase 3b, Task 7 (B-7; controller ruling E4-P7/E5-P6): one app offered for a word form is asked
+    // by name — «Вы имели в виду «Миравин»?», the interpretation surface's own sentence; several apps, offered
+    // or not, keep the list's header. Either way a tap on the list LAUNCHES (the act it confirms is a launch).
+    is CommandFeedback.Ambiguous ->
+        if (feedback.confirm && feedback.candidates.size == 1) {
+            FeedbackText(R.string.launcher_interpretation_did_you_mean, listOf(feedback.candidates.single().label))
+        } else {
+            FeedbackText(R.string.launcher_feedback_ambiguous)
+        }
+}
+
+/**
+ * Whether the line carries «Настроить провайдера» (Этап 4.0, F1): only where the provider screen can fix
+ * the cause - no provider, a key the provider refused, a request it rejected (usually the model's name).
+ */
+internal fun CommandMessage.offersProviderSetup(): Boolean = when (this) {
+    CommandMessage.UnderstandingNeedsProvider -> true
+    is CommandMessage.UnderstandingModelUnavailable ->
+        reason == ModelUnavailableReason.CREDENTIALS || reason == ModelUnavailableReason.REQUEST_REJECTED
+    else -> false
 }
 
 /**

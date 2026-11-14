@@ -1,6 +1,7 @@
 package com.sidr.launcher.agent
 
 import com.sidr.launcher.data.repository.action.DefaultActionCatalog
+import com.sidr.launcher.data.repository.agent.InAppToolIds
 import com.sidr.launcher.data.repository.agent.PermissionPresence
 import com.sidr.launcher.data.repository.agent.SystemIntentToolSource
 import com.sidr.launcher.data.repository.agent.Tier0IntentToolSource
@@ -298,6 +299,8 @@ class ToolRegistryPermissionGuardTest {
         val REQUIRED_TOOL_IDS: List<ToolId> = listOf(
             ToolIds.LAUNCH_APP,
             ToolIds.PLAY_STORE_SEARCH,
+            InAppToolIds.WEB_SEARCH,
+            InAppToolIds.OPEN_URL,
             Tier0ToolIds.SET_TIMER,
             Tier0ToolIds.OPEN_SYSTEM_SETTINGS,
             Tier0ToolIds.SET_ALARM,

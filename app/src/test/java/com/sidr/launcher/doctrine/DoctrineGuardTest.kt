@@ -3,6 +3,7 @@ package com.sidr.launcher.doctrine
 import android.content.Intent
 import com.sidr.launcher.agent.stripComments
 import com.sidr.launcher.data.repository.action.DefaultActionCatalog
+import com.sidr.launcher.data.repository.agent.InAppToolIds
 import com.sidr.launcher.data.repository.agent.IntentLauncher
 import com.sidr.launcher.data.repository.agent.PermissionPresence
 import com.sidr.launcher.data.repository.agent.SystemIntentToolSource
@@ -35,6 +36,7 @@ import com.sidr.launcher.domain.memory.resolution.DeleteLearnedChoiceUseCase
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.text.PlainTextFolding
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolAdapter
 import com.sidr.launcher.domain.tool.ToolFederation
@@ -259,11 +261,15 @@ class DoctrineGuardTest {
         shortcutRegistry = shortcutSource(),
         shortcutWorker = ShortcutToolWorker(ShortcutLauncher { _, _ -> }),
         memoryRegistry = MemoryToolSource(),
-        memoryWorker = MemoryToolWorker(
-            save = SaveAliasUseCase(FakeAliasStore()),
-            deleteAlias = DeleteAliasUseCase(FakeAliasStore()),
-            deleteChoice = DeleteLearnedChoiceUseCase(FakeResolutionPreferenceStore()),
-        ),
+        memoryWorker = FakeAliasStore().let { aliases ->
+            MemoryToolWorker(
+                save = SaveAliasUseCase(aliases),
+                deleteAlias = DeleteAliasUseCase(aliases),
+                deleteChoice = DeleteLearnedChoiceUseCase(FakeResolutionPreferenceStore()),
+                aliases = aliases,
+                folding = PlainTextFolding,
+            )
+        },
     )
 
     private object NoAppsRepository : InstalledAppsRepository {
@@ -786,6 +792,11 @@ class DoctrineGuardTest {
     private val declaredRisk: Map<ToolId, ActionRiskLevel> = mapOf(
         ToolIds.LAUNCH_APP to ActionRiskLevel.SAFE,
         ToolIds.PLAY_STORE_SEARCH to ActionRiskLevel.CONFIRM,
+        // A4′ phase 3a (spec §7.12.3): the router's actions with an executor, now tools. The catalog is
+        // authoritative; these pins are the gate half of "the KDoc argument lapses only as its three
+        // parts are met".
+        InAppToolIds.WEB_SEARCH to ActionRiskLevel.SAFE,
+        InAppToolIds.OPEN_URL to ActionRiskLevel.CONFIRM,
         Tier0ToolIds.SET_TIMER to ActionRiskLevel.SAFE,
         Tier0ToolIds.OPEN_SYSTEM_SETTINGS to ActionRiskLevel.SAFE,
         Tier0ToolIds.SET_ALARM to ActionRiskLevel.SAFE,
@@ -927,6 +938,8 @@ class DoctrineGuardTest {
         val REQUIRED_TOOL_IDS: List<ToolId> = listOf(
             ToolIds.LAUNCH_APP,
             ToolIds.PLAY_STORE_SEARCH,
+            InAppToolIds.WEB_SEARCH,
+            InAppToolIds.OPEN_URL,
             Tier0ToolIds.SET_TIMER,
             Tier0ToolIds.OPEN_SYSTEM_SETTINGS,
             Tier0ToolIds.SET_ALARM,

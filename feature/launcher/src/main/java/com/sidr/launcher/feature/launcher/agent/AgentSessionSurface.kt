@@ -24,7 +24,9 @@ import com.sidr.launcher.core.ui.theme.SidrShapes
 import com.sidr.launcher.core.ui.theme.Spacing
 import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.ExecutionState
+import com.sidr.launcher.domain.agent.StepUndo
 import com.sidr.launcher.domain.tool.ToolId
+import com.sidr.launcher.domain.tool.Undo
 import com.sidr.launcher.domain.trace.TraceEvent
 import com.sidr.launcher.feature.launcher.R
 
@@ -36,8 +38,10 @@ import com.sidr.launcher.feature.launcher.R
  * `session.plan.steps` and the marked row from `session.cursor`, so a 2-step plan and a 7-step plan
  * differ in list length and in nothing else. There is no two-row special case anywhere below.
  *
- * `Cancelled` renders nothing at all — the ordinary command surface is the right thing to be looking
- * at once a plan has been called off.
+ * `Cancelled` before any step acted renders nothing at all — the ordinary command surface is the right
+ * thing to be looking at once a plan has been called off. `Cancelled` AFTER a step acted is a finished
+ * card (A4′ phase 3b, Task 12 — phase 2's N2, plan §0.2 B-11): what acted is real, so the card says what
+ * ran and offers to undo it.
  */
 @Composable
 internal fun AgentSessionSurface(
@@ -49,12 +53,46 @@ internal fun AgentSessionSurface(
     onDeny: (Int) -> Unit,
     onContinue: () -> Unit,
     onDismiss: () -> Unit,
+    // A4′ phase 2 (F2-3.3). Defaulted so a caller that has no undo — a test of another state — draws
+    // no button; the one production caller, `LauncherScreen`, passes both.
+    undoReview: List<StepUndo> = emptyList(),
+    onUndo: () -> Unit = {},
+    // A4′ phase 3b, Task 11 (fork 3b-A). Defaulted like undo: whether this finished `Failed`/`Blocked`
+    // model-plan card offers «Повторить остаток» (`LauncherAgentSession.remainderOffered`), and its tap.
+    remainderOffered: Boolean = false,
+    onRetryRemainder: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    // Null for exactly one state (Cancelled), which renders nothing; every other state has a title.
-    val title = session.state.title() ?: return
+    // Null for exactly one shape — Cancelled before any step acted — which renders nothing; every other
+    // state has a title, and so has a Cancelled session in which a step acted (N2, `title()`'s KDoc).
+    val title = session.title() ?: return
     val subject = session.goal.subject()
     val dismiss = SidrSurfaceAction(sidrString(R.string.launcher_agent_cancel), onDismiss)
+    // «Отменить» exists only when at least one step can actually be undone; and when only part can,
+    // the card names the rest, so the button's reach is never implied larger than it is (B14).
+    val undo = if (undoReview.any { it.undo is Undo.By }) {
+        SidrSurfaceAction(sidrString(R.string.launcher_agent_undo), onUndo)
+    } else {
+        null
+    }
+    val notUndoable = if (undo == null) {
+        null
+    } else {
+        undoReview
+            .filter { it.undo == Undo.NotUndoable }
+            .mapNotNull { pending -> session.plan.steps.firstOrNull { it.index == pending.stepIndex } }
+            .map { it.line(subject, dynamicLabels) }
+            .takeIf { it.isNotEmpty() }
+            ?.let { sidrString(R.string.launcher_agent_undo_not_all, it.joinToString(", ")) }
+    }
+    // «Повторить остаток» (A4′ phase 3b, Task 11): the steps after the last act, back on the interpretation
+    // card. The finished card has one secondary slot, and «Отменить» keeps it when both exist — the rest is
+    // offered only when nothing can be undone (named in the task report, not decided by a test).
+    val secondary = undo ?: if (remainderOffered) {
+        SidrSurfaceAction(sidrString(R.string.launcher_agent_retry_remainder), onRetryRemainder)
+    } else {
+        null
+    }
 
     when (session.state) {
         // The planner has not answered yet. Indeterminate, because there is nothing honest to
@@ -93,11 +131,14 @@ internal fun AgentSessionSurface(
             }
             if (checkpoint != null && step != null) {
                 SidrActionGate(
-                    type = checkpoint.reason.gateType(),
+                    type = checkpoint.reasons.gateType(),
                     title = title,
+                    // A4′ phase 3b, Task 10 (A0.5's F5): the gated step names the value it WILL receive —
+                    // a reference to an earlier step's output is resolved for display from what the
+                    // session recorded (`PlanStep.line`'s KDoc); the plan list below keeps the default.
                     consequence = sidrString(
                         R.string.launcher_agent_gate_consequence,
-                        step.line(subject, dynamicLabels),
+                        step.line(subject, dynamicLabels, session.observations),
                     ),
                     confirmLabel = sidrString(R.string.launcher_agent_gate_confirm),
                     onConfirm = { onConfirm(checkpoint.index) },
@@ -120,7 +161,15 @@ internal fun AgentSessionSurface(
             tone = SidrResultTone.Partial,
             title = title,
             modifier = modifier,
-            body = sidrString(R.string.launcher_agent_paused_body),
+            // F2-3.2: the body says what «Продолжить» will actually do, by the predicate the resume
+            // use case acts on — a plan that has only looked is planned afresh.
+            body = sidrString(
+                if (session.replansOnResume()) {
+                    R.string.launcher_agent_paused_body_replan
+                } else {
+                    R.string.launcher_agent_paused_body
+                },
+            ),
             provenance = {
                 AgentPlanSteps(
                     session = session,
@@ -178,25 +227,53 @@ internal fun AgentSessionSurface(
                         dynamicLabels = dynamicLabels,
                     )
                     AgentProvenance(session = session)
+                    notUndoable?.let { SidrText(text = it, role = SidrTextRole.PROVENANCE) }
                 },
                 primaryAction = dismiss,
+                secondaryAction = undo,
             )
         }
 
         ExecutionState.Failed -> SidrErrorSurface(
             title = title,
             modifier = modifier,
+            next = notUndoable,
             primaryAction = dismiss,
+            secondaryAction = secondary,
         )
 
         ExecutionState.Blocked -> SidrBlockedState(
             title = title,
             body = sidrString(R.string.launcher_agent_blocked_body),
             modifier = modifier,
+            next = notUndoable,
             primaryAction = dismiss,
+            secondaryAction = secondary,
         )
 
-        ExecutionState.Cancelled -> Unit
+        // A4′ phase 3b, Task 12 — N2, answered «partial» (plan §0.2 B-11, `DOC-ILM-4`; the owner may
+        // overturn). Reached only when a step acted (`title()` returned above otherwise): the user refused a
+        // later step. The `Completed` card's shape, not `SidrBlockedState`, whose body is required and would
+        // have to say who stopped it: the title alone says the plan stopped (R12-1), the step lines say what
+        // acted and what never ran, and the undo is what it is on every finished card. The secondary slot is
+        // `undo` only — «Повторить остаток» stays `Failed`/`Blocked`'s (`LauncherAgentSession.show`).
+        ExecutionState.Cancelled -> SidrResultSurface(
+            tone = SidrResultTone.Partial,
+            title = title,
+            modifier = modifier,
+            provenance = {
+                AgentPlanSteps(
+                    session = session,
+                    subject = subject,
+                    toolProvenance = toolProvenance,
+                    dynamicLabels = dynamicLabels,
+                )
+                AgentProvenance(session = session)
+                notUndoable?.let { SidrText(text = it, role = SidrTextRole.PROVENANCE) }
+            },
+            primaryAction = dismiss,
+            secondaryAction = undo,
+        )
     }
 }
 
@@ -266,7 +343,7 @@ private fun AgentPlanSteps(
  * `provenanceLabelFor`.
  */
 @Composable
-private fun AgentStepProvenance(provenance: StepProvenance?) {
+internal fun AgentStepProvenance(provenance: StepProvenance?) {
     val label = provenance?.let { provenanceLabelFor(it.level, it.effect) }
     if (label != null) {
         SidrProvenanceLine(source = sidrString(label))

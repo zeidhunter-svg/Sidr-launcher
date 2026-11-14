@@ -8,6 +8,8 @@ import android.provider.AlarmClock
 import android.provider.MediaStore
 import android.provider.Settings
 import com.sidr.launcher.domain.intent.CommandFailure
+import com.sidr.launcher.domain.sort.ClockTimeSort
+import com.sidr.launcher.domain.sort.DurationSort
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.tool.ToolWorker
@@ -208,7 +210,7 @@ class Tier0IntentToolWorker @Inject constructor(
     }
 
     private fun setTimer(duration: String): ToolResult {
-        val seconds = parseSeconds(duration) ?: return ToolResult.Failed(CommandFailure.Generic)
+        val seconds = DurationSort.secondsOf(duration) ?: return ToolResult.Failed(CommandFailure.Generic)
         return launch(
             Intent(AlarmClock.ACTION_SET_TIMER)
                 .putExtra(AlarmClock.EXTRA_LENGTH, seconds)
@@ -222,7 +224,7 @@ class Tier0IntentToolWorker @Inject constructor(
      * the alarm already enabled, so the flag governs the responder's own UI, not consent).
      */
     private fun setAlarm(raw: String): ToolResult {
-        val at = parseClockTime(raw) ?: return ToolResult.Failed(CommandFailure.Generic)
+        val at = ClockTimeSort.timeOf(raw) ?: return ToolResult.Failed(CommandFailure.Generic)
         return launch(
             Intent(AlarmClock.ACTION_SET_ALARM)
                 .putExtra(AlarmClock.EXTRA_HOUR, at.first)
@@ -242,13 +244,14 @@ class Tier0IntentToolWorker @Inject constructor(
      * and get another. Injecting a resolver into this class would reintroduce exactly that defect.
      *
      * Two refusals, both before the intent is built:
-     *  - a **blank** target, for the same fail-closed reason `parseSeconds` and `parseClockTime`
-     *    decline what they cannot read: `package:` names no package, so the call cannot remove
-     *    anything and that is known before it is made. Without this check, a dispatch that returned
-     *    normally would come back as this arm's success, [ToolResult.HandedOff] (since A4′ phase 0,
+     *  - a **blank** target, for the same fail-closed reason `DurationSort.secondsOf` and
+     *    `ClockTimeSort.timeOf` decline what they cannot read: `package:` names no package, so the
+     *    call cannot remove anything and that is known before it is made. Without this check, a
+     *    dispatch that returned normally would come back as this arm's success, [ToolResult.HandedOff] (since A4′ phase 0,
      *    Task 5 — [ToolResult.Effected] before it): "outcome unknown" for an outcome already known,
-     *    where the answer `DOC-ILM-3` requires is [ToolResult.Failed]. It is a second line of defence — `ToolMatchPlanner` answers `NoPlan` when resolution fails, so a
-     *    blank should never arrive — and second lines are kept, not argued away;
+     *    where the answer `DOC-ILM-3` requires is [ToolResult.Failed]. It is a second line of defence — a target that did not resolve never becomes a plan
+     *    (`ToolMatchPlanner` answers `PlanningResult.Unresolved`, and only a tap on an offered package
+     *    binds it), so a blank should never arrive — and second lines are kept, not argued away;
      *  - **our own package** (owner condition 4, 2026-09-18): uninstalling Sidr mid-session kills the
      *    surface the session is running on. [ownPackageName] is injected rather than read from a
      *    `Context` here, so this is an ordinary equality a unit test can state.
@@ -320,18 +323,6 @@ class Tier0IntentToolWorker @Inject constructor(
     }
 
     /**
-     * `H:MM` or `HH:MM` only — a bounded token (spec §7.1), never a guess, never a default. The
-     * vocabulary hands this string over unparsed, exactly like [parseSeconds]'s `duration`; there is no
-     * free-text reading to normalize away here, only a fixed clock-time shape to accept or decline.
-     */
-    private fun parseClockTime(raw: String): Pair<Int, Int>? {
-        val match = Regex("""^(\d{1,2}):(\d{2})$""").find(raw.trim()) ?: return null
-        val hour = match.groupValues[1].toIntOrNull() ?: return null
-        val minute = match.groupValues[2].toIntOrNull() ?: return null
-        return if (hour in 0..23 && minute in 0..59) hour to minute else null
-    }
-
-    /**
      * The only place this worker touches the world, and the only place it can fail from the world's
      * side. **Every** tool in the `when` above goes through it, so the catch cannot be forgotten by
      * whoever adds the next one. (It said "all four … whoever adds a fifth" until A1″ Phase 3b, which
@@ -351,51 +342,5 @@ class Tier0IntentToolWorker @Inject constructor(
         ToolResult.Failed(CommandFailure.Generic)
     } catch (e: SecurityException) {
         ToolResult.Failed(CommandFailure.Generic)
-    }
-
-    /**
-     * Leading integer plus an optional unit word. Returns `null` for anything it cannot read, and the
-     * caller fails closed on that: an agent that silently starts a zero-length timer is worse than one
-     * that declines and says so. Same reasoning as `InvocationValidator.resolve`'s refusal to bind a
-     * blank.
-     *
-     * **The unit token is matched exactly, never by prefix** (fix round 1, controller ruling R11). A
-     * `startsWith` match let `"1 min 30 sec"` silently read as 60 seconds instead of 90, and let
-     * `"10 minecraft"` silently start a real 600-second timer from nonsense — the worse of the two
-     * failures this KDoc already names, because it does not decline, it lies. The token left after the
-     * digits must therefore be a single word — any whitespace or digit in it fails closed rather than
-     * being read as "the first word matched" — and that word is compared with `==` against an explicit,
-     * intentionally narrow list per unit. An unlisted-but-valid inflection is declined, not guessed;
-     * widening the vocabulary is Task 8's job (`ToolMatchPlanner`), not this worker's.
-     *
-     * Unit words are read here rather than in `ToolVocabulary` because they belong to reading the
-     * **value**, not to recognising the tool; the vocabulary hands this string over **unparsed** — it
-     * never reads the value for meaning. Not *verbatim*, though: since Task 8 the vocabulary matches on
-     * `CommandNormalizer`-normalized text, so what arrives here is already lower-cased and
-     * whitespace-collapsed. Harmless for a duration — the trim/lowercase below is then redundant rather
-     * than wrong — but see `ToolVocabulary.Entry` for why a free-text argument will need the raw span.
-     */
-    private fun parseSeconds(raw: String): Int? {
-        val text = raw.trim().lowercase()
-        val digits = text.takeWhile { it.isDigit() }
-        val amount = digits.toIntOrNull() ?: return null
-        if (amount <= 0 || digits.length > 4) return null
-        val unit = text.drop(digits.length).trim()
-        val multiplier = when {
-            unit.isEmpty() -> MINUTE
-            unit.any { it.isWhitespace() || it.isDigit() } -> return null
-            unit in SECOND_FORMS -> 1
-            unit in MINUTE_FORMS -> MINUTE
-            unit in HOUR_FORMS -> MINUTE * 60
-            else -> return null
-        }
-        return amount * multiplier
-    }
-
-    private companion object {
-        const val MINUTE = 60
-        val SECOND_FORMS = setOf("sec", "secs", "second", "seconds", "сек", "секунда", "секунды", "секунд", "saniye")
-        val MINUTE_FORMS = setOf("min", "mins", "minute", "minutes", "мин", "минута", "минуты", "минут", "dakika", "dk")
-        val HOUR_FORMS = setOf("hour", "hours", "hr", "hrs", "час", "часа", "часов", "saat")
     }
 }

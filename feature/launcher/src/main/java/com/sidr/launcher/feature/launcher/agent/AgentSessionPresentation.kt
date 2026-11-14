@@ -13,10 +13,11 @@ import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.tool.ArgSource
+import com.sidr.launcher.domain.tool.InvocationValidator
+import com.sidr.launcher.domain.tool.ResolutionResult
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
-import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolLevel
 import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolResult
@@ -85,6 +86,11 @@ internal fun AgentGoal.subject(): String = when (val shape = shape) {
  * `launch_app` / `play_store_search` need no literal — they are `ToolIds` in `:domain`.
  */
 private const val TIER0_SET_TIMER = "set_timer"
+
+// A4′ phase 3a: the two router actions projected as tools (`InAppToolIds`, `:data:repository`). Literals
+// for the same no-feature->data reason as the TIER0_* ones; `DoctrineGuardTest` scans for them.
+private const val IN_APP_WEB_SEARCH = "web_search"
+private const val IN_APP_OPEN_URL = "open_url"
 private const val TIER0_OPEN_SYSTEM_SETTINGS = "open_system_settings"
 private const val TIER0_SET_ALARM = "set_alarm"
 
@@ -145,6 +151,7 @@ private const val MEMORY_FORGET_LEARNED_CHOICE = "forget_learned_choice"
  */
 private const val APP_ARG = "app"
 private const val APP_LABEL_ARG = "app_label"
+private const val QUERY_ARG = "query"
 private const val PHRASE_ARG = "phrase"
 
 /**
@@ -167,6 +174,8 @@ private const val PHRASE_ARG = "phrase"
 internal fun toolLabelFor(id: ToolId): Int = when (id.value) {
     ToolIds.LAUNCH_APP.value -> R.string.launcher_agent_step_launch
     ToolIds.PLAY_STORE_SEARCH.value -> R.string.launcher_agent_step_store
+    IN_APP_WEB_SEARCH -> R.string.launcher_agent_step_web_search
+    IN_APP_OPEN_URL -> R.string.launcher_agent_step_open_url
     TIER0_SET_TIMER -> R.string.launcher_agent_step_timer
     TIER0_OPEN_SYSTEM_SETTINGS -> R.string.launcher_agent_step_settings
     TIER0_SET_ALARM -> R.string.launcher_agent_step_alarm
@@ -238,14 +247,29 @@ fun interface DynamicToolLabels {
  * free-text goal carries the whole typed command (`RouteCommandUseCase` builds `GoalShape.Free` from
  * it), so a timer step filled with [subject] reads "Set a timer for set a timer for 10 minutes".
  *
- * So a step with **exactly one** literal argument speaks about that argument instead. `singleOrNull`
- * rather than `first`: with one literal there is no choice to get wrong, and with two there is no
- * principled way to pick, so the line falls back to the goal — saying less rather than guessing. A
- * bound argument ([ArgSource.FromStep]) is not a literal and is deliberately not read here: the plan
- * holds a reference, not a value, and only the engine ever resolves one.
+ * So a step with **exactly one** shown argument speaks about that argument instead. `singleOrNull`
+ * rather than `first`: with one value there is no choice to get wrong, and with two there is no
+ * principled way to pick, so the line falls back to the goal — saying less rather than guessing.
  *
- * Both A0 steps are unaffected, which is why the rendering baseline holds: step 0's single literal IS
- * the goal query, and step 1 binds rather than repeats, so it has no literal at all.
+ * **A bound argument ([ArgSource.FromStep]) is shown only where the caller passes [observations]**
+ * (A4′ phase 3b, Task 10; controller ruling E10-P5). Then it is one of the step's shown values like a
+ * literal — so it is the line's SUBJECT when it is the step's only argument, and it fills its named slot
+ * in the branches below — and its value is:
+ *  - the earlier step's output, read through `InvocationValidator.resolve(invocation, observations)` —
+ *    the engine's own pure binding, called for display only and never written back — when that output
+ *    exists. The consent card passes the session's observations, so the gated step names the value it
+ *    WILL receive (A0.5's F5);
+ *  - otherwise `launcher_interpretation_from_step` with the source step's 1-based number («← из шага 1»):
+ *    the interpretation card passes an empty map (nothing has run before «Выполнить»), and a missing or
+ *    unusable output reads the same. `resolve` is all-or-nothing, as it is for the engine: one reference it
+ *    cannot bind marks every reference of the step, and the engine would not run that step either.
+ *
+ * With [observations] `null` — the plan list and the undo line — a reference is not read, exactly as
+ * before this task: the plan holds a reference, and the line falls back to the goal. That default is
+ * what keeps A0's rendering baseline: step 0's single literal IS the goal query, and step 1 binds rather
+ * than repeats, so it has no literal at all and reads the goal's query («Find убер in the app store»,
+ * `AgentSessionSurfaceProvenanceTest`). On the A0 consent card step 1 now reads step 0's
+ * `resolved_query` instead — the value the store search will actually receive.
  *
  * **[dynamicLabels] is empty for every authored tool** (A1″), so A0's and A1′'s lines are byte-for-byte
  * what they were. A shortcut has no string resource to map to, and [toolLabelFor] would fall through to
@@ -285,24 +309,40 @@ fun interface DynamicToolLabels {
  * reachable via the one producer of these invocations today; it exists so a future one degrades to
  * "says less" rather than to an unhandled `MissingFormatArgumentException`.
  *
- * `literalSubject()`'s `singleOrNull()` fallback is **UNCHANGED** below and still governs every other
- * tool. CLAUDE.md's named limitation (5) is therefore closed **for these two tools by name**, not in
- * general.
+ * The single-value fallback below still governs every other tool — over the literals alone wherever
+ * [observations] is `null`, byte-for-byte the `singleOrNull()` it always was. CLAUDE.md's named
+ * limitation (5) is therefore closed **for these two tools by name**, not in general.
  */
 @Composable
 @ReadOnlyComposable
-internal fun PlanStep.line(subject: String, dynamicLabels: Map<ToolId, DynamicToolLabel>): String {
+internal fun PlanStep.line(
+    subject: String,
+    dynamicLabels: Map<ToolId, DynamicToolLabel>,
+    observations: Map<Int, ToolResult>? = null,
+): String {
     val dynamic = dynamicLabels[invocation.id]
     if (dynamic != null) {
         return sidrString(R.string.launcher_agent_step_shortcut, dynamic.qualifier, dynamic.name)
     }
 
-    fun literal(name: String): String? = (invocation.args[name] as? ArgSource.Literal)?.value
+    val shown = shownArgs(observations)
+
+    fun shownArg(name: String): String? = shown[name]
 
     when (invocation.id.value) {
+        ToolIds.LAUNCH_APP.value -> {
+            // A4′ phase 3a: a launch the device pinned (the binding pick) names what the user called it
+            // AND the package that will open — two apps can share a label. Unpinned, it has one literal
+            // and falls through to the line it always had.
+            val label = shownArg(QUERY_ARG)
+            val pkg = shownArg(APP_ARG)
+            if (label != null && pkg != null) {
+                return sidrString(R.string.launcher_agent_step_launch_pinned, label, pkg)
+            }
+        }
         MEMORY_SET_APP_ALIAS -> {
-            val app = literal(APP_LABEL_ARG) ?: literal(APP_ARG)
-            val phrase = literal(PHRASE_ARG)
+            val app = shownArg(APP_LABEL_ARG) ?: shownArg(APP_ARG)
+            val phrase = shownArg(PHRASE_ARG)
             if (app != null && phrase != null) {
                 return sidrString(R.string.launcher_agent_step_set_alias, app, phrase)
             }
@@ -310,19 +350,40 @@ internal fun PlanStep.line(subject: String, dynamicLabels: Map<ToolId, DynamicTo
         TIER0_UNINSTALL_APP -> {
             // Owner condition 2: the card names BOTH the label and the package, because resolution is
             // fuzzy and the user must see what will actually be removed before tapping Confirm.
-            val pkg = literal(APP_ARG)
-            val label = literal(APP_LABEL_ARG)
+            val pkg = shownArg(APP_ARG)
+            val label = shownArg(APP_LABEL_ARG)
             if (pkg != null && label != null) {
                 return sidrString(R.string.launcher_agent_step_uninstall, label, pkg)
             }
         }
     }
 
-    return sidrString(toolLabelFor(invocation.id), invocation.literalSubject() ?: subject)
+    return sidrString(toolLabelFor(invocation.id), shown.values.singleOrNull() ?: subject)
 }
 
-private fun ToolInvocation.literalSubject(): String? =
-    args.values.filterIsInstance<ArgSource.Literal>().singleOrNull()?.value
+/**
+ * The step's arguments as the line shows them, in declaration order: every literal as written; every
+ * reference only when [observations] is given — resolved for display, or marked with its source step. See
+ * [line]'s KDoc for the two cases. Pure in both inputs: nothing here reaches the session or the engine.
+ */
+@Composable
+@ReadOnlyComposable
+private fun PlanStep.shownArgs(observations: Map<Int, ToolResult>?): Map<String, String> {
+    val resolved = observations?.let { recorded ->
+        (InvocationValidator.resolve(invocation, recorded) as? ResolutionResult.Resolved)?.invocation?.args
+    }
+    val shown = LinkedHashMap<String, String>(invocation.args.size)
+    for ((name, source) in invocation.args) {
+        when (source) {
+            is ArgSource.Literal -> shown[name] = source.value
+            is ArgSource.FromStep -> if (observations != null) {
+                shown[name] = resolved?.get(name)
+                    ?: sidrString(R.string.launcher_interpretation_from_step, source.stepIndex + 1)
+            }
+        }
+    }
+    return shown
+}
 
 /**
  * The two fields of a [com.sidr.launcher.domain.tool.ToolDescriptor] the surface is allowed to see.
@@ -369,12 +430,19 @@ internal fun provenanceLabelFor(level: ToolLevel, effect: ToolEffect): Int? {
 }
 
 /**
- * The title of the whole surface for the state it is in, or `null` for the one state that renders
- * nothing at all: a cancelled session hands the screen back to the ordinary command surface.
+ * The title of the whole surface for the state the session is in, or `null` for the one shape that
+ * renders nothing at all: a session cancelled before any step acted hands the screen back to the
+ * ordinary command surface.
+ *
+ * **A session cancelled AFTER a step acted is a finished card** (A4′ phase 3b, Task 12 — phase 2's N2,
+ * answered «partial», plan §0.2 B-11; the owner may overturn): what acted is real, and the card says so
+ * and offers to undo it. Its title is the `Blocked` one, «План остановлен» (controller ruling R12-1 — no
+ * new string key; the owner may overturn): the plan did stop part-way. The `Blocked` BODY is not used
+ * with it, because it says Sidr stopped the plan, and here the user did.
  */
 @Composable
 @ReadOnlyComposable
-internal fun ExecutionState.title(): String? = when (this) {
+internal fun AgentSession.title(): String? = when (state) {
     ExecutionState.Planning -> sidrString(R.string.launcher_agent_title)
     ExecutionState.Running -> sidrString(R.string.launcher_agent_running_title)
     ExecutionState.AwaitingConsent -> sidrString(R.string.launcher_agent_gate_title)
@@ -382,22 +450,33 @@ internal fun ExecutionState.title(): String? = when (this) {
     ExecutionState.Completed -> sidrString(R.string.launcher_agent_completed_title)
     ExecutionState.Failed -> sidrString(R.string.launcher_agent_failed_title)
     ExecutionState.Blocked -> sidrString(R.string.launcher_agent_blocked_title)
-    ExecutionState.Cancelled -> null
+    ExecutionState.Cancelled -> if (anyStepActed()) sidrString(R.string.launcher_agent_blocked_title) else null
 }
+
+/**
+ * A step of this session acted: its observation is `Effected`, or `HandedOff` (the act left the launcher
+ * and may have happened). Looks (`Observed`) and failures are not acts. The same reading as
+ * `AgentSession.replansOnResume`'s and `Compensation.review`'s — what the card of a `Cancelled` session
+ * is drawn on (A4′ phase 3b, Task 12, N2).
+ */
+internal fun AgentSession.anyStepActed(): Boolean =
+    observations.values.any { it is ToolResult.Effected || it is ToolResult.HandedOff }
 
 /**
  * Why the engine stopped -> which kind of boundary the gate announces. This is a mapping of typed
  * values, NOT of copy: `SidrActionGate` renders the type as its own already-translated risk chip
- * (`ui_gate_type_*`), so the reason survives translation without this task inventing four more keys.
+ * (`ui_gate_type_*`), so the reason survives translation without this task inventing more keys.
  *
- * It is also why the gate's type is not hardcoded to `Confirmation`: a `MISSING_PERMISSION`
- * checkpoint labelled "confirmation" would understate what is being asked for.
+ * **A stop can have several reasons** (A4′ phase 2, F2-2), and the chip shows the one that says most
+ * about what is at stake: irreversibility first (`DESTRUCTIVE`, which also tones the surface as a
+ * risk — `DOC-HMA-3`'s "marked before execution" as the user sees it), then a declared permission,
+ * then risk. The trace keeps every reason; the chip is one word. Until phase 2 `DURABLE_EFFECT` mapped
+ * to `ExternalHandoff`, which was never reached and would have understated it.
  */
-internal fun ConsentReason.gateType(): SidrActionGateType = when (this) {
-    ConsentReason.RISK_LEVEL -> SidrActionGateType.Confirmation
-    ConsentReason.RISK_RAISED -> SidrActionGateType.Confirmation
-    ConsentReason.MISSING_PERMISSION -> SidrActionGateType.Permission
-    ConsentReason.DURABLE_EFFECT -> SidrActionGateType.ExternalHandoff
+internal fun Set<ConsentReason>.gateType(): SidrActionGateType = when {
+    ConsentReason.DURABLE_EFFECT in this -> SidrActionGateType.Destructive
+    ConsentReason.MISSING_PERMISSION in this -> SidrActionGateType.Permission
+    else -> SidrActionGateType.Confirmation
 }
 
 /**
@@ -450,13 +529,15 @@ private fun ToolResult.stepState(): AgentStepState = when (this) {
  *    list (a named A0 limitation), so that half was wrong at the function and never drawn;
  *  - the same line answered CURRENT for the cursor step of a **terminal** session, because
  *    `AgentExecutor.perform` advances the cursor before `ended(...)` (found 2026-09-22, named in no
- *    document before this one). Also wrong at the function and not drawn today: `Failed` and
- *    `Blocked` draw no step lines, `Cancelled` draws nothing at all, and `Completed` — the one
- *    terminal surface that does draw them — is reached only once the cursor is past the last step,
+ *    document before this one). Also wrong at the function and not drawn at the time: `Failed` and
+ *    `Blocked` draw no step lines, `Cancelled` drew nothing at all, and `Completed` — then the one
+ *    terminal surface that drew them — is reached only once the cursor is past the last step,
  *    so no step sits at it.
  *
  * The two undrawn cases are corrected anyway, so that a future surface drawing the plan list in those
- * states cannot inherit them.
+ * states cannot inherit them. **That future arrived for `Cancelled`** (A4′ phase 3b, Task 12, N2): a plan
+ * refused after a step acted draws its plan list, and the refused step — at the cursor of a terminal
+ * session — reads [AgentStepState.PENDING], «не начат», by the correction made here in advance.
  *
  * The order is load-bearing and is not alphabetical: a recorded observation outranks any state, a
  * skipped step outranks the cursor, and only a step that is *at* the cursor is allowed to ask what

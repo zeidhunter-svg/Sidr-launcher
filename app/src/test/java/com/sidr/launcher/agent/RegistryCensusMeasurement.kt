@@ -27,7 +27,7 @@ import org.junit.Test
  * this file maintains by hand is as green when it forgets an adapter as when it does not — the exact
  * hand-written-column weakness `ToolPermissionCatalog`'s own KDoc names. So the id set is compared
  * against that catalog, which is a **separate** production statement over the same authored tools
- * (20 rows, P10): drop `SystemIntentToolSource` here and the sets differ by `launch_app` and
+ * (22 rows, P10): drop `SystemIntentToolSource` here and the sets differ by `launch_app` and
  * `play_store_search`, and this goes red instead of printing 18.
  */
 class RegistryCensusMeasurement {

@@ -4,21 +4,29 @@ import com.sidr.launcher.core.testing.FakeToolExecutor
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.intent.CommandFailure
+import com.sidr.launcher.domain.permission.PermissionFeature
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ObservedFact
 import com.sidr.launcher.domain.tool.RejectionReason
 import com.sidr.launcher.domain.tool.ResolvedInvocation
+import com.sidr.launcher.domain.tool.ToolDescriptor
+import com.sidr.launcher.domain.tool.ToolDurability
+import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolExecutor
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
+import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.trace.ExecutionTrace
 import com.sidr.launcher.domain.trace.TraceEvent
+import java.util.concurrent.CountDownLatch
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -100,7 +108,7 @@ class AgentExecutorTest {
         assertEquals(1, tools.invocations.size)          // the store was NOT called
         assertTrue(
             afterSecond.trace.events.any {
-                it is TraceEvent.ConsentRequested && it.reason == ConsentReason.RISK_LEVEL
+                it is TraceEvent.ConsentRequested && ConsentReason.RISK_LEVEL in it.reasons
             },
         )
     }
@@ -291,11 +299,11 @@ class AgentExecutorTest {
      * bounded steps and consecutive failures only, and the domain is deliberately clock-free). What
      * this test proves is the **cooperative** half — a tool suspended at a cancellable point (`delay`
      * here; a future network or MCP call in production) used to hold the session open forever with no
-     * trace event and no way out, and is now cut. It does **not** prove a bound on a tool blocked in
-     * non-suspending code: `withTimeout` only cancels at a suspension point, and today's shipped
-     * Android workers and the JVM sandbox reach the world synchronously or via `withContext` around a
-     * blocking body, so for them this budget is latent rather than enforced (see
-     * `RuntimeBudget`'s KDoc for the full account).
+     * trace event and no way out, and is now cut. Since A4′ phase 2 (owner fork F2-1, R14) the cut is
+     * the engine's own, not the tool's: `AgentExecutor` runs the world call in its own scope and stops
+     * WAITING at the budget regardless of whether the call itself can be interrupted — a parked,
+     * non-suspending call (every binder call Android makes) is handed off the same way a suspending one
+     * is cut (see `RuntimeBudget`'s KDoc for the full account).
      *
      * The result recorded is `HandedOff` and not `Failed`, and the difference is the honest one: the
      * call WAS made, we stopped waiting, and the side effect may well have happened. Recording a
@@ -357,6 +365,107 @@ class AgentExecutorTest {
     @Test
     fun `the shipped budget bounds a step by wall-clock time`() {
         assertEquals(10_000L, RuntimeBudget.Default.maxStepWallClockMs)
+    }
+
+    /**
+     * N1 / T1 m1 (final review, 2026-10-03): the world call runs detached from structured concurrency
+     * (`minusKey(Job) + SupervisorJob()`), so nothing but the `finally { call.cancel() }` in
+     * [AgentExecutor.perform] stops a cut suspending call from resuming and acting later. Without that
+     * line, a tool cut at the wall-clock budget would keep running in the background and could still
+     * write an alias or issue an intent seconds after the card already said the plan had stopped.
+     */
+    @Test
+    fun `a cut suspending call never acts after the cut`() = runTest {
+        var acted = false
+        val slow = object : ToolExecutor {
+            override suspend fun invoke(invocation: ResolvedInvocation): ToolResult {
+                delay(20_000)
+                acted = true
+                return ToolResult.Effected()
+            }
+        }
+        val executor = AgentExecutor(
+            registry,
+            slow,
+            RuntimeBudget(maxSteps = 8, maxConsecutiveFailures = 2, maxStepWallClockMs = 1_000),
+        )
+
+        executor.advance(session())
+        testScheduler.advanceUntilIdle()
+
+        assertTrue("the cut call must never reach its side effect", !acted)
+    }
+
+    /**
+     * R14, closed by owner fork F2-1 (plan §0.1). A call parked in NON-suspending code — the shape of
+     * every binder call Android makes — is interrupted by neither `withTimeout` nor
+     * `runInterruptible` (plan §0.2, probe 2: an uninterruptible block waited out its full time under
+     * both). What the budget CAN do is stop waiting for it, and that is what this pins: the engine is
+     * back at exactly the budget in virtual time while the worker thread is still parked.
+     *
+     * The JUnit timeout is what makes the mutation that puts the call back on the caller's thread
+     * (M1a) FAIL instead of hang: the latch then parks the test's own thread, and only JUnit can end it.
+     */
+    @Test(timeout = 20_000)
+    fun `a call blocked outside any suspension point is abandoned at the budget, not waited for`() = runTest {
+        val release = CountDownLatch(1)
+        val parked = object : ToolExecutor {
+            override suspend fun invoke(invocation: ResolvedInvocation): ToolResult {
+                release.await()
+                return notInstalled("вельтрикс")
+            }
+        }
+        try {
+            val executor = AgentExecutor(
+                registry,
+                parked,
+                RuntimeBudget(maxSteps = 8, maxConsecutiveFailures = 2, maxStepWallClockMs = 1_000),
+                worldContext = Dispatchers.IO,
+            )
+
+            val after = executor.advance(session("вельтрикс"))
+
+            assertEquals(ToolResult.HandedOff(), after.observations[0])
+            assertEquals(1_000L, currentTime)
+        } finally {
+            release.countDown()
+        }
+    }
+
+    /**
+     * Owner fork F2-1b. A call the engine stopped waiting for may still be acting, so the plan does not
+     * start another: two world calls in flight at once would break the order the plan promised. The
+     * two steps below do not depend on each other — the only shape in which the second could run at
+     * all — and the second must never be called.
+     */
+    @Test
+    fun `a step cut by the clock ends the plan, so no second call starts while the first may still act`() = runTest {
+        val calls = mutableListOf<ToolId>()
+        val firstHangs = object : ToolExecutor {
+            override suspend fun invoke(invocation: ResolvedInvocation): ToolResult {
+                calls += invocation.id
+                if (calls.size == 1) delay(Long.MAX_VALUE / 2)
+                return ToolResult.Effected()
+            }
+        }
+        val independent = ExecutionPlan(
+            listOf(
+                planForMissingApp("вельтрикс").steps[0],
+                planForMissingApp("лумора").steps[0].copy(index = 1),
+            ),
+        )
+        val executor = AgentExecutor(
+            registry,
+            firstHangs,
+            RuntimeBudget(maxSteps = 8, maxConsecutiveFailures = 2, maxStepWallClockMs = 1_000),
+        )
+
+        var current = executor.advance(session("вельтрикс").copy(plan = independent))
+        current = executor.advance(current)
+
+        assertEquals(ExecutionState.Blocked, current.state)
+        assertEquals(listOf(ToolIds.LAUNCH_APP), calls)
+        assertEquals(TraceEvent.SessionEnded(ExecutionState.Blocked), current.trace.events.last())
     }
 
     // --- Fix round 1 regression + coverage tests -----------------------------------------------
@@ -756,6 +865,101 @@ class AgentExecutorTest {
         )
     }
 
+    // --- More than one reason to stop (A4′ phase 2, spec §6.1, owner fork F2-2) -----------------
+
+    private val quill = ToolId("fixture_quill")     // CONFIRM + DURABLE — uninstall_app's shape
+    private val ledger = ToolId("fixture_ledger")   // SAFE + DURABLE — no such tool ships yet
+    private val parcel = ToolId("fixture_parcel")   // CONFIRM + a declared permission gate
+
+    private fun fixtureTool(
+        id: ToolId,
+        risk: ActionRiskLevel,
+        durability: ToolDurability,
+        gate: PermissionFeature? = null,
+    ) = ToolDescriptor(
+        id = id,
+        level = ToolLevels.SANDBOX,
+        effect = ToolEffect.LOCAL,
+        risk = risk,
+        durability = durability,
+        permissionGate = gate,
+    )
+
+    private val stops = FakeToolRegistry(
+        listOf(
+            fixtureTool(quill, ActionRiskLevel.CONFIRM, ToolDurability.DURABLE),
+            fixtureTool(ledger, ActionRiskLevel.SAFE, ToolDurability.DURABLE),
+            fixtureTool(parcel, ActionRiskLevel.CONFIRM, ToolDurability.TRANSIENT, PermissionFeature.WALLPAPER),
+        ),
+    )
+
+    private fun oneStep(id: ToolId, risk: ActionRiskLevel) = session("вельтрикс").copy(
+        plan = ExecutionPlan(
+            listOf(PlanStep(0, ToolInvocation(id), risk, StepPrecondition.None, StepRationale.GOAL_DIRECT)),
+        ),
+    )
+
+    /**
+     * `DOC-HMA-3`, first half: an irreversible step is marked BEFORE it runs. Until phase 2 the
+     * `DURABLE_EFFECT` branch sat below `requiresConsent(risk)` and was never reached for exactly the
+     * risk band where irreversibility matters most (spec §3 0.2(2); A0.5's named finding).
+     */
+    @Test
+    fun `a CONFIRM step that is also DURABLE records both reasons before it runs`() = runTest {
+        val tools = FakeToolExecutor(emptyList())
+
+        val after = AgentExecutor(stops, tools, budget).advance(oneStep(quill, ActionRiskLevel.CONFIRM))
+
+        assertEquals(ExecutionState.AwaitingConsent, after.state)
+        assertEquals(
+            listOf(TraceEvent.ConsentRequested(0, setOf(ConsentReason.RISK_LEVEL, ConsentReason.DURABLE_EFFECT))),
+            after.trace.events.filterIsInstance<TraceEvent.ConsentRequested>(),
+        )
+        assertTrue("nothing may run before consent", tools.invocations.isEmpty())
+    }
+
+    @Test
+    fun `a SAFE step that is DURABLE stops for its durability alone`() = runTest {
+        val tools = FakeToolExecutor(emptyList())
+
+        val after = AgentExecutor(stops, tools, budget).advance(oneStep(ledger, ActionRiskLevel.SAFE))
+
+        assertEquals(
+            listOf(TraceEvent.ConsentRequested(0, setOf(ConsentReason.DURABLE_EFFECT))),
+            after.trace.events.filterIsInstance<TraceEvent.ConsentRequested>(),
+        )
+        assertTrue(tools.invocations.isEmpty())
+    }
+
+    @Test
+    fun `a declared permission gate is recorded even when risk already stops the step`() = runTest {
+        val after = AgentExecutor(stops, FakeToolExecutor(emptyList()), budget)
+            .advance(oneStep(parcel, ActionRiskLevel.CONFIRM))
+
+        assertEquals(
+            listOf(TraceEvent.ConsentRequested(0, setOf(ConsentReason.RISK_LEVEL, ConsentReason.MISSING_PERMISSION))),
+            after.trace.events.filterIsInstance<TraceEvent.ConsentRequested>(),
+        )
+    }
+
+    /**
+     * `RISK_RAISED` is a claim about a transition, so it needs a step that ran before this one. A0's
+     * store step is the shape that has one: `launch_app` (SAFE) ran, `play_store_search` (CONFIRM) is
+     * next. The first-step tests above pin the other half by their exact sets: nothing ran before
+     * them, so no rise is recorded.
+     */
+    @Test
+    fun `the A0 store step records the rise in risk as well as the risk level`() = runTest {
+        val executor = AgentExecutor(registry, FakeToolExecutor(listOf(notInstalled())), budget)
+
+        val atGate = executor.advance(executor.advance(session()))
+
+        assertEquals(
+            listOf(TraceEvent.ConsentRequested(1, setOf(ConsentReason.RISK_LEVEL, ConsentReason.RISK_RAISED))),
+            atGate.trace.events.filterIsInstance<TraceEvent.ConsentRequested>(),
+        )
+    }
+
     /**
      * The same two steps, but step 1 is not gated on an observation — the only way to drive a
      * *resolution* rejection, since a skipped step is never resolved at all.
@@ -766,4 +970,42 @@ class AgentExecutorTest {
             planForMissingApp("убер").steps[1].copy(precondition = StepPrecondition.None),
         ),
     )
+
+    /**
+     * `DOC-ADL-1`'s anchor after the router (spec §7.12.3): the same risk gets the same gate whoever
+     * proposed the step. A `CONFIRM` step the MODEL proposed stops at the engine's consent exactly as a
+     * deterministic one does — same state, same trace, nothing invoked.
+     */
+    @Test
+    fun `a CONFIRM step the model proposed stops at the engine's consent exactly like a deterministic one`() = runTest {
+        fun storeStep(rationale: StepRationale) = AgentSession(
+            id = AgentSessionId("s-${rationale.name}"),
+            goal = AgentGoal("найди lumora в магазине", GoalShape.Free("найди lumora в магазине")),
+            plan = ExecutionPlan(
+                listOf(
+                    PlanStep(
+                        index = 0,
+                        invocation = ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.Literal("lumora"))),
+                        risk = ActionRiskLevel.CONFIRM,
+                        precondition = StepPrecondition.None,
+                        rationale = rationale,
+                    ),
+                ),
+            ),
+            cursor = 0,
+            state = ExecutionState.Running,
+            observations = emptyMap(),
+            consents = emptyMap(),
+            trace = ExecutionTrace(emptyList()),
+        )
+        val tools = FakeToolExecutor(emptyList())
+
+        val deterministic = AgentExecutor(registry, tools, budget).advance(storeStep(StepRationale.GOAL_DIRECT))
+        val proposed = AgentExecutor(registry, tools, budget).advance(storeStep(StepRationale.MODEL_PROPOSED))
+
+        assertEquals(ExecutionState.AwaitingConsent, proposed.state)
+        assertEquals(deterministic.state, proposed.state)
+        assertEquals(deterministic.trace.events, proposed.trace.events)
+        assertEquals(emptyList<Any>(), tools.invocations)
+    }
 }

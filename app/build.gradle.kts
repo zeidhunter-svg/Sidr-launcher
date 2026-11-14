@@ -152,6 +152,10 @@ dependencies {
     testImplementation(project(":core:testing"))
     testImplementation(libs.junit4)
     testImplementation(libs.coroutines.test)
+    // A4′ phase 3a: the bridge's payload guard drives the real transport over a MockEngine and reads
+    // the JSON it sent. Test-only.
+    testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.serialization.json)
 
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
@@ -341,6 +345,12 @@ tasks.withType<Test>().configureEach {
         .withPropertyName("doctrineMatrix")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 
+    // Context hygiene, 2026-11-11. `ClaudeMdSizeGuardTest` reads the size of `CLAUDE.md` - the same
+    // silent-skip trap as the matrix above (an undeclared input is served FROM-CACHE after an edit).
+    inputs.file(rootProject.file("CLAUDE.md"))
+        .withPropertyName("claudeMd")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
     // A1' device-acceptance defect, 2026-09-10. `DeviceDatabaseReadGuardTest` scans the fenced code
     // blocks of every checklist under `docs/superpowers/plans` - same silent-skip trap as the matrix
     // above, and the same fix. The scan and this declaration are the SAME directory on purpose; a
@@ -504,4 +514,18 @@ tasks.withType<Test>().configureEach {
     inputs.file(rootProject.file("app/build.gradle.kts"))
         .withPropertyName("i18nGuardAppBuildGradleKts")
         .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
+// A4′ phase 3a (plan §0.2 B-7, probed in §0.3): the transport measurement is PAID and NETWORKED, so it
+// never runs in a gate. Every Test task of :app excludes it unless the run names the property, which
+// tools/gate.sh never does and tools/measure-bridge-transport.sh does. Excluded = not executed and not
+// counted, so the gate's floor and its per-module counts are untouched.
+tasks.withType<Test>().configureEach {
+    if (!providers.gradleProperty("sidr.measureBridgeTransport").isPresent) {
+        filter { excludeTestsMatching("*.BridgeTransportMeasurement") }
+    } else {
+        systemProperty("sidr.measureModels", providers.gradleProperty("sidr.measureModels").getOrElse(""))
+        systemProperty("sidr.measureDryRun", providers.gradleProperty("sidr.measureDryRun").isPresent.toString())
+        testLogging.showStandardStreams = true
+    }
 }

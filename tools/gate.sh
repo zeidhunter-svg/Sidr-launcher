@@ -16,9 +16,9 @@
 #   boundary (default) — the run that closes a task, and takes NO task list of its own (it is the
 #                        full gate by definition — see the two refusals below). Clears every module's
 #                        results, passes `--rerun-tasks`, and REQUIRES the total to reach the
-#                        baseline floor (`BASELINE_TESTS` below — 1463 since A4′ phase 0; it was
-#                        1440 before) before it will say `GATE GREEN`; short of the floor, or any
-#                        failure/error, it says `GATE RED`.
+#                        baseline floor (`BASELINE_TESTS` below — 1673 since A4′ phase 3a, 1560 after
+#                        phase 2, 1485 after phase 1, 1463 after phase 0, 1440 before) before it will
+#                        say `GATE GREEN`; short of the floor, or any failure/error, it says `GATE RED`.
 #   --scoped           — a run inside a task: a TDD step or a mutation. Keeps its OWN task list
 #                        untouched (boundary's default list is assigned only in boundary mode — fix
 #                        round 2 below). Clears, COUNTS and reports the named modules only, passes
@@ -192,7 +192,7 @@ from xml.etree import ElementTree as ET
 
 root, mode = sys.argv[1], sys.argv[2]
 named = list(dict.fromkeys(sys.argv[3:]))
-BASELINE_TESTS = 1463  # after A4′ phase 0 (1440 before it); a boundary total below this is RED
+BASELINE_TESTS = 1673  # after A4′ phase 3a (1560 after phase 2, 1485 after phase 1, 1463 after phase 0, 1440 before it); a boundary total below this is RED
 per_module, failed = {}, []
 for path in glob.glob(os.path.join(root, "**", "build", "test-results", "**", "*.xml"),
                       recursive=True):
@@ -233,7 +233,7 @@ for line in failed:
 # one module's count with a whole-tree number — a table describing five absent modules.
 below_baseline = False
 if mode == "boundary":
-    print(f"BASELINE after A4′ phase 0: tests={BASELINE_TESTS} failures=0 errors=0")
+    print(f"BASELINE after A4′ phase 3a: tests={BASELINE_TESTS} failures=0 errors=0")
     # Task 1 review finding (Important): a partial run — a module whose test task silently stopped
     # producing XML, as well as the forgotten-`--scoped` case fix 1 above refuses outright — must not
     # read as GATE GREEN just because failures=0 and errors=0. Reproduced: with only :app's 60 tests

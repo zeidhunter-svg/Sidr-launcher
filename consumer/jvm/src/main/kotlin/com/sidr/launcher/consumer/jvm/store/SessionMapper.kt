@@ -164,7 +164,7 @@ internal object SessionMapper {
         is TraceEvent.StepStarted -> TraceDto("StepStarted", index = event.index)
         is TraceEvent.StepSkipped -> TraceDto("StepSkipped", index = event.index, precondition = preconditionDto(event.precondition))
         is TraceEvent.StepRejected -> TraceDto("StepRejected", index = event.index, reason = event.reason.name)
-        is TraceEvent.ConsentRequested -> TraceDto("ConsentRequested", index = event.index, reason = event.reason.name)
+        is TraceEvent.ConsentRequested -> TraceDto("ConsentRequested", index = event.index, reasons = ConsentReason.entries.filter { it in event.reasons }.map { it.name })
         is TraceEvent.ConsentResolved -> TraceDto("ConsentResolved", index = event.index, granted = event.granted)
         is TraceEvent.ToolInvoked -> TraceDto("ToolInvoked", index = event.index, toolId = event.toolId.value)
         is TraceEvent.ToolObserved -> TraceDto("ToolObserved", index = event.index, result = resultDto(event.result))
@@ -186,7 +186,12 @@ internal object SessionMapper {
         )
         "ConsentRequested" -> TraceEvent.ConsentRequested(
             require(dto.index, "ConsentRequested.index"),
-            enum(ConsentReason.entries, require(dto.reason, "ConsentRequested.reason"), "ConsentReason"),
+            // `reasons` since A4′ phase 2; a file written before carries one `reason`.
+            (dto.reasons ?: listOf(require(dto.reason, "ConsentRequested.reason")))
+                .map { enum(ConsentReason.entries, it, "ConsentReason") }
+                .toSet()
+                .takeIf { it.isNotEmpty() }
+                ?: throw IllegalArgumentException("empty ConsentReason list in the persisted session"),
         )
         "ConsentResolved" -> TraceEvent.ConsentResolved(
             require(dto.index, "ConsentResolved.index"),

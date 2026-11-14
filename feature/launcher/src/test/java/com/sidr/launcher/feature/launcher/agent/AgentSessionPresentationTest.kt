@@ -1,23 +1,32 @@
 package com.sidr.launcher.feature.launcher.agent
 
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.core.ui.primitive.SidrStatus
+import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.feature.launcher.R
+import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.AgentSessionId
+import com.sidr.launcher.domain.agent.ConsentReason
 import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.PlanningRequest
 import com.sidr.launcher.domain.agent.PlanningResult
 import com.sidr.launcher.domain.agent.StepPrecondition
+import com.sidr.launcher.domain.agent.StepRationale
 import com.sidr.launcher.domain.agent.TemplatePlanner
 import com.sidr.launcher.domain.intent.CommandFailure
+import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ObservedFact
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
+import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolLevel
 import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolOutput
@@ -31,7 +40,11 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * **What the plan list is allowed to claim** (review findings F3/F6, 2026-08-23).
@@ -51,9 +64,17 @@ import org.junit.Test
  * — eight since A4′ phase 0, over four markers — are distinguishable at all, which is what `R-ADL-2`
  * needs and what a colour alone cannot give. The word half of that is held over the resources by
  * `StepStateWordDistinctnessGuardTest` (`:app`), because a JVM test cannot call `word()`.
+ *
+ * **One test here renders** (A4′ phase 3b, Task 10): what the consent card says a step will receive from
+ * an earlier one is [PlanStep.line] — `@Composable` — read at its real caller, so the class runs under
+ * Robolectric with a compose rule. Every other test in it stays a pure function over the session.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class AgentSessionPresentationTest {
+
+    @get:Rule val compose = createComposeRule()
 
     private val goal = AgentGoal("открой убер", GoalShape.AppNotInstalled("убер"))
 
@@ -236,9 +257,11 @@ class AgentSessionPresentationTest {
      * The third instance of the same defect, found by this plan's pre-flight and named in no
      * document (P4). `AgentExecutor.perform` advances the cursor BEFORE `ended(...)`, so a dead
      * session pointed its cursor at a step that will never run — and the function answered CURRENT
-     * for it. Wrong at the function, not drawn today: `Failed`/`Blocked` draw no step lines and
-     * `Cancelled` draws nothing, while `Completed` is reached only with the cursor past the last step.
-     * Corrected so that a future surface drawing the list in a terminal state cannot inherit it.
+     * for it. Wrong at the function, not drawn when found: `Failed`/`Blocked` draw no step lines, and
+     * `Completed` is reached only with the cursor past the last step. `Cancelled` before any step acted
+     * draws nothing; `Cancelled` after an act draws its plan list (A4′ phase 3b, Task 12 — N2), and the
+     * refused step at its cursor reads PENDING by this correction. Corrected so that a surface drawing
+     * the list in a terminal state cannot inherit it.
      */
     @Test
     fun `a terminal session has nothing in progress`() = runTest {
@@ -334,7 +357,10 @@ class AgentSessionPresentationTest {
      */
     @Test
     fun `each new tool maps to its own label, not the generic one`() {
-        listOf("set_alarm", "uninstall_app", "set_app_alias", "forget_app_alias", "forget_learned_choice")
+        listOf(
+            "set_alarm", "uninstall_app", "set_app_alias", "forget_app_alias", "forget_learned_choice",
+            "web_search", "open_url",
+        )
             .forEach { id ->
                 assertNotEquals(
                     "a tool without its own label reads as 'Run this step for …' on the gate",
@@ -354,5 +380,68 @@ class AgentSessionPresentationTest {
             R.string.launcher_tool_level_unknown,
             provenanceLabelFor(ToolLevel("mcp"), ToolEffect.EXTERNAL),
         )
+    }
+
+    /**
+     * A4′ phase 3b, Task 10 (fork 3b-B; A0.5's F5): the consent card names the value the gated step WILL
+     * receive — step 1 binds step 0's `resolved_query`, step 0 ran and produced «Lumora», so the card says
+     * «Lumora». Resolved for display through `InvocationValidator.resolve`, the engine's own pure function.
+     * Before, a reference was never read and the line fell back to the goal's text, which names something
+     * else entirely. Fixture values share no substring (R14-43): the goal is Cyrillic, step 0's typed
+     * query «лумора» is Cyrillic too and is NOT the output, so «Lumora» can only reach the card through
+     * step 0's recorded output. The whole consent sentence is compared by equality.
+     */
+    @Test
+    fun `a step awaiting consent shows the value it will receive from an earlier step`() {
+        val goal = AgentGoal("найди это в магазине", GoalShape.Free("найди это в магазине"))
+        val session = AgentSession(
+            id = AgentSessionId("s1"),
+            goal = goal,
+            plan = ExecutionPlan(
+                listOf(
+                    PlanStep(
+                        index = 0,
+                        invocation = ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal("лумора"))),
+                        risk = ActionRiskLevel.SAFE,
+                        precondition = StepPrecondition.None,
+                        rationale = StepRationale.MODEL_PROPOSED,
+                    ),
+                    PlanStep(
+                        index = 1,
+                        invocation = ToolInvocation(
+                            ToolIds.PLAY_STORE_SEARCH,
+                            mapOf("query" to ArgSource.FromStep(stepIndex = 0, key = "resolved_query")),
+                        ),
+                        risk = ActionRiskLevel.CONFIRM,
+                        precondition = StepPrecondition.None,
+                        rationale = StepRationale.MODEL_PROPOSED,
+                    ),
+                ),
+            ),
+            cursor = 1,
+            state = ExecutionState.AwaitingConsent,
+            observations = mapOf(0 to ToolResult.Effected(ToolOutput(mapOf("resolved_query" to "Lumora")))),
+            consents = emptyMap(),
+            trace = ExecutionTrace(listOf(TraceEvent.ConsentRequested(1, setOf(ConsentReason.RISK_LEVEL)))),
+        )
+
+        compose.setContent {
+            SidrTheme {
+                AgentSessionSurface(
+                    session = session,
+                    toolProvenance = emptyMap(),
+                    dynamicLabels = emptyMap(),
+                    confirming = false,
+                    onConfirm = {},
+                    onDeny = {},
+                    onContinue = {},
+                    onDismiss = {},
+                )
+            }
+        }
+        compose.waitForIdle()
+
+        compose.onNodeWithText("Sidr will do this next: Find Lumora in the app store. Nothing runs until you confirm.")
+            .assertExists()
     }
 }

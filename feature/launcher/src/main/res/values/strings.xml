@@ -23,7 +23,9 @@
     <string name="launcher_feedback_no_app_found">No app found for \"%1$s\"</string>
     <string name="launcher_message_showing_all_apps">Showing all apps</string>
     <string name="launcher_message_assistant_soon">Assistant coming soon</string>
-    <string name="launcher_message_verbatim">%1$s</string>
+    <string name="launcher_message_verbatim">The model asks: %1$s</string>
+    <!-- A4′ phase 3b, Task 6: a value a tool's sort could not read, in the words given for it. Class A, not locked. -->
+    <string name="launcher_message_value_not_understood">I didn\'t understand «%1$s».</string>
 
     <!-- Domain-named failures (CommandFailure) -->
     <string name="launcher_failure_generic">Something went wrong. Please try again.</string>
@@ -73,14 +75,6 @@
     <string name="launcher_setup_nudge_body">Set Sidr as your default launcher, then type or search from the field above to open apps.</string>
     <string name="launcher_setup_nudge_action">Set as default</string>
 
-    <!-- AIL-5 router-proposal confirmation (PendingActionArea) -->
-    <string name="launcher_confirm_execute_title">Execute?</string>
-    <!-- The %1$s argument (commandLine) stays English - command grammar echo (spec Sec4), not prose. -->
-    <string name="launcher_confirm_will_run">This will run: %1$s</string>
-    <string name="launcher_confirm_confirm">Confirm</string>
-    <string name="launcher_safe_proposal_description">Safe proposal. It still waits for your tap.</string>
-    <string name="launcher_safe_proposal_run">Run</string>
-
     <!-- I18N-1 Task 13: AppDrawerScreen.kt -->
     <string name="launcher_drawer_title">All apps</string>
     <string name="launcher_drawer_back">Back</string>
@@ -118,6 +112,29 @@
     <string name="launcher_understanding_provider_action">Set up provider</string>
     <string name="launcher_understanding_needs_network">Understanding this command needs a network connection.</string>
 
+    <!-- A4′ phase 3a — the interpretation card (spec §7.12.2/§7.12.3), the visible wait and the six reasons
+         the model gave nothing usable (finding (c) of the A1″ acceptance). Class A, not locked. -->
+    <string name="launcher_interpretation_title">Here is how I understood it</string>
+    <string name="launcher_interpretation_run">Run</string>
+    <string name="launcher_interpretation_model_value">Suggested by the model: %1$s</string>
+    <string name="launcher_interpretation_open_settings">Open Sidr settings</string>
+    <string name="launcher_interpretation_show_apps">Show all apps</string>
+    <string name="launcher_interpretation_choose_app">Which app is \"%1$s\"?</string>
+    <string name="launcher_interpretation_candidate">%1$s (%2$s)</string>
+    <!-- A4′ phase 3b (fork 3b-G): a word form offered as one app, for confirmation. Class A, not locked. -->
+    <string name="launcher_interpretation_did_you_mean">Did you mean «%1$s»?</string>
+    <!-- A4′ phase 3b, Task 10 (fork 3b-B): a value a step takes from an earlier step's output, shown
+         where the value would be while that output does not exist yet; the step number is 1-based.
+         Class A, not locked. -->
+    <string name="launcher_interpretation_from_step">← from step %1$d</string>
+    <string name="launcher_thinking">Working out what you meant…</string>
+    <string name="launcher_model_unavailable_credentials">The AI provider key is missing or was not accepted.</string>
+    <string name="launcher_model_unavailable_request_rejected">The AI provider refused the request. Check the provider settings.</string>
+    <string name="launcher_model_unavailable_provider_failing">The AI provider is busy or failing. Try again later.</string>
+    <string name="launcher_model_unavailable_timed_out">The AI provider did not answer in time.</string>
+    <string name="launcher_model_unavailable_network">Could not reach the AI provider.</string>
+    <string name="launcher_model_unavailable_unreadable">The model\'s answer could not be read.</string>
+
     <!-- Этап 4 / A0 Task 12 — the agent execution surface. Class A (ordinary UI), NOT the
          owner-signed Class B set in strings_locked.xml: the step gate is a risk confirmation, the
          same class as the AIL-5 confirm card, whose copy has always been Class A. Should the owner
@@ -125,7 +142,10 @@
     <string name="launcher_agent_title">Agent</string>
     <string name="launcher_agent_running_title">Working on it</string>
     <string name="launcher_agent_step_launch">Open %1$s</string>
+    <string name="launcher_agent_step_launch_pinned">Open %1$s (%2$s)</string>
     <string name="launcher_agent_step_store">Find %1$s in the app store</string>
+    <string name="launcher_agent_step_web_search">Search the web: %1$s</string>
+    <string name="launcher_agent_step_open_url">Open %1$s in the browser</string>
     <!-- Task 10 / A1': a step names its TOOL, not a launch. `launcher_agent_step_generic` is the
          fail-soft line for a registered tool this surface has no sentence for. -->
     <string name="launcher_agent_step_timer">Set a timer for %1$s</string>
@@ -185,6 +205,7 @@
          (the rest of it), plus what dismissing costs. -->
     <string name="launcher_agent_paused_title">Plan paused</string>
     <string name="launcher_agent_paused_body">You left before this plan finished. Continue and Sidr picks it up where it stopped; dismiss it and nothing further runs.</string>
+    <string name="launcher_agent_paused_body_replan">You left before this plan finished, and things may have changed since. Continue and Sidr looks at the plan afresh; dismiss it and nothing further runs.</string>
     <string name="launcher_agent_paused_continue">Continue</string>
     <string name="launcher_agent_completed_title">Plan complete</string>
     <string name="launcher_agent_completed_partial_title">Plan finished, not every step ran</string>
@@ -203,4 +224,12 @@
     <string name="launcher_agent_failed_title">This plan could not finish</string>
     <string name="launcher_agent_blocked_title">Plan stopped</string>
     <string name="launcher_agent_blocked_body">Sidr stopped this plan because it could no longer follow it safely. Nothing further will run.</string>
+    <string name="launcher_agent_undo">Undo</string>
+    <string name="launcher_agent_undo_not_all">Can’t be undone here: %1$s</string>
+    <!-- A4′ phase 3b, Task 11 (fork 3b-A): a finished Failed/Blocked model-plan card offers the steps after
+         the last act again, on the interpretation card, bound on the device. Class A, not locked. -->
+    <string name="launcher_agent_retry_remainder">Retry the rest</string>
+    <!-- A4′ phase 3b, Task 11 (fork 3b-F): «Continue» the store could not carry out is said, not silent.
+         Class A, not locked. -->
+    <string name="launcher_agent_resume_failed">The plan could not be continued.</string>
 </resources>

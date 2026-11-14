@@ -20,6 +20,7 @@ import com.sidr.launcher.domain.memory.resolution.ResolutionPreferencePolicy
 import com.sidr.launcher.domain.memory.resolution.ResolutionPreferenceStore
 import com.sidr.launcher.domain.memory.resolution.ResolveCommandWithPreferenceUseCase
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
+import com.sidr.launcher.domain.text.TextFolding
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -52,6 +53,11 @@ object MemoryProvidesModule {
     fun provideEvaluateLearnedChoiceDisplayStateUseCase(): EvaluateLearnedChoiceDisplayStateUseCase =
         EvaluateLearnedChoiceDisplayStateUseCase()
 
+    /**
+     * The learned-choice key folds by the device's one [TextFolding] (A4′ phase 3b, Task 7; B-4) — the
+     * binding `BridgeProvidesModule.provideTextFolding` makes once, the same the bridge's binder keys by;
+     * passed on, never the decorator's `PlainTextFolding` default (`TextFoldingBindingGuardTest`).
+     */
     @Provides
     @Singleton
     fun provideResolveCommandWithPreferenceUseCase(
@@ -59,11 +65,13 @@ object MemoryProvidesModule {
         store: ResolutionPreferenceStore,
         policy: ResolutionPreferencePolicy,
         catalog: ActionCatalog,
+        folding: TextFolding,
     ): ResolveCommandWithPreferenceUseCase = ResolveCommandWithPreferenceUseCase(
         route = route,
         store = store,
         policy = policy,
         catalog = catalog,
+        folding = folding,
     )
 
     @Provides

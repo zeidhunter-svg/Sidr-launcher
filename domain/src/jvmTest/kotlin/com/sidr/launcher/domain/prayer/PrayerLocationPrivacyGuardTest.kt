@@ -47,12 +47,14 @@ class PrayerLocationPrivacyGuardTest {
     fun `guard 1 - prayer adds zero outbound context categories, allow-list stays the pre-DS-6B 4-value set`() {
         // If DS-6B had wired prayer location into any outbound category (even a new, seemingly
         // innocuous one), this set would grow past 4 and this assertion would fail closed.
+        // A4′ phase 3a replaced the router's schema category with AUTHORED_TOOL_SCHEMA (ADR 1 of the
+        // phase); the set stays four.
         assertEquals(
             setOf(
                 AllowedContext.USER_COMMAND,
                 AllowedContext.STATIC_SYSTEM_PROMPT,
                 AllowedContext.GENERATION_LIMITS,
-                AllowedContext.ACTION_CATALOG_SCHEMA,
+                AllowedContext.AUTHORED_TOOL_SCHEMA,
             ),
             OutboundContextPolicy.ALLOWED,
         )
@@ -293,8 +295,9 @@ class PrayerLocationPrivacyGuardTest {
             "PromptContextBuilder",
             "GenerativeAiEngine",
             "GenerateReplyUseCase",
-            "CommandPlanner",
-            "CatalogSchemaRenderer",
+            "ModelPlanner",
+            "BridgeRendering",
+            "BridgeTransport",
             "com.sidr.launcher.domain.ai",
         )
 

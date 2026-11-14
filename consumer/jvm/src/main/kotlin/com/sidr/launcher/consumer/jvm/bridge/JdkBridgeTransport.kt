@@ -67,7 +67,9 @@ class JdkHttpSender(private val timeoutMs: Long) : BridgeHttpSender {
             .header("Accept", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .build()
-        // `await` cancels the request's future when the coroutine is cancelled — the user's «no» is honoured.
+        // On cancellation `await` stops waiting at once and calls `future.cancel(false)` on the request's future:
+        // the caller is released, but the JDK client is not asked to abort the exchange, which may keep running
+        // in the background until [timeoutMs] ends it. Cancelling stops the wait, not necessarily the request.
         val response = client.sendAsync(request, HttpResponse.BodyHandlers.ofString()).await()
         return response.statusCode() to response.body()
     }

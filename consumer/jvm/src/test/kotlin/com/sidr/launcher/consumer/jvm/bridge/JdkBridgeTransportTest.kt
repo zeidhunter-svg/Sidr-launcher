@@ -11,6 +11,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 /**
@@ -50,11 +51,14 @@ class JdkBridgeTransportTest {
     /**
      * Fork 3b-B, B-13: the golden reply, read field for field into exactly the value
      * `OpenAiCompatibleBridgeTransportTest > steps and a reference object are read` asserts — one golden,
-     * two parsers.
+     * two parsers. And the one request it answers, held whole (fix round 1, review m1): the body is exactly
+     * the `PROMPT_ONLY` form of the [BridgeRequest]'s parts — the request carries a reasoning cap, and the body
+     * has none, because the host is not OpenRouter (B-16) — and the key reached the sender's key argument
+     * only, never the body or the URL.
      */
     @Test
     fun `a prompt-only answer with steps and a reference is read`() = runTest {
-        val reply = transport(sender(completion(GOLDEN_STEPS_WITH_REFERENCE))).ask(request)
+        val reply = transport(sender(completion(GOLDEN_STEPS_WITH_REFERENCE))).ask(request.copy(reasoningMaxTokens = 256))
 
         assertEquals(
             TransportReply.Answer(
@@ -71,7 +75,32 @@ class JdkBridgeTransportTest {
             ),
             reply,
         )
-        assertEquals(listOf("https://api.example.com/v1/chat/completions"), sent.map { it.first })
+        val (url, body, key) = sent.single()
+        assertEquals("https://api.example.com/v1/chat/completions", url)
+        assertEquals(
+            Json.parseToJsonElement(
+                """{"model":"fixture-model","messages":[{"role":"system","content":"FIXTURE-SYSTEM-TEXT"},""" +
+                    """{"role":"user","content":"find orvelle.txt"}],"max_tokens":512,"stream":false}""",
+            ),
+            Json.parseToJsonElement(body),
+        )
+        assertEquals("sk-SNTL-KEY", key)
+        assertFalse("the key is not in the body", body.contains("sk-SNTL-KEY"))
+        assertFalse("the key is not in the url", url.contains("sk-SNTL-KEY"))
+    }
+
+    /**
+     * Fix round 1 (review m2): production's sender refuses plain HTTP on its own, before anything is built or
+     * sent — the property does not rest on [JdkBridgeTransport]'s check alone. The URL is loopback on a port
+     * nothing serves, so even a sender that lost its refusal could reach no provider.
+     */
+    @Test
+    fun `the production sender refuses a non-https url before any request`() = runTest {
+        val refused = runCatching { JdkHttpSender(timeoutMs = 1_000L).send("http://127.0.0.1:1/v1/chat/completions", "{}", "sk-SNTL-KEY") }
+            .exceptionOrNull()
+
+        assertEquals(IllegalArgumentException::class, refused?.let { it::class })
+        assertEquals("refused before sending: the bridge sends over https only", refused?.message)
     }
 
     @Test

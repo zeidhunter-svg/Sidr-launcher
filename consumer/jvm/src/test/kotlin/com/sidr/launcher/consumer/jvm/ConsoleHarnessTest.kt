@@ -133,6 +133,53 @@ class ConsoleHarnessTest {
     }
 
     /**
+     * Task 13 fix round 1 (review I1): «nothing runs before a `y` to the card». The refused reading is one that
+     * WOULD act with no further question — `rename_file` is `SAFE`, so the engine's consent gate would not stop
+     * it — so an «n» the harness ignored would show up as a renamed file, a started session and a different
+     * state. The card is asserted printed first (the file named in words is bound on this computer, through
+     * the file sort), so the refusal is the card's and not an earlier stop.
+     */
+    @Test
+    fun `a refused card starts nothing`() = runTest {
+        val orvelle = temp.newFile("orvelle.txt").toPath().toRealPath()
+        orvelle.toFile().writeText("SNTL-UNTOUCHED-ORVELLE")
+        val before = tree()
+        val transport = ScriptedTransport(
+            TransportReply.Answer(
+                RawAnswer(
+                    kind = "plan",
+                    steps = listOf(
+                        RawStep("rename_file", mapOf("name" to null, "new_name" to RawArg.Text("quembly.txt"), "path" to RawArg.Text("orvelle.txt"))),
+                    ),
+                    question = null,
+                    destination = null,
+                ),
+                ReplyMeta.NONE,
+            ),
+        )
+
+        val state = harness(mutableListOf("n"), transport).run("ask rename orvelle.txt to quembly.txt")
+
+        val card = listOf(
+            "The model's reading of \"rename orvelle.txt to quembly.txt\":",
+            "  0. rename_file(path=$orvelle [device], new_name=quembly.txt [user]) — risk SAFE",
+            "Run this plan? [y/N]",
+        )
+        val at = printed.indexOf(card.first())
+        assertTrue("the card is printed:\n${printed.joinToString("\n")}", at >= 0)
+        assertEquals(card, printed.subList(at, minOf(printed.size, at + card.size)))
+        assertEquals(ExecutionState.Cancelled, state)
+        assertEquals("the model is asked once", 1, transport.requests.size)
+        assertEquals("no session is started", emptyList<String>(), printed.filter { it.startsWith("  PlanCreated") })
+        assertEquals(before, tree())
+        assertEquals(
+            "the store holds no session",
+            OperationResult.Success(null),
+            JvmAgentSessionStore(temp.root.toPath().resolve(".sidr-agent/session.json")).active(),
+        )
+    }
+
+    /**
      * Review Focus 2: «find orvelle.txt, then delete it», and the find finds nothing. The plan validates and
      * STARTS (it is a well-formed plan; nothing is known about the sandbox before it runs), the user even says
      * `y` at the gate — and nothing is deleted: the delete's reference has no value, the step is rejected, and

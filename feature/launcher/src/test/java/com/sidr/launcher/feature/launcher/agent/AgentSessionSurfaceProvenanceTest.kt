@@ -52,10 +52,21 @@ import org.robolectric.annotation.Config
  *
  * **Where the line is and is not visible.** [AgentSessionSurface] draws the plan list in `Running`,
  * `Paused` and `Completed`, and the consent card in `AwaitingConsent`; those four states are covered
- * below. `Planning` has no plan yet, and `Failed` / `Blocked` / `Cancelled` draw no steps at all —
- * pre-existing surface design this task does not change. In particular the plan list is still not
- * drawn under `AwaitingConsent` (a named A0 limitation in `CLAUDE.md`), which is why the consent card
- * carries its own provenance line for the one step it is asking about rather than relying on the list.
+ * below. `Planning` has no plan yet, and `Failed` / `Blocked` draw no steps at all — pre-existing
+ * surface design this task did not change. `Cancelled` before any step acted draws nothing; `Cancelled`
+ * after an act draws its plan list (A4′ phase 3b, Task 12 — phase 2's N2). In particular the plan list
+ * is still not drawn under `AwaitingConsent` (a named A0 limitation in `CLAUDE.md`), which is why the
+ * consent card carries its own provenance line for the one step it is asking about rather than relying
+ * on the list.
+ *
+ * **Named gap (A4′ phase 3b, Task 12 review M2): the `Cancelled`-after-an-act card's provenance is not
+ * covered.** That card draws the plan list through the same `AgentPlanSteps` — each step's provenance
+ * line, the refused step's included — and `AgentProvenance`. No test renders either provenance line on
+ * it: `AgentSessionSurfaceUndoTest`'s N2 test asserts its step lines, not their provenance, and passes
+ * no `toolProvenance`. So that arm passing no provenance, or dropping its `AgentProvenance`, would stay
+ * green. Reachable on Android today whenever a step acted before a refused one — Task 12's report names
+ * a multi-step model plan `launch_app` then a refused `uninstall_app`, both `EXTERNAL`. No test is added
+ * for it in that review round.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])

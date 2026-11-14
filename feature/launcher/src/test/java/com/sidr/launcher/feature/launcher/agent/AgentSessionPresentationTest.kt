@@ -257,9 +257,11 @@ class AgentSessionPresentationTest {
      * The third instance of the same defect, found by this plan's pre-flight and named in no
      * document (P4). `AgentExecutor.perform` advances the cursor BEFORE `ended(...)`, so a dead
      * session pointed its cursor at a step that will never run — and the function answered CURRENT
-     * for it. Wrong at the function, not drawn today: `Failed`/`Blocked` draw no step lines and
-     * `Cancelled` draws nothing, while `Completed` is reached only with the cursor past the last step.
-     * Corrected so that a future surface drawing the list in a terminal state cannot inherit it.
+     * for it. Wrong at the function, not drawn when found: `Failed`/`Blocked` draw no step lines, and
+     * `Completed` is reached only with the cursor past the last step. `Cancelled` before any step acted
+     * draws nothing; `Cancelled` after an act draws its plan list (A4′ phase 3b, Task 12 — N2), and the
+     * refused step at its cursor reads PENDING by this correction. Corrected so that a surface drawing
+     * the list in a terminal state cannot inherit it.
      */
     @Test
     fun `a terminal session has nothing in progress`() = runTest {

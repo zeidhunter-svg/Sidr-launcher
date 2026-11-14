@@ -20,8 +20,11 @@ import com.sidr.launcher.domain.agent.StepRationale
 import com.sidr.launcher.domain.agent.StepUndo
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.tool.ArgSource
+import com.sidr.launcher.domain.tool.ObservedFact
 import com.sidr.launcher.domain.tool.ToolId
+import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
+import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.tool.Undo
 import com.sidr.launcher.domain.trace.ExecutionTrace
@@ -154,23 +157,34 @@ class AgentSessionSurfaceUndoTest {
 
     /**
      * N2, answered «partial» (plan §0.2 B-11, `DOC-ILM-4`; the owner may overturn). The user refused the
-     * uninstall at its consent card AFTER the alias step had acted: the session ends `Cancelled`, and the
-     * card no longer vanishes. It is a finished card — titled «Plan stopped» (controller ruling R12-1: the
-     * `Blocked` title, WITHOUT the `Blocked` body, which says Sidr stopped it — here the user did), the
-     * step lines saying what acted and what never ran, and «Undo» wired to what can be undone.
+     * uninstall — step 1, a `CONFIRM` step — at its consent card AFTER the alias step 0 had acted: the
+     * session ends `Cancelled`, and the card no longer vanishes. It is a finished card — titled «Plan
+     * stopped» (controller ruling R12-1: the `Blocked` title, WITHOUT the `Blocked` body, which says Sidr
+     * stopped it — here the user did), the step lines saying what acted and what never ran, «Dismiss», and
+     * «Undo» wired to what can be undone.
      *
-     * The control comes first, on the same screen: the same plan refused before anything acted still
-     * draws nothing — the ordinary command surface is what to look at then. The goal's words share nothing
-     * with any expected line, so a line that fell back to the goal cannot satisfy an assertion here.
+     * The control comes first, on the same screen, and is the shape a user really reaches (A0's own plan,
+     * review fix M3): step 0 `launch_app` only LOOKED (`Observed`, «no such app») and the user refused step
+     * 1, the `CONFIRM` store search, at its consent card. A look is not an act, so that `Cancelled` session
+     * draws nothing at all — neither the title nor the card's «Dismiss»; the ordinary command surface is
+     * what to look at then. The treatment asserts «Dismiss» IS drawn on its card, so the control's absence
+     * is of a label the card really carries. Every asserted string is matched whole (exact text, never a
+     * substring), and none contains either goal's text or the control's query, so a line that fell back to
+     * the goal cannot satisfy one.
      */
     @Test
     fun `a plan cancelled after a step acted shows what acted and offers undo`() {
+        val lookThenStore = listOf(
+            PlanStep(0, ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal("ностра"))), ActionRiskLevel.SAFE, StepPrecondition.None, StepRationale.GOAL_DIRECT),
+            PlanStep(1, ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.FromStep(0, "resolved_query"))), ActionRiskLevel.CONFIRM, StepPrecondition.PreviousStepObserved(ObservedFact.APP_NOT_INSTALLED), StepRationale.APP_NOT_INSTALLED_FALLBACK),
+        )
+        val looked = ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED, ToolOutput(mapOf("resolved_query" to "ностра")))
+        val refusedAfterLooking = session(ExecutionState.Cancelled, lookThenStore, mapOf(0 to looked))
+            .copy(goal = AgentGoal("открой ностра", GoalShape.AppNotInstalled("ностра")), cursor = 1, consents = mapOf(1 to false))
         val steps = listOf(aliasStep(0), uninstallStep(1))
-        val refusedBeforeActing = session(ExecutionState.Cancelled, steps, emptyMap(), goalText = "дай имя и сотри")
-            .copy(cursor = 0, consents = mapOf(0 to false))
         val refusedAfterActing = session(ExecutionState.Cancelled, steps, mapOf(0 to ToolResult.Effected()), goalText = "дай имя и сотри")
             .copy(cursor = 1, consents = mapOf(1 to false))
-        var shown by mutableStateOf(refusedBeforeActing)
+        var shown by mutableStateOf(refusedAfterLooking)
         var review by mutableStateOf(emptyList<StepUndo>())
         var undone = false
         compose.setContent {
@@ -192,12 +206,14 @@ class AgentSessionSurfaceUndoTest {
         compose.waitForIdle()
 
         compose.onNodeWithText("Plan stopped").assertDoesNotExist()
+        compose.onNodeWithText("Dismiss").assertDoesNotExist()
 
         shown = refusedAfterActing
         review = listOf(StepUndo(0, byUndo))
         compose.waitForIdle()
 
         compose.onNodeWithText("Plan stopped").assertExists()
+        compose.onNodeWithText("Dismiss").assertExists()
         compose.onNodeWithText("Sidr stopped this plan because it could no longer follow it safely. Nothing further will run.").assertDoesNotExist()
         compose.onNodeWithText("Call “Lumora” “вельтрикс” — done").assertExists()
         compose.onNodeWithText("Remove Orvelle (net.fixture.orvelle) — not started").assertExists()

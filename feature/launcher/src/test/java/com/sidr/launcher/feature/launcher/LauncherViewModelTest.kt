@@ -127,11 +127,18 @@ import com.sidr.launcher.domain.prayer.PrayerName
 import com.sidr.launcher.domain.prayer.PrayerSetup
 import com.sidr.launcher.domain.prayer.UnavailableReason
 import com.sidr.launcher.domain.result.OperationError
+import com.sidr.launcher.domain.action.ActionArg
+import com.sidr.launcher.domain.agent.StepUndo
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ObservedFact
+import com.sidr.launcher.domain.tool.ToolDescriptor
+import com.sidr.launcher.domain.tool.ToolDurability
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
+import com.sidr.launcher.domain.tool.ToolInverses
 import com.sidr.launcher.domain.tool.ToolInvocation
+import com.sidr.launcher.domain.tool.ToolLevels
+import com.sidr.launcher.domain.tool.Undo
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolRegistry
@@ -141,6 +148,7 @@ import com.sidr.launcher.domain.trace.ExecutionTrace
 import com.sidr.launcher.domain.trace.TraceEvent
 import com.sidr.launcher.feature.launcher.agent.DynamicToolLabels
 import com.sidr.launcher.feature.launcher.agent.StepProvenance
+import com.sidr.launcher.feature.launcher.agent.anyStepActed
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -308,6 +316,9 @@ class LauncherViewModelTest {
         route: CommandRouteStep = CommandRouteStep { routeUseCase.route(it) },
         // A4′ phase 3b, Task 11 fix round 1: the binder a remainder card is bound by, for a test that reads it.
         mentionBinder: FakeMentionBinder = FakeMentionBinder(),
+        // A4′ phase 3b, Task 12 review fix: how «Отменить» undoes a step, for the one test that reads the
+        // undo review. Defaulted to `undoOver`'s own default, so every other caller is byte-for-byte unchanged.
+        undoInverses: ToolInverses = noInverses,
     ) = LauncherViewModel(
         installedAppsRepository = fakeRepo,
         resolveCommand = aliasAwareResolveCommand(
@@ -330,7 +341,7 @@ class LauncherViewModelTest {
         resolveAgentConsent = ResolveConsentUseCase(fakeAgentStore, runAgent),
         cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
         resumeAgentSession = resumeOver(fakeAgentStore, runAgent, agentRegistry),
-        undoAgentSession = undoOver(fakeAgentStore, agentRegistry),
+        undoAgentSession = undoOver(fakeAgentStore, agentRegistry, undoInverses),
         agentSessionStore = fakeAgentStore,
         startAgentSession = startAgentSession,
         mentionBinder = mentionBinder,
@@ -2322,12 +2333,15 @@ class LauncherViewModelTest {
 
     /**
      * What the screen actually draws: `AgentSessionSurface` returns before rendering anything when
-     * the state has no title, and `Cancelled` is exactly that state. So "no surface" is two shapes,
-     * not one — a null session (dismiss) and a `Cancelled` one (a refused consent).
+     * the session has no title, and that is exactly one shape — `Cancelled` before any step acted
+     * (`title()`, which reads the same [anyStepActed] this helper reads). So "no surface" is two shapes,
+     * not one — a null session (dismiss) and a session cancelled before any step acted (a refused
+     * consent after, at most, a look). A `Cancelled` session in which a step acted draws its finished
+     * card (A4′ phase 3b, Task 12 — phase 2's N2), so it counts as visible here, as on the screen.
      */
     private fun LauncherViewModel.agentSurfaceVisible(): Boolean {
         val session = agentSessionState.value ?: return false
-        return session.state != ExecutionState.Cancelled
+        return session.state != ExecutionState.Cancelled || session.anyStepActed()
     }
 
     @Test
@@ -2379,8 +2393,11 @@ class LauncherViewModelTest {
 
     /**
      * The second way out, and the one the owner reached through «Отмена». A refused consent ends the
-     * session `Cancelled`, which `AgentSessionSurface` renders as nothing at all — so the surface
-     * leaves the screen down this path too, and the launcher owes the user the same return home.
+     * session `Cancelled`; here it is refused before any step acted (step 0 only looked — `Observed`,
+     * «no such app»), and a plan cancelled before any step acted is what `AgentSessionSurface` renders
+     * as nothing at all — so the surface leaves the screen down this path too, and the launcher owes the
+     * user the same return home. A refusal AFTER a step acted keeps its stopped card instead (A4′ phase
+     * 3b, Task 12 — `refusing a step after an earlier one acted keeps the stopped card with its undo`).
      */
     @Test
     fun `refusing consent returns the launcher to its resting home state`() = runTest(testDispatcher) {
@@ -2407,12 +2424,129 @@ class LauncherViewModelTest {
         vm.denyAgentStep(stepIndex = 1)
         advanceUntilIdle()
 
-        assertFalse("a refused plan draws no surface", vm.agentSurfaceVisible())
+        assertFalse("a plan refused before any step acted draws no surface", vm.agentSurfaceVisible())
         assertEquals("the command buffer is cleared", "", vm.commandInput.value)
         assertFalse(
             "the home body must be drawn again after «Отмена» too",
             vm.inputResults.value.active,
         )
+    }
+
+    /**
+     * A4′ phase 3b, Task 12 review fix I1 — phase 2's N2 on the launcher's deny path, through the real
+     * collaborators: a submitted command starts a two-step plan, the real `LauncherAgentSession` attaches
+     * and runs it through the real engine, step 0 (a `SAFE`, undoable `launcher_memory` alias) acts, and
+     * step 1 (a `CONFIRM` uninstall) stops at its consent card. «Отмена» there is
+     * [LauncherViewModel.denyAgentStep]. The stopped card must stay on screen — the session `Cancelled`, not dropped — with
+     * «Отменить»'s review holding the alias's inverse, while the buffer is cleared as on every refusal.
+     *
+     * The plan is built by this test's route, not by a planner: no Android planner produces an undoable
+     * step inside a multi-step plan today (`DOC-HMA-3`'s narrowed remainder, controller ruling R12-2). So
+     * this holds what the launcher does on that shape, not that a user can reach it. `memory tool` ids are
+     * literals for the reason `AgentSessionSurfaceUndoTest` gives.
+     */
+    @Test
+    fun `refusing a step after an earlier one acted keeps the stopped card with its undo`() = runTest(testDispatcher) {
+        val setAlias = ToolId("set_app_alias")
+        val forgetAlias = ToolId("forget_app_alias")
+        val uninstall = ToolId("uninstall_app")
+        val registry = FakeToolRegistry(
+            listOf(
+                ToolDescriptor(
+                    id = setAlias,
+                    level = ToolLevels.LAUNCHER_MEMORY,
+                    effect = ToolEffect.LOCAL,
+                    argSchema = listOf("app", "app_label", "phrase").map { ActionArg(it, description = "fixture") },
+                    risk = ActionRiskLevel.SAFE,
+                    durability = ToolDurability.TRANSIENT,
+                ),
+                ToolDescriptor(
+                    id = forgetAlias,
+                    level = ToolLevels.LAUNCHER_MEMORY,
+                    effect = ToolEffect.LOCAL,
+                    argSchema = listOf(ActionArg("phrase", description = "fixture")),
+                    risk = ActionRiskLevel.SAFE,
+                    durability = ToolDurability.TRANSIENT,
+                ),
+                ToolDescriptor(
+                    id = uninstall,
+                    level = ToolLevels.SYSTEM_INTENT,
+                    effect = ToolEffect.EXTERNAL,
+                    argSchema = listOf("app", "app_label").map { ActionArg(it, description = "fixture") },
+                    risk = ActionRiskLevel.CONFIRM,
+                    durability = ToolDurability.DURABLE,
+                ),
+            ),
+        )
+        val inverses = ToolInverses { forward, _ ->
+            if (forward.id == setAlias) {
+                Undo.By(ToolInvocation(forgetAlias, mapOf("phrase" to ArgSource.Literal(forward.args.getValue("phrase")))))
+            } else {
+                Undo.NotUndoable
+            }
+        }
+        val goal = AgentGoal("назови лумору вельтрикс и сотри орвелле", GoalShape.Free("назови лумору вельтрикс и сотри орвелле"))
+        val plan = ExecutionPlan(
+            listOf(
+                PlanStep(
+                    index = 0,
+                    invocation = ToolInvocation(
+                        setAlias,
+                        mapOf(
+                            "app" to ArgSource.Literal("net.fixture.quill"),
+                            "app_label" to ArgSource.Literal("Lumora"),
+                            "phrase" to ArgSource.Literal("вельтрикс"),
+                        ),
+                    ),
+                    risk = ActionRiskLevel.SAFE,
+                    precondition = StepPrecondition.None,
+                    rationale = StepRationale.GOAL_DIRECT,
+                ),
+                PlanStep(
+                    index = 1,
+                    invocation = ToolInvocation(
+                        uninstall,
+                        mapOf("app" to ArgSource.Literal("net.fixture.orvelle"), "app_label" to ArgSource.Literal("Orvelle")),
+                    ),
+                    risk = ActionRiskLevel.CONFIRM,
+                    precondition = StepPrecondition.None,
+                    rationale = StepRationale.GOAL_DIRECT,
+                ),
+            ),
+        )
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
+        val start = StartAgentSessionUseCase(TemplatePlanner(), fakeAgentStore, agentIds, registry)
+        val vm = buildViewModel(
+            runAgent = RunAgentSessionUseCase(AgentExecutor(registry, tools, RuntimeBudget.Default), fakeAgentStore),
+            route = CommandRouteStep {
+                val started = (start.startPlanned(goal, plan) as OperationResult.Success).value
+                CommandOutcome.AgentSessionStarted(requireNotNull(started) { "the fixture plan must validate" }.id)
+            },
+            undoInverses = inverses,
+        )
+        vm.submitAgentCommand(goal.text)
+        advanceUntilIdle()
+
+        val awaiting = vm.agentSessionState.value
+        assertEquals("the fixture must stop at step 1's consent card", ExecutionState.AwaitingConsent, awaiting?.state)
+        assertEquals("the consent card stands at step 1", 1, awaiting!!.cursor)
+        assertTrue("step 0 acted before the refusal, or this is the control's shape", awaiting.observations[0] is ToolResult.Effected)
+        assertTrue("the typed command stands until the refusal", vm.commandInput.value.isNotEmpty())
+
+        vm.denyAgentStep(stepIndex = 1)
+        advanceUntilIdle()
+
+        val stopped = vm.agentSessionState.value
+        assertNotNull("the stopped card's session stays on screen", stopped)
+        assertEquals(ExecutionState.Cancelled, stopped!!.state)
+        assertTrue("the screen draws it", vm.agentSurfaceVisible())
+        assertEquals(
+            "«Отменить» on the stopped card undoes the alias step 0 set",
+            listOf(StepUndo(0, Undo.By(ToolInvocation(forgetAlias, mapOf("phrase" to ArgSource.Literal("вельтрикс")))))),
+            vm.agentUndoReview.value,
+        )
+        assertEquals("the command buffer is cleared", "", vm.commandInput.value)
+        assertEquals("the refused uninstall never ran", listOf(setAlias), tools.invocations.map { it.id })
     }
 
     /** A one-step store search the MODEL proposed, stopped at its consent card, the process killed. */

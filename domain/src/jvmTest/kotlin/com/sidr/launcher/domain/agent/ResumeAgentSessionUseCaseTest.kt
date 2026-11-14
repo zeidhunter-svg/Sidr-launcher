@@ -377,6 +377,41 @@ class ResumeAgentSessionUseCaseTest {
     }
 
     /**
+     * Fix round 1, controller ruling E11-R1 (owner fork F2-1b): the clock stopped the plan on its first
+     * launch, so that call may still be acting — `Blocked` with `HandedOff` at the step before the cursor.
+     * «Повторить остаток» would start a world call beside it, so it is withheld on exactly the evidence that
+     * withholds «Отменить» (`UndoAgentSessionUseCase.review`). The control: the same plan and observations,
+     * ended `Failed` rather than cut, do have their rest.
+     */
+    @Test
+    fun `a cut call's plan offers no remainder`() {
+        val cut = ToolResult.HandedOff()
+        val blocked = AgentSession(
+            id = AgentSessionId("m-cut"),
+            goal = readingGoal,
+            plan = ExecutionPlan(listOf(modelLaunch(0, "net.fixture.lumora", "lumora"), modelLaunch(1, "net.fixture.tessar.two", "tessar"))),
+            cursor = 1,
+            state = ExecutionState.Blocked,
+            observations = mapOf(0 to cut),
+            consents = emptyMap(),
+            trace = ExecutionTrace(
+                listOf(
+                    TraceEvent.PlanCreated(2), TraceEvent.StepStarted(0), TraceEvent.ToolInvoked(0, ToolIds.LAUNCH_APP),
+                    TraceEvent.ToolObserved(0, cut), TraceEvent.SessionEnded(ExecutionState.Blocked),
+                ),
+            ),
+        )
+        val resume = resume(FakeToolExecutor(emptyList()))
+
+        assertEquals(
+            "the control: not cut, the rest is offered",
+            ExecutionPlan(listOf(modelLaunch(0, "net.fixture.tessar.two", "tessar"))),
+            resume.remainder(blocked.copy(state = ExecutionState.Failed)),
+        )
+        assertEquals("cut: no remainder, on the undo's evidence", null, resume.remainder(blocked))
+    }
+
+    /**
      * `DOC-HMA-1`, unchanged by the remainder: the second launch's call was in flight when the process
      * died, so it may have acted. It is resumed once from the cursor — never handed back for a card, which
      * would offer to perform it a second time.
@@ -396,6 +431,56 @@ class ResumeAgentSessionUseCaseTest {
         assertEquals(ExecutionState.Completed, after?.state)
         assertEquals(listOf(mapOf("app" to "net.fixture.tessar.two", "query" to "tessar")), tools.invocations.map { it.args })
         assertEquals(1, after?.trace?.events?.count { it is TraceEvent.ToolInvoked && it.index == 1 })
+        assertEquals(0, planner.calls)
+    }
+
+    /**
+     * Fix round 1, controller ruling E11-R3 (owner decision M1(b), B-10): the first launch acted but recorded
+     * no `resolved_query`, and the store search after it takes exactly that value. Its remainder cannot be
+     * written honestly, so the stale session ends `Failed` — it is NOT continued from the cursor, where the
+     * `CONFIRM` step would put up a consent card for a step that cannot run. Nothing is performed, the trace
+     * ends `SessionEnded(Failed)` with no `SessionResumed`, and at rest the store is empty.
+     */
+    @Test
+    fun `an acted model plan whose reference has no value ends Failed and nothing runs`() = runTest {
+        val planner = CountingPlanner()
+        val paused = AgentSession(
+            id = AgentSessionId("m-noref"),
+            goal = readingGoal,
+            plan = ExecutionPlan(
+                listOf(
+                    modelLaunch(0, "net.fixture.lumora", "lumora"),
+                    PlanStep(
+                        index = 1,
+                        invocation = ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.FromStep(0, "resolved_query"))),
+                        risk = ActionRiskLevel.CONFIRM,
+                        precondition = StepPrecondition.None,
+                        rationale = StepRationale.MODEL_PROPOSED,
+                    ),
+                ),
+            ),
+            cursor = 1,
+            state = ExecutionState.Paused,
+            observations = mapOf(0 to ToolResult.Effected(ToolOutput())),
+            consents = emptyMap(),
+            trace = ExecutionTrace(
+                listOf(
+                    TraceEvent.PlanCreated(2), TraceEvent.StepStarted(0), TraceEvent.ToolInvoked(0, ToolIds.LAUNCH_APP),
+                    TraceEvent.ToolObserved(0, ToolResult.Effected(ToolOutput())), TraceEvent.SessionPaused,
+                ),
+            ),
+        ).also { store.save(it) }
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
+
+        val result = resume(tools, planner).resume(paused)
+
+        val after = ((result as OperationResult.Success).value as? Resumption.Ran)?.session
+        assertEquals("the stale session ends Failed", ExecutionState.Failed, after?.state)
+        assertEquals(AgentSessionId("m-noref"), after?.id)
+        assertEquals("nothing runs", emptyList<Any>(), tools.invocations)
+        assertEquals(TraceEvent.SessionEnded(ExecutionState.Failed), after?.trace?.events?.last())
+        assertTrue("not continued", after?.trace?.events?.contains(TraceEvent.SessionResumed) == false)
+        assertEquals("at rest the store is empty", null, store.activeOrNull)
         assertEquals(0, planner.calls)
     }
 }

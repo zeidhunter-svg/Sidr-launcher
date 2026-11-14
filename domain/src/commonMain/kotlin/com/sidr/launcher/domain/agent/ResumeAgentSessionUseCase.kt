@@ -125,8 +125,10 @@ class ResumeAgentSessionUseCase(
      * «Повторить остаток» on a finished `Failed`/`Blocked` model-plan card: the steps of [session]'s plan
      * after its last act, re-indexed, every reference into a finished step its recorded value
      * ([RemainderPlanner], B-10). `null` when there is none to offer: not a plan the model wrote, an undo,
-     * a call in flight (it may have acted — `DOC-HMA-1`), a reference with no value, or nothing left.
-     * Pure — it plans nothing anew and asks no model.
+     * a call in flight (it may have acted — `DOC-HMA-1`), a plan the clock stopped on a call that may still
+     * be acting ([cutCallMayStillAct] — the evidence that withholds «Отменить» too, owner fork F2-1b; fix
+     * round 1, controller ruling E11-R1), a reference with no value, or nothing left. Pure — it plans
+     * nothing anew and asks no model.
      */
     fun remainder(session: AgentSession): ExecutionPlan? =
         when (val rest = remainderOf(session)) {
@@ -137,6 +139,7 @@ class ResumeAgentSessionUseCase(
     /** `null` when the remainder rule does not apply to [session] at all; otherwise [RemainderPlanner]'s answer. */
     private fun remainderOf(session: AgentSession): PlanningResult? {
         if (!session.plan.isModelProposed() || Compensation.isUndo(session.plan) || session.midStepInvocation() != null) return null
+        if (session.cutCallMayStillAct()) return null
         return remainders.remainderOf(PlanningRequest(session.goal, priorObservations = session.observations, previous = session.plan))
     }
 

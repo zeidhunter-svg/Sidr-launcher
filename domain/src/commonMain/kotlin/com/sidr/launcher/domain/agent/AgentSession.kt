@@ -167,6 +167,14 @@ data class AgentSession(
      * promise of a fresh look that a stale continuation would have broken. When the fresh look finds a
      * target the user must pick again (`Unresolved`, a 2b pick — A4′ phase 3b, E5-R1), the goal goes back
      * to the route, which asks again; the look is still fresh, so the card's promise holds.
+     *
+     * **Where the promise no longer holds word for word, named** (A4′ phase 3b fix round 1, controller
+     * ruling E11-R4). When this is FALSE for a plan the MODEL wrote in which a step acted, with no call in
+     * flight, «Продолжить» does not pick up at the cursor: it shows the REMAINDER's interpretation card first
+     * (`Resumption.NeedsCard` — the steps after the last act, every app bound again on the device), and
+     * nothing runs before «Выполнить». The paused card still picks its body by this predicate, so it reads
+     * «Продолжите — и Sidr возьмётся с того места, где остановился» — true of where the rest begins, silent
+     * about the card that comes first. The strings are unchanged on purpose; a third body is the owner's.
      */
     fun replansOnResume(): Boolean =
         state == ExecutionState.Paused &&
@@ -174,6 +182,21 @@ data class AgentSession(
             midStepInvocation() == null &&
             observations.values.none { it is ToolResult.Effected || it is ToolResult.HandedOff }
 }
+
+/**
+ * Whether the clock stopped this plan on a call that may still be acting (owner fork F2-1b): `Blocked`,
+ * with `HandedOff` at the step before the cursor. **One evidence for both secondary actions of a finished
+ * card** — «Отменить» (`UndoAgentSessionUseCase.review`) and «Повторить остаток»
+ * (`ResumeAgentSessionUseCase.remainder`, A4′ phase 3b fix round 1, controller ruling E11-R1): each is a
+ * world call, and starting one beside a call that may still act breaks the order the plan promised.
+ *
+ * It is not the only shape `AgentExecutor` produces with that pair: a step-budget stop after a genuine
+ * `HandedOff` ends there too (today unreachable on Android: a model plan is at most the budget's length).
+ * The direction is safe either way — both actions are withheld on the same evidence, an outcome that was
+ * never seen.
+ */
+internal fun AgentSession.cutCallMayStillAct(): Boolean =
+    state == ExecutionState.Blocked && observations[cursor - 1] is ToolResult.HandedOff
 
 /**
  * The [TraceEvent.ToolInvoked] event of the step whose tool call has been decided but not yet

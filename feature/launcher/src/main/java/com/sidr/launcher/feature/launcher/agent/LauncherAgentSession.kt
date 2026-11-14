@@ -90,7 +90,9 @@ internal class LauncherAgentSession(
     /**
      * Whether the finished card on screen offers «Повторить остаток» (A4′ phase 3b, Task 11): a `Failed` or
      * `Blocked` session whose plan has a remainder — `ResumeAgentSessionUseCase.remainder`, the same entry
-     * [retryRemainder] reads, so the button cannot promise what the tap does not do. Recomputed by [show].
+     * [retryRemainder] reads, so the button cannot promise what the tap does not do. Never on a plan the
+     * clock stopped on a call that may still be acting — that entry withholds it on the evidence that
+     * withholds «Отменить» (owner fork F2-1b, ruling E11-R1). Recomputed by [show].
      */
     private val _remainderOffered = MutableStateFlow(false)
     val remainderOffered: StateFlow<Boolean> = _remainderOffered.asStateFlow()

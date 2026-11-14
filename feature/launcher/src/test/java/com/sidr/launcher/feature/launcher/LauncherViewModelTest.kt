@@ -306,6 +306,8 @@ class LauncherViewModelTest {
         runAgent: RunAgentSessionUseCase = runAgentSession,
         // A4′ phase 3a, Task 8: a test may route through its own RouteCommandUseCase (Task 9 scripts it).
         route: CommandRouteStep = CommandRouteStep { routeUseCase.route(it) },
+        // A4′ phase 3b, Task 11 fix round 1: the binder a remainder card is bound by, for a test that reads it.
+        mentionBinder: FakeMentionBinder = FakeMentionBinder(),
     ) = LauncherViewModel(
         installedAppsRepository = fakeRepo,
         resolveCommand = aliasAwareResolveCommand(
@@ -331,7 +333,7 @@ class LauncherViewModelTest {
         undoAgentSession = undoOver(fakeAgentStore, agentRegistry),
         agentSessionStore = fakeAgentStore,
         startAgentSession = startAgentSession,
-        mentionBinder = FakeMentionBinder(),
+        mentionBinder = mentionBinder,
         toolRegistry = agentRegistry,
         // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
         // and every step line renders exactly as it did before the dynamic arm existed.
@@ -2465,6 +2467,88 @@ class LauncherViewModelTest {
 
         assertEquals(CommandFeedback.Domain(CommandMessage.UnderstandingLocalOnly), vm.commandFeedback.value)
         assertEquals(null, fakeAgentStore.activeOrNull)
+    }
+
+    /**
+     * A4′ phase 3b, Task 11 fix round 1 (controller ruling E11-R2; fork 3b-A, B-10) — the launcher's OWN
+     * dispatch of a remainder, end to end through the real collaborators: «Продолжить» on a paused plan the
+     * model wrote whose first step acted → `Resumption.NeedsCard` → `LauncherAgentSession`'s `onRemainder` →
+     * `LauncherCommandSession.showRemainder` → the binder's `rebind` → the interpretation card. The route
+     * under it is a REAL `RouteCommandUseCase` whose rule matcher is forced undecided, a provider configured,
+     * online — so any submit of the goal's words would reach its model planner; the wrapper counts every
+     * command the route is handed. The card must be the remainder's (the search, re-indexed to step 0, as the
+     * binder bound it), nothing may reach the route or the model, and the stale row must be gone.
+     */
+    @Test
+    fun `continuing an acted model plan shows its remainder card and asks the model nothing`() = runTest(testDispatcher) {
+        val goal = AgentGoal("открой lumora и найди ostravel lectures", GoalShape.Free("открой lumora и найди ostravel lectures"))
+        val webSearch = ToolId("web_search")
+        fun modelStep(index: Int, tool: ToolId, vararg args: Pair<String, String>) = PlanStep(
+            index = index,
+            invocation = ToolInvocation(tool, args.associate { (name, value) -> name to ArgSource.Literal(value) }),
+            risk = ActionRiskLevel.SAFE,
+            precondition = StepPrecondition.None,
+            rationale = StepRationale.MODEL_PROPOSED,
+        )
+        fakeAgentStore.save(
+            AgentSession(
+                id = AgentSessionId("m-acted"),
+                goal = goal,
+                plan = ExecutionPlan(
+                    listOf(
+                        modelStep(0, ToolIds.LAUNCH_APP, "app" to "net.fixture.lumora", "query" to "lumora"),
+                        modelStep(1, webSearch, "query" to "ostravel lectures"),
+                    ),
+                ),
+                cursor = 1,
+                state = ExecutionState.Paused,
+                observations = mapOf(0 to ToolResult.Effected()),
+                consents = emptyMap(),
+                trace = ExecutionTrace(
+                    listOf(
+                        TraceEvent.PlanCreated(2), TraceEvent.StepStarted(0), TraceEvent.ToolInvoked(0, ToolIds.LAUNCH_APP),
+                        TraceEvent.ToolObserved(0, ToolResult.Effected()), TraceEvent.SessionPaused,
+                    ),
+                ),
+            ),
+        )
+        fakeMatcher.intentToReturn = LauncherIntent.UnknownIntent(originalInput = goal.text, reason = "x")
+        fakeMatcher.confidenceToReturn = 0.0f
+        val model = FakeModelPlanner()
+        val bridgeRoute = RouteCommandUseCase(
+            handleUserCommand = useCase,
+            modelPlanner = model,
+            binder = FakeMentionBinder(),
+            featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = false)),
+            providerConfigRepository = configuredProvider(),
+            connectivityChecker = FakeConnectivityChecker(initiallyOnline = true),
+            startAgentSession = startAgentSession,
+        )
+        val routed = mutableListOf<String>()
+        val binder = FakeMentionBinder()
+        val vm = buildViewModel(route = CommandRouteStep { text -> routed += text; bridgeRoute.route(text) }, mentionBinder = binder)
+        advanceUntilIdle()
+        check(vm.agentSessionState.value?.state == ExecutionState.Paused) { "seed expected Paused, was ${vm.agentSessionState.value?.state}" }
+
+        vm.continueAgentSession()
+        advanceUntilIdle()
+
+        assertEquals(
+            "the remainder's card, as the binder bound it",
+            Interpretation.Act(
+                goal = goal,
+                steps = listOf(modelStep(0, webSearch, "query" to "ostravel lectures")),
+                origins = mapOf(0 to mapOf("query" to ValueOrigin.ModelGenerated)),
+                effects = mapOf(0 to ToolEffect.EXTERNAL),
+                choices = emptyList(),
+            ),
+            vm.interpretation.value,
+        )
+        assertEquals("the remainder was bound once, on the device", 1, binder.rebindCallCount)
+        assertEquals("nothing reached the route", emptyList<String>(), routed)
+        assertEquals("the model was not asked", 0, model.planCallCount)
+        assertEquals("the stale row is gone", null, fakeAgentStore.activeOrNull)
+        assertNull("the agent card gave way to the remainder card", vm.agentSessionState.value)
     }
 
     // ── A4′ phase 3a: the interpretation card (spec §7.12.3) ─────────────────────────────

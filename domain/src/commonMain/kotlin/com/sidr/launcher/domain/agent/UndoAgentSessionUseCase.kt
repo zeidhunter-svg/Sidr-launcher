@@ -3,7 +3,6 @@ package com.sidr.launcher.domain.agent
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.ToolInverses
 import com.sidr.launcher.domain.tool.ToolRegistry
-import com.sidr.launcher.domain.tool.ToolResult
 
 /**
  * «Отменить» (A4′ phase 2, spec §6.6, owner fork F2-3.3): a NEW session whose plan undoes a finished
@@ -23,15 +22,12 @@ class UndoAgentSessionUseCase(
      * is finished: a paused or waiting plan has nothing final to undo, and a cancelled one draws no card.
      *
      * Also empty for a plan the clock stopped (owner fork F2-1b): its cut call may still be acting,
-     * and an undo is a world call too. A `Blocked` session whose last step is `HandedOff` is exactly
-     * that shape, but it is not the only one `AgentExecutor` produces with that pair: a step-budget
-     * stop after a genuine `HandedOff` (today unreachable on Android while plans are one step, P8)
-     * ends there too. The direction is still safe either way — both withhold undo on the same
-     * evidence, an outcome that was never seen.
+     * and an undo is a world call too — [cutCallMayStillAct], the one evidence «Повторить остаток» reads
+     * as well (A4′ phase 3b, ruling E11-R1); its KDoc names the second shape that pair also covers.
      */
     fun review(session: AgentSession): List<StepUndo> = when {
         !session.state.isTerminal || session.state == ExecutionState.Cancelled -> emptyList()
-        session.state == ExecutionState.Blocked && session.observations[session.cursor - 1] is ToolResult.HandedOff -> emptyList()
+        session.cutCallMayStillAct() -> emptyList()
         else -> Compensation.review(session, inverses)
     }
 

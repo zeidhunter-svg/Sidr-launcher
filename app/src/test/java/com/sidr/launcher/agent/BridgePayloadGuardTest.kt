@@ -481,11 +481,14 @@ class BridgePayloadGuardTest {
     /**
      * Fork 3b-A («nothing leaves», plan §0.5: the guard becomes «no remainder path asks the model»; `DOC-AML-1`).
      * A plan the model wrote — launch «lumora», launch «tessar», search «ostravel lectures» — whose first step
-     * acted. Both remainder paths are driven exactly as the launcher drives them: «Продолжить» on the paused
-     * plan follows each `Resumption` arm as `LauncherAgentSession` does (`NeedsRoute` → the route with the
-     * goal's words; `NeedsCard` → the binder's `rebind`, mapped by step 7's own mapping), and «Повторить
-     * остаток» on the finished `Failed` card reads the one domain entry, `ResumeAgentSessionUseCase.remainder`.
-     * The recording transport sees NO body across both.
+     * acted. The driver below REPLICATES the launcher's arms — it is a test-local copy, not the launcher's
+     * code: «Продолжить» on the paused plan follows each `Resumption` arm as `LauncherAgentSession` does
+     * (`NeedsRoute` → the route with the goal's words; `NeedsCard` → the binder's `rebind`, mapped by step 7's
+     * own mapping), and «Повторить остаток» on the finished `Failed` card reads the one domain entry,
+     * `ResumeAgentSessionUseCase.remainder`. The recording transport sees NO body across both. What this
+     * holds is the domain and the real graph under the arms; the launcher's OWN dispatch of `NeedsCard`
+     * (`onRemainder` → `LauncherCommandSession.showRemainder`) is held by `LauncherViewModelTest > continuing
+     * an acted model plan shows its remainder card and asks the model nothing` (fix round 1, ruling E11-R2).
      *
      * Not vacuous: each comes back as the bound card of the two steps after the act — the app re-bound on the
      * device from the planted learned choice (`net.fixture.tessar.two`), the search the model's words — a
@@ -557,7 +560,8 @@ class BridgePayloadGuardTest {
             ),
         )
 
-        // The launcher's own driver: every arm as `LauncherAgentSession.continueSession` follows it.
+        // A copy of the launcher's arms, as `LauncherAgentSession.continueSession` follows them (its own
+        // dispatch: `LauncherViewModelTest > continuing an acted model plan shows its remainder card…`).
         suspend fun follow(resumption: Resumption): CommandOutcome? = when (resumption) {
             is Resumption.Ran -> null
             is Resumption.NeedsRoute -> route.route(resumption.goal.text)

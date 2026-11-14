@@ -125,8 +125,15 @@ data class AgentSession(
      *    store even if the app was installed while the plan sat paused). **Built in phase 2** — not
      *    here, in `ResumeAgentSessionUseCase`: a plan in which nothing has acted is planned afresh
      *    ([replansOnResume]), and if that fresh look finds no plan the stale session ends
-     *    [ExecutionState.Failed] rather than continuing (owner decision 2026-10-03, M1(b)); anything
-     *    that may have acted still continues from this cursor, and that remainder is named, not closed.
+     *    [ExecutionState.Failed] rather than continuing (owner decision 2026-10-03, M1(b)). **Since A4′
+     *    phase 3b (Task 11; fork 3b-A, plan §0.2 B-10)** a plan the MODEL wrote in which a step acted,
+     *    with no call in flight, does not continue from this cursor either: its remainder — the steps
+     *    after the last act — goes back for an interpretation card, every app re-bound on the device and
+     *    nothing run before «Выполнить» (`Resumption.NeedsCard`). What still continues from this cursor
+     *    on pre-pause observations, named and not closed: a deterministic plan that acted, an undo, and a
+     *    call in flight (resumed once, `DOC-HMA-1`). And inside a remainder, a finished step's recorded
+     *    output IS a pre-pause observation, used as recorded on purpose — re-running that act to read it
+     *    afresh would perform it twice; value arguments (a duration, a time, an address) are not re-read.
      *  - **Layer 2 — a source's own snapshot.** `ShortcutRefreshTrigger.start()` runs once per
      *    process and observes **shortcut** changes; a grant of the `android.app.role.HOME` role is
      *    not one, so the dynamic catalog stays empty until a restart (A1″ acceptance finding (b),

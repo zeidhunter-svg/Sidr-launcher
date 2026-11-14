@@ -26,7 +26,8 @@ sealed interface StepPrecondition {
  * [MODEL_PROPOSED] (A4′ phase 3a, spec §7.12.3 condition 4): the bridge's model planner wrote the step.
  * A paused plan made of such steps, in which nothing has acted, is never planned again from its goal by
  * the deterministic planner — it goes back through the route ([isModelProposed],
- * `ResumeAgentSessionUseCase`). Persisted by name, like [COMPENSATION]; never shown — a step's line is
+ * `ResumeAgentSessionUseCase`); one in which a step acted comes back as a card for its remainder (A4′
+ * phase 3b, B-10). Persisted by name, like [COMPENSATION]; never shown — a step's line is
  * keyed on its tool, so it needs no string.
  */
 enum class StepRationale { GOAL_DIRECT, APP_NOT_INSTALLED_FALLBACK, COMPENSATION, MODEL_PROPOSED }
@@ -204,12 +205,16 @@ fun UnresolvedTarget.bind(packageName: String): ExecutionPlan? {
  * the first real addition edits the signature of four production implementations in three modules,
  * both consumers, and every test fake — which is the cost this type is here to not pay twice.
  *
- * [priorObservations] is **not speculative, and its consumer moved once**: re-planning after a
+ * [priorObservations] was **not speculative, and its consumer moved twice**: re-planning after a
  * partial failure was dated to phase 2 (§6.4), and the owner moved it to phase 3 on 2026-09-27 (fork
- * F2-3.1). None of the deterministic planners can do anything better after a failure, and the first
- * planner that can — the bridge's model planner — arrives there. Phase 2's re-planning (on resume)
- * plans afresh with an EMPTY request on purpose: what the stale attempt observed is exactly what is
- * no longer trusted. It is empty at every call site, and that is the honest state.
+ * F2-3.1), expecting the bridge's model planner to read it. Fork 3b-A («nothing leaves», 2026-11-07)
+ * closed that door — what the device observed never goes to the model — so its first consumer is
+ * local: [RemainderPlanner] (A4′ phase 3b, Task 11; plan §0.2 B-10), which cuts the remainder of
+ * [previous] — the plan of the attempt that acted, also first read there — and carries a finished
+ * step's recorded value into it. `ResumeAgentSessionUseCase` is its one production caller, for a model
+ * plan that acted. Every other call site still passes both EMPTY, on purpose: a first attempt has
+ * observed nothing, and phase 2's re-planning on resume (a plan that has only looked) plans afresh
+ * because what the stale attempt observed is exactly what is no longer trusted.
  *
  * The tool registry stays a separate parameter. It is not context about the attempt; it is the world
  * the plan is written against, and it is read by the engine as well as by the planner.
@@ -217,6 +222,7 @@ fun UnresolvedTarget.bind(packageName: String): ExecutionPlan? {
 data class PlanningRequest(
     val goal: AgentGoal,
     val priorObservations: Map<Int, ToolResult> = emptyMap(),
+    val previous: ExecutionPlan? = null,
 )
 
 /**

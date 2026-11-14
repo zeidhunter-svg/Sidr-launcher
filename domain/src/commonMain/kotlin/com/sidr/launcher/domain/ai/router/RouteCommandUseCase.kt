@@ -223,14 +223,7 @@ class RouteCommandUseCase(
             // check). The binder takes the WHOLE reading: one card for all of its steps, or one answer — the
             // first step it cannot bind — for all of them. Nothing is started here either way.
             is ModelPlanning.Proposed ->
-                when (val bound = binder.bind(AgentGoal(text = command, shape = GoalShape.Free(command)), answer.steps)) {
-                    is Binding.Bound -> CommandOutcome.Interpreted(bound.interpretation)
-                    is Binding.NotFound -> CommandOutcome.Message(CommandMessage.NoAppFound(bound.mention))
-                    // A4′ phase 3b, Task 6: a value its sort could not read is said in the words written for
-                    // it — to the user, never back to the model, and not a reason to ask the model again.
-                    is Binding.NotUnderstood -> CommandOutcome.Message(CommandMessage.ValueNotUnderstood(bound.words))
-                    Binding.Unavailable -> CommandOutcome.Failed(CommandFailure.Generic)
-                }
+                binder.bind(AgentGoal(text = command, shape = GoalShape.Free(command)), answer.steps).toCommandOutcome()
             // Condition 3: a question goes to the assistant, prefilled and unsent — never to a web search.
             is ModelPlanning.ToAssistant -> CommandOutcome.OpenAssistant(answer.question)
             is ModelPlanning.Navigate -> CommandOutcome.Interpreted(Interpretation.Navigate(answer.destination))
@@ -272,4 +265,20 @@ class RouteCommandUseCase(
     /** Keeps a decided FastPath outcome byte-for-byte; replaces only the "unknown command" claim. */
     private fun CommandOutcome.orHonestly(message: CommandMessage): CommandOutcome =
         if (isUndecided()) CommandOutcome.Message(message) else this
+}
+
+/**
+ * What the device's binding of a reading becomes on screen — step 7's mapping, and the ONE mapping
+ * (controller ruling E11-P5): the remainder card of a model plan that acted (`MentionBinder.rebind`, A4′
+ * phase 3b, Task 11) says «нет такого приложения», «не понял» or the generic failure through this same
+ * function, never a second spelling. A bound reading becomes the interpretation card; nothing here runs
+ * anything, and nothing it finds goes back to the model (D1).
+ */
+fun Binding.toCommandOutcome(): CommandOutcome = when (this) {
+    is Binding.Bound -> CommandOutcome.Interpreted(interpretation)
+    is Binding.NotFound -> CommandOutcome.Message(CommandMessage.NoAppFound(mention))
+    // A4′ phase 3b, Task 6: a value its sort could not read is said in the words written for it — to the
+    // user, never back to the model, and not a reason to ask the model again.
+    is Binding.NotUnderstood -> CommandOutcome.Message(CommandMessage.ValueNotUnderstood(words))
+    Binding.Unavailable -> CommandOutcome.Failed(CommandFailure.Generic)
 }

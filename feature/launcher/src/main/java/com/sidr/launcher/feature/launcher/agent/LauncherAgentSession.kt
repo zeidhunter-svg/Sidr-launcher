@@ -1,9 +1,11 @@
 package com.sidr.launcher.feature.launcher.agent
 
+import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.AgentSessionStore
 import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
+import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
 import com.sidr.launcher.domain.agent.ResumeAgentSessionUseCase
@@ -33,6 +35,15 @@ import kotlinx.coroutines.launch
  * puts a pending consent checkpoint back on screen rather than stepping past it. A paused plan the MODEL
  * wrote (A4′ phase 3a, spec §7.12.3 condition 4) is neither: the engine hands it back, this collaborator
  * closes the stale session and passes its goal text to [onReroute] — back through the whole command route.
+ * One the model wrote in which a step already ACTED (A4′ phase 3b, Task 11; fork 3b-A, B-10) comes back
+ * as `Resumption.NeedsCard`: the stale session is closed and its remainder — the steps after the last act
+ * — goes to [onRemainder], the shape of [onReroute], where the command session binds its apps again on the
+ * device and shows the interpretation card; no model is asked. A finished `Failed` or `Blocked` card of a
+ * plan the model wrote offers the same remainder ([remainderOffered], [retryRemainder] — «Повторить
+ * остаток»), built from the session on screen by the one domain entry
+ * (`ResumeAgentSessionUseCase.remainder`, controller ruling E11-P3), never when nothing is left
+ * (ruling E11-P6). A «Продолжить» the store cannot carry out is SAID ([resumeFailed], fork 3b-F) — it used
+ * to take the card down and put nothing in its place.
  *
  * Everything it touches is a `:domain` port, so it is unit-testable without Android or Compose.
  */
@@ -46,6 +57,8 @@ internal class LauncherAgentSession(
     private val undoSession: UndoAgentSessionUseCase,
     /** Where a paused plan the model wrote goes: its words, back through the command route (spec §7.12.3 condition 4). */
     private val onReroute: (String) -> Unit,
+    /** Where the remainder of a model plan that acted goes: the interpretation card, bound again on the device (B-10). */
+    private val onRemainder: (AgentGoal, ExecutionPlan) -> Unit,
 ) {
     private val _session = MutableStateFlow<AgentSession?>(null)
     val session: StateFlow<AgentSession?> = _session.asStateFlow()
@@ -67,9 +80,27 @@ internal class LauncherAgentSession(
     private val _undoReview = MutableStateFlow<List<StepUndo>>(emptyList())
     val undoReview: StateFlow<List<StepUndo>> = _undoReview.asStateFlow()
 
+    /**
+     * «Продолжить» could not be carried out — the store failed (fork 3b-F). Typed, never text: the surface
+     * says «Не удалось продолжить план.» where the paused card stood. Cleared by the next [show].
+     */
+    private val _resumeFailed = MutableStateFlow(false)
+    val resumeFailed: StateFlow<Boolean> = _resumeFailed.asStateFlow()
+
+    /**
+     * Whether the finished card on screen offers «Повторить остаток» (A4′ phase 3b, Task 11): a `Failed` or
+     * `Blocked` session whose plan has a remainder — `ResumeAgentSessionUseCase.remainder`, the same entry
+     * [retryRemainder] reads, so the button cannot promise what the tap does not do. Recomputed by [show].
+     */
+    private val _remainderOffered = MutableStateFlow(false)
+    val remainderOffered: StateFlow<Boolean> = _remainderOffered.asStateFlow()
+
     private fun show(next: AgentSession?) {
         _session.value = next
         _undoReview.value = next?.let(undoSession::review).orEmpty()
+        _resumeFailed.value = false
+        _remainderOffered.value = next?.takeIf { it.state == ExecutionState.Failed || it.state == ExecutionState.Blocked }
+            ?.let(resumeSession::remainder) != null
     }
 
     fun attach(id: AgentSessionId) = scope.launch {
@@ -136,7 +167,20 @@ internal class LauncherAgentSession(
                         show(null)
                         onReroute(resumed.goal.text)
                     }
-                    null -> show(null)
+                    // Fork 3b-A (B-10): a model plan that acted is not continued on what it saw before the
+                    // pause, and the model is not asked. Close it; its remainder goes to the card, re-bound.
+                    is Resumption.NeedsCard -> {
+                        cancelSession.cancel(paused.id)
+                        show(null)
+                        onRemainder(resumed.goal, resumed.plan)
+                    }
+                    // Fork 3b-F: the store failed. Said, not silent. The stale card does not stay with its
+                    // «Продолжить» — had the save failed after a step acted, it would offer that step again;
+                    // the next start restores what the store actually holds.
+                    null -> {
+                        show(null)
+                        _resumeFailed.value = true
+                    }
                 }
             } finally {
                 busy = false
@@ -169,6 +213,22 @@ internal class LauncherAgentSession(
         _session.value?.let { cancelSession.cancel(it.id) }
         show(null)
         _confirming.value = false
+    }
+
+    /**
+     * «Повторить остаток» (A4′ phase 3b, Task 11): the remainder of the finished `Failed`/`Blocked` model-plan
+     * card on screen — the steps after its last act — goes to [onRemainder], built from that in-memory session
+     * (a terminal session is no longer in the store) by the one domain entry. Nothing runs here and no model
+     * is asked; «Выполнить» on the card starts a NEW session. Shares [busy]; nothing happens when no
+     * remainder is offered.
+     */
+    fun retryRemainder() {
+        if (busy) return
+        val finished = _session.value ?: return
+        if (finished.state != ExecutionState.Failed && finished.state != ExecutionState.Blocked) return
+        val rest = resumeSession.remainder(finished) ?: return
+        show(null)
+        onRemainder(finished.goal, rest)
     }
 
     /**

@@ -20,6 +20,7 @@ import com.sidr.launcher.domain.agent.StepUndo
 import com.sidr.launcher.domain.agent.UndoAgentSessionUseCase
 import com.sidr.launcher.domain.agent.UnresolvedTarget
 import com.sidr.launcher.domain.ai.bridge.Interpretation
+import com.sidr.launcher.domain.ai.bridge.MentionBinder
 import com.sidr.launcher.domain.history.UsageHistoryRepository
 import com.sidr.launcher.domain.memory.alias.ResolveCommandWithAliasUseCase
 import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
@@ -103,6 +104,9 @@ class LauncherViewModel @Inject constructor(
     private val agentSessionStore: AgentSessionStore,
     // A4′ phase 3a: the interpretation card's «Выполнить» starts the model's plan through the engine.
     private val startAgentSession: StartAgentSessionUseCase,
+    // A4′ phase 3b, Task 11 (fork 3b-A): the remainder of a model plan that acted is bound again on the
+    // device before its card. A domain port — `:app` binds `DeviceMentionBinder`; no feature -> data edge.
+    private val mentionBinder: MentionBinder,
     // Task 10 / A1': read-only lookup of a registered tool's descriptor (the shape the deleted router's
     // `ActionCatalog` lookup had here). The surface must be able to say where an EXTERNAL tool's effect
     // goes (`DOC-ILM-2`), and provenance lives on the descriptor — a plan step carries the tool's id
@@ -289,6 +293,9 @@ class LauncherViewModel @Inject constructor(
         // A4′ phase 3a (condition 4): forward-references [commandSession], declared below — legal for the
         // same reason as [appLaunch]'s onFeedback: the lambda runs only after construction.
         onReroute = { text -> commandSession.submit(text) },
+        // A4′ phase 3b, Task 11 (fork 3b-A): the remainder of a model plan that acted goes to the
+        // interpretation card, bound again on the device — the same forward reference as [onReroute].
+        onRemainder = { goal, plan -> commandSession.showRemainder(goal, plan) },
     )
 
     /** The agent runtime's current session, or null when none is on screen. */
@@ -299,6 +306,12 @@ class LauncherViewModel @Inject constructor(
 
     /** What «Отменить» would undo on the agent card now on screen (A4′ phase 2). */
     val agentUndoReview: StateFlow<List<StepUndo>> get() = agentSession.undoReview
+
+    /** A4′ phase 3b, Task 11: «Продолжить» could not be carried out — the store failed (see [LauncherAgentSession.resumeFailed]). */
+    val agentResumeFailed: StateFlow<Boolean> get() = agentSession.resumeFailed
+
+    /** A4′ phase 3b, Task 11: whether the finished model-plan card on screen offers «Повторить остаток». */
+    val agentRemainderOffered: StateFlow<Boolean> get() = agentSession.remainderOffered
 
     /**
      * Task 10 / A1'. The registry's provenance, projected to the two fields the surface may see, so the
@@ -351,6 +364,7 @@ class LauncherViewModel @Inject constructor(
         devConsole = devConsole,
         agentSession = agentSession,
         startAgentSession = startAgentSession,
+        binder = mentionBinder,
         scope = viewModelScope,
         onNavigate = { route -> navigateTo(route) },
     )
@@ -530,11 +544,23 @@ class LauncherViewModel @Inject constructor(
      * closed and the surface goes, and its goal is submitted through the command route afresh — what
      * the user sees next is that command's own outcome (a wait, a card, a feedback line). Calling
      * [leaveAgentSurface] there would be wrong, not merely unneeded: its edit would cancel that command.
-     * A resume the store fails also takes the surface down (`LauncherAgentSession.continueSession`'s
-     * `null` branch) and puts nothing in its place — named, not handled here.
+     * The same holds for «Продолжить» on a model-written plan that ACTED (A4′ phase 3b, Task 11,
+     * `Resumption.NeedsCard`): the session is closed and its remainder comes back as the interpretation
+     * card, bound again on the device — an edit here would take that card down. A resume the store fails
+     * takes the session's surface down and says so in its place (`LauncherAgentSession.continueSession`'s
+     * `null` branch, [agentResumeFailed]); its «Закрыть» is [dismissAgentSession].
      */
     fun continueAgentSession() {
         agentSession.continueSession()
+    }
+
+    /**
+     * «Повторить остаток» on a finished `Failed`/`Blocked` model-plan card (A4′ phase 3b, Task 11): its
+     * remainder comes back as the interpretation card — see [LauncherAgentSession.retryRemainder]. No
+     * [leaveAgentSurface], for the reason [continueAgentSession] gives.
+     */
+    fun retryAgentRemainder() {
+        agentSession.retryRemainder()
     }
 
     /** Undo what the finished plan on screen did, as far as it can be undone — see [LauncherAgentSession.undo]. */

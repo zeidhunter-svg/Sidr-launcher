@@ -186,6 +186,7 @@ class LauncherScreenPrayerStripTest {
             undoAgentSession = undoOver(agentStore, agentRegistry),
             agentSessionStore = agentStore,
             startAgentSession = startAgentSession,
+            mentionBinder = FakeMentionBinder(),
             toolRegistry = agentRegistry,
             // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
             // and every step line renders exactly as it did before the dynamic arm existed.

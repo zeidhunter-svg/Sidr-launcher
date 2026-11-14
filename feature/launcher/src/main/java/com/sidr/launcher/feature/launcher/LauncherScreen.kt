@@ -61,11 +61,13 @@ import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.core.ui.component.AppTile
 import com.sidr.launcher.core.ui.component.EmptyState
 import com.sidr.launcher.core.ui.component.ErrorState
+import com.sidr.launcher.core.ui.component.SidrErrorSurface
 import com.sidr.launcher.core.ui.component.SidrSectionHeader
 import com.sidr.launcher.core.ui.component.SidrPrayerSummary
 import com.sidr.launcher.core.ui.component.SidrPrayerTimeUi
 import com.sidr.launcher.core.ui.component.SidrRouteChip
 import com.sidr.launcher.core.ui.component.SidrScaffold
+import com.sidr.launcher.core.ui.component.SidrSurfaceAction
 import com.sidr.launcher.core.ui.component.SidrUniversalInput
 import com.sidr.launcher.core.ui.component.SidrUniversalInputState
 import com.sidr.launcher.core.ui.component.TopBarIcon
@@ -116,6 +118,8 @@ fun LauncherScreen(
     val agentSession by viewModel.agentSessionState.collectAsStateWithLifecycle()
     val agentConfirming by viewModel.agentConfirming.collectAsStateWithLifecycle()
     val agentUndoReview by viewModel.agentUndoReview.collectAsStateWithLifecycle()
+    val agentResumeFailed by viewModel.agentResumeFailed.collectAsStateWithLifecycle()
+    val agentRemainderOffered by viewModel.agentRemainderOffered.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     // First-run nudge (Block X6): whether this launcher is already the system default HOME app.
@@ -312,6 +316,16 @@ fun LauncherScreen(
                     onDismiss = viewModel::dismissAgentSession,
                     undoReview = agentUndoReview,
                     onUndo = viewModel::undoAgentSession,
+                    remainderOffered = agentRemainderOffered,
+                    onRetryRemainder = viewModel::retryAgentRemainder,
+                )
+            }
+            // A4′ phase 3b, Task 11 (fork 3b-F): «Продолжить» the store could not carry out is SAID, in the
+            // place the paused card stood — never a silent disappearance. «Закрыть» puts the launcher back at rest.
+            if (agentSession == null && agentResumeFailed) {
+                SidrErrorSurface(
+                    title = sidrString(R.string.launcher_agent_resume_failed),
+                    primaryAction = SidrSurfaceAction(sidrString(R.string.launcher_agent_cancel), viewModel::dismissAgentSession),
                 )
             }
 

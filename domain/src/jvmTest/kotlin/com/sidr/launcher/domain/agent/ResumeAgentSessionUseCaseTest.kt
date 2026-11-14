@@ -323,4 +323,79 @@ class ResumeAgentSessionUseCaseTest {
         assertTrue("nothing was performed", tools.invocations.isEmpty())
         assertEquals("the stale session is the route layer's to close", paused, store.active)
     }
+
+    // --- A4′ phase 3b, Task 11 (fork 3b-A, B-10): the remainder of a model plan that acted --------------
+
+    private val readingGoal = AgentGoal("давай lumora и tessar", GoalShape.Free("давай lumora и tessar"))
+
+    private fun modelLaunch(index: Int, packageName: String, words: String) = PlanStep(
+        index = index,
+        invocation = ToolInvocation(ToolIds.LAUNCH_APP, mapOf("app" to ArgSource.Literal(packageName), "query" to ArgSource.Literal(words))),
+        risk = ActionRiskLevel.SAFE,
+        precondition = StepPrecondition.None,
+        rationale = StepRationale.MODEL_PROPOSED,
+    )
+
+    /** Two launches the model proposed; the first ran, and the process died before the second. */
+    private suspend fun actedModelPlan(trace: List<TraceEvent>) = AgentSession(
+        id = AgentSessionId("m-acted"),
+        goal = readingGoal,
+        plan = ExecutionPlan(listOf(modelLaunch(0, "net.fixture.lumora", "lumora"), modelLaunch(1, "net.fixture.tessar.two", "tessar"))),
+        cursor = 1,
+        state = ExecutionState.Paused,
+        observations = mapOf(0 to ToolResult.Effected()),
+        consents = emptyMap(),
+        trace = ExecutionTrace(
+            listOf(
+                TraceEvent.PlanCreated(2), TraceEvent.StepStarted(0), TraceEvent.ToolInvoked(0, ToolIds.LAUNCH_APP),
+                TraceEvent.ToolObserved(0, ToolResult.Effected()),
+            ) + trace + TraceEvent.SessionPaused,
+        ),
+    ).also { store.save(it) }
+
+    /**
+     * Fork 3b-A: «Продолжить» on a model plan that already acted does not continue on what it saw before
+     * the pause, and asks no model — the steps after the last act come back for a card (re-bound on the
+     * device by the layer that holds the binder), re-indexed from 0. Nothing is performed here, the
+     * deterministic planner is not asked, and the stale session is left for that layer to close.
+     */
+    @Test
+    fun `an acted model plan comes back as a card for its remainder and nothing is re-run`() = runTest {
+        val planner = CountingPlanner()
+        val paused = actedModelPlan(trace = emptyList())
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
+
+        val result = resume(tools, planner).resume(paused)
+
+        assertEquals(
+            OperationResult.Success(Resumption.NeedsCard(readingGoal, ExecutionPlan(listOf(modelLaunch(0, "net.fixture.tessar.two", "tessar"))))),
+            result,
+        )
+        assertEquals("nothing is re-run", emptyList<Any>(), tools.invocations)
+        assertEquals(0, planner.calls)
+        assertEquals("the stale session is the card layer's to close", paused, store.active)
+    }
+
+    /**
+     * `DOC-HMA-1`, unchanged by the remainder: the second launch's call was in flight when the process
+     * died, so it may have acted. It is resumed once from the cursor — never handed back for a card, which
+     * would offer to perform it a second time.
+     */
+    @Test
+    fun `a call in flight is still resumed once, not re-planned`() = runTest {
+        val planner = CountingPlanner()
+        val paused = actedModelPlan(trace = listOf(TraceEvent.StepStarted(1), TraceEvent.ToolInvoked(1, ToolIds.LAUNCH_APP)))
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
+
+        val result = resume(tools, planner).resume(paused)
+
+        // Read without a cast that could throw: a regression that hands the plan back for a card must fail
+        // HERE, as an assertion, not as a ClassCastException.
+        val after = ((result as OperationResult.Success).value as? Resumption.Ran)?.session
+        assertEquals("the engine resumed it — not handed back for a card", AgentSessionId("m-acted"), after?.id)
+        assertEquals(ExecutionState.Completed, after?.state)
+        assertEquals(listOf(mapOf("app" to "net.fixture.tessar.two", "query" to "tessar")), tools.invocations.map { it.args })
+        assertEquals(1, after?.trace?.events?.count { it is TraceEvent.ToolInvoked && it.index == 1 })
+        assertEquals(0, planner.calls)
+    }
 }

@@ -5,12 +5,14 @@ import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeAliasStore
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
+import com.sidr.launcher.data.repository.action.DefaultActionCatalog
 import com.sidr.launcher.data.repository.intent.RuleBasedIntentMatcher
 import com.sidr.launcher.domain.action.ActionCategory
 import com.sidr.launcher.domain.action.ActionDescriptor
 import com.sidr.launcher.domain.action.ActionIds
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentGoal
+import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.StepPrecondition
@@ -45,10 +47,17 @@ import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.text.PlainTextFolding
 import com.sidr.launcher.domain.tool.ArgSource
+import com.sidr.launcher.domain.tool.ResolvedInvocation
+import com.sidr.launcher.domain.tool.ToolAdapter
 import com.sidr.launcher.domain.tool.ToolEffect
+import com.sidr.launcher.domain.tool.ToolFederation
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
+import com.sidr.launcher.domain.tool.ToolLevels
+import com.sidr.launcher.domain.tool.ToolRegistry
+import com.sidr.launcher.domain.tool.ToolResult
+import com.sidr.launcher.domain.tool.ToolWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.runBlocking
@@ -88,6 +97,20 @@ class DeviceMentionBinderTest {
             effect = effect,
         )
 
+    /**
+     * The production shape of the two Android sources a remainder's steps come from (`AgentProvidesModule`'s
+     * first two adapters), seen through the federation — what `rebind` reads each step's effect from. Nothing
+     * here invokes a tool.
+     */
+    private val registry: ToolRegistry = ToolFederation(
+        listOf(ToolLevels.IN_APP to SystemIntentToolSource(DefaultActionCatalog()), ToolLevels.SYSTEM_INTENT to Tier0IntentToolSource(ToolPermissionCatalog()) { true })
+            .map { (level, source) ->
+                ToolAdapter(level, source, object : ToolWorker {
+                    override suspend fun invoke(invocation: ResolvedInvocation): ToolResult = error("a binder invokes nothing")
+                })
+            },
+    ).registry
+
     private fun binder(
         apps: List<InstalledApp>,
         store: ResolutionPreferenceStore = FakeResolutionPreferenceStore(),
@@ -108,6 +131,7 @@ class DeviceMentionBinderTest {
             store,
             DefaultResolutionPreferencePolicy(),
             PlainTextFolding,
+            registry,
         )
     }
 
@@ -546,5 +570,111 @@ class DeviceMentionBinderTest {
                 ),
             ),
         )
+    }
+
+    // --- A4′ phase 3b, Task 11 (fork 3b-A, B-10): the remainder of a model plan that acted, bound again ------
+
+    private val orvane = "net.fixture.orvane"
+    private val vemblic = InstalledApp(packageName = "net.fixture.vemblic", label = "Vemblic")
+
+    private fun remainderStep(index: Int, tool: ToolId, vararg args: Pair<String, String>) = PlanStep(
+        index = index,
+        invocation = ToolInvocation(tool, args.associate { (name, value) -> name to ArgSource.Literal(value) }),
+        risk = ActionRiskLevel.SAFE,
+        precondition = StepPrecondition.None,
+        rationale = StepRationale.MODEL_PROPOSED,
+    )
+
+    /**
+     * Controller ruling E11-P4: a remainder's app is resolved AGAIN from the words the user typed, which the
+     * step kept in `launch_app`'s `query` — through the same mention branch as a first binding, never the
+     * package the step kept. Two cases, each compared whole:
+     *  - the app those words named then (`net.fixture.orvane`) is gone, and they now name «Lumora»: bound to
+     *    it, ours; the user's words stay the user's, and the second step's value — written by the model —
+     *    is marked the model's (ruling E11-P1); each effect is the registry's;
+     *  - the words now name two «Tessar»: a pick is owed before the card, carrying the launch's own learning
+     *    token keyed on those words (B-19) — and the step keeps no package until it is made.
+     */
+    @Test
+    fun `a remainder re-binds its app from the user's words`() = runTest {
+        val one = binder(listOf(lumora)).rebind(
+            goal,
+            ExecutionPlan(
+                listOf(
+                    remainderStep(0, ToolIds.LAUNCH_APP, "app" to orvane, "query" to "lumora"),
+                    remainderStep(1, InAppToolIds.WEB_SEARCH, "query" to "ostravel lectures"),
+                ),
+            ),
+        )
+        assertEquals(
+            Binding.Bound(
+                Interpretation.Act(
+                    goal = goal,
+                    steps = listOf(
+                        remainderStep(0, ToolIds.LAUNCH_APP, "query" to "lumora", "app" to "net.fixture.lumora"),
+                        remainderStep(1, InAppToolIds.WEB_SEARCH, "query" to "ostravel lectures"),
+                    ),
+                    origins = mapOf(
+                        0 to mapOf("app" to ValueOrigin.Ours, "query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                        1 to mapOf("query" to ValueOrigin.ModelGenerated),
+                    ),
+                    effects = mapOf(0 to ToolEffect.EXTERNAL, 1 to ToolEffect.EXTERNAL),
+                    choices = emptyList(),
+                ),
+            ),
+            one,
+        )
+
+        val two = binder(listOf(tessarOne, tessarTwo)).rebind(
+            goal,
+            ExecutionPlan(listOf(remainderStep(0, ToolIds.LAUNCH_APP, "app" to tessarOne.packageName, "query" to "tessar"))),
+        )
+        val tessars = CandidateSet(listOf(ResolvedTarget.App(tessarOne.packageName), ResolvedTarget.App(tessarTwo.packageName)))
+        assertEquals(
+            Binding.Bound(
+                Interpretation.Act(
+                    goal = goal,
+                    steps = listOf(remainderStep(0, ToolIds.LAUNCH_APP, "query" to "tessar")),
+                    origins = mapOf(0 to mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER))),
+                    effects = mapOf(0 to ToolEffect.EXTERNAL),
+                    choices = listOf(
+                        PendingChoice(
+                            step = 0,
+                            choice = AppChoice(
+                                arg = "app",
+                                mention = "tessar",
+                                candidates = listOf(tessarOne, tessarTwo),
+                                learning = ResolutionLearningToken(
+                                    capabilityKey = CapabilityKey(ActionIds.LAUNCH_APP, "tessar"),
+                                    context = ResolutionContext.None,
+                                    candidateSet = tessars,
+                                    fingerprint = fingerprintOf(tessars),
+                                    isAppAmbiguityFlow = true,
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            two,
+        )
+    }
+
+    /**
+     * The plan's Review Focus 4: the app a paused plan named was removed meanwhile. The remainder says «нет
+     * такого приложения» — from the user's words where the step kept them (`launch_app`), by its package where
+     * it kept only that (`open_app_info`) — and never launches the stale package. The control: with both apps
+     * installed, the same two steps bind.
+     */
+    @Test
+    fun `a remainder whose app is gone is not found`() = runTest {
+        val launch = ExecutionPlan(listOf(remainderStep(0, ToolIds.LAUNCH_APP, "app" to lumora.packageName, "query" to "lumora")))
+        val info = ExecutionPlan(listOf(remainderStep(0, Tier0ToolIds.OPEN_APP_INFO, "app" to vemblic.packageName)))
+        val both = binder(listOf(lumora, vemblic))
+        assertTrue("the control: installed, the launch binds", both.rebind(goal, launch) is Binding.Bound)
+        assertTrue("the control: installed, the app info binds", both.rebind(goal, info) is Binding.Bound)
+
+        assertEquals(Binding.NotFound("lumora"), binder(listOf(zantor)).rebind(goal, launch))
+        assertEquals(Binding.NotFound("net.fixture.vemblic"), binder(listOf(zantor)).rebind(goal, info))
     }
 }

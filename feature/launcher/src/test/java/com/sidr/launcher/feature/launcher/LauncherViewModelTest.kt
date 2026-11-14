@@ -331,6 +331,7 @@ class LauncherViewModelTest {
         undoAgentSession = undoOver(fakeAgentStore, agentRegistry),
         agentSessionStore = fakeAgentStore,
         startAgentSession = startAgentSession,
+        mentionBinder = FakeMentionBinder(),
         toolRegistry = agentRegistry,
         // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
         // and every step line renders exactly as it did before the dynamic arm existed.
@@ -395,6 +396,7 @@ class LauncherViewModelTest {
             undoAgentSession = undoOver(fakeAgentStore, agentRegistry),
             agentSessionStore = fakeAgentStore,
             startAgentSession = startAgentSession,
+            mentionBinder = FakeMentionBinder(),
             toolRegistry = agentRegistry,
             // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
             // and every step line renders exactly as it did before the dynamic arm existed.
@@ -633,6 +635,7 @@ class LauncherViewModelTest {
             undoAgentSession = undoOver(fakeAgentStore, agentRegistry),
             agentSessionStore = fakeAgentStore,
             startAgentSession = startAgentSession,
+            mentionBinder = FakeMentionBinder(),
             toolRegistry = agentRegistry,
             // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
             // and every step line renders exactly as it did before the dynamic arm existed.
@@ -892,6 +895,7 @@ class LauncherViewModelTest {
             undoAgentSession = undoOver(fakeAgentStore, agentRegistry),
             agentSessionStore = fakeAgentStore,
             startAgentSession = startAgentSession,
+            mentionBinder = FakeMentionBinder(),
             toolRegistry = agentRegistry,
             // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
             // and every step line renders exactly as it did before the dynamic arm existed.

@@ -433,6 +433,7 @@ class LauncherScreenInterpretationTest {
             undoAgentSession = undoOver(agentStore, agentRegistry, noInverses),
             agentSessionStore = agentStore,
             startAgentSession = startAgentSession,
+            mentionBinder = com.sidr.launcher.core.testing.FakeMentionBinder(),
             toolRegistry = agentRegistry,
             dynamicToolLabels = com.sidr.launcher.feature.launcher.agent.DynamicToolLabels { emptyMap() },
             ioDispatcher = dispatcher,

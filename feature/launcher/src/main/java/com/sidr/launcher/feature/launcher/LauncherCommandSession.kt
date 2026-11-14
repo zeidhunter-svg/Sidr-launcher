@@ -4,13 +4,17 @@ import androidx.lifecycle.SavedStateHandle
 import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.domain.action.LauncherAction
+import com.sidr.launcher.domain.agent.AgentGoal
+import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.UnresolvedTarget
 import com.sidr.launcher.domain.agent.bind
 import com.sidr.launcher.domain.ai.bridge.Interpretation
+import com.sidr.launcher.domain.ai.bridge.MentionBinder
 import com.sidr.launcher.domain.ai.bridge.SidrDestination
 import com.sidr.launcher.domain.ai.bridge.choose
 import com.sidr.launcher.domain.ai.bridge.plan
+import com.sidr.launcher.domain.ai.router.toCommandOutcome
 import com.sidr.launcher.domain.input.InputIntent
 import com.sidr.launcher.domain.input.UniversalInputRouter
 import com.sidr.launcher.domain.intent.CommandFailure
@@ -88,6 +92,9 @@ internal class LauncherCommandSession(
     // A4′ phase 3a: «Выполнить» on the interpretation card starts the model's plan through the
     // engine — `startPlanned` validates it against the federation, the engine gates it by risk.
     private val startAgentSession: StartAgentSessionUseCase,
+    // A4′ phase 3b, Task 11 (fork 3b-A, B-10): the remainder of a model plan that acted is bound AGAIN on
+    // the device before its card — no model is asked ([showRemainder]).
+    private val binder: MentionBinder,
     private val scope: CoroutineScope,
     private val onNavigate: (String) -> Unit,
 ) {
@@ -333,7 +340,9 @@ internal class LauncherCommandSession(
      *  - the ASK chip and the prayer strip's details, from `LauncherScreen` — `LauncherViewModel.navigateByUser`.
      *    The prayer-details half is wired, and held by no test (plant F1-PRAYER stays green). It is
      *    reachable during a wait: the strip hides while the field holds text, but «Продолжить» on a
-     *    model-written plan re-routes its goal with the field empty.
+     *    model-written plan re-routes its goal with the field empty;
+     *  - a remainder card brought up from the agent surface — [showRemainder] (A4′ phase 3b, Task 11), held by
+     *    no test.
      * [submitSite] needs no call: it is a [submit], which supersedes on its own. [onChanged] and
      * [cancelThinking] keep their own lines, written out where they are.
      *
@@ -542,6 +551,21 @@ internal class LauncherCommandSession(
                 else CommandOutcome.Failed(CommandFailure.Generic),
             )
         }
+    }
+
+    /**
+     * The remainder of a model plan that acted — «Продолжить» on it (`Resumption.NeedsCard`) or «Повторить
+     * остаток» on its finished card (A4′ phase 3b, Task 11; fork 3b-A, B-10). Its apps are bound AGAIN on the
+     * device ([MentionBinder.rebind]) and what that finds reaches the screen through step 7's own mapping
+     * ([toCommandOutcome], controller ruling E11-P5): the interpretation card — the same card, so its picks,
+     * their tokens and «Выполнить» work exactly as for a fresh reading (B-19) — or «нет такого приложения»,
+     * «не понял», a failure. No model is asked; nothing runs before «Выполнить», which starts a NEW session.
+     * A command still waiting on the model is abandoned first ([supersedeWaitingCommand]); the binding rides
+     * [pending], so an edit abandons it too.
+     */
+    fun showRemainder(goal: AgentGoal, plan: ExecutionPlan) {
+        supersedeWaitingCommand()
+        pending = scope.launch { applyOutcome(binder.rebind(goal, plan).toCommandOutcome()) }
     }
 
     /** «Отмена» on a 2b pick: nothing starts. */

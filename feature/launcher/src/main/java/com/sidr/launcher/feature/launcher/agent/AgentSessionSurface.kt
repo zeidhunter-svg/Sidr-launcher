@@ -55,6 +55,10 @@ internal fun AgentSessionSurface(
     // no button; the one production caller, `LauncherScreen`, passes both.
     undoReview: List<StepUndo> = emptyList(),
     onUndo: () -> Unit = {},
+    // A4′ phase 3b, Task 11 (fork 3b-A). Defaulted like undo: whether this finished `Failed`/`Blocked`
+    // model-plan card offers «Повторить остаток» (`LauncherAgentSession.remainderOffered`), and its tap.
+    remainderOffered: Boolean = false,
+    onRetryRemainder: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     // Null for exactly one state (Cancelled), which renders nothing; every other state has a title.
@@ -77,6 +81,14 @@ internal fun AgentSessionSurface(
             .map { it.line(subject, dynamicLabels) }
             .takeIf { it.isNotEmpty() }
             ?.let { sidrString(R.string.launcher_agent_undo_not_all, it.joinToString(", ")) }
+    }
+    // «Повторить остаток» (A4′ phase 3b, Task 11): the steps after the last act, back on the interpretation
+    // card. The finished card has one secondary slot, and «Отменить» keeps it when both exist — the rest is
+    // offered only when nothing can be undone (named in the task report, not decided by a test).
+    val secondary = undo ?: if (remainderOffered) {
+        SidrSurfaceAction(sidrString(R.string.launcher_agent_retry_remainder), onRetryRemainder)
+    } else {
+        null
     }
 
     when (session.state) {
@@ -224,7 +236,7 @@ internal fun AgentSessionSurface(
             modifier = modifier,
             next = notUndoable,
             primaryAction = dismiss,
-            secondaryAction = undo,
+            secondaryAction = secondary,
         )
 
         ExecutionState.Blocked -> SidrBlockedState(
@@ -233,7 +245,7 @@ internal fun AgentSessionSurface(
             modifier = modifier,
             next = notUndoable,
             primaryAction = dismiss,
-            secondaryAction = undo,
+            secondaryAction = secondary,
         )
 
         ExecutionState.Cancelled -> Unit

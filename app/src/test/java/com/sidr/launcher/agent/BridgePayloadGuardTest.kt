@@ -10,6 +10,7 @@ import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeIntentMatcher
 import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
 import com.sidr.launcher.core.testing.FakeSecureSecretStore
+import com.sidr.launcher.core.testing.FakeToolExecutor
 import com.sidr.launcher.core.testing.configuredProvider
 import com.sidr.launcher.data.aicloud.BridgeTransportMode
 import com.sidr.launcher.data.aicloud.OpenAiCompatibleBridgeTransport
@@ -18,14 +19,28 @@ import com.sidr.launcher.data.repository.agent.AppTargetResolver
 import com.sidr.launcher.data.repository.agent.AuthoredToolDescriptions
 import com.sidr.launcher.data.repository.agent.CatalogArgumentSorts
 import com.sidr.launcher.data.repository.agent.DeviceMentionBinder
+import com.sidr.launcher.data.repository.agent.InAppToolIds
 import com.sidr.launcher.data.repository.agent.shortcut.AppShortcut
 import com.sidr.launcher.data.repository.agent.shortcut.ShortcutToolIds
 import com.sidr.launcher.di.BridgeProvidesModule
 import com.sidr.launcher.di.SortProvidesModule
 import com.sidr.launcher.domain.action.ActionIds
+import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.agent.AgentExecutor
+import com.sidr.launcher.domain.agent.AgentGoal
+import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.AgentSessionIdFactory
+import com.sidr.launcher.domain.agent.ExecutionPlan
+import com.sidr.launcher.domain.agent.ExecutionState
+import com.sidr.launcher.domain.agent.GoalShape
+import com.sidr.launcher.domain.agent.PlanStep
+import com.sidr.launcher.domain.agent.ResumeAgentSessionUseCase
+import com.sidr.launcher.domain.agent.Resumption
+import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
+import com.sidr.launcher.domain.agent.StepPrecondition
+import com.sidr.launcher.domain.agent.StepRationale
 import com.sidr.launcher.domain.agent.TemplatePlanner
 import com.sidr.launcher.domain.ai.AiModelId
 import com.sidr.launcher.domain.ai.AiProviderConfig
@@ -38,6 +53,10 @@ import com.sidr.launcher.domain.ai.bridge.BridgeModelPlanner
 import com.sidr.launcher.domain.ai.bridge.BridgeOffering
 import com.sidr.launcher.domain.ai.bridge.BridgeRendering
 import com.sidr.launcher.domain.ai.bridge.Interpretation
+import com.sidr.launcher.domain.ai.bridge.PrincipalId
+import com.sidr.launcher.domain.ai.bridge.ValueOrigin
+import com.sidr.launcher.domain.ai.router.toCommandOutcome
+import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
@@ -53,9 +72,16 @@ import com.sidr.launcher.domain.memory.resolution.ResolutionPreference
 import com.sidr.launcher.domain.memory.resolution.ResolvedTarget
 import com.sidr.launcher.domain.memory.resolution.fingerprintOf
 import com.sidr.launcher.domain.model.InstalledApp
+import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.security.SecretKeys
 import com.sidr.launcher.domain.text.PlainTextFolding
 import com.sidr.launcher.domain.tool.ArgSource
+import com.sidr.launcher.domain.tool.ToolEffect
+import com.sidr.launcher.domain.tool.ToolIds
+import com.sidr.launcher.domain.tool.ToolInvocation
+import com.sidr.launcher.domain.tool.ToolResult
+import com.sidr.launcher.domain.trace.ExecutionTrace
+import com.sidr.launcher.domain.trace.TraceEvent
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -223,17 +249,7 @@ class BridgePayloadGuardTest {
             // reads the model's reply only and adds nothing to a request, so the payload under guard is the same.
             PlainTextFolding,
         ),
-        binder = BridgeProvidesModule.provideMentionBinder(
-            DeviceMentionBinder(
-                AppTargetResolver(apps(), aliases(), PlainTextFolding),
-                CatalogArgumentSorts(),
-                // The production registry, by its own `@Provides` (phase 3b, Task 6) — the precedent above.
-                SortProvidesModule.provideSortResolvers(AppSortResolver(AppTargetResolver(apps(), aliases(), PlainTextFolding))),
-                learned(),
-                DefaultResolutionPreferencePolicy(),
-                PlainTextFolding,
-            ),
-        ),
+        binder = binder(),
         featureFlagRepository = FakeFeatureFlagRepository(),
         providerConfigRepository = configuredProvider(),
         connectivityChecker = FakeConnectivityChecker(initiallyOnline = true),
@@ -244,6 +260,21 @@ class BridgePayloadGuardTest {
                 private var n = 0
                 override fun newId() = AgentSessionId("guard-${++n}")
             },
+            federation.registry,
+        ),
+    )
+
+    /** The device's binder over the planted stores, by `BridgeProvidesModule`'s own `@Provides` — the route's and the remainder's. */
+    private fun binder() = BridgeProvidesModule.provideMentionBinder(
+        DeviceMentionBinder(
+            AppTargetResolver(apps(), aliases(), PlainTextFolding),
+            CatalogArgumentSorts(),
+            // The production registry, by its own `@Provides` (phase 3b, Task 6) — the precedent above.
+            SortProvidesModule.provideSortResolvers(AppSortResolver(AppTargetResolver(apps(), aliases(), PlainTextFolding))),
+            learned(),
+            DefaultResolutionPreferencePolicy(),
+            PlainTextFolding,
+            // A4′ phase 3b, Task 11: a remainder's effects are the federation's (ruling E11-P1).
             federation.registry,
         ),
     )
@@ -445,6 +476,121 @@ class BridgePayloadGuardTest {
                 assertTrue(body.contains("launch_app"))
             }
         }
+    }
+
+    /**
+     * Fork 3b-A («nothing leaves», plan §0.5: the guard becomes «no remainder path asks the model»; `DOC-AML-1`).
+     * A plan the model wrote — launch «lumora», launch «tessar», search «ostravel lectures» — whose first step
+     * acted. Both remainder paths are driven exactly as the launcher drives them: «Продолжить» on the paused
+     * plan follows each `Resumption` arm as `LauncherAgentSession` does (`NeedsRoute` → the route with the
+     * goal's words; `NeedsCard` → the binder's `rebind`, mapped by step 7's own mapping), and «Повторить
+     * остаток» on the finished `Failed` card reads the one domain entry, `ResumeAgentSessionUseCase.remainder`.
+     * The recording transport sees NO body across both.
+     *
+     * Not vacuous: each comes back as the bound card of the two steps after the act — the app re-bound on the
+     * device from the planted learned choice (`net.fixture.tessar.two`), the search the model's words — a
+     * card no single answer of this mock could produce; and the control — the same goal routed fresh — asks
+     * the model once (its retry follows the mock's rejected first answer).
+     */
+    @Test
+    fun `a remainder asks the model nothing`() {
+        val capture = Capture(BridgeTransportMode.PROMPT_ONLY)
+        val route = route(BridgeTransportMode.PROMPT_ONLY, capture)
+        val binder = binder()
+        val store = FakeAgentSessionStore()
+        val resume = ResumeAgentSessionUseCase(
+            StartAgentSessionUseCase(
+                TemplatePlanner(),
+                store,
+                object : AgentSessionIdFactory {
+                    private var n = 0
+                    override fun newId() = AgentSessionId("remainder-${++n}")
+                },
+                federation.registry,
+            ),
+            RunAgentSessionUseCase(AgentExecutor(federation.registry, FakeToolExecutor(emptyList())), store),
+        )
+        val goal = AgentGoal("давай lumora и tessar", GoalShape.Free("давай lumora и tessar"))
+        fun step(index: Int, tool: com.sidr.launcher.domain.tool.ToolId, vararg args: Pair<String, String>) = PlanStep(
+            index = index,
+            invocation = ToolInvocation(tool, args.associate { (name, value) -> name to ArgSource.Literal(value) }),
+            risk = ActionRiskLevel.SAFE,
+            precondition = StepPrecondition.None,
+            rationale = StepRationale.MODEL_PROPOSED,
+        )
+        val reading = ExecutionPlan(
+            listOf(
+                step(0, ToolIds.LAUNCH_APP, "app" to "net.fixture.lumora", "query" to "lumora"),
+                step(1, ToolIds.LAUNCH_APP, "app" to "net.fixture.tessar.two", "query" to "tessar"),
+                step(2, InAppToolIds.WEB_SEARCH, "query" to "ostravel lectures"),
+            ),
+        )
+        val acted = listOf(
+            TraceEvent.PlanCreated(3), TraceEvent.StepStarted(0), TraceEvent.ToolInvoked(0, ToolIds.LAUNCH_APP),
+            TraceEvent.ToolObserved(0, ToolResult.Effected()),
+        )
+        val paused = AgentSession(
+            id = AgentSessionId("paused-acted"),
+            goal = goal,
+            plan = reading,
+            cursor = 1,
+            state = ExecutionState.Paused,
+            observations = mapOf(0 to ToolResult.Effected()),
+            consents = emptyMap(),
+            trace = ExecutionTrace(acted + TraceEvent.SessionPaused),
+        )
+        val failure = ToolResult.Failed(CommandFailure.Generic)
+        val failed = AgentSession(
+            id = AgentSessionId("failed-acted"),
+            goal = goal,
+            plan = reading,
+            cursor = 3,
+            state = ExecutionState.Failed,
+            observations = mapOf(0 to ToolResult.Effected(), 1 to failure, 2 to failure),
+            consents = emptyMap(),
+            trace = ExecutionTrace(
+                acted + listOf(
+                    TraceEvent.StepStarted(1), TraceEvent.ToolInvoked(1, ToolIds.LAUNCH_APP), TraceEvent.ToolObserved(1, failure),
+                    TraceEvent.StepStarted(2), TraceEvent.ToolInvoked(2, InAppToolIds.WEB_SEARCH), TraceEvent.ToolObserved(2, failure),
+                    TraceEvent.SessionEnded(ExecutionState.Failed),
+                ),
+            ),
+        )
+
+        // The launcher's own driver: every arm as `LauncherAgentSession.continueSession` follows it.
+        suspend fun follow(resumption: Resumption): CommandOutcome? = when (resumption) {
+            is Resumption.Ran -> null
+            is Resumption.NeedsRoute -> route.route(resumption.goal.text)
+            is Resumption.NeedsCard -> binder.rebind(resumption.goal, resumption.plan).toCommandOutcome()
+        }
+        val resumed = runBlocking {
+            store.save(paused)
+            follow((resume.resume(paused) as OperationResult.Success).value)
+        }
+        val retried = runBlocking { resume.remainder(failed)?.let { binder.rebind(failed.goal, it).toCommandOutcome() } }
+
+        assertEquals("no body left the device on either remainder path", emptyList<String>(), capture.bodies)
+        val card = CommandOutcome.Interpreted(
+            Interpretation.Act(
+                goal = goal,
+                steps = listOf(
+                    step(0, ToolIds.LAUNCH_APP, "query" to "tessar", "app" to "net.fixture.tessar.two"),
+                    step(1, InAppToolIds.WEB_SEARCH, "query" to "ostravel lectures"),
+                ),
+                origins = mapOf(
+                    0 to mapOf("app" to ValueOrigin.Ours, "query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                    1 to mapOf("query" to ValueOrigin.ModelGenerated),
+                ),
+                effects = mapOf(0 to ToolEffect.EXTERNAL, 1 to ToolEffect.EXTERNAL),
+                choices = emptyList(),
+            ),
+        )
+        assertEquals("«Продолжить»: the remainder is a bound card", card, resumed)
+        assertEquals("«Повторить остаток»: the same remainder, the same card", card, retried)
+
+        // The control: the same goal through the route asks the model — exactly once.
+        runBlocking { route.route(goal.text) }
+        assertEquals("the control asked once", 1, capture.bodies.count { messagesOf(it).size == 2 })
     }
 
     /** Spec §7.12.3 (1), the three sources with no port (plan §0.5 S5): held by the bridge's signatures. */

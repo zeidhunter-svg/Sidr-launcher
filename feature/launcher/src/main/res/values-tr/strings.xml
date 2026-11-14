@@ -153,4 +153,6 @@
     <string name="launcher_agent_blocked_body">Sidr bu planı durdurdu, çünkü artık güvenle sürdüremiyordu. Başka hiçbir şey çalışmayacak.</string>
     <string name="launcher_agent_undo">Geri al</string>
     <string name="launcher_agent_undo_not_all">Burada geri alınamaz: %1$s</string>
+    <string name="launcher_agent_retry_remainder">Kalanı yeniden dene</string>
+    <string name="launcher_agent_resume_failed">Plan sürdürülemedi.</string>
 </resources>

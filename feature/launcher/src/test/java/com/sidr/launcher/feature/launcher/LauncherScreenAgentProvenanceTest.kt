@@ -281,6 +281,7 @@ class LauncherScreenAgentProvenanceTest {
             undoAgentSession = undoOver(agentStore, agentRegistry, inverses),
             agentSessionStore = agentStore,
             startAgentSession = startAgentSession,
+            mentionBinder = FakeMentionBinder(),
             toolRegistry = agentRegistry,
             dynamicToolLabels = agentToolLabels,
             ioDispatcher = dispatcher,

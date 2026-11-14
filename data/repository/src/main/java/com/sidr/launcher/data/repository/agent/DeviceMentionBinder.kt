@@ -1,6 +1,7 @@
 package com.sidr.launcher.data.repository.agent
 
 import com.sidr.launcher.domain.agent.AgentGoal
+import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.ai.bridge.AppChoice
 import com.sidr.launcher.domain.ai.bridge.Binding
@@ -9,6 +10,7 @@ import com.sidr.launcher.domain.ai.bridge.MentionBinder
 import com.sidr.launcher.domain.ai.bridge.PendingChoice
 import com.sidr.launcher.domain.ai.bridge.PrincipalId
 import com.sidr.launcher.domain.ai.bridge.ProposedStep
+import com.sidr.launcher.domain.ai.bridge.StepRef
 import com.sidr.launcher.domain.ai.bridge.ValueOrigin
 import com.sidr.launcher.domain.ai.bridge.toPlanStep
 import com.sidr.launcher.domain.memory.resolution.CandidateSet
@@ -27,8 +29,10 @@ import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.sort.SortResolution
 import com.sidr.launcher.domain.sort.SortResolver
 import com.sidr.launcher.domain.text.TextFolding
+import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolIds
+import com.sidr.launcher.domain.tool.ToolRegistry
 import javax.inject.Inject
 
 /**
@@ -73,8 +77,22 @@ import javax.inject.Inject
  * conversion, [toPlanStep], so a reference the model wrote reaches the plan as `ArgSource.FromStep`; on
  * Android no authored tool describes an output yet (B-8), so none arrives here today.
  *
+ * **The remainder of a model plan that acted is bound AGAIN before its card** ([rebind]; A4′ phase 3b,
+ * Task 11, fork 3b-A, B-10) — after a pause or a failure the apps it named may be gone. Each app argument is
+ * re-resolved from the user's words the step kept in its `labelArg` (`launch_app`'s `query`,
+ * `uninstall_app`'s `app_label`), through the SAME mention branch as [bind] — candidates, learned choices
+ * for `launch_app` only, a pick with its own token (controller ruling E11-P4); a step that kept the package
+ * only (`open_app_info`) is checked against the installed list instead. A package no longer installed is
+ * [Binding.NotFound] («нет такого приложения»), never launched stale. Origins (controller ruling E11-P1):
+ * the re-bound package is [ValueOrigin.Ours], its words [ValueOrigin.SaidBy] the user, as in [bind]; every
+ * other literal — a value the model wrote, or one a finished step recorded — is [ValueOrigin.ModelGenerated],
+ * so an `EXTERNAL` step shows it (over-shown, never under-shown). Effects are the CURRENT [registry]'s; a
+ * step whose tool is no longer registered answers [Binding.Unavailable] for the whole remainder. Value
+ * arguments are NOT re-read: they were read before the first card and are not observations of the world.
+ *
  * Nothing here reaches the model: `RouteCommandUseCase` calls this after the model has answered, and
- * returns what it finds to the screen.
+ * returns what it finds to the screen; the remainder card is reached from the launcher's resume, with no
+ * model asked.
  */
 class DeviceMentionBinder @Inject constructor(
     private val appTargets: AppTargetResolver,
@@ -83,6 +101,8 @@ class DeviceMentionBinder @Inject constructor(
     private val preferences: ResolutionPreferenceStore,
     private val policy: ResolutionPreferencePolicy,
     private val folding: TextFolding,
+    // A4′ phase 3b, Task 11 (ruling E11-P1): a remainder's effects are the current registry's.
+    private val registry: ToolRegistry,
 ) : MentionBinder {
 
     override suspend fun bind(goal: AgentGoal, steps: List<ProposedStep>): Binding {
@@ -92,16 +112,28 @@ class DeviceMentionBinder @Inject constructor(
                 is StepBinding.Refused -> return step.binding
             }
         }
-        return Binding.Bound(
-            Interpretation.Act(
-                goal = goal,
-                steps = bound.map { it.step },
-                origins = bound.associate { it.step.index to it.origins },
-                effects = bound.associate { it.step.index to it.effect },
-                choices = bound.mapNotNull { step -> step.choice?.let { PendingChoice(step.step.index, it) } },
-            ),
-        )
+        return Binding.Bound(act(goal, bound))
     }
+
+    /** The remainder of a model plan that acted, bound again — see the class KDoc. */
+    override suspend fun rebind(goal: AgentGoal, plan: ExecutionPlan): Binding {
+        val bound = plan.steps.mapIndexed { index, planned ->
+            when (val again = rebindStep(index, planned)) {
+                is StepBinding.Bound -> again
+                is StepBinding.Refused -> return again.binding
+            }
+        }
+        return Binding.Bound(act(goal, bound))
+    }
+
+    /** One card for every step bound, in plan order, every owed pick in step order (B-19). */
+    private fun act(goal: AgentGoal, bound: List<StepBinding.Bound>) = Interpretation.Act(
+        goal = goal,
+        steps = bound.map { it.step },
+        origins = bound.associate { it.step.index to it.origins },
+        effects = bound.associate { it.step.index to it.effect },
+        choices = bound.mapNotNull { step -> step.choice?.let { PendingChoice(step.step.index, it) } },
+    )
 
     /** One step at plan position [index], bound exactly as a one-step reading always was. */
     private suspend fun bindStep(index: Int, proposed: ProposedStep): StepBinding {
@@ -111,6 +143,52 @@ class DeviceMentionBinder @Inject constructor(
             is Values.Read -> values.args
             is Values.NotRead -> return StepBinding.Refused(values.binding)
         }
+        return bindMention(index, proposed, args)
+    }
+
+    /**
+     * One step of a remainder at plan position [index], bound again (controller rulings E11-P1, E11-P4): the
+     * step is read back into the shape the model's step had before [bind] — the user's words under the
+     * mention, no package — and goes through [bindMention], the one mention branch; a step that kept no
+     * words for its app has its package checked against the installed list.
+     */
+    private suspend fun rebindStep(index: Int, planned: PlanStep): StepBinding {
+        val tool = planned.invocation.id
+        val effect = registry.find(tool)?.effect ?: return StepBinding.Refused(Binding.Unavailable)
+        val literals = planned.invocation.args.mapNotNull { (name, source) -> (source as? ArgSource.Literal)?.let { name to it.value } }.toMap()
+        val refs = planned.invocation.args.mapNotNull { (name, source) -> (source as? ArgSource.FromStep)?.let { name to StepRef(it.stepIndex, it.key) } }.toMap()
+        fun asProposed(args: Map<String, String>) = ProposedStep(
+            tool = tool,
+            args = args,
+            // E11-P1: every literal is the model's until the mention branch says otherwise (the app: ours;
+            // its words: the user's) — a finished step's recorded value included.
+            origins = args.mapValues { ValueOrigin.ModelGenerated },
+            risk = planned.risk,
+            effect = effect,
+            refs = refs,
+        )
+        val kept = asProposed(literals)
+        val (appArg, sorted) = sorts.appArgOf(tool) ?: return step(index, kept, literals, kept.origins, choice = null)
+        val label = sorted.labelArg
+        val words = label?.let { literals[it] }
+        if (label != null && words != null) {
+            val again = asProposed(literals - appArg - label + (AuthoredToolDescriptions.MENTION_ARG to words))
+            return bindMention(index, again, again.args)
+        }
+        val packageName = literals[appArg] ?: return step(index, kept, literals, kept.origins, choice = null)
+        return when (appTargets.stillInstalled(packageName)) {
+            true -> step(index, kept, literals, kept.origins + (appArg to ValueOrigin.Ours), choice = null)
+            false -> StepBinding.Refused(Binding.NotFound(packageName))
+            null -> StepBinding.Refused(Binding.Unavailable)
+        }
+    }
+
+    /**
+     * The mention branch — the ONE place an app mention becomes a package, a pick, «not found» or
+     * «unavailable», for [bind] and [rebind] alike: [args] are the step's model-facing arguments, its app
+     * (if it has one) in the user's words under [AuthoredToolDescriptions.MENTION_ARG].
+     */
+    private suspend fun bindMention(index: Int, proposed: ProposedStep, args: Map<String, String>): StepBinding {
         val sort = sorts.appArgOf(proposed.tool)
         val mention = args[AuthoredToolDescriptions.MENTION_ARG]
         if (sort == null || mention == null) {

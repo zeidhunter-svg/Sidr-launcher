@@ -114,6 +114,20 @@ fun ProposedStep.toPlanStep(index: Int, words: Map<String, String>): PlanStep = 
  */
 interface MentionBinder {
     suspend fun bind(goal: AgentGoal, steps: List<ProposedStep>): Binding
+
+    /**
+     * The REMAINDER of a model plan that acted, bound again on this device before its card (A4′ phase 3b,
+     * Task 11; fork 3b-A, plan §0.2 B-10) — after a pause («Продолжить», `Resumption.NeedsCard`) or a
+     * failure («Повторить остаток»), when the apps the plan named may be gone or renamed. [plan] is
+     * `ResumeAgentSessionUseCase.remainder`'s: steps re-indexed from 0, each argument a literal value or
+     * a reference to an earlier step of [plan]. Every app argument is resolved AGAIN — from the user's
+     * words the step kept for it where it kept them, otherwise by checking that its package is still
+     * there — through the same search, learned choices and picks as [bind]; never the stale package
+     * kept. Each step's effect is the CURRENT registry's, and a step whose tool is no longer registered
+     * answers [Binding.Unavailable] for the whole remainder (controller ruling E11-P1). No model is
+     * asked; the answer goes to the user, exactly as [bind]'s.
+     */
+    suspend fun rebind(goal: AgentGoal, plan: ExecutionPlan): Binding
 }
 
 /**

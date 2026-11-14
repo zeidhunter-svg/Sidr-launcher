@@ -112,6 +112,14 @@ class AppTargetResolver @Inject constructor(
     suspend fun resolve(query: String): String? =
         (candidates(query) as? AppCandidates.One)?.app?.packageName
 
+    /**
+     * Whether [packageName] — a package bound earlier, with no words kept to search by — is still
+     * installed (A4′ phase 3b, Task 11: `DeviceMentionBinder.rebind` for `open_app_info`, whose step keeps
+     * the package only). `null` = the app list could not be read: not «gone», which would be a lie.
+     */
+    suspend fun stillInstalled(packageName: String): Boolean? =
+        installedOrNull()?.any { it.packageName == packageName }
+
     private suspend fun installedOrNull(): List<InstalledApp>? =
         (apps.getInstalledApps() as? OperationResult.Success)?.value
 

@@ -226,4 +226,10 @@
     <string name="launcher_agent_blocked_body">Sidr stopped this plan because it could no longer follow it safely. Nothing further will run.</string>
     <string name="launcher_agent_undo">Undo</string>
     <string name="launcher_agent_undo_not_all">Can’t be undone here: %1$s</string>
+    <!-- A4′ phase 3b, Task 11 (fork 3b-A): a finished Failed/Blocked model-plan card offers the steps after
+         the last act again, on the interpretation card, bound on the device. Class A, not locked. -->
+    <string name="launcher_agent_retry_remainder">Retry the rest</string>
+    <!-- A4′ phase 3b, Task 11 (fork 3b-F): «Continue» the store could not carry out is said, not silent.
+         Class A, not locked. -->
+    <string name="launcher_agent_resume_failed">The plan could not be continued.</string>
 </resources>

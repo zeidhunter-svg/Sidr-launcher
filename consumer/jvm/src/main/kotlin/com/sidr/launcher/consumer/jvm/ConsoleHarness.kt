@@ -1,8 +1,12 @@
 package com.sidr.launcher.consumer.jvm
 
+import com.sidr.launcher.consumer.jvm.bridge.SandboxFileSort
+import com.sidr.launcher.consumer.jvm.bridge.SandboxMentionBinder
+import com.sidr.launcher.consumer.jvm.bridge.SandboxToolDescriptions
 import com.sidr.launcher.consumer.jvm.plan.FilePlanner
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionIdFactory
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionStore
+import com.sidr.launcher.consumer.jvm.text.JdkTextFolding
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolInverses
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolSource
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolWorker
@@ -16,7 +20,18 @@ import com.sidr.launcher.domain.agent.ResolveConsentUseCase
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.UndoAgentSessionUseCase
+import com.sidr.launcher.domain.ai.AiError
+import com.sidr.launcher.domain.ai.bridge.Binding
+import com.sidr.launcher.domain.ai.bridge.BridgeModelPlanner
+import com.sidr.launcher.domain.ai.bridge.BridgeTransport
+import com.sidr.launcher.domain.ai.bridge.Interpretation
+import com.sidr.launcher.domain.ai.bridge.ModelPlanning
+import com.sidr.launcher.domain.ai.bridge.PrincipalId
+import com.sidr.launcher.domain.ai.bridge.TransportReply
+import com.sidr.launcher.domain.ai.bridge.ValueOrigin
+import com.sidr.launcher.domain.ai.bridge.plan
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.InvocationValidator
 import com.sidr.launcher.domain.tool.ResolutionResult
 import com.sidr.launcher.domain.tool.ToolAdapter
@@ -50,6 +65,16 @@ import kotlin.coroutines.EmptyCoroutineContext
  * restored session may continue under a different typed goal is a question about restore semantics, and
  * the Android consumer carries the identical question one level deeper — a resumed plan never re-checks
  * its preconditions against the world. Owned by A4', not decided here.
+ *
+ * **The model path (A4′ phase 3b, Task 13; B-12, B-13): `ask <goal>`.** The goal after `ask` goes to the
+ * SAME bridge `:domain` holds — `BridgeModelPlanner` over this consumer's offering (the sandbox level,
+ * [SandboxToolDescriptions]), this platform's folding, the injected [BridgeTransport] — then the validator's
+ * verdict is bound on this computer ([SandboxMentionBinder]: the sandbox root by the device, a file the user
+ * named through `SandboxFileSort`, references kept), then printed as a card. Nothing runs before a `y` to
+ * the card; then `startPlanned` and the same engine, with its consent prompts unchanged. Every answer that is
+ * not a plan, and every binding that is not one, is said and starts nothing. A reading is never stored: a
+ * card left unanswered is dropped. `remove …` / `rename …` keep the deterministic `FilePlanner` — the model
+ * is asked only on `ask`.
  */
 class ConsoleHarness(
     root: Path,
@@ -62,6 +87,12 @@ class ConsoleHarness(
      * here — named, not tested.
      */
     worldContext: CoroutineContext = EmptyCoroutineContext,
+    /**
+     * The model's transport for `ask` (B-13). `Main.kt` passes `JdkBridgeTransport` over the environment;
+     * tests pass a fake. The default is no model at all: an `ask` then answers «credentials missing» and
+     * nothing is sent.
+     */
+    transport: BridgeTransport = BridgeTransport { TransportReply.Failed(AiError.MissingCredentials) },
 ) {
     // This consumer reaches the world through one federation, same as the plan's Task 4 Step 2 shape
     // pulled forward by one task: SandboxToolWorker is that federation's registered worker for the
@@ -85,11 +116,27 @@ class ConsoleHarness(
         registry,
     )
 
+    // The model path (`ask`): the domain's one bridge over this consumer's levels, its binder after it.
+    private val modelPlanner = BridgeModelPlanner(
+        registry = registry,
+        descriptions = SandboxToolDescriptions(),
+        transport = transport,
+        levels = SandboxToolDescriptions.OFFERED_LEVELS,
+        folding = JdkTextFolding,
+    )
+    private val binder = SandboxMentionBinder(root, SandboxFileSort(root, JdkTextFolding, worldContext), registry)
+
     private var printed = 0
 
     suspend fun run(goalText: String): ExecutionState {
         val restored = restore()
-        val session = restored ?: start(goalText) ?: return ExecutionState.Blocked
+        val session = restored ?: when (val command = modelCommandOf(goalText)) {
+            null -> start(goalText) ?: return ExecutionState.Blocked
+            else -> when (val read = interpret(command)) {
+                is Interpreted.Started -> read.session
+                is Interpreted.NotStarted -> return read.state
+            }
+        }
 
         val ran = when (val result = runner.run(session)) {
             is OperationResult.Failure -> {
@@ -137,10 +184,92 @@ class ConsoleHarness(
             is OperationResult.Success -> result.value
         }
         if (id == null) {
-            out("No plan for: \"$goalText\". This harness understands: remove <file name> · rename <file name> to <new name>")
+            out("No plan for: \"$goalText\". This harness understands: remove <file name> · rename <file name> to <new name> · ask <goal>")
             return null
         }
         return (store.active() as? OperationResult.Success)?.value
+    }
+
+    /** The goal after `ask `, or `null` when [goalText] is not a model goal. */
+    private fun modelCommandOf(goalText: String): String? {
+        val text = goalText.trim()
+        if (!text.startsWith("$ASK_VERB ")) return null
+        return text.removePrefix("$ASK_VERB ").trim().takeIf { it.isNotEmpty() }
+    }
+
+    /** What the model path made of a command: a started session, or the state it ended in with nothing started. */
+    private sealed interface Interpreted {
+        data class Started(val session: AgentSession) : Interpreted
+        data class NotStarted(val state: ExecutionState) : Interpreted
+    }
+
+    private fun notStarted(line: String, state: ExecutionState = ExecutionState.Blocked): Interpreted {
+        out(line)
+        return Interpreted.NotStarted(state)
+    }
+
+    /**
+     * Model → validator (inside [BridgeModelPlanner]) → binder → the card. Exhaustive with no `else` over
+     * [ModelPlanning] and [Binding]: a new answer must decide here what it means for this consumer.
+     */
+    private suspend fun interpret(command: String): Interpreted {
+        val goal = AgentGoal(text = command, shape = GoalShape.Free(command))
+        return when (val planning = modelPlanner.plan(command)) {
+            is ModelPlanning.Proposed -> when (val binding = binder.bind(goal, planning.steps)) {
+                is Binding.Bound -> card(binding.interpretation)
+                is Binding.NotFound -> notStarted("No file in the sandbox answers to \"${binding.mention}\". Nothing ran.")
+                is Binding.NotUnderstood -> notStarted("Could not read \"${binding.words}\". Nothing ran.")
+                Binding.Unavailable -> notStarted(
+                    "The reading could not be bound here: the sandbox could not be read, or a file name answers to " +
+                        "more than one file (this harness takes no pick). Nothing ran.",
+                )
+            }
+            is ModelPlanning.ToAssistant -> notStarted("The model reads a question, not a plan: \"${planning.question}\". This harness has no assistant. Nothing ran.")
+            is ModelPlanning.Clarify -> notStarted("The model asks first: \"${planning.question}\". Nothing ran.")
+            is ModelPlanning.Navigate -> notStarted("The model names a launcher screen (${planning.destination.wire}); this harness has none. Nothing ran.")
+            ModelPlanning.Declined -> notStarted("The model found no tool that fits. Nothing ran.")
+            is ModelPlanning.Unavailable -> notStarted("The model gave no usable answer: ${planning.reason}. Nothing ran.")
+        }
+    }
+
+    /**
+     * The interpretation card: every step with the values it will be called with and who said each — the
+     * user, this device, or the model — and every reference as the earlier step's output it names. Only a
+     * `y` starts it, through `startPlanned`; anything else, or no answer at all, drops the reading
+     * (`Cancelled`: the person did not say yes; nothing was started, nothing is stored).
+     */
+    private suspend fun card(act: Interpretation.Act): Interpreted {
+        // No pick is ever owed from this consumer's binder (it fails a file choice closed); were one owed,
+        // nothing would start.
+        val plan = act.plan() ?: return notStarted("A pick is owed before this reading can run, and this harness takes none. Nothing ran.")
+        out("The model's reading of \"${act.goal.text}\":")
+        act.steps.forEach { step ->
+            val origins = act.origins[step.index].orEmpty()
+            val args = step.invocation.args.entries.joinToString(", ") { (name, source) ->
+                when (source) {
+                    is ArgSource.Literal -> "$name=${source.value} [${labelOf(origins[name])}]"
+                    is ArgSource.FromStep -> "$name ← step ${source.stepIndex} ${source.key}"
+                }
+            }
+            out("  ${step.index}. ${step.invocation.id.value}($args) — risk ${step.risk}")
+        }
+        out("Run this plan? [y/N]")
+        val answer = ask() ?: return notStarted("No answer given — the reading is dropped; nothing was started.", ExecutionState.Cancelled)
+        if (answer.trim().lowercase() != "y") return notStarted("Not run.", ExecutionState.Cancelled)
+
+        val starting = StartAgentSessionUseCase(FilePlanner(), store, JvmAgentSessionIdFactory(), registry)
+        return when (val started = starting.startPlanned(act.goal, plan)) {
+            is OperationResult.Failure -> notStarted("Store failure: ${started.error}", ExecutionState.Failed)
+            is OperationResult.Success -> started.value?.let { Interpreted.Started(it) }
+                ?: notStarted("The reading does not check out against this registry. Nothing ran.")
+        }
+    }
+
+    /** Who said a value on the card; a value with no origin is shown as the model's (over-shown, never under). */
+    private fun labelOf(origin: ValueOrigin?): String = when (origin) {
+        is ValueOrigin.SaidBy -> if (origin.principal == PrincipalId.USER) "user" else origin.principal.value
+        ValueOrigin.Ours -> "device"
+        ValueOrigin.ModelGenerated, null -> "model"
     }
 
     private suspend fun gate(session: AgentSession): ExecutionState {
@@ -249,5 +378,10 @@ class ConsoleHarness(
         TraceEvent.SessionPaused -> "SessionPaused"
         TraceEvent.SessionResumed -> "SessionResumed"
         is TraceEvent.SessionEnded -> "SessionEnded(${event.state})"
+    }
+
+    private companion object {
+        /** The one word that sends a goal to the model (B-13); everything else stays `FilePlanner`'s. */
+        const val ASK_VERB = "ask"
     }
 }

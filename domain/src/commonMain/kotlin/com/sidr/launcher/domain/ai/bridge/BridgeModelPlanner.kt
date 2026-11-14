@@ -4,6 +4,7 @@ import com.sidr.launcher.domain.ai.AiError
 import com.sidr.launcher.domain.intent.ModelUnavailableReason
 import com.sidr.launcher.domain.text.PlainTextFolding
 import com.sidr.launcher.domain.text.TextFolding
+import com.sidr.launcher.domain.tool.ToolLevel
 import com.sidr.launcher.domain.tool.ToolRegistry
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -18,11 +19,16 @@ import kotlinx.coroutines.withTimeoutOrNull
  *
  * [folding] is what derivability compares the model's mention and the command by (phase 3b, B-1): the
  * platform's own — Android passes `IcuTextFolding`; the default segments nothing.
+ *
+ * [levels] are the CONSUMER's allow-list of tool levels (phase 3b, B-12), required with no default so that
+ * no consumer inherits another's: Android passes [BridgeFilter.ANDROID_OFFERED_LEVELS], `:consumer:jvm`
+ * its sandbox level.
  */
 class BridgeModelPlanner(
     private val registry: ToolRegistry,
     private val descriptions: ToolDescriptions,
     private val transport: BridgeTransport,
+    private val levels: Set<ToolLevel>,
     private val budget: BridgeBudget = BridgeBudget.Default,
     private val folding: TextFolding = PlainTextFolding,
 ) : ModelPlanner {
@@ -32,7 +38,7 @@ class BridgeModelPlanner(
             ?: ModelPlanning.Unavailable(ModelUnavailableReason.TIMED_OUT)
 
     private suspend fun attempt(command: String): ModelPlanning {
-        val offering = BridgeFilter.offeringOf(registry, descriptions)
+        val offering = BridgeFilter.offeringOf(registry, levels, descriptions)
         val first = BridgeRequest(
             system = BridgeRendering.systemText(offering),
             schemaJson = BridgeRendering.schemaJson(offering),

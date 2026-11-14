@@ -31,7 +31,8 @@ class BridgeOfferingTest {
     }
 
     private fun offered(vararg tools: ToolDescriptor, descriptions: ToolDescriptions = described): List<String> =
-        BridgeFilter.offeringOf(FakeToolRegistry(tools.toList()), descriptions).tools.map { it.descriptor.id.value }
+        BridgeFilter.offeringOf(FakeToolRegistry(tools.toList()), BridgeFilter.ANDROID_OFFERED_LEVELS, descriptions)
+            .tools.map { it.descriptor.id.value }
 
     @Test
     fun `the authored levels are offered, each tool with its description`() {
@@ -39,7 +40,7 @@ class BridgeOfferingTest {
             listOf(tool("fixture_quill", ToolLevels.IN_APP), tool("fixture_ledger", ToolLevels.SYSTEM_INTENT)),
         )
 
-        val offering = BridgeFilter.offeringOf(registry, described)
+        val offering = BridgeFilter.offeringOf(registry, BridgeFilter.ANDROID_OFFERED_LEVELS, described)
 
         assertEquals(listOf("fixture_quill", "fixture_ledger"), offering.tools.map { it.descriptor.id.value })
         assertEquals("Fixture tool fixture_ledger.", offering.find(ToolId("fixture_ledger"))!!.description.text)
@@ -80,6 +81,24 @@ class BridgeOfferingTest {
     @Test
     fun `a tool at a level the filter has not heard of is not offered`() {
         assertEquals(emptyList<String>(), offered(tool("fixture_unnote", ToolLevel("app_function"))))
+    }
+
+    /**
+     * A4′ phase 3b, B-12: the levels are the consumer's, not the filter's. One registry holding a sandbox
+     * tool and an Android one answers with the sandbox tool alone for the JVM's set and with the Android
+     * tool alone for Android's — so neither consumer is offered the other's tools by default.
+     */
+    @Test
+    fun `the offering is the levels its consumer passes`() {
+        val registry = FakeToolRegistry(
+            listOf(tool("fixture_quill", ToolLevels.IN_APP), tool("fixture_pallet", ToolLevels.SANDBOX)),
+        )
+
+        val forSandbox = BridgeFilter.offeringOf(registry, setOf(ToolLevels.SANDBOX), described)
+        val forAndroid = BridgeFilter.offeringOf(registry, BridgeFilter.ANDROID_OFFERED_LEVELS, described)
+
+        assertEquals(listOf("fixture_pallet"), forSandbox.tools.map { it.descriptor.id.value })
+        assertEquals(listOf("fixture_quill"), forAndroid.tools.map { it.descriptor.id.value })
     }
 
     /** Fail-closed: the model may only see what we have described in our own words. */

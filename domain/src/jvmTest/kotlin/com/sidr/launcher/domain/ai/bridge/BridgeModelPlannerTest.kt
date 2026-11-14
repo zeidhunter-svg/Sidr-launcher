@@ -29,7 +29,7 @@ class BridgeModelPlannerTest {
     )
 
     private fun planner(transport: FakeBridgeTransport, budget: BridgeBudget = BridgeBudget.Default) =
-        BridgeModelPlanner(registry, descriptions, transport, budget)
+        BridgeModelPlanner(registry, descriptions, transport, BridgeFilter.ANDROID_OFFERED_LEVELS, budget)
 
     @Test
     fun `a valid first answer asks the model once and returns its reading`() = runTest {
@@ -139,7 +139,7 @@ class BridgeModelPlannerTest {
 
         planner(transport).plan(command)
 
-        val offering = BridgeFilter.offeringOf(registry, descriptions)
+        val offering = BridgeFilter.offeringOf(registry, BridgeFilter.ANDROID_OFFERED_LEVELS, descriptions)
         val request = transport.requests.single()
         assertEquals(BridgeRendering.systemText(offering), request.system)
         assertEquals(BridgeRendering.schemaJson(offering), request.schemaJson)

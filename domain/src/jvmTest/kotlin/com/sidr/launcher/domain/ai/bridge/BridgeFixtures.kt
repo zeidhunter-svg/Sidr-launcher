@@ -67,7 +67,7 @@ internal object BridgeFixtures {
         }
     }
 
-    val offering: BridgeOffering get() = BridgeFilter.offeringOf(registry, descriptions)
+    val offering: BridgeOffering get() = BridgeFilter.offeringOf(registry, BridgeFilter.ANDROID_OFFERED_LEVELS, descriptions)
 
     /** A one-step plan whose arguments are words (or null) — the 3a form, read as the transport reads it. */
     fun plan(tool: String?, vararg args: Pair<String, String?>) =
@@ -121,5 +121,6 @@ internal object BridgeFixtures {
         }
     }
 
-    val chainOffering: BridgeOffering get() = BridgeFilter.offeringOf(chainRegistry, chainDescriptions)
+    val chainOffering: BridgeOffering get() =
+        BridgeFilter.offeringOf(chainRegistry, BridgeFilter.ANDROID_OFFERED_LEVELS, chainDescriptions)
 }

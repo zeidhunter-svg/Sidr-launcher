@@ -21,7 +21,11 @@ class OfferedToolIdsFreezeGuardTest {
 
     @Test
     fun `the nineteen offered tool ids are frozen byte for byte`() {
-        val offered = BridgeFilter.offeringOf(ProductionGraph.federation().registry, AuthoredToolDescriptions())
+        val offered = BridgeFilter.offeringOf(
+            ProductionGraph.federation().registry,
+            BridgeFilter.ANDROID_OFFERED_LEVELS,
+            AuthoredToolDescriptions(),
+        )
             .tools.map { it.descriptor.id.value }.toSet()
 
         assertEquals("a frozen id is no longer offered", emptySet<String>(), FROZEN - offered)

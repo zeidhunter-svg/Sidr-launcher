@@ -85,7 +85,7 @@ class BridgeTransportMeasurement {
 
         val registry = ProductionGraph.federation().registry
         val descriptions = AuthoredToolDescriptions()
-        val offered = BridgeFilter.offeringOf(registry, descriptions).tools.size
+        val offered = BridgeFilter.offeringOf(registry, BridgeFilter.ANDROID_OFFERED_LEVELS, descriptions).tools.size
         // Built BEFORE the dry-run return, so the dry run prints the budgets the live run would pass.
         val budgets = reasonings.associateWith { reasoning ->
             BridgeBudget(
@@ -121,7 +121,8 @@ class BridgeTransportMeasurement {
                     val rows = corpus.map { (label, command) ->
                         val recording = Recording(OpenAiCompatibleBridgeTransport(client, store, config, Dispatchers.IO, mode))
                         val started = System.nanoTime()
-                        val result = BridgeModelPlanner(registry, descriptions, recording, budget).plan(command)
+                        val result = BridgeModelPlanner(registry, descriptions, recording, BridgeFilter.ANDROID_OFFERED_LEVELS, budget)
+                            .plan(command)
                         Row(model, mode, reasoning, label, command, result, recording.replies.toList(), (System.nanoTime() - started) / 1_000_000)
                     }
                     rows.forEach { emit(lineOf(it)) }

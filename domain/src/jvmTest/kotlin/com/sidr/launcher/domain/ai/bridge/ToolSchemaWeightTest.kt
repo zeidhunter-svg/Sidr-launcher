@@ -73,7 +73,9 @@ class ToolSchemaWeightTest {
                 )
             },
         )
-        val offering = BridgeFilter.offeringOf(registry) { ToolDescription(ToolNamespace.LAUNCHER, "Do one thing.", emptyList()) }
+        val offering = BridgeFilter.offeringOf(registry, BridgeFilter.ANDROID_OFFERED_LEVELS) {
+            ToolDescription(ToolNamespace.LAUNCHER, "Do one thing.", emptyList())
+        }
         return BridgeRendering.systemText(offering)
     }
 }

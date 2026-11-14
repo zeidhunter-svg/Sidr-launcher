@@ -403,7 +403,7 @@ class BridgePayloadGuardTest {
     /** §7.12.3 (2): the catalog part of the payload IS the rendered offering of the nineteen — not one line more. */
     @Test
     fun `the catalog part of every body is exactly the rendered offering of the nineteen authored tools`() {
-        val offering = BridgeFilter.offeringOf(federation.registry, AuthoredToolDescriptions())
+        val offering = BridgeFilter.offeringOf(federation.registry, BridgeFilter.ANDROID_OFFERED_LEVELS, AuthoredToolDescriptions())
         val system = BridgeRendering.systemText(offering)
         val schema = Json.parseToJsonElement(BridgeRendering.schemaJson(offering))
 

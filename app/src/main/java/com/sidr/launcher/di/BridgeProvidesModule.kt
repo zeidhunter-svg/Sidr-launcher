@@ -10,6 +10,7 @@ import com.sidr.launcher.data.repository.text.IcuTextFolding
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.ai.AiProviderConfigRepository
 import com.sidr.launcher.domain.ai.bridge.BridgeBudget
+import com.sidr.launcher.domain.ai.bridge.BridgeFilter
 import com.sidr.launcher.domain.ai.bridge.BridgeModelPlanner
 import com.sidr.launcher.domain.ai.bridge.BridgeTransport
 import com.sidr.launcher.domain.ai.bridge.MentionBinder
@@ -87,7 +88,8 @@ object BridgeProvidesModule {
         descriptions: ToolDescriptions,
         transport: BridgeTransport,
         folding: TextFolding,
-    ): ModelPlanner = BridgeModelPlanner(registry, descriptions, transport, BridgeBudget.Default, folding)
+    ): ModelPlanner =
+        BridgeModelPlanner(registry, descriptions, transport, BridgeFilter.ANDROID_OFFERED_LEVELS, BridgeBudget.Default, folding)
 
     @Provides
     @Singleton

@@ -16,7 +16,7 @@ import org.junit.Test
 class BridgeOfferingGuardTest {
 
     private val federation = ProductionGraph.federation()
-    private val offered = BridgeFilter.offeringOf(federation.registry, AuthoredToolDescriptions())
+    private val offered = BridgeFilter.offeringOf(federation.registry, BridgeFilter.ANDROID_OFFERED_LEVELS, AuthoredToolDescriptions())
         .tools.map { it.descriptor.id.value }
 
     @Test

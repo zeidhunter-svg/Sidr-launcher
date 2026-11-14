@@ -28,21 +28,28 @@ data class BridgeOffering(val tools: List<OfferedTool>) {
 object BridgeFilter {
 
     /**
-     * Owner fork F3a-A (allow). A predicate on the level every tool declares about itself — not a list
-     * of ids (spec §7.6, criterion 8) — and an ALLOW-list, so a level nobody decided about (AppFunctions,
-     * MCP — third-party names, like `app_shortcut`) is not offered by default. `app_shortcut` is out
-     * under D1 (the model never sees the user's world); `launcher_memory` is out under §7.5 (`B13`).
+     * **Android's** allow-list (owner fork F3a-A, allow; since phase 3b, B-12, one consumer's set among
+     * others — `:consumer:jvm` passes its sandbox level). A predicate on the level every tool declares
+     * about itself — not a list of ids (spec §7.6, criterion 8) — and an ALLOW-list, so a level nobody
+     * decided about (AppFunctions, MCP — third-party names, like `app_shortcut`) is not offered by default.
+     * `app_shortcut` is out under D1 (the model never sees the user's world); `launcher_memory` is out
+     * under §7.5 (`B13`).
      *
      * **The obligation of spec §7.9, restated where it bites:** the day inference becomes local, whoever
      * does it re-checks whether the egress guard can still fail, and widens or keeps this set by a
      * written decision.
      */
-    val OFFERED_LEVELS: Set<ToolLevel> = setOf(ToolLevels.IN_APP, ToolLevels.SYSTEM_INTENT)
+    val ANDROID_OFFERED_LEVELS: Set<ToolLevel> = setOf(ToolLevels.IN_APP, ToolLevels.SYSTEM_INTENT)
 
-    fun offeringOf(registry: ToolRegistry, descriptions: ToolDescriptions): BridgeOffering =
+    /**
+     * The tools of [registry] at one of [levels] that [descriptions] describe. [levels] are the CONSUMER's
+     * allow-list (phase 3b, B-12) — Android passes [ANDROID_OFFERED_LEVELS], `:consumer:jvm` its sandbox
+     * level — with no default, so no consumer is offered another's tools by forgetting to choose.
+     */
+    fun offeringOf(registry: ToolRegistry, levels: Set<ToolLevel>, descriptions: ToolDescriptions): BridgeOffering =
         BridgeOffering(
             registry.all()
-                .filter { it.level in OFFERED_LEVELS }
+                .filter { it.level in levels }
                 .mapNotNull { descriptor ->
                     descriptions.describe(descriptor.id)?.let { OfferedTool(descriptor, it) }
                 },

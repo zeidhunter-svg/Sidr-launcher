@@ -92,7 +92,8 @@ fun ExecutionPlan.isModelProposed(): Boolean = steps.any { it.rationale == StepR
  *    it falls through to the cloud model. It no longer means "a tool claimed it and its target did not
  *    resolve", which it also meant from A1″ Task 6b until this phase (R14-39) — that is [Unresolved]
  *    now. It means "no registered tool claimed the text", or "a second goal rides in a target's words"
- *    (B-15, on purpose — the model plans both), or — since phase 3b's Task 6, controller ruling E6-R1 —
+ *    (B-15, on purpose — the model plans both, as one reading of several steps the interpretation card
+ *    draws in order), or — since phase 3b's Task 6, controller ruling E6-R1 —
  *    "a tool claimed it and its sort cannot read the VALUE" (on purpose: a value sort is a pure function
  *    of the command text, and the vocabulary is no filter on understanding; this covers a second goal in
  *    a value slot too). **It also still means three cases in which a tool DID

@@ -123,6 +123,10 @@
     <string name="launcher_interpretation_candidate">%1$s (%2$s)</string>
     <!-- A4′ phase 3b (fork 3b-G): a word form offered as one app, for confirmation. Class A, not locked. -->
     <string name="launcher_interpretation_did_you_mean">Did you mean «%1$s»?</string>
+    <!-- A4′ phase 3b, Task 10 (fork 3b-B): a value a step takes from an earlier step's output, shown
+         where the value would be while that output does not exist yet; the step number is 1-based.
+         Class A, not locked. -->
+    <string name="launcher_interpretation_from_step">← from step %1$d</string>
     <string name="launcher_thinking">Working out what you meant…</string>
     <string name="launcher_model_unavailable_credentials">The AI provider key is missing or was not accepted.</string>
     <string name="launcher_model_unavailable_request_rejected">The AI provider refused the request. Check the provider settings.</string>

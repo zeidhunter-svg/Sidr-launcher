@@ -599,8 +599,9 @@ class ToolMatchPlannerTest {
      * B-15 for value slots (review I1, closed by controller ruling E6-R1). The vocabulary claims the whole
      * remainder as `set_alarm`'s time — the premise, asserted as the whole match — and a clock time
      * refuses trailing words (`ClockTimeSort` is anchored `H:MM`), so «7:30 и открой lumora» reads as no
-     * time: `NoPlan`, and the model, which plans both goals, gets the command. Nothing is offered or
-     * started on the device for the first goal alone. The control is the first goal by itself, which plans.
+     * time: `NoPlan`, and the model gets the command — it plans both goals, as one reading of several
+     * steps the card draws in order (phase 3b Task 10). Nothing is offered or started on the device for the
+     * first goal alone. The control is the first goal by itself, which plans.
      */
     @Test
     fun `a second goal in a value slot is left to the model`() = runTest {

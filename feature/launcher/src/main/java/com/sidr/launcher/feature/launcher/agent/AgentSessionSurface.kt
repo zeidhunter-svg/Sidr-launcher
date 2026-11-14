@@ -118,9 +118,12 @@ internal fun AgentSessionSurface(
                 SidrActionGate(
                     type = checkpoint.reasons.gateType(),
                     title = title,
+                    // A4′ phase 3b, Task 10 (A0.5's F5): the gated step names the value it WILL receive —
+                    // a reference to an earlier step's output is resolved for display from what the
+                    // session recorded (`PlanStep.line`'s KDoc); the plan list below keeps the default.
                     consequence = sidrString(
                         R.string.launcher_agent_gate_consequence,
-                        step.line(subject, dynamicLabels),
+                        step.line(subject, dynamicLabels, session.observations),
                     ),
                     confirmLabel = sidrString(R.string.launcher_agent_gate_confirm),
                     onConfirm = { onConfirm(checkpoint.index) },

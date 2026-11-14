@@ -86,6 +86,7 @@
     <string name="launcher_interpretation_choose_app">Какое приложение — «%1$s»?</string>
     <string name="launcher_interpretation_candidate">%1$s (%2$s)</string>
     <string name="launcher_interpretation_did_you_mean">Вы имели в виду «%1$s»?</string>
+    <string name="launcher_interpretation_from_step">← из шага %1$d</string>
     <string name="launcher_thinking">Разбираю команду…</string>
     <string name="launcher_model_unavailable_credentials">Ключ ИИ-провайдера не найден или не принят.</string>
     <string name="launcher_model_unavailable_request_rejected">ИИ-провайдер отклонил запрос. Проверьте настройки провайдера.</string>

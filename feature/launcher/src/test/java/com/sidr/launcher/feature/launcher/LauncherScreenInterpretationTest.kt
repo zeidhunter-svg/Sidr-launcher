@@ -60,9 +60,12 @@ import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.prayer.GetPrayerContextUseCase
 import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.tool.ArgSource
+import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolEffect
+import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
+import com.sidr.launcher.domain.tool.ToolResult
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -115,6 +118,10 @@ class LauncherScreenInterpretationTest {
     private val dispatcher = UnconfinedTestDispatcher(scheduler)
     private val agentRegistry = FakeToolRegistry.withA0Tools()
     private val agentStore = FakeAgentSessionStore()
+    // A field (it was built inline below) so a test can read what the engine invoked. Two `Effected`
+    // answers for the one test that runs two SAFE steps; every other test here stops at a consent gate
+    // before any invocation, so the script reaches none of them.
+    private val toolExecutor = FakeToolExecutor(listOf(ToolResult.Effected(), ToolResult.Effected()))
 
     @Before
     fun setUp() {
@@ -310,6 +317,64 @@ class LauncherScreenInterpretationTest {
         assertEquals("one session, started by the tap", 1, agentStore.saved.map { it.id }.distinct().size)
     }
 
+    /**
+     * A4′ phase 3b, Task 10 (fork 3b-B): **the screen half of the card for N steps.** The card is drawn with
+     * every step of the reading, in plan order — compared WHOLE, so a card drawing the head alone cannot pass
+     * — and «Run» hands BOTH steps to the engine, which invokes each through the tool executor. Both steps
+     * are `SAFE`, so no consent gate stands between Run and the invocations. Compared literally (English,
+     * the default test locale).
+     */
+    @Test
+    fun `a two-step card runs both steps through the engine after Run`() {
+        val twoSteps = Interpretation.Act(
+            goal = AgentGoal("kelmora goal", GoalShape.Free("kelmora goal")),
+            steps = listOf(
+                PlanStep(
+                    index = 0,
+                    invocation = ToolInvocation(
+                        ToolIds.LAUNCH_APP,
+                        mapOf("query" to ArgSource.Literal("Vemblic"), "app" to ArgSource.Literal("net.fixture.vemblic")),
+                    ),
+                    risk = ActionRiskLevel.SAFE,
+                    precondition = StepPrecondition.None,
+                    rationale = StepRationale.MODEL_PROPOSED,
+                ),
+                PlanStep(
+                    index = 1,
+                    invocation = ToolInvocation(ToolId("web_search"), mapOf("query" to ArgSource.Literal("ostravel lectures"))),
+                    risk = ActionRiskLevel.SAFE,
+                    precondition = StepPrecondition.None,
+                    rationale = StepRationale.MODEL_PROPOSED,
+                ),
+            ),
+            origins = mapOf(
+                0 to mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER), "app" to ValueOrigin.Ours),
+                1 to mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+            ),
+            effects = mapOf(0 to ToolEffect.EXTERNAL, 1 to ToolEffect.EXTERNAL),
+            choices = emptyList(),
+        )
+        val vm = show(CommandRouteStep { CommandOutcome.Interpreted(twoSteps) })
+
+        vm.onCommandSubmitted("kelmora goal")
+        compose.waitForIdle()
+        compose.onNodeWithText("Open Vemblic (net.fixture.vemblic)\nSearch the web: ostravel lectures").assertExists()
+        assertTrue("drawing the card invokes nothing", toolExecutor.invocations.isEmpty())
+
+        compose.onNodeWithText("Run").performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("Here is how I understood it").assertDoesNotExist()
+        assertEquals(
+            "Run hands both steps to the engine, which invokes each in plan order",
+            listOf(
+                ResolvedInvocation(ToolIds.LAUNCH_APP, mapOf("query" to "Vemblic", "app" to "net.fixture.vemblic")),
+                ResolvedInvocation(ToolId("web_search"), mapOf("query" to "ostravel lectures")),
+            ),
+            toolExecutor.invocations,
+        )
+    }
+
     private fun buildViewModel(route: CommandRouteStep): LauncherViewModel {
         val fakeRepo = FakeInstalledAppsRepository()
         val fakeExecutor = FakeActionExecutor()
@@ -318,7 +383,7 @@ class LauncherScreenInterpretationTest {
             override fun newId() = AgentSessionId("test-agent-${++n}")
         }
         val runAgent = RunAgentSessionUseCase(
-            executor = AgentExecutor(agentRegistry, FakeToolExecutor(emptyList()), RuntimeBudget.Default),
+            executor = AgentExecutor(agentRegistry, toolExecutor, RuntimeBudget.Default),
             store = agentStore,
         )
         val startAgentSession = StartAgentSessionUseCase(

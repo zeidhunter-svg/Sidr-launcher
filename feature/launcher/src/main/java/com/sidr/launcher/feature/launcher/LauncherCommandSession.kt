@@ -18,6 +18,7 @@ import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.ExecuteActionUseCase
 import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.memory.alias.ResolveCommandWithAliasUseCase
+import com.sidr.launcher.domain.memory.resolution.ResolutionLearningToken
 import com.sidr.launcher.domain.memory.resolution.ResolvedCommand
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.feature.launcher.agent.LauncherAgentSession
@@ -141,8 +142,11 @@ internal class LauncherCommandSession(
     val thinking: StateFlow<Boolean> = _thinking
     private var pending: Job? = null
 
-    // The package the user picked on the card's list, recorded as a learned choice at «Выполнить».
-    private var pickedPackage: String? = null
+    // The picks made on the card standing now, in the order they were made — which is step order, because a
+    // pick answers the HEAD owed pick only and the head is the earliest step still owed (A4′ phase 3b, B-19,
+    // controller ruling E10-P4). Each keeps the token of the pick IT answered: recorded at «Выполнить», one
+    // by one, never at the pick. Cleared with the card — Run, «Отмена», an edit, any new outcome.
+    private val picks = mutableListOf<CardPick>()
 
     // ── The 2b target pick (A4′ phase 3b, fork 3b-E; plan §0.2 B-7) — transient, like the card, and
     // NOT the card: the model read nothing here. A tap binds and starts the session directly.
@@ -154,7 +158,7 @@ internal class LauncherCommandSession(
         // Editing a new command clears stale feedback and any interpretation card standing for the old one.
         _feedback.value = CommandFeedback.None
         _interpretation.value = null
-        pickedPackage = null
+        picks.clear()
         // A 2b pick stands for the old text as much as a card does (phase 3b).
         _targetPick.value = null
         // A4′ phase 3a, Task 9 review I1 (Review Focus 2, in flight): an edit also abandons a command
@@ -362,9 +366,12 @@ internal class LauncherCommandSession(
     // ── CommandOutcome → UI — exhaustive when, no else branch ──────────────
     // Add a new branch here whenever CommandOutcome gains a new variant.
     fun applyOutcome(outcome: CommandOutcome) {
-        // Any new outcome dismisses a stale interpretation card and a stale 2b pick; the Interpreted and
-        // ChooseTarget branches re-arm their own below.
+        // Any new outcome dismisses a stale interpretation card, the picks made on it, and a stale 2b pick;
+        // the Interpreted and ChooseTarget branches re-arm their own below. The learning token is NOT
+        // cleared here: the submit path armed it for THIS outcome just before (a FastPath ambiguity's token),
+        // and every branch that must not learn clears it itself.
         _interpretation.value = null
+        picks.clear()
         _targetPick.value = null
         when (outcome) {
             CommandOutcome.Empty ->
@@ -433,13 +440,13 @@ internal class LauncherCommandSession(
                 agentSession.attach(outcome.id)
             }
 
-            // A4′ phase 3a (condition 1): the model's reading waits on the card. A launch the user must
-            // pick arms the learned-choice token; the pick binds and «Выполнить» records (B-3).
-            // Task 9's interim, closed by Task 10 (ruling E9-P4): only the HEAD owed pick's token is armed.
+            // A4′ phase 3a (condition 1): the model's reading waits on the card. A pick binds; «Выполнить»
+            // records (B-3). Phase 3b, B-19 (ruling E10-P4): no token is armed while the card stands — each
+            // pick carries its own, armed and recorded one by one at «Выполнить», in step order — so none is
+            // left from before either (a grid tap under the card answers no ambiguity).
             is CommandOutcome.Interpreted -> {
                 _feedback.value = CommandFeedback.None
-                pickedPackage = null
-                appLaunch.rememberLearningToken((outcome.interpretation as? Interpretation.Act)?.choices?.firstOrNull()?.choice?.learning)
+                appLaunch.rememberLearningToken(null)
                 _interpretation.value = outcome.interpretation
             }
 
@@ -462,19 +469,31 @@ internal class LauncherCommandSession(
         _thinking.value = false
     }
 
-    /** A pick on the card's list (spec §7.12.3 condition 2): it BINDS the step's app; it launches nothing. */
+    /**
+     * A pick on the card's list (spec §7.12.3 condition 2): it BINDS the step's app; it launches nothing. It
+     * answers the HEAD owed pick ([choose]); that pick's step and its OWN learning token are kept with the
+     * package — read from the head BEFORE [choose] takes it off — for «Выполнить» to record (B-19).
+     */
     fun chooseApp(packageName: String) {
         val act = _interpretation.value as? Interpretation.Act ?: return
+        val head = act.choices.firstOrNull() ?: return
         val bound = act.choose(packageName) ?: return
-        pickedPackage = packageName
+        picks += CardPick(step = head.step, learning = head.choice.learning, packageName = packageName)
         _interpretation.value = bound
     }
 
     /**
-     * «Выполнить» (condition 1). A navigation opens its screen. A step starts a session through the
-     * engine, which gates it by its risk exactly as any plan; a `CONFIRM` step therefore costs a second
-     * card — the regression spec §7.12.3 accepts. The card is taken down BEFORE the start, so a second
-     * tap finds nothing to run (Review Focus 1).
+     * «Выполнить» (condition 1). A navigation opens its screen. A reading of steps starts a session through
+     * the engine only once no pick is owed ([plan] is `null` until then, and Run does nothing); the engine
+     * gates every step by its risk exactly as any plan, so a `CONFIRM` step costs a second card — the
+     * regression spec §7.12.3 accepts. The card is taken down BEFORE the start, so a second tap finds
+     * nothing to run (Review Focus 1).
+     *
+     * **The picks are learned here, in step order, each under its own token** (B-19, ruling E10-P4): for
+     * every pick whose token is non-null — a launch pick; `uninstall_app`'s pick carries none — the token is
+     * armed and the package handed to [LauncherAppLaunch.recordChoiceIfPending], the ONE gated record call
+     * (its membership check is the check; there is no second record path). Each call consumes the token it
+     * was armed with, so no pick can be recorded under another pick's mention.
      */
     fun runInterpretation() {
         when (val reading = _interpretation.value ?: return) {
@@ -487,8 +506,12 @@ internal class LauncherCommandSession(
             is Interpretation.Act -> {
                 val plan = reading.plan() ?: return // a pick is still owed
                 _interpretation.value = null
-                pickedPackage?.let(appLaunch::recordChoiceIfPending)
-                pickedPackage = null
+                for (pick in picks.sortedBy { it.step }) {
+                    val token = pick.learning ?: continue
+                    appLaunch.rememberLearningToken(token)
+                    appLaunch.recordChoiceIfPending(pick.packageName)
+                }
+                picks.clear()
                 scope.launch {
                     val started = (startAgentSession.startPlanned(reading.goal, plan) as? OperationResult.Success)?.value
                     applyOutcome(
@@ -526,10 +549,10 @@ internal class LauncherCommandSession(
         _targetPick.value = null
     }
 
-    /** «Отмена» on the card: nothing runs, nothing is learned. */
+    /** «Отмена» on the card — at any pick or at Run: nothing runs, nothing is learned. */
     fun dismissInterpretation() {
         _interpretation.value = null
-        pickedPackage = null
+        picks.clear()
         appLaunch.rememberLearningToken(null)
     }
 
@@ -557,6 +580,9 @@ internal class LauncherCommandSession(
         is LauncherIntent.PlayStoreSearchIntent -> SuggestedIntent.PlayStoreSearch(intent.query)
         is LauncherIntent.UnknownIntent -> SuggestedIntent.Unknown
     }
+
+    /** One pick made on the card: the step it bound, that pick's own learning token (if any), the package. */
+    private data class CardPick(val step: Int, val learning: ResolutionLearningToken?, val packageName: String)
 
     private companion object {
         // The WEB chip's de-duplication: a buffer already led by the search verb is not searched for it.

@@ -129,6 +129,7 @@ import com.sidr.launcher.domain.prayer.UnavailableReason
 import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ObservedFact
+import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolEffect
@@ -2798,6 +2799,207 @@ class LauncherViewModelTest {
 
         assertEquals("the tap itself launched", 1, fakeExecutor.executedActions.size)
         assertTrue("nothing is learned from a dismissed card", fakeResolutionStore.observeAll().first().isEmpty())
+    }
+
+    // ── A4′ phase 3b, Task 10 (B-19): picks owed in step order, each learned under its own mention ──────
+
+    private val pellixOne = InstalledApp("net.fixture.pellix.one", "Pellix")
+    private val pellixTwo = InstalledApp("net.fixture.pellix.two", "Pellix")
+
+    /** A launch step as the binder writes it: the user's words in `query` — runnable once its app is bound. */
+    private fun launchStep(index: Int, words: String) = PlanStep(
+        index = index,
+        invocation = ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal(words))),
+        risk = ActionRiskLevel.SAFE,
+        precondition = StepPrecondition.None,
+        rationale = StepRationale.MODEL_PROPOSED,
+    )
+
+    /** A launch pick owed on [step], carrying ITS OWN learning token keyed on [mention] (B-19, the binder's half). */
+    private fun launchPick(step: Int, mention: String, vararg apps: InstalledApp): PendingChoice {
+        val candidates = CandidateSet(apps.map { ResolvedTarget.App(it.packageName) })
+        return PendingChoice(
+            step = step,
+            choice = AppChoice(
+                arg = "app",
+                mention = mention,
+                candidates = apps.toList(),
+                learning = ResolutionLearningToken(
+                    capabilityKey = CapabilityKey(ActionIds.LAUNCH_APP, mention),
+                    context = ResolutionContext.None,
+                    candidateSet = candidates,
+                    fingerprint = fingerprintOf(candidates),
+                    isAppAmbiguityFlow = true,
+                ),
+            ),
+        )
+    }
+
+    private fun severalPicksReading(goal: String, steps: List<PlanStep>, choices: List<PendingChoice>) = Interpretation.Act(
+        goal = AgentGoal(goal, GoalShape.Free(goal)),
+        steps = steps,
+        origins = steps.associate { step -> step.index to step.invocation.args.keys.associateWith { ValueOrigin.SaidBy(PrincipalId.USER) } },
+        effects = steps.associate { it.index to ToolEffect.EXTERNAL },
+        choices = choices,
+    )
+
+    private fun tessarAndPellixReading() = severalPicksReading(
+        goal = "открой tessar и pellix",
+        steps = listOf(launchStep(0, "tessar"), launchStep(1, "pellix")),
+        choices = listOf(launchPick(0, "tessar", tessarOne, tessarTwo), launchPick(1, "pellix", pellixOne, pellixTwo)),
+    )
+
+    private suspend fun learnedRows() =
+        fakeResolutionStore.observeAll().first().map { it.capabilityKey to it.preferredTarget }
+
+    /**
+     * Review Focus 3 (fork 3b-B). Picks are owed one after the other — the second is the head only once the
+     * first is answered — and «Выполнить» starts nothing while any is owed. Each launch step carries its own
+     * `query`, so the plan Run is refused here WOULD be runnable if forced (`FakeToolRegistry`'s `launch_app`
+     * requires `query` only — the E9-M1 lesson): «nothing starts» is the gate's doing, not the registry's.
+     * The second scenario dismisses at the SECOND pick: the card goes, nothing starts, nothing is learned.
+     */
+    @Test
+    fun `two picks are owed one after the other and Run waits for both`() = runTest(testDispatcher) {
+        val vm = answering(CommandOutcome.Interpreted(tessarAndPellixReading()))
+
+        // Dismissed at the second pick.
+        vm.onCommandSubmitted("открой tessar и pellix")
+        advanceUntilIdle()
+        vm.chooseInterpretationApp(tessarTwo.packageName)
+        advanceUntilIdle()
+        assertEquals(
+            "after the first pick the second is the head",
+            listOf(1),
+            (vm.interpretation.value as Interpretation.Act).choices.map { it.step },
+        )
+        vm.dismissInterpretation()
+        advanceUntilIdle()
+        assertEquals("dismissed at the second pick, the card is gone", null, vm.interpretation.value)
+        assertTrue("dismissed at the second pick, nothing starts", fakeAgentStore.saved.isEmpty())
+        assertEquals("dismissed at the second pick, nothing is learned", emptyList<Any>(), learnedRows())
+
+        // Run waits for both.
+        vm.onCommandSubmitted("открой tessar и pellix")
+        advanceUntilIdle()
+        vm.chooseInterpretationApp(tessarTwo.packageName)
+        advanceUntilIdle()
+        vm.runInterpretation()
+        advanceUntilIdle()
+        assertTrue("Run with a pick still owed starts nothing", fakeAgentStore.saved.isEmpty())
+        assertEquals(
+            "Run with a pick still owed leaves the card up, the second pick still owed",
+            listOf(1),
+            (vm.interpretation.value as Interpretation.Act).choices.map { it.step },
+        )
+
+        vm.chooseInterpretationApp(pellixOne.packageName)
+        advanceUntilIdle()
+        vm.runInterpretation()
+        advanceUntilIdle()
+        assertEquals("after both picks Run starts one session", 1, fakeAgentStore.saved.map { it.id }.distinct().size)
+        assertEquals(
+            "both steps bound, each to its own pick",
+            listOf(
+                ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal("tessar"), "app" to ArgSource.Literal(tessarTwo.packageName))),
+                ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal("pellix"), "app" to ArgSource.Literal(pellixOne.packageName))),
+            ),
+            fakeAgentStore.saved.first().plan.steps.map { it.invocation },
+        )
+    }
+
+    /** Controller ruling E10-P2 (B-19): two picks over different apps — each recorded under its own mention, in step order. */
+    @Test
+    fun `each pick is learned under its own mention, in step order`() = runTest(testDispatcher) {
+        val vm = answering(CommandOutcome.Interpreted(tessarAndPellixReading()))
+        vm.onCommandSubmitted("открой tessar и pellix")
+        advanceUntilIdle()
+        vm.chooseInterpretationApp(tessarTwo.packageName)
+        vm.chooseInterpretationApp(pellixOne.packageName)
+        advanceUntilIdle()
+        assertEquals("nothing is learned at the picks", emptyList<Any>(), learnedRows())
+
+        vm.runInterpretation()
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(
+                CapabilityKey(ActionIds.LAUNCH_APP, "tessar") to ResolvedTarget.App(tessarTwo.packageName),
+                CapabilityKey(ActionIds.LAUNCH_APP, "pellix") to ResolvedTarget.App(pellixOne.packageName),
+            ),
+            learnedRows(),
+        )
+    }
+
+    /**
+     * Controller ruling E10-P2 (B-19): two mentions over the SAME two apps — «tessar» and the Cyrillic «тессар»
+     * (different scripts, no shared substring). One token for both would record the second pick under the
+     * first mention's key; each pick is learned under its own.
+     */
+    @Test
+    fun `picks over the same apps are learned each under its own mention`() = runTest(testDispatcher) {
+        val vm = answering(
+            CommandOutcome.Interpreted(
+                severalPicksReading(
+                    goal = "открой tessar и тессар",
+                    steps = listOf(launchStep(0, "tessar"), launchStep(1, "тессар")),
+                    choices = listOf(launchPick(0, "tessar", tessarOne, tessarTwo), launchPick(1, "тессар", tessarOne, tessarTwo)),
+                ),
+            ),
+        )
+        vm.onCommandSubmitted("открой tessar и тессар")
+        advanceUntilIdle()
+        vm.chooseInterpretationApp(tessarTwo.packageName)
+        vm.chooseInterpretationApp(tessarOne.packageName)
+        vm.runInterpretation()
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(
+                CapabilityKey(ActionIds.LAUNCH_APP, "tessar") to ResolvedTarget.App(tessarTwo.packageName),
+                CapabilityKey(ActionIds.LAUNCH_APP, "тессар") to ResolvedTarget.App(tessarOne.packageName),
+            ),
+            learnedRows(),
+        )
+    }
+
+    /**
+     * Controller ruling E10-P2 (B-19): a head `uninstall_app` pick has no learning token (`learning = null` —
+     * a removal is not a launch). It must not stand in for the later launch pick's token: that pick is learned,
+     * and it is the only row.
+     */
+    @Test
+    fun `a head uninstall pick leaves the later launch's pick learned`() = runTest(testDispatcher) {
+        val uninstall = PlanStep(
+            index = 0,
+            invocation = ToolInvocation(ToolId("uninstall_app"), mapOf("app_label" to ArgSource.Literal("tessar"))),
+            risk = ActionRiskLevel.CONFIRM,
+            precondition = StepPrecondition.None,
+            rationale = StepRationale.MODEL_PROPOSED,
+        )
+        val vm = answering(
+            CommandOutcome.Interpreted(
+                severalPicksReading(
+                    goal = "удали tessar и открой pellix",
+                    steps = listOf(uninstall, launchStep(1, "pellix")),
+                    choices = listOf(
+                        PendingChoice(step = 0, choice = AppChoice(arg = "app", mention = "tessar", candidates = listOf(tessarOne, tessarTwo), learning = null)),
+                        launchPick(1, "pellix", pellixOne, pellixTwo),
+                    ),
+                ),
+            ),
+        )
+        vm.onCommandSubmitted("удали tessar и открой pellix")
+        advanceUntilIdle()
+        vm.chooseInterpretationApp(tessarOne.packageName)
+        vm.chooseInterpretationApp(pellixTwo.packageName)
+        vm.runInterpretation()
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(CapabilityKey(ActionIds.LAUNCH_APP, "pellix") to ResolvedTarget.App(pellixTwo.packageName)),
+            learnedRows(),
+        )
     }
 
     /** FastPath's own «assistant» carries no question: the assistant opens empty, on its bare route. */

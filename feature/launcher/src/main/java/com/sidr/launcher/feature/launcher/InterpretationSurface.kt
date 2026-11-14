@@ -42,9 +42,13 @@ import com.sidr.launcher.core.ui.R as UiR
  * meant", not "do you allow the consequence": a `CONFIRM` step still stops at the engine's own consent
  * card after «Выполнить» (`DOC-ADL-1` untouched).
  *
- * **Task 9's interim, closed by Task 10** (A4′ phase 3b, controller ruling E9-P4): a reading may carry
- * several steps since the bridge's cap opened, but this card still draws the HEAD step and the HEAD owed
- * pick only; «Выполнить» runs the whole plan once no pick is owed.
+ * **A reading of N steps** (A4′ phase 3b, fork 3b-B, Task 10): the card draws EVERY step, in plan order —
+ * the description is the step lines, one per line; a value a step takes from an earlier step's output
+ * reads «← из шага N» there, 1-based, because nothing has run yet (`PlanStep.line`'s KDoc). The provenance
+ * slot carries, step by step in the same order, that step's model-written values (`DOC-MZN-2`, each
+ * against its own origins and effect) and where its effect goes (`DOC-ILM-2`). The tone is `Confirm` when
+ * ANY step needs consent. While a pick is owed the card is the pick list for the HEAD owed pick — picks
+ * are answered one at a time, in step order — and «Выполнить» exists only once none is owed.
  */
 @Composable
 internal fun InterpretationArea(
@@ -68,7 +72,6 @@ internal fun InterpretationArea(
         )
         is Interpretation.Act -> {
             val choice = interpretation.choices.firstOrNull()?.choice
-            val head = interpretation.steps.first()
             if (choice != null) {
                 AppChoiceList(
                     mention = choice.mention,
@@ -79,13 +82,23 @@ internal fun InterpretationArea(
                     modifier = modifier,
                 )
             } else {
+                val subject = interpretation.goal.subject()
                 SidrActionProposal(
                     title = sidrString(R.string.launcher_interpretation_title),
-                    description = head.line(interpretation.goal.subject(), dynamicLabels),
-                    tone = if (requiresConsent(head.risk)) SidrActionProposalTone.Confirm else SidrActionProposalTone.Safe,
+                    // Nothing has run before «Выполнить»: an empty record, so a reference reads its source step.
+                    description = interpretation.steps
+                        .map { step -> step.line(subject, dynamicLabels, observations = emptyMap()) }
+                        .joinToString(STEP_LINE_SEPARATOR),
+                    tone = if (interpretation.steps.any { requiresConsent(it.risk) }) {
+                        SidrActionProposalTone.Confirm
+                    } else {
+                        SidrActionProposalTone.Safe
+                    },
                     provenance = {
-                        ModelValues(head, interpretation.origins[head.index].orEmpty(), interpretation.effects[head.index])
-                        AgentStepProvenance(provenance[head.invocation.id])
+                        interpretation.steps.forEach { step ->
+                            ModelValues(step, interpretation.origins[step.index].orEmpty(), interpretation.effects[step.index])
+                            AgentStepProvenance(provenance[step.invocation.id])
+                        }
                     },
                     onExecute = onRun,
                     onCancel = onDismiss,
@@ -179,6 +192,9 @@ internal fun AppChoiceList(
         )
     }
 }
+
+/** One step per line on the card: layout between whole sentences, not copy joined into one. */
+private const val STEP_LINE_SEPARATOR = "\n"
 
 private fun destinationLine(destination: SidrDestination): Int = when (destination) {
     SidrDestination.LAUNCHER_SETTINGS -> R.string.launcher_interpretation_open_settings

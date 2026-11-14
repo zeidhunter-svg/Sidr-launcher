@@ -91,7 +91,8 @@ import javax.inject.Inject
  * **A second goal in the target's words still reaches the model** (B-15). Phase 1's `SecondGoal`
  * check runs on the words BEFORE the windows — «удали приложение lumora и проверь почту» is `NoPlan` —
  * because a window would otherwise offer «Lumora» and silently drop «проверь почту», where the model
- * plans both. Two limits, named: aliases answer the whole words only, never a window (controller ruling
+ * plans both — as one reading of several steps, which the interpretation card draws in order (phase 3b
+ * Task 10). Two limits, named: aliases answer the whole words only, never a window (controller ruling
  * E5-P5 — «телега пожалуйста» does not reach the alias «телега»); and the check reads the app argument
  * only. A second goal in a VALUE slot reaches the model by the value rule above instead, not by this
  * check: each value parser refuses trailing words (a unit word with whitespace in it, an anchored `H:MM`,
@@ -179,8 +180,9 @@ class ToolMatchPlanner @Inject constructor(
         // nothing to decline: an absent optional argument is absent.
         if (raw.isBlank() && !appArg.required) return planned(descriptor, args - argName)
 
-        // B-15: a second goal in the target's words goes to the model, which plans both — never into a
-        // window, which would offer the first app and drop the rest of the command (the class KDoc).
+        // B-15: a second goal in the target's words goes to the model, which plans both as one reading of
+        // several steps the card draws in order — never into a window, which would offer the first app and
+        // drop the rest of the command (the class KDoc).
         if (SecondGoal.carriedBy(raw)) return PlanningResult.NoPlan
 
         val labelArg = sorted.labelArg?.takeIf { label -> descriptor.argSchema.any { it.name == label } }

@@ -258,4 +258,105 @@ class InterpretationSurfaceTest {
 
         compose.onNodeWithContentDescription("source SIDR · EXTERNAL").assertExists()
     }
+
+    // ── A4′ phase 3b, Task 10 (fork 3b-B): the card for N steps ─────────────────────────────
+
+    private fun step(index: Int, tool: String, args: Map<String, ArgSource>, risk: ActionRiskLevel = ActionRiskLevel.SAFE) =
+        PlanStep(
+            index = index,
+            invocation = ToolInvocation(ToolId(tool), args),
+            risk = risk,
+            precondition = StepPrecondition.None,
+            rationale = StepRationale.MODEL_PROPOSED,
+        )
+
+    private fun reading(
+        steps: List<PlanStep>,
+        origins: Map<Int, Map<String, ValueOrigin>> = emptyMap(),
+        effects: Map<Int, ToolEffect> = steps.associate { it.index to ToolEffect.EXTERNAL },
+    ) = Interpretation.Act(
+        goal = AgentGoal("fixture goal", GoalShape.Free("fixture goal")),
+        steps = steps,
+        origins = origins,
+        effects = effects,
+        choices = emptyList(),
+    )
+
+    /**
+     * Every step is drawn, in plan order — the card's description is the step lines, one per line, compared
+     * WHOLE: the head-only card draws the first line alone and cannot equal it, and a reversed order cannot
+     * either.
+     */
+    @Test
+    fun `a two-step reading lists both steps in order`() {
+        render(
+            reading(
+                listOf(
+                    step(0, "launch_app", mapOf("query" to ArgSource.Literal("Vemblic"), "app" to ArgSource.Literal("net.fixture.vemblic"))),
+                    step(1, "web_search", mapOf("query" to ArgSource.Literal("ostravel lectures"))),
+                ),
+            ),
+        )
+
+        compose.onNodeWithText("Open Vemblic (net.fixture.vemblic)\nSearch the web: ostravel lectures").assertExists()
+    }
+
+    /**
+     * A value the step will take from an earlier step's output does not exist before Run — nothing has run —
+     * so the line says where it comes from, 1-based, instead of falling back to the goal's text
+     * («fixture goal», which appears in no expected line here).
+     */
+    @Test
+    fun `an argument taken from an earlier step says so`() {
+        render(
+            reading(
+                listOf(
+                    step(0, "launch_app", mapOf("query" to ArgSource.Literal("Lumora"))),
+                    step(1, "web_search", mapOf("query" to ArgSource.FromStep(stepIndex = 0, key = "resolved_query"))),
+                ),
+            ),
+        )
+
+        compose.onNodeWithText("Open Lumora\nSearch the web: ← from step 1").assertExists()
+    }
+
+    /**
+     * Controller ruling E10-P1 (`DOC-MZN-2`): nothing the model wrote leaves the phone unshown — a LATER
+     * step's model-written value on an `EXTERNAL` step is marked exactly as the head's would be. The head
+     * here is `LOCAL`, so its own value carries no mark and the only mark on the card is step 1's.
+     */
+    @Test
+    fun `a later step's model-written value that leaves the phone is shown`() {
+        render(
+            reading(
+                steps = listOf(
+                    step(0, "forget_app_alias", mapOf("phrase" to ArgSource.Literal("кварцелот"))),
+                    step(1, "web_search", mapOf("query" to ArgSource.Literal("ostravel lectures"))),
+                ),
+                origins = mapOf(
+                    0 to mapOf("phrase" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                    1 to mapOf("query" to ValueOrigin.ModelGenerated),
+                ),
+                effects = mapOf(0 to ToolEffect.LOCAL, 1 to ToolEffect.EXTERNAL),
+            ),
+        )
+
+        compose.onNodeWithText("Suggested by the model: ostravel lectures").assertExists()
+    }
+
+    /** Controller ruling E10-P3: the card's tone answers for EVERY step — one needing consent makes it CONFIRM. */
+    @Test
+    fun `a later step that needs consent gives the card the confirm tone`() {
+        render(
+            reading(
+                listOf(
+                    step(0, "web_search", mapOf("query" to ArgSource.Literal("ostravel lectures"))),
+                    step(1, "play_store_search", mapOf("query" to ArgSource.Literal("Lumora")), risk = ActionRiskLevel.CONFIRM),
+                ),
+            ),
+        )
+
+        compose.onNodeWithText("CONFIRM").assertExists()
+        compose.onNodeWithText("SAFE").assertDoesNotExist()
+    }
 }

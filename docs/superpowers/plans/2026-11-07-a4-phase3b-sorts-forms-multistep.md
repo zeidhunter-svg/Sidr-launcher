@@ -1044,6 +1044,8 @@ order; Run enabled only when none is owed; B-19 tokens recorded in step order at
 
 - [ ] **Step 6:** boundary gate → **1759**. **Step 7: commit** — `feat(agentic-6/A4' ф3b): карточка из N шагов; карточка согласия показывает значение из прошлого шага`.
 
+*Measured in execution (Task 10, rulings E10-P1…P5, E10-I1): five tests beyond this task's list close Task 9's interim, each an assertion red — `InterpretationSurfaceTest > a later step's model-written value that leaves the phone is shown` (`DOC-MZN-2`), `> a later step that needs consent gives the card the confirm tone` (the card's tone reads every step), and three `LauncherViewModelTest` tests (`> each pick is learned under its own mention, in step order`, `> picks over the same apps are learned each under its own mention`, `> a head uninstall pick leaves the later launch's pick learned`): the session keeps the picks of a reading in order, each with its own token, and records them at Run through the one gated call. `PlanStep.line` takes `observations: Map<Int, ToolResult>? = null` — `null` keeps the plan list byte-for-byte (the A0 baseline pin), an empty map is the card's «← из шага N», the session's observations the consent card's resolved value. `> two picks are owed…` could not go red (Task 9 already gated Run) — held by M10c and the designed M10e (dismiss learns nothing); M10d (reverse order) holds «in step order». Measured T10 **1774** (`:feature:launcher` 273).*
+
 ---
 
 ## Task 11: re-planning without egress — the remainder of a model plan; a failed resume says so

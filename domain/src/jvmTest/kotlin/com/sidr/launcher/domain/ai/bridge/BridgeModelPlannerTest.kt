@@ -157,13 +157,13 @@ class BridgeModelPlannerTest {
     }
 
     /**
-     * The shipped numbers are the 2026-11-07b re-measure's (ADR addendum «Повторный замер «50 с × 4 096»
-     * (2026-11-07b)»), with the reasoning cap OFF until phase 3b's own measurement decides it (fork 3b-H).
+     * The shipped numbers are phase 3b's in-phase measurement's (plan Task 14; ADR addendum «Замер фазы 3b»):
+     * R4's 40 s ceiling, the 2026-11-07b output limit, and the reasoning cap ON at 4 096 / 2 by R3 (fork 3b-H).
      * A legitimate re-measure edits this line; a silent revert of the constants no longer passes the gate.
      */
     @Test
     fun `the shipped budget is the re-measured pair`() {
-        assertEquals(BridgeBudget(45_000L, 4_096, null), BridgeBudget.Default)
+        assertEquals(BridgeBudget(40_000L, 4_096, 2_048), BridgeBudget.Default)
     }
 
     /** Fork 3b-H: the cap is a generation limit of the budget, so the one retry carries it as the first ask did. */

@@ -47,6 +47,7 @@ import com.sidr.launcher.domain.ai.AiProviderConfig
 import com.sidr.launcher.domain.ai.AiProviderId
 import com.sidr.launcher.domain.ai.OutboundContextPolicy
 import com.sidr.launcher.domain.ai.OutboundContextPolicy.AllowedContext
+import com.sidr.launcher.domain.ai.bridge.BridgeBudget
 import com.sidr.launcher.domain.ai.bridge.BridgeError
 import com.sidr.launcher.domain.ai.bridge.BridgeFilter
 import com.sidr.launcher.domain.ai.bridge.BridgeModelPlanner
@@ -227,7 +228,7 @@ class BridgePayloadGuardTest {
         }
     }
 
-    private fun route(mode: BridgeTransportMode, capture: Capture) = BridgeProvidesModule.provideRouteCommandUseCase(
+    private fun route(mode: BridgeTransportMode, capture: Capture, baseUrl: String = "https://api.example.com/v1") = BridgeProvidesModule.provideRouteCommandUseCase(
         handleUserCommand = HandleUserCommandUseCase(
             matcher = FakeIntentMatcher(),
             resolver = IntentActionResolver(apps()),
@@ -241,7 +242,7 @@ class BridgePayloadGuardTest {
             OpenAiCompatibleBridgeTransport(
                 HttpClient(capture.engine),
                 FakeSecureSecretStore().apply { runBlocking { put(SecretKeys.apiKey(provider), keySentinel) } },
-                FakeAiProviderConfigRepository(AiProviderConfig(provider, "https://api.example.com/v1", AiModelId("fixture-model"))),
+                FakeAiProviderConfigRepository(AiProviderConfig(provider, baseUrl, AiModelId("fixture-model"))),
                 Dispatchers.Unconfined,
                 mode,
             ),
@@ -397,6 +398,37 @@ class BridgePayloadGuardTest {
                     retryMessages[2].jsonObject.getValue("content").jsonPrimitive.content,
                 )
             }
+        }
+    }
+
+    /**
+     * Plan 3b Task 14 (carried E1-F8): since the in-phase measurement the shipped budget carries a reasoning
+     * cap, and the transport writes it only to `openrouter.ai` (B-16) — a body every test above, which sends
+     * to `api.example.com`, never sees. Here the same route sends the shipped `PROMPT_ONLY` form to
+     * OpenRouter: no planted source reaches any body, first ask or retry; each body is the other host's body
+     * plus exactly one key, `reasoning`, whose one field is the budget's number (`GENERATION_LIMITS`) — so the
+     * cap opens no channel for anything else.
+     */
+    @Test
+    fun `an OpenRouter body adds only the budget's reasoning cap and carries no private source`() {
+        val cap = checkNotNull(BridgeBudget.Default.reasoningMaxTokens) { "the shipped budget carries a reasoning cap since plan 3b Task 14" }
+        val capture = Capture(BridgeTransportMode.PROMPT_ONLY)
+        val route = route(BridgeTransportMode.PROMPT_ONLY, capture, baseUrl = "https://openrouter.ai/api/v1")
+        commands.forEach { runBlocking { route.route(it) } }
+        val elsewhere = runs.single { it.mode == BridgeTransportMode.PROMPT_ONLY }.bodies
+        assertEquals(commands.size * 2, capture.bodies.size)
+        assertEquals(elsewhere.size, capture.bodies.size)
+
+        val violations = capture.bodies.flatMap { body ->
+            sources.flatMap { (source, sentinels) -> sentinels.filter { body.contains(it) }.map { "openrouter / $source: $it" } }
+        }.distinct()
+        assertEquals(emptyList<String>(), violations)
+
+        capture.bodies.zip(elsewhere).forEach { (sent, other) ->
+            val body = Json.parseToJsonElement(sent).jsonObject
+            val otherBody = Json.parseToJsonElement(other).jsonObject
+            assertEquals(JsonObject(mapOf("max_tokens" to JsonPrimitive(cap))), body.getValue("reasoning"))
+            assertEquals(otherBody, JsonObject(body - "reasoning"))
         }
     }
 

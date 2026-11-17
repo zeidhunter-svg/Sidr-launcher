@@ -30,6 +30,7 @@ import com.sidr.launcher.domain.sort.SortResolution
 import com.sidr.launcher.domain.sort.SortResolver
 import com.sidr.launcher.domain.text.TextFolding
 import com.sidr.launcher.domain.tool.ArgSource
+import com.sidr.launcher.domain.tool.ToolDurability
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolRegistry
@@ -43,7 +44,8 @@ import javax.inject.Inject
  * row's argument once known, the user's words into its `labelArg`. [AppTargetResolver.candidates] answers —
  * it never guesses and consults aliases; two candidates are a choice for the USER before any card, and a
  * word FORM of a name (phase 3b, fork 3b-G: «миравину» for «Миравин») is a pick of that one app marked
- * [AppChoice.confirm] — «Вы имели в виду…?» — never a bind.
+ * [AppChoice.confirm] — «Вы имели в виду…?» — never a bind. So is a name exact only after folding when the
+ * tool's act cannot be undone (`uninstall_app`; owner decision 2026-11-17, [forIrreversible]).
  *
  * **Learned choices answer for `launch_app` only**, with FastPath's policy — a confident one binds
  * without asking, a weak one is offered first — and for a confirmation exactly as for a choice between
@@ -200,7 +202,10 @@ class DeviceMentionBinder @Inject constructor(
         val wordOrigins = (proposed.origins - AuthoredToolDescriptions.MENTION_ARG) +
             listOfNotNull(sorted.labelArg?.let { it to ValueOrigin.SaidBy(PrincipalId.USER) })
 
-        return when (val found = appTargets.candidates(mention)) {
+        // Owner decision 2026-11-17: an irreversible tool binds only a name exact as typed (`forIrreversible`);
+        // a tool the registry does not know is treated as irreversible — the stricter reading.
+        val irreversible = registry.find(proposed.tool)?.durability != ToolDurability.TRANSIENT
+        return when (val found = appTargets.candidates(mention).forIrreversible(irreversible)) {
             AppCandidates.None -> StepBinding.Refused(Binding.NotFound(mention))
             AppCandidates.Unavailable -> StepBinding.Refused(Binding.Unavailable)
             is AppCandidates.One ->

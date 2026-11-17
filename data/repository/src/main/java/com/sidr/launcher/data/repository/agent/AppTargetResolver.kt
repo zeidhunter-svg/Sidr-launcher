@@ -23,17 +23,35 @@ import javax.inject.Inject
  */
 sealed interface AppCandidates {
     data object None : AppCandidates
-    data class One(val app: InstalledApp) : AppCandidates
+
+    /**
+     * One app answers exactly. [foldedOnly] — exact only AFTER the text folding (`TextFolding`, B-1), not as
+     * the words were typed (`CommandNormalizer` forms differ: «lumora» for «Lumora+»). Owner decision
+     * 2026-11-17: for an irreversible tool such an answer is a pick, never a bind ([forIrreversible]).
+     */
+    data class One(val app: InstalledApp, val foldedOnly: Boolean = false) : AppCandidates
     data class Several(val apps: List<InstalledApp>) : AppCandidates
     data class Confirm(val apps: List<InstalledApp>) : AppCandidates
     data object Unavailable : AppCandidates
 }
 
 /**
+ * Owner decision 2026-11-17 (phase 3b close, final review B-I1, answer «2: a» — narrow entry (a)): for a
+ * tool whose act cannot be undone (`ToolDurability.DURABLE` — `uninstall_app` today, the only app-sorted
+ * one), a name that is exact only after folding is OFFERED as a one-app confirmation (`confirm = true` on
+ * step 2b, `AppChoice.confirm` on the bridge's card) and bound only by the user's tap; an answer exact as
+ * typed binds as before. Every other tool keeps the folded exact bind. Read at both binding sites —
+ * `ToolMatchPlanner` (2b) and `DeviceMentionBinder` (the bridge) — so the two cannot disagree.
+ */
+fun AppCandidates.forIrreversible(irreversible: Boolean): AppCandidates =
+    if (irreversible && this is AppCandidates.One && foldedOnly) AppCandidates.Confirm(listOf(app)) else this
+
+/**
  * A name becomes a package, or nothing happens. Task 6 (A1″ Phase 3a) — this feeds `uninstall_app`,
  * the track's first `CONFIRM` tool over an irreversible act, so [resolve]'s `null` is not "no answer
  * yet"; it is the resolver's own considered refusal, and every caller must treat it as such. Never
- * guesses: only an EXACT name binds (an alias, or a whole label under [AppNameMatcher]); two apps
+ * guesses: only an EXACT name binds (an alias, or a whole label under [AppNameMatcher]; for an irreversible
+ * tool, exact as typed — [forIrreversible], owner decision 2026-11-17); two apps
  * answering exactly are the user's choice; a word form (phase 3b, B-2 — «миравину» for «Миравин») is
  * only offered ([AppCandidates.Confirm]); no match, a blank query and a read failure decline — and
  * [resolve] declines all of these the same way, silently, never by throwing.
@@ -96,7 +114,7 @@ class AppTargetResolver @Inject constructor(
         return when (val match = windowed.match) {
             is NameMatch.Exact -> when {
                 !windowed.whole -> AppCandidates.Confirm(match.apps)
-                match.apps.size == 1 -> AppCandidates.One(match.apps.single())
+                match.apps.size == 1 -> match.apps.single().let { AppCandidates.One(it, foldedOnly = !typedExactly(it, normalized)) }
                 else -> AppCandidates.Several(match.apps)
             }
             is NameMatch.Edge -> AppCandidates.Confirm(match.apps)
@@ -134,10 +152,12 @@ class AppTargetResolver @Inject constructor(
 
         val named = aliasNamedOrNull(installed) ?: return AppCandidates.Unavailable
         val byAlias = AppNameMatcher.matchWhole(normalized, named, folding)
-        if (byAlias is NameMatch.Exact) return listed(installedTargetsOf(byAlias.apps, installed))
+        if (byAlias is NameMatch.Exact) {
+            return listed(installedTargetsOf(byAlias.apps, installed), foldedOnly = byAlias.apps.none { typedExactly(it, normalized) })
+        }
 
         val byLabel = AppNameMatcher.matchWhole(normalized, installed, folding)
-        if (byLabel is NameMatch.Exact) return listed(byLabel.apps)
+        if (byLabel is NameMatch.Exact) return listed(byLabel.apps, foldedOnly = byLabel.apps.none { typedExactly(it, normalized) })
 
         val forms = (installedTargetsOf(appsOf(byAlias), installed) + appsOf(byLabel)).distinctBy { it.packageName }
         return if (forms.isEmpty()) AppCandidates.None else AppCandidates.Confirm(forms)
@@ -172,7 +192,15 @@ class AppTargetResolver @Inject constructor(
         NameMatch.None -> emptyList()
     }
 
-    /** Exact answers: one binds, several are the user's choice. */
-    private fun listed(apps: List<InstalledApp>): AppCandidates =
-        if (apps.size == 1) AppCandidates.One(apps.single()) else AppCandidates.Several(apps)
+    /** Exact answers: one binds ([foldedOnly] kept for [forIrreversible]), several are the user's choice. */
+    private fun listed(apps: List<InstalledApp>, foldedOnly: Boolean): AppCandidates =
+        if (apps.size == 1) AppCandidates.One(apps.single(), foldedOnly) else AppCandidates.Several(apps)
+
+    /**
+     * Whether [app]'s label — an alias pseudo-app's label is its phrase — names the words exactly AS TYPED, in
+     * the `CommandNormalizer` form the phase's base compared (owner decision 2026-11-17); otherwise an exact
+     * [AppNameMatcher] answer is exact only after folding.
+     */
+    private fun typedExactly(app: InstalledApp, normalized: String): Boolean =
+        CommandNormalizer.normalize(app.label) == normalized
 }

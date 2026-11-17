@@ -428,6 +428,9 @@ class ToolMatchPlannerTest {
 
     private val removeDescriptor = appToolDescriptor("app", "app_label")
 
+    /** [removeDescriptor] declared as `uninstall_app` is — its act cannot be undone (owner decision 2026-11-17). */
+    private val irreversibleRemove = removeDescriptor.copy(durability = ToolDurability.DURABLE)
+
     /** What the planner hands step 2b for [text]: the step without its target, the words typed for it. */
     private fun claimed(
         text: String,
@@ -495,24 +498,49 @@ class ToolMatchPlannerTest {
     }
 
     /**
-     * Phase 3b close, final review B-I1 — one of the three ways into `uninstall_app` the owner's condition
-     * (3) record names (`Tier0IntentToolSource`): «exact» is exact AFTER the text folding (B-1). Punctuation
-     * and symbols are not part of a name, so a label that differs from the user's words only by a symbol
-     * binds the irreversible tool WITHOUT a pick; the consent card that follows names the package. Recorded,
-     * not chosen here — at the phase's base this command declined (an exact compare of `CommandNormalizer`
-     * forms) — and an owner item at the close. The first assertion is the premise that keeps the test from
-     * passing vacuously: before folding, the label and the words differ.
+     * Owner decision 2026-11-17 (phase 3b close, final review B-I1, «2: a» — narrow entry (a)). One of the
+     * ways into `uninstall_app` the owner's condition (3) record names (`Tier0IntentToolSource`): a name
+     * that is exact only AFTER the text folding (B-1) — «lumora» for «Lumora+» — is no longer bound without
+     * a pick for an irreversible tool; it is offered as a one-app confirmation (`confirm = true`) and the
+     * user's tap binds it. Until this decision the same command bound «Lumora+» with no pick (this test
+     * pinned that, under the name «…binds the uninstall without a pick»); at the phase's base it declined.
+     * The first assertion keeps the test from passing vacuously — before folding, the label and the words
+     * differ; the second ties the fixture to production: `uninstall_app` is the tool the rule reads, by its
+     * declared durability.
      */
     @Test
-    fun `a label that differs from the words only by a symbol binds the uninstall without a pick`() = runTest {
+    fun `a label that differs from the words only by a symbol asks the uninstall's pick`() = runTest {
         assertNotEquals("lumora", CommandNormalizer.normalize("Lumora+"))
+        assertEquals(ToolDurability.DURABLE, registry.find(Tier0ToolIds.UNINSTALL_APP)?.durability)
+        val lumoraPlus = InstalledApp(packageName = "net.fixture.qelvarn", label = "Lumora+")
+        val text = "удали приложение lumora"
+        val planner = ToolMatchPlanner(appSelector, appTargetsOf("Lumora+" to "net.fixture.qelvarn"), appSorts, sortResolversOf())
+
+        val result = planner.plan(PlanningRequest(free(text)), registryWith(irreversibleRemove))
+
+        assertEquals(claimed(text, "lumora", listOf(lumoraPlus), confirm = true), result)
+    }
+
+    /** The other half of the owner's rule: a name exact as typed binds an irreversible tool as before, with no pick. */
+    @Test
+    fun `a name exact as typed still binds the uninstall without a pick`() = runTest {
+        val planner = ToolMatchPlanner(appSelector, appTargetsOf("Lumora" to "net.fixture.lumora"), appSorts, sortResolversOf())
+
+        val result = planner.plan(PlanningRequest(free("удали приложение lumora")), registryWith(irreversibleRemove))
+
+        val args = (result as PlanningResult.Planned).plan.steps.single().invocation.args
+        assertEquals(mapOf("app" to ArgSource.Literal("net.fixture.lumora"), "app_label" to ArgSource.Literal("lumora")), args)
+    }
+
+    /** The rule is the irreversible tool's only: a reversible one still binds a name exact after folding, with no pick. */
+    @Test
+    fun `a label exact only after folding still binds a reversible tool`() = runTest {
         val planner = ToolMatchPlanner(appSelector, appTargetsOf("Lumora+" to "net.fixture.qelvarn"), appSorts, sortResolversOf())
 
         val result = planner.plan(PlanningRequest(free("удали приложение lumora")), registryWith(removeDescriptor))
 
         val args = (result as PlanningResult.Planned).plan.steps.single().invocation.args
-        assertEquals(ArgSource.Literal("net.fixture.qelvarn"), args["app"])
-        assertEquals(ArgSource.Literal("lumora"), args["app_label"])
+        assertEquals(mapOf("app" to ArgSource.Literal("net.fixture.qelvarn"), "app_label" to ArgSource.Literal("lumora")), args)
     }
 
     /** Controller ruling E5-P3: two exact answers are the user's choice — `Several`, never a guess, never `NoPlan`. */

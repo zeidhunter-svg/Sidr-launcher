@@ -17,6 +17,7 @@ import com.sidr.launcher.domain.sort.SortResolution
 import com.sidr.launcher.domain.sort.SortResolver
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ToolDescriptor
+import com.sidr.launcher.domain.tool.ToolDurability
 import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolRegistry
 import javax.inject.Inject
@@ -79,7 +80,9 @@ import javax.inject.Inject
  * the cloud model, so from A1″ Task 6b until this phase an unresolved name decided that a command a
  * registered tool had already claimed left the device as raw text. `Unresolved` is answered by step 2b
  * on the device. The search is [AppTargetResolver.windows] over the target's words:
- *  - the whole words name one app exactly → the plan, as before;
+ *  - the whole words name one app exactly → the plan, as before — except that for a tool whose act cannot
+ *    be undone (`ToolDurability.DURABLE`, `uninstall_app`) a name exact only after folding («lumora» for
+ *    «Lumora+») is offered, `confirm = true` (owner decision 2026-11-17, `AppCandidates.forIrreversible`);
  *  - two apps answer exactly → the user picks (`confirm = false`);
  *  - a word form, or a name found in a **window shorter than the words** («удали приложение миравин
  *    пожалуйста» → «Миравин») → offered for confirmation, **never bound** (`confirm = true`): the extra
@@ -205,7 +208,7 @@ class ToolMatchPlanner @Inject constructor(
         }
 
         // The search: the whole words first, then windows of them (`AppTargetResolver.windows`).
-        return when (val found = appTargets.windows(raw)) {
+        return when (val found = appTargets.windows(raw).forIrreversible(descriptor.durability == ToolDurability.DURABLE)) {
             // Only the whole words naming one app exactly bind; everything else is the user's.
             is AppCandidates.One ->
                 planned(descriptor, rest + (argName to found.app.packageName) + listOfNotNull(labelArg?.let { it to raw }))

@@ -215,17 +215,23 @@ class Tier0IntentToolSource @Inject constructor(
         // resolve: the planner answers `PlanningResult.Unresolved` (since A4′ phase 3b; `NoPlan` before
         // it, which fell through to the cloud model — R14-39), and step 2b answers that on the device
         // with no plan. **Since phase 3b three ways lead into this tool, each before the consent card,
-        // which then names the package** (final review B-I1; an owner item at the phase close):
-        //   (a) the whole words naming ONE app exactly — a label or an alias — bind with no pick, and
-        //       «exactly» is exact AFTER the text folding (`TextFolding`, B-1): punctuation, symbols, an
-        //       apostrophe between letters and the two dropped mark ranges are not part of a name, so
-        //       «удали приложение lumora» binds «Lumora+» (`ToolMatchPlannerTest > a label that differs
-        //       from the words only by a symbol binds the uninstall without a pick`) — at the phase's
-        //       base that command declined;
-        //   (b) a candidate step 2b OFFERED — a word form, a name found inside extra words (`confirm =
-        //       true`), or one of two exact matches — that the user bound by a tap (`UnresolvedTarget.bind`);
+        // which then names the package** (final review B-I1; owner decision 2026-11-17, «2: a» — narrow
+        // (a)):
+        //   (a) the whole words naming ONE app exactly AS TYPED — a label or an alias, in the
+        //       `CommandNormalizer` form the phase's base compared — bind with no pick. A name exact only
+        //       AFTER the text folding (`TextFolding`, B-1: punctuation, symbols, an apostrophe between
+        //       letters, the two dropped mark ranges) is NOT bound by the device: because this tool is
+        //       `DURABLE`, `AppCandidates.forIrreversible` turns it into a one-app confirmation, so
+        //       «удали приложение lumora» asks «Lumora+» (`ToolMatchPlannerTest > a label that differs from
+        //       the words only by a symbol asks the uninstall's pick`; the bridge's half —
+        //       `DeviceMentionBinderTest > a mention exact only after folding is a pick for uninstall and a
+        //       bind for app info`) and enters only by (b) or (c);
+        //   (b) a candidate step 2b OFFERED — a word form, a name exact only after folding, a name found
+        //       inside extra words (`confirm = true`), or one of two exact matches — that the user bound by
+        //       a tap (`UnresolvedTarget.bind`);
         //   (c) a candidate the bridge's interpretation card offered (`DeviceMentionBinder` → `AppChoice`,
-        //       word forms included), bound by the user's pick on that card (`Interpretation.Act.choose`).
+        //       word forms and names exact only after folding included), bound by the user's pick on that
+        //       card (`Interpretation.Act.choose`).
         // An offered candidate is never bound by the device alone;
         // (4) our own package is refused — `Tier0IntentToolWorker.uninstallApp`; (5) the wording says
         // the precondition is CHECKED BEFORE THE CALL and never that a refusal is DETECTED (rows

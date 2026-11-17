@@ -194,6 +194,27 @@ class DeviceMentionBinderTest {
         assertEquals(mapOf("app" to ArgSource.Literal("net.fixture.lumora")), act.steps.single().invocation.args)
     }
 
+    /**
+     * Owner decision 2026-11-17 (the bridge's half of narrow entry (a)): «lumora» names «Lumora+» only after
+     * folding — for `uninstall_app`, whose act cannot be undone, that is a one-app pick marked to confirm and
+     * nothing is bound; for `open_app_info` it binds as before. An exact-as-typed mention still binds the
+     * uninstall (`one candidate binds the package and keeps the user's words where the tool shows them`).
+     */
+    @Test
+    fun `a mention exact only after folding is a pick for uninstall and a bind for app info`() = runTest {
+        val lumoraPlus = InstalledApp(packageName = "net.fixture.qelvarn", label = "Lumora+")
+
+        val uninstall = binder(listOf(lumoraPlus))
+            .bind(goal, listOf(proposed(Tier0ToolIds.UNINSTALL_APP, "app" to "lumora", risk = ActionRiskLevel.CONFIRM))).act()
+        assertEquals(listOf(lumoraPlus), uninstall.choices.single().choice.candidates)
+        assertTrue(uninstall.choices.single().choice.confirm)
+        assertNull(uninstall.steps.single().invocation.args["app"])
+
+        val info = binder(listOf(lumoraPlus)).bind(goal, listOf(proposed(Tier0ToolIds.OPEN_APP_INFO, "app" to "lumora"))).act()
+        assertEquals(mapOf("app" to ArgSource.Literal("net.fixture.qelvarn")), info.steps.single().invocation.args)
+        assertEquals(emptyList<PendingChoice>(), info.choices)
+    }
+
     /** Criterion 17 (binder half): two candidates are a choice BEFORE any plan, and nothing is bound yet. */
     @Test
     fun `two candidates give a choice before any plan, and nothing is bound yet`() = runTest {

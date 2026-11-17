@@ -173,7 +173,28 @@ class AppTargetResolverTest {
         val resolver = AppTargetResolver(FakeApps(listOf(zantor)), aliasedZantor(), PlainTextFolding)
 
         assertEquals(AppCandidates.One(zantor), resolver.candidates("кварцелот"))
-        assertEquals(AppCandidates.One(zantor), resolver.candidates("кварце\u0301лот"))
+        assertEquals(AppCandidates.One(zantor, foldedOnly = true), resolver.candidates("кварце\u0301лот"))
+    }
+
+    /**
+     * Owner decision 2026-11-17: whether an exact answer is exact AS TYPED or only after folding is kept, so an
+     * irreversible tool can ask instead of binding. «lumora» names «Lumora+» only after folding; «lumora+» names
+     * it as typed; and the rule itself — a fold-only answer offered for an irreversible tool, every other answer
+     * unchanged — is [forIrreversible]'s.
+     */
+    @Test
+    fun `a name exact only after folding is marked, and one exact as typed is not`() = runTest {
+        val lumoraPlus = app("Lumora+", "net.fixture.qelvarn")
+        val resolver = AppTargetResolver(FakeApps(listOf(lumoraPlus)), EmptyAliases, PlainTextFolding)
+
+        val folded = resolver.candidates("lumora")
+        val typed = resolver.candidates("lumora+")
+
+        assertEquals(AppCandidates.One(lumoraPlus, foldedOnly = true), folded)
+        assertEquals(AppCandidates.One(lumoraPlus, foldedOnly = false), typed)
+        assertEquals(AppCandidates.Confirm(listOf(lumoraPlus)), folded.forIrreversible(irreversible = true))
+        assertEquals(folded, folded.forIrreversible(irreversible = false))
+        assertEquals(typed, typed.forIrreversible(irreversible = true))
     }
 
     /** Spec 3b-G: «миравину» is a form of «Миравин» — a question for the user, so `resolve` (step 2b today) binds nothing. */

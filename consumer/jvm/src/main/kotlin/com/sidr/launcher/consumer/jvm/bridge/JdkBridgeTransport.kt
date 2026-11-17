@@ -48,8 +48,9 @@ fun interface BridgeHttpSender {
  * request to plain HTTP. The client is built on the first send, so a harness that never asks the model
  * starts no HTTP machinery.
  *
- * [timeoutMs] bounds each request; `Main.kt` passes the bridge's ceiling, as `:data:ai-cloud` bounds its
- * socket by it (`bridgeHttpClient`). **Unproven by any test** — no test touches the network (named, not
+ * [timeoutMs] bounds each request; `Main.kt` passes the bridge's LONGEST per-host ceiling
+ * (`BridgeBudget.longestCeilingMs`), as `:data:ai-cloud` bounds its socket by it (`bridgeHttpClient`) — never
+ * the capped one, which would cut another host's longer wait. **Unproven by any test** — no test touches the network (named, not
  * hidden: it is the one wiring here only a live run would show).
  */
 class JdkHttpSender(private val timeoutMs: Long) : BridgeHttpSender {

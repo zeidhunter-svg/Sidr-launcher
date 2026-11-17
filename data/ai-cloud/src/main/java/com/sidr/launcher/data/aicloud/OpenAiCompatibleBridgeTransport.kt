@@ -59,7 +59,8 @@ enum class BridgeTransportMode { PROMPT_ONLY, RESPONSE_FORMAT, FORCED_TOOL }
  * The bridge's own HTTP client — not the shared cloud one. That client's 30 s socket timeout
  * (`AiCloudProvidesModule`) would cut a non-streaming reasoning model's silent wait before the bridge's
  * ceiling, and the spec names the ceiling, not the socket, as the bound (§7.12.2). [socketTimeoutMs] is
- * therefore the ceiling in production (`BridgeProvidesModule`) and the measurement's cap in the harness.
+ * therefore the LONGEST per-host ceiling in production (`BridgeBudget.longestCeilingMs`, `BridgeProvidesModule`) —
+ * never the capped 40 s, which would cut another host's 50 s wait — and the measurement's cap in the harness.
  */
 fun bridgeHttpClient(socketTimeoutMs: Long): HttpClient = HttpClient(Android) {
     install(HttpTimeout) {

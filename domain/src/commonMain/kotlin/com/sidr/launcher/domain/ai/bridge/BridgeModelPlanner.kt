@@ -33,12 +33,13 @@ class BridgeModelPlanner(
     private val folding: TextFolding = PlainTextFolding,
 ) : ModelPlanner {
 
-    override suspend fun plan(command: String): ModelPlanning {
+    override suspend fun plan(command: String): ModelPlanning =
         // The ceiling is the host's (owner decision 2026-11-17): the transport says whether the cap reaches it.
-        val ceilingMs = budget.ceilingFor(capReachesHost = transport.sendsReasoningCap())
-        return withTimeoutOrNull(ceilingMs) { attempt(command) }
-            ?: ModelPlanning.Unavailable(ModelUnavailableReason.TIMED_OUT)
-    }
+        // The read itself is inside the longest ceiling, so a stalled config read is bounded too (review m2).
+        withTimeoutOrNull(budget.longestCeilingMs) {
+            val ceilingMs = budget.ceilingFor(capReachesHost = transport.sendsReasoningCap())
+            withTimeoutOrNull(ceilingMs) { attempt(command) }
+        } ?: ModelPlanning.Unavailable(ModelUnavailableReason.TIMED_OUT)
 
     private suspend fun attempt(command: String): ModelPlanning {
         val offering = BridgeFilter.offeringOf(registry, levels, descriptions)

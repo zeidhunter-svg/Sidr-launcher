@@ -8,6 +8,7 @@ import com.sidr.launcher.domain.ai.bridge.BridgeFixtures.registry
 import com.sidr.launcher.domain.intent.ModelUnavailableReason
 import com.sidr.launcher.domain.tool.ToolId
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -188,6 +189,21 @@ class BridgeModelPlannerTest {
         val openRouter = planner(FakeBridgeTransport(listOf(valid), delayMs = 45_000, sendsCap = true), budget).plan(command)
         assertEquals(ModelPlanning.Unavailable(ModelUnavailableReason.TIMED_OUT), openRouter)
         assertEquals(40_000L, currentTime - startedAt)
+    }
+
+    /** Review m2 (item 1): the host's reading is inside the longest ceiling — a read that never answers is still cut. */
+    @Test
+    fun `a host reading that never answers is cut at the longest ceiling`() = runTest {
+        val stalled = object : BridgeTransport {
+            override suspend fun ask(request: BridgeRequest): TransportReply = error("never asked")
+            override suspend fun sendsReasoningCap(): Boolean = awaitCancellation()
+        }
+        val budget = BridgeBudget(ceilingMs = 50_000L, maxOutputTokens = 4_096, reasoningMaxTokens = 2_048, cappedCeilingMs = 40_000L)
+
+        val result = BridgeModelPlanner(registry, descriptions, stalled, BridgeFilter.ANDROID_OFFERED_LEVELS, budget).plan(command)
+
+        assertEquals(ModelPlanning.Unavailable(ModelUnavailableReason.TIMED_OUT), result)
+        assertEquals(50_000L, currentTime)
     }
 
     /** A budget with no reasoning cap sends none, so a host that would accept one still gets the uncapped ceiling. */

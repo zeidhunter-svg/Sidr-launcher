@@ -33,7 +33,7 @@ import javax.inject.Singleton
 /**
  * The bridge (A4′ phase 3a, D1–D3) — replaces `RouterProvidesModule`. One model path: the
  * [ModelPlanner] over the federation's offered tools and our descriptions, its own transport over its
- * own HTTP client (socket bound = the ceiling), the device-side [MentionBinder], and [RouteCommandUseCase] asking the
+ * own HTTP client (socket bound = the longest per-host ceiling, `BridgeBudget.longestCeilingMs`), the device-side [MentionBinder], and [RouteCommandUseCase] asking the
  * planner at step 7 only. Lazy singletons; nothing here is on the launcher's cold path.
  *
  * The model planner is NOT in `AgentProvidesModule`'s `CompositePlanner` list — that list is what step

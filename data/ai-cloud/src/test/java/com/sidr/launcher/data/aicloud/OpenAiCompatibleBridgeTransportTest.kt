@@ -5,6 +5,10 @@ import com.sidr.launcher.core.testing.FakeSecureSecretStore
 import com.sidr.launcher.domain.ai.AiError
 import com.sidr.launcher.domain.ai.AiModelId
 import com.sidr.launcher.domain.ai.AiProviderConfig
+import com.sidr.launcher.domain.ai.AiProviderConfigRepository
+import com.sidr.launcher.domain.result.OperationResult
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import com.sidr.launcher.domain.ai.AiProviderId
 import com.sidr.launcher.domain.ai.bridge.BridgeRequest
 import com.sidr.launcher.domain.ai.bridge.RawAnswer
@@ -436,6 +440,20 @@ class OpenAiCompatibleBridgeTransportTest {
     @Test
     fun `with no active config the cap reaches no host and nothing is called`() = runTest {
         assertFalse(transport(cfg = null).sendsReasoningCap())
+        assertTrue(bodies.isEmpty())
+    }
+
+    /** Review m3 (item 1): a config flow that throws is `false` — the longer ceiling — never an exception out of the planner. */
+    @Test
+    fun `a config that cannot be read is no cap and never a throw`() = runTest {
+        val failing = object : AiProviderConfigRepository {
+            override fun activeConfig(): Flow<AiProviderConfig?> = flow { throw IllegalStateException("config unreadable") }
+            override suspend fun setActiveConfig(config: AiProviderConfig): OperationResult<Unit> = OperationResult.Success(Unit)
+            override suspend fun clearActiveConfig(): OperationResult<Unit> = OperationResult.Success(Unit)
+        }
+        val t = OpenAiCompatibleBridgeTransport(HttpClient(engine()), seededStore(), failing, Dispatchers.Unconfined)
+
+        assertFalse(t.sendsReasoningCap())
         assertTrue(bodies.isEmpty())
     }
 

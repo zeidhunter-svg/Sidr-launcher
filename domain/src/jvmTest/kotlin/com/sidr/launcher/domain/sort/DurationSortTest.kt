@@ -33,6 +33,37 @@ class DurationSortTest {
         assertEquals(SortResolution.Unreadable, DurationSort.resolver.resolve("10 minecraft"))
     }
 
+    /**
+     * Owner decision 2026-11-17 («полчаса — (a)»; phase 3b measurement: llama wrote «полчаса» and the device
+     * said «не понял»). A half hour and an hour and a half, as whole phrases, in `ru` / `en` / `tr` (the list is
+     * controller ruling P4-R1); the resolver still validates without rewriting.
+     */
+    @Test
+    fun `half an hour and an hour and a half read in en ru tr`() = runTest {
+        mapOf(
+            "полчаса" to 1_800, "полтора часа" to 5_400,
+            "half an hour" to 1_800, "half hour" to 1_800, "an hour and a half" to 5_400, "one and a half hours" to 5_400,
+            "yarım saat" to 1_800, "yarim saat" to 1_800, "bir buçuk saat" to 5_400,
+        ).forEach { (words, seconds) -> assertEquals(words, seconds, DurationSort.secondsOf(words)) }
+        assertEquals(1_800, DurationSort.secondsOf("  Полчаса "))
+
+        assertEquals(SortResolution.Resolved("полчаса"), DurationSort.resolver.resolve("полчаса"))
+    }
+
+    /**
+     * The phrases are matched WHOLE, as the unit words are: a diminutive is not on the list, and trailing words —
+     * where a second goal rides (B-15, held by the parsers' refusal of trailing words) — are never read.
+     */
+    @Test
+    fun `a half-hour phrase is matched whole, never by prefix`() = runTest {
+        assertNull(DurationSort.secondsOf("полчасика"))
+        assertNull(DurationSort.secondsOf("полчаса и открой lumora"))
+        assertNull(DurationSort.secondsOf("half an hour or so"))
+        assertNull(DurationSort.secondsOf("yarım saat sonra"))
+
+        assertEquals(SortResolution.Unreadable, DurationSort.resolver.resolve("полчаса и открой lumora"))
+    }
+
     @Test
     fun `a bare number is minutes, five digits are refused`() {
         assertEquals(300, DurationSort.secondsOf("5"))

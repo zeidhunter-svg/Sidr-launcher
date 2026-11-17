@@ -1,7 +1,8 @@
 package com.sidr.launcher.domain.sort
 
 /**
- * The duration sort (A4′ phase 3b, B-5): «10 minutes», «10 минут», «10 dakika», «2 saat».
+ * The duration sort (A4′ phase 3b, B-5): «10 minutes», «10 минут», «10 dakika», «2 saat» — and, since the
+ * owner's decision of 2026-11-17, «полчаса», «полтора часа» and their `en`/`tr` neighbours ([PHRASES]).
  *
  * **It validates; it does not rewrite.** [resolver] answers [SortResolution.Resolved] with the words
  * as written, or [SortResolution.Unreadable]; the worker (`Tier0IntentToolWorker`) reads the same
@@ -16,7 +17,7 @@ package com.sidr.launcher.domain.sort
 object DurationSort {
 
     /**
-     * Leading integer plus an optional unit word. Returns `null` for anything it cannot read, and the
+     * One of the whole [PHRASES], or a leading integer plus an optional unit word. Returns `null` for anything it cannot read, and the
      * caller fails closed on that: an agent that silently starts a zero-length timer is worse than one
      * that declines and says so. Same reasoning as `InvocationValidator.resolve`'s refusal to bind a
      * blank.
@@ -38,6 +39,7 @@ object DurationSort {
      */
     fun secondsOf(words: String): Int? {
         val text = words.trim().lowercase()
+        PHRASES[text]?.let { return it }
         val digits = text.takeWhile { it.isDigit() }
         val amount = digits.toIntOrNull() ?: return null
         if (amount <= 0 || digits.length > 4) return null
@@ -59,6 +61,24 @@ object DurationSort {
     }
 
     private const val MINUTE = 60
+
+    /**
+     * Owner decision 2026-11-17: a half hour and an hour and a half, said without a number — WHOLE phrases,
+     * compared exactly like the unit words (no prefix, no trailing words: B-15 for value slots rests on that).
+     * The list is controller ruling P4-R1; «yarim saat» is there only because the invariant `lowercase()` turns
+     * a typed «YARIM» into it. A diminutive («полчасика») is not a phrase here — the model reads it online.
+     */
+    private val PHRASES: Map<String, Int> = mapOf(
+        "полчаса" to 30 * MINUTE,
+        "полтора часа" to 90 * MINUTE,
+        "half an hour" to 30 * MINUTE,
+        "half hour" to 30 * MINUTE,
+        "an hour and a half" to 90 * MINUTE,
+        "one and a half hours" to 90 * MINUTE,
+        "yarım saat" to 30 * MINUTE,
+        "yarim saat" to 30 * MINUTE,
+        "bir buçuk saat" to 90 * MINUTE,
+    )
     private val SECOND_FORMS = setOf("sec", "secs", "second", "seconds", "сек", "секунда", "секунды", "секунд", "saniye")
     private val MINUTE_FORMS = setOf("min", "mins", "minute", "minutes", "мин", "минута", "минуты", "минут", "dakika", "dk")
     private val HOUR_FORMS = setOf("hour", "hours", "hr", "hrs", "час", "часа", "часов", "saat")

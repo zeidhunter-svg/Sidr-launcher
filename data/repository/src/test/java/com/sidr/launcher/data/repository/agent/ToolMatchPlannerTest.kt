@@ -647,6 +647,24 @@ class ToolMatchPlannerTest {
     }
 
     /**
+     * Owner decision 2026-11-17: «полчаса» and its `en` / `tr` neighbours now read as a duration, so at 2b the
+     * production vocabulary and sort plan the timer on the device with the words as written — nothing goes to
+     * the model. A second goal after the phrase still reads as no duration (B-15): `NoPlan`, the model's.
+     */
+    @Test
+    fun `a half hour at 2b plans the timer on the device`() = runTest {
+        mapOf(
+            "поставь таймер на полчаса" to "полчаса",
+            "set a timer for half an hour" to "half an hour",
+            "yarım saat zamanlayıcı ayarla" to "yarım saat",
+        ).forEach { (text, words) ->
+            val planned = planner.plan(PlanningRequest(free(text)), registry)
+            assertEquals(text, mapOf("duration" to ArgSource.Literal(words)), (planned as PlanningResult.Planned).plan.steps.single().invocation.args)
+        }
+        assertEquals(PlanningResult.NoPlan, planner.plan(PlanningRequest(free("поставь таймер на полчаса и открой lumora")), registry))
+    }
+
+    /**
      * B-15 for value slots (review I1, closed by controller ruling E6-R1). The vocabulary claims the whole
      * remainder as `set_alarm`'s time — the premise, asserted as the whole match — and a clock time
      * refuses trailing words (`ClockTimeSort` is anchored `H:MM`), so «7:30 и открой lumora» reads as no

@@ -134,7 +134,9 @@ interface MentionBinder {
  * What the device made of the model's step. [NotFound] is about an APP mention («нет такого
  * приложения»); [NotUnderstood] is about a VALUE whose sort could not read [NotUnderstood.words] (phase
  * 3b, Task 6) — the words the model wrote for that one argument, said to the user and never sent back;
- * [Unavailable] — the device could not be asked (its app list could not be read).
+ * [Unavailable] — the device could not answer: its app list or alias store could not be read, a value
+ * sort had no usable resolver, an app a remainder named could not be checked again, or a remainder's tool
+ * is no longer registered (phase 3b, Tasks 6 and 11). Never a reason to ask the model; nothing runs.
  */
 sealed interface Binding {
     data class Bound(val interpretation: Interpretation.Act) : Binding

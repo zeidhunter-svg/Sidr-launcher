@@ -1,13 +1,23 @@
 package com.sidr.launcher.agent
 
 import com.sidr.launcher.core.testing.FakeActionCatalog
+import com.sidr.launcher.core.testing.FakeBridgeTransport
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
+import com.sidr.launcher.core.testing.FakeToolRegistry
+import com.sidr.launcher.data.repository.agent.AuthoredToolDescriptions
 import com.sidr.launcher.data.repository.text.IcuTextFolding
 import com.sidr.launcher.di.BridgeProvidesModule
 import com.sidr.launcher.di.IntentProvidesModule
 import com.sidr.launcher.di.MemoryProvidesModule
 import com.sidr.launcher.domain.action.ActionIds
+import com.sidr.launcher.domain.ai.bridge.BridgeRendering
+import com.sidr.launcher.domain.ai.bridge.ModelPlanning
+import com.sidr.launcher.domain.ai.bridge.RawAnswer
+import com.sidr.launcher.domain.ai.bridge.RawArg
+import com.sidr.launcher.domain.ai.bridge.RawStep
+import com.sidr.launcher.domain.ai.bridge.ReplyMeta
+import com.sidr.launcher.domain.ai.bridge.TransportReply
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.ExecutableAction
 import com.sidr.launcher.domain.intent.LauncherIntent
@@ -18,6 +28,7 @@ import com.sidr.launcher.domain.memory.resolution.ResolvedCommand
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.text.TextFolding
+import com.sidr.launcher.domain.tool.ToolIds
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
@@ -40,8 +51,8 @@ import org.junit.Test
  *    text is one and the same word, so «zantor» finds «Lumora» and every key is that word.
  *
  * Step 2b (`AppTargetResolver`) and the bridge's binder (`DeviceMentionBinder`) take the folding through
- * `@Inject`, so the one binding is the only thing Hilt can hand them; `provideModelPlanner` passes its own
- * parameter (read in the source, not run here — the planner needs a transport).
+ * `@Inject`, so the one binding is the only thing Hilt can hand them. `provideModelPlanner` passes its own
+ * parameter — run here since phase 3b's close (final review B-M1), over a fake transport.
  */
 class TextFoldingBindingGuardTest {
 
@@ -71,6 +82,34 @@ class TextFoldingBindingGuardTest {
         )
         val asked = decorator.resolve("открой tessar") as ResolvedCommand.Outcome
         assertEquals(CapabilityKey(ActionIds.LAUNCH_APP, SAME_WORD), asked.learningToken!!.capabilityKey)
+    }
+
+    /**
+     * Phase 3b close, final review B-M1 — the third hand-built collaborator: the bridge's planner, as
+     * [BridgeProvidesModule.provideModelPlanner] builds it, checks derivability by the folding it is GIVEN,
+     * not by `BridgeModelPlanner`'s `PlainTextFolding` default. Under [oneWord] every text is one word, so a
+     * mention the command never said («zantor» for «открой lumora») is derivable and the reading proposed on
+     * the first ask; under the plain folding the same answer is underivable, asked again once, and refused —
+     * which is what a dropped argument would do to every Thai or CJK mention in production.
+     */
+    @Test
+    fun `the bridge's planner checks derivability by the folding it is given`() = runTest {
+        val zantor = TransportReply.Answer(
+            RawAnswer(
+                kind = BridgeRendering.KIND_PLAN,
+                steps = listOf(RawStep("launch_app", mapOf("app" to RawArg.Text("zantor")))),
+                question = null,
+                destination = null,
+            ),
+            ReplyMeta.NONE,
+        )
+        val transport = FakeBridgeTransport(listOf(zantor, zantor))
+        val planner = BridgeProvidesModule.provideModelPlanner(FakeToolRegistry.withA0Tools(), AuthoredToolDescriptions(), transport, oneWord)
+
+        val result = planner.plan("открой lumora")
+
+        assertEquals("proposed under the folding it was given", ToolIds.LAUNCH_APP, (result as? ModelPlanning.Proposed)?.steps?.single()?.tool)
+        assertEquals("asked once — the mention was derivable the first time", 1, transport.requests.size)
     }
 
     private companion object {

@@ -833,6 +833,30 @@ class RouteCommandUseCaseTest {
     }
 
     /**
+     * Phase 3b close, final review B-M8 (and deferred E5-F8): `DOC-ADL-3`'s cell says the unresolved 2b target
+     * reaches step 7 in NO state, and the test above holds one — online, a provider, local-only off. In
+     * local-only mode the target a registered tool claimed is still the DEVICE's to answer — «нет такого
+     * приложения» in the user's own words, not the local-only line, which would blame the mode for a name
+     * that is simply not installed — and the model is not asked. The control is the same mode with a text no
+     * planner claims: the local-only line, as before — so the answer above is step 2b's, not the mode's.
+     */
+    @Test
+    fun `in local-only mode an unresolved 2b target is still answered on the device`() = runTest {
+        driveUnknown()
+        val target = removeTarget("удали приложение вельтрикс", words = "вельтрикс", candidates = emptyList())
+        val route = useCase(localOnly = true, agentPlanner = claims(target), agentRegistry = removeRegistry)
+
+        assertEquals(
+            CommandOutcome.Message(CommandMessage.NoAppFound("вельтрикс")),
+            route.route("удали приложение вельтрикс"),
+        )
+        assertEquals("the model is not asked in local-only mode", 0, planner.planCallCount)
+        assertTrue("nothing is persisted for a target nobody picked", agentStore.saved.isEmpty())
+
+        assertEquals(CommandOutcome.Message(CommandMessage.UnderstandingLocalOnly), route.route("do a barrel roll"))
+    }
+
+    /**
      * Controller ruling E5-P1. The app list (or the alias store) could not be read, so the device does
      * not know whether the app is there: «нет такого приложения» would be a lie, and falling through
      * would let a disk error decide what leaves the device. It is answered exactly as step 7 answers

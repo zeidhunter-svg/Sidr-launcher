@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.sidr.launcher.core.ui.theme.SidrTheme
@@ -21,8 +22,10 @@ import com.sidr.launcher.domain.agent.StepUndo
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ObservedFact
+import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
+import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
@@ -219,6 +222,55 @@ class AgentSessionSurfaceUndoTest {
         compose.onNodeWithText("Remove Orvelle (net.fixture.orvelle) — not started").assertExists()
         compose.onNodeWithText("Undo").performClick()
         assertTrue("Undo on the cancelled card calls the undo", undone)
+    }
+
+    /**
+     * Phase 3b close, final review F1 — the N2 card a user can actually reach on Android today: a model plan's
+     * `launch_app` handed its act to the system (`HandedOff` — it left the launcher and may have happened),
+     * then the user refused step 1, the `CONFIRM` uninstall, at its consent card. The test above covers an
+     * `Effected` act; this is the `HandedOff` half of `anyStepActed`, which nothing else draws (the
+     * ViewModel's own visibility helper calls `anyStepActed` and would agree with any regression of it).
+     * The card is drawn — «Plan stopped», both step lines, and each `EXTERNAL` step's provenance (the Task 12
+     * review's named gap M2) — and, with nothing that can be undone, no «Undo». Strings are matched whole;
+     * no expected value shares a substring with another (R14-43).
+     */
+    @Test
+    fun `a plan cancelled after a handed-off step shows its stopped card without undo`() {
+        val launch = PlanStep(
+            0,
+            ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal("Vemblic"), "app" to ArgSource.Literal("net.fixture.vemblic"))),
+            ActionRiskLevel.SAFE, StepPrecondition.None, StepRationale.MODEL_PROPOSED,
+        )
+        val refused = session(ExecutionState.Cancelled, listOf(launch, uninstallStep(1)), mapOf(0 to ToolResult.HandedOff()), goalText = "запусти и сотри")
+            .copy(cursor = 1, consents = mapOf(1 to false))
+        compose.setContent {
+            SidrTheme(darkTheme = true) {
+                AgentSessionSurface(
+                    session = refused,
+                    toolProvenance = mapOf(
+                        ToolIds.LAUNCH_APP to StepProvenance(ToolLevels.IN_APP, ToolEffect.EXTERNAL),
+                        ToolId("uninstall_app") to StepProvenance(ToolLevels.SYSTEM_INTENT, ToolEffect.EXTERNAL),
+                    ),
+                    dynamicLabels = emptyMap(),
+                    confirming = false,
+                    onConfirm = {},
+                    onDeny = {},
+                    onContinue = {},
+                    onDismiss = {},
+                    undoReview = listOf(StepUndo(0, Undo.NotUndoable)),
+                    onUndo = {},
+                )
+            }
+        }
+        compose.waitForIdle()
+
+        compose.onNodeWithText("Plan stopped").assertExists()
+        compose.onNodeWithText("Dismiss").assertExists()
+        compose.onNodeWithText("Undo").assertDoesNotExist()
+        compose.onNodeWithText("Open Vemblic (net.fixture.vemblic) — handed to the system").assertExists()
+        compose.onNodeWithText("Remove Orvelle (net.fixture.orvelle) — not started").assertExists()
+        compose.onNodeWithContentDescription("source SIDR · EXTERNAL").assertExists()
+        compose.onNodeWithContentDescription("source SYSTEM INTENT · EXTERNAL").assertExists()
     }
 
     /** T6 m5 (phase 2's final review): the `Blocked` card's «Undo» is not only drawn — its tap is the undo. */

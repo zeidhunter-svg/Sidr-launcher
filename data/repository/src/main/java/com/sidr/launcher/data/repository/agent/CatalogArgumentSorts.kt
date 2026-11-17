@@ -36,8 +36,8 @@ import javax.inject.Inject
  * sees exactly what it saw before; the `internal` one lets a test state its own rows for a synthetic
  * tool without that tool appearing in production data. The cost, named in phase 0 and still true: only
  * `:data:repository` can supply rows to THIS catalog — a consumer in another module declares its own
- * sorts by implementing [ArgumentSorts], which the port now allows (the JVM sandbox's file sort is
- * planned for phase 3b's Task 13, not built yet).
+ * sorts by implementing [ArgumentSorts], which the port allows — and the JVM sandbox does, since phase 3b's
+ * Task 13 (`SandboxArgumentSorts`, its file sort `SandboxFileSort`, in `:consumer:jvm`).
  */
 class CatalogArgumentSorts internal constructor(
     private val rows: Map<ToolId, Map<String, SortedArg>>,

@@ -4,8 +4,11 @@ package com.sidr.launcher.domain.sort
 data class SortCandidate(val value: String, val label: String)
 
 /**
- * What the device made of the user's words for one sort (A4′ phase 3b, fork 3b-C). Five answers, each
- * a different thing to tell the user, so none may be folded into another:
+ * What the device made of the user's words for one sort (A4′ phase 3b, fork 3b-C). Five answers a resolver
+ * may give, each a different thing to tell the user — so a RESOLVER folds none into another. Its CALLERS may,
+ * where the user would be told the same thing: for a value sort (duration, clock time, address) step 2b
+ * (`ToolMatchPlanner`) and the bridge's binder (`DeviceMentionBinder`) read [NotFound] as [Unreadable] and
+ * a [Choice] as [Unavailable] — and the pure value sorts answer only [Resolved] or [Unreadable] anyway:
  *  - [Resolved] — one value; it binds;
  *  - [Choice] — several values, or one to confirm ([confirm] = `true`); the USER picks before any card;
  *  - [NotFound] — the words were read and nothing on the device answers to them («нет такого приложения»);

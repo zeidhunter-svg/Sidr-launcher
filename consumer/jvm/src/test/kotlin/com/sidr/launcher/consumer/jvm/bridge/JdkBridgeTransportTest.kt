@@ -7,11 +7,14 @@ import com.sidr.launcher.domain.ai.bridge.RawArg
 import com.sidr.launcher.domain.ai.bridge.RawStep
 import com.sidr.launcher.domain.ai.bridge.ReplyMeta
 import com.sidr.launcher.domain.ai.bridge.TransportReply
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.fail
 import org.junit.Test
 
 /**
@@ -127,6 +130,84 @@ class JdkBridgeTransportTest {
         val reply = transport(sender("""{"error":{"message":"upstream failure","code":502}}""")).ask(request)
 
         assertEquals(TransportReply.Unparseable(ReplyMeta.NONE), reply)
+    }
+
+    /**
+     * Phase 3b close, final review F4 (the JVM copy of the parse pinned off the happy path too). Controller
+     * ruling E8-P4: `from_step` is an integer JSON NUMBER — the string `"0"`, a fraction, a boolean or `null`
+     * is not one. And Task 8's review m2 (R8-m2), unpinned on either side until now: a reference is EXACTLY
+     * its two fields, its `key` is a JSON string, and a `steps` element is an object. Each of these replies is
+     * unreadable — the shape-error class the one retry answers — never a guess, exactly as `:data:ai-cloud`
+     * reads them.
+     */
+    @Test
+    fun `a reference that is not exactly an integer step and a string key is unreadable`() = runTest {
+        fun plan(target: String) =
+            """{"kind":"plan","steps":[{"tool":"fixture_mortar","args":{"target":$target,"label":null}}],"question":null,"destination":null}"""
+        val contents = listOf("\"0\"", "0.5", "true", "null").map { fromStep -> plan("""{"from_step":$fromStep,"key":"kept"}""") } +
+            plan("""{"from_step":0,"key":"kept","note":"x"}""") +
+            plan("""{"from_step":0,"key":7}""") +
+            """{"kind":"plan","steps":["fixture_mortar"],"question":null,"destination":null}"""
+
+        val replies = contents.map { content -> transport(sender(completion(content))).ask(request) }
+
+        assertEquals(contents.map { TransportReply.Unparseable(ReplyMeta("stop", null, null)) }, replies)
+    }
+
+    /**
+     * Fork 3b-H, B-16, as `:data:ai-cloud` sends it: the one provider the measurement covers gets the cap as
+     * `reasoning.max_tokens`, in its own field and nothing more — whatever case the configured host is
+     * written in (a host is compared case-insensitively, RFC 3986 §3.2.2).
+     */
+    @Test
+    fun `a reasoning cap is sent to OpenRouter as reasoning max_tokens`() = runTest {
+        val openRouter = listOf("https://openrouter.ai/api/v1", "https://OPENROUTER.AI/api/v1")
+
+        openRouter.forEach { baseUrl ->
+            transport(sender(completion(DECLINE)), baseUrl = baseUrl).ask(request.copy(reasoningMaxTokens = 1_234))
+        }
+
+        assertEquals(openRouter.size, sent.size)
+        sent.forEachIndexed { i, (_, body, _) ->
+            val json = Json.parseToJsonElement(body).jsonObject
+            assertEquals(openRouter[i], setOf("model", "messages", "max_tokens", "stream", "reasoning"), json.keys)
+            assertEquals(openRouter[i], Json.parseToJsonElement("""{"max_tokens":1234}"""), json.getValue("reasoning"))
+        }
+    }
+
+    /**
+     * B-16: an endpoint that does not know the field may refuse the whole request, so no other provider ever
+     * receives it. The HOST is what is compared — a look-alike host and a userinfo prefix are other providers.
+     */
+    @Test
+    fun `a reasoning cap is never sent to another provider`() = runTest {
+        val elsewhere = listOf(
+            "https://api.quillmere.example/v1",
+            "https://openrouter.ai.quillmere.example/v1",
+            "https://openrouter.ai@quillmere.example/v1",
+        )
+
+        elsewhere.forEach { baseUrl ->
+            transport(sender(completion(DECLINE)), baseUrl = baseUrl).ask(request.copy(reasoningMaxTokens = 1_234))
+        }
+
+        assertEquals(elsewhere.size, sent.size)
+        sent.forEachIndexed { i, (_, body, _) ->
+            assertEquals(elsewhere[i], setOf("model", "messages", "max_tokens", "stream"), Json.parseToJsonElement(body).jsonObject.keys)
+        }
+    }
+
+    /** The user's «Отмена» must reach the caller as a cancellation, never become a `Failed` reply. */
+    @Test
+    fun `cancellation is not swallowed`() = runTest {
+        val cancelled = BridgeHttpSender { _, _, _ -> throw CancellationException("cancelled by the user") }
+
+        try {
+            transport(cancelled).ask(request)
+            fail("a CancellationException must propagate")
+        } catch (expected: CancellationException) {
+            // propagated, as it must
+        }
     }
 
     private companion object {

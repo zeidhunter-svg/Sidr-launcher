@@ -214,12 +214,19 @@ class Tier0IntentToolSource @Inject constructor(
         // (3) exact resolution or decline — no consent card is ever drawn for a name that did not
         // resolve: the planner answers `PlanningResult.Unresolved` (since A4′ phase 3b; `NoPlan` before
         // it, which fell through to the cloud model — R14-39), and step 2b answers that on the device
-        // with no plan. **Since phase 3b the condition also admits a candidate the device OFFERED** — a
-        // word form, or a name found inside extra words (`confirm = true`), or one of two exact matches —
-        // **and the user bound by a tap** (`UnresolvedTarget.bind`), before the consent card, which then
-        // names that package. Only the whole words naming one app exactly — a label or an alias — bind
-        // without the user; an offered candidate is never bound by the device alone. An owner item at
-        // the phase close;
+        // with no plan. **Since phase 3b three ways lead into this tool, each before the consent card,
+        // which then names the package** (final review B-I1; an owner item at the phase close):
+        //   (a) the whole words naming ONE app exactly — a label or an alias — bind with no pick, and
+        //       «exactly» is exact AFTER the text folding (`TextFolding`, B-1): punctuation, symbols, an
+        //       apostrophe between letters and the two dropped mark ranges are not part of a name, so
+        //       «удали приложение lumora» binds «Lumora+» (`ToolMatchPlannerTest > a label that differs
+        //       from the words only by a symbol binds the uninstall without a pick`) — at the phase's
+        //       base that command declined;
+        //   (b) a candidate step 2b OFFERED — a word form, a name found inside extra words (`confirm =
+        //       true`), or one of two exact matches — that the user bound by a tap (`UnresolvedTarget.bind`);
+        //   (c) a candidate the bridge's interpretation card offered (`DeviceMentionBinder` → `AppChoice`,
+        //       word forms included), bound by the user's pick on that card (`Interpretation.Act.choose`).
+        // An offered candidate is never bound by the device alone;
         // (4) our own package is refused — `Tier0IntentToolWorker.uninstallApp`; (5) the wording says
         // the precondition is CHECKED BEFORE THE CALL and never that a refusal is DETECTED (rows
         // 16/28/32: `startActivity` returns normally and throws nothing whether the uninstaller

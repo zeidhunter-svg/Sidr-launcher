@@ -23,9 +23,13 @@ package com.sidr.launcher.domain.ai.bridge
  * through OpenRouter, `PROMPT_ONLY`, 40 lines (32 single + 8 `multi`), reasoning off and on, 560 lines:
  * R1 224 / 224 single lines usable (rule ≥ 220); R3 — for every model zero `REQUEST_REJECTED` and usable
  * 40 / 40 under both settings, truncations 1 → 0 and the largest p90 32 916 → 24 307 ms → the cap ON;
- * R4 — 24 307 ms (`qwen/qwen3.7-flash`, on) × 1.5 = 36 460 → rounded up to 5 000 ms → **40 s**. One line
- * ran past 40, 45 and 50 s alike (qwen, 51 536 ms over two attempts) and is cut by any of them; none fell
- * between 40 and 45 s.
+ * R4 — 24 307 ms (`qwen/qwen3.7-flash`, on) × 1.5 = 36 460 → rounded up to 5 000 ms → **40 s**. With
+ * reasoning ON, one line ran past 40, 45 and 50 s alike (qwen, 51 536 ms over two attempts) and is cut by any
+ * of them; none fell between 40 and 45 s. **That is the ON half only** (final review F3, phase 3b close): the
+ * cap reaches OpenRouter alone (B-16), so every other provider runs as the OFF half did — and there the same
+ * formula gives 32 916 × 1.5 = 49 374 → 50 s, three lines ran past 40 s (qwen 40 365, 41 429 and 86 687 ms)
+ * and two of them fell between 40 and 45 s. One ceiling for every host is the shipped choice, not a measured
+ * one for the hosts without the cap — an owner item at the close (one ceiling, or one per host).
  *
  * **The reasoning cap is ON by default since then**, [maxOutputTokens] / 2 = 2 048 (derived, not a new
  * number; fork 3b-H). `null` would send nothing; a value is sent as OpenRouter's `reasoning.max_tokens`,

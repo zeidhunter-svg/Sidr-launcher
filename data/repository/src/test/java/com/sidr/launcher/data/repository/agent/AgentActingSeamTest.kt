@@ -621,6 +621,35 @@ class AgentActingSeamTest {
             assertEquals("nothing may be left at rest", null, (store.active() as OperationResult.Success).value)
         }
 
+    /**
+     * Phase 3b close, final review (deferred E6-F8): a VALUE a registered tool claimed and its sort cannot
+     * read falls through step 2b to the later steps — held here through the real planner and the real route,
+     * not only by the planner's own tests (controller ruling E6-R1: «полчасика» is the model's to read, like
+     * any unclaimed text — the vocabulary is no filter on understanding). The first assertion is the premise:
+     * the vocabulary claims the text for `set_timer`. The control is the same tool with a value the device
+     * reads — a session starts on the device and the model is not asked again — so the one ask is the value's,
+     * not the wiring's.
+     */
+    @Test
+    fun `a claimed duration the device cannot read reaches the model`() = runTest {
+        assertEquals(
+            "the premise: the vocabulary must claim this text, or this test proves nothing",
+            Tier0ToolIds.SET_TIMER,
+            ToolVocabulary().match(GOAL_TIMER_UNREADABLE)?.id,
+        )
+
+        val outcome = routeUseCase(federation()).route(GOAL_TIMER_UNREADABLE)
+
+        assertEquals("the model reads the value the device could not", 1, modelPlanner.planCallCount)
+        assertEquals(GOAL_TIMER_UNREADABLE, modelPlanner.lastCommand)
+        assertTrue("no session may start on a value nobody read, was $outcome", outcome !is CommandOutcome.AgentSessionStarted)
+
+        val readable = routeUseCase(federation()).route(GOAL_TIMER_READABLE)
+
+        assertTrue("the control: a value the device reads starts a session there, was $readable", readable is CommandOutcome.AgentSessionStarted)
+        assertEquals("…and the model is not asked again", 1, modelPlanner.planCallCount)
+    }
+
     // ---------------------------------------------------------------------------------------------
     // The precondition gate, from text.
     // ---------------------------------------------------------------------------------------------
@@ -697,6 +726,10 @@ class AgentActingSeamTest {
         const val GOAL_UNINSTALL_UNKNOWN = "удали приложение $UNKNOWN_LABEL"
         const val GOAL_ALIAS = "называй $TARGET_LABEL как $ALIAS_PHRASE"
         const val GOAL_ALARM = "поставь будильник на 7:30"
+
+        /** A duration `DurationSort` cannot read (number + unit only) and one it can — phase 3b close. */
+        const val GOAL_TIMER_UNREADABLE = "поставь таймер на полчасика"
+        const val GOAL_TIMER_READABLE = "поставь таймер на 10 минут"
 
         /** Claimed by neither FastPath nor the vocabulary, so the model is legitimately consulted. */
         const val GOAL_UNMATCHED = "расскажи что-нибудь про горы"

@@ -153,6 +153,26 @@ class OpenAiCompatibleBridgeTransportTest {
         assertEquals(fromSteps.map { TransportReply.Unparseable(ReplyMeta("stop", null, null)) }, replies)
     }
 
+    /**
+     * Task 8's review m2 (R8-m2), pinned at phase 3b's close (final review F4): the rest of ruling E8-P4's
+     * strictness. A reference is EXACTLY two fields, its `key` is a JSON string, and a `steps` element is an
+     * object — a third field, a numeric key or a bare string where a step belongs is unreadable, never a guess.
+     */
+    @Test
+    fun `a reference with another field, a non-string key or a non-object step is unreadable`() = runTest {
+        fun plan(target: String) =
+            """{"kind":"plan","steps":[{"tool":"fixture_mortar","args":{"target":$target,"label":null}}],"question":null,"destination":null}"""
+        val contents = listOf(
+            plan("""{"from_step":0,"key":"kept","note":"x"}"""),
+            plan("""{"from_step":0,"key":7}"""),
+            """{"kind":"plan","steps":["fixture_mortar"],"question":null,"destination":null}""",
+        )
+
+        val replies = contents.map { content -> transport(engine(completion(content))).ask(request) }
+
+        assertEquals(contents.map { TransportReply.Unparseable(ReplyMeta("stop", null, null)) }, replies)
+    }
+
     @Test
     fun `an answer inside a code fence is read`() = runTest {
         val reply = transport(engine(completion("```json\n$DECLINE\n```"))).ask(request)
@@ -351,7 +371,11 @@ class OpenAiCompatibleBridgeTransportTest {
         assertEquals("512", sent.getValue("max_tokens").jsonPrimitive.content)
     }
 
-    /** The switch is OFF by default (`BridgeBudget.Default`): even OpenRouter then gets the 3a body, unchanged. */
+    /**
+     * A request that carries no cap sends no reasoning object — even to OpenRouter, which then gets the 3a body
+     * unchanged. (Production's `BridgeBudget.Default` carries a cap of 2 048 since phase 3b's Task 14, so this is
+     * the shape of a budget with the switch off, not of the shipped one.)
+     */
     @Test
     fun `no reasoning cap sends no reasoning object`() = runTest {
         transport(cfg = openRouter).ask(request)

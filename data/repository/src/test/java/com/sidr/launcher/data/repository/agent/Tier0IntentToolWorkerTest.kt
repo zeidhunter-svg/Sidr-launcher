@@ -25,8 +25,10 @@ import org.robolectric.annotation.Config
  * the frozen seven `ActionIds`, so this class is the whole of their execution — no `ExecuteActionUseCase`
  * involved.
  *
- * [FakeIntentLauncher] is the one seam an intent leaves through, so `parseSeconds` and the argument
- * wiring can be tested without a Robolectric activity. The class still runs under Robolectric because
+ * [FakeIntentLauncher] is the one seam an intent leaves through, so the duration and clock-time reading
+ * (the pure sorts `DurationSort` and `ClockTimeSort` since A4′ phase 3b's Task 3, which replaced the
+ * worker's private `parseSeconds` / `parseClockTime`) and the argument wiring can be tested without a
+ * Robolectric activity. The class still runs under Robolectric because
  * it reads `Intent` extras, exactly like the other Android-touching tests in this package.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -358,7 +360,7 @@ class Tier0IntentToolWorkerTest {
     /**
      * Bounded token, `H:MM`/`HH:MM` only (spec §7.1) — never a guess, never a default. An agent that
      * silently guesses a clock time is worse than one that declines and says so, the same reasoning
-     * `parseSeconds` already carries for durations.
+     * `DurationSort` carries for durations (both pure sorts since A4′ phase 3b's Task 3).
      */
     @Test
     fun `an unparseable time declines instead of guessing`() = runTest {
@@ -433,15 +435,16 @@ class Tier0IntentToolWorkerTest {
     }
 
     /**
-     * A blank target declines instead of dispatching, the same fail-closed reading [parseSeconds] and
-     * `parseClockTime` already carry: `Intent(ACTION_DELETE, "package:")` names no package, so the
+     * A blank target declines instead of dispatching, the same fail-closed reading `DurationSort` and
+     * `ClockTimeSort` carry: `Intent(ACTION_DELETE, "package:")` names no package, so the
      * call cannot remove anything and that is known before it is made. An agent that fired an
      * uninstall intent at nothing would, if the dispatch returned normally, report `HandedOff`
      * ("outcome unknown" — `Effected` until A4′ phase 0, Task 5) for an outcome already known; the
      * `Failed` asserted below is the answer `DOC-ILM-3` requires.
      *
-     * It is a second line of defence rather than the only one: `ToolMatchPlanner` declines with
-     * `NoPlan` when `AppTargetResolver` cannot resolve a name, so a blank should never reach here.
+     * It is a second line of defence rather than the only one: `ToolMatchPlanner` answers `Unresolved`
+     * (step 2b then answers on the device; `NoPlan` before A4′ phase 3b's Task 5) when `AppTargetResolver`
+     * cannot resolve a name, so a blank should never reach here.
      */
     @Test
     fun `a blank package declines and nothing is dispatched`() = runTest {

@@ -17,9 +17,15 @@ class PlainTextFoldingTest {
         assertEquals(listOf("instagram"), PlainTextFolding.words("İnstagram"))
     }
 
+    /**
+     * The second row (phase 3b close, final review; deferred R2-m3) is U+0670, the superscript alef — dropped
+     * by its own clause outside the harakat range, and asserted by no test until now: «هٰذا» folds to «هذا».
+     * Written as escapes so the mark cannot vanish from the source unnoticed.
+     */
     @Test
     fun `harakat are removed before words are split`() {
         assertEquals(listOf("سنداف"), PlainTextFolding.words("سِنْدَاف"))
+        assertEquals(listOf("هذا"), PlainTextFolding.words("هٰذا"))
     }
 
     /** The hamza-carrying alefs and alef wasla are one alef; alef maqsura and Farsi yeh are yeh; keheh is kaf; ta marbuta is heh; tatweel is gone. */

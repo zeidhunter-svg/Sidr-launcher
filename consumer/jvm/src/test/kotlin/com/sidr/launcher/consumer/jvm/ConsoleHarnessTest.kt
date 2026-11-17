@@ -117,6 +117,15 @@ class ConsoleHarnessTest {
 
         assertEquals(ExecutionState.Completed, state)
         assertEquals(listOf("find orvelle.txt and delete it"), transport.requests.map { it.command })
+        // Phase 3b close, final review B-M7 — the JVM's egress sentinel: nothing of this computer reaches the
+        // model in OUR words, the schema or a retry note — not a file the sandbox holds, not the sandbox's own
+        // path (bound by the device after the answer). The command is the one part that is the user's.
+        val world = listOf("pallimer", "orvelle", temp.root.toPath().toString(), sandbox.toString())
+        transport.requests.forEach { request ->
+            listOfNotNull(request.system, request.schemaJson, request.retryNote).forEach { part ->
+                world.forEach { trace -> assertFalse("«$trace» reached the model's request", part.contains(trace)) }
+            }
+        }
         val card = listOf(
             "The model's reading of \"find orvelle.txt and delete it\":",
             "  0. find_file(query=orvelle.txt [user], root=$sandbox [device]) — risk SAFE",

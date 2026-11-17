@@ -5,6 +5,7 @@ import com.sidr.launcher.data.repository.agent.memory.MemoryToolSource
 import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.sort.SortedArg
 import com.sidr.launcher.domain.tool.ToolDescriptor
+import com.sidr.launcher.domain.tool.ToolId
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -75,6 +76,28 @@ class ToolArgumentSortGuardTest {
             ),
             nonApp,
         )
+    }
+
+    /**
+     * Phase 3b close (final review; deferred E3-F4): the catalog refuses, where its rows are built, a tool with
+     * two app-sorted arguments — one mention binds one package, so such a row is not a shape any caller can
+     * bind. The `require` held it in one direction only; this is its failing direction.
+     */
+    @Test
+    fun `a tool with two app arguments is refused where the rows are built`() {
+        val refused = runCatching {
+            CatalogArgumentSorts(
+                mapOf(
+                    ToolId("fixture_twin") to mapOf(
+                        "first" to SortedArg(ArgSorts.APP, labelArg = null),
+                        "second" to SortedArg(ArgSorts.APP, labelArg = null),
+                    ),
+                ),
+            )
+        }.exceptionOrNull()
+
+        assertEquals(IllegalArgumentException::class, refused?.let { it::class })
+        assertEquals("more than one app-sorted argument on [fixture_twin]", refused?.message)
     }
 
     /**

@@ -17,6 +17,7 @@ import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.StepRationale
 import com.sidr.launcher.domain.agent.UnresolvedTarget
+import com.sidr.launcher.domain.intent.CommandNormalizer
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
@@ -38,6 +39,7 @@ import com.sidr.launcher.domain.tool.ToolWorker
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -490,6 +492,27 @@ class ToolMatchPlannerTest {
             ArgSource.Literal("net.fixture.miravin"),
             (whole as PlanningResult.Planned).plan.steps.single().invocation.args["app"],
         )
+    }
+
+    /**
+     * Phase 3b close, final review B-I1 — one of the three ways into `uninstall_app` the owner's condition
+     * (3) record names (`Tier0IntentToolSource`): «exact» is exact AFTER the text folding (B-1). Punctuation
+     * and symbols are not part of a name, so a label that differs from the user's words only by a symbol
+     * binds the irreversible tool WITHOUT a pick; the consent card that follows names the package. Recorded,
+     * not chosen here — at the phase's base this command declined (an exact compare of `CommandNormalizer`
+     * forms) — and an owner item at the close. The first assertion is the premise that keeps the test from
+     * passing vacuously: before folding, the label and the words differ.
+     */
+    @Test
+    fun `a label that differs from the words only by a symbol binds the uninstall without a pick`() = runTest {
+        assertNotEquals("lumora", CommandNormalizer.normalize("Lumora+"))
+        val planner = ToolMatchPlanner(appSelector, appTargetsOf("Lumora+" to "net.fixture.qelvarn"), appSorts, sortResolversOf())
+
+        val result = planner.plan(PlanningRequest(free("удали приложение lumora")), registryWith(removeDescriptor))
+
+        val args = (result as PlanningResult.Planned).plan.steps.single().invocation.args
+        assertEquals(ArgSource.Literal("net.fixture.qelvarn"), args["app"])
+        assertEquals(ArgSource.Literal("lumora"), args["app_label"])
     }
 
     /** Controller ruling E5-P3: two exact answers are the user's choice — `Several`, never a guess, never `NoPlan`. */

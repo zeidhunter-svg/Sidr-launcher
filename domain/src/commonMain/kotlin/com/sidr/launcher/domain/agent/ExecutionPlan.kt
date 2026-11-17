@@ -90,7 +90,8 @@ fun ExecutionPlan.isModelProposed(): Boolean = steps.any { it.rationale == StepR
  * What a DETERMINISTIC planner answers. Three variants since A4′ phase 3b (plan §0.2 B-6):
  *  - [Planned] — a plan to run;
  *  - [NoPlan] — this planner has no answer it can give for the goal. At `RouteCommandUseCase` step 2b
- *    it falls through to the cloud model. It no longer means "a tool claimed it and its target did not
+ *    it falls through to the later steps — the cloud model at step 7 only past the local-only, provider
+ *    and connectivity gates (each blocked state says which). It no longer means "a tool claimed it and its target did not
  *    resolve", which it also meant from A1″ Task 6b until this phase (R14-39) — that is [Unresolved]
  *    now. It means "no registered tool claimed the text", or "a second goal rides in a target's words"
  *    (B-15, on purpose — the model plans both, as one reading of several steps the interpretation card

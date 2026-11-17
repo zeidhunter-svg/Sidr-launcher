@@ -248,17 +248,6 @@ class MemoryToolWorkerTest {
     }
 
     /**
-     * A4′ phase 3b, Task 7 fix round (review I1, controller ruling E7-R1; plan §0.2 B-4 «one key on every
-     * path»). FastPath — the real [RuleBasedIntentMatcher] and resolver — reads «Vemblic'i aç» as a word
-     * form of the installed «Vemblic» and only offers it; the production decorator arms its token and the
-     * VM's own recording use case stores the user's confirmation. Then «forget the choice for Vemblic'i»
-     * reaches this worker with the phrase as step 2b's vocabulary hands it (normalised only). The worker
-     * must delete exactly the key that was written — the fold drops the apostrophe between two letters, so
-     * a raw-phrase key would miss the row, the store would still answer Success, the tool would report
-     * Effected, and the choice would keep auto-launching. The control proves the fixture discriminates: the
-     * written key is not the raw phrase's.
-     */
-    /**
      * Owner decision 2026-11-17 (phase 3b close M5): the key is on folded words, so a choice learned for the
      * label «Tessar.» is the one «забудь выбор tessar» removes — before, the two were two keys and the
      * auto-launch of «tessar.» survived the forget with the tool reporting it done.
@@ -283,6 +272,17 @@ class MemoryToolWorkerTest {
         assertEquals(ToolResult.Effected(), result)
     }
 
+    /**
+     * A4′ phase 3b, Task 7 fix round (review I1, controller ruling E7-R1; plan §0.2 B-4 «one key on every
+     * path»). FastPath — the real [RuleBasedIntentMatcher] and resolver — reads «Vemblic'i aç» as a word
+     * form of the installed «Vemblic» and only offers it; the production decorator arms its token and the
+     * VM's own recording use case stores the user's confirmation. Then «forget the choice for Vemblic'i»
+     * reaches this worker with the phrase as step 2b's vocabulary hands it (normalised only). The worker
+     * must delete exactly the key that was written — the fold drops the apostrophe between two letters, so
+     * a raw-phrase key would miss the row, the store would still answer Success, the tool would report
+     * Effected, and the choice would keep auto-launching. The control proves the fixture discriminates: the
+     * written key is not the raw phrase's.
+     */
     @Test
     fun `forget_learned_choice deletes the very key FastPath wrote for a confirmed word form`() = runTest {
         val store = KeyRecordingPreferenceStore()

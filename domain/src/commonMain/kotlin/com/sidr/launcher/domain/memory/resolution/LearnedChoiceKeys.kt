@@ -16,8 +16,10 @@ import com.sidr.launcher.domain.text.TextFolding
  * (symbols only) keys its folded form, so two such names never share an empty key. For a name the fold
  * and the word cut leave alone (no marks, apostrophes, symbols or Arabic letter variants; space-separated
  * words) the key is byte for byte what `slotOf(normalize(name))` gave before folding existed (E4-F3;
- * `LearnedChoiceKeysTest`). Rows keyed before the decision under a symbol («tessar.») are orphans —
- * visible and deletable in Settings.
+ * `LearnedChoiceKeysTest`). Rows keyed before the decision whose key the word cut changes are orphans —
+ * visible and deletable in Settings, which shows the key: a symbol («tessar.» → «tessar»), a hyphen
+ * («wi-fi analyzer» → «wi fi analyzer»), and on Android every CJK/Thai name ICU cuts into several words
+ * («微信» → «微 信»). The user is asked once more; nothing is bound by an orphan.
  *
  * **Who keys here, as of Task 7:**
  *  - FastPath (`ResolveCommandWithPreferenceUseCase`), on its outcome's `query` — the matcher's

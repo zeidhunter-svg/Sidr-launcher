@@ -30,7 +30,6 @@ import com.sidr.launcher.domain.sort.SortResolution
 import com.sidr.launcher.domain.sort.SortResolver
 import com.sidr.launcher.domain.text.TextFolding
 import com.sidr.launcher.domain.tool.ArgSource
-import com.sidr.launcher.domain.tool.ToolDurability
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolRegistry
@@ -204,7 +203,7 @@ class DeviceMentionBinder @Inject constructor(
 
         // Owner decision 2026-11-17: an irreversible tool binds only a name exact as typed (`forIrreversible`);
         // a tool the registry does not know is treated as irreversible — the stricter reading.
-        val irreversible = registry.find(proposed.tool)?.durability != ToolDurability.TRANSIENT
+        val irreversible = registry.find(proposed.tool)?.durability.isIrreversible()
         return when (val found = appTargets.candidates(mention).forIrreversible(irreversible)) {
             AppCandidates.None -> StepBinding.Refused(Binding.NotFound(mention))
             AppCandidates.Unavailable -> StepBinding.Refused(Binding.Unavailable)

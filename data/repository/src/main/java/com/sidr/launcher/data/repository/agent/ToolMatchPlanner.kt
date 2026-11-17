@@ -17,7 +17,6 @@ import com.sidr.launcher.domain.sort.SortResolution
 import com.sidr.launcher.domain.sort.SortResolver
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ToolDescriptor
-import com.sidr.launcher.domain.tool.ToolDurability
 import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolRegistry
 import javax.inject.Inject
@@ -208,7 +207,7 @@ class ToolMatchPlanner @Inject constructor(
         }
 
         // The search: the whole words first, then windows of them (`AppTargetResolver.windows`).
-        return when (val found = appTargets.windows(raw).forIrreversible(descriptor.durability == ToolDurability.DURABLE)) {
+        return when (val found = appTargets.windows(raw).forIrreversible(descriptor.durability.isIrreversible())) {
             // Only the whole words naming one app exactly bind; everything else is the user's.
             is AppCandidates.One ->
                 planned(descriptor, rest + (argName to found.app.packageName) + listOfNotNull(labelArg?.let { it to raw }))

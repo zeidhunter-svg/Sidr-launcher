@@ -157,8 +157,9 @@ class DoctrineMatrixGuardTest {
      * Three citation forms are read: `` `XTest` `` (the class), `` `XTest#fn` `` (a plain function) and —
      * since the owner's decision of 2026-11-17 (phase 3b close, triage line 61) — `` `XTest > name` ``, a
      * backticked test name as phase 3b's cells write it: its class must exist AND declare ``fun `name`(``.
-     * Before that, the third form was read by nothing, not even its class, and passed only because each
-     * cell also named its classes bare. The scope is unchanged: the evidence cells of rule rows.
+     * Before that, the third form was read by nothing, not even its class — and not every cell named its
+     * classes bare as well (`DOC-HMA-3` cited `ConsoleHarnessTest` only in this form). The scope is
+     * unchanged: the evidence cells of rule rows (eight such citations on 2026-11-17).
      */
     @Test fun every_named_test_exists_in_the_repository() {
         val reference = Regex("""`([A-Z][A-Za-z0-9_]*Test)(?:#([A-Za-z0-9_]+))?`""")

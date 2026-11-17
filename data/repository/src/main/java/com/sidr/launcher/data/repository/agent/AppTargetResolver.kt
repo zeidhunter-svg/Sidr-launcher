@@ -10,6 +10,7 @@ import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.text.AppNameMatcher
 import com.sidr.launcher.domain.text.NameMatch
 import com.sidr.launcher.domain.text.TextFolding
+import com.sidr.launcher.domain.tool.ToolDurability
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
@@ -45,6 +46,12 @@ sealed interface AppCandidates {
  */
 fun AppCandidates.forIrreversible(irreversible: Boolean): AppCandidates =
     if (irreversible && this is AppCandidates.One && foldedOnly) AppCandidates.Confirm(listOf(app)) else this
+
+/**
+ * The ONE predicate both binding sites read for [forIrreversible] (final review m4): anything but
+ * `TRANSIENT` — `DURABLE`, a value added later, or no descriptor at all — is irreversible, the stricter reading.
+ */
+fun ToolDurability?.isIrreversible(): Boolean = this != ToolDurability.TRANSIENT
 
 /**
  * A name becomes a package, or nothing happens. Task 6 (A1″ Phase 3a) — this feeds `uninstall_app`,
@@ -126,8 +133,8 @@ class AppTargetResolver @Inject constructor(
     /**
      * One package or nothing — the shape step 2b declined on until phase 3b, when `ToolMatchPlanner` moved
      * to [windows] so that a decline reaches the user instead of the model. No production caller is left;
-     * kept for its tests and the shape it pins. A form binds nothing. It knows no tool: a fold-only match
-     * resolves here — never feed an irreversible tool from it without [forIrreversible].
+     * kept for its tests and the shape it pins. A form binds nothing. It knows no tool and drops
+     * [AppCandidates.One.foldedOnly]: a fold-only match resolves here — never feed an irreversible tool from it.
      */
     suspend fun resolve(query: String): String? =
         (candidates(query) as? AppCandidates.One)?.app?.packageName

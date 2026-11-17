@@ -5,7 +5,20 @@
 > digest); per-phase plans carry their own checklists.** This file is the status snapshot — if it
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
-> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-11-17
+> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-11-17 (c)
+> (**the owner's five answers to phase 3b's close — built, `CODE-GREEN` at 1839 / 0 failures** (boundary
+> `tools/gate.sh` on `8325aa5` + the close docs, cleared tree, 557 executed: `:domain` 582 · `:consumer:jvm` 91 ·
+> `:data:repository` 468 · `:feature:launcher` 281 · `:app` 84 · `:data:ai-cloud` 49 · other seven 284; commits
+> `03f70aa…8325aa5`; floor `BASELINE_TESTS` 1821 → 1839): the bridge ceiling is per host — 40 s where the reasoning
+> cap reaches OpenRouter, 50 s elsewhere, chosen by the transport's reading of the host (the same predicate its
+> body uses), both consumers; for `uninstall_app` (by its declared `DURABLE`) a name exact only after folding is
+> offered as a one-app confirmation on 2b and on the bridge card, never bound alone; the learned-choice key is
+> the folded words («Tessar.» = «tessar»); `DurationSort` reads «полчаса», «полтора часа» and their `en`/`tr`
+> neighbours as whole phrases; `DoctrineMatrixGuardTest` reads `` `XTest > name` ``. Each item red-first,
+> guards and silent tests mutation-proved; reviews by risk (item 2 `reviewer-deep`, item 1 `reviewer`, a final
+> `reviewer-deep` over the range — all CLEAN, minors fixed or named). **No device round.** Next: phase 4's plan
+> (the learned-plan cache, spec §8). Record: the 3b journal «Post-close owner items»; `§HANDOFF` «Фаза 3b A4′»
+> pointer); prior 2026-11-17
 > (**Этап 6 (A4′) phase 3b — sorts, word forms, multi-step plans — `CODE-GREEN` at 1821 / 0 failures**
 > (boundary `tools/gate.sh` at `1b8693a`, 557 executed, cleared tree: `:domain` 574 · `:consumer:jvm` 90 ·
 > `:data:repository` 462 · `:feature:launcher` 281 · `:app` 84 · `:data:ai-cloud` 46 · other seven 284; the
@@ -1721,7 +1734,7 @@ alias decorator fills only `Unknown`, a bare alias phrase under a broken key rea
 unavailable» instead of launching (owner fork F3a-C (a), named). *Re-based 2026-11-17 by phase 3b:* the
 numbers are now pinned by a test and re-measured — **40 s**, 4 096 tokens, a reasoning cap of 2 048 sent to
 OpenRouter only — but the 40 s is derived from the half of the measurement only OpenRouter receives, and the
-other providers' closest stand-in gives 50 s (owner 2026-11-17: per host, 50 s off OpenRouter — to build); `open_url`'s address is normalised before the
+other providers' closest stand-in gives 50 s (owner 2026-11-17: per host, 50 s off OpenRouter — **built** the same day); `open_url`'s address is normalised before the
 card (`UrlSort`: lower-case scheme, whitespace refused); R14-39 is **closed** in code.
 
 **A4′ phase 3b (2026-11-17) is `CODE-GREEN` only — nothing of it has been seen on a phone.** Not «Вы имели в
@@ -1729,13 +1742,15 @@ card (`UrlSort`: lower-case scheme, whitespace refused); R14-39 is **closed** in
 two-step card or «← из шага N» on a consent card, not the remainder card on «Продолжить», not «Повторить
 остаток», not the stopped card after a refusal that follows an act; the hypothesis list is in the phase plan
 §0.7 and `§HANDOFF` «Фаза 3b A4′» (archive). Not claimed: that a phone's ICU segments words as Robolectric's
-72.1 does; that one 40 s ceiling suits hosts without the cap; that two of the four local states of
-`DOC-ADL-3` hold the 2b answer by test (they hold by step order); that the doctrine guard reads a
-`` `XTest > name` `` citation (it reads the class only when it is also named bare); that the ledger records
+72.1 does; that 50 s suits hosts without the cap (the reasoning-off half of the OpenRouter run is their
+stand-in, not their measurement); that two of the four local states of
+`DOC-ADL-3` hold the 2b answer by test (they hold by step order); that the doctrine guard reads the matrix's
+journal rows (it reads rule rows — all three citation forms since 2026-11-17); that the ledger records
 Tasks 12–13 (lost; the final review read their commits from scratch). Named, not fixed: a name exact only
-after folding binds with no pick (FastPath launches «Lumora+» for «lumora»; the uninstall half is recorded in
-owner condition (3), an owner item); a broken alias table reads as «no alias forms»; the learned-choice key
-folds characters while matchers compare words.
+after folding binds with no pick on FastPath («открой lumora» launches «Lumora+»; `uninstall_app` asks instead
+since 2026-11-17); a broken alias table reads as «no alias forms»; learned-choice rows keyed before 2026-11-17
+whose key the word cut changes (a symbol, a hyphen, a CJK/Thai name under ICU) are orphans, visible and
+deletable in Settings; «BİR BUÇUK SAAT» typed in capitals is not read (U+0307), «YARIM SAAT» is.
 
 **Context hygiene (2026-11-11) claims nothing on a phone and nothing about tokens directly:** every number
 it reports is bytes (`wc -c`), not tokens — the harness has no counter; the hook filter is calibrated on
@@ -1787,7 +1802,8 @@ ADR, which a mechanical check cannot judge).
   3a `CODE-GREEN` 2026-11-07**, plan `docs/superpowers/plans/2026-10-03-a4-phase3a-bridge-first-slice.md`,
   record and the owner's answers of 2026-11-07 in `§HANDOFF` («Фаза 3a A4′», archive); **phase 3b
   `CODE-GREEN` 2026-11-17** (gate 1821), plan `docs/superpowers/plans/2026-11-07-a4-phase3b-sorts-forms-multistep.md`,
-  record and its eleven open owner items in `§HANDOFF` («Фаза 3b A4′», archive), ledger
+  record and its eleven open owner items in `§HANDOFF` («Фаза 3b A4′», archive) — the five the owner answered
+  «build» are built (2026-11-17, gate 1839, the ledger's «Post-close owner items»), ledger
   `.superpowers/sdd/2026-11-07-a4-phase3b/progress.md` (git-ignored); **phase 4 — the learned-plan cache
   (spec §8) — to go**, its own plan, then the block's one acceptance. Of the
   four findings A1″'s acceptance handed it, phase 0 **repaired (a) in code** (a cancelled uninstall

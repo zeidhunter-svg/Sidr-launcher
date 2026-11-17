@@ -153,15 +153,33 @@ class DoctrineMatrixGuardTest {
      * The point of the whole exercise. A rule that claims `arch-guard` (or any other automated type)
      * and names a test class that does not exist in the repository is a rule that reads as enforced
      * and is not.
+     *
+     * Three citation forms are read: `` `XTest` `` (the class), `` `XTest#fn` `` (a plain function) and —
+     * since the owner's decision of 2026-11-17 (phase 3b close, triage line 61) — `` `XTest > name` ``, a
+     * backticked test name as phase 3b's cells write it: its class must exist AND declare ``fun `name`(``.
+     * Before that, the third form was read by nothing, not even its class, and passed only because each
+     * cell also named its classes bare. The scope is unchanged: the evidence cells of rule rows.
      */
     @Test fun every_named_test_exists_in_the_repository() {
         val reference = Regex("""`([A-Z][A-Za-z0-9_]*Test)(?:#([A-Za-z0-9_]+))?`""")
+        val named = Regex("""`([A-Z][A-Za-z0-9_]*Test) > ([^`]+)`""")
         val broken = mutableListOf<String>()
 
         rules.forEach { rule ->
             if (rule.evidence.contains(NO_EVIDENCE)) return@forEach
             val references = reference.findAll(rule.evidence).toList()
-            if (references.isEmpty()) {
+            val names = named.findAll(rule.evidence).toList()
+            names.forEach { match ->
+                val className = match.groupValues[1]
+                val testName = match.groupValues[2].trim()
+                val file = testFilesByClassName[className]
+                if (file == null) {
+                    broken += "${rule.id}: cites `$className > $testName`, but `$className` exists in no test source set"
+                } else if (!file.readText().contains("fun `$testName`(")) {
+                    broken += "${rule.id}: `$className` has no test named `$testName` (${file.invariantSeparatorsPath})"
+                }
+            }
+            if (references.isEmpty() && names.isEmpty()) {
                 broken += "${rule.id}: evidence cell names neither a test nor `$NO_EVIDENCE` " +
                     "('${rule.evidence}')"
                 return@forEach

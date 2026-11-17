@@ -29,4 +29,13 @@ sealed interface SortResolution {
  */
 fun interface SortResolver {
     suspend fun resolve(words: String): SortResolution
+
+    /**
+     * The same reading for a tool whose act cannot be undone ([irreversible]; `ToolDurability.DURABLE`): a
+     * resolver that knows when its one match is exact only after the text folding answers that match as a
+     * one-candidate [SortResolution.Choice] with `confirm = true` — offered, never bound alone (owner
+     * decisions 2026-11-17: «2: a» for `uninstall_app`, «1: a» for `:consumer:jvm`'s `delete_file`). The
+     * default knows nothing finer than [resolve].
+     */
+    suspend fun resolve(words: String, irreversible: Boolean): SortResolution = resolve(words)
 }

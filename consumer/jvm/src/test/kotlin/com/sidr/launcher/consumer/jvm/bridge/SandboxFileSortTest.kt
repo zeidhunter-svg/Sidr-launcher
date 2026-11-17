@@ -29,6 +29,26 @@ class SandboxFileSortTest {
         assertEquals(SortResolution.Resolved(orvelle.toString()), sort().resolve("orvelle.txt"))
     }
 
+    /**
+     * Owner decision 2026-11-17 («1: a» — the JVM half of the uninstall rule): for an irreversible tool a name
+     * exact only after folding («orvelle txt» for «orvelle.txt») is a one-file confirmation, never a bind; a
+     * name exact as written still binds, and a reversible tool keeps the folded bind. The premise: the two
+     * spellings differ before folding.
+     */
+    @Test
+    fun `a name exact only after folding is a confirmation for an irreversible tool`() = runTest {
+        val orvelle = temp.newFile("orvelle.txt").toPath().toRealPath()
+        val path = orvelle.toString()
+
+        assertEquals(
+            SortResolution.Choice(listOf(SortCandidate(value = path, label = "orvelle.txt")), confirm = true),
+            sort().resolve("orvelle txt", irreversible = true),
+        )
+        assertEquals(SortResolution.Resolved(path), sort().resolve("orvelle txt", irreversible = false))
+        assertEquals(SortResolution.Resolved(path), sort().resolve("orvelle txt"))
+        assertEquals(SortResolution.Resolved(path), sort().resolve("Orvelle.TXT", irreversible = true))
+    }
+
     /** `find_file` takes the first match in walk order; the sort refuses to: two are the user's to pick. */
     @Test
     fun `two files sharing a name are a choice`() = runTest {

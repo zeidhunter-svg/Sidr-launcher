@@ -2,6 +2,7 @@ package com.sidr.launcher.consumer.jvm.bridge
 
 import com.sidr.launcher.consumer.jvm.tool.SandboxKeys
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolIds
+import com.sidr.launcher.domain.intent.CommandNormalizer
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.sort.ArgumentSorts
@@ -25,7 +26,8 @@ import kotlin.coroutines.EmptyCoroutineContext
  * The «file» sort's resolver (A4′ phase 3b, Task 13; `ArgSorts.FILE`): the user's words for a file → the
  * sandbox files whose name answers to them, by the ONE name matcher every consumer uses
  * ([AppNameMatcher.matchWhole], word-form rule B-2) under this platform's [folding]. It never guesses:
- *  - one exact match → [SortResolution.Resolved] with its absolute path;
+ *  - one exact match → [SortResolution.Resolved] with its absolute path — for an irreversible tool only if it
+ *    is exact as written; exact only after folding it is a one-file choice to confirm (owner 2026-11-17);
  *  - several exact matches → [SortResolution.Choice] — the user's, never the first found (where `find_file`
  *    takes the first match in walk order);
  *  - only word FORMS of a name → [SortResolution.Choice] with `confirm = true`, never a bind;
@@ -48,8 +50,16 @@ class SandboxFileSort(
     private val context: CoroutineContext = EmptyCoroutineContext,
 ) : SortResolver {
 
-    override suspend fun resolve(words: String): SortResolution = try {
-        withContext(context) { resolveIn(root.toAbsolutePath().normalize().toRealPath(), words) }
+    override suspend fun resolve(words: String): SortResolution = resolve(words, irreversible = false)
+
+    /**
+     * Owner decision 2026-11-17 («1: a», the JVM half of `uninstall_app`'s rule): for an [irreversible] tool
+     * (`delete_file`) a single match exact only after folding — «orvelle txt» for «orvelle.txt»; «as written»
+     * is the `CommandNormalizer` form of the name equal to that of the words — is a one-file confirmation,
+     * never [SortResolution.Resolved]; `SandboxMentionBinder` fails that choice closed.
+     */
+    override suspend fun resolve(words: String, irreversible: Boolean): SortResolution = try {
+        withContext(context) { resolveIn(root.toAbsolutePath().normalize().toRealPath(), words, irreversible) }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -57,19 +67,25 @@ class SandboxFileSort(
         SortResolution.Unavailable
     }
 
-    private fun resolveIn(base: Path, words: String): SortResolution {
+    private fun resolveIn(base: Path, words: String, irreversible: Boolean): SortResolution {
         val files = Files.walk(base).use { stream ->
             stream.filter { Files.isRegularFile(it, LinkOption.NOFOLLOW_LINKS) }.toList()
         }
         val named = files.map { InstalledApp(packageName = it.toAbsolutePath().toString(), label = it.fileName.toString()) }
         return when (val match = AppNameMatcher.matchWhole(words, named, folding)) {
-            is NameMatch.Exact ->
-                if (match.apps.size == 1) SortResolution.Resolved(match.apps.single().packageName)
-                else SortResolution.Choice(candidatesOf(match.apps, base), confirm = false)
+            is NameMatch.Exact -> when {
+                match.apps.size > 1 -> SortResolution.Choice(candidatesOf(match.apps, base), confirm = false)
+                irreversible && !writtenExactly(match.apps.single(), words) ->
+                    SortResolution.Choice(candidatesOf(match.apps, base), confirm = true)
+                else -> SortResolution.Resolved(match.apps.single().packageName)
+            }
             is NameMatch.Edge -> SortResolution.Choice(candidatesOf(match.apps, base), confirm = true)
             NameMatch.None -> SortResolution.NotFound
         }
     }
+
+    private fun writtenExactly(file: InstalledApp, words: String): Boolean =
+        CommandNormalizer.normalize(file.label) == CommandNormalizer.normalize(words)
 
     private fun candidatesOf(files: List<InstalledApp>, base: Path): List<SortCandidate> =
         files.map { SortCandidate(value = it.packageName, label = base.relativize(Path.of(it.packageName)).toString()) }

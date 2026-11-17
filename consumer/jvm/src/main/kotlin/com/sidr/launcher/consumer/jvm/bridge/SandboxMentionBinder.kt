@@ -17,6 +17,7 @@ import com.sidr.launcher.domain.sort.ArgumentSorts
 import com.sidr.launcher.domain.sort.SortResolution
 import com.sidr.launcher.domain.sort.SortResolver
 import com.sidr.launcher.domain.tool.ArgSource
+import com.sidr.launcher.domain.tool.ToolDurability
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolRegistry
 import java.nio.file.Files
@@ -41,8 +42,9 @@ import java.nio.file.Path
  *    (`UNRESOLVED_ARG_SOURCE`) rather than act;
  *  - every other argument passes as the model's words, with the validator's origin.
  *
- * **A named limit: a file choice fails closed.** [SortResolution.Choice] — two files of one name, or only a
- * word form of one — is [Binding.Unavailable] here, as a value sort's choice is on Android: the pick a card
+ * **A named limit: a file choice fails closed.** [SortResolution.Choice] — two files of one name, only a
+ * word form of one, or (for `delete_file`, owner decision 2026-11-17) one named exactly only after folding —
+ * is [Binding.Unavailable] here, as a value sort's choice is on Android: the pick a card
  * owes ([com.sidr.launcher.domain.ai.bridge.AppChoice]) carries installed apps, and this binder does not
  * dress a file as one. Nothing runs; the user is told the reading could not be bound. A file pick is a
  * domain type this phase does not add.
@@ -111,7 +113,10 @@ class SandboxMentionBinder(
                 origins[name] = proposed.origins[name] ?: ValueOrigin.ModelGenerated
                 continue
             }
-            when (val resolution = files.resolve(value)) {
+            // Owner decision 2026-11-17 («1: a»): an irreversible tool (`delete_file`) binds only a name exact as
+            // written; a fold-only match is a choice, which this binder fails closed (the class KDoc).
+            val irreversible = registry.find(proposed.tool)?.durability != ToolDurability.TRANSIENT
+            when (val resolution = files.resolve(value, irreversible)) {
                 is SortResolution.Resolved -> {
                     words[name] = resolution.value
                     origins[name] = ValueOrigin.Ours

@@ -34,6 +34,38 @@ class SandboxMentionBinderTest {
 
     @get:Rule val temp = TemporaryFolder()
 
+    /**
+     * Owner decision 2026-11-17 («1: a»): `delete_file` (DURABLE) is never bound to a file named exactly only
+     * after folding — the choice it would owe fails closed here, so nothing runs; `rename_file` (TRANSIENT)
+     * binds the same words to the file's path; a name exact as written still binds the delete.
+     */
+    @Test
+    fun `a file named exactly only after folding is not bound for delete, and is for rename`() = runTest {
+        val root = temp.root.toPath()
+        val path = temp.newFile("orvelle.txt").toPath().toRealPath().toString()
+        val binder = SandboxMentionBinder(root, SandboxFileSort(root, JdkTextFolding), SandboxToolSource())
+        val goal = AgentGoal("remove orvelle txt", GoalShape.Free("remove orvelle txt"))
+        fun step(tool: com.sidr.launcher.domain.tool.ToolId, words: String, extra: Map<String, String> = emptyMap()) = ProposedStep(
+            tool = tool,
+            args = mapOf(SandboxKeys.PATH to words) + extra,
+            origins = (mapOf(SandboxKeys.PATH to words) + extra).mapValues { ValueOrigin.SaidBy(PrincipalId.USER) },
+            risk = ActionRiskLevel.DANGEROUS,
+            effect = ToolEffect.LOCAL,
+        )
+
+        assertEquals(Binding.Unavailable, binder.bind(goal, listOf(step(SandboxToolIds.DELETE_FILE, "orvelle txt"))))
+
+        val asWritten = binder.bind(goal, listOf(step(SandboxToolIds.DELETE_FILE, "orvelle.txt"))) as Binding.Bound
+        assertEquals(ArgSource.Literal(path), asWritten.interpretation.steps.single().invocation.args[SandboxKeys.PATH])
+
+        val renameArgs = SandboxToolSource().find(SandboxToolIds.RENAME_FILE)!!.argSchema.map { it.name } - SandboxKeys.PATH
+        val rename = binder.bind(
+            goal,
+            listOf(step(SandboxToolIds.RENAME_FILE, "orvelle txt", renameArgs.associateWith { "pallimer.txt" })),
+        ) as Binding.Bound
+        assertEquals(ArgSource.Literal(path), rename.interpretation.steps.single().invocation.args[SandboxKeys.PATH])
+    }
+
     @Test
     fun `the sandbox root is bound by the device and never asked of the model`() = runTest {
         val root = temp.root.toPath()

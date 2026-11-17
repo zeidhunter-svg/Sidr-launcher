@@ -38,7 +38,9 @@ sealed interface Interpretation {
 
 /**
  * The model's word for an app names more than one installed app (spec §7.12.3 condition 2), or names one
- * only as a word FORM (phase 3b, fork 3b-G: [confirm] = `true`, «Вы имели в виду…?»). A pick writes the
+ * only as a word FORM (phase 3b, fork 3b-G: [confirm] = `true`, «Вы имели в виду…?») — or, for a tool whose
+ * act cannot be undone (`uninstall_app`), names one exactly only after folding (owner decision 2026-11-17;
+ * [confirm] = `true` too). A pick writes the
  * package into [arg] — it binds; it launches nothing. A form is never bound without this pick. [learning]
  * is the learned-choice token for `launch_app` only (the same act as a launch); the command session
  * records the choice at «Выполнить», through the one gated record call

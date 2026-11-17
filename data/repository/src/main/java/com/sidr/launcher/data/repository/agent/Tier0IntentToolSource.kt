@@ -218,7 +218,9 @@ class Tier0IntentToolSource @Inject constructor(
         // which then names the package** (final review B-I1; owner decision 2026-11-17, «2: a» — narrow
         // (a)):
         //   (a) the whole words naming ONE app exactly AS TYPED — a label or an alias, in the
-        //       `CommandNormalizer` form the phase's base compared — bind with no pick. A name exact only
+        //       `CommandNormalizer` form the phase's base compared — bind with no pick. «The words» are
+        //       the user's at 2b and the MODEL's mention on the bridge (its card and the consent card
+        //       still name the package): «снеси disney» may come back as «Disney+» and bind. A name exact only
         //       AFTER the text folding (`TextFolding`, B-1: punctuation, symbols, an apostrophe between
         //       letters, the two dropped mark ranges) is NOT bound by the device: because this tool is
         //       `DURABLE`, `AppCandidates.forIrreversible` turns it into a one-app confirmation, so

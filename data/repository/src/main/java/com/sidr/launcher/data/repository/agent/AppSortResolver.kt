@@ -19,7 +19,9 @@ import javax.inject.Inject
  * Registered for `ArgSorts.APP` by `SortProvidesModule` (`:app`). Since phase 3b's Task 6 the registry
  * that holds it is injected into `ToolMatchPlanner` and `DeviceMentionBinder`, and **both skip this
  * entry**: the app keeps its own searches there (windows at 2b; candidates with learned choices at the
- * bridge), so routing still never calls [resolve] — said rather than implied.
+ * bridge), so routing still never calls [resolve] — said rather than implied. **It knows no tool**: a fold-only
+ * [AppCandidates.One] resolves here like any other, so a caller that ever feeds an irreversible tool
+ * (`ToolDurability.DURABLE`) from this resolver must apply [forIrreversible] itself (owner decision 2026-11-17).
  */
 class AppSortResolver @Inject constructor(
     private val targets: AppTargetResolver,

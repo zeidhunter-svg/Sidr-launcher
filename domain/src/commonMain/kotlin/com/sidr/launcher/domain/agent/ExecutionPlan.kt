@@ -154,8 +154,9 @@ sealed interface PlanningResult {
  * device could not be asked. (An empty, readable `Unresolved` of a value sort has no production producer
  * since E6-R1; step 2b would say «не понял» in [words], a fail-safe.) Non-empty (an app only — the
  * type is `InstalledApp`): the user picks; [confirm] is `true` when they are OFFERED rather than matched
- * — a word form (3b-G), or a window of the words short of the whole (3b-E: «a window equal to the whole
- * slot → plan; a window shorter than the slot → confirm»).
+ * — a word form (3b-G), a window of the words short of the whole (3b-E: «a window equal to the whole
+ * slot → plan; a window shorter than the slot → confirm»), or — for a tool whose act cannot be undone
+ * (`uninstall_app`) — a name exact only after folding (owner decision 2026-11-17, `forIrreversible`).
  *
  * [unreadable] (controller ruling E5-P1): the app list or the alias store could not be read — or, since
  * Task 6, a value sort had no registered resolver, could not be asked, or answered with a choice this

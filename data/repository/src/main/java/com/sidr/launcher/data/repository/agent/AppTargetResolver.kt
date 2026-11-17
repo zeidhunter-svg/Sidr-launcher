@@ -51,7 +51,8 @@ fun AppCandidates.forIrreversible(irreversible: Boolean): AppCandidates =
  * the track's first `CONFIRM` tool over an irreversible act, so [resolve]'s `null` is not "no answer
  * yet"; it is the resolver's own considered refusal, and every caller must treat it as such. Never
  * guesses: only an EXACT name binds (an alias, or a whole label under [AppNameMatcher]; for an irreversible
- * tool, exact as typed — [forIrreversible], owner decision 2026-11-17); two apps
+ * tool, exact as typed — but THIS class does not know the tool: its callers apply [forIrreversible], owner
+ * decision 2026-11-17); two apps
  * answering exactly are the user's choice; a word form (phase 3b, B-2 — «миравину» for «Миравин») is
  * only offered ([AppCandidates.Confirm]); no match, a blank query and a read failure decline — and
  * [resolve] declines all of these the same way, silently, never by throwing.
@@ -125,7 +126,8 @@ class AppTargetResolver @Inject constructor(
     /**
      * One package or nothing — the shape step 2b declined on until phase 3b, when `ToolMatchPlanner` moved
      * to [windows] so that a decline reaches the user instead of the model. No production caller is left;
-     * kept for its tests and the shape it pins. A form binds nothing.
+     * kept for its tests and the shape it pins. A form binds nothing. It knows no tool: a fold-only match
+     * resolves here — never feed an irreversible tool from it without [forIrreversible].
      */
     suspend fun resolve(query: String): String? =
         (candidates(query) as? AppCandidates.One)?.app?.packageName

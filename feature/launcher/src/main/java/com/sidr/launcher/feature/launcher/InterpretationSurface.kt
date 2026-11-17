@@ -149,7 +149,8 @@ private fun ModelValues(step: PlanStep, origins: Map<String, ValueOrigin>, effec
 
 /**
  * Condition 2: label AND package (two apps can share a label); a tap binds that one and launches nothing.
- * A word form offered as ONE app (phase 3b, fork 3b-G: [AppChoice.confirm]) asks «did you mean» with that
+ * A word form offered as ONE app (phase 3b, fork 3b-G: [AppChoice.confirm]) — or, for `uninstall_app`, a name
+ * exact only after folding (owner decision 2026-11-17) — asks «did you mean» with that
  * app's label; a confirmation over two or more apps keeps the «which app» title (E4-P7, E5-P6).
  *
  * **Two callers, one list** (phase 3b, B-7): the card's pick ([AppChoice], the model's mention) and step

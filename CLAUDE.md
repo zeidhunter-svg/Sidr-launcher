@@ -302,11 +302,14 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
   `SCOPED NOT RUN` when a named test task did not execute, prints each failing test as a `FAILED ::`
   line, and labels itself `SCOPED GREEN … — NOT a boundary gate`.
 - **Never pipe `gradlew` through `tail`** — that masked a red gate as exit 0 on 2026-07-13. Check the
-  exit code and read the real output. (`tools/claude/guard-bash.sh` refuses it, and `git push`, and
-  Gradle-driven instrumented tests on the owner's phone.)
+  exit code and read the real output. (`tools/claude/guard-bash.sh` refuses it, a **destructive** push —
+  force, `--force-with-lease`, delete, `--mirror`, `--prune`, a `+`/leading-`:` refspec — and Gradle-driven
+  instrumented tests on the owner's phone.)
 - A stage/block is not closed until the gate is green, an ADR is written, `CLAUDE.md` +
-  `ai-context/current-status.md` are synced, and a commit is **proposed to the owner**. The agent
-  commits; the agent never pushes.
+  `ai-context/current-status.md` are synced, and a commit is **proposed to the owner**. The agent commits
+  **and pushes** (owner decision 2026-11-17; before it, the agent never pushed): `git push origin <branch>`,
+  `origin` = GitHub named explicitly (the second remote is Codeberg), never a force push — a diverged
+  branch is fetched and merged.
 - **"Synced" includes the TAIL, not just the header** (rule added 2026-09-20, after A1″'s acceptance
   found `current-status.md` asserting that `Migration3To4` had never run — disproved on device two months
   and five blocks earlier). At every close, **after** the header entry, re-read that file's last three

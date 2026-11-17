@@ -31,8 +31,8 @@ layers grow inside vertical slices) → **Agentic OS** (consented automation + t
 their original headings, so «`§HANDOFF` «Фаза 2 A4′»» resolves there.
 
 **Right now: A4′ phase 3b is `CODE-GREEN`** (2026-11-17, gate 1821) **and the owner's five answers of
-2026-11-17 are built** (`03f70aa…8325aa5`, gate **1839**): per-host bridge ceiling 40 s OpenRouter with the cap /
-50 s elsewhere; for `uninstall_app` a name exact only after folding asks; learned key on folded words;
+2026-11-17 are built** (`03f70aa…13bdd52`, gate **1841**): per-host bridge ceiling 40 s OpenRouter with the cap /
+50 s elsewhere; for `uninstall_app` (and `:consumer:jvm`'s `delete_file`) a name exact only after folding asks; learned key on folded words;
 `DurationSort` reads «полчаса»; the matrix guard reads `XTest > name`. **Next: phase 4 — the learned-plan
 cache** (spec §8), its own plan. Phase 3b's record and the answers: `§HANDOFF` «Фаза 3b A4′» (archive); plan
 [2026-11-07-a4-phase3b-sorts-forms-multistep.md](docs/superpowers/plans/2026-11-07-a4-phase3b-sorts-forms-multistep.md).
@@ -271,8 +271,8 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
   plus `:core:ui:verifyRoborazziDebug` whenever `core/ui` is touched, and `:app:assembleRelease` for
   release-affecting work. **`:domain:jvmTest` and `:consumer:jvm:test` must be listed explicitly:**
   `testDebugUnitTest` has not reached `:domain` since it went KMP, and it never reaches `:consumer:jvm`
-  at all. **Baseline: the floor in `tools/gate.sh` (`BASELINE_TESTS`, 1839 since the five answers to A4′ phase 3b
-  (2026-11-17; 1821 at the phase's close), 557 actionable tasks executed, `build/test-results` cleared first) — compare a
+  at all. **Baseline: the floor in `tools/gate.sh` (`BASELINE_TESTS`, 1841 since the owner's answers to A4′ phase 3b's
+  close (2026-11-17; 1821 at the phase's close), 557 actionable tasks executed, `build/test-results` cleared first) — compare a
   fresh gate against the floor and against the active phase's predicted chain (its plan), not against
   any number quoted in an older ADR.** The decomposition by module is derived **before** every boundary
   run and compared with it — a sum alone cannot tell «two added» from «two added and two lost»; the chains

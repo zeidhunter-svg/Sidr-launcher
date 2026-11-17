@@ -18,7 +18,10 @@
 > guards and silent tests mutation-proved; reviews by risk (item 2 `reviewer-deep`, item 1 `reviewer`, a final
 > `reviewer-deep` over the range — all CLEAN, minors fixed or named). **No device round.** Next: phase 4's plan
 > (the learned-plan cache, spec §8). Record: the 3b journal «Post-close owner items»; `§HANDOFF` «Фаза 3b A4′»
-> pointer); prior 2026-11-17
+> pointer). *Addendum, same day — the owner's answers to that report:* «1: a» — `:consumer:jvm`'s `delete_file`
+> follows the same rule (a fold-only file name is a choice, which the JVM binder refuses closed; `13bdd52`, gate
+> **1841**, `:consumer:jvm` 93, floor 1841); «2: а» read as accepting the three named limits (m4 alias path, m5
+> over-strict «as typed», «BİR BUÇUK SAAT» in capitals); prior 2026-11-17
 > (**Этап 6 (A4′) phase 3b — sorts, word forms, multi-step plans — `CODE-GREEN` at 1821 / 0 failures**
 > (boundary `tools/gate.sh` at `1b8693a`, 557 executed, cleared tree: `:domain` 574 · `:consumer:jvm` 90 ·
 > `:data:repository` 462 · `:feature:launcher` 281 · `:app` 84 · `:data:ai-cloud` 46 · other seven 284; the

@@ -127,6 +127,9 @@ class JdkBridgeTransport(
         )
     }
 
+    /** As `:data:ai-cloud`: the planner's ceiling reads the host through the same [acceptsReasoningCap] the body does. */
+    override suspend fun sendsReasoningCap(): Boolean = baseUrl?.let(::acceptsReasoningCap) == true
+
     private suspend fun exchange(request: BridgeRequest): TransportReply {
         // No endpoint or no model is "no active config" — the credentials failure `:data:ai-cloud` answers.
         val endpoint = baseUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return TransportReply.Failed(AiError.MissingCredentials)

@@ -60,4 +60,13 @@ data class BridgeRequest(
 /** The bridge's own transport — its own path, not `GenerativeAiEngine` (spec §7.12.2). Never throws. */
 fun interface BridgeTransport {
     suspend fun ask(request: BridgeRequest): TransportReply
+
+    /**
+     * Whether a request's reasoning cap would reach the provider this transport talks to now (B-16) — the
+     * same reading of the host its [ask] applies to the body, so the planner's ceiling and the body cannot
+     * disagree (owner decision 2026-11-17: the ceiling is per host, `BridgeBudget.ceilingFor`). Never throws;
+     * anything it cannot read is `false` — the longer ceiling. A transport that never sends the cap keeps
+     * the default.
+     */
+    suspend fun sendsReasoningCap(): Boolean = false
 }

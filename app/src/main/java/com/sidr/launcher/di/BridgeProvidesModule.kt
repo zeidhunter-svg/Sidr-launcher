@@ -58,8 +58,9 @@ object BridgeProvidesModule {
         @IoDispatcher ioDispatcher: CoroutineDispatcher,
     ): BridgeTransport = OpenAiCompatibleBridgeTransport(
         // Not the shared cloud client: its 30 s socket would end a silent reasoning model's wait before
-        // the ceiling does. Each attempt's socket is bounded by the ceiling; the planner bounds the whole.
-        bridgeHttpClient(BridgeBudget.Default.ceilingMs),
+        // the ceiling does. Each attempt's socket is bounded by the longest ceiling (the host's own is the
+        // planner's, `BridgeBudget.ceilingFor`); the planner bounds the whole.
+        bridgeHttpClient(BridgeBudget.Default.longestCeilingMs),
         secretStore,
         configRepository,
         ioDispatcher,

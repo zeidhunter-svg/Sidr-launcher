@@ -116,6 +116,21 @@ class OpenAiCompatibleBridgeTransport(
         }
     }
 
+    /**
+     * The host reading the planner's ceiling rests on (owner decision 2026-11-17): the active config's base
+     * URL through the SAME [acceptsReasoningCap] the body applies. Never throws: no config, or a config that
+     * cannot be read, is `false` — the longer ceiling.
+     */
+    override suspend fun sendsReasoningCap(): Boolean = withContext(ioDispatcher) {
+        try {
+            configRepository.activeConfig().first()?.baseUrl?.let(::acceptsReasoningCap) == true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     private suspend fun exchange(request: BridgeRequest): TransportReply {
         val config = configRepository.activeConfig().first()
             ?: return TransportReply.Failed(AiError.MissingCredentials)

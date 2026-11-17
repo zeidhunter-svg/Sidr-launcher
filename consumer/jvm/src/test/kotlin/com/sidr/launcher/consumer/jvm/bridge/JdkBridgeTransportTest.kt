@@ -197,6 +197,32 @@ class JdkBridgeTransportTest {
         }
     }
 
+    /**
+     * Owner decision 2026-11-17 (F3), as `:data:ai-cloud`: the planner picks the ceiling by `sendsReasoningCap`,
+     * which must read the host exactly as the body does; no base URL at all is `false`.
+     */
+    @Test
+    fun `the ceiling's reading of the host is the body's`() = runTest {
+        val hosts = listOf(
+            "https://openrouter.ai/api/v1",
+            "https://OPENROUTER.AI/api/v1",
+            "https://api.quillmere.example/v1",
+            "https://openrouter.ai.quillmere.example/v1",
+            "https://openrouter.ai@quillmere.example/v1",
+        )
+
+        val said = hosts.map { baseUrl ->
+            val t = transport(sender(completion(DECLINE)), baseUrl = baseUrl)
+            t.ask(request.copy(reasoningMaxTokens = 1_234))
+            t.sendsReasoningCap()
+        }
+
+        val carried = sent.map { (_, body, _) -> "reasoning" in Json.parseToJsonElement(body).jsonObject }
+        assertEquals(listOf(true, true, false, false, false), carried)
+        assertEquals(carried, said)
+        assertFalse(transport(sender(completion(DECLINE)), baseUrl = null).sendsReasoningCap())
+    }
+
     /** The user's «Отмена» must reach the caller as a cancellation, never become a `Failed` reply. */
     @Test
     fun `cancellation is not swallowed`() = runTest {

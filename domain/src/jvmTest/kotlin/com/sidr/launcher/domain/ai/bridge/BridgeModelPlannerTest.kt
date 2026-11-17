@@ -11,6 +11,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
 import org.junit.Test
 
@@ -157,13 +158,47 @@ class BridgeModelPlannerTest {
     }
 
     /**
-     * The shipped numbers are phase 3b's in-phase measurement's (plan Task 14; ADR addendum «Замер фазы 3b»):
-     * R4's 40 s ceiling, the 2026-11-07b output limit, and the reasoning cap ON at 4 096 / 2 by R3 (fork 3b-H).
-     * A legitimate re-measure edits this line; a silent revert of the constants no longer passes the gate.
+     * The shipped numbers are phase 3b's in-phase measurement's (plan Task 14; ADR addendum «Замер фазы 3b»),
+     * per host by the owner's decision of 2026-11-17: R4 over the reasoning-OFF half — **50 s** — for a host the
+     * cap does not reach, R4 over the ON half — **40 s** — where it does (OpenRouter, B-16); the 2026-11-07b
+     * output limit; the reasoning cap ON at 4 096 / 2 by R3 (fork 3b-H). Both ceilings are pinned, and so is
+     * the socket bound both consumers read. A legitimate re-measure edits these lines; a silent revert of a
+     * constant does not pass the gate.
      */
     @Test
     fun `the shipped budget is the re-measured pair`() {
-        assertEquals(BridgeBudget(40_000L, 4_096, 2_048), BridgeBudget.Default)
+        assertEquals(BridgeBudget(ceilingMs = 50_000L, maxOutputTokens = 4_096, reasoningMaxTokens = 2_048, cappedCeilingMs = 40_000L), BridgeBudget.Default)
+        assertEquals(40_000L, BridgeBudget.Default.ceilingFor(capReachesHost = true))
+        assertEquals(50_000L, BridgeBudget.Default.ceilingFor(capReachesHost = false))
+        assertEquals(50_000L, BridgeBudget.Default.longestCeilingMs)
+    }
+
+    /**
+     * Owner decision 2026-11-17 (F3): the ceiling is the host's — the capped one only where the transport says the
+     * cap reaches the provider. A reply at 45 s completes for a host without the cap and is cut for OpenRouter.
+     */
+    @Test
+    fun `the ceiling is the capped one only where the cap reaches the host`() = runTest {
+        val budget = BridgeBudget(ceilingMs = 50_000L, maxOutputTokens = 4_096, reasoningMaxTokens = 2_048, cappedCeilingMs = 40_000L)
+
+        val elsewhere = planner(FakeBridgeTransport(listOf(valid), delayMs = 45_000, sendsCap = false), budget).plan(command)
+        assertTrue("$elsewhere", elsewhere !is ModelPlanning.Unavailable)
+
+        val startedAt = currentTime
+        val openRouter = planner(FakeBridgeTransport(listOf(valid), delayMs = 45_000, sendsCap = true), budget).plan(command)
+        assertEquals(ModelPlanning.Unavailable(ModelUnavailableReason.TIMED_OUT), openRouter)
+        assertEquals(40_000L, currentTime - startedAt)
+    }
+
+    /** A budget with no reasoning cap sends none, so a host that would accept one still gets the uncapped ceiling. */
+    @Test
+    fun `without a reasoning cap the capped ceiling never applies`() = runTest {
+        val budget = BridgeBudget(ceilingMs = 50_000L, maxOutputTokens = 4_096, reasoningMaxTokens = null, cappedCeilingMs = 40_000L)
+
+        val result = planner(FakeBridgeTransport(listOf(valid), delayMs = 45_000, sendsCap = true), budget).plan(command)
+
+        assertTrue("$result", result !is ModelPlanning.Unavailable)
+        assertEquals(50_000L, budget.ceilingFor(capReachesHost = true))
     }
 
     /** Fork 3b-H: the cap is a generation limit of the budget, so the one retry carries it as the first ask did. */

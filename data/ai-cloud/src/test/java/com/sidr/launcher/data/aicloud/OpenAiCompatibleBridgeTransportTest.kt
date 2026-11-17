@@ -406,6 +406,39 @@ class OpenAiCompatibleBridgeTransportTest {
         }
     }
 
+    /**
+     * Owner decision 2026-11-17 (F3): the planner picks the ceiling by [OpenAiCompatibleBridgeTransport.sendsReasoningCap],
+     * so it must read the host exactly as the body does — for every host, whether it says «the cap reaches it» is
+     * whether the sent body carried `reasoning`.
+     */
+    @Test
+    fun `the ceiling's reading of the host is the body's`() = runTest {
+        val hosts = listOf(
+            "https://openrouter.ai/api/v1",
+            "https://OPENROUTER.AI/api/v1",
+            "https://api.quillmere.example/v1",
+            "https://openrouter.ai.quillmere.example/v1",
+            "https://openrouter.ai@quillmere.example/v1",
+        )
+
+        val said = hosts.map { baseUrl ->
+            val t = transport(cfg = config.copy(baseUrl = baseUrl))
+            t.ask(request.copy(reasoningMaxTokens = 1_234))
+            t.sendsReasoningCap()
+        }
+
+        val carried = bodies.map { "reasoning" in Json.parseToJsonElement(it).jsonObject }
+        assertEquals(listOf(true, true, false, false, false), carried)
+        assertEquals(carried, said)
+    }
+
+    /** No active config: nothing to read the host of — `false` (the longer ceiling), and no call is made. */
+    @Test
+    fun `with no active config the cap reaches no host and nothing is called`() = runTest {
+        assertFalse(transport(cfg = null).sendsReasoningCap())
+        assertTrue(bodies.isEmpty())
+    }
+
     @Test
     fun `the reply's meta carries the finish reason and the reasoning tokens when the provider reports them`() = runTest {
         val usage = ""","usage":{"completion_tokens":321,"completion_tokens_details":{"reasoning_tokens":200}}"""

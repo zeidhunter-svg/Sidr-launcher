@@ -2,11 +2,12 @@ package com.sidr.launcher.domain.ai.bridge
 
 /**
  * The bridge's own budget (spec §7.12.2) — named, and not the router's 2 000 ms / 256 tokens, which a
- * reasoning model never fits. [ceilingMs] bounds the WHOLE planning, the one retry included;
- * [maxOutputTokens] bounds each answer, hidden reasoning included (shown for two models on 2026-11-07);
- * [reasoningMaxTokens], when set, caps the reasoning alone as well. The transport's socket is bounded by
- * the same [ceilingMs] per attempt (`bridgeHttpClient`), so the socket never ends a wait the ceiling still
- * allows.
+ * reasoning model never fits. The ceiling bounds the WHOLE planning, the one retry included, and is the
+ * HOST's ([ceilingFor]): [cappedCeilingMs] where the reasoning cap reaches the provider, [ceilingMs]
+ * everywhere else; [maxOutputTokens] bounds each answer, hidden reasoning included (shown for two models on
+ * 2026-11-07); [reasoningMaxTokens], when set, caps the reasoning alone as well. Each consumer's socket is
+ * bounded per attempt by [longestCeilingMs] (`bridgeHttpClient`, `JdkHttpSender`), so the socket never ends
+ * a wait a ceiling still allows.
  *
  * **Re-measured on 2026-11-07b at the shipped 4 096 tokens** (the 45 s that held until phase 3b's own
  * measurement, below) — the pair the first run (2026-11-07, which
@@ -28,8 +29,10 @@ package com.sidr.launcher.domain.ai.bridge
  * of them; none fell between 40 and 45 s. **That is the ON half only** (final review F3, phase 3b close): the
  * cap reaches OpenRouter alone (B-16), so every other provider runs as the OFF half did — and there the same
  * formula gives 32 916 × 1.5 = 49 374 → 50 s, three lines ran past 40 s (qwen 40 365, 41 429 and 86 687 ms)
- * and two of them fell between 40 and 45 s. One ceiling for every host is the shipped choice, not a measured
- * one for the hosts without the cap — an owner item at the close (one ceiling, or one per host).
+ * and two of them fell between 40 and 45 s. **Built per host** (owner decision 2026-11-17, «1. b»): 40 s
+ * ([cappedCeilingMs]) where the cap reaches OpenRouter, 50 s ([ceilingMs]) for every other host — each
+ * ceiling the R4 of the half its host runs as. Which one applies is the transport's reading of the host,
+ * the same predicate its body uses (B-16), so the ceiling and the body cannot disagree.
  *
  * **The reasoning cap is ON by default since then**, [maxOutputTokens] / 2 = 2 048 (derived, not a new
  * number; fork 3b-H). `null` would send nothing; a value is sent as OpenRouter's `reasoning.max_tokens`,
@@ -37,11 +40,31 @@ package com.sidr.launcher.domain.ai.bridge
  * no other provider was measured. `BridgePayloadGuardTest > an OpenRouter body adds only the budget's
  * reasoning cap and carries no private source` reads that body.
  *
- * Pinned by `BridgeModelPlannerTest > the shipped budget is the re-measured pair`, which a legitimate
- * re-measure edits (Task 14 did). The budget on ACTIONS (`RuntimeBudget`) is a different thing and does not change.
+ * Pinned — both ceilings, the socket bound, the limits — by `BridgeModelPlannerTest > the shipped budget is
+ * the re-measured pair`, which a legitimate re-measure edits (Task 14 did; the per-host split did). The budget on ACTIONS (`RuntimeBudget`) is a different thing and does not change.
  */
-data class BridgeBudget(val ceilingMs: Long, val maxOutputTokens: Int, val reasoningMaxTokens: Int? = null) {
+data class BridgeBudget(
+    val ceilingMs: Long,
+    val maxOutputTokens: Int,
+    val reasoningMaxTokens: Int? = null,
+    val cappedCeilingMs: Long = ceilingMs,
+) {
+    /**
+     * The ceiling of one planning: [cappedCeilingMs] when this budget carries a reasoning cap AND the
+     * transport says the cap reaches its host (`BridgeTransport.sendsReasoningCap`); [ceilingMs] otherwise.
+     */
+    fun ceilingFor(capReachesHost: Boolean): Long =
+        if (capReachesHost && reasoningMaxTokens != null) cappedCeilingMs else ceilingMs
+
+    /** The longest wait any host is allowed — the socket bound of both consumers' HTTP clients. */
+    val longestCeilingMs: Long get() = maxOf(ceilingMs, cappedCeilingMs)
+
     companion object {
-        val Default = BridgeBudget(ceilingMs = 40_000L, maxOutputTokens = 4_096, reasoningMaxTokens = 2_048)
+        val Default = BridgeBudget(
+            ceilingMs = 50_000L,
+            maxOutputTokens = 4_096,
+            reasoningMaxTokens = 2_048,
+            cappedCeilingMs = 40_000L,
+        )
     }
 }

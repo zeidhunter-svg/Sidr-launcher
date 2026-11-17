@@ -52,6 +52,9 @@ class BridgeTransportMeasurement {
     private class Recording(private val inner: BridgeTransport) : BridgeTransport {
         val replies = mutableListOf<TransportReply>()
         override suspend fun ask(request: BridgeRequest): TransportReply = inner.ask(request).also { replies += it }
+
+        // Forwarded so a wrapper never changes the host's ceiling (the measurement's own ceiling is one for both).
+        override suspend fun sendsReasoningCap(): Boolean = inner.sendsReasoningCap()
     }
 
     private data class Row(
@@ -208,7 +211,7 @@ class BridgeTransportMeasurement {
          * The planner's ceiling for the measurement. `BridgeModelPlanner` wraps the WHOLE planning, the one
          * retry included, in `withTimeoutOrNull(ceilingMs)`; with `BridgeBudget.Default` (45 s when this was
          * written, 50 s after the 2026-11-07 run, 45 s again since the 2026-11-07b re-measure, 40 s since phase
-         * 3b's in-phase measurement) a 60 s answer would be cut and recorded as `timed_out` at the default
+         * 3b's in-phase measurement, per host since 2026-11-17: 40 s with the cap, 50 s without) a 60 s answer would be cut and recorded as `timed_out` at the default
          * ceiling, so p90 could never exceed it and rule 2 would be fed a truncated number.
          * Two attempts × the socket cap, so one silent wait up to the cap is observed rather than cut.
          * Not a strict bound: connect time and body transfer count against the

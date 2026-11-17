@@ -8,8 +8,15 @@ import kotlinx.coroutines.delay
 /**
  * A scripted [BridgeTransport]: one reply per ask, in order, each after [delayMs] of (virtual) time.
  * An ask beyond the script throws — a planner that asks more often than the test expected fails loudly.
+ * [sendsCap] is its answer to [BridgeTransport.sendsReasoningCap] — whether the host would get the cap.
  */
-class FakeBridgeTransport(replies: List<TransportReply>, private val delayMs: Long = 0L) : BridgeTransport {
+class FakeBridgeTransport(
+    replies: List<TransportReply>,
+    private val delayMs: Long = 0L,
+    private val sendsCap: Boolean = false,
+) : BridgeTransport {
+
+    override suspend fun sendsReasoningCap(): Boolean = sendsCap
 
     private val queue = ArrayDeque(replies)
 

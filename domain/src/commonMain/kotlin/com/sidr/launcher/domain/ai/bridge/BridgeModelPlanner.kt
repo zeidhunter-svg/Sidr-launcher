@@ -33,9 +33,12 @@ class BridgeModelPlanner(
     private val folding: TextFolding = PlainTextFolding,
 ) : ModelPlanner {
 
-    override suspend fun plan(command: String): ModelPlanning =
-        withTimeoutOrNull(budget.ceilingMs) { attempt(command) }
+    override suspend fun plan(command: String): ModelPlanning {
+        // The ceiling is the host's (owner decision 2026-11-17): the transport says whether the cap reaches it.
+        val ceilingMs = budget.ceilingFor(capReachesHost = transport.sendsReasoningCap())
+        return withTimeoutOrNull(ceilingMs) { attempt(command) }
             ?: ModelPlanning.Unavailable(ModelUnavailableReason.TIMED_OUT)
+    }
 
     private suspend fun attempt(command: String): ModelPlanning {
         val offering = BridgeFilter.offeringOf(registry, levels, descriptions)

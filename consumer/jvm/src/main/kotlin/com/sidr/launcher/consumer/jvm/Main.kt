@@ -35,7 +35,7 @@ fun main(args: Array<String>) {
         baseUrl = System.getenv(JdkBridgeTransport.ENV_BASE_URL),
         model = System.getenv(JdkBridgeTransport.ENV_MODEL),
         key = System.getenv(JdkBridgeTransport.ENV_API_KEY),
-        sender = JdkHttpSender(timeoutMs = BridgeBudget.Default.ceilingMs),
+        sender = JdkHttpSender(timeoutMs = BridgeBudget.Default.longestCeilingMs),
     )
 
     val state = runBlocking {

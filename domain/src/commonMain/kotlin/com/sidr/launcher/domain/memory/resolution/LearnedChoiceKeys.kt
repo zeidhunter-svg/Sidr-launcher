@@ -10,9 +10,14 @@ import com.sidr.launcher.domain.text.TextFolding
  * **What the key is:** `launch_app` and the APP NAME the path extracted — never the command it came in —
  * normalised ([CommandNormalizer.normalize]), stripped of English launch fillers by [LaunchSlotExtractor]
  * (a leading «open»/«my»/…, a trailing «app»; its documented input is normalised text, hence the order), and
- * folded by the device's [TextFolding], so «Vemblic'i» and a vowel-marked name key the same word as their
- * folded forms. For a name the fold leaves alone (no marks, apostrophes or Arabic letter variants) the key
- * is byte for byte what `slotOf(normalize(name))` gave before folding existed (E4-F3).
+ * read as the device's [TextFolding] WORDS joined by one space (owner decision 2026-11-17, phase 3b close
+ * M5): the matchers compare words, so the key does too — «Tessar.» and «tessar» are one choice, and
+ * «Vemblic'i» and a vowel-marked name key the same word as their folded forms. A name with no word at all
+ * (symbols only) keys its folded form, so two such names never share an empty key. For a name the fold
+ * and the word cut leave alone (no marks, apostrophes, symbols or Arabic letter variants; space-separated
+ * words) the key is byte for byte what `slotOf(normalize(name))` gave before folding existed (E4-F3;
+ * `LearnedChoiceKeysTest`). Rows keyed before the decision under a symbol («tessar.») are orphans —
+ * visible and deletable in Settings.
  *
  * **Who keys here, as of Task 7:**
  *  - FastPath (`ResolveCommandWithPreferenceUseCase`), on its outcome's `query` — the matcher's
@@ -29,6 +34,10 @@ import com.sidr.launcher.domain.text.TextFolding
  * again — safe, no migration.
  */
 object LearnedChoiceKeys {
-    fun launch(name: String, folding: TextFolding): CapabilityKey =
-        CapabilityKey(ActionIds.LAUNCH_APP, folding.fold(LaunchSlotExtractor.slotOf(CommandNormalizer.normalize(name))))
+    fun launch(name: String, folding: TextFolding): CapabilityKey {
+        val slot = LaunchSlotExtractor.slotOf(CommandNormalizer.normalize(name))
+        val words = folding.words(slot)
+        // No word at all (a symbols-only name): its folded form, so two such names never share one empty key.
+        return CapabilityKey(ActionIds.LAUNCH_APP, if (words.isEmpty()) folding.fold(slot) else words.joinToString(" "))
+    }
 }

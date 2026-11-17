@@ -1,5 +1,7 @@
 package com.sidr.launcher.data.repository.agent.memory
 
+import com.sidr.launcher.domain.memory.resolution.CandidateSet
+import com.sidr.launcher.domain.memory.resolution.LearnedChoiceKeys
 import com.sidr.launcher.core.testing.FakeActionCatalog
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeAliasStore
@@ -256,6 +258,31 @@ class MemoryToolWorkerTest {
      * Effected, and the choice would keep auto-launching. The control proves the fixture discriminates: the
      * written key is not the raw phrase's.
      */
+    /**
+     * Owner decision 2026-11-17 (phase 3b close M5): the key is on folded words, so a choice learned for the
+     * label «Tessar.» is the one «забудь выбор tessar» removes — before, the two were two keys and the
+     * auto-launch of «tessar.» survived the forget with the tool reporting it done.
+     */
+    @Test
+    fun `forget_learned_choice removes a choice learned for the same name with a symbol`() = runTest {
+        val store = KeyRecordingPreferenceStore()
+        val learned = LearnedChoiceKeys.launch("Tessar.", PlainTextFolding)
+        RecordResolutionChoiceUseCase(store).record(
+            learned,
+            ResolutionContext.None,
+            ResolvedTarget.App("net.fixture.tessar.two"),
+            CandidateSet(listOf(ResolvedTarget.App("net.fixture.tessar.one"), ResolvedTarget.App("net.fixture.tessar.two"))),
+        )
+        val written = store.upserted.single()
+
+        val result = memoryWorker(preferenceStore = store)
+            .invoke(ResolvedInvocation(MemoryToolIds.FORGET_LEARNED_CHOICE, mapOf("phrase" to "tessar")))
+
+        assertEquals(listOf(written), store.deleted)
+        assertEquals(emptyList<ResolutionPreference>(), store.observeAll().first())
+        assertEquals(ToolResult.Effected(), result)
+    }
+
     @Test
     fun `forget_learned_choice deletes the very key FastPath wrote for a confirmed word form`() = runTest {
         val store = KeyRecordingPreferenceStore()

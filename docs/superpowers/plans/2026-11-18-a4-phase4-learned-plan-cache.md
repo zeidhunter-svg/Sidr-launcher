@@ -5,7 +5,9 @@
 > checkbox (`- [ ]`) syntax for tracking.
 
 > **Status: written 2026-11-18, reviewed once the same day against the tree and the spec (`reviewer-deep`,
-> FIX REQUIRED: 0 blocking, 4 substantial, 6 minor — every finding applied, §0.11). Not approved. Not started.** Branch `launcher--7`,
+> FIX REQUIRED: 0 blocking, 4 substantial, 6 minor — every finding applied, §0.11). Approved by the owner
+> 2026-11-19 with the answer «a» to §0.7 item 6 — Task 10 (Auto Backup) added, the close is Task 11 (§0.12).
+> Started 2026-11-19.** Branch `launcher--7`,
 > base `9fe73aa` (the forks commit over `abf3531`), gate baseline **1841 / 0 / 0** — measured at the start of
 > this session: boundary `tools/gate.sh`, cleared tree, `557 actionable tasks: 557 executed`, per module
 > exactly the floor.
@@ -51,6 +53,9 @@ reading, for any value in the slots the user's words filled:
   screen (its step lines are the card's own `PlanStep.line`).
 - **`:feature:settings`.** One row opening that screen. **`:core:common`.** `Routes.LearnedCommands`.
 - **`:consumer:jvm`.** `JvmLearnedPlanStore` (a JSON file) and step 2c in `ConsoleHarness`'s `ask` path.
+- **`:app`, memory stays on the device (owner, 2026-11-19, §0.7 item 6 «a»).** `res/xml/data_extraction_rules.xml`
+  (API 31+: cloud backup and device-to-device transfer) and `res/xml/backup_rules.xml` (API 28–30) leave out every
+  database and every DataStore file; the manifest names both; `BackupRulesGuardTest` holds it.
 
 `ActionIds`' seven values, `ObservedFact`, `CommandFailure`, `GoalShape`, `ArgType`, `ToolDescriptor`'s type,
 `ExecutionState`, `TraceEvent`, `StepRationale`, `PlanningResult`, `ModelPlanning`, `Binding`, `BridgeRequest`,
@@ -93,11 +98,12 @@ reading the results, the mutation protocol, fixtures and commits** hold verbatim
   same commit; the `tr` text joins the owner's Turkish review at block acceptance.
 - **Nothing about the user's world leaves the device through the bridge** — the learned store is a fifth private
   source the bridge graph reads, and Task 6 proves its sentinels reach no body (`DOC-AML-1`). **Not** a claim that
-  nothing leaves at all: Android Auto Backup copies the database today (§0.7 item 6, named debt at close).
+  nothing leaves at all until Task 10: Android Auto Backup copies the database and the DataStore files today (§0.7
+  item 6); Task 10 leaves them out of cloud backup and device transfer (`DOC-AML-4`), in code, not seen on a phone.
 - **A line predicting what the user will see is a hypothesis** until run once on a phone.
 - **Tiers:** no task carries complete code → `implementer-critical` by default. Task review by risk:
-  `reviewer-deep` after Tasks 3, 4, 5, 6, 7, 9 (egress, consent, memory, migration, lifecycle); `reviewer` after
-  1, 2, 8; none after 10; the final whole-branch review `reviewer-deep`.
+  `reviewer-deep` after Tasks 3, 4, 5, 6, 7, 9, 10 (egress, consent, memory, migration, lifecycle, backup); `reviewer`
+  after 1, 2, 8; none after 11; the final whole-branch review `reviewer-deep`.
 - Commits: Russian, scope `agentic-6/A4' ф4`, trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`;
   the agent commits and pushes to `origin` (owner, 2026-11-17), never a force push; the phone is not touched;
   `connectedAndroidTest` and every instrumented test are never run by the agent.
@@ -318,19 +324,20 @@ model is asked does not change (the rule of 2026-11-13 asks for one only then).
 
 ### 0.7 · Owner dependencies and hypotheses
 
-**Owner dependencies.** (1) The D3 amendment ADR and the CLAUDE.md hard-rule text (Task 10); (2) `DOC-HMA-3`'s
-marker gets a new address (Task 10); (3) the Turkish review grows by seven strings; (4) the instrumented
+**Owner dependencies.** (1) The D3 amendment ADR and the CLAUDE.md hard-rule text (Task 11); (2) `DOC-HMA-3`'s
+marker gets a new address (Task 11); (3) the Turkish review grows by seven strings; (4) the instrumented
 `MigrationTest` `v4_to_v5` / `v1_to_v5` run at acceptance; (5) §0.2's decisions, B-5, B-7 and B-11 first;
 (6) **a finding outside the spec, found writing this plan:** `app/src/main/AndroidManifest.xml:64` sets
 `android:allowBackup="true"` with no `dataExtractionRules` / `fullBackupContent`, so Android Auto Backup copies
 `sidr_history.db` (learned choices, aliases — and from this phase learned commands) and the DataStore files to the
 user's cloud backup. That is memory leaving the device as a side effect (`DOC-AML-4`), and no guard sees it. It
 predates this phase; excluding the memory files changes what a restore on a new phone brings back, so it is the
-owner's call — **not built by this plan** unless the owner adds it (one small task: with `targetSdk` 36 and
+owner's call — **the owner added it, 2026-11-19, answer «a»: Task 10** (with `targetSdk` 36 and
 `minSdk` 28 it needs both `dataExtractionRules` (API 31+, cloud backup and device-to-device transfer) and
 `fullBackupContent` (API 28–30) excluding the database and the DataStore files, plus a guard on the manifest; the
-Keystore-wrapped secrets DataStore already restores as ciphertext a new device cannot read). Whatever the answer,
-Task 10 writes it as a Known-debt line and the ADR names what this phase starts storing: `learned_plans` is the
+Keystore-wrapped secrets DataStore already restores as ciphertext a new device cannot read). The cost the owner
+accepted: on a new phone the memory is not restored. Task 11 writes the outcome in Known debt / the shipped surface
+and the ADR names what this phase starts storing: `learned_plans` is the
 first persistent holder of **confirmed command words** — a form with no slot is the whole folded command, a
 constant may hold model-written search text, and every fresh reading writes a streak-1 row.
 
@@ -348,18 +355,18 @@ is 2b's and «найди …» FastPath's — they never reach the model, so the
 
 ### 0.8 · The gate chain — predicted before any run
 
-| Module | Base | T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8 | T9 |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `:domain` | 582 | 597 | 602 | 609 | 615 | 615 | 615 | 615 | 615 | 615 |
-| `:data:repository` | 468 | 468 | 468 | 468 | 468 | 477 | 477 | 477 | 477 | 477 |
-| `:app` | 84 | 84 | 84 | 84 | 84 | 84 | 85 | 85 | 85 | 85 |
-| `:feature:launcher` | 281 | 281 | 281 | 281 | 281 | 281 | 281 | 287 | 290 | 290 |
-| `:feature:settings` | 34 | 34 | 34 | 34 | 34 | 34 | 34 | 34 | 35 | 35 |
-| `:consumer:jvm` | 93 | 93 | 93 | 93 | 93 | 93 | 93 | 93 | 93 | 97 |
-| the other seven | 299 | 299 | 299 | 299 | 299 | 299 | 299 | 299 | 299 | 299 |
-| **total** | **1841** | 1856 | 1861 | 1868 | 1874 | 1883 | 1884 | 1890 | 1894 | **1898** |
+| Module | Base | T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8 | T9 | T10 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `:domain` | 582 | 597 | 602 | 609 | 615 | 615 | 615 | 615 | 615 | 615 | 615 |
+| `:data:repository` | 468 | 468 | 468 | 468 | 468 | 477 | 477 | 477 | 477 | 477 | 477 |
+| `:app` | 84 | 84 | 84 | 84 | 84 | 84 | 85 | 85 | 85 | 85 | 89 |
+| `:feature:launcher` | 281 | 281 | 281 | 281 | 281 | 281 | 281 | 287 | 290 | 290 | 290 |
+| `:feature:settings` | 34 | 34 | 34 | 34 | 34 | 34 | 34 | 34 | 35 | 35 | 35 |
+| `:consumer:jvm` | 93 | 93 | 93 | 93 | 93 | 93 | 93 | 93 | 93 | 97 | 97 |
+| the other seven | 299 | 299 | 299 | 299 | 299 | 299 | 299 | 299 | 299 | 299 | 299 |
+| **total** | **1841** | 1856 | 1861 | 1868 | 1874 | 1883 | 1884 | 1890 | 1894 | 1898 | **1902** |
 
-Task 10 adds no test. **No task deletes a test.** Existing tests changed at constant count are in §0.9.
+Task 11 adds no test. **No task deletes a test.** Existing tests changed at constant count are in §0.9.
 
 ### 0.9 · Guards, anchors and existing tests this plan moves
 
@@ -373,7 +380,8 @@ Task 10 adds no test. **No task deletes a test.** Existing tests changed at cons
 | `LauncherViewModel(` (7 test sites) | compile-follow the two new use cases | Task 7 |
 | `OneModelPathGuardTest`, `DoctrineGuardTest > the composition root's planner list…` | **stay green** — no direct `LauncherAction`; `DefaultLearnedPlans` is not a `Planner` | Tasks 4, 6 |
 | `CoreVocabularyFreezeGuardTest`, `AgentVocabularyGuardTest`, `ModuleIsolationTest`, `HardcodedUiTextGuardTest`, `StringSeamGuardTest`, `LocaleCompletenessGuardTest` | must stay green | every task |
-| `DOC-ADL-3`, `DOC-AML-1`, `DOC-AML-5`, `DOC-NYH-1`, `DOC-ILM-5`, `DOC-HMA-3` | + tests / note / decision / re-address | Task 10 |
+| `ToolPermissionManifestGuardTest` (reads the same manifest) | **stays green** — `<application>` attributes only, no `<uses-permission>` | Task 10 |
+| `DOC-ADL-3`, `DOC-AML-1`, `DOC-AML-4`, `DOC-AML-5`, `DOC-NYH-1`, `DOC-ILM-5`, `DOC-HMA-3` | + tests / note / decision / re-address | Task 11 |
 | KDoc made false: `RouteCommandUseCase` (order of decision), `CommandOutcome.Interpreted`, `SidrDatabase` (version list), `RoomColumnNames`, `migrations/README.md`, `LauncherAgentSession`, `ConsoleHarness` | rewritten | the task that changes the code |
 
 ### 0.10 · How the predictions were produced
@@ -407,6 +415,21 @@ applied; none was rejected.
 
 **Net effect on the numbers:** T1 +1, T5 +1, T7 +1 → **1898** at T9 (was 1895). **No second review** under the
 owner's rule: the delta is corrections inside the same ten tasks — no task, port or closed type added or removed.
+
+### 0.12 · What the owner added after the review (2026-11-19)
+
+**§0.7 item 6, answer «a»:** leave the memory out of Auto Backup and device transfer, a small task of this phase
+with a guard. It became **Task 10**; the close moved to **Task 11** (the §0.11 table above keeps the review's own
+numbering). Decisions it takes (each named at close):
+- **B-16 · Domains, not file names.** The rules leave out the whole `database` domain (`path="."`) and the
+  DataStore directory (`domain="file" path="datastore/"`), so a database or DataStore added later is left out
+  without an edit. Everything else the app writes (today the AppCompat locale record in `files/`) is still backed
+  up. `android:allowBackup` stays `true`.
+- **B-17 · The guard holds the reach, not only the XML.** Production code may open storage only through
+  `Room.databaseBuilder` and `preferencesDataStoreFile` — the two shapes whose files the rules cover; any other
+  storage call (`getSharedPreferences`, `openFileOutput`, `dataStoreFile`, a `File(` under `filesDir`/`getDir`, …)
+  in any module's `src/main` is red until the rules and the guard are widened together.
+- The chain: `:app` +4 → **1902** at T10.
 
 ---
 
@@ -757,20 +780,54 @@ owner's rule: the delta is corrections inside the same ten tasks — no task, po
   M9-2 — `ask` calls the model before 2c → RED exactly test 3.
 - [ ] **Step 5: Commit** — `feat(agentic-6/A4' ф4): :consumer:jvm — выученные команды из файла`.
 
-## Task 10: close the phase — documents, the floor
+## Task 10: the memory stays on the device — Auto Backup and device transfer (`:app`)
 
-- [ ] Boundary gate from a cleared tree after `gradlew --stop`: predicted **1898**, per module as §0.8.
+**Files:**
+- Create: `app/src/main/res/xml/data_extraction_rules.xml` (`<data-extraction-rules>`: `<cloud-backup>` and
+  `<device-transfer>`, each `<exclude domain="database" path="."/>` and `<exclude domain="file" path="datastore/"/>`)
+- Create: `app/src/main/res/xml/backup_rules.xml` (`<full-backup-content>` with the same two excludes)
+- Modify: `app/src/main/AndroidManifest.xml` (`<application>`: `android:dataExtractionRules="@xml/data_extraction_rules"`,
+  `android:fullBackupContent="@xml/backup_rules"`; `allowBackup` stays `true`; one comment naming `DOC-AML-4`)
+- Test: `app/src/test/java/com/sidr/launcher/doctrine/BackupRulesGuardTest.kt`
+
+**Interfaces:** none produced; consumes the manifest and the two XML files as text (parsed, attributes compared by
+equality), and every module's `src/main/**/*.kt` (B-17).
+
+- [ ] **Step 1: Write the failing tests** — `BackupRulesGuardTest`:
+  1. `the manifest points backup and device transfer at the rules` — `<application>`'s `android:dataExtractionRules
+     == "@xml/data_extraction_rules"`, `android:fullBackupContent == "@xml/backup_rules"`.
+  2. `cloud backup and device transfer leave out every database and every DataStore file` — `<cloud-backup>` and
+     `<device-transfer>` each hold exactly the excludes `{(database, .), (file, datastore/)}` and no `<include>`.
+  3. `before Android 12 the same two are left out` — `<full-backup-content>` holds the same set and no `<include>`.
+  4. `every store the app opens lives where the rules leave it out` — over every module's `src/main/**/*.kt`
+     (`build/` excluded): a storage-opening call other than `Room.databaseBuilder(` and `preferencesDataStoreFile(`
+     — `getSharedPreferences(`, `openFileOutput(`, `dataStoreFile(`, `getDir(`, `filesDir`, `externalFilesDir`,
+     `noBackupFilesDir`, `SQLiteDatabase.openOrCreateDatabase(` — fails with `file:line`; the control: the two
+     allowed shapes are found (≥ 1 each), so an empty scan cannot pass.
+- [ ] **Step 2: Run** — `--scoped :app:testDebugUnitTest`; expected `FAILED ::` on tests 1–3 (test 4 green on today's tree:
+  the two DataStores and the one Room builder are the only stores).
+- [ ] **Step 3: Implement** B-16 (the two XML files, the manifest attributes).
+- [ ] **Step 4: Run** — `SCOPED GREEN`, `:app` 89.
+- [ ] **Mutations (privacy, `mutation-prover-deep`):** M10-1 — `<device-transfer>` loses the database exclude → RED
+  exactly test 2; M10-2 — a production file in another module gains `context.getSharedPreferences("x", 0)` → RED
+  exactly test 4; M10-3 — the manifest loses `android:fullBackupContent` → RED exactly test 1.
+- [ ] **Step 5: Commit** — `feat(agentic-6/A4' ф4): память не уходит в резервную копию — правила бэкапа и гвард`.
+
+## Task 11: close the phase — documents, the floor
+
+- [ ] Boundary gate from a cleared tree after `gradlew --stop`: predicted **1902**, per module as §0.8.
 - [ ] ADRs in `ai-context/decisions.md`: «A4′ ф4: кэш выученных планов — форма со слотами, шаблон, схема 5» (B-1…B-14,
   the six forks, spec §10 criterion 9's three mutations and their results, **what this phase starts storing** —
-  §0.7 item 6) and «D3, поправка: выученная команда» (B-15; owner sign-off).
+  §0.7 item 6 — and B-16/B-17: the memory left out of Auto Backup and device transfer, the cost the owner accepted)
+  and «D3, поправка: выученная команда» (B-15; owner sign-off).
 - [ ] Doctrine matrix — every citation the full `` `XTest > name` `` (`DoctrineMatrixGuardTest` reads it):
   `DOC-ADL-3` + `` `RouteCommandUseCaseTest > in local-only mode a learned command still runs and the model is never asked` ``;
-  `DOC-AML-1` + the fifth source; `DOC-AML-5` + `` `LearnedPlanUseCasesTest` ``, `` `LearnedCommandsViewModelTest` ``;
+  `DOC-AML-1` + the fifth source; `DOC-AML-4` + `` `BackupRulesGuardTest` ``; `DOC-AML-5` + `` `LearnedPlanUseCasesTest` ``, `` `LearnedCommandsViewModelTest` ``;
   `DOC-NYH-1` note (a learned command is a deterministic path); `DOC-ILM-5` — fork 4-5 recorded, third column stays
   `<нет>` unless the owner decides the mark tests it; `DOC-HMA-3`'s marker re-addressed (owner item).
 - [ ] `CLAUDE.md` (stage row, «Right now», the D3 hard rule, shipped surface, known debt: the fork 4-5 limit, B-5's
-  fail-open, B-2's non-learnable commands, `MigrationTest` unrun, **Auto Backup of the memory database** unless the
-  owner had it built — §0.7 item 6), `ai-context/current-status.md` (header **and**
+  fail-open, B-2's non-learnable commands, `MigrationTest` unrun, the backup rules `CODE-GREEN` only — no restore or
+  transfer seen; the memory does not move to a new phone — §0.7 item 6), `ai-context/current-status.md` (header **and**
   tail), `§HANDOFF` (phase 4's record to the archive, next: the block's acceptance and block ADR), `tools/gate.sh`
   floor → measured total; `ClaudeMdSizeGuardTest` stays green.
 - [ ] Commit and push — `docs(agentic-6/A4' ф4): фаза 4 закрыта — пол <N>, документы синхронизированы`.
@@ -789,3 +846,4 @@ owner's rule: the delta is corrections inside the same ten tasks — no task, po
 | §8.6 predictability on a moving registry | §0.5 item 3 (it is the model and the names it stabilises) |
 | §8.7 not skipping gates, not caching packages, not touching S2-1/S2-2, not before the 4th | B-4, B-7; the stores untouched; B-8 |
 | §9 gate | Global Constraints, §0.8 |
+| outside the spec: §0.7 item 6, the owner's «a» (`DOC-AML-4`) | B-16, B-17; Task 10 tests 1–4 |

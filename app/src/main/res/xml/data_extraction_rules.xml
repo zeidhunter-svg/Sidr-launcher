@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android 12+: what Auto Backup and device-to-device transfer may copy. The app's memory (every Room
+    database, every DataStore file) stays on the device (DOC-AML-4, A4' phase 4 B-16): whole domains,
+    so a store added later is left out without an edit. Held by BackupRulesGuardTest.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="database" path="." />
+        <exclude domain="file" path="datastore/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="database" path="." />
+        <exclude domain="file" path="datastore/" />
+    </device-transfer>
+</data-extraction-rules>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Before Android 12: the same two exclusions as data_extraction_rules.xml (DOC-AML-4, B-16).
+    Held by BackupRulesGuardTest.
+-->
+<full-backup-content>
+    <exclude domain="database" path="." />
+    <exclude domain="file" path="datastore/" />
+</full-backup-content>

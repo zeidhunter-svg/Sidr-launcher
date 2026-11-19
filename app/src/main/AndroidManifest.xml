@@ -59,9 +59,13 @@
         </intent>
     </queries>
 
+    <!-- DOC-AML-4 (A4' phase 4): allowBackup stays true, but every database and DataStore file is left out of
+         Auto Backup and device transfer by these two rule files; BackupRulesGuardTest holds them. -->
     <application
         android:name=".SidrLauncherApp"
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:localeConfig="@xml/locales_config"

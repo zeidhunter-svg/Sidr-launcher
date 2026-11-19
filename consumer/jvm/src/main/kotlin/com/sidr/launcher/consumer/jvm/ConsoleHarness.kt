@@ -79,8 +79,9 @@ import kotlin.coroutines.EmptyCoroutineContext
  * verdict is bound on this computer ([SandboxMentionBinder]: the sandbox root by the device, a file the user
  * named through `SandboxFileSort`, references kept), then printed as a card. Nothing runs before a `y` to
  * the card; then `startPlanned` and the same engine, with its consent prompts unchanged. Every answer that is
- * not a plan, and every binding that is not one, is said and starts nothing. A reading is never stored: a
- * card left unanswered is dropped. `remove …` / `rename …` keep the deterministic `FilePlanner` — the model
+ * not a plan, and every binding that is not one, is said and starts nothing. An unconfirmed reading is never stored
+ * (a card refused or left unanswered is dropped; a confirmed one's form and template are kept in the
+ * learned-plan file, below). `remove …` / `rename …` keep the deterministic `FilePlanner` — the model
  * is asked only on `ask`.
  *
  * **The learned-plan cache (A4′ phase 4, B-13): step 2c of `ask`.** Before the model is asked, the command is
@@ -132,10 +133,13 @@ class ConsoleHarness(
         registry,
     )
 
+    // One offering for both users of it: the bridge planner below and the learned-plan cache (same gates by construction).
+    private val descriptions = SandboxToolDescriptions()
+
     // The model path (`ask`): the domain's one bridge over this consumer's levels, its binder after it.
     private val modelPlanner = BridgeModelPlanner(
         registry = registry,
-        descriptions = SandboxToolDescriptions(),
+        descriptions = descriptions,
         transport = transport,
         levels = SandboxToolDescriptions.OFFERED_LEVELS,
         folding = JdkTextFolding,
@@ -148,7 +152,7 @@ class ConsoleHarness(
     private val learnedPlans = DefaultLearnedPlans(
         store = learnedStore,
         registry = registry,
-        descriptions = SandboxToolDescriptions(),
+        descriptions = descriptions,
         levels = SandboxToolDescriptions.OFFERED_LEVELS,
         binder = binder,
         folding = JdkTextFolding,
@@ -314,7 +318,7 @@ class ConsoleHarness(
             is OperationResult.Success -> {
                 val session = started.value ?: return notStarted("The reading does not check out against this registry. Nothing ran.")
                 if (learnable != null && recordLearned.record(learnable) is OperationResult.Failure) {
-                    out("The learned-plan file could not be written; this reading is not remembered.")
+                    out("The learned-plan file could not be read or written; this reading is not remembered.")
                 }
                 Interpreted.Started(session)
             }

@@ -3,6 +3,7 @@ package com.sidr.launcher.consumer.jvm
 import com.sidr.launcher.consumer.jvm.plan.FilePlanner
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionIdFactory
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionStore
+import com.sidr.launcher.consumer.jvm.store.JvmLearnedPlanStore
 import com.sidr.launcher.consumer.jvm.tool.SandboxKeys
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolIds
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolSource
@@ -24,6 +25,7 @@ import com.sidr.launcher.domain.ai.bridge.RawArg
 import com.sidr.launcher.domain.ai.bridge.RawStep
 import com.sidr.launcher.domain.ai.bridge.ReplyMeta
 import com.sidr.launcher.domain.ai.bridge.TransportReply
+import com.sidr.launcher.domain.memory.plan.LearnedPlan
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ResolvedInvocation
@@ -195,6 +197,8 @@ class ConsoleHarnessTest {
         assertTrue("a learned line is printed:\n${printed.joinToString("\n")}", printed.contains("Learned command: find … and delete it"))
         assertTrue("the session ran", printed.contains("  ToolInvoked(1, delete_file)"))
         assertFalse("the file named in the slot is deleted", File(temp.root, "kestun.txt").exists())
+        val learned = (JvmLearnedPlanStore(temp.root.toPath().resolve(".sidr-agent/learned-plans.json")).all() as OperationResult.Success).value
+        assertEquals("a replay records nothing: the streak is still 3", listOf(3), learned.map { it.streak })
     }
 
     /** A learned delete is still a `DANGEROUS` step: the prompt is asked every time, and «no» deletes nothing. */
@@ -259,6 +263,41 @@ class ConsoleHarnessTest {
             OperationResult.Success(null),
             JvmAgentSessionStore(temp.root.toPath().resolve(".sidr-agent/session.json")).active(),
         )
+    }
+
+    /**
+     * B-8, Task 9 fix round 1 (review Important 1): a refused card teaches nothing. `rename_file` is `SAFE`, so
+     * a form learned from refused readings would replay with no card and no prompt. Three refusals of one
+     * form leave the learned-plan file empty, and the fourth ask reaches the model and prints the card again.
+     */
+    @Test
+    fun `a refused card teaches nothing`() = runTest {
+        temp.newFile("orvelle.txt")
+        val transport = ScriptedTransport(
+            TransportReply.Answer(
+                RawAnswer(
+                    kind = "plan",
+                    steps = listOf(
+                        RawStep("rename_file", mapOf("name" to null, "new_name" to RawArg.Text("quembly.txt"), "path" to RawArg.Text("orvelle.txt"))),
+                    ),
+                    question = null,
+                    destination = null,
+                ),
+                ReplyMeta.NONE,
+            ),
+        )
+        val learned = JvmLearnedPlanStore(temp.root.toPath().resolve(".sidr-agent/learned-plans.json"))
+
+        repeat(3) { harness(mutableListOf("n"), transport).run("ask rename orvelle.txt to quembly.txt") }
+        assertEquals("nothing learned from refusals", OperationResult.Success(emptyList<LearnedPlan>()), learned.all())
+        printed.clear()
+        val state = harness(mutableListOf("n"), transport).run("ask rename orvelle.txt to quembly.txt")
+
+        assertEquals("the fourth ask reaches the model", 4, transport.requests.size)
+        assertTrue("and shows the card:\n${printed.joinToString("\n")}", printed.contains("Run this plan? [y/N]"))
+        assertFalse("not a learned command", printed.any { it.startsWith("Learned command") })
+        assertEquals(ExecutionState.Cancelled, state)
+        assertTrue(File(temp.root, "orvelle.txt").exists())
     }
 
     /**

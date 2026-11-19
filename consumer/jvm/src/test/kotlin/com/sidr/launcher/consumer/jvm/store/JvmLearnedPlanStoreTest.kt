@@ -87,17 +87,44 @@ class JvmLearnedPlanStoreTest {
         assertEquals(OperationResult.Success(emptyList<LearnedPlan>()), store.all())
     }
 
+    private fun formOf(n: Int) = "row $n"
+
+    /**
+     * B-9 (Android's `LearnedPlanStoreImplTest` scenario): unpinned rows go first — the lowest streak, then the
+     * oldest confirmation — so the oldest row (streak 2) outlives a younger streak-1 row; with only pinned rows,
+     * the oldest confirmation goes whatever its streak, and the row just written is never the victim.
+     */
     @Test
     fun `the cap evicts unpinned rows first, the lowest streak then the oldest`() = runTest {
         val store = JvmLearnedPlanStore(file)
-        store.upsert(plan("pinned old", streak = 3, at = 1L))
-        for (i in 2..MAX_LEARNED_PLANS) store.upsert(plan("row $i", streak = 1, at = 100L + i))
-        store.upsert(plan("row two", streak = 2, at = 5L))
-        // 201 rows: the unpinned streak-1 row with the oldest confirmation goes, not the old pinned one.
-        val kept = (store.all() as OperationResult.Success).value.map { it.shape.form.key }
+        store.upsert(plan(formOf(0), streak = 2, at = 0L))
+        store.upsert(plan(formOf(1), streak = 1, at = 1L))
+        for (n in 2 until MAX_LEARNED_PLANS) store.upsert(plan(formOf(n), streak = 1, at = n.toLong()))
+        assertEquals(MAX_LEARNED_PLANS, keys(store).size)
+
+        store.upsert(plan(formOf(MAX_LEARNED_PLANS), streak = 1, at = 10_000L))
+
+        val kept = keys(store)
         assertEquals(MAX_LEARNED_PLANS, kept.size)
-        assertTrue("pinned row kept", "pinned old" in kept)
-        assertTrue("the row just written kept", "row two" in kept)
-        assertTrue("the oldest unpinned streak-1 row evicted", "row 2" !in kept)
+        assertTrue("the lowest-streak, oldest unpinned row goes", formOf(1) !in kept)
+        assertTrue("an older row with a higher streak stays", formOf(0) in kept)
+        assertTrue("the row just written stays", formOf(MAX_LEARNED_PLANS) in kept)
+
+        // Only pinned rows: the oldest confirmation goes — not the lowest streak — and a fresh streak-1 write
+        // is not evicted by its own write.
+        Files.delete(file)
+        store.upsert(plan("pinned oldest high", streak = 9, at = 0L))
+        store.upsert(plan("pinned younger", streak = 3, at = 1L))
+        for (n in 2 until MAX_LEARNED_PLANS) store.upsert(plan("pinned $n", streak = 3, at = n.toLong()))
+        store.upsert(plan("fresh unpinned", streak = 1, at = 20_000L))
+
+        val kept2 = keys(store)
+        assertEquals(MAX_LEARNED_PLANS, kept2.size)
+        assertTrue("the row just written stays, though it is the one unpinned row", "fresh unpinned" in kept2)
+        assertTrue("the oldest pinned row goes, whatever its streak", "pinned oldest high" !in kept2)
+        assertTrue("pinned younger" in kept2)
     }
+
+    private suspend fun keys(store: JvmLearnedPlanStore): List<String> =
+        (store.all() as OperationResult.Success).value.map { it.shape.form.key }
 }

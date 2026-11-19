@@ -3,6 +3,8 @@ package com.sidr.launcher.domain.intent
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.UnresolvedTarget
 import com.sidr.launcher.domain.ai.bridge.Interpretation
+import com.sidr.launcher.domain.memory.plan.CommandForm
+import com.sidr.launcher.domain.memory.plan.LearnedPlanShape
 import com.sidr.launcher.domain.model.InstalledApp
 
 /**
@@ -69,19 +71,34 @@ sealed interface CommandOutcome {
     data object ClearInput : CommandOutcome
 
     /**
-     * A goal FastPath decided but did not achieve — the app does not exist — has been handed to the
-     * agent, and [id] identifies the session now in flight. The command surface stops rendering a
-     * message and starts rendering session state.
+     * A goal has been handed to the agent, and [id] identifies the session now in flight: a goal FastPath
+     * decided but did not achieve — the app does not exist — (routing step 2), a registered tool's match
+     * (step 2b), a learned command replayed (step 2c, A4′ phase 4), or a card's «Выполнить». The command
+     * surface stops rendering a message and starts rendering session state.
+     *
+     * [learned] is the form of the learned command this session replays (plan §0.2 B-7, B-10) — the mark the
+     * launcher shows while that session is on screen — and `null` for every other start.
      */
-    data class AgentSessionStarted(val id: AgentSessionId) : CommandOutcome
+    data class AgentSessionStarted(val id: AgentSessionId, val learned: CommandForm? = null) : CommandOutcome
 
     /**
      * The model's reading of a command, bound to this device and shown BEFORE anything runs (A4′ phase
      * 3a, spec §7.12.3 condition 1) — the interpretation card. Nothing here executes: only the user's
      * «Выполнить» starts a session, through the engine, which gates it by risk like any plan. It replaced
      * the deleted router's proposal outcome (A4′ phase 3a, D3).
+     *
+     * Since A4′ phase 4 the reading is fresh from the model (routing step 7) or a learned command replayed on
+     * the device (step 2c) that still owes a pick or sends the model's own text off the phone (plan §0.2 B-7):
+     *  - [learnable] — what a fresh, bound reading would teach if it runs (B-8), set by step 7 only; `null` for
+     *    a reading with nothing to learn, a replay, and a remainder card;
+     *  - [learned] — the form a replay came from, for the card's «Выполнить» to carry the mark on into
+     *    [AgentSessionStarted.learned] (the launcher's half, phase 4 Task 7); `null` for a fresh reading.
      */
-    data class Interpreted(val interpretation: Interpretation) : CommandOutcome
+    data class Interpreted(
+        val interpretation: Interpretation,
+        val learnable: LearnedPlanShape? = null,
+        val learned: CommandForm? = null,
+    ) : CommandOutcome
 
     /**
      * A registered tool claimed the command at routing step 2b and its target is the user's to pick

@@ -11,11 +11,15 @@ import com.sidr.launcher.domain.ai.bridge.Interpretation
 import com.sidr.launcher.domain.ai.bridge.MentionBinder
 import com.sidr.launcher.domain.ai.bridge.ModelPlanner
 import com.sidr.launcher.domain.ai.bridge.ModelPlanning
+import com.sidr.launcher.domain.ai.bridge.plan
 import com.sidr.launcher.domain.connectivity.ConnectivityChecker
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
+import com.sidr.launcher.domain.memory.plan.LearnedPlans
+import com.sidr.launcher.domain.memory.plan.Replay
+import com.sidr.launcher.domain.memory.plan.needsCard
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.sort.ArgSorts
@@ -53,6 +57,19 @@ import kotlinx.coroutines.flow.first
  *    phase 3b Task 6 — a value sort is a pure function of the command text, so nothing of the device
  *    decides what is sent). `StartAgentSessionUseCase.planning`
  *    persists nothing, so an unrecognised or unresolved command leaves no `goal_text` row behind.
+ * 2c. **A command the user taught ⇒ replay it on the device, without the model** (A4′ phase 4, spec §8;
+ *    plan §0.2 B-5…B-7). Only when FastPath was undecided **and** 2b answered `NoPlan`: it sits in 2b's
+ *    `NoPlan` arm, so a text FastPath decided or 2b claimed never reads the learned plans.
+ *    [LearnedPlans.replay] fits the command to the one pinned form it matches (a form and template the user
+ *    confirmed three times) and judges the filled template exactly as step 7 judges the model's answer — the
+ *    same validator, against today's offering; the same [MentionBinder] — with no model. A bound replay that
+ *    owes a pick, or sends the model's own text off the phone ([needsCard]), is the interpretation card,
+ *    marked as learned ([CommandOutcome.Interpreted.learned]); any other starts its session at once
+ *    ([CommandOutcome.AgentSessionStarted.learned]), through the engine, every gate of which — the consent
+ *    card included — is unchanged. **A miss is not an answer**: nothing fits, the words bind nothing, the
+ *    store cannot be read, the start fails — the chain below runs exactly as if nothing were learned (B-5;
+ *    E6-R1: a deterministic miss is not a filter on understanding). An unreadable store therefore fails open
+ *    to step 7, named beside A1′ residual (3).
  * 3. **`localOnlyMode` on ⇒ byte-for-byte FastPath parity** — the planner is never consulted and
  *    nothing leaves the device. A FastPath hit returns untouched; a miss says so plainly
  *    ([CommandMessage.UnderstandingLocalOnly]) instead of claiming the command was unknown.
@@ -71,7 +88,21 @@ import kotlinx.coroutines.flow.first
  *    of a card («нет такого приложения», «не понял» for a value the device could not read — phase 3b,
  *    Task 6 — or a failure; the model is asked once and told none of it), or — when the model declines
  *    — FastPath's outcome untouched. Nothing here executes (`DOC-NYH-1`, Fork R4); the model is below
- *    gates 3, 5 and 6 (`DOC-ADL-3`).
+ *    gates 3, 5 and 6 (`DOC-ADL-3`). A bound reading also carries what it would teach
+ *    ([CommandOutcome.Interpreted.learnable], A4′ phase 4 B-8): computed here, from the validated steps
+ *    before binding, never inside `toCommandOutcome` (the remainder card shares that and teaches nothing);
+ *    nothing is recorded here — the launcher records it once «Выполнить» has started the session.
+ *
+ * **Step 2c sits above step 3, and that is `DOC-ADL-3` applied, not bent** (plan §0.2 B-6; no amendment).
+ * The rule's parity is two claims — the model planner is not consulted, and nothing leaves the device — and
+ * deterministic plan replay is part of the local path, which since the 2026-08-22 amendment may change an
+ * outcome FastPath did not decide. Step 2c consults no model — [LearnedPlans] has no port to one; it reads the
+ * on-device store, the registry and the binder — and the route transmits nothing; a replayed step acts only
+ * through the engine, as a 2b plan's does. In local-only mode it answers with the command the user taught
+ * instead of the local-only line: the deterministic local path doing its job. The three
+ * understanding-unavailable messages stay mutually exclusive for step 2b's reason (below): 2c's exits are a
+ * started session, a card, or a fall-through that changes nothing — none of them one of the three. Should 2c
+ * ever reach a model, it moves below step 3; it is not excused.
  *
  * **Step 2 sits above step 3 and that does not weaken the chain.** The three
  * understanding-unavailable messages stay mutually exclusive because step 2 is keyed on an outcome
@@ -106,7 +137,8 @@ import kotlinx.coroutines.flow.first
  *
  * Steps 2 and 2b are disjoint by construction, not by ordering: `NoAppFound` is a decided
  * [CommandOutcome.Message], so `isUndecided()` is false for it and a `NoAppFound` that failed open at
- * step 2 is never re-planned at 2b.
+ * step 2 is never re-planned at 2b. Step 2c is inside 2b's `NoPlan` arm, so it is disjoint from both the
+ * same way: a 2b plan whose start failed falls through to step 3, not to 2c.
  *
  * **What the ordering DOES break, stated rather than glossed.** `DOC-ADL-3` used to read "…and
  * every outcome FastPath **decided** is returned byte-for-byte". `NoAppFound` is an outcome FastPath
@@ -135,6 +167,10 @@ class RouteCommandUseCase(
     private val providerConfigRepository: AiProviderConfigRepository,
     private val connectivityChecker: ConnectivityChecker,
     private val startAgentSession: StartAgentSessionUseCase,
+    // A4′ phase 4: step 2c's replay and step 7's `learnable`. The default replays and teaches nothing, so the
+    // test construction sites stay as they were (B-12); the production provider is to take it with no default
+    // (phase 4 Task 6 wires it — until then production builds the route with `NONE`).
+    private val learnedPlans: LearnedPlans = LearnedPlans.NONE,
 ) {
 
     suspend fun route(rawInput: String): CommandOutcome {
@@ -163,8 +199,8 @@ class RouteCommandUseCase(
 
         // (2b) FastPath could not decide, but a registered tool may match the text deterministically.
         // This use case learns NOTHING about tools: it offers the raw goal and the planner answers.
-        // `NoPlan` — the case where nothing matches — leaves `ruleOutcome` untouched and the chain
-        // below runs exactly as it did before, which is what the three parity tests pin.
+        // `NoPlan` — the case where nothing matches — leaves `ruleOutcome` untouched; step 2c is tried, and on
+        // its miss the chain below runs exactly as it did before, which is what the three parity tests pin.
         //
         // It sits above the localOnlyMode check for the same reason branch (2) does: the planner here
         // is deterministic and offline, so no model is consulted and nothing leaves the device. That
@@ -188,7 +224,9 @@ class RouteCommandUseCase(
                 // R14-39 closed (A4′ phase 3b, fork 3b-E): a target the vocabulary claimed is answered
                 // HERE and never reaches step 7 — whatever the local state, whatever the network.
                 is PlanningResult.Unresolved -> return answerOnDevice(planned.target)
-                PlanningResult.NoPlan -> Unit // nothing claimed it: the chain below, exactly as before
+                // Nothing claimed it: step 2c — a command the user taught — and on its miss the chain below,
+                // exactly as before.
+                PlanningResult.NoPlan -> replayLearned(trimmed)?.let { return it }
             }
         }
 
@@ -222,8 +260,16 @@ class RouteCommandUseCase(
             // the engine's own cap (`BridgeRendering.MAX_STEPS_OFFERED`, held by `BridgeValidator`'s size
             // check). The binder takes the WHOLE reading: one card for all of its steps, or one answer — the
             // first step it cannot bind — for all of them. Nothing is started here either way.
-            is ModelPlanning.Proposed ->
-                binder.bind(AgentGoal(text = command, shape = GoalShape.Free(command)), answer.steps).toCommandOutcome()
+            //
+            // A4′ phase 4 (B-8): a BOUND reading carries what it would teach — `learnable`, from the validated
+            // steps as the model wrote them (`ModelPlanning.Proposed.steps`, before binding: no package, the
+            // user's words still words). Attached HERE and never inside `toCommandOutcome`, which the remainder
+            // card shares: a remainder is not a fresh reading and teaches nothing. Nothing is recorded here —
+            // the launcher records it once «Выполнить» has started the session.
+            is ModelPlanning.Proposed -> {
+                val outcome = binder.bind(AgentGoal(text = command, shape = GoalShape.Free(command)), answer.steps).toCommandOutcome()
+                if (outcome is CommandOutcome.Interpreted) outcome.copy(learnable = learnedPlans.learnable(command, answer.steps)) else outcome
+            }
             // Condition 3: a question goes to the assistant, prefilled and unsent — never to a web search.
             is ModelPlanning.ToAssistant -> CommandOutcome.OpenAssistant(answer.question)
             is ModelPlanning.Navigate -> CommandOutcome.Interpreted(Interpretation.Navigate(answer.destination))
@@ -233,6 +279,36 @@ class RouteCommandUseCase(
             is ModelPlanning.Unavailable -> CommandOutcome.Message(CommandMessage.UnderstandingModelUnavailable(answer.reason))
         }
     }
+
+    /**
+     * Step 2c (A4′ phase 4, plan §0.2 B-5…B-7): [command] replayed from the one pinned form it fits, or `null` —
+     * and `null` means the chain goes on exactly as if nothing were learned. The cache never answers on
+     * understanding's behalf: a [Replay.Miss] (nothing fits, the binding found nothing, the store unreadable) is
+     * not «нет такого приложения» and not «не понял».
+     *
+     * A bound replay that owes a pick, or sends the model's own text off the phone ([needsCard]), is shown on the
+     * interpretation card first, with its mark ([CommandOutcome.Interpreted.learned]) and nothing to teach. Any
+     * other starts at once through `startPlanned` — the engine's every gate unchanged: `uninstall_app` still stops
+     * at its consent card. A start that fails ([OperationResult.Failure], or a plan the registry refuses) is
+     * `null` too — the fall-through step 2b gives its own failed start.
+     */
+    private suspend fun replayLearned(command: String): CommandOutcome? =
+        when (val replay = learnedPlans.replay(command)) {
+            Replay.Miss -> null
+            is Replay.Bound -> {
+                val plan = replay.act.plan()
+                if (plan == null || replay.act.needsCard()) {
+                    CommandOutcome.Interpreted(replay.act, learned = replay.form)
+                } else {
+                    val started = startAgentSession.startPlanned(replay.act.goal, plan)
+                    if (started is OperationResult.Success && started.value != null) {
+                        CommandOutcome.AgentSessionStarted(started.value.id, learned = replay.form)
+                    } else {
+                        null
+                    }
+                }
+            }
+        }
 
     /**
      * Step 2b's answer to a target a registered tool claimed and could not bind (A4′ phase 3b). The

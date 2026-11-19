@@ -6,6 +6,7 @@ import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeIntentMatcher
+import com.sidr.launcher.core.testing.FakeLearnedPlanStore
 import com.sidr.launcher.core.testing.FakeMentionBinder
 import com.sidr.launcher.core.testing.FakeModelPlanner
 import com.sidr.launcher.core.testing.FakeToolRegistry
@@ -27,9 +28,13 @@ import com.sidr.launcher.domain.agent.StepRationale
 import com.sidr.launcher.domain.agent.TemplatePlanner
 import com.sidr.launcher.domain.agent.UnresolvedTarget
 import com.sidr.launcher.domain.agent.bind
+import com.sidr.launcher.domain.ai.bridge.AppChoice
 import com.sidr.launcher.domain.ai.bridge.Binding
+import com.sidr.launcher.domain.ai.bridge.BridgeFilter
+import com.sidr.launcher.domain.ai.bridge.BridgeFixtures
 import com.sidr.launcher.domain.ai.bridge.Interpretation
 import com.sidr.launcher.domain.ai.bridge.ModelPlanning
+import com.sidr.launcher.domain.ai.bridge.PendingChoice
 import com.sidr.launcher.domain.ai.bridge.PrincipalId
 import com.sidr.launcher.domain.ai.bridge.ProposedStep
 import com.sidr.launcher.domain.ai.bridge.SidrDestination
@@ -43,10 +48,22 @@ import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.intent.ModelUnavailableReason
 import com.sidr.launcher.domain.intent.SimpleCommand
+import com.sidr.launcher.domain.memory.plan.CommandForm
+import com.sidr.launcher.domain.memory.plan.DefaultLearnedPlans
+import com.sidr.launcher.domain.memory.plan.LearnedPlanFixtures
+import com.sidr.launcher.domain.memory.plan.LearnedPlanFixtures.modelText
+import com.sidr.launcher.domain.memory.plan.LearnedPlanFixtures.pin
+import com.sidr.launcher.domain.memory.plan.LearnedPlanFixtures.said
+import com.sidr.launcher.domain.memory.plan.LearnedPlanShape
+import com.sidr.launcher.domain.memory.plan.LearnedPlans
+import com.sidr.launcher.domain.memory.plan.PlanTemplate
+import com.sidr.launcher.domain.memory.plan.TemplateArg
+import com.sidr.launcher.domain.memory.plan.TemplateStep
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.preferences.FeatureFlags
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.sort.ArgSorts
+import com.sidr.launcher.domain.text.PlainTextFolding
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ToolDescriptor
 import com.sidr.launcher.domain.tool.ToolDurability
@@ -985,5 +1002,260 @@ class RouteCommandUseCaseTest {
         assertEquals(1, planner.planCallCount)
         assertEquals(1, binder.bindCallCount)
         assertTrue("nothing starts before «Выполнить», and there is nothing to run", agentStore.saved.isEmpty())
+    }
+
+    // --- A4′ phase 4, Task 4: step 2c — a learned command replays on the device (plan §0.2 B-5…B-8) ----------
+
+    /**
+     * The learned-plan store and what the replay's binder can bind — a mention exactly as typed to the apps it
+     * names ([LearnedPlanFixtures.bindApps], the rule `LearnedPlanReplayTest` binds by). Two «Vemblic» apps are a
+     * pick; «все фотографии» names nothing. Every app is invented (R14-43).
+     */
+    private val learnedStore = FakeLearnedPlanStore()
+    private val vemblic = InstalledApp("net.fixture.vemblic", "Vemblic")
+    private val vemblicTwo = InstalledApp("net.fixture.vemblic.two", "Vemblic")
+    private val installedByName = mutableMapOf("Vemblic" to listOf(vemblic))
+
+    /**
+     * The route with the learned-plan cache, as Task 6 will compose it: ONE [binder] in the graph, asked by the
+     * replay and by step 7 alike (scripted here with the fixtures' rule), and the bridge fixtures' learned registry
+     * — the offering a replay is judged against, and the registry `startPlanned` validates the started plan in.
+     * [useCase] above is untouched (B-12): every earlier test still builds the route without this parameter.
+     */
+    private fun learnedRoute(
+        localOnly: Boolean = false,
+        agentPlanner: Planner = TemplatePlanner(),
+        agentRegistry: ToolRegistry = BridgeFixtures.learnedRegistry,
+    ): RouteCommandUseCase {
+        binder.binding = { goal, steps -> LearnedPlanFixtures.bindApps(goal, steps) { installedByName[it].orEmpty() } }
+        val learned: LearnedPlans = DefaultLearnedPlans(
+            store = learnedStore,
+            registry = BridgeFixtures.learnedRegistry,
+            descriptions = BridgeFixtures.learnedDescriptions,
+            levels = BridgeFilter.ANDROID_OFFERED_LEVELS,
+            binder = binder,
+            folding = PlainTextFolding,
+        )
+        return RouteCommandUseCase(
+            handleUserCommand = HandleUserCommandUseCase(
+                matcher = matcher,
+                resolver = IntentActionResolver(appsRepo),
+                executor = executor,
+                confidencePolicy = DefaultIntentConfidencePolicy(),
+                recordingScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
+            ),
+            modelPlanner = planner,
+            binder = binder,
+            featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = localOnly)),
+            providerConfigRepository = provider,
+            connectivityChecker = connectivity,
+            startAgentSession = StartAgentSessionUseCase(agentPlanner, agentStore, agentIds, agentRegistry),
+            learnedPlans = learned,
+        )
+    }
+
+    private fun freeGoal(command: String) = AgentGoal(text = command, shape = GoalShape.Free(command))
+
+    /** «сотри lumora» → `uninstall_app(app = lumora)`, confirmed three times: the form «сотри …» is pinned. */
+    private suspend fun pinErase() = learnedStore.pin("сотри lumora", said(LEARNED_UNINSTALL, "app" to "lumora"))
+
+    /** What a replay of «сотри Vemblic» starts: the package bound on the device, the user's words beside it. */
+    private val erasesVemblic = ToolInvocation(
+        LEARNED_UNINSTALL,
+        mapOf("app" to ArgSource.Literal("net.fixture.vemblic"), "app_label" to ArgSource.Literal("Vemblic")),
+    )
+
+    /**
+     * B-6, B-7: online, with a provider — every condition under which step 7 WOULD ask the model — a pinned form
+     * the command fits is replayed on the device and its session started at once: no card (nothing in it the user
+     * has not confirmed three times), the mark carried on the outcome, and the model is never asked.
+     */
+    @Test
+    fun `a learned command starts its session without a card and the model is never asked`() = runTest {
+        driveUnknown()
+        pinErase()
+
+        val outcome = learnedRoute().route("сотри Vemblic")
+
+        assertEquals(
+            CommandOutcome.AgentSessionStarted(AgentSessionId("s1"), learned = CommandForm.parse("сотри …")),
+            outcome,
+        )
+        assertEquals("the model is never asked", 0, planner.planCallCount)
+        assertEquals(freeGoal("сотри Vemblic"), agentStore.saved.single().goal)
+        assertEquals(erasesVemblic, agentStore.saved.single().plan.steps.single().invocation)
+    }
+
+    /**
+     * `DOC-ADL-3` applied: deterministic replay is part of the local path, so local-only mode does not stop it —
+     * the model planner is not consulted and nothing leaves the device.
+     */
+    @Test
+    fun `in local-only mode a learned command still runs and the model is never asked`() = runTest {
+        driveUnknown()
+        pinErase()
+
+        val outcome = learnedRoute(localOnly = true).route("сотри Vemblic")
+
+        assertEquals(
+            CommandOutcome.AgentSessionStarted(AgentSessionId("s1"), learned = CommandForm.parse("сотри …")),
+            outcome,
+        )
+        assertEquals("the model is never asked", 0, planner.planCallCount)
+        assertEquals(erasesVemblic, agentStore.saved.single().plan.steps.single().invocation)
+    }
+
+    /**
+     * B-7: a replay that owes a pick, or whose step sends the MODEL's text off the phone, is shown on the card
+     * first — carrying its mark (`learned`) and teaching nothing new (`learnable` null: it is not a fresh reading).
+     * Nothing starts, and the model is not asked.
+     *
+     * The model-text half is pinned from «поищи что-нибудь про орвелин» → `web_search(query = орвелин история)`:
+     * the query is not the user's words, so the template keeps it as a constant and the form is every word — the
+     * same command, the fourth time, is what fits it.
+     */
+    @Test
+    fun `a learned command that owes a pick or shows model text gets the card`() = runTest {
+        driveUnknown()
+        pinErase()
+        learnedStore.pin("поищи что-нибудь про орвелин", modelText(LEARNED_WEB_SEARCH, "query" to "орвелин история"))
+        installedByName["Vemblic"] = listOf(vemblic, vemblicTwo)
+        val route = learnedRoute()
+
+        assertEquals(
+            CommandOutcome.Interpreted(
+                Interpretation.Act(
+                    goal = freeGoal("сотри Vemblic"),
+                    steps = listOf(
+                        PlanStep(
+                            index = 0,
+                            invocation = ToolInvocation(LEARNED_UNINSTALL, mapOf("app_label" to ArgSource.Literal("Vemblic"))),
+                            risk = ActionRiskLevel.CONFIRM,
+                            precondition = StepPrecondition.None,
+                            rationale = StepRationale.MODEL_PROPOSED,
+                        ),
+                    ),
+                    origins = mapOf(0 to mapOf("app_label" to ValueOrigin.SaidBy(PrincipalId.USER))),
+                    effects = mapOf(0 to ToolEffect.EXTERNAL),
+                    choices = listOf(PendingChoice(0, AppChoice("app", "Vemblic", listOf(vemblic, vemblicTwo), learning = null))),
+                ),
+                learnable = null,
+                learned = CommandForm.parse("сотри …"),
+            ),
+            route.route("сотри Vemblic"),
+        )
+
+        assertEquals(
+            CommandOutcome.Interpreted(
+                Interpretation.Act(
+                    goal = freeGoal("поищи что-нибудь про орвелин"),
+                    steps = listOf(
+                        PlanStep(
+                            index = 0,
+                            invocation = ToolInvocation(LEARNED_WEB_SEARCH, mapOf("query" to ArgSource.Literal("орвелин история"))),
+                            risk = ActionRiskLevel.SAFE,
+                            precondition = StepPrecondition.None,
+                            rationale = StepRationale.MODEL_PROPOSED,
+                        ),
+                    ),
+                    origins = mapOf(0 to mapOf("query" to ValueOrigin.ModelGenerated)),
+                    effects = mapOf(0 to ToolEffect.EXTERNAL),
+                    choices = emptyList(),
+                ),
+                learnable = null,
+                learned = CommandForm.parse("поищи что нибудь про орвелин"),
+            ),
+            route.route("поищи что-нибудь про орвелин"),
+        )
+        assertEquals("the model is never asked", 0, planner.planCallCount)
+        assertTrue("nothing starts before «Выполнить»", agentStore.saved.isEmpty())
+    }
+
+    /**
+     * Review Focus 1, B-5: the words fit «сотри …» but name nothing the device can bind. The cache does not answer
+     * «нет такого приложения» on understanding's behalf: it misses, and the command goes on down the chain exactly
+     * as if nothing were learned — online the model is asked, local-only the honest local-only line. The replay
+     * WAS tried both times (the store read, the binder asked) — the miss is the binding's, not a form that did not fit.
+     */
+    @Test
+    fun `a learned command that does not bind goes on down the chain`() = runTest {
+        driveUnknown()
+        pinErase()
+
+        val online = learnedRoute().route("сотри все фотографии")
+
+        assertEquals("the model declined: FastPath's outcome, untouched", CommandOutcome.Unknown("do a barrel roll"), online)
+        assertEquals("online, the model is asked once", 1, planner.planCallCount)
+        assertEquals("сотри все фотографии", planner.lastCommand)
+
+        val localOnly = learnedRoute(localOnly = true).route("сотри все фотографии")
+
+        assertEquals(CommandOutcome.Message(CommandMessage.UnderstandingLocalOnly), localOnly)
+        assertEquals("local-only, the model is not asked", 1, planner.planCallCount)
+        assertEquals("the replay was tried both times", 2, learnedStore.reads)
+        assertEquals("and both times the binder found nothing", 2, binder.bindCallCount)
+        assertTrue("nothing is started for a miss", agentStore.saved.isEmpty())
+    }
+
+    /**
+     * B-8, the route half: a fresh model reading bound on the device carries what it would teach — computed in step
+     * 7 from the VALIDATED steps (`ModelPlanning.Proposed.steps`, before binding: no package, the user's words a
+     * slot) — and no mark (`learned`: it was not replayed). A reading with no word of its own (the command is all
+     * slot) teaches nothing.
+     */
+    @Test
+    fun `a fresh model reading carries what it teaches, and one that cannot be learned carries nothing`() = runTest {
+        driveUnknown()
+        val route = learnedRoute()
+
+        planner.answer = ModelPlanning.Proposed(listOf(said(LEARNED_WEB_SEARCH, "query" to "орвелин")))
+        val searched = route.route("поищи орвелин") as CommandOutcome.Interpreted
+
+        assertEquals(
+            LearnedPlanShape(
+                CommandForm.parse("поищи …"),
+                PlanTemplate(listOf(TemplateStep(LEARNED_WEB_SEARCH, mapOf("query" to TemplateArg.Slot(0))))),
+            ),
+            searched.learnable,
+        )
+        assertNull("a fresh reading is not a replay", searched.learned)
+
+        planner.answer = ModelPlanning.Proposed(listOf(said(LEARNED_WEB_SEARCH, "query" to "lumora")))
+        val bare = route.route("lumora") as CommandOutcome.Interpreted
+
+        assertNull("a form with no word of its own is not learned", bare.learnable)
+        assertNull(bare.learned)
+        assertEquals("both were fresh readings of the model", 2, planner.planCallCount)
+    }
+
+    /**
+     * B-6: 2c runs only when FastPath was undecided AND 2b answered `NoPlan`. A pinned form that would fit each text
+     * here is never read: FastPath's decision, 2b's plan and 2b's claimed target each answer before 2c — and none of
+     * those outcomes carries a mark.
+     */
+    @Test
+    fun `a text FastPath or 2b decided never consults the learned plans`() = runTest {
+        pinErase()
+        learnedStore.pin("удали приложение lumora", said(LEARNED_UNINSTALL, "app" to "lumora"))
+
+        driveConfidentShowApps()
+        val fastPath = learnedRoute().route("сотри Vemblic")
+
+        driveUnknown()
+        val planned = learnedRoute(agentPlanner = plansOneStep()).route("сотри Vemblic")
+
+        val target = removeTarget("удали приложение Vemblic", words = "Vemblic", candidates = emptyList())
+        val claimed = learnedRoute(agentPlanner = claims(target), agentRegistry = removeRegistry).route("удали приложение Vemblic")
+
+        assertEquals(CommandOutcome.ShowApps, fastPath)
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), planned)
+        assertEquals(CommandOutcome.Message(CommandMessage.NoAppFound("Vemblic")), claimed)
+        assertEquals("the learned plans were never read", 0, learnedStore.reads)
+        assertEquals(0, planner.planCallCount)
+    }
+
+    private companion object {
+        val LEARNED_UNINSTALL = ToolId("uninstall_app")
+        val LEARNED_WEB_SEARCH = ToolId("web_search")
     }
 }

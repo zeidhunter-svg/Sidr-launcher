@@ -7,7 +7,6 @@ import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.ai.bridge.AppChoice
-import com.sidr.launcher.domain.ai.bridge.Binding
 import com.sidr.launcher.domain.ai.bridge.BridgeFilter
 import com.sidr.launcher.domain.ai.bridge.BridgeFixtures
 import com.sidr.launcher.domain.ai.bridge.Interpretation
@@ -16,6 +15,9 @@ import com.sidr.launcher.domain.ai.bridge.PrincipalId
 import com.sidr.launcher.domain.ai.bridge.ProposedStep
 import com.sidr.launcher.domain.ai.bridge.ValueOrigin
 import com.sidr.launcher.domain.ai.bridge.toPlanStep
+import com.sidr.launcher.domain.memory.plan.LearnedPlanFixtures.bindApps
+import com.sidr.launcher.domain.memory.plan.LearnedPlanFixtures.pin
+import com.sidr.launcher.domain.memory.plan.LearnedPlanFixtures.said
 import com.sidr.launcher.domain.memory.resolution.DEFAULT_AUTO_RESOLVE_STREAK_THRESHOLD
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.text.PlainTextFolding
@@ -27,7 +29,6 @@ import com.sidr.launcher.domain.tool.ToolLevels
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -38,9 +39,10 @@ import org.junit.Test
  * but a bound reading is a miss, and a miss writes nothing.
  *
  * The registry and descriptions are the bridge fixtures' learned-plan set ([BridgeFixtures.learnedRegistry]);
- * the binder is the shared [FakeMentionBinder], scripted to bind «Lumora» and «Vemblic» to their fixture
- * packages and nothing else — and to forget one, as a phone forgets an app it removed. Fixtures (R14-43): every
- * app is invented; assertions compare by equality.
+ * the binder is the shared [FakeMentionBinder], scripted with [LearnedPlanFixtures.bindApps] (the rule the route's
+ * step-2c tests share, Task 4) to bind «Lumora» and «Vemblic» to their fixture packages and nothing else — and to
+ * forget one, as a phone forgets an app it removed. Fixtures (R14-43): every app is invented; assertions compare by
+ * equality.
  */
 class LearnedPlanReplayTest {
 
@@ -49,7 +51,9 @@ class LearnedPlanReplayTest {
 
     /** What the fake binder can bind: a mention, exactly as the user typed it, to a package. */
     private val installed = mutableMapOf("Lumora" to LUMORA, "Vemblic" to VEMBLIC)
-    private val binder = FakeMentionBinder(binding = { goal, steps -> bindApps(goal, steps) })
+    private val binder = FakeMentionBinder(
+        binding = { goal, steps -> bindApps(goal, steps) { mention -> listOfNotNull(installed[mention]?.let { InstalledApp(it, mention) }) } },
+    )
 
     private fun plans(levels: Set<ToolLevel> = BridgeFilter.ANDROID_OFFERED_LEVELS) = DefaultLearnedPlans(
         store = store,
@@ -62,7 +66,7 @@ class LearnedPlanReplayTest {
 
     @Test
     fun `a pinned form replays through the validator and the binder with the new words`() = runBlocking {
-        pin("сотри lumora", said(UNINSTALL_APP, "app" to "lumora"))
+        store.pin("сотри lumora", said(UNINSTALL_APP, "app" to "lumora"))
         val plans = plans()
 
         val first = bound(plans.replay("сотри Lumora"))
@@ -78,14 +82,14 @@ class LearnedPlanReplayTest {
 
     @Test
     fun `a form below the threshold does not replay`() = runBlocking {
-        pin("сотри lumora", said(UNINSTALL_APP, "app" to "lumora"), streak = DEFAULT_AUTO_RESOLVE_STREAK_THRESHOLD - 1)
+        store.pin("сотри lumora", said(UNINSTALL_APP, "app" to "lumora"), streak = DEFAULT_AUTO_RESOLVE_STREAK_THRESHOLD - 1)
 
         assertEquals(Replay.Miss, plans().replay("сотри Vemblic"))
     }
 
     @Test
     fun `a tool no longer offered misses and the entry stays`() = runBlocking {
-        pin("сотри lumora", said(UNINSTALL_APP, "app" to "lumora"))
+        store.pin("сотри lumora", said(UNINSTALL_APP, "app" to "lumora"))
         val before = store.rows
 
         // `uninstall_app` is `system_intent`: an offering of `in_app` alone no longer holds it.
@@ -95,7 +99,7 @@ class LearnedPlanReplayTest {
 
     @Test
     fun `a slot the binder cannot bind misses`() = runBlocking {
-        pin("сотри lumora", said(UNINSTALL_APP, "app" to "lumora"))
+        store.pin("сотри lumora", said(UNINSTALL_APP, "app" to "lumora"))
         val plans = plans()
 
         // Review Focus 1: the words fit the form, but they name nothing the device can bind.
@@ -109,8 +113,8 @@ class LearnedPlanReplayTest {
 
     @Test
     fun `two pinned forms that fit the same command miss`() = runBlocking {
-        pin("найди книгу в магазине", said(WEB_SEARCH, "query" to "книгу"), said(WEB_SEARCH, "query" to "магазине"))
-        pin("найди книгу в центре", said(WEB_SEARCH, "query" to "центре"))
+        store.pin("найди книгу в магазине", said(WEB_SEARCH, "query" to "книгу"), said(WEB_SEARCH, "query" to "магазине"))
+        store.pin("найди книгу в центре", said(WEB_SEARCH, "query" to "центре"))
         assertEquals(setOf("найди … в …", "найди книгу в …"), store.rows.keys)
 
         assertEquals(Replay.Miss, plans().replay("найди книгу в магазине"))
@@ -118,7 +122,7 @@ class LearnedPlanReplayTest {
 
     @Test
     fun `an unreadable store misses`() = runBlocking {
-        pin("сотри lumora", said(UNINSTALL_APP, "app" to "lumora"))
+        store.pin("сотри lumora", said(UNINSTALL_APP, "app" to "lumora"))
         store.failReads = true
 
         assertEquals(Replay.Miss, plans().replay("сотри Vemblic"))
@@ -145,51 +149,9 @@ class LearnedPlanReplayTest {
 
     // --- fixtures ---------------------------------------------------------------------------------------
 
-    /** A step the model proposed, every argument the user's own words — what `learn` turns into slots. */
-    private fun said(tool: ToolId, vararg args: Pair<String, String>) = ProposedStep(
-        tool = tool,
-        args = mapOf(*args),
-        origins = args.associate { (name, _) -> name to USER },
-        risk = BridgeFixtures.learnedRegistry.find(tool)!!.risk,
-        effect = ToolEffect.EXTERNAL,
-    )
-
-    /** Learns [command]'s reading as a confirmed reading would teach it, and stores it with [streak]. */
-    private suspend fun pin(command: String, vararg steps: ProposedStep, streak: Int = DEFAULT_AUTO_RESOLVE_STREAK_THRESHOLD) {
-        val shape = LearnedForms.learn(command, steps.toList(), folding)
-        assertNotNull("«$command» was expected to be learned", shape)
-        store.upsert(LearnedPlan(shape!!, streak = streak, confirmations = streak, confirmedAtEpochMs = 0L))
-    }
-
     private fun bound(replay: Replay): Replay.Bound {
         assertTrue("expected a bound replay, was $replay", replay is Replay.Bound)
         return replay as Replay.Bound
-    }
-
-    /** The fake binder's rule: the mention under `app` binds to its package, or nothing binds at all. */
-    private fun bindApps(goal: AgentGoal, steps: List<ProposedStep>): Binding {
-        val planSteps = mutableListOf<PlanStep>()
-        val origins = mutableMapOf<Int, Map<String, ValueOrigin>>()
-        for ((index, step) in steps.withIndex()) {
-            val mention = step.args["app"]
-            if (mention == null) {
-                planSteps += step.toPlanStep(index, step.args)
-                origins[index] = step.origins
-            } else {
-                val packageName = installed[mention] ?: return Binding.NotFound(mention)
-                planSteps += step.toPlanStep(index, step.args + ("app" to packageName))
-                origins[index] = step.origins + ("app" to ValueOrigin.Ours)
-            }
-        }
-        return Binding.Bound(
-            Interpretation.Act(
-                goal = goal,
-                steps = planSteps,
-                origins = origins,
-                effects = steps.withIndex().associate { (index, step) -> index to step.effect },
-                choices = emptyList(),
-            ),
-        )
     }
 
     private fun goal(command: String) = AgentGoal(text = command, shape = GoalShape.Free(command))

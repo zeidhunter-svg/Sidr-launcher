@@ -123,4 +123,40 @@ internal object BridgeFixtures {
 
     val chainOffering: BridgeOffering get() =
         BridgeFilter.offeringOf(chainRegistry, BridgeFilter.ANDROID_OFFERED_LEVELS, chainDescriptions)
+
+    /**
+     * A third, separate registry for the learned-plan cache (A4′ phase 4, Task 3): the three tools its fixtures
+     * replay, each at the level it holds on Android — `uninstall_app` (`system_intent`, `CONFIRM`, one app
+     * mention), `web_search` (`in_app`), `set_alarm` (`system_intent`) — described as `AuthoredToolDescriptions`
+     * describes them. Kept apart from [registry] so the tests above read the offering they always did. The
+     * learned-plan tests pass their own levels: the offering is what a replay is judged against.
+     */
+    val learnedRegistry = FakeToolRegistry(
+        listOf(
+            descriptor("uninstall_app", ToolLevels.SYSTEM_INTENT, ActionRiskLevel.CONFIRM, listOf("app", "app_label")),
+            descriptor("web_search", ToolLevels.IN_APP, args = listOf("query")),
+            descriptor("set_alarm", ToolLevels.SYSTEM_INTENT, args = listOf("time")),
+        ),
+    )
+
+    val learnedDescriptions = ToolDescriptions { id ->
+        when (id.value) {
+            "uninstall_app" -> ToolDescription(
+                ToolNamespace.DEVICE,
+                "Remove an app.",
+                listOf(ModelArg("app", "the app, in the user's own words", required = true, mention = true)),
+            )
+            "web_search" -> ToolDescription(
+                ToolNamespace.CONTENT,
+                "Search the web.",
+                listOf(ModelArg("query", "what to search for", required = true, mention = false)),
+            )
+            "set_alarm" -> ToolDescription(
+                ToolNamespace.DEVICE,
+                "Set an alarm.",
+                listOf(ModelArg("time", "the clock time", required = true, mention = false)),
+            )
+            else -> null
+        }
+    }
 }

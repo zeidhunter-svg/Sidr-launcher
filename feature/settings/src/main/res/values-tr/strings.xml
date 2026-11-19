@@ -41,6 +41,7 @@
     <string name="settings_prayer_times_title">Namaz vakitleri</string>
     <string name="settings_section_memory">Bellek</string>
     <string name="settings_learned_choices_title">Öğrenilmiş seçimler</string>
+    <string name="settings_learned_commands_title">Öğrenilmiş komutlar</string>
     <string name="settings_section_assistant">Asistan</string>
     <string name="settings_ai_provider_title">Yapay zeka sağlayıcı ayarları</string>
     <string name="settings_local_only_title">Yalnızca yerel</string>

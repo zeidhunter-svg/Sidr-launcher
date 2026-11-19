@@ -47,6 +47,7 @@
     <string name="settings_prayer_times_title">Prayer times</string>
     <string name="settings_section_memory">MEMORY</string>
     <string name="settings_learned_choices_title">Learned choices</string>
+    <string name="settings_learned_commands_title">Learned commands</string>
     <string name="settings_section_assistant">ASSISTANT</string>
     <string name="settings_ai_provider_title">AI provider settings</string>
     <string name="settings_local_only_title">Local-only mode</string>

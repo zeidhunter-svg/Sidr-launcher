@@ -66,6 +66,15 @@ sealed class Routes {
         const val ROUTE = "learned_choices"
     }
 
+    /**
+     * The learned-command cache's screen (A4′ phase 4, B-11): every learned command, its steps and its streak,
+     * each forgettable (`DOC-AML-5`). Reached from Settings; composed by `:app` from `:feature:launcher`'s screen
+     * — Settings only navigates, so there is no `feature → feature` edge. A pushed, unwrapped destination.
+     */
+    object LearnedCommands : Routes() {
+        const val ROUTE = "learned_commands"
+    }
+
     object Aliases : Routes() {
         const val ROUTE = "aliases"
     }

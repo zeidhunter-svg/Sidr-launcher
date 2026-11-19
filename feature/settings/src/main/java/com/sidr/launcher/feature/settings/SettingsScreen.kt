@@ -86,6 +86,7 @@ fun SettingsScreen(
         onLocalOnlyModeChanged = viewModel::setLocalOnlyMode,
         onAssistantProvider = viewModel::openAssistantProvider,
         onLearnedChoices = viewModel::openLearnedChoices,
+        onLearnedCommands = viewModel::openLearnedCommands,
         onAliases = viewModel::openAliases,
         onPrayerSettings = viewModel::openPrayerSettings,
         onSetDefaultLauncher = {
@@ -115,6 +116,7 @@ private fun SettingsContent(
     onLocalOnlyModeChanged: (Boolean) -> Unit,
     onAssistantProvider: () -> Unit,
     onLearnedChoices: () -> Unit,
+    onLearnedCommands: () -> Unit,
     onAliases: () -> Unit,
     onPrayerSettings: () -> Unit,
     onSetDefaultLauncher: () -> Unit,
@@ -250,6 +252,7 @@ private fun SettingsContent(
             // ── Memory ──────────────────────────────────────────────────────────
             SidrSectionHeader(text = sidrString(R.string.settings_section_memory))
             SidrNavigationRow(title = sidrString(R.string.settings_learned_choices_title), onClick = onLearnedChoices)
+            SidrNavigationRow(title = sidrString(R.string.settings_learned_commands_title), onClick = onLearnedCommands)
             SidrNavigationRow(title = sidrString(R.string.settings_aliases_title), onClick = onAliases)
 
             // ── Assistant ───────────────────────────────────────────────────────

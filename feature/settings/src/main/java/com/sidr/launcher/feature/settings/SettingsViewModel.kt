@@ -266,6 +266,10 @@ class SettingsViewModel @Inject constructor(
         _navigationEvents.trySend(NavigationEvent.NavigateTo(Routes.LearnedChoices.ROUTE))
     }
 
+    fun openLearnedCommands() {
+        _navigationEvents.trySend(NavigationEvent.NavigateTo(Routes.LearnedCommands.ROUTE))
+    }
+
     fun openAliases() {
         _navigationEvents.trySend(NavigationEvent.NavigateTo(Routes.Aliases.ROUTE))
     }

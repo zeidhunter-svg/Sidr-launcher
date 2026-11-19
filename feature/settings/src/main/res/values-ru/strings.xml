@@ -41,6 +41,7 @@
     <string name="settings_prayer_times_title">Время намаза</string>
     <string name="settings_section_memory">Память</string>
     <string name="settings_learned_choices_title">Изученные выборы</string>
+    <string name="settings_learned_commands_title">Выученные команды</string>
     <string name="settings_section_assistant">Ассистент</string>
     <string name="settings_ai_provider_title">Настройки провайдера ИИ</string>
     <string name="settings_local_only_title">Только локально</string>

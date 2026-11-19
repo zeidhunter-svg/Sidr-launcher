@@ -157,4 +157,9 @@
     <string name="launcher_agent_resume_failed">Не удалось продолжить план.</string>
     <string name="launcher_agent_learned_mark">Выученная команда</string>
     <string name="launcher_agent_learned_forget">Забыть</string>
+    <string name="launcher_learned_commands_title">Выученные команды</string>
+    <string name="launcher_learned_commands_empty">Пока ничего не выучено</string>
+    <string name="launcher_learned_commands_learning">%1$d / %2$d</string>
+    <string name="launcher_learned_commands_learned">Выучено</string>
+    <string name="launcher_learned_commands_failed">Не удалось прочитать выученные команды</string>
 </resources>

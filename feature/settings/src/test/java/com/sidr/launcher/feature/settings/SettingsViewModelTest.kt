@@ -327,6 +327,16 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `the learned commands row opens its screen`() = runTest(testDispatcher) {
+        val vm = buildViewModel()
+
+        vm.openLearnedCommands()
+        val event = vm.navigationEvents.first()
+
+        assertEquals(NavigationEvent.NavigateTo(Routes.LearnedCommands.ROUTE), event)
+    }
+
+    @Test
     fun `aliases entry emits navigation to aliases route`() = runTest(testDispatcher) {
         val vm = buildViewModel()
 

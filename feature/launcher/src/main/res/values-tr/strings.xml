@@ -157,4 +157,9 @@
     <string name="launcher_agent_resume_failed">Plan sürdürülemedi.</string>
     <string name="launcher_agent_learned_mark">Öğrenilmiş komut</string>
     <string name="launcher_agent_learned_forget">Unut</string>
+    <string name="launcher_learned_commands_title">Öğrenilmiş komutlar</string>
+    <string name="launcher_learned_commands_empty">Henüz öğrenilmiş bir şey yok</string>
+    <string name="launcher_learned_commands_learning">%1$d / %2$d</string>
+    <string name="launcher_learned_commands_learned">Öğrenildi</string>
+    <string name="launcher_learned_commands_failed">Öğrenilmiş komutlar okunamadı</string>
 </resources>

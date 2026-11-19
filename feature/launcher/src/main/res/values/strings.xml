@@ -236,4 +236,11 @@
          to forget the command (its form is deleted; the card stays). Class A, not locked. -->
     <string name="launcher_agent_learned_mark">Learned command</string>
     <string name="launcher_agent_learned_forget">Forget</string>
+    <!-- A4′ phase 4, Task 8 (plan §0.2 B-11): the screen of learned commands (DOC-AML-5), reached from Settings.
+         Class A, not locked. «learning» is a streak below the threshold: «2 / 3». -->
+    <string name="launcher_learned_commands_title">Learned commands</string>
+    <string name="launcher_learned_commands_empty">Nothing learned yet</string>
+    <string name="launcher_learned_commands_learning">%1$d / %2$d</string>
+    <string name="launcher_learned_commands_learned">Learned</string>
+    <string name="launcher_learned_commands_failed">Couldn’t read learned commands</string>
 </resources>

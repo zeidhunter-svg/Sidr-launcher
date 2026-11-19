@@ -8,6 +8,7 @@ import com.sidr.launcher.data.repository.db.dao.AgentSessionDao
 import com.sidr.launcher.data.repository.db.dao.AliasDao
 import com.sidr.launcher.data.repository.db.dao.AppUsageDao
 import com.sidr.launcher.data.repository.db.dao.IntentMatchDao
+import com.sidr.launcher.data.repository.db.dao.LearnedPlanDao
 import com.sidr.launcher.data.repository.db.dao.ResolutionPreferenceDao
 import com.sidr.launcher.data.repository.db.dao.SuggestionRankingDao
 import com.sidr.launcher.data.repository.db.entity.AgentPlanStepEntity
@@ -16,22 +17,26 @@ import com.sidr.launcher.data.repository.db.entity.AgentTraceEventEntity
 import com.sidr.launcher.data.repository.db.entity.AliasEntity
 import com.sidr.launcher.data.repository.db.entity.AppUsageEntity
 import com.sidr.launcher.data.repository.db.entity.IntentMatchEntity
+import com.sidr.launcher.data.repository.db.entity.LearnedPlanEntity
 import com.sidr.launcher.data.repository.db.entity.ResolutionPreferenceEntity
 import com.sidr.launcher.data.repository.db.entity.SuggestionRankingEntity
 
 /**
  * Room database for Block F history tables (Fork 2), the Stage-2 S2-1 `resolution_preferences`
- * table, the Stage-2 S2-2 `aliases` table, and the agentic-track A0 session tables.
+ * table, the Stage-2 S2-2 `aliases` table, the agentic-track A0 session tables, and the A4′ phase 4
+ * `learned_plans` table.
  *
- * - `version = 4`, `exportSchema = true` → schema JSON committed under `data/repository/schemas/`.
+ * - `version = 5`, `exportSchema = true` → schema JSON committed under `data/repository/schemas/`.
  *   `1.json` is the frozen historical 3-entity shape; `2.json` (Task 9) adds `resolution_preferences`
  *   via `Migration1To2`; `3.json` adds `aliases` via `Migration2To3`; `4.json` (A0 Task 10) adds the
- *   three `agent_*` tables via `Migration3To4`.
+ *   three `agent_*` tables via `Migration3To4`; `5.json` (A4′ phase 4, Task 5) adds `learned_plans` via
+ *   `Migration4To5`, which is also proved inside the JVM gate (`Migration4To5Test`, Robolectric).
  * - The five older tables are recreatable learning/cache tables. `fallbackToDestructiveMigration` may be
  *   enabled by the DI builder (F7) **only for debug builds**; release builds get no destructive
  *   fallback, so a missing migration fails loudly instead of silently wiping data.
  * - When an entity changes: bump `version`, add a `Migration` under `db/migrations/`, commit the new
- *   golden schema, and cover it in the instrumented `MigrationTest`.
+ *   golden schema, and cover it in the instrumented `MigrationTest` (and, since schema 5, in a Robolectric
+ *   `MigrationTestHelper` test the JVM gate runs — the schemas are unit-test assets too).
  */
 @Database(
     entities = [
@@ -51,8 +56,12 @@ import com.sidr.launcher.data.repository.db.entity.SuggestionRankingEntity
         AgentSessionEntity::class,
         AgentPlanStepEntity::class,
         AgentTraceEventEntity::class,
+        // A4′ phase 4: the learned-plan cache (spec §8), added in schema v5 via Migration4To5. User-taught
+        // state kept at rest (visible and deletable, DOC-AML-5) — like `resolution_preferences` and `aliases`,
+        // not a recreatable cache — so it gets a real migration, never the debug-only destructive path.
+        LearnedPlanEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(IntentMatchTypeConverter::class)
@@ -63,6 +72,7 @@ abstract class SidrDatabase : RoomDatabase() {
     abstract fun resolutionPreferenceDao(): ResolutionPreferenceDao
     abstract fun aliasDao(): AliasDao
     abstract fun agentSessionDao(): AgentSessionDao
+    abstract fun learnedPlanDao(): LearnedPlanDao
 
     companion object {
         const val DATABASE_NAME = "sidr_history.db"

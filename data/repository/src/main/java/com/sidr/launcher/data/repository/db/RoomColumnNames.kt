@@ -31,6 +31,12 @@ package com.sidr.launcher.data.repository.db
  * have forced a second entry in [APPROVED_SENSITIVE_COLUMNS]. The spec was amended to match on
  * 2026-08-21, so this block adds **no** new entry — the S2-1 exemption stays the only one in the
  * database, and it stays owner-granted.
+ *
+ * Agentic-track A4′ phase 4 Task 5 adds [LEARNED_PLANS] (schema v5). Unlike the agent tables it is **kept at
+ * rest** — it is the learned-plan cache, local-only, user-visible and deletable (spec §8, `DOC-AML-5`) — but it
+ * holds no raw command and no package: `form` is the command's folded words with each value replaced by `…`,
+ * and `template_json` the plan's tools and argument kinds, an app always a slot (spec §8.2). Its columns
+ * collide with no forbidden term, so this block adds **no** entry to [APPROVED_SENSITIVE_COLUMNS].
  */
 internal object RoomColumnNames {
 
@@ -132,8 +138,20 @@ internal object RoomColumnNames {
         "at",
     )
 
+    /**
+     * [com.sidr.launcher.data.repository.db.entity.LearnedPlanEntity] — table: learned_plans (A4′ phase 4,
+     * schema v5). The form is `form`, never a `query`: the name keeps the scan's full denylist on this table.
+     */
+    val LEARNED_PLANS: Set<String> = setOf(
+        "form",
+        "template_json",
+        "streak",
+        "confirmations",
+        "confirmed_at",
+    )
+
     val ALL: Set<String> = APP_USAGE + SUGGESTION_RANKING + INTENT_MATCH + RESOLUTION_PREFERENCES +
-        ALIASES + AGENT_SESSION + AGENT_PLAN_STEP + AGENT_TRACE_EVENT
+        ALIASES + AGENT_SESSION + AGENT_PLAN_STEP + AGENT_TRACE_EVENT + LEARNED_PLANS
 
     /**
      * Every `@Entity(tableName = ...)` in [SidrDatabase]. Kept in sync by hand with the entity
@@ -148,6 +166,7 @@ internal object RoomColumnNames {
         "agent_session",          // AgentSessionEntity      (A0 Task 10)
         "agent_plan_step",        // AgentPlanStepEntity     (A0 Task 10)
         "agent_trace_event",      // AgentTraceEventEntity   (A0 Task 10)
+        "learned_plans",          // LearnedPlanEntity       (A4′ phase 4, Task 5)
     )
 
     /**
@@ -165,6 +184,7 @@ internal object RoomColumnNames {
         "agent_session" to AGENT_SESSION,
         "agent_plan_step" to AGENT_PLAN_STEP,
         "agent_trace_event" to AGENT_TRACE_EVENT,
+        "learned_plans" to LEARNED_PLANS,
     )
 
     /**

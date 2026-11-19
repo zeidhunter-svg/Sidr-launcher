@@ -176,6 +176,25 @@ class RoomColumnNamesGuardTest {
     }
 
     /**
+     * A4′ phase 4, Task 5: `learned_plans` is inventoried column by column, and it added **no** exemption —
+     * the form is `form`, not a `query`, and the template `template_json`, so the full denylist scans it and
+     * `resolution_preferences.query` stays the only approved collision in the database.
+     */
+    @Test
+    fun `learned plans table is inventoried and needs no exemption`() {
+        assertTrue(RoomColumnNames.TABLE_NAMES.contains("learned_plans"))
+        assertEquals(
+            setOf("form", "template_json", "streak", "confirmations", "confirmed_at"),
+            RoomColumnNames.BY_TABLE["learned_plans"],
+        )
+        assertTrue(RoomColumnNames.ALL.containsAll(RoomColumnNames.BY_TABLE.getValue("learned_plans")))
+        assertEquals(
+            setOf("resolution_preferences.query"),
+            RoomColumnNames.APPROVED_SENSITIVE_COLUMNS,
+        )
+    }
+
+    /**
      * Task 9 scoped-exemption teeth test, part (b): the exemption is table+column scoped, NOT a
      * bare "query" allow. An unrelated table's `query` column must still be flagged even though
      * the column name is identical to the approved one.

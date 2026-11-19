@@ -13,6 +13,7 @@ import com.sidr.launcher.data.repository.db.dao.SuggestionRankingDao
 import com.sidr.launcher.data.repository.db.migrations.Migration1To2
 import com.sidr.launcher.data.repository.db.migrations.Migration2To3
 import com.sidr.launcher.data.repository.db.migrations.Migration3To4
+import com.sidr.launcher.data.repository.db.migrations.Migration4To5
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -29,7 +30,9 @@ import javax.inject.Singleton
  * is user-learned state, so a real migration is provided (see [Migration1To2]) rather than relying
  * on the debug-only destructive path. The A0 `agent_*` tables (see [Migration3To4]) hold at most one
  * in-flight session and are empty at rest, but they get a real migration for the same reason: a
- * destructive fallback that only exists in debug is not a migration strategy. Release builds get no destructive fallback: a missing
+ * destructive fallback that only exists in debug is not a migration strategy. The A4′ phase 4
+ * `learned_plans` table (see [Migration4To5]) is user-taught state, so it too has a real migration.
+ * Release builds get no destructive fallback: a missing
      * migration will crash loudly (expected — signals that a Migration object and schema bump are
      * required).
  *
@@ -47,7 +50,7 @@ object DatabaseModule {
             context,
             SidrDatabase::class.java,
             SidrDatabase.DATABASE_NAME,
-        ).addMigrations(Migration1To2, Migration2To3, Migration3To4)
+        ).addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5)
         if (BuildConfig.DEBUG) {
             builder.fallbackToDestructiveMigration()
         }

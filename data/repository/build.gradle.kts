@@ -35,6 +35,11 @@ android {
         getByName("androidTest") {
             assets.srcDirs(files("$projectDir/schemas"))
         }
+        // A4′ phase 4 (B-14): the same schemas as unit-test assets, so `Migration4To5Test` runs
+        // `MigrationTestHelper` under Robolectric inside the JVM gate, mirroring the block above.
+        getByName("test") {
+            assets.srcDirs(files("$projectDir/schemas"))
+        }
     }
 }
 
@@ -75,6 +80,8 @@ dependencies {
     // Test-only. `AgentSessionMappersTest` enumerates TraceEvent's sealed subclasses so that adding a
     // variant without teaching the mapper to read it fails a test instead of shipping.
     testImplementation(libs.kotlin.reflect)
+    // A4′ phase 4 (B-14): `MigrationTestHelper` for the Robolectric migration test in the JVM gate.
+    testImplementation(libs.room.testing)
 
     androidTestImplementation(libs.room.testing)
     androidTestImplementation(libs.androidx.test.ext.junit)

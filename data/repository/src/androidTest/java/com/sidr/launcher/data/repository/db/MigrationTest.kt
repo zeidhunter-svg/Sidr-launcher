@@ -6,6 +6,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.sidr.launcher.data.repository.db.migrations.Migration1To2
 import com.sidr.launcher.data.repository.db.migrations.Migration2To3
 import com.sidr.launcher.data.repository.db.migrations.Migration3To4
+import com.sidr.launcher.data.repository.db.migrations.Migration4To5
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -88,6 +89,29 @@ class MigrationTest {
         helper.createDatabase(TEST_DB, 1).close()
 
         helper.runMigrationsAndValidate(TEST_DB, 4, true, Migration1To2, Migration2To3, Migration3To4).close()
+    }
+
+    @Test
+    fun v4_to_v5_migration_addsLearnedPlansTable_andValidatesAgainstGoldenSchema() {
+        // Create the DB at v4 (schemas/4.json — everything up to the three agent_* tables).
+        helper.createDatabase(TEST_DB, 4).close()
+
+        // Run Migration4To5 and validate the resulting schema against schemas/5.json (adds learned_plans,
+        // A4′ phase 4). The same hop runs inside the JVM gate as `Migration4To5Test` (Robolectric); this one
+        // is for the device, at the owner's acceptance.
+        helper.runMigrationsAndValidate(TEST_DB, 5, true, Migration4To5).close()
+    }
+
+    /**
+     * The whole runway, v1 → v5: the four migration objects in sequence, which is what a device upgrading from
+     * the first install does. Supersedes nothing — `v1_to_v4_migrationRunway_composes` above stays as the
+     * runway up to the A0 tables.
+     */
+    @Test
+    fun v1_to_v5_migrationRunway_composes() {
+        helper.createDatabase(TEST_DB, 1).close()
+
+        helper.runMigrationsAndValidate(TEST_DB, 5, true, Migration1To2, Migration2To3, Migration3To4, Migration4To5).close()
     }
 
     private companion object {

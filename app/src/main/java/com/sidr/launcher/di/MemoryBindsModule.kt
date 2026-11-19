@@ -1,8 +1,10 @@
 package com.sidr.launcher.di
 
 import com.sidr.launcher.data.repository.db.AliasStoreImpl
+import com.sidr.launcher.data.repository.db.LearnedPlanStoreImpl
 import com.sidr.launcher.data.repository.db.ResolutionPreferenceStoreImpl
 import com.sidr.launcher.domain.memory.alias.AliasStore
+import com.sidr.launcher.domain.memory.plan.LearnedPlanStore
 import com.sidr.launcher.domain.memory.resolution.ResolutionPreferenceStore
 import dagger.Binds
 import dagger.Module
@@ -31,4 +33,11 @@ abstract class MemoryBindsModule {
     abstract fun bindAliasStore(
         impl: AliasStoreImpl,
     ): AliasStore
+
+    /** A4′ phase 4: the learned-plan cache (spec §8) — the on-device Room table, read by step 2c. */
+    @Binds
+    @Singleton
+    abstract fun bindLearnedPlanStore(
+        impl: LearnedPlanStoreImpl,
+    ): LearnedPlanStore
 }

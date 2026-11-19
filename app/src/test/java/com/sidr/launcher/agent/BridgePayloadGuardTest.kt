@@ -8,6 +8,7 @@ import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeIntentMatcher
+import com.sidr.launcher.core.testing.FakeLearnedPlanStore
 import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
 import com.sidr.launcher.core.testing.FakeSecureSecretStore
 import com.sidr.launcher.core.testing.FakeToolExecutor
@@ -56,6 +57,7 @@ import com.sidr.launcher.domain.ai.bridge.BridgeRendering
 import com.sidr.launcher.domain.ai.bridge.Interpretation
 import com.sidr.launcher.domain.ai.bridge.PrincipalId
 import com.sidr.launcher.domain.ai.bridge.ValueOrigin
+import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
 import com.sidr.launcher.domain.ai.router.toCommandOutcome
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.CommandOutcome
@@ -64,8 +66,16 @@ import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.memory.alias.Alias
 import com.sidr.launcher.domain.memory.alias.AliasTarget
+import com.sidr.launcher.domain.memory.plan.CommandForm
+import com.sidr.launcher.domain.memory.plan.FormPart
+import com.sidr.launcher.domain.memory.plan.LearnedPlan
+import com.sidr.launcher.domain.memory.plan.LearnedPlanShape
+import com.sidr.launcher.domain.memory.plan.PlanTemplate
+import com.sidr.launcher.domain.memory.plan.TemplateArg
+import com.sidr.launcher.domain.memory.plan.TemplateStep
 import com.sidr.launcher.domain.memory.resolution.CandidateSet
 import com.sidr.launcher.domain.memory.resolution.CapabilityKey
+import com.sidr.launcher.domain.memory.resolution.DEFAULT_AUTO_RESOLVE_STREAK_THRESHOLD
 import com.sidr.launcher.domain.memory.resolution.DefaultResolutionPreferencePolicy
 import com.sidr.launcher.domain.memory.resolution.PreferenceEvidence
 import com.sidr.launcher.domain.memory.resolution.ResolutionContext
@@ -116,10 +126,11 @@ import org.junit.Test
  * tool outside the offering, carrying an echo sentinel), so every command also produces a retry body,
  * and accepts the second.
  *
- * Seven private sources (spec §7.12.3 (1)), in two groups — said, not blurred (plan §0.5 S5):
- *  - four the bridge graph DOES read — the dynamic tier (registry), installed apps, the alias table,
- *    learned choices (binder): planted, asserted absent from every body, each with a control proving it
- *    was read on the device;
+ * Eight private sources (spec §7.12.3 (1)), in two groups — said, not blurred (plan §0.5 S5):
+ *  - five the bridge graph DOES read — the dynamic tier (registry), installed apps, the alias table,
+ *    learned choices (binder) and, since A4′ phase 4, the learned-plan cache (step 2c reads it whole on
+ *    every command, before the model is asked): planted, asserted absent from every body, each with a
+ *    control proving it was read on the device;
  *  - three it holds NO port to — prayer location, calendar, usage history: asserted absent, and held
  *    STRUCTURALLY by `the bridge's classes take no port to prayer, calendar or usage data`. Their
  *    sentinels are planted nowhere — there is nowhere to plant them — so the scan of the bodies is not
@@ -133,6 +144,8 @@ import org.junit.Test
  * is the sentinel only that source holds: «плимдорф» / `net.fixture.plimdorf` for the alias table,
  * «фальмира» / `net.fixture.falmira` for learned choices, «Vemblic» / `net.fixture.vemblic` for the app
  * list — each never typed and never bound, so it can only reach a body by that store being read whole.
+ * The learned-plan cache holds only sentinels of its own — the pinned form's word «плексорин» and the
+ * template's constant `SNTL-LEARNED-CONST` — and its form fits none of the commands, so nothing replays.
  *
  * **Why «Pellix» stays although Task 10 renamed it in its own tests (R14-43).** There the label and the
  * package were both EXPECTED values on a rendered card, and a substring check could pass on the wrong
@@ -152,6 +165,7 @@ class BridgePayloadGuardTest {
         "installed apps" to listOf("net.fixture.lumora", "net.fixture.vemblic", "Vemblic", "net.fixture.pellix.one", "net.fixture.pellix.two"),
         "alias table" to listOf("net.fixture.zantor", "Zantor", "плимдорф", "net.fixture.plimdorf"),
         "learned choices" to listOf("net.fixture.tessar.one", "net.fixture.tessar.two", "фальмира", "net.fixture.falmira"),
+        "learned plans" to listOf("плексорин", "SNTL-LEARNED-CONST"),
         "prayer location (no port)" to listOf("Ostrevik"),
         "calendar (no port)" to listOf("Halvorn standup"),
         "usage history (no port)" to listOf("net.fixture.usagelog"),
@@ -198,6 +212,33 @@ class BridgePayloadGuardTest {
         }
     }
 
+    /**
+     * The fifth source (A4′ phase 4, `DOC-AML-1`): the learned-plan cache, as step 2c reads it — whole, on every
+     * command. Mirrors the other four: a `core/testing` fake, as the alias and learned-choice stores above are.
+     * Its one PINNED form «плексорин …» (`launch_app` of the slot, then a search for the constant) fits none of
+     * [commands], so every command misses at 2c and goes on to the model — carrying neither the form's word nor
+     * the template's constant. Both are sentinels: planted here, typed nowhere.
+     */
+    private fun plantedLearnedPlans() = FakeLearnedPlanStore().apply {
+        runBlocking {
+            upsert(
+                pinned(
+                    "плексорин",
+                    TemplateStep(ToolIds.LAUNCH_APP, mapOf("app" to TemplateArg.Slot(0))),
+                    TemplateStep(InAppToolIds.WEB_SEARCH, mapOf("query" to TemplateArg.Constant("SNTL-LEARNED-CONST"))),
+                ),
+            )
+        }
+    }
+
+    /** A form «<word> …» confirmed as often as pinning takes (`LearnedPlan.pinned`). */
+    private fun pinned(word: String, vararg steps: TemplateStep) = LearnedPlan(
+        shape = LearnedPlanShape(CommandForm(listOf(FormPart.Word(word), FormPart.Slot)), PlanTemplate(steps.toList())),
+        streak = DEFAULT_AUTO_RESOLVE_STREAK_THRESHOLD,
+        confirmations = DEFAULT_AUTO_RESOLVE_STREAK_THRESHOLD,
+        confirmedAtEpochMs = 1L,
+    )
+
     private class Capture(private val mode: BridgeTransportMode) {
         val bodies = mutableListOf<String>()
 
@@ -228,42 +269,59 @@ class BridgePayloadGuardTest {
         }
     }
 
-    private fun route(mode: BridgeTransportMode, capture: Capture, baseUrl: String = "https://api.example.com/v1") = BridgeProvidesModule.provideRouteCommandUseCase(
-        handleUserCommand = HandleUserCommandUseCase(
-            matcher = FakeIntentMatcher(),
-            resolver = IntentActionResolver(apps()),
-            executor = FakeActionExecutor(),
-            confidencePolicy = DefaultIntentConfidencePolicy(),
-            recordingScope = CoroutineScope(Dispatchers.Unconfined),
-        ),
-        modelPlanner = BridgeProvidesModule.provideModelPlanner(
-            federation.registry,
-            BridgeProvidesModule.provideToolDescriptions(AuthoredToolDescriptions()),
-            OpenAiCompatibleBridgeTransport(
-                HttpClient(capture.engine),
-                FakeSecureSecretStore().apply { runBlocking { put(SecretKeys.apiKey(provider), keySentinel) } },
-                FakeAiProviderConfigRepository(AiProviderConfig(provider, baseUrl, AiModelId("fixture-model"))),
-                Dispatchers.Unconfined,
-                mode,
+    /**
+     * The route as `BridgeProvidesModule` builds it. One registry, one set of descriptions, one binder and one
+     * folding are handed to the model planner, the route and the learned plans alike — as Hilt hands its
+     * singletons — so step 2c's replay is judged and bound by the same gates as step 7's reading (B-4).
+     */
+    private fun route(
+        mode: BridgeTransportMode,
+        capture: Capture,
+        baseUrl: String = "https://api.example.com/v1",
+        learnedStore: FakeLearnedPlanStore = plantedLearnedPlans(),
+    ): RouteCommandUseCase {
+        val descriptions = BridgeProvidesModule.provideToolDescriptions(AuthoredToolDescriptions())
+        val binder = binder()
+        return BridgeProvidesModule.provideRouteCommandUseCase(
+            handleUserCommand = HandleUserCommandUseCase(
+                matcher = FakeIntentMatcher(),
+                resolver = IntentActionResolver(apps()),
+                executor = FakeActionExecutor(),
+                confidencePolicy = DefaultIntentConfidencePolicy(),
+                recordingScope = CoroutineScope(Dispatchers.Unconfined),
             ),
-            // Not `provideTextFolding()`: off Robolectric `android.icu` is the android.jar stub. The folding
-            // reads the model's reply only and adds nothing to a request, so the payload under guard is the same.
-            PlainTextFolding,
-        ),
-        binder = binder(),
-        featureFlagRepository = FakeFeatureFlagRepository(),
-        providerConfigRepository = configuredProvider(),
-        connectivityChecker = FakeConnectivityChecker(initiallyOnline = true),
-        startAgentSession = StartAgentSessionUseCase(
-            TemplatePlanner(),
-            FakeAgentSessionStore(),
-            object : AgentSessionIdFactory {
-                private var n = 0
-                override fun newId() = AgentSessionId("guard-${++n}")
-            },
-            federation.registry,
-        ),
-    )
+            modelPlanner = BridgeProvidesModule.provideModelPlanner(
+                federation.registry,
+                descriptions,
+                OpenAiCompatibleBridgeTransport(
+                    HttpClient(capture.engine),
+                    FakeSecureSecretStore().apply { runBlocking { put(SecretKeys.apiKey(provider), keySentinel) } },
+                    FakeAiProviderConfigRepository(AiProviderConfig(provider, baseUrl, AiModelId("fixture-model"))),
+                    Dispatchers.Unconfined,
+                    mode,
+                ),
+                // Not `provideTextFolding()`: off Robolectric `android.icu` is the android.jar stub. The folding
+                // reads the model's reply only and adds nothing to a request, so the payload under guard is the same.
+                PlainTextFolding,
+            ),
+            binder = binder,
+            featureFlagRepository = FakeFeatureFlagRepository(),
+            providerConfigRepository = configuredProvider(),
+            connectivityChecker = FakeConnectivityChecker(initiallyOnline = true),
+            startAgentSession = StartAgentSessionUseCase(
+                TemplatePlanner(),
+                FakeAgentSessionStore(),
+                object : AgentSessionIdFactory {
+                    private var n = 0
+                    override fun newId() = AgentSessionId("guard-${++n}")
+                },
+                federation.registry,
+            ),
+            // A4′ phase 4: step 2c's cache, by its own `@Provides` — the planner's registry, descriptions and
+            // folding, the route's binder.
+            learnedPlans = BridgeProvidesModule.provideLearnedPlans(learnedStore, federation.registry, descriptions, binder, PlainTextFolding),
+        )
+    }
 
     /** The device's binder over the planted stores, by `BridgeProvidesModule`'s own `@Provides` — the route's and the remainder's. */
     private fun binder() = BridgeProvidesModule.provideMentionBinder(
@@ -280,25 +338,30 @@ class BridgePayloadGuardTest {
         ),
     )
 
-    /** [routed] has one entry per body: the command whose `route()` call was running when that body was sent. */
+    /**
+     * [routed] has one entry per body: the command whose `route()` call was running when that body was sent.
+     * [learnedReads] is how many times the run's planted learned-plan store was read.
+     */
     private data class Run(
         val mode: BridgeTransportMode,
         val bodies: List<String>,
         val routed: List<String>,
         val outcomes: List<CommandOutcome>,
+        val learnedReads: Int,
     )
 
     private val runs: List<Run> by lazy {
         BridgeTransportMode.entries.map { mode ->
             val capture = Capture(mode)
-            val route = route(mode, capture)
+            val learnedStore = plantedLearnedPlans()
+            val route = route(mode, capture, learnedStore = learnedStore)
             val routed = mutableListOf<String>()
             val outcomes = commands.map { command ->
                 val outcome = runBlocking { route.route(command) }
                 repeat(capture.bodies.size - routed.size) { routed += command }
                 outcome
             }
-            Run(mode, capture.bodies.toList(), routed.toList(), outcomes)
+            Run(mode, capture.bodies.toList(), routed.toList(), outcomes, learnedStore.reads)
         }
     }
 
@@ -494,6 +557,9 @@ class BridgePayloadGuardTest {
             assertEquals("${run.mode}: alias table", "net.fixture.zantor", pinned(1))
             assertEquals("${run.mode}: learned choices", "net.fixture.tessar.two", pinned(2))
             assertEquals("${run.mode}: a choice", listOf("net.fixture.pellix.one", "net.fixture.pellix.two"), bound[3].choices.single().choice.candidates.map { it.packageName })
+            // A4′ phase 4: step 2c read the learned-plan cache — whole — once for every command, before the
+            // model was asked, and none of its forms fit (every command still reached step 7, below).
+            assertEquals("${run.mode}: learned plans", commands.size, run.learnedReads)
             assertEquals(commands.size * 2, run.bodies.size)
             // Task 11 ruling on hole H4: the user slot of every body — first ask and retry alike — is
             // exactly the command that was being routed, as the user typed it (`USER_COMMAND`), and nothing
@@ -627,6 +693,36 @@ class BridgePayloadGuardTest {
         // The control: the same goal through the route asks the model — exactly once.
         runBlocking { route.route(goal.text) }
         assertEquals("the control asked once", 1, capture.bodies.count { messagesOf(it).size == 2 })
+    }
+
+    /**
+     * A4′ phase 4 (spec §8, `DOC-AML-1`): a command the user taught is answered on the device — step 2c replays
+     * it and NOTHING leaves, not even the command. A second store, «тирмалон …» pinned (`launch_app` of the
+     * slot; a typed form, not a sentinel): «тирмалон lumora» starts its session at once, carrying the mark of the
+     * form it was learned in, and the mock sees no body. Not vacuous: the same command over an empty store —
+     * unlearned — reaches step 7 and asks the model exactly once, counted as first asks (a body of two
+     * messages), as the remainder's control counts them: the mock rejects every first answer, so the raw count
+     * is two.
+     */
+    @Test
+    fun `a learned command sends nothing, and the same command unlearned is asked once`() {
+        val form = CommandForm(listOf(FormPart.Word("тирмалон"), FormPart.Slot))
+        val taught = FakeLearnedPlanStore().apply {
+            runBlocking { upsert(pinned("тирмалон", TemplateStep(ToolIds.LAUNCH_APP, mapOf("app" to TemplateArg.Slot(0))))) }
+        }
+        val learnedCapture = Capture(BridgeTransportMode.PROMPT_ONLY)
+        val learned = runBlocking {
+            route(BridgeTransportMode.PROMPT_ONLY, learnedCapture, learnedStore = taught).route("тирмалон lumora")
+        }
+
+        assertEquals("a learned command sent no body", emptyList<String>(), learnedCapture.bodies)
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("guard-1"), learned = form), learned)
+
+        val unlearnedCapture = Capture(BridgeTransportMode.PROMPT_ONLY)
+        runBlocking {
+            route(BridgeTransportMode.PROMPT_ONLY, unlearnedCapture, learnedStore = FakeLearnedPlanStore()).route("тирмалон lumora")
+        }
+        assertEquals("the same command unlearned asked once", 1, unlearnedCapture.bodies.count { messagesOf(it).size == 2 })
     }
 
     /** Spec §7.12.3 (1), the three sources with no port (plan §0.5 S5): held by the bridge's signatures. */

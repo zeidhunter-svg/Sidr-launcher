@@ -168,8 +168,8 @@ class RouteCommandUseCase(
     private val connectivityChecker: ConnectivityChecker,
     private val startAgentSession: StartAgentSessionUseCase,
     // A4′ phase 4: step 2c's replay and step 7's `learnable`. The default replays and teaches nothing, so the
-    // test construction sites stay as they were (B-12); the production provider is to take it with no default
-    // (phase 4 Task 6 wires it — until then production builds the route with `NONE`).
+    // test construction sites stay as they were (B-12); the production provider takes it with no default
+    // (`BridgeProvidesModule.provideRouteCommandUseCase`, phase 4 Task 6), so the graph never builds it with `NONE`.
     private val learnedPlans: LearnedPlans = LearnedPlans.NONE,
 ) {
 

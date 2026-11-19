@@ -9,6 +9,10 @@ import com.sidr.launcher.domain.memory.alias.PruneUnavailableAliasesUseCase
 import com.sidr.launcher.domain.memory.alias.ResolvedCommandStep
 import com.sidr.launcher.domain.memory.alias.ResolveCommandWithAliasUseCase
 import com.sidr.launcher.domain.memory.alias.SaveAliasUseCase
+import com.sidr.launcher.domain.memory.plan.ForgetLearnedPlanUseCase
+import com.sidr.launcher.domain.memory.plan.LearnedPlanStore
+import com.sidr.launcher.domain.memory.plan.ObserveLearnedPlansUseCase
+import com.sidr.launcher.domain.memory.plan.RecordLearnedPlanUseCase
 import com.sidr.launcher.domain.memory.resolution.CommandRouteStep
 import com.sidr.launcher.domain.memory.resolution.DefaultResolutionPreferencePolicy
 import com.sidr.launcher.domain.memory.resolution.DeleteLearnedChoiceUseCase
@@ -129,6 +133,26 @@ object MemoryProvidesModule {
         store: AliasStore,
         installedApps: InstalledAppsRepository,
     ): PruneUnavailableAliasesUseCase = PruneUnavailableAliasesUseCase(store, installedApps)
+
+    /**
+     * A4′ phase 4: the learned-plan cache's three use cases (spec §8) over the one [LearnedPlanStore]
+     * (`MemoryBindsModule`) step 2c reads — recording after «Выполнить» started the session, forgetting and the
+     * list for the learned-commands screen. Step 2c's replay itself is `BridgeProvidesModule.provideLearnedPlans`.
+     */
+    @Provides
+    @Singleton
+    fun provideRecordLearnedPlanUseCase(store: LearnedPlanStore): RecordLearnedPlanUseCase =
+        RecordLearnedPlanUseCase(store)
+
+    @Provides
+    @Singleton
+    fun provideForgetLearnedPlanUseCase(store: LearnedPlanStore): ForgetLearnedPlanUseCase =
+        ForgetLearnedPlanUseCase(store)
+
+    @Provides
+    @Singleton
+    fun provideObserveLearnedPlansUseCase(store: LearnedPlanStore): ObserveLearnedPlansUseCase =
+        ObserveLearnedPlansUseCase(store)
 
     @Provides
     @Singleton

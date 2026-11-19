@@ -8,6 +8,7 @@ import com.sidr.launcher.data.repository.db.dao.AgentSessionDao
 import com.sidr.launcher.data.repository.db.dao.AliasDao
 import com.sidr.launcher.data.repository.db.dao.AppUsageDao
 import com.sidr.launcher.data.repository.db.dao.IntentMatchDao
+import com.sidr.launcher.data.repository.db.dao.LearnedPlanDao
 import com.sidr.launcher.data.repository.db.dao.ResolutionPreferenceDao
 import com.sidr.launcher.data.repository.db.dao.SuggestionRankingDao
 import com.sidr.launcher.data.repository.db.migrations.Migration1To2
@@ -76,4 +77,8 @@ object DatabaseModule {
 
     @Provides
     fun provideAgentSessionDao(db: SidrDatabase): AgentSessionDao = db.agentSessionDao()
+
+    /** A4′ phase 4: the learned-plan cache's table (schema v5), behind `LearnedPlanStoreImpl`. */
+    @Provides
+    fun provideLearnedPlanDao(db: SidrDatabase): LearnedPlanDao = db.learnedPlanDao()
 }

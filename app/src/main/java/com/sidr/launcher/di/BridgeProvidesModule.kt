@@ -19,6 +19,9 @@ import com.sidr.launcher.domain.ai.bridge.ToolDescriptions
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
 import com.sidr.launcher.domain.connectivity.ConnectivityChecker
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
+import com.sidr.launcher.domain.memory.plan.DefaultLearnedPlans
+import com.sidr.launcher.domain.memory.plan.LearnedPlanStore
+import com.sidr.launcher.domain.memory.plan.LearnedPlans
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.security.SecureSecretStore
 import com.sidr.launcher.domain.text.TextFolding
@@ -34,7 +37,8 @@ import javax.inject.Singleton
  * The bridge (A4′ phase 3a, D1–D3) — replaces `RouterProvidesModule`. One model path: the
  * [ModelPlanner] over the federation's offered tools and our descriptions, its own transport over its
  * own HTTP client (socket bound = the longest per-host ceiling, `BridgeBudget.longestCeilingMs`), the device-side [MentionBinder], and [RouteCommandUseCase] asking the
- * planner at step 7 only. Lazy singletons; nothing here is on the launcher's cold path.
+ * planner at step 7 only — and, since A4′ phase 4, replaying a command the user taught at step 2c over the same
+ * gates ([LearnedPlans]). Lazy singletons; nothing here is on the launcher's cold path.
  *
  * The model planner is NOT in `AgentProvidesModule`'s `CompositePlanner` list — that list is what step
  * 2b and resume ask, and `DoctrineGuardTest > the composition root's planner list matches the declared
@@ -96,6 +100,27 @@ object BridgeProvidesModule {
     @Singleton
     fun provideMentionBinder(impl: DeviceMentionBinder): MentionBinder = impl
 
+    /**
+     * Step 2c's learned-plan cache (A4′ phase 4, spec §8; plan §0.2 B-4): **the same gates as step 7, by
+     * construction** — the [registry], [descriptions] and [folding] [provideModelPlanner] receives, Android's
+     * offered levels ([BridgeFilter.ANDROID_OFFERED_LEVELS], the planner's own), and the route's [binder]. So a
+     * replay is judged against the offering step 7 would send, by the validator step 7's planner runs, and bound
+     * by the binder step 7's reading is bound by. No second folding: the one [provideTextFolding] binds.
+     *
+     * The [store] is the on-device table (`MemoryBindsModule`); nothing it holds goes into a request
+     * (`BridgePayloadGuardTest`, its fifth private source, `DOC-AML-1`).
+     */
+    @Provides
+    @Singleton
+    fun provideLearnedPlans(
+        store: LearnedPlanStore,
+        registry: ToolRegistry,
+        descriptions: ToolDescriptions,
+        binder: MentionBinder,
+        folding: TextFolding,
+    ): LearnedPlans = DefaultLearnedPlans(store, registry, descriptions, BridgeFilter.ANDROID_OFFERED_LEVELS, binder, folding)
+
+    /** [learnedPlans] has no default here (B-12): the graph cannot build a route without step 2c's cache. */
     @Provides
     @Singleton
     fun provideRouteCommandUseCase(
@@ -106,6 +131,7 @@ object BridgeProvidesModule {
         providerConfigRepository: AiProviderConfigRepository,
         connectivityChecker: ConnectivityChecker,
         startAgentSession: StartAgentSessionUseCase,
+        learnedPlans: LearnedPlans,
     ): RouteCommandUseCase = RouteCommandUseCase(
         handleUserCommand = handleUserCommand,
         modelPlanner = modelPlanner,
@@ -114,5 +140,6 @@ object BridgeProvidesModule {
         providerConfigRepository = providerConfigRepository,
         connectivityChecker = connectivityChecker,
         startAgentSession = startAgentSession,
+        learnedPlans = learnedPlans,
     )
 }

@@ -40,8 +40,10 @@ import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ObservedFact
 import com.sidr.launcher.domain.tool.ToolDescriptor
+import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolDurability
 import com.sidr.launcher.domain.tool.ToolEffect
+import com.sidr.launcher.domain.tool.ToolExecutor
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInverses
@@ -53,10 +55,12 @@ import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.tool.Undo
 import com.sidr.launcher.domain.trace.ExecutionTrace
 import com.sidr.launcher.domain.trace.TraceEvent
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -106,7 +110,7 @@ class LauncherAgentSessionTest {
     }
 
     private fun collaborator(
-        tools: FakeToolExecutor,
+        tools: ToolExecutor,
         scope: CoroutineScope,
         registry: ToolRegistry = this.registry,
         inverses: ToolInverses = ToolInverses { _, _ -> Undo.NotUndoable },
@@ -654,5 +658,64 @@ class LauncherAgentSessionTest {
         assertEquals(waiting, agent.session.value?.id)
         assertEquals(ExecutionState.Paused, agent.session.value?.state)
         assertNull("a session restored at start carries no mark (fork 4-5)", agent.learned.value)
+    }
+
+    /** Answers every call `Effected`, but holds the call at [gateAt] until [gate] completes. */
+    private class GatedToolExecutor(private val gateAt: Int, private val gate: CompletableDeferred<Unit>) : ToolExecutor {
+        val invocations = mutableListOf<ResolvedInvocation>()
+
+        override suspend fun invoke(invocation: ResolvedInvocation): ToolResult {
+            val index = invocations.size
+            invocations += invocation
+            if (index == gateAt) gate.await()
+            return ToolResult.Effected()
+        }
+    }
+
+    /**
+     * Task 7 review, fix round 1 (Important 1): «Забыть» forgets the command whose card is ON SCREEN. A learned
+     * command started while another learned session's card stands takes its mark only when its own run returns
+     * and it is shown — until then the screen still shows the previous card and that card's mark, and «Забыть»
+     * under it must forget that command, not the one still running. The second run is held on a gate and driven
+     * with `runCurrent` only: no virtual time passes, so the engine's per-step wall-clock budget does not fire.
+     */
+    @Test
+    fun `Forget while another learned session is still running forgets the command on screen`() = runTest {
+        val modelTextForm = CommandForm.parse("поищи что нибудь про орвелин")
+        learnedStore.upsert(learnedRow(searchForm, searchTool, "query"))
+        learnedStore.upsert(
+            LearnedPlan(
+                shape = LearnedPlanShape(modelTextForm, PlanTemplate(listOf(TemplateStep(searchTool, mapOf("query" to TemplateArg.Constant("орвелин история")))))),
+                streak = 3,
+                confirmations = 3,
+                confirmedAtEpochMs = 0L,
+            ),
+        )
+        val gate = CompletableDeferred<Unit>()
+        val tools = GatedToolExecutor(gateAt = 1, gate = gate)
+        val agent = collaborator(tools, this)
+        val shown = startedSearch()
+        agent.attach(shown, searchForm)
+        runCurrent()
+        check(agent.session.value?.state == ExecutionState.Completed) { "seed expected Completed, was ${agent.session.value?.state}" }
+
+        val running = startedSearch()
+        agent.attach(running, modelTextForm)
+        runCurrent()
+        check(tools.invocations.size == 2) { "the second session's step must be in flight, invocations=${tools.invocations.size}" }
+        assertEquals("the previous card is still on screen", shown, agent.session.value?.id)
+        assertEquals("with its own mark", searchForm, agent.learned.value)
+
+        agent.forgetLearned()
+        runCurrent()
+
+        assertEquals("«Забыть» forgot the command on screen, and only it", setOf(modelTextForm.key), learnedStore.rows.keys)
+        assertNull("the forgotten command's mark is gone", agent.learned.value)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(running, agent.session.value?.id)
+        assertEquals("the running learned session arrives with its own mark", modelTextForm, agent.learned.value)
     }
 }

@@ -131,12 +131,18 @@ internal class LauncherAgentSession(
      * Shows the session [id] — the one just started and persisted — after running it. [learned] is the form of the
      * learned command that started it, or `null` for every other start (B-7, B-10): the mark is set here for that
      * session only, and never cleared here — a session that is not the marked one drops it in [show].
+     *
+     * **Set once the run has returned, immediately before [show]** (Task 7 review, fix round 1). While the run is
+     * in flight the screen still shows the previous card and that card's mark: a mark set earlier would belong to
+     * a session not yet on screen, and «Забыть» under the old card ([forgetLearned]) would forget the command still
+     * running — or «Закрыть» on it would drop the new session's mark before it arrived.
      */
     fun attach(id: AgentSessionId, learned: CommandForm? = null) = scope.launch {
         val active = (store.active() as? OperationResult.Success)?.value ?: return@launch
         if (active.id != id) return@launch
+        val ran = (runSession.run(active) as? OperationResult.Success)?.value
         if (learned != null) learnedMark = id to learned
-        show((runSession.run(active) as? OperationResult.Success)?.value)
+        show(ran)
     }
 
     /**

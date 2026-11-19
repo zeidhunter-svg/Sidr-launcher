@@ -238,6 +238,33 @@ class LearnedFormsTest {
         )
     }
 
+    /**
+     * Fix round 1 (review, Important 1): slots are numbered in the order the command says them, not in the
+     * order the arguments come — `near` is given first and said second, so it is slot 1. Numbered the other way,
+     * a card-less replay would put each value into the other argument.
+     */
+    @Test
+    fun `two slots are numbered in the order the command says them`() {
+        val shape = learned("найди книгу в центре", step(WEB_SEARCH, "near" to said("центре"), "query" to said("книгу")))
+
+        assertEquals("найди … в …", shape.form.key)
+        assertEquals(
+            PlanTemplate(listOf(TemplateStep(WEB_SEARCH, mapOf("near" to TemplateArg.Slot(1), "query" to TemplateArg.Slot(0))))),
+            shape.template,
+        )
+        assertEquals(listOf("телефон", "Казани"), LearnedForms.match(shape.form, "найди телефон в Казани", folding))
+    }
+
+    /**
+     * Fix round 1 (review, Important 2): `match`'s own whole-token rule, apart from `learn`'s boundary check —
+     * a slot neither starts (`сотри-Vemblic`) nor ends (`книгу-в`) inside a space-separated word.
+     */
+    @Test
+    fun `a slot never takes part of a space-separated word`() {
+        assertNull(LearnedForms.match(CommandForm.parse("сотри …"), "сотри-Vemblic", folding))
+        assertNull(LearnedForms.match(CommandForm.parse("найди … в …"), "найди книгу-в магазине", folding))
+    }
+
     private companion object {
         val UNINSTALL_APP = ToolId("uninstall_app")
         val SET_ALARM = ToolId("set_alarm")

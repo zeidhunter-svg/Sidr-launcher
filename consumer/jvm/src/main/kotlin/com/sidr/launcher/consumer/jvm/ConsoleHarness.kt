@@ -6,6 +6,7 @@ import com.sidr.launcher.consumer.jvm.bridge.SandboxToolDescriptions
 import com.sidr.launcher.consumer.jvm.plan.FilePlanner
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionIdFactory
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionStore
+import com.sidr.launcher.consumer.jvm.store.JvmLearnedPlanStore
 import com.sidr.launcher.consumer.jvm.text.JdkTextFolding
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolInverses
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolSource
@@ -13,6 +14,7 @@ import com.sidr.launcher.consumer.jvm.tool.SandboxToolWorker
 import com.sidr.launcher.domain.agent.AgentExecutor
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.AgentSession
+import com.sidr.launcher.domain.agent.ExecutionPlan
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.PlanStep
@@ -30,6 +32,11 @@ import com.sidr.launcher.domain.ai.bridge.PrincipalId
 import com.sidr.launcher.domain.ai.bridge.TransportReply
 import com.sidr.launcher.domain.ai.bridge.ValueOrigin
 import com.sidr.launcher.domain.ai.bridge.plan
+import com.sidr.launcher.domain.memory.plan.DefaultLearnedPlans
+import com.sidr.launcher.domain.memory.plan.LearnedPlanShape
+import com.sidr.launcher.domain.memory.plan.RecordLearnedPlanUseCase
+import com.sidr.launcher.domain.memory.plan.Replay
+import com.sidr.launcher.domain.memory.plan.needsCard
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.InvocationValidator
@@ -75,6 +82,15 @@ import kotlin.coroutines.EmptyCoroutineContext
  * not a plan, and every binding that is not one, is said and starts nothing. A reading is never stored: a
  * card left unanswered is dropped. `remove …` / `rename …` keep the deterministic `FilePlanner` — the model
  * is asked only on `ask`.
+ *
+ * **The learned-plan cache (A4′ phase 4, B-13): step 2c of `ask`.** Before the model is asked, the command is
+ * tried against the learned forms ([DefaultLearnedPlans.replay], the same gates as a fresh reading — the same
+ * registry, offering, binder and folding). A bound replay prints `Learned command: <form>` and starts the same
+ * engine at once — or, when [needsCard] (a pick is owed, or an `EXTERNAL` step carries a model-written value),
+ * shows the card first. **Nothing is decided on the person's behalf:** the engine's consent prompt of a risky
+ * step (`delete_file`) is asked on every replay, exactly as for a model plan. A miss — and an unreadable
+ * learned-plan file is a miss — goes to the model unchanged. A fresh reading is recorded only after its card's
+ * `y` **and** a started session; a replay records nothing (the streak counts confirmed model readings).
  */
 class ConsoleHarness(
     root: Path,
@@ -126,13 +142,26 @@ class ConsoleHarness(
     )
     private val binder = SandboxMentionBinder(root, SandboxFileSort(root, JdkTextFolding, worldContext), registry)
 
+    // The learned-plan cache (A4′ phase 4, B-13): the same registry, descriptions, levels, binder and folding as
+    // the bridge above, so a replay is judged by the gates a fresh reading is — and a file beside the session's.
+    private val learnedStore = JvmLearnedPlanStore(root.resolve(".sidr-agent/learned-plans.json"))
+    private val learnedPlans = DefaultLearnedPlans(
+        store = learnedStore,
+        registry = registry,
+        descriptions = SandboxToolDescriptions(),
+        levels = SandboxToolDescriptions.OFFERED_LEVELS,
+        binder = binder,
+        folding = JdkTextFolding,
+    )
+    private val recordLearned = RecordLearnedPlanUseCase(learnedStore)
+
     private var printed = 0
 
     suspend fun run(goalText: String): ExecutionState {
         val restored = restore()
         val session = restored ?: when (val command = modelCommandOf(goalText)) {
             null -> start(goalText) ?: return ExecutionState.Blocked
-            else -> when (val read = interpret(command)) {
+            else -> when (val read = replayOrInterpret(command)) {
                 is Interpreted.Started -> read.session
                 is Interpreted.NotStarted -> return read.state
             }
@@ -208,6 +237,23 @@ class ConsoleHarness(
         return Interpreted.NotStarted(state)
     }
 
+    /** Step 2c: a learned form first, the model only on a miss (B-13). */
+    private suspend fun replayOrInterpret(command: String): Interpreted =
+        when (val replay = learnedPlans.replay(command)) {
+            Replay.Miss -> interpret(command)
+            is Replay.Bound -> {
+                out("Learned command: ${replay.form.key}")
+                // A replay writes nothing: no `learnable`, so the card's `y` records nothing either.
+                if (replay.act.needsCard()) card(replay.act, learnable = null) else startAtOnce(replay.act)
+            }
+        }
+
+    /** A bound reading that needs no card: started with no question; the engine's own prompts still apply. */
+    private suspend fun startAtOnce(act: Interpretation.Act): Interpreted {
+        val plan = act.plan() ?: return notStarted("A pick is owed before this reading can run, and this harness takes none. Nothing ran.")
+        return startPlanned(act, plan, learnable = null)
+    }
+
     /**
      * Model → validator (inside [BridgeModelPlanner]) → binder → the card. Exhaustive with no `else` over
      * [ModelPlanning] and [Binding]: a new answer must decide here what it means for this consumer.
@@ -216,7 +262,7 @@ class ConsoleHarness(
         val goal = AgentGoal(text = command, shape = GoalShape.Free(command))
         return when (val planning = modelPlanner.plan(command)) {
             is ModelPlanning.Proposed -> when (val binding = binder.bind(goal, planning.steps)) {
-                is Binding.Bound -> card(binding.interpretation)
+                is Binding.Bound -> card(binding.interpretation, learnable = learnedPlans.learnable(command, planning.steps))
                 is Binding.NotFound -> notStarted("No file in the sandbox answers to \"${binding.mention}\". Nothing ran.")
                 is Binding.NotUnderstood -> notStarted("Could not read \"${binding.words}\". Nothing ran.")
                 Binding.Unavailable -> notStarted(
@@ -238,7 +284,7 @@ class ConsoleHarness(
      * `y` starts it, through `startPlanned`; anything else, or no answer at all, drops the reading
      * (`Cancelled`: the person did not say yes; nothing was started, nothing is stored).
      */
-    private suspend fun card(act: Interpretation.Act): Interpreted {
+    private suspend fun card(act: Interpretation.Act, learnable: LearnedPlanShape?): Interpreted {
         // No pick is ever owed from this consumer's binder (it fails a file choice closed); were one owed,
         // nothing would start.
         val plan = act.plan() ?: return notStarted("A pick is owed before this reading can run, and this harness takes none. Nothing ran.")
@@ -257,11 +303,21 @@ class ConsoleHarness(
         val answer = ask() ?: return notStarted("No answer given — the reading is dropped; nothing was started.", ExecutionState.Cancelled)
         if (answer.trim().lowercase() != "y") return notStarted("Not run.", ExecutionState.Cancelled)
 
+        return startPlanned(act, plan, learnable)
+    }
+
+    /** `startPlanned`, then — only once the session started — what a fresh reading teaches is recorded (B-8). */
+    private suspend fun startPlanned(act: Interpretation.Act, plan: ExecutionPlan, learnable: LearnedPlanShape?): Interpreted {
         val starting = StartAgentSessionUseCase(FilePlanner(), store, JvmAgentSessionIdFactory(), registry)
         return when (val started = starting.startPlanned(act.goal, plan)) {
             is OperationResult.Failure -> notStarted("Store failure: ${started.error}", ExecutionState.Failed)
-            is OperationResult.Success -> started.value?.let { Interpreted.Started(it) }
-                ?: notStarted("The reading does not check out against this registry. Nothing ran.")
+            is OperationResult.Success -> {
+                val session = started.value ?: return notStarted("The reading does not check out against this registry. Nothing ran.")
+                if (learnable != null && recordLearned.record(learnable) is OperationResult.Failure) {
+                    out("The learned-plan file could not be written; this reading is not remembered.")
+                }
+                Interpreted.Started(session)
+            }
         }
     }
 

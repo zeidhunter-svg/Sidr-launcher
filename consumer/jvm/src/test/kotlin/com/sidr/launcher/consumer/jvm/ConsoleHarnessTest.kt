@@ -141,6 +141,79 @@ class ConsoleHarnessTest {
         assertTrue("nothing else is touched", File(temp.root, "pallimer.md").exists())
     }
 
+    /** The model's reading of «find <name> and delete it» for whatever file the command names. */
+    private fun findThenDeleteOf(command: String) = TransportReply.Answer(
+        RawAnswer(
+            kind = "plan",
+            steps = listOf(
+                RawStep("find_file", mapOf("name" to RawArg.Text(command.removePrefix("find ").removeSuffix(" and delete it")), "new_name" to null, "path" to null)),
+                RawStep("delete_file", mapOf("name" to null, "new_name" to null, "path" to RawArg.Ref(step = 0, key = "resolved_path"))),
+            ),
+            question = null,
+            destination = null,
+        ),
+        ReplyMeta.NONE,
+    )
+
+    /** A transport that reads each command as «find X and delete it», counting how often it is asked. */
+    private class FindDeleteTransport : BridgeTransport {
+        val requests = mutableListOf<BridgeRequest>()
+        override suspend fun ask(request: BridgeRequest): TransportReply {
+            requests += request
+            return reply(request.command)
+        }
+        lateinit var reply: (String) -> TransportReply
+    }
+
+    /** Teaches «find … and delete it» three times, each through a fresh harness over the same sandbox (the file is the memory). */
+    private suspend fun teachFindDelete(transport: FindDeleteTransport) {
+        listOf("orvelle.txt", "pallimer.md", "quembly.txt").forEach { name ->
+            temp.newFile(name)
+            val state = harness(mutableListOf("y", "y"), transport).run("ask find $name and delete it")
+            assertEquals(ExecutionState.Completed, state)
+            assertFalse(File(temp.root, name).exists())
+        }
+    }
+
+    /**
+     * A4′ phase 4, Task 9 (B-13): the learned-plan cache on the second consumer. Three confirmations of one form
+     * pin it; the fourth ask of that form — with another file's name in the slot — never reaches the model, runs
+     * the same engine, and says that it is a learned command.
+     */
+    @Test
+    fun `the fourth ask of a confirmed form runs without the model`() = runTest {
+        val transport = FindDeleteTransport().also { it.reply = ::findThenDeleteOf }
+        teachFindDelete(transport)
+        assertEquals("the model answered each of the three", 3, transport.requests.size)
+        printed.clear()
+        temp.newFile("kestun.txt")
+
+        val state = harness(mutableListOf("y"), transport).run("ask find kestun.txt and delete it")
+
+        assertEquals("the model is not asked a fourth time", 3, transport.requests.size)
+        assertEquals(ExecutionState.Completed, state)
+        assertTrue("a learned line is printed:\n${printed.joinToString("\n")}", printed.contains("Learned command: find … and delete it"))
+        assertTrue("the session ran", printed.contains("  ToolInvoked(1, delete_file)"))
+        assertFalse("the file named in the slot is deleted", File(temp.root, "kestun.txt").exists())
+    }
+
+    /** A learned delete is still a `DANGEROUS` step: the prompt is asked every time, and «no» deletes nothing. */
+    @Test
+    fun `a learned delete still asks consent`() = runTest {
+        val transport = FindDeleteTransport().also { it.reply = ::findThenDeleteOf }
+        teachFindDelete(transport)
+        printed.clear()
+        temp.newFile("kestun.txt")
+
+        val state = harness(mutableListOf("n"), transport).run("ask find kestun.txt and delete it")
+
+        assertEquals("the model is not asked a fourth time", 3, transport.requests.size)
+        assertTrue("the replayed delete asks:\n${printed.joinToString("\n")}", printed.contains("Proceed? [y/N]"))
+        assertTrue(printed.any { it.startsWith("Consent required for step 1: delete_file") })
+        assertEquals(ExecutionState.Cancelled, state)
+        assertTrue("nothing is deleted", File(temp.root, "kestun.txt").exists())
+    }
+
     /**
      * Task 13 fix round 1 (review I1): «nothing runs before a `y` to the card». The refused reading is one that
      * WOULD act with no further question — `rename_file` is `SAFE`, so the engine's consent gate would not stop

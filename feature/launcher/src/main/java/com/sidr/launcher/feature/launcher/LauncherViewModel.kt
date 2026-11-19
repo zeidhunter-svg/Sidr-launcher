@@ -23,6 +23,9 @@ import com.sidr.launcher.domain.ai.bridge.Interpretation
 import com.sidr.launcher.domain.ai.bridge.MentionBinder
 import com.sidr.launcher.domain.history.UsageHistoryRepository
 import com.sidr.launcher.domain.memory.alias.ResolveCommandWithAliasUseCase
+import com.sidr.launcher.domain.memory.plan.CommandForm
+import com.sidr.launcher.domain.memory.plan.ForgetLearnedPlanUseCase
+import com.sidr.launcher.domain.memory.plan.RecordLearnedPlanUseCase
 import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
 import com.sidr.launcher.domain.connectivity.ConnectivityChecker
 import com.sidr.launcher.domain.input.UniversalInputRouter
@@ -73,6 +76,11 @@ class LauncherViewModel @Inject constructor(
     // on [applicationScope]. Never consulted for decision-making in the VM — only invoked after a
     // successful launch of a candidate the pending token actually offered.
     private val recordResolutionChoice: RecordResolutionChoiceUseCase,
+    // A4′ phase 4, Task 7 (plan §0.2 B-8, B-10): «Выполнить» on a fresh model card records what it teaches —
+    // once its session started, on [applicationScope] like a learned choice — and «Забыть» on the card of a
+    // learned command's session forgets its form. Domain use cases over the `LearnedPlanStore` port.
+    private val recordLearnedPlan: RecordLearnedPlanUseCase,
+    private val forgetLearnedPlan: ForgetLearnedPlanUseCase,
     // The web chip's act (resolve → execute) via the same proven resolver/executor path. Since A4′ phase
     // 3a deleted the router's confirm card, the chip is its only caller — never the model's path.
     private val executeAction: ExecuteActionUseCase,
@@ -296,6 +304,7 @@ class LauncherViewModel @Inject constructor(
         // A4′ phase 3b, Task 11 (fork 3b-A): the remainder of a model plan that acted goes to the
         // interpretation card, bound again on the device — the same forward reference as [onReroute].
         onRemainder = { goal, plan -> commandSession.showRemainder(goal, plan) },
+        forgetLearnedPlan = forgetLearnedPlan,
     )
 
     /** The agent runtime's current session, or null when none is on screen. */
@@ -312,6 +321,9 @@ class LauncherViewModel @Inject constructor(
 
     /** A4′ phase 3b, Task 11: whether the finished model-plan card on screen offers «Повторить остаток». */
     val agentRemainderOffered: StateFlow<Boolean> get() = agentSession.remainderOffered
+
+    /** A4′ phase 4, Task 7 (B-10): the form of the learned command whose session is on screen, or null. */
+    val agentLearnedCommand: StateFlow<CommandForm?> get() = agentSession.learned
 
     /**
      * Task 10 / A1'. The registry's provenance, projected to the two fields the surface may see, so the
@@ -365,6 +377,8 @@ class LauncherViewModel @Inject constructor(
         agentSession = agentSession,
         startAgentSession = startAgentSession,
         binder = mentionBinder,
+        recordLearnedPlan = recordLearnedPlan,
+        applicationScope = applicationScope,
         scope = viewModelScope,
         onNavigate = { route -> navigateTo(route) },
     )
@@ -569,6 +583,14 @@ class LauncherViewModel @Inject constructor(
      */
     fun retryAgentRemainder() {
         agentSession.retryRemainder()
+    }
+
+    /**
+     * «Забыть» on a learned command's card (A4′ phase 4, B-10): its form is forgotten — see
+     * [LauncherAgentSession.forgetLearned]. The card stays; only its mark goes. No [leaveAgentSurface].
+     */
+    fun onForgetLearnedCommand() {
+        agentSession.forgetLearned()
     }
 
     /** Undo what the finished plan on screen did, as far as it can be undone — see [LauncherAgentSession.undo]. */

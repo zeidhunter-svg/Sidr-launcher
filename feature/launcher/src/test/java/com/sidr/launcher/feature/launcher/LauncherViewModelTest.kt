@@ -11,6 +11,16 @@ import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.configuredProvider
 import com.sidr.launcher.core.testing.FakeAliasStore
+import com.sidr.launcher.core.testing.FakeLearnedPlanStore
+import com.sidr.launcher.domain.memory.plan.CommandForm
+import com.sidr.launcher.domain.memory.plan.ForgetLearnedPlanUseCase
+import com.sidr.launcher.domain.memory.plan.FormPart
+import com.sidr.launcher.domain.memory.plan.LearnedPlan
+import com.sidr.launcher.domain.memory.plan.LearnedPlanShape
+import com.sidr.launcher.domain.memory.plan.PlanTemplate
+import com.sidr.launcher.domain.memory.plan.RecordLearnedPlanUseCase
+import com.sidr.launcher.domain.memory.plan.TemplateArg
+import com.sidr.launcher.domain.memory.plan.TemplateStep
 import com.sidr.launcher.core.testing.FakeMentionBinder
 import com.sidr.launcher.core.testing.FakeModelPlanner
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
@@ -193,6 +203,8 @@ class LauncherViewModelTest {
     // test class per @Test method), so tests never leak preferences into one another.
     private val fakeResolutionStore = FakeResolutionPreferenceStore()
     private val fakeAliasStore = FakeAliasStore()
+    // A4′ phase 4, Task 7: what «Выполнить» teaches and «Забыть» forgets. Empty by default, fresh per test.
+    private val fakeLearnedPlanStore = FakeLearnedPlanStore()
 
     // DS-6B Task 9: parity-only default — an unconfigured prayer use case over fresh fakes, so every
     // pre-Task-9 test (which never touches prayerContext) is unaffected. Tests that care about prayer
@@ -327,6 +339,8 @@ class LauncherViewModelTest {
             actionCatalog = actionCatalog,
         ),
         recordResolutionChoice = RecordResolutionChoiceUseCase(resolutionStore),
+        recordLearnedPlan = RecordLearnedPlanUseCase(fakeLearnedPlanStore),
+        forgetLearnedPlan = ForgetLearnedPlanUseCase(fakeLearnedPlanStore),
         executeAction = executeAction,
         actionExecutor = fakeExecutor,
         usageHistoryRepository = fakeUsageRepo,
@@ -392,6 +406,8 @@ class LauncherViewModelTest {
                 resolutionStore = resolutionStore,
             ),
             recordResolutionChoice = RecordResolutionChoiceUseCase(resolutionStore),
+            recordLearnedPlan = RecordLearnedPlanUseCase(fakeLearnedPlanStore),
+            forgetLearnedPlan = ForgetLearnedPlanUseCase(fakeLearnedPlanStore),
             executeAction = executeAction,
             actionExecutor = fakeExecutor,
             usageHistoryRepository = fakeUsageRepo,
@@ -631,6 +647,8 @@ class LauncherViewModelTest {
                 installedApps = gatedRepo,
             ),
             recordResolutionChoice = RecordResolutionChoiceUseCase(fakeResolutionStore),
+            recordLearnedPlan = RecordLearnedPlanUseCase(fakeLearnedPlanStore),
+            forgetLearnedPlan = ForgetLearnedPlanUseCase(fakeLearnedPlanStore),
             executeAction = executeAction,
             actionExecutor = fakeExecutor,
             usageHistoryRepository = fakeUsageRepo,
@@ -889,6 +907,8 @@ class LauncherViewModelTest {
                 installedApps = gatedRepo,
             ),
             recordResolutionChoice = RecordResolutionChoiceUseCase(fakeResolutionStore),
+            recordLearnedPlan = RecordLearnedPlanUseCase(fakeLearnedPlanStore),
+            forgetLearnedPlan = ForgetLearnedPlanUseCase(fakeLearnedPlanStore),
             executeAction = executeAction,
             actionExecutor = fakeExecutor,
             usageHistoryRepository = fakeUsageRepo,
@@ -3604,5 +3624,153 @@ class LauncherViewModelTest {
         assertEquals(null, vm.targetPick.value)
         assertEquals(null, vm.interpretation.value)
         assertTrue(fakeAgentStore.saved.isEmpty())
+    }
+
+    // ── A4′ phase 4, Task 7: «Выполнить» teaches; a learned session keeps its mark (plan §0.2 B-7, B-8, B-10) ──
+
+    private val webSearchTool = ToolId("web_search")
+
+    /** «поищи …» → `web_search(query = slot 0)`: what «поищи орвелин» teaches (the phase's fixture set). */
+    private val searchForm = CommandForm(listOf(FormPart.Word("поищи"), FormPart.Slot))
+    private val searchShape = LearnedPlanShape(
+        searchForm,
+        PlanTemplate(listOf(TemplateStep(webSearchTool, mapOf("query" to TemplateArg.Slot(0))))),
+    )
+
+    /** The bound reading of one `SAFE` web search — of the user's own word by default. */
+    private fun searchReading(
+        command: String = "поищи орвелин",
+        query: String = "орвелин",
+        origin: ValueOrigin = ValueOrigin.SaidBy(PrincipalId.USER),
+    ) = Interpretation.Act(
+        goal = AgentGoal(command, GoalShape.Free(command)),
+        steps = listOf(
+            PlanStep(
+                index = 0,
+                invocation = ToolInvocation(webSearchTool, mapOf("query" to ArgSource.Literal(query))),
+                risk = ActionRiskLevel.SAFE,
+                precondition = StepPrecondition.None,
+                rationale = StepRationale.MODEL_PROPOSED,
+            ),
+        ),
+        origins = mapOf(0 to mapOf("query" to origin)),
+        effects = mapOf(0 to ToolEffect.EXTERNAL),
+        choices = emptyList(),
+    )
+
+    /**
+     * B-8, the launcher's half: «Выполнить» on a fresh reading records what it teaches — after the session
+     * started, never at the card — and a second tap on the same card records nothing more: the card, and
+     * what it would teach, are already down.
+     */
+    @Test
+    fun `Run on a fresh model card records what it teaches once the session started`() = runTest(testDispatcher) {
+        val vm = answering(CommandOutcome.Interpreted(searchReading(), learnable = searchShape))
+        vm.onCommandSubmitted("поищи орвелин")
+        advanceUntilIdle()
+        assertEquals("nothing is learned at the card", emptyMap<String, LearnedPlan>(), fakeLearnedPlanStore.rows)
+
+        vm.runInterpretation()
+        vm.runInterpretation()
+        advanceUntilIdle()
+
+        assertEquals("the session started", listOf(searchReading().goal), fakeAgentStore.saved.map { it.goal }.distinct())
+        assertEquals(setOf("поищи …"), fakeLearnedPlanStore.rows.keys)
+        assertEquals(searchShape, fakeLearnedPlanStore.rows["поищи …"]?.shape)
+        assertEquals("one Run, one confirmation", 1, fakeLearnedPlanStore.rows["поищи …"]?.streak)
+    }
+
+    /**
+     * B-8: nothing is learned from a card that did not run. Three cards, each carrying a lesson a Run would
+     * record: one dismissed; one whose «Выполнить» could not start its session (the store refused the save);
+     * and a fresh card that a REMAINDER card replaced (phase 3b B-10 — a remainder is not a fresh reading and
+     * teaches nothing; its Run starts a session and must not record the lesson of the card it replaced).
+     */
+    @Test
+    fun `a dismissed card, a session that did not start and a remainder card record nothing`() = runTest(testDispatcher) {
+        val remainderGoal = AgentGoal("открой lumora и найди ostravel lectures", GoalShape.Free("открой lumora и найди ostravel lectures"))
+        fun modelStep(index: Int, tool: ToolId, vararg args: Pair<String, String>) = PlanStep(
+            index = index,
+            invocation = ToolInvocation(tool, args.associate { (name, value) -> name to ArgSource.Literal(value) }),
+            risk = ActionRiskLevel.SAFE,
+            precondition = StepPrecondition.None,
+            rationale = StepRationale.MODEL_PROPOSED,
+        )
+        // A plan the model wrote whose first step acted, paused by a process death: «Продолжить» on it brings
+        // its remainder back as the interpretation card (`Resumption.NeedsCard`).
+        fakeAgentStore.save(
+            AgentSession(
+                id = AgentSessionId("m-acted"),
+                goal = remainderGoal,
+                plan = ExecutionPlan(
+                    listOf(
+                        modelStep(0, ToolIds.LAUNCH_APP, "app" to "net.fixture.lumora", "query" to "lumora"),
+                        modelStep(1, webSearchTool, "query" to "ostravel lectures"),
+                    ),
+                ),
+                cursor = 1,
+                state = ExecutionState.Paused,
+                observations = mapOf(0 to ToolResult.Effected()),
+                consents = emptyMap(),
+                trace = ExecutionTrace(
+                    listOf(
+                        TraceEvent.PlanCreated(2), TraceEvent.StepStarted(0), TraceEvent.ToolInvoked(0, ToolIds.LAUNCH_APP),
+                        TraceEvent.ToolObserved(0, ToolResult.Effected()), TraceEvent.SessionPaused,
+                    ),
+                ),
+            ),
+        )
+        val vm = buildViewModel(route = CommandRouteStep { CommandOutcome.Interpreted(searchReading(), learnable = searchShape) })
+        advanceUntilIdle()
+        check(vm.agentSessionState.value?.state == ExecutionState.Paused) { "seed expected Paused, was ${vm.agentSessionState.value?.state}" }
+
+        // (1) Dismissed.
+        vm.onCommandSubmitted("поищи орвелин")
+        advanceUntilIdle()
+        assertEquals(searchReading(), vm.interpretation.value)
+        vm.dismissInterpretation()
+        advanceUntilIdle()
+        assertEquals("a dismissed card teaches nothing", emptyMap<String, LearnedPlan>(), fakeLearnedPlanStore.rows)
+
+        // (2) «Выполнить», and the session does not start.
+        vm.onCommandSubmitted("поищи орвелин")
+        advanceUntilIdle()
+        fakeAgentStore.failNextSave = true
+        vm.runInterpretation()
+        advanceUntilIdle()
+        assertEquals("the start failed", CommandFeedback.Failure(CommandFailure.Generic), vm.commandFeedback.value)
+        assertEquals("a session that did not start teaches nothing", emptyMap<String, LearnedPlan>(), fakeLearnedPlanStore.rows)
+
+        // (3) A fresh card, replaced by a remainder card, and the remainder run.
+        vm.onCommandSubmitted("поищи орвелин")
+        advanceUntilIdle()
+        vm.continueAgentSession()
+        advanceUntilIdle()
+        assertEquals("the remainder's card stands", remainderGoal, (vm.interpretation.value as Interpretation.Act).goal)
+        vm.runInterpretation()
+        advanceUntilIdle()
+        assertEquals("the remainder's session started", remainderGoal, fakeAgentStore.saved.last().goal)
+        assertEquals("a remainder card teaches nothing", emptyMap<String, LearnedPlan>(), fakeLearnedPlanStore.rows)
+    }
+
+    /**
+     * B-7 (fork 4-5; review S4): a learned command that still needed the card — here its web search sends the
+     * model's own words off the phone — keeps its mark through «Выполнить»: the session on screen says it is a
+     * learned command. Nothing is recorded: a replay card carries nothing to teach.
+     */
+    @Test
+    fun `a learned command that needed the card keeps its mark after Run`() = runTest(testDispatcher) {
+        val form = CommandForm.parse("поищи что нибудь про орвелин")
+        val reading = searchReading(command = "поищи что-нибудь про орвелин", query = "орвелин история", origin = ValueOrigin.ModelGenerated)
+        val vm = answering(CommandOutcome.Interpreted(reading, learned = form))
+        vm.onCommandSubmitted("поищи что-нибудь про орвелин")
+        advanceUntilIdle()
+
+        vm.runInterpretation()
+        advanceUntilIdle()
+
+        assertEquals("the learned session is the one on screen", reading.goal, vm.agentSessionState.value?.goal)
+        assertEquals(form, vm.agentLearnedCommand.value)
+        assertEquals("a replay card teaches nothing", emptyMap<String, LearnedPlan>(), fakeLearnedPlanStore.rows)
     }
 }

@@ -155,4 +155,6 @@
     <string name="launcher_agent_undo_not_all">Здесь не отменить: %1$s</string>
     <string name="launcher_agent_retry_remainder">Повторить остаток</string>
     <string name="launcher_agent_resume_failed">Не удалось продолжить план.</string>
+    <string name="launcher_agent_learned_mark">Выученная команда</string>
+    <string name="launcher_agent_learned_forget">Забыть</string>
 </resources>

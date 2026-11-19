@@ -2,9 +2,11 @@ package com.sidr.launcher.feature.launcher.agent
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.sidr.launcher.core.ui.component.SidrActionGate
 import com.sidr.launcher.core.ui.component.SidrBlockedState
@@ -12,6 +14,7 @@ import com.sidr.launcher.core.ui.component.SidrErrorSurface
 import com.sidr.launcher.core.ui.component.SidrResultSurface
 import com.sidr.launcher.core.ui.component.SidrResultTone
 import com.sidr.launcher.core.ui.component.SidrSurfaceAction
+import com.sidr.launcher.core.ui.component.SidrTertiaryButton
 import com.sidr.launcher.core.ui.i18n.sidrString
 import com.sidr.launcher.core.ui.primitive.SidrProgress
 import com.sidr.launcher.core.ui.primitive.SidrProvenanceLine
@@ -25,6 +28,7 @@ import com.sidr.launcher.core.ui.theme.Spacing
 import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.StepUndo
+import com.sidr.launcher.domain.memory.plan.CommandForm
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.Undo
 import com.sidr.launcher.domain.trace.TraceEvent
@@ -42,6 +46,11 @@ import com.sidr.launcher.feature.launcher.R
  * thing to be looking at once a plan has been called off. `Cancelled` AFTER a step acted is a finished
  * card (A4′ phase 3b, Task 12 — phase 2's N2, plan §0.2 B-11): what acted is real, so the card says what
  * ran and offers to undo it.
+ *
+ * A4′ phase 4, Task 7 (plan §0.2 B-10): the session a learned command started — [learned], its form, non-null
+ * while that session is on screen (`LauncherAgentSession.learned`) — carries the line «Выученная команда» and
+ * «Забыть» ([onForgetLearned]) under its card. Any other session is drawn exactly as before, with no node added;
+ * a session that draws no card (`Cancelled` before any step acted) draws no mark either.
  */
 @Composable
 internal fun AgentSessionSurface(
@@ -61,7 +70,43 @@ internal fun AgentSessionSurface(
     // model-plan card offers «Повторить остаток» (`LauncherAgentSession.remainderOffered`), and its tap.
     remainderOffered: Boolean = false,
     onRetryRemainder: () -> Unit = {},
+    // A4′ phase 4, Task 7. Defaulted like undo: a caller that shows no learned command draws no mark.
+    learned: CommandForm? = null,
+    onForgetLearned: () -> Unit = {},
     modifier: Modifier = Modifier,
+) {
+    if (learned == null || session.title() == null) {
+        AgentSessionCard(
+            session, toolProvenance, dynamicLabels, confirming, onConfirm, onDeny, onContinue, onDismiss,
+            undoReview, onUndo, remainderOffered, onRetryRemainder, modifier,
+        )
+        return
+    }
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+        AgentSessionCard(
+            session, toolProvenance, dynamicLabels, confirming, onConfirm, onDeny, onContinue, onDismiss,
+            undoReview, onUndo, remainderOffered, onRetryRemainder, Modifier,
+        )
+        LearnedCommandMark(onForget = onForgetLearned)
+    }
+}
+
+/** The card itself, one component per runtime state — see [AgentSessionSurface]. */
+@Composable
+private fun AgentSessionCard(
+    session: AgentSession,
+    toolProvenance: Map<ToolId, StepProvenance>,
+    dynamicLabels: Map<ToolId, DynamicToolLabel>,
+    confirming: Boolean,
+    onConfirm: (Int) -> Unit,
+    onDeny: (Int) -> Unit,
+    onContinue: () -> Unit,
+    onDismiss: () -> Unit,
+    undoReview: List<StepUndo>,
+    onUndo: () -> Unit,
+    remainderOffered: Boolean,
+    onRetryRemainder: () -> Unit,
+    modifier: Modifier,
 ) {
     // Null for exactly one shape — Cancelled before any step acted — which renders nothing; every other
     // state has a title, and so has a Cancelled session in which a step acted (N2, `title()`'s KDoc).
@@ -274,6 +319,26 @@ internal fun AgentSessionSurface(
             primaryAction = dismiss,
             secondaryAction = undo,
         )
+    }
+}
+
+/**
+ * «Выученная команда» and «Забыть» (A4′ phase 4, B-10) — under the card of a learned command's session, composed
+ * of shipped primitives only (nothing added to `core/ui`). «Забыть» deletes the command's form; the card stays.
+ */
+@Composable
+private fun LearnedCommandMark(onForget: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+    ) {
+        SidrText(
+            text = sidrString(R.string.launcher_agent_learned_mark),
+            role = SidrTextRole.PROVENANCE,
+            modifier = Modifier.weight(1f),
+        )
+        SidrTertiaryButton(text = sidrString(R.string.launcher_agent_learned_forget), onClick = onForget)
     }
 }
 

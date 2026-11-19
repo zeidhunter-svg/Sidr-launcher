@@ -1,5 +1,7 @@
 package com.sidr.launcher.feature.launcher
 
+import com.sidr.launcher.domain.memory.plan.ForgetLearnedPlanUseCase
+import com.sidr.launcher.domain.memory.plan.RecordLearnedPlanUseCase
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -162,10 +164,14 @@ class LauncherScreenPrayerStripTest {
             store = FakeAliasStore(),
             installedApps = fakeRepo,
         )
+        // A4′ phase 4, Task 7: compile-follow — nothing here learns or forgets a command.
+        val learnedPlanStore = com.sidr.launcher.core.testing.FakeLearnedPlanStore()
         return LauncherViewModel(
             installedAppsRepository = fakeRepo,
             resolveCommand = resolveCommand,
             recordResolutionChoice = RecordResolutionChoiceUseCase(resolutionStore),
+            recordLearnedPlan = RecordLearnedPlanUseCase(learnedPlanStore),
+            forgetLearnedPlan = ForgetLearnedPlanUseCase(learnedPlanStore),
             executeAction = ExecuteActionUseCase(
                 resolver = IntentActionResolver(fakeRepo),
                 executor = fakeExecutor,

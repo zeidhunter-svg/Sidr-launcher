@@ -155,4 +155,6 @@
     <string name="launcher_agent_undo_not_all">Burada geri alınamaz: %1$s</string>
     <string name="launcher_agent_retry_remainder">Kalanı yeniden dene</string>
     <string name="launcher_agent_resume_failed">Plan sürdürülemedi.</string>
+    <string name="launcher_agent_learned_mark">Öğrenilmiş komut</string>
+    <string name="launcher_agent_learned_forget">Unut</string>
 </resources>

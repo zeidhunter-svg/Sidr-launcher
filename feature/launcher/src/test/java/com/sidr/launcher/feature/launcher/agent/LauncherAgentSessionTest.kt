@@ -1,6 +1,7 @@
 package com.sidr.launcher.feature.launcher.agent
 
 import com.sidr.launcher.core.testing.FakeAgentSessionStore
+import com.sidr.launcher.core.testing.FakeLearnedPlanStore
 import com.sidr.launcher.core.testing.FakeToolExecutor
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.domain.action.ActionArg
@@ -27,6 +28,14 @@ import com.sidr.launcher.domain.agent.StepUndo
 import com.sidr.launcher.domain.agent.TemplatePlanner
 import com.sidr.launcher.domain.agent.UndoAgentSessionUseCase
 import com.sidr.launcher.domain.intent.CommandFailure
+import com.sidr.launcher.domain.memory.plan.CommandForm
+import com.sidr.launcher.domain.memory.plan.ForgetLearnedPlanUseCase
+import com.sidr.launcher.domain.memory.plan.FormPart
+import com.sidr.launcher.domain.memory.plan.LearnedPlan
+import com.sidr.launcher.domain.memory.plan.LearnedPlanShape
+import com.sidr.launcher.domain.memory.plan.PlanTemplate
+import com.sidr.launcher.domain.memory.plan.TemplateArg
+import com.sidr.launcher.domain.memory.plan.TemplateStep
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ObservedFact
@@ -75,6 +84,7 @@ class LauncherAgentSessionTest {
     private val goal = AgentGoal("открой убер", GoalShape.AppNotInstalled("убер"))
     private val rerouted = mutableListOf<String>()
     private val remainders = mutableListOf<Pair<AgentGoal, ExecutionPlan>>()
+    private val learnedStore = FakeLearnedPlanStore()
 
     /** `launch_app`'s missing-app result, carrying the `resolved_query` step 1 binds to (F6). */
     private fun notInstalled() = ToolResult.Observed(
@@ -112,6 +122,7 @@ class LauncherAgentSessionTest {
             undoSession = UndoAgentSessionUseCase(StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry), inverses, registry),
             onReroute = { rerouted += it },
             onRemainder = { goal, plan -> remainders += goal to plan },
+            forgetLearnedPlan = ForgetLearnedPlanUseCase(learnedStore),
         )
     }
 
@@ -542,5 +553,106 @@ class LauncherAgentSessionTest {
         assertNull(agent.session.value)
         assertEquals("nothing was performed", 1, tools.invocations.size)
         assertEquals("the paused plan is still on disk", ExecutionState.Paused, store.active.state)
+    }
+
+    // --- A4′ phase 4, Task 7 (plan §0.2 B-10): the mark of a learned command --------------------------------------
+
+    private val searchTool = ToolId("web_search")
+    private val searchForm = CommandForm(listOf(FormPart.Word("поищи"), FormPart.Slot))
+    private val eraseForm = CommandForm(listOf(FormPart.Word("сотри"), FormPart.Slot))
+
+    private fun learnedRow(form: CommandForm, tool: ToolId, arg: String) = LearnedPlan(
+        shape = LearnedPlanShape(form, PlanTemplate(listOf(TemplateStep(tool, mapOf(arg to TemplateArg.Slot(0)))))),
+        streak = 3,
+        confirmations = 3,
+        confirmedAtEpochMs = 0L,
+    )
+
+    /** One `SAFE` web search of «глимсар» — «поищи глимсар» replayed from «поищи …» — started as step 2c starts it. */
+    private suspend fun startedSearch(): AgentSessionId {
+        val goal = AgentGoal("поищи глимсар", GoalShape.Free("поищи глимсар"))
+        val plan = ExecutionPlan(
+            listOf(PlanStep(0, ToolInvocation(searchTool, mapOf("query" to ArgSource.Literal("глимсар"))), ActionRiskLevel.SAFE, StepPrecondition.None, StepRationale.MODEL_PROPOSED)),
+        )
+        val started = StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry).startPlanned(goal, plan)
+        return (started as OperationResult.Success).value!!.id
+    }
+
+    /** One `CONFIRM` store search: it stops at its consent card and stays in the store, as a learned uninstall does. */
+    private suspend fun startedStoreSearch(): AgentSessionId {
+        val goal = AgentGoal("поищи в магазине глимсар", GoalShape.Free("поищи в магазине глимсар"))
+        val plan = ExecutionPlan(
+            listOf(PlanStep(0, ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.Literal("глимсар"))), ActionRiskLevel.CONFIRM, StepPrecondition.None, StepRationale.MODEL_PROPOSED)),
+        )
+        val started = StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry).startPlanned(goal, plan)
+        return (started as OperationResult.Success).value!!.id
+    }
+
+    /**
+     * B-10: the session a learned command started says so while it is on screen, and «Забыть» deletes that
+     * command's form — that one only — from the learned store. The mark goes with it; the card stays.
+     */
+    @Test
+    fun `a learned session says so and Forget deletes its form`() = runTest {
+        learnedStore.upsert(learnedRow(searchForm, searchTool, "query"))
+        learnedStore.upsert(learnedRow(eraseForm, ToolId("uninstall_app"), "app"))
+        val agent = collaborator(FakeToolExecutor(listOf(ToolResult.Effected())), this)
+        agent.attach(startedSearch(), searchForm)
+        advanceUntilIdle()
+        check(agent.session.value?.state == ExecutionState.Completed) { "seed expected Completed, was ${agent.session.value?.state}" }
+
+        assertEquals(searchForm, agent.learned.value)
+
+        agent.forgetLearned()
+        advanceUntilIdle()
+
+        assertEquals("only its own form is forgotten", setOf("сотри …"), learnedStore.rows.keys)
+        assertNull("the mark goes with it", agent.learned.value)
+        assertEquals("the card itself stays", ExecutionState.Completed, agent.session.value?.state)
+    }
+
+    /**
+     * B-10: the mark belongs to its session — another session on screen, no session on screen, or a session
+     * restored at start drops it.
+     *
+     * **The last is fork 4-5's named limit, not a nicety.** The mark is held in memory by this collaborator and
+     * never persisted, so a learned session that outlives its process comes back from [LauncherAgentSession.restoreOnStart]
+     * (as `Paused`) without its mark. `restoreOnStart` drops it even for the very session that carried it — the
+     * case below — so a restored card never claims what the store does not hold.
+     */
+    @Test
+    fun `the mark stays with its session only`() = runTest {
+        val agent = collaborator(FakeToolExecutor(listOf(ToolResult.Effected(), ToolResult.Effected(), ToolResult.Effected())), this)
+
+        // Another session on screen: a command that was not learned.
+        agent.attach(startedSearch(), searchForm)
+        advanceUntilIdle()
+        assertEquals("precondition: the learned session carries its mark", searchForm, agent.learned.value)
+        val other = startedSearch()
+        agent.attach(other)
+        advanceUntilIdle()
+        assertEquals(other, agent.session.value?.id)
+        assertNull("another session on screen drops the mark", agent.learned.value)
+
+        // No session on screen.
+        agent.attach(startedSearch(), searchForm)
+        advanceUntilIdle()
+        assertEquals("precondition: the learned session carries its mark", searchForm, agent.learned.value)
+        agent.cancel()
+        advanceUntilIdle()
+        assertNull(agent.session.value)
+        assertNull("no session on screen drops the mark", agent.learned.value)
+
+        // The same session, restored at start: it was waiting on its consent card.
+        val waiting = startedStoreSearch()
+        agent.attach(waiting, searchForm)
+        advanceUntilIdle()
+        check(agent.session.value?.state == ExecutionState.AwaitingConsent) { "seed expected AwaitingConsent, was ${agent.session.value?.state}" }
+        assertEquals("precondition: the learned session carries its mark", searchForm, agent.learned.value)
+        agent.restoreOnStart()
+        advanceUntilIdle()
+        assertEquals(waiting, agent.session.value?.id)
+        assertEquals(ExecutionState.Paused, agent.session.value?.state)
+        assertNull("a session restored at start carries no mark (fork 4-5)", agent.learned.value)
     }
 }

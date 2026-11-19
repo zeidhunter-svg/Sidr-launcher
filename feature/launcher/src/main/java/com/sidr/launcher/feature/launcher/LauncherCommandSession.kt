@@ -22,10 +22,14 @@ import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.ExecuteActionUseCase
 import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.memory.alias.ResolveCommandWithAliasUseCase
+import com.sidr.launcher.domain.memory.plan.CommandForm
+import com.sidr.launcher.domain.memory.plan.LearnedPlanShape
+import com.sidr.launcher.domain.memory.plan.RecordLearnedPlanUseCase
 import com.sidr.launcher.domain.memory.resolution.ResolutionLearningToken
 import com.sidr.launcher.domain.memory.resolution.ResolvedCommand
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.feature.launcher.agent.LauncherAgentSession
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -95,6 +99,10 @@ internal class LauncherCommandSession(
     // A4′ phase 3b, Task 11 (fork 3b-A, B-10): the remainder of a model plan that acted is bound AGAIN on
     // the device before its card — no model is asked ([showRemainder]).
     private val binder: MentionBinder,
+    // A4′ phase 4, Task 7 (B-8): «Выполнить» on a fresh reading records what it teaches once its session started —
+    // on [applicationScope], like `LauncherAppLaunch.recordChoiceIfPending`, so the write survives the ViewModel.
+    private val recordLearnedPlan: RecordLearnedPlanUseCase,
+    private val applicationScope: CoroutineScope,
     private val scope: CoroutineScope,
     private val onNavigate: (String) -> Unit,
 ) {
@@ -144,6 +152,13 @@ internal class LauncherCommandSession(
     private val _interpretation = MutableStateFlow<Interpretation?>(null)
     val interpretation: StateFlow<Interpretation?> = _interpretation
 
+    // Beside the card standing now (A4′ phase 4, plan §0.2 B-7, B-8), and cleared with it: what a fresh reading
+    // would teach if it runs ([CommandOutcome.Interpreted.learnable]), and the form of the learned command a
+    // replay card came from ([CommandOutcome.Interpreted.learned]). Never both — step 7 sets the first, step 2c
+    // the second. Read once, by «Выполнить» ([runInterpretation]).
+    private var learnable: LearnedPlanShape? = null
+    private var learned: CommandForm? = null
+
     // ── The visible wait (spec §7.12.2, plan §0.2 B-10) and the command it waits for. ──
     private val _thinking = MutableStateFlow(false)
     val thinking: StateFlow<Boolean> = _thinking
@@ -166,6 +181,7 @@ internal class LauncherCommandSession(
         _feedback.value = CommandFeedback.None
         _interpretation.value = null
         picks.clear()
+        clearLearnedBesideCard()
         // A 2b pick stands for the old text as much as a card does (phase 3b).
         _targetPick.value = null
         // A4′ phase 3a, Task 9 review I1 (Review Focus 2, in flight): an edit also abandons a command
@@ -381,6 +397,7 @@ internal class LauncherCommandSession(
         // and every branch that must not learn clears it itself.
         _interpretation.value = null
         picks.clear()
+        clearLearnedBesideCard()
         _targetPick.value = null
         when (outcome) {
             CommandOutcome.Empty ->
@@ -444,9 +461,11 @@ internal class LauncherCommandSession(
             // and get out of the way. The feedback line is cleared because the agent surface is now
             // the honest account of what is happening — leaving "no such app" underneath it would
             // contradict the plan that was made precisely because of it.
+            // A4′ phase 4 (B-7, B-10): a learned command's session — started at once by step 2c, or by a learned
+            // card's «Выполнить» — carries its form on into the agent surface, which marks that session's card.
             is CommandOutcome.AgentSessionStarted -> {
                 _feedback.value = CommandFeedback.None
-                agentSession.attach(outcome.id)
+                agentSession.attach(outcome.id, outcome.learned)
             }
 
             // A4′ phase 3a (condition 1): the model's reading waits on the card. A pick binds; «Выполнить»
@@ -456,6 +475,8 @@ internal class LauncherCommandSession(
             is CommandOutcome.Interpreted -> {
                 _feedback.value = CommandFeedback.None
                 appLaunch.rememberLearningToken(null)
+                learnable = outcome.learnable
+                learned = outcome.learned
                 _interpretation.value = outcome.interpretation
             }
 
@@ -503,6 +524,12 @@ internal class LauncherCommandSession(
      * armed and the package handed to [LauncherAppLaunch.recordChoiceIfPending], the ONE gated record call
      * (its membership check is the check; there is no second record path). Each call consumes the token it
      * was armed with, so no pick can be recorded under another pick's mention.
+     *
+     * **What a fresh reading teaches is recorded only once its session started** (A4′ phase 4, plan §0.2 B-8):
+     * the card's `learnable` is taken down with the card — a second tap finds neither — and recorded on
+     * [applicationScope] only after `startPlanned` succeeded; a start that failed teaches nothing. A replay card's
+     * `learned` form records nothing and rides on into [CommandOutcome.AgentSessionStarted.learned], so a learned
+     * command keeps its mark whether or not it needed the card (B-7; fork 4-5, review S4).
      */
     fun runInterpretation() {
         when (val reading = _interpretation.value ?: return) {
@@ -515,6 +542,9 @@ internal class LauncherCommandSession(
             is Interpretation.Act -> {
                 val plan = reading.plan() ?: return // a pick is still owed
                 _interpretation.value = null
+                val teaches = learnable
+                val mark = learned
+                clearLearnedBesideCard()
                 for (pick in picks.sortedBy { it.step }) {
                     val token = pick.learning ?: continue
                     appLaunch.rememberLearningToken(token)
@@ -523,10 +553,12 @@ internal class LauncherCommandSession(
                 picks.clear()
                 scope.launch {
                     val started = (startAgentSession.startPlanned(reading.goal, plan) as? OperationResult.Success)?.value
-                    applyOutcome(
-                        if (started != null) CommandOutcome.AgentSessionStarted(started.id)
-                        else CommandOutcome.Failed(CommandFailure.Generic),
-                    )
+                    if (started == null) {
+                        applyOutcome(CommandOutcome.Failed(CommandFailure.Generic))
+                        return@launch
+                    }
+                    teaches?.let(::recordLearned)
+                    applyOutcome(CommandOutcome.AgentSessionStarted(started.id, mark))
                 }
             }
         }
@@ -565,6 +597,8 @@ internal class LauncherCommandSession(
      */
     fun showRemainder(goal: AgentGoal, plan: ExecutionPlan) {
         supersedeWaitingCommand()
+        // A4′ phase 4 (B-8): a remainder is not a fresh reading — it teaches nothing, and carries no mark.
+        clearLearnedBesideCard()
         pending = scope.launch { applyOutcome(binder.rebind(goal, plan).toCommandOutcome()) }
     }
 
@@ -577,7 +611,31 @@ internal class LauncherCommandSession(
     fun dismissInterpretation() {
         _interpretation.value = null
         picks.clear()
+        clearLearnedBesideCard()
         appLaunch.rememberLearningToken(null)
+    }
+
+    /** The card's lesson and mark go with the card (B-8): nothing is learned from a card that did not run. */
+    private fun clearLearnedBesideCard() {
+        learnable = null
+        learned = null
+    }
+
+    /**
+     * Records what a started fresh reading teaches (B-8), fire-and-forget on [applicationScope] — exactly as
+     * `LauncherAppLaunch.recordChoiceIfPending` records a choice: the write survives the user leaving the screen,
+     * and a failed or aborted record never surfaces (the session already started).
+     */
+    private fun recordLearned(shape: LearnedPlanShape) {
+        applicationScope.launch {
+            try {
+                recordLearnedPlan.record(shape)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                // Non-critical — the session already started; the lesson is lost, nothing else is.
+            }
+        }
     }
 
     /** The command form the dev console shows for the web chip's search (display-safe). */

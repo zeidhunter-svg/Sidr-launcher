@@ -232,4 +232,8 @@
     <!-- A4′ phase 3b, Task 11 (fork 3b-F): «Continue» the store could not carry out is said, not silent.
          Class A, not locked. -->
     <string name="launcher_agent_resume_failed">The plan could not be continued.</string>
+    <!-- A4′ phase 4, Task 7 (plan §0.2 B-10): the card of a session a learned command started says so, and offers
+         to forget the command (its form is deleted; the card stays). Class A, not locked. -->
+    <string name="launcher_agent_learned_mark">Learned command</string>
+    <string name="launcher_agent_learned_forget">Forget</string>
 </resources>

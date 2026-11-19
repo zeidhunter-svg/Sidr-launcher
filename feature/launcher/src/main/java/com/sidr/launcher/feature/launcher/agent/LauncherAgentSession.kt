@@ -13,6 +13,8 @@ import com.sidr.launcher.domain.agent.Resumption
 import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StepUndo
 import com.sidr.launcher.domain.agent.UndoAgentSessionUseCase
+import com.sidr.launcher.domain.memory.plan.CommandForm
+import com.sidr.launcher.domain.memory.plan.ForgetLearnedPlanUseCase
 import com.sidr.launcher.domain.result.OperationResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,6 +47,9 @@ import kotlinx.coroutines.launch
  * (ruling E11-P6). A «Продолжить» the store cannot carry out is SAID ([resumeFailed], fork 3b-F) — it used
  * to take the card down and put nothing in its place.
  *
+ * The session a learned command started carries that command's form ([learned], A4′ phase 4, B-10) while it is
+ * the one on screen, and «Забыть» forgets the form ([forgetLearned]).
+ *
  * Everything it touches is a `:domain` port, so it is unit-testable without Android or Compose.
  */
 internal class LauncherAgentSession(
@@ -59,6 +64,8 @@ internal class LauncherAgentSession(
     private val onReroute: (String) -> Unit,
     /** Where the remainder of a model plan that acted goes: the interpretation card, bound again on the device (B-10). */
     private val onRemainder: (AgentGoal, ExecutionPlan) -> Unit,
+    /** «Забыть» on the card of a learned command's session (A4′ phase 4, B-10): deletes that command's form. */
+    private val forgetLearnedPlan: ForgetLearnedPlanUseCase,
 ) {
     private val _session = MutableStateFlow<AgentSession?>(null)
     val session: StateFlow<AgentSession?> = _session.asStateFlow()
@@ -97,18 +104,55 @@ internal class LauncherAgentSession(
     private val _remainderOffered = MutableStateFlow(false)
     val remainderOffered: StateFlow<Boolean> = _remainderOffered.asStateFlow()
 
+    /**
+     * The form of the learned command whose session is on screen, or `null` (A4′ phase 4, plan §0.2 B-10): the card
+     * says «Выученная команда» and offers «Забыть» while it is non-null. Held as [learnedMark] — the session id
+     * beside the form — and set only by [attach], for the session a learned command started: step 2c's at once, or
+     * a learned card's «Выполнить» (B-7). [show] drops it whenever the session on screen is not the one it was set
+     * for — another session, or none ([cancel], a resume closing it); [forgetLearned] drops it once the form is
+     * deleted. [restoreOnStart] drops it outright: the mark lives here, in memory, never in the store, so a session
+     * restored at start comes back without it, even the very session that carried it (fork 4-5's named limit).
+     */
+    private val _learned = MutableStateFlow<CommandForm?>(null)
+    val learned: StateFlow<CommandForm?> = _learned.asStateFlow()
+    private var learnedMark: Pair<AgentSessionId, CommandForm>? = null
+
     private fun show(next: AgentSession?) {
         _session.value = next
         _undoReview.value = next?.let(undoSession::review).orEmpty()
         _resumeFailed.value = false
         _remainderOffered.value = next?.takeIf { it.state == ExecutionState.Failed || it.state == ExecutionState.Blocked }
             ?.let(resumeSession::remainder) != null
+        learnedMark = learnedMark?.takeIf { (id, _) -> id == next?.id }
+        _learned.value = learnedMark?.second
     }
 
-    fun attach(id: AgentSessionId) = scope.launch {
+    /**
+     * Shows the session [id] — the one just started and persisted — after running it. [learned] is the form of the
+     * learned command that started it, or `null` for every other start (B-7, B-10): the mark is set here for that
+     * session only, and never cleared here — a session that is not the marked one drops it in [show].
+     */
+    fun attach(id: AgentSessionId, learned: CommandForm? = null) = scope.launch {
         val active = (store.active() as? OperationResult.Success)?.value ?: return@launch
         if (active.id != id) return@launch
+        if (learned != null) learnedMark = id to learned
         show((runSession.run(active) as? OperationResult.Success)?.value)
+    }
+
+    /**
+     * «Забыть» on a learned command's card (B-10, `DOC-AML-5`): its form is deleted from the learned store, on
+     * [scope] like every other write this card makes. The mark goes only when the store says the form is gone
+     * ([OperationResult.Success]); on a failure it stays — the command is still learned, and the card says so.
+     * A mark that moved on to another session meanwhile is not touched.
+     */
+    fun forgetLearned() {
+        val mark = learnedMark ?: return
+        scope.launch {
+            if (forgetLearnedPlan.forget(mark.second) is OperationResult.Success && learnedMark == mark) {
+                learnedMark = null
+                _learned.value = null
+            }
+        }
     }
 
     /**
@@ -127,6 +171,9 @@ internal class LauncherAgentSession(
      * this branch the trace grows by a row on every start for as long as the plan sits unanswered.
      */
     fun restoreOnStart() = scope.launch {
+        // Fork 4-5's named limit (B-10): no mark survives into a restored session — see [learned].
+        learnedMark = null
+        _learned.value = null
         val active = (store.active() as? OperationResult.Success)?.value ?: return@launch
 
         if (active.state.isTerminal) {

@@ -120,6 +120,7 @@ fun LauncherScreen(
     val agentUndoReview by viewModel.agentUndoReview.collectAsStateWithLifecycle()
     val agentResumeFailed by viewModel.agentResumeFailed.collectAsStateWithLifecycle()
     val agentRemainderOffered by viewModel.agentRemainderOffered.collectAsStateWithLifecycle()
+    val agentLearnedCommand by viewModel.agentLearnedCommand.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     // First-run nudge (Block X6): whether this launcher is already the system default HOME app.
@@ -318,6 +319,8 @@ fun LauncherScreen(
                     onUndo = viewModel::undoAgentSession,
                     remainderOffered = agentRemainderOffered,
                     onRetryRemainder = viewModel::retryAgentRemainder,
+                    learned = agentLearnedCommand,
+                    onForgetLearned = viewModel::onForgetLearnedCommand,
                 )
             }
             // A4′ phase 3b, Task 11 (fork 3b-F): «Продолжить» the store could not carry out is SAID, in the

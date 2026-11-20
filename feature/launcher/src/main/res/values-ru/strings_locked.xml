@@ -45,4 +45,6 @@
     <string name="launcher_prayer_name_asr">Аср</string>
     <string name="launcher_prayer_name_maghrib">Магриб</string>
     <string name="launcher_prayer_name_isha">Иша</string>
+    <!-- Class B: destructive-gate consequence (A4′ ф4, owner «T8: a» 2026-11-20) -->
+    <string name="launcher_forget_learned_command_consequence">"«%1$s» больше не будет выполняться без вопроса.\nЧтобы выучить её снова, подтвердите её ещё три раза."</string>
 </resources>

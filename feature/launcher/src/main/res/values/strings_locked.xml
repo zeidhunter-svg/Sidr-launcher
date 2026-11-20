@@ -52,6 +52,12 @@
     renderings used in Russian/Turkish Islamic sources) awaiting owner sign-off - mistranslating the
     Shahada is a real risk this task will not take silently.
 
+  - launcher_forget_learned_command_consequence: the `consequence` passed into SidrForgetGate ->
+    SidrActionGate(type = Destructive) on the learned-commands screen - a destructive-gate consequence
+    sentence in the same species as feature/settings' settings_forget_*_consequence (A4' phase 4, owner
+    "T8: a" 2026-11-20). Class B: translated in values-ru / values-tr, pending owner re-sign of the
+    OWNER-REVIEWED digest in those two files.
+
   I18N-2 addition (2026-08-19): prayer-name labels (5, matching PrayerSummaryMapper.kt's
   FIVE_PRAYERS_ORDER). Closes a real TalkBack bug: the Home strip's cell contentDescription used to
   read the raw Kotlin enum name (name.name -> "FAJR"/"DHUHR"/...) instead of resolving through
@@ -107,4 +113,6 @@
     <string name="launcher_prayer_name_asr">ASR</string>
     <string name="launcher_prayer_name_maghrib">MAGHRIB</string>
     <string name="launcher_prayer_name_isha">ISHA</string>
+    <!-- Class B: destructive-gate consequence (A4′ ф4, owner «T8: a» 2026-11-20) -->
+    <string name="launcher_forget_learned_command_consequence">"\"%1$s\" will no longer run without asking.\nTo learn it again, confirm it three more times."</string>
 </resources>

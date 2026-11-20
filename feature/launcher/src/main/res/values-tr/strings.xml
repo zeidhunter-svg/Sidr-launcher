@@ -162,4 +162,5 @@
     <string name="launcher_learned_commands_learning">%1$d / %2$d</string>
     <string name="launcher_learned_commands_learned">Öğrenildi</string>
     <string name="launcher_learned_commands_failed">Öğrenilmiş komutlar okunamadı</string>
+    <string name="launcher_forget_learned_command_title">Öğrenilmiş komut unutulsun mu?</string>
 </resources>

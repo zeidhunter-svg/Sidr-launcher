@@ -45,4 +45,6 @@
     <string name="launcher_prayer_name_asr">İkindi</string>
     <string name="launcher_prayer_name_maghrib">Akşam</string>
     <string name="launcher_prayer_name_isha">Yatsı</string>
+    <!-- Class B: destructive-gate consequence (A4′ ф4, owner «T8: a» 2026-11-20) -->
+    <string name="launcher_forget_learned_command_consequence">"\"%1$s\" artık sormadan çalışmayacak.\nYeniden öğrenilmesi için üç kez daha onaylayın."</string>
 </resources>

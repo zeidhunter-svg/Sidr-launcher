@@ -13,12 +13,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sidr.launcher.core.ui.component.EmptyState
 import com.sidr.launcher.core.ui.component.ErrorState
+import com.sidr.launcher.core.ui.component.SidrForgetGate
 import com.sidr.launcher.core.ui.component.SidrIconButton
 import com.sidr.launcher.core.ui.component.SidrMemoryItem
 import com.sidr.launcher.core.ui.component.SidrMemoryStatus
@@ -53,7 +57,7 @@ fun LearnedCommandsScreen(
 }
 
 @Composable
-private fun LearnedCommandsContent(
+internal fun LearnedCommandsContent(
     uiState: LearnedCommandsUiState,
     onBack: () -> Unit,
     onRetry: () -> Unit,
@@ -61,6 +65,9 @@ private fun LearnedCommandsContent(
     modifier: Modifier = Modifier,
 ) {
     val title = sidrString(R.string.launcher_learned_commands_title)
+    // «Забыть» asks first (owner «T8: a», 2026-11-20), as `LearnedChoicesScreen` does: the row's tap only names the
+    // form; the store is touched by the gate's own confirm.
+    var pendingForget by remember { mutableStateOf<String?>(null) }
     SidrScaffold(
         modifier = modifier,
         topBar = {
@@ -109,9 +116,22 @@ private fun LearnedCommandsContent(
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs),
                 ) {
                     items(uiState.commands, key = { it.form }) { command ->
-                        LearnedCommandItem(command = command, onForget = { onForget(command.form) })
+                        LearnedCommandItem(command = command, onForget = { pendingForget = command.form })
                     }
                 }
+            }
+
+            pendingForget?.let { form ->
+                SidrForgetGate(
+                    title = sidrString(R.string.launcher_forget_learned_command_title),
+                    consequence = sidrString(R.string.launcher_forget_learned_command_consequence, form),
+                    onCancel = { pendingForget = null },
+                    onForget = {
+                        onForget(form)
+                        pendingForget = null
+                    },
+                    modifier = Modifier.padding(Spacing.md),
+                )
             }
         }
     }

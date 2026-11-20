@@ -10,7 +10,7 @@
   retyped) out of this module's ordinary values-ru/strings.xml - no copy change.
 -->
 <!--
-  OWNER-REVIEWED 2026-08-20 sha256:c8fa59b1cfe57052 - the owner has read and approved this file's
+  OWNER-REVIEWED 2026-11-20 sha256:26c8b173d891df98 - the owner has read and approved this file's
   Russian/Turkish text against docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md (Class B,
   spec §7.2). Provenance, recorded deliberately: the review was performed by the owner; this token
   was typed by the agent on the owner's explicit instruction. The gate cannot tell the two apart,
@@ -24,6 +24,8 @@
   checkOwnerReviewedLocaleStrings became content-bound in the same block: the digest above covers
   this file's Class B keys, so the next edit to any of them invalidates this signature instead of
   riding it.
+  Re-signed 2026-11-20 (A4' phase 4, owner answer «I1: a», then «подпись: да» to the exact text shown in the
+  session): settings_local_only_description rewritten. Token typed by the agent on that instruction.
 -->
 <resources>
     <string name="settings_stored_locally">Хранится только на этом устройстве.</string>

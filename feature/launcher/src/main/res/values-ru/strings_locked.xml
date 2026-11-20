@@ -15,11 +15,13 @@
   the same owner sign-off.
 -->
 <!--
-  OWNER-REVIEWED 2026-08-19 sha256:af2f76416a1d40fe - the owner has read and approved this file's Russian/Turkish text
+  OWNER-REVIEWED 2026-11-20 sha256:f984af4fa5f89833 - the owner has read and approved this file's Russian/Turkish text
   against docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md (Class B, spec §7.2).
   Provenance, recorded deliberately: the review was performed by the owner; this token was typed
   by the agent on the owner's explicit instruction in the 2026-08-19 session. The gate cannot tell
   the two apart, so the file says which it was.
+  Re-signed 2026-11-20 (A4' phase 4, owner answer «T8: a», then «подпись: да» to the exact text shown in the
+  session): adds launcher_forget_learned_command_consequence. Token typed by the agent on that instruction.
 -->
 <resources>
     <string name="launcher_prayer_method_mwl">Всемирная исламская лига</string>

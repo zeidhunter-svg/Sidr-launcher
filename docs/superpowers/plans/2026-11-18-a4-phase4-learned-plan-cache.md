@@ -7,7 +7,10 @@
 > **Status: written 2026-11-18, reviewed once the same day against the tree and the spec (`reviewer-deep`,
 > FIX REQUIRED: 0 blocking, 4 substantial, 6 minor — every finding applied, §0.11). Approved by the owner
 > 2026-11-19 with the answer «a» to §0.7 item 6 — Task 10 (Auto Backup) added, the close is Task 11 (§0.12).
-> Started 2026-11-19.** Branch `launcher--7`,
+> Started 2026-11-19. Closed 2026-11-20, `CODE-GREEN`, gate 1910** (plan 1902; +8 from review and fix rounds) —
+> ADRs «2026-11-20 — A4′ ф4: кэш выученных планов — форма со слотами, шаблон, схема 5» and «2026-11-20 — D3,
+> поправка: выученная команда» (owner sign-off pending) in `ai-context/decisions.md`; record in the `§HANDOFF` archive,
+> «Фаза 4 A4′ — кэш выученных планов». Branch `launcher--7`,
 > base `9fe73aa` (the forks commit over `abf3531`), gate baseline **1841 / 0 / 0** — measured at the start of
 > this session: boundary `tools/gate.sh`, cleared tree, `557 actionable tasks: 557 executed`, per module
 > exactly the floor.

@@ -5,7 +5,35 @@
 > digest); per-phase plans carry their own checklists.** This file is the status snapshot — if it
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
-> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-11-17 (c)
+> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-11-20
+> (**Этап 6 (A4′) phase 4 — the learned-plan cache — `CODE-GREEN` at 1910 / 0 failures** (boundary
+> `tools/gate.sh` at `22d1bed9`, cleared tree after `gradlew --stop`, 557 executed: `:domain` 617 · `:consumer:jvm` 101 ·
+> `:data:repository` 477 · `:feature:launcher` 291 · `:app` 90 · `:feature:settings` 35 · other seven 299; the plan
+> predicted 1902 — +2 T1, +1 T7, +4 T9 from review and fix rounds, +1 the final review's I2), forks `9fe73aa`, plan
+> `54ffcf0`, plan review `8820da7`, the owner's «a» `cd761c3`, task commits `8c54a32`…`bedb11e0`, final-review fixes
+> `22d1bed9`; floor `BASELINE_TESTS` 1841 → 1910; `:app:assembleRelease` BUILD SUCCESSFUL, unsigned APK 7.3 MB (R8
+> decode of the template DTOs at runtime not exercised). **No device round, by design.** What landed (six owner
+> forks, `1: a · 2: a · 3: c · 4: a (3) · 5: a · 6: a`): a fresh model reading the user ran (`«Выполнить»` and a
+> started session) teaches a **form with slots** — the user's words the model took into an argument — and the
+> model's **validated answer before binding** as its template; at **three** confirmations of the same form and
+> template it is pinned and **replays at step 2c** (after 2b, above the local-only / provider / network gates)
+> through the same `BridgeValidator`, `MentionBinder`, offering and ICU folding as step 7, **without the model and
+> without the interpretation card** — unless a pick is owed or model text would go out; the engine's consent card
+> every time (spec §10 criterion 9's three mutations proved: streak M3-2, re-resolve M3-3, consent M5-1a; M5-1 as
+> planned was vacuous). The session card says «Выученная команда» with «Забыть» (process memory only, fork 4-5);
+> Settings → «Выученные команды» lists and forgets (`DOC-AML-5`). Storage: `learned_plans`, Room schema 4 → 5
+> (`Migration4To5` proved under Robolectric; the instrumented cases written, not run). The bridge's fifth private
+> source is planted in `BridgePayloadGuardTest` (`DOC-AML-1`). Outside the spec, owner's «a» of 2026-11-19: every
+> database and DataStore file left out of Auto Backup and device transfer (`BackupRulesGuardTest`, `DOC-AML-4`) — on
+> a new phone memory **and every setting** start from defaults; no restore seen. `:consumer:jvm` parity over a JSON
+> file. **D3 amended** (ADR «2026-11-20 — D3, поправка: выученная команда», **owner sign-off pending**); **owner
+> item I1** — the owner-signed `settings_local_only_description` («…suggested actions always ask before running»)
+> is false since 2c; it blocks the block's acceptance, not the phase close (agent recommends rewording (a)). Other
+> owner items: `DOC-HMA-3`'s marker address (proposed `← долг A4′ приёмка / A5`), one-tap «Забыть» on the screen (a
+> confirm gate's consequence line is Class B), eight new `tr` strings for the block's Turkish review, the
+> instrumented `MigrationTest`. Next: **the block's single acceptance on the phone, then the block ADR A4′**. Full
+> record: `§HANDOFF` «Фаза 4 A4′» (archive); ADRs «2026-11-20 — A4′ ф4: кэш выученных планов — форма со слотами,
+> шаблон, схема 5» and «2026-11-20 — D3, поправка: выученная команда»**); prior 2026-11-17 (c)
 > (**the owner's five answers to phase 3b's close — built, `CODE-GREEN` at 1839 / 0 failures** (boundary
 > `tools/gate.sh` on `8325aa5` + the close docs, cleared tree, 557 executed: `:domain` 582 · `:consumer:jvm` 91 ·
 > `:data:repository` 468 · `:feature:launcher` 281 · `:app` 84 · `:data:ai-cloud` 49 · other seven 284; commits
@@ -1755,6 +1783,21 @@ since 2026-11-17); a broken alias table reads as «no alias forms»; learned-cho
 whose key the word cut changes (a symbol, a hyphen, a CJK/Thai name under ICU) are orphans, visible and
 deletable in Settings; «BİR BUÇUK SAAT» typed in capitals is not read (U+0307), «YARIM SAAT» is.
 
+**A4′ phase 4 (2026-11-20) is `CODE-GREEN` only — nothing of it has been seen on a phone.** Not the fourth
+«сотри …» with no interpretation card and only the consent card naming the package, not a search that opens at
+once with «Выученная команда» and «Забыть», not the card coming back after «Забыть», not the Settings screen
+«Выученные команды», not the v4 → v5 update of a real install (the instrumented `MigrationTest` cases are
+written, not run), not a backup restore or a device transfer; the hypothesis list is in the phase plan §0.7 and
+`§HANDOFF` «Фаза 4 A4′» (archive). Not claimed: that R8 decodes the template DTOs at runtime (the release build
+compiles them); that the owner signed D3's amendment (pending); that the owner-signed local-only description is
+true (I1 — «…suggested actions always ask before running» is false since step 2c; owner item); that «Забыть» erases
+the bytes (SQLite free pages, A1′ residual (10)); that memory or settings move to a new phone (they start from
+defaults, the cost of the owner's «a»); that a learned command is multilingual (each wording pins on its own
+streak — spec §8.1 diverges). Named, not fixed: an unreadable store or a failed 2c start sends the command to the
+model online (B-5 fails open; the JVM ends it); a replayed address ending «)» is cut; one form holds one template,
+so a different reading unpins it; «Забыть» on the screen is one tap with no confirm; the learned mark is gone
+after process death.
+
 **Context hygiene (2026-11-11) claims nothing on a phone and nothing about tokens directly:** every number
 it reports is bytes (`wc -c`), not tokens — the harness has no counter; the hook filter is calibrated on
 one session (sixteen prompts) and is to be re-read after three; the `:app` 77 → 79 is a scoped-run count,
@@ -1767,17 +1810,19 @@ ADR, which a mechanical check cannot judge).
 
 > **Re-based 2026-09-20 — this list had been stale since 2026-07-11 and pointed two tracks back.**
 
-- Current state + hard rules + gate (NOT a session digest since Этап 0.4; re-compressed 2026-11-11 to ~42 KB with a size ceiling held by `ClaudeMdSizeGuardTest`): `CLAUDE.md`
+- Current state + hard rules + gate (NOT a session digest since Этап 0.4; re-compressed 2026-11-11 to ~42 KB, ~47 KB at A4′ phase 4's close, under the 48 000-byte ceiling held by `ClaudeMdSizeGuardTest`): `CLAUDE.md`
 - Decisions log — **latest block ADR: «2026-09-19 — Этап 5.5 (A1″)», whose last section is the
   owner's device acceptance of 2026-09-20**. A4′ has no block ADR yet — it is written at the block's
   close, not per phase; inside it phase 3a wrote two ADRs, «2026-10-05 — A4′ ф3a: `ACTION_CATALOG_SCHEMA`
   → `AUTHORED_TOOL_SCHEMA`» and «2026-10-05 — A4′ ф3a: один модельный путь; исходящий контракт —
   девятнадцать `ToolId`» (with the 2026-11-07 addendum on the bridge's budget and transport, and inside it
   phase 3b's «Замер фазы 3b», 2026-11-15, clarified at close); phase 3b wrote «2026-11-07 — A4′ ф3b: сорт —
-  отдельная ось; F6 закрыт» (written 2026-11-09, clarified at close). The latest
-  ADR of all is «2026-11-11 — Сжатие CLAUDE.md (гигиена контекста)» (docs + one guard class; carries the
-  verbatim appendix of everything compressed out of `CLAUDE.md`), after «2026-11-07 — Два принципа агентной
-  ОС: защищённая открытость и локальное по умолчанию» (docs only): `ai-context/decisions.md`
+  отдельная ось; F6 закрыт» (written 2026-11-09, clarified at close); phase 4 wrote the
+  latest ADRs of all, «2026-11-20 — A4′ ф4: кэш выученных планов — форма со слотами, шаблон, схема 5» and
+  «2026-11-20 — D3, поправка: выученная команда» (owner sign-off pending). Before them «2026-11-11 — Сжатие
+  CLAUDE.md (гигиена контекста)» (docs + one guard class; carries the verbatim appendix of everything compressed
+  out of `CLAUDE.md`) and «2026-11-07 — Два принципа агентной ОС: защищённая открытость и локальное по
+  умолчанию» (docs only): `ai-context/decisions.md`
 - Architecture: `docs/architecture.md` · Roadmap: `docs/roadmap.md`
 - **Governing**: agentic Master Plan `docs/governing/sidr-agentic-master-plan-v1.0.md` · doctrine
   matrix (rules `DOC-*`) `docs/governing/sidr-doctrine-matrix-v1.0.md` · ontology v0.1
@@ -1786,7 +1831,7 @@ ADR, which a mechanical check cannot judge).
   A4′ phase 3a — follow-ups under their own change control, listed in `§HANDOFF` «Фаза 3a A4′»
 - **Active track plan** (stages, §0 protocol, `§HANDOFF` written for the next session — since
   2026-11-11 the **live** part only):
-  `docs/superpowers/plans/2026-08-18-agentic-track-restart.md`; the closed phase records (A4′ Фазы 0–3b,
+  `docs/superpowers/plans/2026-08-18-agentic-track-restart.md`; the closed phase records (A4′ Фазы 0–4,
   the A1″ handoff, D1–D11) are verbatim under their original headings in
   `docs/superpowers/plans/2026-08-18-agentic-track-restart-handoff-archive.md`, so «`§HANDOFF` «Фаза N A4′»»
   resolves there
@@ -1808,7 +1853,10 @@ ADR, which a mechanical check cannot judge).
   record and its eleven open owner items in `§HANDOFF` («Фаза 3b A4′», archive) — the five the owner answered
   «build» are built (2026-11-17, gate 1839, the ledger's «Post-close owner items»), ledger
   `.superpowers/sdd/2026-11-07-a4-phase3b/progress.md` (git-ignored); **phase 4 — the learned-plan cache
-  (spec §8) — to go**, its own plan, then the block's one acceptance. Of the
+  (spec §8) — `CODE-GREEN` 2026-11-20** (gate 1910), plan `docs/superpowers/plans/2026-11-18-a4-phase4-learned-plan-cache.md`,
+  record and its open owner items (D3 sign-off, I1, the `DOC-HMA-3` address, the screen's forget gate) in
+  `§HANDOFF` («Фаза 4 A4′», archive), ledger `.superpowers/sdd/2026-11-18-a4-phase4-learned-plan-cache/progress.md`
+  (git-ignored); next — the block's one acceptance on the phone, then the block ADR A4′. Of the
   four findings A1″'s acceptance handed it, phase 0 **repaired (a) in code** (a cancelled uninstall
   claiming success), **named (b) excluded** from A4′ with its own address (the `HOME`-role grant a live
   process does not see — staleness layer 2, `ShortcutRefreshTrigger`), and phase 3a **closed (c) and (d)

@@ -36,8 +36,8 @@
 
   Every value below is extracted verbatim (byte-for-byte, not retyped) from the pre-I18N-1 Kotlin
   literals in AssistantPresentation.kt / AssistantScreen.kt; no copy change. The Russian and Turkish
-  values in the corresponding values-ru / values-tr strings_locked.xml are agent-drafted and NOT
-  owner-reviewed.
+  values in the corresponding values-ru / values-tr strings_locked.xml were agent-drafted and are
+  owner-reviewed (see the OWNER-REVIEWED line in each file).
 -->
 <resources>
     <!-- ── Class A: locked, never translated (spec §7.1) ─────────────────────────────────────── -->

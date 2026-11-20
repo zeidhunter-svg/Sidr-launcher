@@ -26,6 +26,14 @@
 
 ## 0. Framing — what "agentic" requires that SIDR does not yet have
 
+> **State 2026-11-20.** The framing below is the 2026-07 starting point and is kept as written. Since then the
+> engine exists: A0 built the bounded loop (`AgentExecutor`, `AgentSession`, `TemplatePlanner`, `ToolExecutor` as
+> the only path to the world, trace, session in Room), A0.5 a second consumer (`:consumer:jvm`), A1′/A1″ the
+> federated `ToolRegistry` (twenty-two authored tools, app shortcuts as tools), and A4′ phases 0–4 (`CODE-GREEN`)
+> partial failure + undo, re-plan, multi-step model plans and the learned-plan cache. `CommandPlanner` and the
+> router were deleted in A4′ phase 3a: **the one model path is the bridge** (`ModelPlanner`; an interpretation
+> card, nothing runs before «Выполнить», then only through the engine). Current status: `CLAUDE.md`.
+
 Today the pipeline is **single-shot**: `command → one proposed action → confirm → execute`
 (`RouteCommandUseCase` → `CommandPlanner` → `ExecuteActionUseCase`). That is a *smart router*, not an agent.
 
@@ -49,7 +57,7 @@ context, memory, and the runtime.** The visual identity polishes the shell; this
 - **`OutboundContextPolicy` allow-list + BYOK Keystore** — the seed of the agent's outbound boundary.
 - **Three separate pipelines (`IntentMatcher` / `GenerativeAiEngine` / `CommandPlanner`)** — the seed of
   tier-aware intelligence (rule → local model → cloud).
-- **`ResolutionPreferenceStore` (S2-1) + planned `AliasStore` (S2-2)** — two concrete memory types to
+- **`ResolutionPreferenceStore` (S2-1) + `AliasStore` (S2-2, shipped)** — two concrete memory types to
   generalize.
 
 ## 1. The six layers
@@ -99,7 +107,8 @@ Each layer: **purpose · grows-from · domain shape · invariants · the surface
 ### A4 — Agent Runtime  *(the missing core)*
 
 - **Grows from:** `CommandPlanner` (single-shot) + `RouteCommandUseCase` (rule-first composition) +
-  `ExecuteActionUseCase`.
+  `ExecuteActionUseCase`. *(2026-11-20: grown — `CommandPlanner` deleted in A4′ phase 3a, replaced by the
+  bridge's `ModelPlanner` at `RouteCommandUseCase` step 7.)*
 - **Domain (pure):**
   - **`Planner`** port: `plan(goal, ContextSnapshot, ToolRegistry, UserMemory) → ExecutionPlan | Clarify |
     NoPlan`. **Rule-first here too:** a deterministic `TemplatePlanner` → on-device model → `LlmPlanner`
@@ -230,9 +239,9 @@ If the runtime first learns to call 20 tools and consent is added afterwards, th
 forget it; if consent lives inside `ToolExecutor` from day one, tool #21 gets it for free. Same logic by
 which this project's privacy guard-tests were written before there was anything to leak.
 
-Current state (2026-08-19): Stage 1 closed; the design track closed (DS-1…DS-11 + I18N-1/2); the four
-strategic ADRs of Этап 1 accepted → **Этап 0 (cleanup) and Этап 2 (toolchain + KMP) next**, then the A0
-spike.
+Current state (2026-11-20): A0…A1″ closed; A4′ phases 0–4 `CODE-GREEN`, block acceptance next.
+*(2026-08-19: Stage 1 closed; the design track closed (DS-1…DS-11 + I18N-1/2); the four strategic ADRs of
+Этап 1 accepted → Этап 0 and Этап 2 next, then the A0 spike.)*
 
 ## 6. Non-goals / explicitly out of scope
 
@@ -240,5 +249,5 @@ spike.
 - Adopting the 5-tab nav (Home/Agents/Memory/Activity/System) or a live "Agents" surface now — deferred
   until A4/A6 are real (see the design audit / DS decisions).
 - Autonomy without consent; any action that bypasses the risk/permission gates.
-- Replacing the existing rule/router/executor path — A1–A6 *compose over* it; router-off / offline parity
-  is preserved throughout.
+- Replacing the existing rule/bridge/executor path — A1–A6 *compose over* it; local-only / offline parity
+  is preserved throughout (the router was deleted in A4′ phase 3a).

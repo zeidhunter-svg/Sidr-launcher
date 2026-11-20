@@ -22,15 +22,15 @@ Sidr Launcher is an AI-first Android launcher for Android 9+ (API 28+) that lets
   already-understood goal shapes offline; everything else reaches the model planner, and a FastPath miss
   is no longer grounds to answer "Unknown command". Nothing the model proposes executes, gains rights or
   leaves the device except through the deterministic gates (`ToolRegistry` → argument validation →
-  preconditions → risk gate / consent → loop bounds → egress allow-list → trace). Router-off / offline /
+  preconditions → risk gate / consent → loop bounds → egress allow-list → trace). Local-only / offline /
   no-key ⇒ FastPath + plan cache + an honest "this needs network", with byte-for-byte parity kept as a
   test.
 - Cloud AI is the default generative path; local AI is optional and capability-gated.
 - **Local inference runtime, when a local tier is built, is LiteRT / LiteRT-LM** (ADR "2026-08-19 — ADR
   2/4"), with `AICore` / Gemini Nano as a separate path on devices that have it. **ONNX Runtime Mobile is
   closed** — the NLU/classification/embedding stack (`:data:ai-local`, `LayeredIntentMatcher`,
-  `NluConfidenceCalibrator`, `TextEmbedder`) is removed in Этап 0.3 of the agentic restart plan; until
-  that lands the code is present but inert (no model has ever been provisioned).
+  `NluConfidenceCalibrator`, `TextEmbedder`) was removed in Этап 0.3 of the agentic restart plan
+  (2026-08-19); no model had ever been provisioned.
 - AI features degrade gracefully without connectivity.
 - Streaming responses use one unified contract: `Flow<AiChunk>`.
 - Accessibility features are optional and require explicit user consent.
@@ -120,13 +120,19 @@ domain/                       Pure Kotlin: models, repository interfaces, use ca
 data/                         Repository implementations and data sources
 data/repository/              Launcher repositories (InstalledApps, preferences, history), rule-based
                               matcher, Android ActionExecutor, Room (Block F) + DataStore (Block E)
-data/ai-cloud/                Ktor cloud AI client and streaming adapter
-data/ai-local/                ONNX NLU, embeddings, local inference (interface-gated, ONNX isolated)
-feature/launcher/             Home screen, app grid, command input, launcher interactions
+data/ai-cloud/                Ktor cloud AI client, streaming adapter, the bridge's transport
+                              (OpenAiCompatibleBridgeTransport)
+data/prayer/                  Offline prayer-time calculation (adhan2), bundled city index, schedule cache
+feature/launcher/             Home screen, app grid, command input, interpretation / agent session cards,
+                              learned-commands screen
 feature/assistant/            Text/voice AI command UI and SpeechInputSource abstraction
 feature/suggestions/          Stateless context-aware suggestions row (UI only; host VM owns state)
-feature/settings/             Settings UI (planned; inline placeholder until created)
+feature/settings/             Settings UI (built), incl. memory screens (aliases, learned choices)
 feature/permission_education/ Permission education UI (built, Block G — real destination + request flow)
+feature/prayer/               Prayer detail and prayer settings screens
+consumer/jvm/                 Second consumer of the portable core (A0.5): headless JVM harness, depends on
+                              :domain only, sandboxed file tools, same bridge
+baselineprofile/              Baseline profile generator
 build-logic/                  Gradle convention plugins (planned)
 ```
 
@@ -139,7 +145,7 @@ Exact module names may be adjusted during setup, but dependencies must preserve 
 - `data/repository` is the single host for launcher repositories, the rule-based `IntentMatcher` implementation, and the Android `ActionExecutor`.
 - Route contracts (`Routes`, `NavigationEvent`) stay in `core/common` for now. Extract a dedicated `core/navigation` module when destinations grow beyond the current set, when a non-`feature`/non-`app` module needs them, or when build profiling shows `core/common` as a recompilation hotspot.
 - `core/testing` (shared fakes/fixtures) is **built** (bootstrapped Block B); `build-logic` (Gradle convention plugins) remains a planned addition, created on first need.
-- `feature/permission_education` is **built** (Block G) — `AppNavHost` routes its real destination, not a placeholder. `feature/settings` is still a planned placeholder; its `AppNavHost` destination remains inline until the module is created (it is also the future home for the permission-education entry point — see the Block G/H ADRs).
+- `feature/permission_education` is **built** (Block G) — `AppNavHost` routes its real destination, not a placeholder. `feature/settings` is **built** and routed by `AppNavHost` (see the Block G/H ADRs for the permission-education entry point).
 - **Room** (Block F) uses **KSP** for its processor while Hilt stays on kapt (Fork 8 hybrid); schema is exported and versioned (`schemas/`, Fork 2), migration runway wired (`MigrationTestHelper`). **DataStore Preferences** (Block E) holds non-secret preferences/flags/profile-cache/last-known-suggestions only.
 
 `SpeechInputSource` is a **domain** interface that abstracts Android `SpeechRecognizer`; its Android implementation lives in `core/android`. It must have a no-op or fake implementation (in `core/testing`) for tests and devices without available speech services.
@@ -154,14 +160,15 @@ enum class DeviceProfile {
 }
 ```
 
-`DeviceProfile` is decided from available RAM, CPU cores, NNAPI availability, GPU capability, thermal state, battery state, and connectivity. `LOW_END` devices should prefer rule matching and cloud routing when connected. `MID_RANGE` devices may use local ONNX classification when models are available. `HIGH_END` devices may enable more local AI features, still gated by model availability, thermals, and battery state.
+`DeviceProfile` is decided from available RAM, CPU cores, NNAPI availability, GPU capability, thermal state, battery state, and connectivity. `LOW_END` devices should prefer rule matching and cloud routing when connected. `MID_RANGE` devices may use a local inference tier (LiteRT / LiteRT-LM, ADR 2/4) once one is built. `HIGH_END` devices may enable more local AI features, still gated by model availability, thermals, and battery state.
 
 ## Dependency direction
 
 ```text
 app        -> feature/*, data/*, core/*
 feature/*  -> domain, core/ui, core/common
-data/*     -> domain, core/common, core/android   (data/ai-local additionally -> ONNX)
+data/*     -> domain, core/common, core/android
+consumer/jvm -> domain only (nothing depends on it)
 core/android -> core/common
 core/ui      -> core/common
 domain     -> Kotlin stdlib / coroutines only
@@ -214,27 +221,31 @@ Deep link support must cover:
 > they are superseded progressively by Этапы 0/4/6 of
 > [the agentic restart plan](superpowers/plans/2026-08-18-agentic-track-restart.md).
 
-**As built today:** intent matching (Phase 3) and generative AI (Phase 5) are two separate pipelines
-that share no code; `HandleUserCommandUseCase` is untouched by the generative path.
+**As built today (2026-11-20):** one command route, `RouteCommandUseCase` (`domain/ai/router`), plus the
+Assistant screen's generative pipeline (below), which is a different port and shares no code with it.
 
-### Intent matching (offline, fast) — as built today
+### Command route — as built today
 
-1. User enters text command in the launcher.
-2. Input is normalized and passed to the unqualified `IntentMatcher`, which is the **rule-first
-   `LayeredIntentMatcher`** (Phase 6, Block R). It runs `RuleBasedIntentMatcher` first (offline,
-   `< 10ms`); if the rule result is **not** low-confidence it is returned **verbatim** and the NLU
-   secondary is **never consulted** — the fast path and every Phase-3 outcome are preserved exactly.
-   *(`RuleBasedIntentMatcher` is FastPath under the new rule. It is English-only today — Этап 0.2
-   localizes its verb sets to `ru`/`tr`.)*
-3. Only on a low-confidence rule does it consult the local NLU secondary (`OnnxIntentClassifier`,
-   `MatcherSource.NLU`), which **self-gates** per inference (LOW_END / no verified model /
-   thermal/battery → escape without loading ONNX). With no model present — the shipping state for
-   14 months — the secondary always escapes, so behaviour is identical to rule-only.
-   **This whole tier is closed** (ADR 2/4) and removed in Этап 0.3, together with
-   `NluConfidenceCalibrator`, `LayeredIntentMatcher` and `MatcherSource.NLU`; the unqualified
-   `IntentMatcher` then binds directly to `RuleBasedIntentMatcher`.
-4. If confidence is sufficient, the mapped intent is executed via `HandleUserCommandUseCase`.
-5. `SimpleCommand.OPEN_ASSISTANT` routes to the assistant screen; the generative pipeline starts there.
+An ordered chain of early returns (the KDoc of `RouteCommandUseCase` is the authoritative text):
+
+1. **FastPath** — `RuleBasedIntentMatcher` via `HandleUserCommandUseCase`, offline, `en`/`ru`/`tr`
+   vocabulary (`FastPathLocaleGuardTest`); trigger matching is locale-blind. Run exactly once.
+2. **Decided but not achieved ⇒ the agent** — FastPath's «no such app» starts an `AgentSession`
+   (`TemplatePlanner`: launch → offer the store).
+   - **2b.** An undecided command is offered to the deterministic tool vocabulary (`ToolMatchPlanner`,
+     `ToolSelector`); a plan starts a session, an unresolved target is answered on the device.
+   - **2c.** A command the user taught (confirmed three times) is replayed from the **learned-plan cache**
+     (`LearnedPlans`, Room table `learned_plans`) through the same validator and binder as step 7, with no
+     model; the engine's consent card still applies.
+3. **`localOnlyMode` on** ⇒ FastPath parity, the model is not consulted and nothing leaves the device
+   (`DOC-ADL-3`). Steps 5/6: **no provider** / **offline** ⇒ an honest message naming which.
+4. **Step 7 — the bridge, the one model path** (A4′ phase 3a): `ModelPlanner` (BYOK, OpenAI-compatible,
+   `OpenAiCompatibleBridgeTransport`) receives the command and the authored tool descriptions; the answer is
+   validated (`BridgeValidator`), bound on the device (`MentionBinder`) and shown as an **interpretation
+   card**. Nothing runs before «Выполнить», and then only through the engine.
+
+Every acting path ends in the engine: `AgentExecutor` → `ToolExecutor` (the only path to the world, one
+call site below the consent checkpoint) over `ToolFederation`'s registry.
 
 ### Generative AI (assistant screen, Phase 5)
 
@@ -245,8 +256,7 @@ The assistant screen drives the generative pipeline via `GenerateReplyUseCase`:
    (positive allow-list: only the verbatim user command + a static system prompt; no calendar /
    location / history / device context assembled — fail-closed privacy guard).
 3. `DefaultGenerativeRouter` selects the engine in order:
-   - **ONNX slot** (reserved for local *generation*, Phase 7+ — still empty; Phase 6's ONNX work
-     feeds the separate `IntentMatcher` pipeline, not this generative router)
+   - **Local-generation slot** (empty; a future local runtime is LiteRT / LiteRT-LM per ADR 2/4)
    - **Cloud** (`OpenAiCompatibleGenerativeAiEngine`) — if online + provider config present + non-blank
      key in Keystore. Sends `POST {baseUrl}/chat/completions` (configurable base URL, free-text model,
      `Authorization: Bearer <key>`, `stream: true`). Parses SSE `choices[].delta.content` deltas.
@@ -269,7 +279,7 @@ When the primary path fails, fallback order is:
 
 ```text
 rule matcher (offline, always)
-  -> ONNX (reserved, Ph7+ — local *generation*; Phase 6 NLU lives in the IntentMatcher pipeline, not here)
+  -> local-generation slot (empty; LiteRT per ADR 2/4)
   -> cloud AI (if online + config + key present)
   -> static conversational fallback (always available)
 ```
@@ -382,11 +392,19 @@ Phase-7 `refreshStatus()` work discharged the original dangerous-permission debt
 - Device profile cache.
 - Last known suggestions.
 
-`Room` stores:
+`Room` stores (`SidrDatabase`, schema 5):
 
-- App usage history.
-- Suggestion ranking history.
-- Intent match history for learning.
+- App usage history (`app_usage`).
+- Suggestion ranking history (`suggestion_ranking`).
+- Intent match history for learning (`intent_match`).
+- Learned resolutions (`resolution_preferences`, S2-1) and user aliases (`aliases`, S2-2).
+- The one in-flight agent session (`agent_session`, `agent_plan_step`, `agent_trace_event`, A0) — empty at
+  rest: every terminal state deletes it by cascade.
+- The learned-plan cache (`learned_plans`, A4′ phase 4).
+
+Every database and DataStore file is **left out of Auto Backup and device transfer**
+(`android:fullBackupContent` / `android:dataExtractionRules` in the manifest, held by `BackupRulesGuardTest`,
+`DOC-AML-4`) — memory and settings stay on the device and start from defaults on a new phone.
 
 No persistence:
 
@@ -409,7 +427,6 @@ Rules:
 
 `WorkManager` is used for:
 
-- ONNX model download and verification.
 - Daily suggestion pre-computation when battery conditions allow it.
 - Usage data cleanup.
 
@@ -475,7 +492,6 @@ User data:
 Build security:
 
 - R8 is enabled in release builds.
-- ONNX Runtime requires explicit ProGuard rules.
 - Release artifacts, including R8 mapping files, must not contain API keys.
 - Network security config enforces HTTPS only.
 
@@ -483,4 +499,4 @@ Build security:
 
 The first implementation milestone is a compile-ready skeleton with stubs and interfaces, not complete business logic.
 
-R8/ProGuard rules are required for ONNX Runtime. Release readiness requires validation on Android 9, 11, 13, and 14, plus memory profiling on the `LOW_END` device profile.
+Release readiness requires validation on Android 9, 11, 13, and 14, plus memory profiling on the `LOW_END` device profile.

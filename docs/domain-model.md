@@ -42,7 +42,7 @@ Expected implementations:
 
 - cloud engine using Ktor
 - optional local LLM engine placeholder
-- local NLU/intent support using ONNX Runtime Mobile
+- local NLU/intent support using ONNX Runtime Mobile *(superseded by ADR 2/4, 2026-08-19: ONNX closed and deleted; a local runtime is LiteRT / LiteRT-LM)*
 
 ### `IntentMatch`
 
@@ -52,7 +52,7 @@ Key fields:
 
 - `intent`: action category
 - `confidence`: numeric confidence
-- `source`: rule, ONNX, cloud, or user confirmation
+- `source`: rule, ONNX, cloud, or user confirmation *(ONNX superseded by ADR 2/4)*
 - `slots`: extracted parameters
 
 ### `LauncherIntent`

@@ -69,7 +69,7 @@ SIDR прошёл Stage 1 — AI Launcher.
 * надёжный offline launcher core;
 * Universal Input;
 * rule-first intent routing;
-* BYOK cloud `CommandPlanner`;
+* BYOK cloud bridge (`ModelPlanner`, A4′ ф3a; до него — `CommandPlanner`);
 * Action Registry;
 * URL, web и Play Store routing;
 * SAFE/CONFIRM gating;
@@ -1229,7 +1229,7 @@ All Apps
 * IME submit;
 * clear behavior;
 * offline path;
-* router-off parity;
+* local-only parity (`DOC-ADL-3`; до A4′ ф3a — router-off parity);
 * current ViewModel contract.
 
 ---

@@ -30,11 +30,13 @@ layers grow inside vertical slices) → **Agentic OS** (consented automation + t
 [the handoff archive](docs/superpowers/plans/2026-08-18-agentic-track-restart-handoff-archive.md) under
 their original headings, so «`§HANDOFF` «Фаза 2 A4′»» resolves there.
 
-**Right now: A4′ phase 4 — the learned-plan cache — is `CODE-GREEN`** (2026-11-20, gate **1910**): a command
+**Right now: A4′ phase 4 — the learned-plan cache — is `CODE-GREEN`** (2026-11-20, gate **1910**; **1912** after T8): a command
 confirmed three times replays on the device at step 2c, no model, consent every time. D3 is amended by ADR
 «2026-11-20 — D3, поправка: выученная команда» — **signed by the owner 2026-11-20**; I1 «a»: the locked
-`settings_local_only_description` is reworded (both halves) — the owner's re-signature of the new text blocks acceptance.
-**Next: the block's single acceptance on the phone, then the block ADR A4′.** Record: `§HANDOFF` «Фаза 4 A4′»
+`settings_local_only_description` is reworded (both halves) and **re-signed by the owner 2026-11-20** (`072889ca`); the
+learned-commands «Забыть» goes through `SidrForgetGate` (T8, `bb4656fa`, consequence line signed in the same commit).
+**Next: the block's Turkish review, the instrumented `MigrationTest` v4→v5 / v1→v5, the single acceptance on the
+phone, then the block ADR A4′.** Record: `§HANDOFF` «Фаза 4 A4′»
 (archive); plan [2026-11-18-a4-phase4-learned-plan-cache.md](docs/superpowers/plans/2026-11-18-a4-phase4-learned-plan-cache.md).
 
 Layers above the track plan: the **Master Plan** (blocks A0…A6, DoD, change-control, `Agentic Shell v1 =
@@ -66,7 +68,7 @@ are not offered).
 | **4.5** A0.5 second consumer | ✅ `CODE-GREEN` 2026-08-26; device acceptance **not applicable** | ADR «Этап 4.5 (A0.5)» |
 | **5** A1′ federated `ToolRegistry` | ✅ `CLOSED` 2026-09-10 (`ru-RU` only) | ADR «Этап 5 (A1′)» |
 | **5.5 / 5.5b** A1″ tool mass + selection, phases 0–3b | ✅ `CLOSED` 2026-09-20, gate **1439**, `ru`/`tr`/`en`; signed build `db1e75d` **unfixed** | ADR «Этап 5.5 (A1″)» |
-| **6** A4′ runtime, spec [2026-09-21-a4-runtime-design.md](docs/superpowers/specs/2026-09-21-a4-runtime-design.md) — **one acceptance at the block's end, no device round per phase**; block ADR at close | phase 0 `CODE-GREEN` 2026-09-26, **1463** (`HandedOff`, cooperative wall-clock budget, `ToolArgumentSorts` closes R14-37 in code) · phase 1 2026-09-26, **1485** (`SecondGoal` FastPath overflow, `DOC-NYH-4`) · phase 2 2026-10-03, **1560** (R14 closed in code, consent reasons as a **set**, re-plan on «Продолжить», undo) · phase 3a 2026-11-07, **1673** (the bridge, **one model path**, router deleted, nineteen `ToolId`s frozen; budget by measurement: `PROMPT_ONLY`, 50 s, 4 096 tokens at 3a) · phase 3b 2026-11-17, **1821** (sorts an axis, `F6` closed; `TextFolding` + word forms, offered never bound; R14-39 closed; multi-step model plans with references; the remainder without the model; N2 «partial»; `:consumer:jvm` bridge parity; budget re-measured, per host since the owner's answers, **1841**) · phase 4 2026-11-20, **1910** (learned-plan cache: a form with slots + the model's validated answer, pinned at 3, replayed at step 2c without the model or a card, consent never skipped; schema 5; memory out of Auto Backup; D3 amended) | `§HANDOFF` «Фаза N A4′» (archive, 0–4); plans `2026-09-22-a4-phase0-…`, `2026-09-26-a4-phase1-…`, `2026-09-27-a4-phase2-…`, `2026-10-03-a4-phase3a-…`, `2026-11-07-a4-phase3b-…`, `2026-11-18-a4-phase4-…` in `docs/superpowers/plans/`; ADRs «2026-10-05 — A4′ ф3a …» (two; addendum «Замер фазы 3b»), «2026-11-07 — A4′ ф3b: сорт — отдельная ось», «2026-11-20 — A4′ ф4: кэш выученных планов…», «2026-11-20 — D3, поправка…» |
+| **6** A4′ runtime, spec [2026-09-21-a4-runtime-design.md](docs/superpowers/specs/2026-09-21-a4-runtime-design.md) — **one acceptance at the block's end, no device round per phase**; block ADR at close | phase 0 `CODE-GREEN` 2026-09-26, **1463** (`HandedOff`, cooperative wall-clock budget, `ToolArgumentSorts` closes R14-37 in code) · phase 1 2026-09-26, **1485** (`SecondGoal` FastPath overflow, `DOC-NYH-4`) · phase 2 2026-10-03, **1560** (R14 closed in code, consent reasons as a **set**, re-plan on «Продолжить», undo) · phase 3a 2026-11-07, **1673** (the bridge, **one model path**, router deleted, nineteen `ToolId`s frozen; budget by measurement: `PROMPT_ONLY`, 50 s, 4 096 tokens at 3a) · phase 3b 2026-11-17, **1821** (sorts an axis, `F6` closed; `TextFolding` + word forms, offered never bound; R14-39 closed; multi-step model plans with references; the remainder without the model; N2 «partial»; `:consumer:jvm` bridge parity; budget re-measured, per host since the owner's answers, **1841**) · phase 4 2026-11-20, **1910** (learned-plan cache: a form with slots + the model's validated answer, pinned at 3, replayed at step 2c without the model or a card, consent never skipped; schema 5; memory out of Auto Backup; D3 amended; T8 forget gate after the answers, **1912**) | `§HANDOFF` «Фаза N A4′» (archive, 0–4); plans `2026-09-22-a4-phase0-…`, `2026-09-26-a4-phase1-…`, `2026-09-27-a4-phase2-…`, `2026-10-03-a4-phase3a-…`, `2026-11-07-a4-phase3b-…`, `2026-11-18-a4-phase4-…` in `docs/superpowers/plans/`; ADRs «2026-10-05 — A4′ ф3a …» (two; addendum «Замер фазы 3b»), «2026-11-07 — A4′ ф3b: сорт — отдельная ось», «2026-11-20 — A4′ ф4: кэш выученных планов…», «2026-11-20 — D3, поправка…» |
 | **6–7** A4′ acceptance + block ADR, then A2/A3/A5/A6 | each its own plan; A2/A3/A5/A6 their own spec (`brainstorm → spec → plan → build`) | |
 
 The four strategic ADRs (2026-08-19): **1/4** understanding belongs to the model, execution to the
@@ -189,8 +191,8 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
   carry between FastPath and the bridge for `ru`/`tr` (fails safe); **(4)** `open_url` scheme case —
   closed by 3b Task 3 (`UrlSort`); **(5)** the bridge ceiling is cooperative; **(6)** the budget is pinned by a
   test since 3b (40 s + reasoning cap on OpenRouter, 50 s elsewhere — owner 2026-11-17), corpus labels still the
-  agent's draft; **(7)** `README.md`, `docs/roadmap.md`, `docs/agentic-os-architecture.md`, both
-  master plans still name the deleted router. **3b named limits** (`§HANDOFF` «Фаза 3b A4′», archive): a
+  agent's draft; **(7)** docs naming the deleted router — closed 2026-11-20 by the docs sync
+  (`README.md` rewritten). **3b named limits** (`§HANDOFF` «Фаза 3b A4′», archive): a
   fold-exact name binds with no pick on FastPath — «открой lumora» launches «Lumora+», a symbols-only label
   cannot be typed (`uninstall_app` asks instead since 2026-11-17, owner condition (3)); a broken alias table
   reads as «no alias forms» (`AliasStoreImpl.observeAll`); learned-choice rows keyed before 2026-11-17 under a
@@ -202,9 +204,9 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
   slots, > 64 chars; each wording pins on its own streak (§8.1 «multilingual for free» not delivered); **(4)**
   instrumented `MigrationTest` `v4_to_v5`/`v1_to_v5` written, not run; **(5)** backup rules `CODE-GREEN` only, no
   restore/transfer seen; memory **and every setting** (`flag_local_only` too) not moved to a new phone; **(6)**
-  **I1 (owner)**: locked `settings_local_only_description` false since 2c — blocks acceptance; **(7)** a replayed
-  URL ending «)» is cut (`SLOT_EDGE_PUNCTUATION`) and opens at once; **(8)** one-tap «Забыть» on the screen (the
-  gate's consequence line is Class B — owner); a forgotten row stays in SQLite free pages (A1′ (10)).
+  I1 closed 2026-11-20: rewritten, re-signed (`072889ca`), not seen on a phone; **(7)** a replayed
+  URL ending «)» is cut (`SLOT_EDGE_PUNCTUATION`) and opens at once; **(8)** «Забыть» on the screen asks first since
+  2026-11-20 (`SidrForgetGate`, T8 «a», `bb4656fa`); a forgotten row stays in SQLite free pages (A1′ (10)).
 - **A0 engine gaps:** the engine stops **waiting** at the budget (phase 2), not the **act**; binder never
   measured; the clock is the dispatcher's, not a port; a persisted `Failed` loses its `CommandFailure`
   variant; `GoalShape` stays at one value until A4′ (Master Plan §3.6 `B1`). **Guards D1–D11** (`§HANDOFF`
@@ -286,8 +288,8 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
   plus `:core:ui:verifyRoborazziDebug` whenever `core/ui` is touched, and `:app:assembleRelease` for
   release-affecting work. **`:domain:jvmTest` and `:consumer:jvm:test` must be listed explicitly:**
   `testDebugUnitTest` has not reached `:domain` since it went KMP, and it never reaches `:consumer:jvm`
-  at all. **Baseline: the floor in `tools/gate.sh` (`BASELINE_TESTS`, 1910 since A4′ phase 4's close (2026-11-20; 1841
-  before it), 557 actionable tasks executed, `build/test-results` cleared first) — compare a
+  at all. **Baseline: the floor in `tools/gate.sh` (`BASELINE_TESTS`, 1912 since the owner's answers to A4′ phase 4 (2026-11-20, T8; 1910
+  at the phase's close, 1841 before it), 557 actionable tasks executed, `build/test-results` cleared first) — compare a
   fresh gate against the floor and against the active phase's predicted chain (its plan), not against
   any number quoted in an older ADR.** The decomposition by module is derived **before** every boundary
   run and compared with it — a sum alone cannot tell «two added» from «two added and two lost»; the chains
@@ -407,7 +409,7 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
 | ADR log — **all history, one ADR per closed block** | [ai-context/decisions.md](ai-context/decisions.md) |
 | Recent status snapshot | [ai-context/current-status.md](ai-context/current-status.md) |
 | Active track plan (stages, §0 protocol, live `§HANDOFF`) | [docs/superpowers/plans/2026-08-18-agentic-track-restart.md](docs/superpowers/plans/2026-08-18-agentic-track-restart.md) |
-| `§HANDOFF` archive — closed phase records (A4′ Фазы 0–3a, the A1″ handoff) under their original headings | [docs/superpowers/plans/2026-08-18-agentic-track-restart-handoff-archive.md](docs/superpowers/plans/2026-08-18-agentic-track-restart-handoff-archive.md) |
+| `§HANDOFF` archive — closed phase records (A4′ Фазы 0–4, the A1″ handoff) under their original headings | [docs/superpowers/plans/2026-08-18-agentic-track-restart-handoff-archive.md](docs/superpowers/plans/2026-08-18-agentic-track-restart-handoff-archive.md) |
 | Roadmap | [docs/roadmap.md](docs/roadmap.md) |
 | Agentic target architecture A1–A6 | [docs/agentic-os-architecture.md](docs/agentic-os-architecture.md) |
 | Doctrine — rules `DOC-*`, verification types, test per rule | [docs/governing/sidr-doctrine-matrix-v1.0.md](docs/governing/sidr-doctrine-matrix-v1.0.md) |
@@ -433,11 +435,13 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
   owner's device acceptance as its last section** (2026-09-20) · **«Две строки доктрины»** —
   `DOC-HMA-5` and `DOC-ILM-5` (2026-09-20; docs only)
 - A4′ (Этап 6) has no block ADR until it closes; its phase records are in the `§HANDOFF` archive (Фазы
-  0–3b). Inside it, two ADRs of phase 3a: «2026-10-05 — A4′ ф3a: `ACTION_CATALOG_SCHEMA` →
+  0–4). Inside it, two ADRs of phase 3a: «2026-10-05 — A4′ ф3a: `ACTION_CATALOG_SCHEMA` →
   `AUTHORED_TOOL_SCHEMA`» and «2026-10-05 — A4′ ф3a: один модельный путь; исходящий контракт —
   девятнадцать `ToolId`», whose addendum «Бюджет и транспорт по умолчанию — по замеру» (2026-11-07) fixes
   the bridge's numbers and whose subsection «Замер фазы 3b» (2026-11-15, clarified at close) re-fixes them;
-  3b Task 3's ADR on argument sorts (header date 2026-11-07, written 2026-11-09, clarified at close) ·
+  3b Task 3's ADR on argument sorts (header date 2026-11-07, written 2026-11-09, clarified at close); phase 4:
+  «2026-11-20 — A4′ ф4: кэш выученных планов — форма со слотами, шаблон, схема 5» and «2026-11-20 — D3,
+  поправка: выученная команда» (signed 2026-11-20) ·
   **«2026-11-07 — Два принципа агентной ОС: защищённая открытость и локальное по умолчанию»** (docs only) ·
   **«2026-11-11 — Сжатие CLAUDE.md (гигиена контекста)»** — this file's compression, with the verbatim
   appendix of everything that left it

@@ -31,6 +31,9 @@ composeUiTest = "1.7.5"
 # kotlin-stdlib 1.9.22 (older than this project's Kotlin 2.0.21 compiler, so Gradle keeps 2.0.21 — no
 # clash); 0.0.6 pulls stdlib 2.2.20 and 0.0.7 pulls stdlib 2.4.0, both NEWER than the compiler
 # (unsupported). Confined to :data:prayer only — see AdhanPrayerCalculatorGoldenTest.kt header.
+# That rationale is historical (DS-6B, Kotlin 2.0.21): since Этап 2 the compiler is 2.4.10, so neither newer
+# release is ahead of it any more; the 0.0.5 pin stays because the golden tests were verified on it, and a bump
+# is its own change, re-run against them.
 adhan2 = "0.0.5"
 kotlinxDatetime = "0.5.0"
 

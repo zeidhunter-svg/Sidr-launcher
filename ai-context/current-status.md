@@ -28,10 +28,13 @@
 > a new phone memory **and every setting** start from defaults; no restore seen. `:consumer:jvm` parity over a JSON
 > file. **D3 amended** (ADR «2026-11-20 — D3, поправка: выученная команда», **signed by the owner 2026-11-20**).
 > Owner answers 2026-11-20 (`D3: да · I1: a · HMA3: да · T8: a · §0: да`): I1 — the locked
-> `settings_local_only_description` is reworded in both halves, its `ru`/`tr` re-signature pending the owner's «yes» to
-> the exact text (release gate red until then); `DOC-HMA-3` → `← долг A4′ приёмка / A5`; «Забыть» on the learned-commands
-> screen goes through `SidrForgetGate` (its consequence line Class B, signed with I1). Still open: the phase's `tr`
-> strings in the block's Turkish review, the instrumented `MigrationTest`. Next: **the block's single acceptance on the phone, then the block ADR A4′**. Full
+> `settings_local_only_description` is reworded in both halves and **re-signed 2026-11-20** (`072889ca`,
+> `checkOwnerReviewedLocaleStrings` green); `DOC-HMA-3` → `← долг A4′ приёмка / A5`; «Забыть» on the learned-commands
+> screen goes through `SidrForgetGate` (T8, `bb4656fa`, `LearnedCommandsScreenForgetGateTest`; consequence line signed
+> in `072889ca`). **Boundary gate after T8 and the signatures: `GATE GREEN` 1912 / 0 / 0** (557 executed; per module as
+> at 1910 except `:feature:launcher` 293), floor `BASELINE_TESTS` 1910 → **1912**; `:app:assembleRelease` BUILD
+> SUCCESSFUL with the signatures. Still open: the phase's `tr` strings (+ `launcher_forget_learned_command_title`) in
+> the block's Turkish review, the instrumented `MigrationTest` v4→v5 / v1→v5. Next: **the block's single acceptance on the phone, then the block ADR A4′**. Full
 > record: `§HANDOFF` «Фаза 4 A4′» (archive); ADRs «2026-11-20 — A4′ ф4: кэш выученных планов — форма со слотами,
 > шаблон, схема 5» and «2026-11-20 — D3, поправка: выученная команда»**); prior 2026-11-17 (c)
 > (**the owner's five answers to phase 3b's close — built, `CODE-GREEN` at 1839 / 0 failures** (boundary
@@ -1686,6 +1689,7 @@ See [`device-acceptance-brief.md`](device-acceptance-brief.md).
 - ⚠️ **Voice recognizer intermediate states** — `Ready` / `Partial` not evidenced (OQ#4); C.2 not a full
   recognizer PASS.
 - ⏭️ **C.5 boot warmup** — `RECEIVE_BOOT_COMPLETED` re-enqueue after a reboot not yet exercised.
+- *(Superseded 2026-08-19 for the next two lines: ONNX stack deleted, OQ#1–3 closed — ADR 2/4.)*
 - ⏭️ `OnnxIntentClassifierInstrumentedTest` assumption-skipped (no bundled model) — no `intent.onnx` /
   `vocab.txt` in repo or app sandbox → **PENDING-MODEL**; Block-P P5 `< 150ms` inference + Block-Q real
   provisioning still model-blocked (OQ#1/#2).
@@ -1789,13 +1793,13 @@ once with «Выученная команда» and «Забыть», not the ca
 «Выученные команды», not the v4 → v5 update of a real install (the instrumented `MigrationTest` cases are
 written, not run), not a backup restore or a device transfer; the hypothesis list is in the phase plan §0.7 and
 `§HANDOFF` «Фаза 4 A4′» (archive). Not claimed: that R8 decodes the template DTOs at runtime (the release build
-compiles them); that the owner signed D3's amendment (pending); that the owner-signed local-only description is
-true (I1 — «…suggested actions always ask before running» is false since step 2c; owner item); that «Забыть» erases
+compiles them); that the rewritten local-only description (I1, re-signed 2026-11-20) and the screen's forget gate
+(T8) have been seen on a phone; that «Забыть» erases
 the bytes (SQLite free pages, A1′ residual (10)); that memory or settings move to a new phone (they start from
 defaults, the cost of the owner's «a»); that a learned command is multilingual (each wording pins on its own
 streak — spec §8.1 diverges). Named, not fixed: an unreadable store or a failed 2c start sends the command to the
 model online (B-5 fails open; the JVM ends it); a replayed address ending «)» is cut; one form holds one template,
-so a different reading unpins it; «Забыть» on the screen is one tap with no confirm; the learned mark is gone
+so a different reading unpins it; the learned mark is gone
 after process death.
 
 **Context hygiene (2026-11-11) claims nothing on a phone and nothing about tokens directly:** every number
@@ -1827,8 +1831,9 @@ ADR, which a mechanical check cannot judge).
 - **Governing**: agentic Master Plan `docs/governing/sidr-agentic-master-plan-v1.0.md` · doctrine
   matrix (rules `DOC-*`) `docs/governing/sidr-doctrine-matrix-v1.0.md` · ontology v0.1
   `docs/governing/sidr-ontology-v0.1.md` — **a draft for discussion, not a decision**. Both master plans,
-  `docs/agentic-os-architecture.md`, `docs/roadmap.md` and `README.md` still name the router deleted in
-  A4′ phase 3a — follow-ups under their own change control, listed in `§HANDOFF` «Фаза 3a A4′»
+  `docs/agentic-os-architecture.md`, `docs/roadmap.md` and `README.md` named the router deleted in A4′ phase 3a
+  until 2026-11-20, when the docs sync before acceptance brought them in line (`README.md` rewritten; the Master
+  Plan's own journal is in its §5)
 - **Active track plan** (stages, §0 protocol, `§HANDOFF` written for the next session — since
   2026-11-11 the **live** part only):
   `docs/superpowers/plans/2026-08-18-agentic-track-restart.md`; the closed phase records (A4′ Фазы 0–4,
@@ -1854,7 +1859,8 @@ ADR, which a mechanical check cannot judge).
   «build» are built (2026-11-17, gate 1839, the ledger's «Post-close owner items»), ledger
   `.superpowers/sdd/2026-11-07-a4-phase3b/progress.md` (git-ignored); **phase 4 — the learned-plan cache
   (spec §8) — `CODE-GREEN` 2026-11-20** (gate 1910), plan `docs/superpowers/plans/2026-11-18-a4-phase4-learned-plan-cache.md`,
-  record and its open owner items (D3 sign-off, I1, the `DOC-HMA-3` address, the screen's forget gate) in
+  record and the owner's answers of 2026-11-20 (D3 signed, I1 rewritten and re-signed, `DOC-HMA-3` → A4′ acceptance /
+  A5, the forget gate built — gate 1912 after it) in
   `§HANDOFF` («Фаза 4 A4′», archive), ledger `.superpowers/sdd/2026-11-18-a4-phase4-learned-plan-cache/progress.md`
   (git-ignored); next — the block's one acceptance on the phone, then the block ADR A4′. Of the
   four findings A1″'s acceptance handed it, phase 0 **repaired (a) in code** (a cancelled uninstall

@@ -16,11 +16,13 @@
 > 3. **Stage 3 — Agentic OS.** An AI operating layer over Android: multi-step planning, user-consented
 >    safe automation, and one coherent intent-driven shell.
 >
-> **The AI-first launcher only becomes real in Stage 1's completion track (below).** Today's shipped
-> routing is rule-based (7 launch/search verbs + a command table); the local NLU/ONNX pipeline is built
-> but **inert** (no model — OQ#1/#2). Stage 1 makes the launcher genuinely "AI" via a **BYOK cloud LLM
-> router** that understands intent and proposes registered actions, gated by confidence, permissions,
-> and explicit confirmation for anything risky. See
+> **The AI-first launcher became real in Stage 1's completion track (below, closed 2026-07-06).** Before it,
+> shipped routing was rule-based (7 launch/search verbs + a command table) and the local NLU/ONNX pipeline was
+> built but **inert** (no model — OQ#1/#2; the stack was deleted in Этап 0.3, 2026-08-19). Stage 1 made the
+> launcher "AI" via a **BYOK cloud LLM router** that understood intent and proposed registered actions, gated by
+> confidence, permissions and explicit confirmation for anything risky. **Since A4′ phase 3a (2026-11-07) the
+> router is deleted and the one model path is the bridge** (`ModelPlanner`: the command and our tool
+> descriptions go out, an interpretation card comes back, nothing runs before «Выполнить»). See
 > [ai-context/ai-launcher-mvp-plan.md](../ai-context/ai-launcher-mvp-plan.md).
 
 ---
@@ -33,7 +35,7 @@
   FastPath and the learned-plan cache answer deterministically and offline as a **latency optimization**,
   not as a filter on understanding; a FastPath miss reaches the planner instead of returning "Unknown
   command". Nothing proposed by a model executes, gains rights or leaves the device except through the
-  deterministic gates. Router-off / offline / no-key ⇒ FastPath + plan cache + an honest "needs network",
+  deterministic gates. Local-only / offline / no-key ⇒ FastPath + plan cache + an honest "needs network",
   with byte-for-byte parity kept as a test.
 - Every AI-proposed action is **confidence-gated, permission-gated, and confirmation-gated** for risk.
   The AI never silently executes a risky or destructive action.
@@ -64,7 +66,7 @@ SM-A325F / Android 13. Compressed history (full detail in `CLAUDE.md` and the pe
   (Keystore AES-256-GCM), prompt/outbound privacy guards, `DefaultGenerativeRouter` + static fallback,
   assistant streaming UI. **Device-proven** (openrouter / `gpt-4o-mini` streamed end-to-end; key stayed
   encrypted).
-- **Phase 6 — local NLU (code only, INERT).** `OnnxIntentClassifier` (self-gating), rule-first
+- **Phase 6 — local NLU (code only, INERT) — deleted Этап 0.3 (2026-08-19, ADR 2/4).** `OnnxIntentClassifier` (self-gating), rule-first
   `LayeredIntentMatcher`, model provisioning (`ModelStore`/SHA-256/WorkManager). **No model bundled →
   always escapes to rule-only.** Gated on OQ#1/#2 — deferred to the model track, not an MVP blocker.
 - **Phase 7 — voice + contextual suggestions.** `AndroidSpeechInputSource` + `RECORD_AUDIO` flow,
@@ -76,7 +78,7 @@ SM-A325F / Android 13. Compressed history (full detail in `CLAUDE.md` and the pe
   Baseline Profile, suggestion correctness, test/privacy/logging hardening, Android-13 + LOW_END-path
   validation.
 
-## 1B. AI-Launcher completion track — ACTIVE (NOW)
+## 1B. AI-Launcher completion track — CLOSED (2026-07-06)
 
 **This is the work that makes the launcher an *AI* launcher.** Detailed plan + forks:
 [ai-context/ai-launcher-mvp-plan.md](../ai-context/ai-launcher-mvp-plan.md). Blocks are vertical
@@ -237,15 +239,19 @@ The user interacts primarily through intent:
 ```
 Stage 1 (MVP): Foundation ✅ → AIL-0…AIL-6 ✅ → design track DS-1…DS-11 ✅ → I18N-1/I18N-2 ✅
 
-Agentic track (NOW, docs/superpowers/plans/2026-08-18-agentic-track-restart.md):
-  Этап 1  strategic ADRs ✅ (2026-08-19)
-  Этап 0  cleanup: release unblock · FastPath ru/tr · remove ONNX · honest statuses · budgets
-  Этап 2  toolchain refresh + :domain → KMP (android + jvm)
-  Этап 3  agentic Master Plan + doctrinal matrix extraction
-  Этап 4  A0 thin agentic spike (one real 2-step goal, end to end, device-accepted)
-  Этап 5  A1′ federated ToolRegistry (InApp · SystemIntent · AppFunctions · MCP · Accessibility)
-  Этап 6  A4′ runtime in full (session persistence, rollback, clarification, learned-plan cache)
-  Этап 7  A2 / A3 by consumer, then A5 / A6
+Agentic track (NOW, docs/superpowers/plans/2026-08-18-agentic-track-restart.md; state 2026-11-20):
+  Этап 1    strategic ADRs ✅ (2026-08-19)
+  Этап 0    cleanup: release unblock · FastPath ru/tr · remove ONNX · honest statuses · budgets ✅ (2026-08-19)
+  Этап 2    toolchain refresh + :domain → KMP (android + jvm) ✅ (2026-08-19)
+  Этап 3    agentic Master Plan + doctrinal matrix extraction ✅ (2026-08-19)
+  Этап 4.0  llmRouterEnabled → localOnlyMode ✅ DEVICE-ACCEPTED (2026-08-22)
+  Этап 4    A0 thin agentic spike ✅ CLOSED (2026-08-22)
+  Этап 4.5  A0.5 second consumer (:consumer:jvm) ✅ CODE-GREEN (2026-08-26; device acceptance n/a)
+  Этап 5    A1′ federated ToolRegistry ✅ CLOSED (2026-09-10)
+  Этап 5.5  A1″ tool mass + selection ✅ CLOSED (2026-09-20)
+  Этап 6    A4′ runtime in full — phases 0–4 CODE-GREEN (2026-11-20; the bridge, partial failure + undo,
+            learned-plan cache; clarification protocol rejected with a measured reason); block acceptance ahead
+  Этап 7    A2 / A3 by consumer, then A5 / A6
 
 "Stage 2 (Framework)" is no longer a schedule stage — it is the portable core built inside the slices
 above (ADR 3/4). "Stage 3 (Agentic OS)" is what Этапы 4–7 deliver.

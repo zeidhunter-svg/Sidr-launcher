@@ -40,7 +40,7 @@ Requirements:
 
 ## Local AI limitations
 
-ONNX Runtime Mobile is suitable for intent classification, NLU helpers, and embeddings. It is not the primary runtime for generative LLM responses.
+ONNX Runtime Mobile is suitable for intent classification, NLU helpers, and embeddings. It is not the primary runtime for generative LLM responses. *(Superseded by ADR 2/4, 2026-08-19: ONNX closed and its stack deleted; a local runtime is LiteRT / LiteRT-LM.)*
 
 Local generative LLM support should be behind an interface and enabled only when:
 

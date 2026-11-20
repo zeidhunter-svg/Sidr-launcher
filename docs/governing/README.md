@@ -18,6 +18,7 @@
 | [`sidr-doctrine-matrix-v1.0.md`](sidr-doctrine-matrix-v1.0.md) | правила `DOC-*`, их типы проверки и имя теста для каждого; приоритет принципов при конфликте; закрытый словарь типов | **обоих треков** — по построению не принадлежит ни одному |
 | [`sidr-agentic-master-plan-v1.0.md`](sidr-agentic-master-plan-v1.0.md) | последовательность блоков A0…A6, DoD, change-control, милстоуны, `Agentic Shell v1 = DONE` | агентный трек |
 | [`sidr-design-system-master-plan-v1.2.md`](sidr-design-system-master-plan-v1.2.md) | последовательность DS-блоков, визуальный контракт, гейты приёмки, DoD дизайн-блока | дизайн-трек |
+| [`sidr-ontology-v0.1.md`](sidr-ontology-v0.1.md) | онтология агентной ОС v0.1 — **черновик для обсуждения, не решение** | агентный трек (черновик) |
 
 ## Правила папки
 

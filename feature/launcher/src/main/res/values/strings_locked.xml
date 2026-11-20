@@ -49,14 +49,15 @@
     "fixed" here. The Turkish/Russian values are a DRAFT translation awaiting owner sign-off.
   - The Shahada (2 lines, LauncherScreen.kt's HomeAnchorSlot, DS-4 sacred anchor): English copied
     verbatim from the pre-Task-13 literal. The Turkish/Russian values are a DRAFT translation (standard
-    renderings used in Russian/Turkish Islamic sources) awaiting owner sign-off - mistranslating the
-    Shahada is a real risk this task will not take silently.
+    renderings used in Russian/Turkish Islamic sources), signed off by the owner on 2026-08-19 (see the
+    OWNER-REVIEWED line in values-ru / values-tr) - mistranslating the Shahada is a real risk this task
+    would not take silently.
 
   - launcher_forget_learned_command_consequence: the `consequence` passed into SidrForgetGate ->
     SidrActionGate(type = Destructive) on the learned-commands screen - a destructive-gate consequence
     sentence in the same species as feature/settings' settings_forget_*_consequence (A4' phase 4, owner
-    "T8: a" 2026-11-20). Class B: translated in values-ru / values-tr, pending owner re-sign of the
-    OWNER-REVIEWED digest in those two files.
+    "T8: a" 2026-11-20). Class B: translated in values-ru / values-tr, signed by the owner 2026-11-20
+    (`072889ca`, the OWNER-REVIEWED digest in those two files).
 
   I18N-2 addition (2026-08-19): prayer-name labels (5, matching PrayerSummaryMapper.kt's
   FIVE_PRAYERS_ORDER). Closes a real TalkBack bug: the Home strip's cell contentDescription used to

@@ -30,10 +30,10 @@
     digest in each values-<locale>/strings_locked.xml header).
     Rewritten a second time on 2026-11-20 (A4' phase 4, owner answer «I1: a»): since step 2c a command the
     user confirmed three times runs without asking, so «always ask before running» stopped being true, and
-    «nothing leaves this device» never was for a search the user asks for. Re-signature pending.
+    «nothing leaves this device» never was for a search the user asks for. Re-signed 2026-11-20 (`072889ca`).
 
-  Russian and Turkish values in the corresponding values-ru/values-tr strings_locked.xml are
-  agent-drafted and NOT owner-reviewed.
+  Russian and Turkish values in the corresponding values-ru/values-tr strings_locked.xml were
+  agent-drafted and are owner-reviewed (see the OWNER-REVIEWED line in each file).
 -->
 <resources>
     <string name="settings_stored_locally">Stored only on this device.</string>

@@ -20,6 +20,6 @@ Task 5) adds `learned_plans`. The database is at **version 5**. When an entity c
    unit-test assets **before** KSP writes the new JSON, so that run's helper test cannot find it —
    the next run (with the JSON committed) can.
 
-`fallbackToDestructiveMigration` is allowed **only in debug builds** and **only** for the
-recreatable learning/cache tables (usage / suggestion-ranking / intent-match). Release builds
-never destroy data.
+`fallbackToDestructiveMigration` is enabled **only in debug builds** (`DatabaseModule`); it would wipe
+the **whole** database — every table, `learned_plans`, `aliases` and `resolution_preferences` included —
+which is why every user-state table gets a real `Migration`. Release builds never destroy data.

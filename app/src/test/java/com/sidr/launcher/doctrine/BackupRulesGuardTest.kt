@@ -30,20 +30,22 @@ import javax.xml.parsers.DocumentBuilderFactory
  * `SharedPreferences(` family (`getSharedPreferences(`, `PreferenceManager.getDefaultSharedPreferences(`),
  * the device-protected context (`createDeviceProtectedStorageContext(` — a database built on it lands in
  * `device_database`, outside the rules), the `root` domain (`dataDir`, `getDataDir(`) and
- * `moveDatabaseFrom(`.
+ * `moveDatabaseFrom(`, and the bare-name file accessors `getFileStreamPath(` and `fileList(` (a file of
+ * `filesDir` reached without the word `filesDir`; final review I3).
  *
  * **What the scan holds.** Every `.kt` under a `src/main` or `src/commonMain` of the repository, walked
  * like `OneModelPathGuardTest` (canonical root; `build` and every dot-directory pruned), read with
- * comments stripped (line numbers preserved, so the message still says `file:line`). Two controls: the
+ * comments stripped in one pass (line numbers preserved, so the message still says `file:line`). Two controls: the
  * scan must reach more than a hundred files, and each allowed shape must be found at least once in
  * stripped code.
  *
  * **Named limits, not implied absent.** `.java` sources are not read. Stores owned by a library are not
  * in the scan: ProfileInstaller's markers in `files/`, WorkManager's database in `no_backup/`. A
  * `Room.databaseBuilder` given an absolute name escapes `databases/`. A `File(` built from a root the
- * list does not name (`cacheDir`, say — not backed up anyway) is not seen. The comment stripper is two
- * regexes, not a lexer: a line-comment opener inside a string literal (an https address) blinds the rest
- * of that line. And only `src/main` and `src/commonMain` are scanned.
+ * list does not name (`cacheDir`, say — not backed up anyway) is not seen. The comment stripper is one
+ * regex, not a lexer: a line-comment opener inside a string literal (an https address) blinds the rest
+ * of that line, and a block-comment opener inside a string literal, the rest of the file up to the next
+ * closer. And only `src/main` and `src/commonMain` are scanned.
  *
  * The XML is read as text from the source tree (the same limit as `ToolPermissionManifestGuardTest`:
  * `:app` has no Robolectric), so this holds the **declared** rules, not the merged manifest.
@@ -114,6 +116,8 @@ class BackupRulesGuardTest {
         "moveDatabaseFrom(",
         "dataDir",
         "getDataDir(",
+        "getFileStreamPath(",
+        "fileList(",
     )
 
     /** The two shapes whose files the rules cover; the control needs each found at least once. */
@@ -124,12 +128,13 @@ class BackupRulesGuardTest {
     private val canonicalRoot = repoRoot.canonicalFile
 
     /**
-     * Comments out, line numbers kept: each block comment is replaced by its own newlines, so a hit still
-     * reports the line it is on. Copy of OneModelPathGuardTest's two regexes, with that one difference.
+     * Comments out, line numbers kept: each comment is replaced by its own newlines, so a hit still reports the
+     * line it is on. ONE pass, so whichever opener comes first wins: a line comment that names a glob such as
+     * `preview/` followed by a star and `.kt` is a line comment, not the start of a block comment that would swallow
+     * the lines after it (final review I3: `AppDrawerScreen.kt:327` swallowed 328–379 under the two-pass form).
      */
     private fun strip(source: String): String =
-        source.replace(Regex("/\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL)) { m -> m.value.filter { it == '\n' } }
-            .replace(Regex("//[^\n]*"), "")
+        source.replace(Regex("/\\*.*?\\*/|//[^\n]*", RegexOption.DOT_MATCHES_ALL)) { m -> m.value.filter { it == '\n' } }
 
     /** Production Kotlin: every module's `src/main` (and KMP `commonMain`); `build` and dot-directories pruned. */
     private fun productionKotlin(): List<File> =

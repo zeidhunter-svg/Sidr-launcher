@@ -3,6 +3,8 @@ package com.sidr.launcher.agent
 import com.sidr.launcher.core.testing.FakeActionCatalog
 import com.sidr.launcher.core.testing.FakeBridgeTransport
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
+import com.sidr.launcher.core.testing.FakeLearnedPlanStore
+import com.sidr.launcher.core.testing.FakeMentionBinder
 import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.data.repository.agent.AuthoredToolDescriptions
@@ -21,8 +23,17 @@ import com.sidr.launcher.domain.ai.bridge.TransportReply
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.ExecutableAction
 import com.sidr.launcher.domain.intent.LauncherIntent
+import com.sidr.launcher.domain.memory.plan.CommandForm
+import com.sidr.launcher.domain.memory.plan.FormPart
+import com.sidr.launcher.domain.memory.plan.LearnedPlan
+import com.sidr.launcher.domain.memory.plan.LearnedPlanShape
+import com.sidr.launcher.domain.memory.plan.PlanTemplate
+import com.sidr.launcher.domain.memory.plan.Replay
+import com.sidr.launcher.domain.memory.plan.TemplateArg
+import com.sidr.launcher.domain.memory.plan.TemplateStep
 import com.sidr.launcher.domain.memory.resolution.CapabilityKey
 import com.sidr.launcher.domain.memory.resolution.CommandRouteStep
+import com.sidr.launcher.domain.memory.resolution.DEFAULT_AUTO_RESOLVE_STREAK_THRESHOLD
 import com.sidr.launcher.domain.memory.resolution.DefaultResolutionPreferencePolicy
 import com.sidr.launcher.domain.memory.resolution.ResolvedCommand
 import com.sidr.launcher.domain.model.InstalledApp
@@ -32,6 +43,7 @@ import com.sidr.launcher.domain.tool.ToolIds
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -49,6 +61,9 @@ import org.junit.Test
  *    ([MemoryProvidesModule.provideResolveCommandWithPreferenceUseCase]) — fold by the folding they are
  *    GIVEN, not by their `PlainTextFolding` default. A distinguishing folding proves it: under it every
  *    text is one and the same word, so «zantor» finds «Lumora» and every key is that word.
+ *
+ * The fourth hand-built collaborator is step 2c's learned-plan cache ([BridgeProvidesModule.provideLearnedPlans],
+ * A4′ phase 4, final review I2): it matches a command to a pinned form by the folding it is GIVEN.
  *
  * Step 2b (`AppTargetResolver`) and the bridge's binder (`DeviceMentionBinder`) take the folding through
  * `@Inject`, so the one binding is the only thing Hilt can hand them. `provideModelPlanner` passes its own
@@ -110,6 +125,36 @@ class TextFoldingBindingGuardTest {
 
         assertEquals("proposed under the folding it was given", ToolIds.LAUNCH_APP, (result as? ModelPlanning.Proposed)?.steps?.single()?.tool)
         assertEquals("asked once — the mention was derivable the first time", 1, transport.requests.size)
+    }
+
+    /**
+     * A4′ phase 4, final review I2 — step 2c's cache, as [BridgeProvidesModule.provideLearnedPlans] builds it,
+     * reads a command's words by the folding it is GIVEN. The form pinned here is `[SAME_WORD] …` — a word only
+     * [oneWord] produces — so the command «открой lumora» fits it under [oneWord] (every token is that one word,
+     * the second is the slot) and under no other folding: the plain one reads «открой» and «lumora», neither the
+     * form's word, and the cache would miss every command in production.
+     */
+    @Test
+    fun `the learned plans match by the folding they are given`() = runTest {
+        val store = FakeLearnedPlanStore()
+        val form = CommandForm(listOf(FormPart.Word(SAME_WORD), FormPart.Slot))
+        val template = PlanTemplate(listOf(TemplateStep(ToolIds.LAUNCH_APP, mapOf("app" to TemplateArg.Slot(0)))))
+        store.upsert(
+            LearnedPlan(
+                LearnedPlanShape(form, template),
+                streak = DEFAULT_AUTO_RESOLVE_STREAK_THRESHOLD,
+                confirmations = DEFAULT_AUTO_RESOLVE_STREAK_THRESHOLD,
+                confirmedAtEpochMs = 0L,
+            ),
+        )
+        val plans = BridgeProvidesModule.provideLearnedPlans(
+            store, FakeToolRegistry.withA0Tools(), AuthoredToolDescriptions(), FakeMentionBinder(), oneWord,
+        )
+
+        val replay = plans.replay("открой lumora")
+
+        assertTrue("replayed under the folding it was given: $replay", replay is Replay.Bound)
+        assertEquals(form, (replay as Replay.Bound).form)
     }
 
     private companion object {

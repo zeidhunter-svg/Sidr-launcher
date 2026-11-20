@@ -32,7 +32,8 @@ import kotlinx.coroutines.flow.first
  * ([HandleUserCommandUseCase]) is a latency optimization, not a filter on understanding: it answers
  * frequent exact commands without a model, and a FastPath *miss* is no longer grounds to answer
  * "Unknown command". What stays deterministic is everything on the execution side — nothing the
- * planner proposes auto-executes (Fork R4), and every reason understanding is unavailable is stated
+ * planner proposes auto-executes (Fork R4) except a learned command (step 2c, D3 as amended), and every
+ * reason understanding is unavailable is stated
  * honestly rather than disguised as an unrecognized command.
  *
  * Order of decision — an ordered chain of early returns, so **at most one** of the three

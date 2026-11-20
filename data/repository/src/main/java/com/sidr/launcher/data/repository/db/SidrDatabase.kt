@@ -31,8 +31,10 @@ import com.sidr.launcher.data.repository.db.entity.SuggestionRankingEntity
  *   via `Migration1To2`; `3.json` adds `aliases` via `Migration2To3`; `4.json` (A0 Task 10) adds the
  *   three `agent_*` tables via `Migration3To4`; `5.json` (A4′ phase 4, Task 5) adds `learned_plans` via
  *   `Migration4To5`, which is also proved inside the JVM gate (`Migration4To5Test`, Robolectric).
- * - The five older tables are recreatable learning/cache tables. `fallbackToDestructiveMigration` may be
- *   enabled by the DI builder (F7) **only for debug builds**; release builds get no destructive
+ * - Recreatable learning/cache tables: `app_usage`, `suggestion_ranking`, `intent_match`. **User state, not
+ *   recreatable:** `resolution_preferences`, `aliases` and `learned_plans` (taught by the user, visible and
+ *   deletable); the three `agent_*` tables are an in-flight recovery record, empty at rest. `fallbackToDestructiveMigration`
+ *   may be enabled by the DI builder (F7) **only for debug builds**; release builds get no destructive
  *   fallback, so a missing migration fails loudly instead of silently wiping data.
  * - When an entity changes: bump `version`, add a `Migration` under `db/migrations/`, commit the new
  *   golden schema, and cover it in the instrumented `MigrationTest` (and, since schema 5, in a Robolectric

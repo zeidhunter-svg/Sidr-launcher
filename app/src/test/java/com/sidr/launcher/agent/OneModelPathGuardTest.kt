@@ -19,7 +19,9 @@ import java.io.File
  * user-chosen app launches, not a model's step, and not scanned here.
  *
  * **What the stripping cannot see, named rather than implied absent** (Task 11, hole H7). The comment
- * stripper is two regexes, not a lexer. A block-comment opener (slash, star) inside a string literal —
+ * stripper is one regex, not a lexer (whichever opener comes first wins, so a line
+ * comment that names a glob — `preview/` and a star — no longer opens a block comment; final review I3).
+ * A block-comment opener (slash, star) inside a string literal —
  * a MIME type such as image/<star> — would be read as a comment start and blind the rest of that file
  * up to the next closer (star, slash); a line-comment opener (two slashes) inside a string, as in an
  * https address, blinds the rest of its line. (The markers are spelled out because Kotlin nests block
@@ -35,7 +37,7 @@ class OneModelPathGuardTest {
     private val repoRoot = File("..").canonicalFile
 
     private fun strip(source: String): String =
-        source.replace(Regex("/\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL), "").replace(Regex("//[^\n]*"), "")
+        source.replace(Regex("/\\*.*?\\*/|//[^\n]*", RegexOption.DOT_MATCHES_ALL), "")
 
     private fun productionSources(): List<File> = repoRoot.walkTopDown()
         .onEnter { it.name != "build" && !it.name.startsWith(".") }

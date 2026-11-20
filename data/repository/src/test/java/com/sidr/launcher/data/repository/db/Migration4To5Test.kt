@@ -31,8 +31,10 @@ import org.robolectric.annotation.Config
  * Schema 4 → 5 inside the JVM gate (A4′ phase 4, plan §0.2 B-14). [MigrationTestHelper] creates a version-4
  * database from the committed `schemas/…/4.json` (its identity hash in `room_master_table`, `user_version = 4`),
  * every pre-existing table gets one row, [Migration4To5] runs and the helper validates the result against
- * `5.json` — then the production [SidrDatabase] opens the file through `addMigrations(Migration4To5)`, which
- * checks the identity hash and every table again, and reads every row back. The instrumented `MigrationTest`
+ * `5.json` — then the production [SidrDatabase] opens the file through `addMigrations(Migration4To5)`. That
+ * file is already at version 5, so the migration does NOT run there: Room checks only the identity hash, and the
+ * every-table check is the helper's (`runMigrationsAndValidate`) — the open proves the production class reads the
+ * migrated file, and every row is read back. The instrumented `MigrationTest`
  * carries `v4_to_v5` and `v1_to_v5` for the device; this one is the gate's.
  *
  * Fixture rows are invented (R14-43); they are compared by equality, table by table, before and after.

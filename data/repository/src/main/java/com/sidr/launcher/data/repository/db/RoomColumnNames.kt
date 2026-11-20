@@ -33,10 +33,13 @@ package com.sidr.launcher.data.repository.db
  * database, and it stays owner-granted.
  *
  * Agentic-track A4′ phase 4 Task 5 adds [LEARNED_PLANS] (schema v5). Unlike the agent tables it is **kept at
- * rest** — it is the learned-plan cache, local-only, user-visible and deletable (spec §8, `DOC-AML-5`) — but it
- * holds no raw command and no package: `form` is the command's folded words with each value replaced by `…`,
- * and `template_json` the plan's tools and argument kinds, an app always a slot (spec §8.2). Its columns
- * collide with no forbidden term, so this block adds **no** entry to [APPROVED_SENSITIVE_COLUMNS].
+ * rest** — it is the learned-plan cache, local-only, user-visible and deletable (spec §8, `DOC-AML-5`). It holds
+ * no package, but it **does hold command text**: `form` is the command's folded words with each value the user
+ * said replaced by `…`, so a form with no slot is the whole folded command, and `template_json` keeps the
+ * model's own constants — a search query among them. Unlike `agent_session.goal_text`, those rows stay after
+ * the session ends (until forgotten or evicted, cap 200). Its columns collide with no forbidden term — `form`
+ * passes the column-name scan — so this block adds **no** entry to [APPROVED_SENSITIVE_COLUMNS]; the honesty
+ * is here, beside the `resolution_preferences.query` precedent, not in the scan.
  */
 internal object RoomColumnNames {
 

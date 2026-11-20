@@ -14,7 +14,8 @@ import com.sidr.launcher.domain.tool.ToolInvocation
 /**
  * What the card shows BEFORE anything runs (spec §7.12.3 condition 1). Transient: held by the command
  * session in memory, never written anywhere (plan §0.2 B-12). Only the user's «Выполнить» turns it into
- * a session, through `StartAgentSessionUseCase.startPlanned` and the unchanged engine.
+ * a session, through `StartAgentSessionUseCase.startPlanned` and the unchanged engine — except a learned
+ * command at step 2c (D3 as amended, B-15), which starts through the same engine with every consent gate.
  */
 sealed interface Interpretation {
 

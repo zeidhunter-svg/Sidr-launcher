@@ -13,8 +13,9 @@ import javax.xml.parsers.DocumentBuilderFactory
  *
  * The learned-plan cache, learned choices, aliases and the agent sessions are command text and user
  * habit. `android:allowBackup="true"` with no rules would copy every Room database and every DataStore
- * file to the user's cloud account and to a new phone. The cost the owner accepted: memory is not
- * restored on a new phone.
+ * file to the user's cloud account and to a new phone. The cost the owner accepted: what is not restored
+ * on a new phone is every Room database and every DataStore file — the memory **and every setting**,
+ * `flag_local_only` included (it returns to its default).
  *
  * **B-16 — domains, not file names.** The rules leave out the whole `database` domain and the
  * `datastore/` directory of the `file` domain, so a database or DataStore added later is left out
@@ -22,9 +23,27 @@ import javax.xml.parsers.DocumentBuilderFactory
  *
  * **B-17 — the guard holds the reach, not only the XML.** The rules cover two storage shapes only:
  * `Room.databaseBuilder` (→ `databases/`) and `preferencesDataStoreFile` (→ `files/datastore/`). A
- * production file that opened storage any other way (`getSharedPreferences`, `openFileOutput`, a path
- * under `filesDir` …) would write memory the rules do not cover, so any such call is red until the
- * rules and this guard are widened together.
+ * production file that opened storage any other way would write memory the rules do not cover, so any
+ * such call is red until the rules and this guard are widened together. The forbidden tokens are case-
+ * sensitive substrings, chosen to catch the Java-getter spelling too (`getFilesDir(` — Kotlin has no
+ * property form for `getExternalFilesDir(String?)`, so `ExternalFilesDir` is the token), the
+ * `SharedPreferences(` family (`getSharedPreferences(`, `PreferenceManager.getDefaultSharedPreferences(`),
+ * the device-protected context (`createDeviceProtectedStorageContext(` — a database built on it lands in
+ * `device_database`, outside the rules), the `root` domain (`dataDir`, `getDataDir(`) and
+ * `moveDatabaseFrom(`.
+ *
+ * **What the scan holds.** Every `.kt` under a `src/main` or `src/commonMain` of the repository, walked
+ * like `OneModelPathGuardTest` (canonical root; `build` and every dot-directory pruned), read with
+ * comments stripped (line numbers preserved, so the message still says `file:line`). Two controls: the
+ * scan must reach more than a hundred files, and each allowed shape must be found at least once in
+ * stripped code.
+ *
+ * **Named limits, not implied absent.** `.java` sources are not read. Stores owned by a library are not
+ * in the scan: ProfileInstaller's markers in `files/`, WorkManager's database in `no_backup/`. A
+ * `Room.databaseBuilder` given an absolute name escapes `databases/`. A `File(` built from a root the
+ * list does not name (`cacheDir`, say — not backed up anyway) is not seen. The comment stripper is two
+ * regexes, not a lexer: a line-comment opener inside a string literal (an https address) blinds the rest
+ * of that line. And only `src/main` and `src/commonMain` are scanned.
  *
  * The XML is read as text from the source tree (the same limit as `ToolPermissionManifestGuardTest`:
  * `:app` has no Robolectric), so this holds the **declared** rules, not the merged manifest.
@@ -82,23 +101,40 @@ class BackupRulesGuardTest {
 
     /** Storage-opening calls the rules do NOT cover. */
     private val forbidden = listOf(
-        "getSharedPreferences(",
+        "SharedPreferences(",
         "openFileOutput(",
         "dataStoreFile(",
         "getDir(",
         "filesDir",
-        "externalFilesDir",
+        "getFilesDir(",
+        "ExternalFilesDir",
         "noBackupFilesDir",
         "openOrCreateDatabase(",
+        "createDeviceProtectedStorageContext(",
+        "moveDatabaseFrom(",
+        "dataDir",
+        "getDataDir(",
     )
 
     /** The two shapes whose files the rules cover; the control needs each found at least once. */
     private val allowed = listOf("Room.databaseBuilder(", "preferencesDataStoreFile(")
 
-    /** Production Kotlin: every module's `src/main` (and KMP `commonMain`), `build/` excluded. */
+    // Canonical on purpose, as in OneModelPathGuardTest: `File("..")` is NAMED "..", and the dot-directory
+    // filter below would skip the root itself.
+    private val canonicalRoot = repoRoot.canonicalFile
+
+    /**
+     * Comments out, line numbers kept: each block comment is replaced by its own newlines, so a hit still
+     * reports the line it is on. Copy of OneModelPathGuardTest's two regexes, with that one difference.
+     */
+    private fun strip(source: String): String =
+        source.replace(Regex("/\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL)) { m -> m.value.filter { it == '\n' } }
+            .replace(Regex("//[^\n]*"), "")
+
+    /** Production Kotlin: every module's `src/main` (and KMP `commonMain`); `build` and dot-directories pruned. */
     private fun productionKotlin(): List<File> =
-        repoRoot.walkTopDown()
-            .onEnter { it.name != "build" && it.name != ".git" && it.name != ".gradle" && it.name != ".superpowers" }
+        canonicalRoot.walkTopDown()
+            .onEnter { it.name != "build" && !it.name.startsWith(".") }
             .filter { it.isFile && it.extension == "kt" }
             .filter { f ->
                 val path = f.invariantSeparatorsPath
@@ -113,7 +149,7 @@ class BackupRulesGuardTest {
         val offenders = mutableListOf<String>()
         val allowedFound = allowed.associateWith { 0 }.toMutableMap()
         for (file in files) {
-            file.readLines().forEachIndexed { index, line ->
+            strip(file.readText()).lines().forEachIndexed { index, line ->
                 forbidden.filter { it in line }.forEach { shape ->
                     offenders += "${file.invariantSeparatorsPath}:${index + 1} uses `$shape`"
                 }

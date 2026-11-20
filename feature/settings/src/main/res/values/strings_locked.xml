@@ -28,13 +28,16 @@
     the first time in the project's history a signed Class B string changed - the owner re-signed it,
     and the gate that guards it was made coverage-aware in the same block (see the OWNER-REVIEWED
     digest in each values-<locale>/strings_locked.xml header).
+    Rewritten a second time on 2026-11-20 (A4' phase 4, owner answer «I1: a»): since step 2c a command the
+    user confirmed three times runs without asking, so «always ask before running» stopped being true, and
+    «nothing leaves this device» never was for a search the user asks for. Re-signature pending.
 
   Russian and Turkish values in the corresponding values-ru/values-tr strings_locked.xml are
   agent-drafted and NOT owner-reviewed.
 -->
 <resources>
     <string name="settings_stored_locally">Stored only on this device.</string>
-    <string name="settings_local_only_description">Off: commands this launcher cannot match locally are sent to your AI provider to be understood, and suggested actions always ask before running. On: nothing leaves this device.</string>
+    <string name="settings_local_only_description">Off: commands this launcher cannot match locally are sent to your AI provider to be understood. On: nothing is sent to your AI provider; commands are understood only on this device. Either way, a suggested action asks before running unless you have confirmed the same command three times, and a risky step always asks. A search or link you ask for opens in your browser.</string>
     <string name="settings_forget_alias_consequence">"\"%1$s\" will no longer open %2$s.\nYou can add it again from Settings."</string>
     <string name="settings_aliases_empty_message">No aliases yet\nAliases appear after you add them here.\nStored only on this device.</string>
     <string name="settings_learned_choices_empty_message">No learned choices yet\nPreferences appear only after confirmed choices.\nStored only on this device.</string>

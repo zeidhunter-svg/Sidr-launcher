@@ -27,7 +27,7 @@
 -->
 <resources>
     <string name="settings_stored_locally">Yalnızca bu cihazda saklanır.</string>
-    <string name="settings_local_only_description">Kapalı: bu başlatıcının yerel olarak eşleştiremediği komutlar anlaşılmak üzere yapay zeka sağlayıcınıza gönderilir ve önerilen eylemler çalıştırılmadan önce her zaman onay ister. Açık: hiçbir şey bu cihazdan ayrılmaz.</string>
+    <string name="settings_local_only_description">Kapalı: bu başlatıcının yerel olarak eşleştiremediği komutlar anlaşılmak üzere yapay zeka sağlayıcınıza gönderilir. Açık: yapay zeka sağlayıcınıza hiçbir şey gönderilmez; komutlar yalnızca bu cihazda anlaşılır. Her iki durumda da önerilen bir eylem, aynı komutu üç kez onaylamadıysanız çalıştırılmadan önce onay ister; riskli bir adım ise her zaman onay ister. İstediğiniz aramalar ve bağlantılar tarayıcınızda açılır.</string>
     <string name="settings_forget_alias_consequence">"\"%1$s\" artık %2$s uygulamasını açmayacak.\nAyarlardan tekrar ekleyebilirsiniz."</string>
     <string name="settings_aliases_empty_message">Henüz takma ad yok\nTakma adlar burada eklendikten sonra görünür.\nYalnızca bu cihazda saklanır.</string>
     <string name="settings_learned_choices_empty_message">Henüz öğrenilmiş seçim yok\nTercihler yalnızca onaylanan seçimlerden sonra görünür.\nYalnızca bu cihazda saklanır.</string>

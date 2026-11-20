@@ -26,12 +26,12 @@
 > source is planted in `BridgePayloadGuardTest` (`DOC-AML-1`). Outside the spec, owner's «a» of 2026-11-19: every
 > database and DataStore file left out of Auto Backup and device transfer (`BackupRulesGuardTest`, `DOC-AML-4`) — on
 > a new phone memory **and every setting** start from defaults; no restore seen. `:consumer:jvm` parity over a JSON
-> file. **D3 amended** (ADR «2026-11-20 — D3, поправка: выученная команда», **owner sign-off pending**); **owner
-> item I1** — the owner-signed `settings_local_only_description` («…suggested actions always ask before running»)
-> is false since 2c; it blocks the block's acceptance, not the phase close (agent recommends rewording (a)). Other
-> owner items: `DOC-HMA-3`'s marker address (proposed `← долг A4′ приёмка / A5`), one-tap «Забыть» on the screen (a
-> confirm gate's consequence line is Class B), eight new `tr` strings for the block's Turkish review, the
-> instrumented `MigrationTest`. Next: **the block's single acceptance on the phone, then the block ADR A4′**. Full
+> file. **D3 amended** (ADR «2026-11-20 — D3, поправка: выученная команда», **signed by the owner 2026-11-20**).
+> Owner answers 2026-11-20 (`D3: да · I1: a · HMA3: да · T8: a · §0: да`): I1 — the locked
+> `settings_local_only_description` is reworded in both halves, its `ru`/`tr` re-signature pending the owner's «yes» to
+> the exact text (release gate red until then); `DOC-HMA-3` → `← долг A4′ приёмка / A5`; «Забыть» on the learned-commands
+> screen goes through `SidrForgetGate` (its consequence line Class B, signed with I1). Still open: the phase's `tr`
+> strings in the block's Turkish review, the instrumented `MigrationTest`. Next: **the block's single acceptance on the phone, then the block ADR A4′**. Full
 > record: `§HANDOFF` «Фаза 4 A4′» (archive); ADRs «2026-11-20 — A4′ ф4: кэш выученных планов — форма со слотами,
 > шаблон, схема 5» and «2026-11-20 — D3, поправка: выученная команда»**); prior 2026-11-17 (c)
 > (**the owner's five answers to phase 3b's close — built, `CODE-GREEN` at 1839 / 0 failures** (boundary
@@ -1819,7 +1819,7 @@ ADR, which a mechanical check cannot judge).
   phase 3b's «Замер фазы 3b», 2026-11-15, clarified at close); phase 3b wrote «2026-11-07 — A4′ ф3b: сорт —
   отдельная ось; F6 закрыт» (written 2026-11-09, clarified at close); phase 4 wrote the
   latest ADRs of all, «2026-11-20 — A4′ ф4: кэш выученных планов — форма со слотами, шаблон, схема 5» and
-  «2026-11-20 — D3, поправка: выученная команда» (owner sign-off pending). Before them «2026-11-11 — Сжатие
+  «2026-11-20 — D3, поправка: выученная команда» (signed by the owner 2026-11-20). Before them «2026-11-11 — Сжатие
   CLAUDE.md (гигиена контекста)» (docs + one guard class; carries the verbatim appendix of everything compressed
   out of `CLAUDE.md`) and «2026-11-07 — Два принципа агентной ОС: защищённая открытость и локальное по
   умолчанию» (docs only): `ai-context/decisions.md`

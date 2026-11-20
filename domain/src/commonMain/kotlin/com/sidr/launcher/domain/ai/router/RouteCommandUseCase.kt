@@ -182,7 +182,7 @@ class RouteCommandUseCase(
         // app. This is the one outcome A0 hands to the agent — not "any Message", not "anything that
         // did not execute". The branch sits above the localOnlyMode check on purpose: the planner
         // here is deterministic and offline, so it consults no model and transmits nothing, which is
-        // what the signed local-only copy promises ("nothing leaves this device"). It DOES falsify
+        // what the signed local-only copy promises ("nothing is sent to your AI provider"). It DOES falsify
         // DOC-ADL-3's byte-for-byte clause, which Task 14 Step 1 narrows per spec §8.1 — see the
         // class KDoc. Widening this list is a separate decision for a later block.
         val message = (ruleOutcome as? CommandOutcome.Message)?.message

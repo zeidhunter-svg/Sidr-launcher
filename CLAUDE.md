@@ -32,8 +32,8 @@ their original headings, so «`§HANDOFF` «Фаза 2 A4′»» resolves there.
 
 **Right now: A4′ phase 4 — the learned-plan cache — is `CODE-GREEN`** (2026-11-20, gate **1910**): a command
 confirmed three times replays on the device at step 2c, no model, consent every time. D3 is amended by ADR
-«2026-11-20 — D3, поправка: выученная команда» — **owner sign-off pending**; **owner item I1**: the locked
-`settings_local_only_description` («…always ask before running») is false since 2c and blocks acceptance.
+«2026-11-20 — D3, поправка: выученная команда» — **signed by the owner 2026-11-20**; I1 «a»: the locked
+`settings_local_only_description` is reworded (both halves) — the owner's re-signature of the new text blocks acceptance.
 **Next: the block's single acceptance on the phone, then the block ADR A4′.** Record: `§HANDOFF` «Фаза 4 A4′»
 (archive); plan [2026-11-18-a4-phase4-learned-plan-cache.md](docs/superpowers/plans/2026-11-18-a4-phase4-learned-plan-cache.md).
 
@@ -262,7 +262,7 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
   **Nothing the model proposes runs before the interpretation card's «Выполнить», and then only through
   the engine — except a learned command** (a form + template the user confirmed three times, step 2c), which
   starts its session through the same engine with no gate skipped; a risky step's consent card is asked every
-  time (Fork R4, D3 amended by ADR «2026-11-20 — D3, поправка: выученная команда», owner sign-off pending;
+  time (Fork R4, D3 amended by ADR «2026-11-20 — D3, поправка: выученная команда», signed 2026-11-20;
   `OneModelPathGuardTest` holds that the router is gone and that the launcher's one direct `LauncherAction`
   execution is the web chip the user points).
 - **Boundaries are laid on the first slice, for two tools — not "when needed".** Registry as the only

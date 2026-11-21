@@ -6,6 +6,13 @@
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
 > / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-11-21
+> (**context hygiene — `decisions.md` stays whole as an archive by address, `ai-context/decisions-orientation.md` beside
+> it is read whole (every journal heading verbatim with an in-force / replaced / history mark), held by
+> `DecisionsOrientationGuardTest` (`:app`, +4, mutation-proved by `mutation-prover`: five plants as predicted, the
+> absent-file plant red one layer earlier, at Gradle's input check); §0 gains the owner's rules 2 (measure real usage
+> before the spec) and 6 (one guard questioned per block close); `CLAUDE.md`'s History map moved into the orientation
+> file — boundary gate **1918 / 0 / 0** (`:app` 90 → 94, other modules unchanged), floor 1914 → 1918; ADR «2026-11-21 —
+> Гигиена контекста: ориентир по решениям и два правила §0»**); prior 2026-11-21
 > (**Этап 6 (A4′) — `CLOSED`: the owner's device acceptance on the SM-A325F (Android 13, `ru-RU`; §A7 and Part D in
 > `tr`) and the block ADR «2026-11-21 — Этап 6 (A4′) — рантайм полностью: фазы 0–4, одна приёмка на устройстве, блок
 > `CLOSED`»** — boundary gate **1914 / 0 / 0** (`:domain` 617 · `:consumer:jvm` 101 · `:data:repository` 477 ·
@@ -1776,12 +1783,22 @@ it); and «no fact lost» rests on the verbatim appendix in the ADR plus
 `b42b53b:CLAUDE.md`, not on a sentence-by-sentence match (341 sentences differ in wording from their
 ADR, which a mechanical check cannot judge).
 
+**Context hygiene (2026-11-21) claims nothing on a phone either.** `DecisionsOrientationGuardTest` holds that every
+`## ` heading of `decisions.md` stands in `decisions-orientation.md` and that the file stays under its ceilings — **not**
+that its marks (in force / replaced / history) are true: those are the closing session's judgement. Citation
+resolution is held by `decisions.md` not being cut, not by a check: seven of the 42 distinct «ADR «…»» citations were
+loose before the session (placeholders like `<date> — A4′ ф3a…`, fragments, backtick differences) and thirteen
+`decisions.md:<line>` references were already stale; neither set was edited (named in the session's ADR).
+
 ## Source of truth
 
 > **Re-based 2026-09-20 — this list had been stale since 2026-07-11 and pointed two tracks back.**
 
-- Current state + hard rules + gate (NOT a session digest since Этап 0.4; re-compressed 2026-11-11 to ~42 KB, ~47 KB at A4′ phase 4's close, ~45 KB at the block's close, under the 48 000-byte ceiling held by `ClaudeMdSizeGuardTest`): `CLAUDE.md`
-- Decisions log — **latest block ADR: «2026-11-21 — Этап 6 (A4′) — рантайм полностью: фазы 0–4, одна приёмка на
+- Current state + hard rules + gate (NOT a session digest since Этап 0.4; re-compressed 2026-11-11 to ~42 KB, ~47 KB at A4′ phase 4's close, ~45 KB at the block's close, ~43 KB after the 2026-11-21 hygiene session moved its History map out, under the 48 000-byte ceiling held by `ClaudeMdSizeGuardTest`): `CLAUDE.md`
+- **Orientation — read whole, before the journal:** `ai-context/decisions-orientation.md` (since 2026-11-21): what is
+  in force, and every `## ` heading of the journal verbatim with its mark — the journal's address book. Latest ADR:
+  «2026-11-21 — Гигиена контекста: ориентир по решениям и два правила §0» (docs + one guard class).
+- Decisions log — an archive by address, appended and never cut (2026-11-21) — **latest block ADR: «2026-11-21 — Этап 6 (A4′) — рантайм полностью: фазы 0–4, одна приёмка на
   устройстве, блок `CLOSED`»**, whose sections «Приёмка на устройстве», the twelve-task table and the residuals are
   the owner's round of 2026-11-21; the block ADR before it is «2026-09-19 — Этап 5.5 (A1″)». Inside A4′ phase 3a wrote
   two ADRs, «2026-10-05 — A4′ ф3a: `ACTION_CATALOG_SCHEMA`
@@ -1811,7 +1828,7 @@ ADR, which a mechanical check cannot judge).
   5.5), `CLOSED` 2026-09-20** — spec `docs/superpowers/specs/2026-09-12-a1-second-tool-mass-and-selection-design.md`,
   checklist `docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md`.
 - No active block: the next is the owner's choice (`§HANDOFF`) — a «хвост приёмки A4′» plan for the block ADR's tasks
-  1–10, then the A2/A3 spec. The closed block's trail: **A4′ runtime (Этап 6)** — spec
+  1–10 and task 13 (opens with a measurement — §0 rule 2), then the A2/A3 spec (tasks 11–12). The closed block's trail: **A4′ runtime (Этап 6)** — spec
   `docs/superpowers/specs/2026-09-21-a4-runtime-design.md` (owner-approved 2026-09-21); **phase 0
   `CODE-GREEN` 2026-09-26**, plan `docs/superpowers/plans/2026-09-22-a4-phase0-engine-preconditions.md`,
   record in the track plan's `§HANDOFF` («Фаза 0 A4′»); **phase 1 `CODE-GREEN` 2026-09-26**, plan
@@ -1849,3 +1866,7 @@ error (Этап 0.5).
 
 *Applied 2026-11-21 at A4′'s close:* the six per-phase «nothing seen on a phone» paragraphs of «Not claimed done»
 were replaced, not appended to, and «Source of truth» no longer says A4′ has no block ADR.
+
+*Applied 2026-11-21 by the context-hygiene session:* «Source of truth» names the orientation file and the journal as an
+archive by address; «Not claimed done» says what the new guard does not hold. The header's first sentence («history
+lives in `decisions.md`») stays true — the journal is not cut.

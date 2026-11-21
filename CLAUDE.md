@@ -33,9 +33,10 @@ their original headings, so «`§HANDOFF` «Фаза 2 A4′»» resolves there.
 **Right now: A4′ is `CLOSED`** (2026-11-21, gate **1914**): five phases `CODE-GREEN`, one owner acceptance on the
 SM-A325F ([checklist](docs/superpowers/plans/2026-11-21-a4-device-acceptance.md); two defects fixed in the round,
 Part D done). Block ADR «2026-11-21 — Этап 6 (A4′) — рантайм полностью…»: acceptance, **twelve owner rulings as
-tasks**, residuals. **Next** (owner 2026-11-21, `2: a · 6: a · ADL3: b · 5: a`): a hygiene session —
-`decisions.md` → archive + ~150-line orientation file, two §0 rules; then the «хвост приёмки A4′» plan (tasks 1–10 +
-task 13, FastPath «найди …»), then the A2/A3 spec (tasks 11–12) — `§HANDOFF`.
+tasks**, residuals. The hygiene session (owner `5: a`) is done 2026-11-21: `decisions.md` is an archive by address,
+[decisions-orientation.md](ai-context/decisions-orientation.md) beside it is read whole, rules 2 and 6 are in §0.
+**Next:** the «хвост приёмки A4′» plan (tasks 1–10 + task 13, FastPath «найди …»; opens with a measurement, rule 2), then
+the A2/A3 spec (tasks 11–12) — `§HANDOFF`.
 
 Layers above the track plan: the **Master Plan** (blocks A0…A6, DoD, change-control, `Agentic Shell v1 =
 DONE`: [docs/governing/sidr-agentic-master-plan-v1.0.md](docs/governing/sidr-agentic-master-plan-v1.0.md))
@@ -196,8 +197,8 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
   «multilingual for free» not delivered; a slot needs the user's words byte for byte → task 8); **(4)** closed —
   `MigrationTest` 11/0 on the phone; **(5)** backup rules `CODE-GREEN` only, memory **and every setting** start from
   defaults on a new phone; **(6)** closed, seen; **(7)** a replayed URL ending «)» is cut (not produced on the phone);
-  **(8)** a forgotten row stays in SQLite free pages (A1′ (10)). **Seen, not ruled:** FastPath answers «найди …»
-  confidently with the remainder as query (B15, §A1) — a third `DOC-ADL-3` amendment candidate, owner's.
+  **(8)** a forgotten row stays in SQLite free pages (A1′ (10)). **Ruled 2026-11-21 (`ADL3: b`):** FastPath answering «найди …»
+  confidently with the remainder as query (B15, §A1) is FastPath behaviour, not a `DOC-ADL-3` breach — **task 13**.
 - **A0 engine gaps:** the engine stops **waiting** at the budget (phase 2), not the **act**; binder never
   measured; the clock is the dispatcher's, not a port; a persisted `Failed` loses its `CommandFailure`
   variant; `GoalShape` stays at one value (A4′ declined `B1`'s licence, spec §10.2). **Guards D1–D11** (`§HANDOFF`
@@ -279,7 +280,7 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
   plus `:core:ui:verifyRoborazziDebug` whenever `core/ui` is touched, and `:app:assembleRelease` for
   release-affecting work. **`:domain:jvmTest` and `:consumer:jvm:test` must be listed explicitly:**
   `testDebugUnitTest` has not reached `:domain` since it went KMP, and it never reaches `:consumer:jvm`
-  at all. **Baseline: the floor in `tools/gate.sh` (`BASELINE_TESTS`, 1914 since A4′'s acceptance fixes, 2026-11-21), 557 actionable tasks executed, `build/test-results` cleared first) — compare a
+  at all. **Baseline: the floor in `tools/gate.sh` (`BASELINE_TESTS`, 1918 since the context-hygiene session, 2026-11-21; 1914 at A4′'s close), 557 actionable tasks executed, `build/test-results` cleared first) — compare a
   fresh gate against the floor and against the active phase's predicted chain (its plan), not against
   any number quoted in an older ADR.** The decomposition by module is derived **before** every boundary
   run and compared with it — a sum alone cannot tell «two added» from «two added and two lost»; the chains
@@ -368,7 +369,7 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
 | `SandboxToolIds`/`SandboxToolSource`/`SandboxToolWorker` (level `sandbox`, one adapter in the same `ToolFederation`) + `FilePlanner` + `JvmAgentSessionStore`/`JvmAgentSessionIdFactory` + `SessionDto`/`SessionMapper` + `ConsoleHarness`; since A4′ 3b the same bridge: `JdkBridgeTransport` (`PROMPT_ONLY`, https only) + `SandboxToolDescriptions` + `SandboxArgumentSorts`/`SandboxFileSort` + `SandboxMentionBinder` + `JdkTextFolding`; since A4′ phase 4 `JvmLearnedPlanStore` (learned commands in a JSON file) | `consumer/jvm` |
 | Test fakes / fixtures | `core/testing` |
 | Feature UI + ViewModels + feature-local presentation mappers | `feature/*` |
-| Single `NavHost`, composition root, Hilt graph, DI modules, i18n guard tests, WorkManager wiring, doc guards (`DoctrineMatrixGuardTest`, `DeviceDatabaseReadGuardTest`, `ClaudeMdSizeGuardTest`) | `app` |
+| Single `NavHost`, composition root, Hilt graph, DI modules, i18n guard tests, WorkManager wiring, doc guards (`DoctrineMatrixGuardTest`, `DeviceDatabaseReadGuardTest`, `ClaudeMdSizeGuardTest`, `DecisionsOrientationGuardTest`) | `app` |
 | Gradle convention plugins | `build-logic` *(planned)* |
 | Claude Code hooks: `tools/claude/guard-bash.sh` (PreToolUse), `tools/claude/codegraph-prompt-hook.sh` (UserPromptSubmit filter), each with a cases file and a test script | `tools/claude` |
 
@@ -396,7 +397,8 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
 | What | Where |
 |---|---|
 | Architecture, module structure, performance tiers | [docs/architecture.md](docs/architecture.md) |
-| ADR log — **all history, one ADR per closed block** | [ai-context/decisions.md](ai-context/decisions.md) |
+| ADR log — **all history, one ADR per closed block**; an archive by address (appended, never cut) | [ai-context/decisions.md](ai-context/decisions.md) |
+| Orientation — what is in force, every ADR heading verbatim; **read whole** | [ai-context/decisions-orientation.md](ai-context/decisions-orientation.md) |
 | Recent status snapshot | [ai-context/current-status.md](ai-context/current-status.md) |
 | Active track plan (stages, §0 protocol, live `§HANDOFF`) | [docs/superpowers/plans/2026-08-18-agentic-track-restart.md](docs/superpowers/plans/2026-08-18-agentic-track-restart.md) |
 | `§HANDOFF` archive — closed phase records (A4′ Фазы 0–4, the A1″ handoff) under their original headings | [docs/superpowers/plans/2026-08-18-agentic-track-restart-handoff-archive.md](docs/superpowers/plans/2026-08-18-agentic-track-restart-handoff-archive.md) |
@@ -409,29 +411,9 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
 | Ontology v0.1 — **a draft for discussion, not a decision** | [docs/governing/sidr-ontology-v0.1.md](docs/governing/sidr-ontology-v0.1.md) |
 | Specs, task plans, closed phase checklists | [docs/superpowers/specs/](docs/superpowers/specs/) · [docs/superpowers/plans/](docs/superpowers/plans/) · `ai-context/phase-{3,4,5,6,7}-*.md` |
 
-### History map — which ADR to open in `decisions.md`
+### History map — moved
 
-- Phases 3–4 (foundation): Blocks **A → H** · Phase 5 (cloud AI): **I → N** + "Phase 5 close summary"
-- Phase 6 (local NLU, stack since deleted): **O → R** + "OQ#1 amended" · Phase 7 (voice + suggestions): **S → W**
-- UX + hardening: **X1 → X6**, **Y1 → Y7**, device-acceptance rounds 1–3
-- Stage-1 AI Launcher: **AIL-0 → AIL-6** · Stage-2 memory: **S2-1**, **S2-2**
-- Design track: **DS-0 → DS-11** + Vision MVP preview · Localization: **I18N-1**, **I18N-2**
-- Agentic restart: **ADR 1/4 … 4/4**, **Этап 0.2 / 0.3 / 0.4 / 0.5 / 0.6 / 0.7 / 2 / 3** (2026-08-19) ·
-  **Этап 4.0** (2026-08-20) · «Развилка агентного трека» — two consumers (2026-08-21) · **Этап 4 (A0)** (2026-08-22) ·
-  «Сквозное ревью блока A0» (2026-08-23) · **Этап 4.5 (A0.5)** — second consumer (2026-08-26) ·
-  **Этап 5 (A1′)** — federated `ToolRegistry` (2026-09-03; the owner's device acceptance of
-  2026-09-10 is a section inside that same ADR) · **Этап 5.5 (A1″)** — tool mass + selection,
-  phases 0–3a (2026-09-19), **phase 3b as a section inside that same ADR** (2026-09-20), **and the
-  owner's device acceptance as its last section** (2026-09-20) · **«Две строки доктрины»** —
-  `DOC-HMA-5` and `DOC-ILM-5` (2026-09-20; docs only)
-- **«2026-11-21 — Этап 6 (A4′) — рантайм полностью…»** — the block ADR (its last sections: the owner's device
-  acceptance, twelve tasks, residuals); phase records in the `§HANDOFF` archive (Фазы 0–4). Inside the block, two ADRs of phase 3a: «2026-10-05 — A4′ ф3a: `ACTION_CATALOG_SCHEMA` →
-  `AUTHORED_TOOL_SCHEMA`» and «2026-10-05 — A4′ ф3a: один модельный путь; исходящий контракт —
-  девятнадцать `ToolId`», whose addendum «Бюджет и транспорт по умолчанию — по замеру» (2026-11-07) fixes
-  the bridge's numbers and whose subsection «Замер фазы 3b» (2026-11-15, clarified at close) re-fixes them;
-  3b Task 3's ADR on argument sorts (header date 2026-11-07, written 2026-11-09, clarified at close); phase 4:
-  «2026-11-20 — A4′ ф4: кэш выученных планов — форма со слотами, шаблон, схема 5» and «2026-11-20 — D3,
-  поправка: выученная команда» (signed 2026-11-20) ·
-  **«2026-11-07 — Два принципа агентной ОС: защищённая открытость и локальное по умолчанию»** (docs only) ·
-  **«2026-11-11 — Сжатие CLAUDE.md (гигиена контекста)»** — this file's compression, with the verbatim
-  appendix of everything that left it
+Which ADR to open is answered by [ai-context/decisions-orientation.md](ai-context/decisions-orientation.md): every
+heading of `decisions.md` verbatim, by epoch, marked in force / replaced / history, plus what binds the next session
+(`DecisionsOrientationGuardTest`). The map that stood here is verbatim in the appendix of ADR «2026-11-21 — Гигиена
+контекста: ориентир по решениям и два правила §0».

@@ -35,8 +35,10 @@ confirmed three times replays on the device at step 2c, no model, consent every 
 «2026-11-20 — D3, поправка: выученная команда» — **signed by the owner 2026-11-20**; I1 «a»: the locked
 `settings_local_only_description` is reworded (both halves) and **re-signed by the owner 2026-11-20** (`072889ca`); the
 learned-commands «Забыть» goes through `SidrForgetGate` (T8, `bb4656fa`, consequence line signed in the same commit).
-**Next: the block's Turkish review, the instrumented `MigrationTest` v4→v5 / v1→v5, the single acceptance on the
-phone, then the block ADR A4′.** Record: `§HANDOFF` «Фаза 4 A4′»
+**Acceptance run 2026-11-21 (`ru`, owner, SM-A325F):** Part A/B done, `MigrationTest` 11/0 on the phone, two
+defects fixed in the round (timer/alarm `EXTRA_SKIP_UI = true`; learned-commands screen crash), gate **1914**;
+twelve owner rulings → tasks — [checklist](docs/superpowers/plans/2026-11-21-a4-device-acceptance.md).
+**Next: §A7 + Part D (Turkish), then the block ADR A4′.** Record: `§HANDOFF` «Фаза 4 A4′»
 (archive); plan [2026-11-18-a4-phase4-learned-plan-cache.md](docs/superpowers/plans/2026-11-18-a4-phase4-learned-plan-cache.md).
 
 Layers above the track plan: the **Master Plan** (blocks A0…A6, DoD, change-control, `Agentic Shell v1 =
@@ -288,7 +290,7 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
   plus `:core:ui:verifyRoborazziDebug` whenever `core/ui` is touched, and `:app:assembleRelease` for
   release-affecting work. **`:domain:jvmTest` and `:consumer:jvm:test` must be listed explicitly:**
   `testDebugUnitTest` has not reached `:domain` since it went KMP, and it never reaches `:consumer:jvm`
-  at all. **Baseline: the floor in `tools/gate.sh` (`BASELINE_TESTS`, 1912 since the owner's answers to A4′ phase 4 (2026-11-20, T8; 1910
+  at all. **Baseline: the floor in `tools/gate.sh` (`BASELINE_TESTS`, 1914 since the acceptance's in-round fixes (2026-11-21; 1912 after T8, 1910
   at the phase's close, 1841 before it), 557 actionable tasks executed, `build/test-results` cleared first) — compare a
   fresh gate against the floor and against the active phase's predicted chain (its plan), not against
   any number quoted in an older ADR.** The decomposition by module is derived **before** every boundary

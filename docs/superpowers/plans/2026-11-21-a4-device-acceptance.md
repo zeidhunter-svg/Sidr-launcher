@@ -1,6 +1,12 @@
 # A4′ — device acceptance (the runtime, phases 0–4, one round)
 
-> **NOT RUN. Written 2026-11-21, before the round; the owner runs it, not an agent.**
+> **RUN 2026-11-21 by the owner on the SM-A325F** (`ru-RU`; §A7 and Part D in `tr`), build
+> `0.1.0+2e3794b-dirty` — `2e3794bb` plus the round's two fixes, committed as `9ced254b` and `6ad827e6`; §A7 on the
+> build with the Part D corrections (`01f61d29`). Gate 1914 / 0 / 0. What was seen, item by item, is in the section
+> «Приёмка на устройстве» of ADR «2026-11-21 — Этап 6 (A4′) — рантайм полностью…» in `ai-context/decisions.md`, and
+> the block is `CLOSED` there; lines below that proved wrong are corrected in place, unrun items stay `[ ]`.
+>
+> *Written 2026-11-21, before the round; the owner runs it, not an agent.*
 >
 > **Why this file exists.** Block A4′ (Этап 6) ran five phases — 0, 1, 2, 3a, 3b, 4 — under the owner's
 > decision of 2026-09-20: **one acceptance at the block's end, no device round per phase**. Every phase is

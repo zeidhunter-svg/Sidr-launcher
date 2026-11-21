@@ -249,8 +249,9 @@ Agentic track (NOW, docs/superpowers/plans/2026-08-18-agentic-track-restart.md; 
   Этап 4.5  A0.5 second consumer (:consumer:jvm) ✅ CODE-GREEN (2026-08-26; device acceptance n/a)
   Этап 5    A1′ federated ToolRegistry ✅ CLOSED (2026-09-10)
   Этап 5.5  A1″ tool mass + selection ✅ CLOSED (2026-09-20)
-  Этап 6    A4′ runtime in full — phases 0–4 CODE-GREEN (2026-11-20; the bridge, partial failure + undo,
-            learned-plan cache; clarification protocol rejected with a measured reason); block acceptance ahead
+  Этап 6    A4′ runtime in full — CLOSED 2026-11-21 (phases 0–4 + one owner acceptance; the bridge, partial
+            failure + undo, learned-plan cache; clarification protocol rejected with a measured reason; twelve
+            owner rulings from the acceptance recorded as tasks)
   Этап 7    A2 / A3 by consumer, then A5 / A6
 
 "Stage 2 (Framework)" is no longer a schedule stage — it is the portable core built inside the slices

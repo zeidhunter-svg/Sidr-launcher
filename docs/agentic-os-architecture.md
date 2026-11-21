@@ -29,7 +29,7 @@
 > **State 2026-11-20.** The framing below is the 2026-07 starting point and is kept as written. Since then the
 > engine exists: A0 built the bounded loop (`AgentExecutor`, `AgentSession`, `TemplatePlanner`, `ToolExecutor` as
 > the only path to the world, trace, session in Room), A0.5 a second consumer (`:consumer:jvm`), A1′/A1″ the
-> federated `ToolRegistry` (twenty-two authored tools, app shortcuts as tools), and A4′ phases 0–4 (`CODE-GREEN`)
+> federated `ToolRegistry` (twenty-two authored tools, app shortcuts as tools), and A4′ (`CLOSED` 2026-11-21)
 > partial failure + undo, re-plan, multi-step model plans and the learned-plan cache. `CommandPlanner` and the
 > router were deleted in A4′ phase 3a: **the one model path is the bridge** (`ModelPlanner`; an interpretation
 > card, nothing runs before «Выполнить», then only through the engine). Current status: `CLAUDE.md`.
@@ -239,7 +239,8 @@ If the runtime first learns to call 20 tools and consent is added afterwards, th
 forget it; if consent lives inside `ToolExecutor` from day one, tool #21 gets it for free. Same logic by
 which this project's privacy guard-tests were written before there was anything to leak.
 
-Current state (2026-11-20): A0…A1″ closed; A4′ phases 0–4 `CODE-GREEN`, block acceptance next.
+Current state (2026-11-21): A0…A1″ and A4′ closed; next — the A4′ acceptance tail (twelve owner rulings) and A2/A3.
+*(2026-11-20: A4′ phases 0–4 `CODE-GREEN`, block acceptance next.)*
 *(2026-08-19: Stage 1 closed; the design track closed (DS-1…DS-11 + I18N-1/2); the four strategic ADRs of
 Этап 1 accepted → Этап 0 and Этап 2 next, then the A0 spike.)*
 

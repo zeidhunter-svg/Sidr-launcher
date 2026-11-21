@@ -277,10 +277,12 @@
 - [ ] **Шаг 1: падающие тесты:**
   - `IntentActionResolverTest > open with an alias launches the alias target`: алиас «tg» → `org.telegram.plus`,
     «открой tg» → `LaunchAppAction(org.telegram.plus)`; `… an alias whose app is gone is not found` → `NoAppFound`.
-  - `IntentActionResolverTest > a word form of an alias is offered, never launched` (владелец 2026-11-21, телефон:
-    «открой телегу» при алиасе «телега» ушло в магазин) — `AppNameMatcher.wordsMatch(typed, aliasPhrase) == false`
-    (край) → `AmbiguousAppAction(confirm = true)` с одним кандидатом-пакетом алиаса («Вы имели в виду «Plus»?»), как
-    край метки (B-2); точное — запуск.
+  - `IntentActionResolverTest > a word form of an alias launches it` (владелец 2026-11-21, телефон: «открой телегу»
+    при алиасе «телега» ушло в магазин; решение владельца «алиасы не спрашивать — лишний слой»):
+    `AppNameMatcher.wordsMatch(typed, aliasPhrase) == false` (край) → `LaunchAppAction` пакета алиаса, **без**
+    «Вы имели в виду». Отличие от края метки (B-2 — только предложение) — намеренное: алиас — память пользователя.
+  - `IntentActionResolverTest > a word form that fits an alias and another app's label is a choice` — край алиаса и
+    край/точная метка **другого** пакета одновременно → `AmbiguousAppAction` с обоими, ничего не запущено.
   - `IntentActionResolverTest > an installed label beats an alias of the same words` — приложение «Камера» и алиас
     «камера» → чужой пакет: запускается установленная «Камера» (Фокус ревью 3).
   - `AppTargetResolverTest > the app slot reads an alias` — «удали приложение tg» → один пакет, без выбора.
@@ -291,7 +293,8 @@
     «Два принципа»).
 - [ ] **Шаг 2: RED** — `--scoped :domain:jvmTest`, затем `--scoped :data:repository:testDebugUnitTest`.
 - [ ] **Шаг 3: реализовать.** Порядок в `IntentActionResolver`: точная метка → алиас (точное совпадение фразы после
-  `CommandNormalizer`) → формы слова меток и алиасов (`AppNameMatcher`, край — только предложение) → `NoAppFound`.
+  `CommandNormalizer`) → формы слова: край алиаса — **запуск**, край метки — предложение (B-2), край алиаса вместе с
+  меткой другого пакета — выбор (`AppNameMatcher`) → `NoAppFound`. То же правило — в слоте 2b (`AppTargetResolver`).
   Замер телефона 2026-11-21 (`intent_match`): «открой телега», «открой tg», «открой телегу» — `LAUNCH_APP` 0.90 →
   магазин; голые «tg» / «телега» — `UNKNOWN`; алиасы `tg`, `телега` → `org.telegram.plus` на месте. Роутер: шаг «1a» — после FastPath, только при
   `isUndecided()`, **выше** шага 2b; стоит выше шага 3 — это `DOC-ADL-3` применённый (детерминированная память меняет

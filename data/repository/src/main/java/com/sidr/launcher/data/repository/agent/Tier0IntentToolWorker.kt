@@ -85,11 +85,15 @@ private const val ACTION_NOTIFICATION_SETTINGS = "android.settings.NOTIFICATION_
  * to read "neither skips the OS's own UI, so the final act is the user's", and to offer that as the
  * ground for `SAFE` and as Master Plan §3.6 `B4`'s form. Driven on the SM-A325F 2026-09-05 the Samsung
  * clock opened *with the timer already counting down* (`Пауза`/`Удалить`, no start button): the flag
- * governs whether the responding app shows **its UI**, not whether it **acts**. It is still set
- * `false` — a timer the user cannot see start would be worse — but what it buys is visibility, not
- * consent. `SAFE` stands by owner decision on other grounds (reversible, immediately visible,
- * provenance disclosed, nothing leaves the device); see [Tier0IntentToolSource]'s KDoc, which carries
- * the decision. `open_system_settings` is untouched by any of this: opening a settings screen performs
+ * governs whether the responding app shows **its UI**, not whether it **acts**. It bought visibility,
+ * not consent. **Since 2026-11-21 it is `true`** for `set_timer` and `set_alarm` (A4′ device acceptance,
+ * owner ruling (a)), on two measurements of that day on the SM-A325F: with `false` the clock stayed open
+ * over the next step of a plan («…и открой tg» needed «Назад»), and a timer started with `false` left an
+ * **ongoing notification ticking after the timer was stopped** — reproduced with the same intent from
+ * `adb`, without Sidr, and not with a timer set by hand in the clock; with `true` the timer ran, rang and
+ * its notification cleared, and the alarm was created enabled with nothing drawn. `SAFE` stands by owner
+ * decision on the same four grounds, «immediately visible» now meaning Sidr's own finished card names the
+ * step (a Home indicator for the next alarm is a follow-up task); see [Tier0IntentToolSource]'s KDoc. `open_system_settings` is untouched by any of this: opening a settings screen performs
  * nothing, so for it there was never an act to complete.
  *
  * **The launch is caught HERE, not in [ContextIntentLauncher]** (final whole-branch review, finding 1,
@@ -214,14 +218,15 @@ class Tier0IntentToolWorker @Inject constructor(
         return launch(
             Intent(AlarmClock.ACTION_SET_TIMER)
                 .putExtra(AlarmClock.EXTRA_LENGTH, seconds)
-                .putExtra(AlarmClock.EXTRA_SKIP_UI, false),
+                .putExtra(AlarmClock.EXTRA_SKIP_UI, true),
         )
     }
 
     /**
-     * Task 5. `EXTRA_SKIP_UI = false` is not "prefilled but not sent" here either — [Tier0IntentToolSource]'s
-     * KDoc on the `SET_ALARM` descriptor carries the measurement (row 13/29: `ACTION_SET_ALARM` creates
-     * the alarm already enabled, so the flag governs the responder's own UI, not consent).
+     * Task 5. `EXTRA_SKIP_UI` is not "prefilled but not sent" here either — [Tier0IntentToolSource]'s
+     * KDoc on the `SET_ALARM` descriptor carries the measurements (row 13/29 with `false`, 2026-11-21 with
+     * `true`: `ACTION_SET_ALARM` creates the alarm already enabled either way; the flag governs only the
+     * responder's own UI). `true` since 2026-11-21 — the class KDoc says why.
      */
     private fun setAlarm(raw: String): ToolResult {
         val at = ClockTimeSort.timeOf(raw) ?: return ToolResult.Failed(CommandFailure.Generic)
@@ -229,7 +234,7 @@ class Tier0IntentToolWorker @Inject constructor(
             Intent(AlarmClock.ACTION_SET_ALARM)
                 .putExtra(AlarmClock.EXTRA_HOUR, at.first)
                 .putExtra(AlarmClock.EXTRA_MINUTES, at.second)
-                .putExtra(AlarmClock.EXTRA_SKIP_UI, false),
+                .putExtra(AlarmClock.EXTRA_SKIP_UI, true),
         )
     }
 

@@ -165,15 +165,15 @@ class Tier0IntentToolSource @Inject constructor(
         // **What SAFE rests on here, stated so it cannot later be "simplified" away.** Row 13/29
         // measured `ACTION_SET_ALARM` on the SM-A325F: it creates the alarm **already enabled** — there
         // is no prefilled form, and the OS interposed no consent step. Both rows fired with
-        // `EXTRA_SKIP_UI = false`, which is what this tool sends; the `true` case was never measured,
-        // so nothing here claims it behaves the same. (Narrowed by fix round 2, finding #4: the
-        // sentence used to say "either way", which stated as measured fact the one half of the pair
-        // that no row covers.) So
+        // `EXTRA_SKIP_UI = false`; the `true` case — what this tool sends since 2026-11-21 (A4′ device
+        // acceptance, owner ruling (a)) — was measured that day on the same phone: the alarm created
+        // enabled, the clock drew nothing. Now both halves of the pair are measured. So
         // this is NOT the "prefilled but not sent" shape (Master Plan §3.6 B4) — that reading was
         // measured false for set_timer's own ACTION_SET_TIMER and the same measurement applies here.
         // SAFE rests on the same four properties the owner accepted for set_timer instead: the effect
-        // is reversible (one tap deletes the alarm that was just created), immediately visible (the
-        // clock app opens showing it), disclosed (EXTERNAL provenance, this tool's only consent-gate
+        // is reversible (one tap deletes the alarm that was just created), immediately visible (Sidr's
+        // finished card names the step; until 2026-11-21 it was the clock app opening over it, which
+        // stayed open over a plan's next step), disclosed (EXTERNAL provenance, this tool's only consent-gate
         // substitute since a SAFE tool never reaches the gate), and local (the invocation and its
         // argument never leave the device).
         ToolDescriptor(

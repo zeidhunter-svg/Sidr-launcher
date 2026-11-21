@@ -100,7 +100,7 @@ class Tier0IntentProbe {
     fun setAlarm() = fire(
         "set_alarm",
         // 04:37 / "SIDR PROBE" so the row is identifiable in the clock's own list afterwards.
-        // EXTRA_SKIP_UI = false is production's shape (`Tier0IntentToolWorker.setTimer`), and 2026-09-05
+        // EXTRA_SKIP_UI = false was production's shape until 2026-11-21 (now `true`, see `Tier0IntentToolWorker`), and 2026-09-05
         // measured on this phone that it governs whether the responding app shows its UI, not whether
         // it acts — which is precisely what this row re-measures for ACTION_SET_ALARM.
         Intent(AlarmClock.ACTION_SET_ALARM)

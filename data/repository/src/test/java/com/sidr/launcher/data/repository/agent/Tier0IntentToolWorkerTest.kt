@@ -76,14 +76,14 @@ class Tier0IntentToolWorkerTest {
     }
 
     @Test
-    fun `ten minutes becomes six hundred seconds and the clock UI is not skipped`() = runTest {
+    fun `ten minutes becomes six hundred seconds and the clock UI is skipped`() = runTest {
         val launched = mutableListOf<Intent>()
         val worker = workerWith(FakeIntentLauncher(launched), grantsEverything)
 
         worker.invoke(ResolvedInvocation(Tier0ToolIds.SET_TIMER, mapOf("duration" to "10 minutes")))
 
         assertEquals(600, launched.single().getIntExtra(AlarmClock.EXTRA_LENGTH, -1))
-        assertEquals(false, launched.single().getBooleanExtra(AlarmClock.EXTRA_SKIP_UI, true))
+        assertEquals(true, launched.single().getBooleanExtra(AlarmClock.EXTRA_SKIP_UI, false))
     }
 
     /**
@@ -334,13 +334,13 @@ class Tier0IntentToolWorkerTest {
     /**
      * Task 5. `set_alarm` shares `set_timer`'s permission (`com.android.alarm.permission.SET_ALARM`,
      * row 27) but a different intent and a different argument shape: a clock time, not a duration.
-     * `EXTRA_SKIP_UI = false` is asserted for the same reason it is on `set_timer` — row 13/29 measured
-     * that `ACTION_SET_ALARM` creates the alarm **already enabled** regardless of this flag, so it is
-     * not "prefilled but not sent"; the flag only governs whether the responder draws its own UI over an
-     * act that has already happened.
+     * `EXTRA_SKIP_UI = true` since 2026-11-21 (A4′ device acceptance, owner ruling (a)): the clock no
+     * longer opens over the next step of a plan; measured that day on the SM-A325F, `ACTION_SET_ALARM`
+     * with `true` creates the alarm enabled and draws nothing (row 13/29 measured `false` the same way —
+     * the flag never governed the act, only the responder's UI).
      */
     @Test
-    fun `set_alarm sends hour and minutes and does not skip the responder's UI`() = runTest {
+    fun `set_alarm sends hour and minutes and skips the responder's UI`() = runTest {
         val launched = mutableListOf<Intent>()
         val worker = workerWith(
             FakeIntentLauncher(launched),
@@ -354,7 +354,7 @@ class Tier0IntentToolWorkerTest {
         assertEquals(AlarmClock.ACTION_SET_ALARM, intent.action)
         assertEquals(7, intent.getIntExtra(AlarmClock.EXTRA_HOUR, -1))
         assertEquals(30, intent.getIntExtra(AlarmClock.EXTRA_MINUTES, -1))
-        assertFalse(intent.getBooleanExtra(AlarmClock.EXTRA_SKIP_UI, true))
+        assertTrue(intent.getBooleanExtra(AlarmClock.EXTRA_SKIP_UI, false))
     }
 
     /**

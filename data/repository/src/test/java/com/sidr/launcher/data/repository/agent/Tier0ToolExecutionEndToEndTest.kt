@@ -204,7 +204,7 @@ class Tier0ToolExecutionEndToEndTest {
         val intent = launched.single()
         assertEquals(AlarmClock.ACTION_SET_TIMER, intent.action)
         assertEquals(600, intent.getIntExtra(AlarmClock.EXTRA_LENGTH, -1))
-        assertEquals(false, intent.getBooleanExtra(AlarmClock.EXTRA_SKIP_UI, true))
+        assertEquals(true, intent.getBooleanExtra(AlarmClock.EXTRA_SKIP_UI, false))
 
         assertNotNull("the run must return a session", finished)
         checkNotNull(finished)

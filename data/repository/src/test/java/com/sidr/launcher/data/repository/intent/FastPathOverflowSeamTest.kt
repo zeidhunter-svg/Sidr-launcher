@@ -180,4 +180,20 @@ class FastPathOverflowSeamTest {
         assertEquals(ExecutableAction.OpenSearchAction("рецепт хлеба и соли", SearchTarget.WEB), executor.executedActions.single())
         assertEquals(0, modelPlanner.planCallCount)
     }
+
+    /**
+     * Task 1 review round 1, Important 1 (controller ruling (a)), the seam half: with the REAL matcher, a bare address
+     * `UrlDetector` refuses to open — a Cyrillic «а» (U+0430) in the host, a homograph — is FastPath's defensive
+     * search, and it is searched by FastPath even online with a provider; the model is not asked. This is the evidence
+     * that `HandleUserCommandUseCase`'s predicate fires on what the production matcher produces: it classifies the same
+     * normalized text the matcher classified.
+     */
+    @Test
+    fun `online an unsafe bare address is searched by FastPath with the real matcher and the model is not asked`() = runTest {
+        val outcome = router().route("https://\u0430pple.com")
+
+        assertEquals(CommandOutcome.Executed, outcome)
+        assertEquals(ExecutableAction.OpenSearchAction("https://\u0430pple.com", SearchTarget.WEB), executor.executedActions.single())
+        assertEquals(0, modelPlanner.planCallCount)
+    }
 }

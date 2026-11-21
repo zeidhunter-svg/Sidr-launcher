@@ -1420,6 +1420,25 @@ class RouteCommandUseCaseTest {
         assertEquals("FastPath matched once", 1, matcher.callCount)
     }
 
+    /**
+     * Review round 1, Important 1 (controller ruling (a)): online, with a provider — the model reachable — a search
+     * FastPath made out of an unsafe address (`UrlDetector`'s `SearchFallback`; here the Cyrillic «а» of a homograph)
+     * is not yielded: FastPath searches it, and the model — scripted to send it to the assistant, so asking it would
+     * change the outcome — is never asked.
+     */
+    @Test
+    fun `online an ambiguous address is searched by FastPath and the model is never asked`() = runTest {
+        matcher.intentToReturn = LauncherIntent.SearchIntent(HOMOGRAPH_ADDRESS, SearchTarget.WEB)
+        matcher.confidenceToReturn = 0.90f
+        planner.answer = ModelPlanning.ToAssistant("что это за адрес")
+
+        val outcome = useCase().route(HOMOGRAPH_ADDRESS)
+
+        assertEquals(CommandOutcome.Executed, outcome)
+        assertEquals(listOf(ExecutableAction.OpenSearchAction(HOMOGRAPH_ADDRESS, SearchTarget.WEB)), executor.executedActions)
+        assertEquals("the model is never asked", 0, planner.planCallCount)
+    }
+
     /** The model reads the «search» as a question: the assistant, prefilled and unsent — the browser does not open. */
     @Test
     fun `a yielded search the model sends to the assistant opens the assistant`() = runTest {
@@ -1438,5 +1457,8 @@ class RouteCommandUseCaseTest {
         val LEARNED_WEB_SEARCH = ToolId("web_search")
         val WEB_SEARCH = ToolId("web_search")
         const val SEARCH_QUERY = "лучший рецепт шашлыка"
+
+        /** «apple.com» with a Cyrillic «а» (U+0430): a non-ASCII host, which `UrlDetector` routes to a search. */
+        const val HOMOGRAPH_ADDRESS = "https://\u0430pple.com"
     }
 }

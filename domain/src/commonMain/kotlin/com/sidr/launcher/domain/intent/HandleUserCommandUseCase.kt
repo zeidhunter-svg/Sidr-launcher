@@ -70,11 +70,13 @@ class HandleUserCommandUseCase(
 
     /**
      * FastPath's answer, with the router's «the model is reachable» as [yieldToModel] (owner decision 13: Б, A4′
-     * acceptance tail plan §0.2). When it is true, a **confident search** — a `SearchIntent` past the auto-execute
-     * gate — is not resolved or run: it comes back as [FastPathYield.Search] with [CommandOutcome.LowConfidence],
-     * so the router asks the model. Nothing else yields: a launch, a settings route, a simple command, a URL, a
-     * store search, and every outcome below the gate answer exactly as with [yieldToModel] false. The match is
-     * recorded either way, with the confidence the gate acted on — the yield is a route, not a confidence.
+     * acceptance tail plan §0.2). When it is true, a **confident search read from a search verb** — a `SearchIntent`
+     * past the auto-execute gate — is not resolved or run: it comes back as [FastPathYield.Search] with
+     * [CommandOutcome.LowConfidence], so the router asks the model. Nothing else yields, and answers exactly as with
+     * [yieldToModel] false: the search FastPath makes out of an unsafe address (`UrlDetector`'s `SearchFallback` —
+     * a defence, not a reading; [isAddressGuardSearch]), an address FastPath opens (`OpenUrlIntent`), a store search,
+     * a launch, a settings route, a simple command, and every outcome below the gate. The match is recorded either
+     * way, with the confidence the gate acted on — the yield is a route, not a confidence.
      */
     suspend fun answer(rawInput: String, yieldToModel: Boolean): FastPathAnswer {
         val normalized = CommandNormalizer.normalize(rawInput)
@@ -127,8 +129,9 @@ class HandleUserCommandUseCase(
 
         // (1′) Decision 13: Б — a reachable model gets a confident search before the browser does. Past the gate,
         // before the resolver: nothing is resolved or run here, and the router runs it (`runYielded`) if the model
-        // cannot answer. Only a search: every other confident intent goes on below exactly as before.
-        if (yieldToModel && intent is LauncherIntent.SearchIntent) {
+        // cannot answer. Only a search, and only one that is a reading of a search: FastPath's defensive search of an
+        // unsafe address (`isAddressGuardSearch`) and every other confident intent go on below exactly as before.
+        if (yieldToModel && intent is LauncherIntent.SearchIntent && !isAddressGuardSearch(normalized)) {
             return FastPathAnswer(CommandOutcome.LowConfidence, FastPathYield.Search(intent))
         }
 
@@ -139,6 +142,21 @@ class HandleUserCommandUseCase(
             },
         )
     }
+
+    /**
+     * Whether a confident search is FastPath's **defence of an address**, not a reading of a search (task 1 review
+     * round 1, controller ruling (a)): [UrlDetector] judged the whole command a domain-shaped but unsafe address —
+     * [UrlClassification.SearchFallback]: a non-ASCII host (a homograph's Cyrillic «а»), punycode, an unknown TLD, an
+     * address carrying a query — which is searched precisely so that nothing opens it. Handed to the model it could
+     * come back as `open_url` in the user's own words, so it is never yielded: FastPath searches it in every state.
+     *
+     * Judged on [normalized] — the very text the matcher classified (`IntentMatcher.match` receives it), so this is
+     * the same verdict the matcher's bare-address rule reached, read again rather than carried. It cannot fire on a
+     * verb search: a search verb is always followed by a space, and [UrlDetector] answers
+     * [UrlClassification.None] for any text with whitespace in it.
+     */
+    private fun isAddressGuardSearch(normalized: String): Boolean =
+        UrlDetector.classify(normalized) is UrlClassification.SearchFallback
 
     /**
      * A claimed launch whose app name did not resolve: is that a fact about the WORLD (no such app —

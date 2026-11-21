@@ -519,20 +519,59 @@ class HandleUserCommandUseCaseTest {
         val helpYielding = useCase.answer("помощь", yieldToModel = true)
         val helpNot = useCase.answer("помощь", yieldToModel = false)
 
+        // Review round 1, Minor 3: the two other confident web intents the KDoc names — an address and a store search.
+        matcherReturns(LauncherIntent.OpenUrlIntent("https://lumora.com"), 0.90f)
+        val urlYielding = useCase.answer("lumora.com", yieldToModel = true)
+        val urlNot = useCase.answer("lumora.com", yieldToModel = false)
+
+        matcherReturns(LauncherIntent.PlayStoreSearchIntent("lumora"), 0.90f)
+        val storeYielding = useCase.answer("установи lumora", yieldToModel = true)
+        val storeNot = useCase.answer("установи lumora", yieldToModel = false)
+
         assertEquals(FastPathAnswer(CommandOutcome.Executed), launchYielding)
         assertEquals(launchNot, launchYielding)
         assertEquals(FastPathAnswer(CommandOutcome.OpenSettings), settingsYielding)
         assertEquals(settingsNot, settingsYielding)
         assertEquals(FastPathAnswer(CommandOutcome.Message(CommandMessage.Help)), helpYielding)
         assertEquals(helpNot, helpYielding)
+        assertEquals("an address is opened, not yielded", FastPathAnswer(CommandOutcome.Executed), urlYielding)
+        assertEquals(urlNot, urlYielding)
+        assertEquals("a store search is run, not yielded", FastPathAnswer(CommandOutcome.Executed), storeYielding)
+        assertEquals(storeNot, storeYielding)
         assertEquals(
-            "the launch ran both times",
+            "each ran both times",
             listOf(
                 ExecutableAction.LaunchAppAction("net.fixture.calc"),
                 ExecutableAction.LaunchAppAction("net.fixture.calc"),
+                ExecutableAction.OpenUrlAction("https://lumora.com"),
+                ExecutableAction.OpenUrlAction("https://lumora.com"),
+                ExecutableAction.PlayStoreSearchAction("lumora"),
+                ExecutableAction.PlayStoreSearchAction("lumora"),
             ),
             fakeExecutor.executedActions,
         )
+    }
+
+    /**
+     * Review round 1, Important 1 (controller ruling (a)): a search the matcher made out of a domain-shaped but UNSAFE
+     * address — `UrlDetector`'s `SearchFallback`: a non-ASCII host (the Cyrillic «а» of a homograph), punycode, an
+     * unknown TLD, an address with a query — is FastPath's defence («never open, search»), not a reading of a search.
+     * It is never handed to the model, which could read it back as `open_url`: FastPath searches it as before. The
+     * precondition pins that each fixture really is that case for the real `UrlDetector`.
+     */
+    @Test fun `an ambiguous address is searched by FastPath and never yielded`() = runTest(testDispatcher) {
+        val addresses = listOf("https://\u0430pple.com", "xn--80ak6aa92e.com", "lumora.zzq", "lumora.com/?q=x")
+
+        addresses.forEach { address ->
+            val fallback = UrlDetector.classify(CommandNormalizer.normalize(address)) as UrlClassification.SearchFallback
+            matcherReturns(LauncherIntent.SearchIntent(fallback.term, SearchTarget.WEB), 0.90f)
+
+            val answer = useCase.answer(address, yieldToModel = true)
+
+            assertEquals(address, FastPathAnswer(CommandOutcome.Executed), answer)
+            assertEquals(address, ExecutableAction.OpenSearchAction(fallback.term, SearchTarget.WEB), fakeExecutor.executedActions.last())
+        }
+        assertEquals("each address was searched once", addresses.size, fakeExecutor.callCount)
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

@@ -46,10 +46,13 @@ import kotlinx.coroutines.flow.first
  * 1. Run FastPath ([HandleUserCommandUseCase.answer]) exactly once — offline, and the source of the recorded
  *    side effects.
  * 1′. **The yield** (owner decision 13: Б, A4′ acceptance tail plan §0.2). When the model is reachable — not
- *    local-only, a provider, online — FastPath does not run a **confident search**: it answers
- *    [CommandOutcome.LowConfidence] and hands the search over ([FastPathYield.Search]), so the command is
+ *    local-only, a provider, online — FastPath does not run a **confident search read from a search verb**: it
+ *    answers [CommandOutcome.LowConfidence] and hands the search over ([FastPathYield.Search]), so the command is
  *    undecided and goes down the chain — 2b and 2c first, as any undecided text, then step 7 — to the model.
- *    Nothing else yields. If the model then cannot take it — `Declined`, `Unavailable` — step 7 runs exactly the
+ *    Nothing else yields — not the search FastPath makes out of an unsafe address (`UrlDetector`'s
+ *    `SearchFallback`: a defence that keeps a homograph or an unknown TLD from being opened, never handed to a
+ *    model that could read it back as `open_url`; task 1 review round 1, ruling (a)), not an address FastPath
+ *    opens, not a store search. If the model then cannot take it — `Declined`, `Unavailable` — step 7 runs exactly the
  *    search FastPath would have run ([HandleUserCommandUseCase.runYielded], controller ruling K1), so a broken
  *    key or a timeout never costs the user a working search. When the model is not reachable there is no yield,
  *    and FastPath answers byte for byte as before.

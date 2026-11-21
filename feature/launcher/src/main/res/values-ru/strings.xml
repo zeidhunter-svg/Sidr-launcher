@@ -108,6 +108,8 @@
     <string name="launcher_agent_step_alarm">Поставить будильник на %1$s</string>
     <string name="launcher_agent_step_uninstall">Удалить %1$s (%2$s)</string>
     <string name="launcher_agent_step_set_alias">Называть «%1$s» «%2$s»</string>
+    <string name="launcher_agent_step_uninstall_one">Удалить %1$s</string>
+    <string name="launcher_agent_step_set_alias_one">Задать название «%1$s»</string>
     <string name="launcher_agent_step_forget_alias">Забыть алиас «%1$s»</string>
     <string name="launcher_agent_step_forget_choice">Забыть выученный выбор для «%1$s»</string>
     <string name="launcher_agent_step_generic">Выполнить шаг для %1$s</string>

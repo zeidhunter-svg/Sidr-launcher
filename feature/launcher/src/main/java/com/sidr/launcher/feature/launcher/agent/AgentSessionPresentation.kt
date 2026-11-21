@@ -358,7 +358,19 @@ internal fun PlanStep.line(
         }
     }
 
-    return sidrString(toolLabelFor(invocation.id), shown.values.singleOrNull() ?: subject)
+    return sidrString(singleValueLabelFor(invocation.id), shown.values.singleOrNull() ?: subject)
+}
+
+/**
+ * The ONE-placeholder resource for [line]'s fallback. [toolLabelFor] gives `uninstall_app` and `set_app_alias`
+ * their TWO-placeholder lines, and calling those with one argument threw `MissingFormatArgumentException` — on the
+ * phone, 2026-11-21, the learned-commands screen crashed on «сотри …» (an `uninstall_app` whose `app` is a slot,
+ * with no `app_label`). An incompletely-bound step of those two tools now says less, as the KDoc above promises.
+ */
+private fun singleValueLabelFor(id: ToolId): Int = when (id.value) {
+    TIER0_UNINSTALL_APP -> R.string.launcher_agent_step_uninstall_one
+    MEMORY_SET_APP_ALIAS -> R.string.launcher_agent_step_set_alias_one
+    else -> toolLabelFor(id)
 }
 
 /**

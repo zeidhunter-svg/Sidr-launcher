@@ -164,6 +164,8 @@
          `PlanStep.line` reads `app_label` (falling back to `app`) and `phrase` BY NAME. %1$s is the
          name the user gave the app, %2$s is the phrase they coined for it. -->
     <string name="launcher_agent_step_set_alias">Call “%1$s” “%2$s”</string>
+    <string name="launcher_agent_step_uninstall_one">Remove %1$s</string>
+    <string name="launcher_agent_step_set_alias_one">Set the name “%1$s”</string>
     <string name="launcher_agent_step_forget_alias">Forget the alias “%1$s”</string>
     <string name="launcher_agent_step_forget_choice">Forget the learned choice for “%1$s”</string>
     <string name="launcher_agent_step_generic">Run this step for %1$s</string>

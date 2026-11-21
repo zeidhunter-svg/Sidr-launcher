@@ -432,6 +432,109 @@ class HandleUserCommandUseCaseTest {
         assertEquals(0.30, history.recorded.single().confidence, 0.0001)
     }
 
+    // ── A4′ acceptance tail, owner decision 13: Б — a confident search yields to a reachable model ─────
+    // `yieldToModel` is the router's «the model is reachable» (not local-only, a provider, the network —
+    // controller ruling K14). FastPath then does not run a confident search: it hands the search over
+    // (`FastPathYield.Search`) and answers `LowConfidence`, so the router asks the model. Without the model it
+    // searches exactly as before. Every query word is invented or ordinary; equality, never `contains`.
+
+    @Test fun `a confident search yields to the model when asked to - nothing executes`() = runTest(testDispatcher) {
+        matcherReturns(LauncherIntent.SearchIntent("лучший рецепт шашлыка", SearchTarget.WEB), 0.90f)
+
+        val answer = useCase.answer("найди лучший рецепт шашлыка", yieldToModel = true)
+
+        assertEquals(CommandOutcome.LowConfidence, answer.outcome)
+        assertEquals(
+            FastPathYield.Search(LauncherIntent.SearchIntent("лучший рецепт шашлыка", SearchTarget.WEB)),
+            answer.yielded,
+        )
+        assertEquals("nothing is executed before the model is asked", 0, fakeExecutor.callCount)
+    }
+
+    @Test fun `a confident search is executed as before when the model is not reachable`() = runTest(testDispatcher) {
+        matcherReturns(LauncherIntent.SearchIntent("лучший рецепт шашлыка", SearchTarget.WEB), 0.90f)
+
+        val answer = useCase.answer("найди лучший рецепт шашлыка", yieldToModel = false)
+
+        assertEquals(CommandOutcome.Executed, answer.outcome)
+        assertEquals(
+            ExecutableAction.OpenSearchAction("лучший рецепт шашлыка", SearchTarget.WEB),
+            fakeExecutor.executedActions.single(),
+        )
+        assertEquals(null, answer.yielded)
+    }
+
+    /**
+     * A plan decision: the yield is a ROUTE, not a confidence. The row says what the matcher claimed and the gate
+     * acted on (0.90, `SEARCH`), so it stays comparable with the rows written before decision 13.
+     */
+    @Test fun `a yielded search records the matcher's confidence`() = runTest(testDispatcher) {
+        val history = RecordingIntentMatchHistory()
+        val useCaseWithHistory = useCaseWith(history)
+        matcherReturns(LauncherIntent.SearchIntent("лучший рецепт шашлыка", SearchTarget.WEB), 0.90f)
+
+        val answer = useCaseWithHistory.answer("найди лучший рецепт шашлыка", yieldToModel = true)
+        advanceUntilIdle() // flush the fire-and-forget recordMatch
+
+        assertEquals(CommandOutcome.LowConfidence, answer.outcome)
+        val record = history.recorded.single()
+        assertEquals(IntentMatchType.SEARCH, record.matchType)
+        assertEquals(0.90, record.confidence, 0.0001)
+    }
+
+    /**
+     * The router runs a yielded search only after `answer` has already recorded the command once; running it must
+     * not write a second row. The history here is wired and enabled — a `runYielded` that recorded would succeed.
+     */
+    @Test fun `runYielded executes the search and records nothing`() = runTest(testDispatcher) {
+        val history = RecordingIntentMatchHistory()
+        val useCaseWithHistory = useCaseWith(history)
+
+        val outcome = useCaseWithHistory.runYielded(
+            FastPathYield.Search(LauncherIntent.SearchIntent("лучший рецепт шашлыка", SearchTarget.WEB)),
+        )
+        advanceUntilIdle() // flush anything a recording would have launched
+
+        assertEquals(CommandOutcome.Executed, outcome)
+        assertEquals(
+            ExecutableAction.OpenSearchAction("лучший рецепт шашлыка", SearchTarget.WEB),
+            fakeExecutor.executedActions.single(),
+        )
+        assertTrue("runYielded must not record a second intent_match row", history.recorded.isEmpty())
+    }
+
+    /** Only a search yields: a launch, a settings route and a simple command answer exactly as without the model. */
+    @Test fun `a launch, a setting and a simple command never yield`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(InstalledApp("net.fixture.calc", "Калькулятор"))
+
+        matcherReturns(LauncherIntent.LaunchAppIntent("калькулятор"), 0.90f)
+        val launchYielding = useCase.answer("открой калькулятор", yieldToModel = true)
+        val launchNot = useCase.answer("открой калькулятор", yieldToModel = false)
+
+        matcherReturns(LauncherIntent.OpenSettingsIntent(), 0.95f)
+        val settingsYielding = useCase.answer("настройки", yieldToModel = true)
+        val settingsNot = useCase.answer("настройки", yieldToModel = false)
+
+        matcherReturns(LauncherIntent.SimpleCommandIntent(SimpleCommand.HELP), 0.95f)
+        val helpYielding = useCase.answer("помощь", yieldToModel = true)
+        val helpNot = useCase.answer("помощь", yieldToModel = false)
+
+        assertEquals(FastPathAnswer(CommandOutcome.Executed), launchYielding)
+        assertEquals(launchNot, launchYielding)
+        assertEquals(FastPathAnswer(CommandOutcome.OpenSettings), settingsYielding)
+        assertEquals(settingsNot, settingsYielding)
+        assertEquals(FastPathAnswer(CommandOutcome.Message(CommandMessage.Help)), helpYielding)
+        assertEquals(helpNot, helpYielding)
+        assertEquals(
+            "the launch ran both times",
+            listOf(
+                ExecutableAction.LaunchAppAction("net.fixture.calc"),
+                ExecutableAction.LaunchAppAction("net.fixture.calc"),
+            ),
+            fakeExecutor.executedActions,
+        )
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private fun matcherReturns(intent: LauncherIntent, confidence: Float) {

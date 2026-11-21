@@ -16,6 +16,8 @@ import com.sidr.launcher.domain.connectivity.ConnectivityChecker
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.intent.CommandOutcome
+import com.sidr.launcher.domain.intent.FastPathAnswer
+import com.sidr.launcher.domain.intent.FastPathYield
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.memory.plan.LearnedPlans
 import com.sidr.launcher.domain.memory.plan.Replay
@@ -37,9 +39,20 @@ import kotlinx.coroutines.flow.first
  * honestly rather than disguised as an unrecognized command.
  *
  * Order of decision — an ordered chain of early returns, so **at most one** of the three
- * understanding-unavailable messages can be reached for a single command:
- * 1. Run FastPath (`handle`) exactly once — offline, unchanged, and the source of the recorded side
- *    effects.
+ * understanding-unavailable messages can be reached for a single command. The three states those messages
+ * name — local-only, a provider, the network — are read **once**, before step 1 (controller ruling K14), and
+ * steps 1′, 3, 5 and 6 all decide on those same values: there is no "the path closed between the gate and the
+ * answer" branch, because no gate is read twice.
+ * 1. Run FastPath ([HandleUserCommandUseCase.answer]) exactly once — offline, and the source of the recorded
+ *    side effects.
+ * 1′. **The yield** (owner decision 13: Б, A4′ acceptance tail plan §0.2). When the model is reachable — not
+ *    local-only, a provider, online — FastPath does not run a **confident search**: it answers
+ *    [CommandOutcome.LowConfidence] and hands the search over ([FastPathYield.Search]), so the command is
+ *    undecided and goes down the chain — 2b and 2c first, as any undecided text, then step 7 — to the model.
+ *    Nothing else yields. If the model then cannot take it — `Declined`, `Unavailable` — step 7 runs exactly the
+ *    search FastPath would have run ([HandleUserCommandUseCase.runYielded], controller ruling K1), so a broken
+ *    key or a timeout never costs the user a working search. When the model is not reachable there is no yield,
+ *    and FastPath answers byte for byte as before.
  * 2. **A goal FastPath DECIDED but did not ACHIEVE ⇒ the agent** ([StartAgentSessionUseCase], A0
  *    Task 11). Exactly one outcome qualifies: [CommandMessage.NoAppFound] — FastPath understood
  *    "open X" and found no such app. Not "any Message", not "anything that did not execute";
@@ -72,8 +85,11 @@ import kotlinx.coroutines.flow.first
  *    E6-R1: a deterministic miss is not a filter on understanding). An unreadable store therefore fails open
  *    to step 7, named beside A1′ residual (3).
  * 3. **`localOnlyMode` on ⇒ byte-for-byte FastPath parity** — the planner is never consulted and
- *    nothing leaves the device. A FastPath hit returns untouched; a miss says so plainly
- *    ([CommandMessage.UnderstandingLocalOnly]) instead of claiming the command was unknown.
+ *    nothing leaves the device. **Local-only: no yield — FastPath searches byte for byte** (step 1′ never
+ *    fires, so a confident search ran in step 1 exactly as before decision 13). A FastPath hit returns
+ *    untouched; a miss says so plainly ([CommandMessage.UnderstandingLocalOnly]) instead of claiming the
+ *    command was unknown. The same holds with no provider and offline (steps 5, 6): no yield, FastPath's
+ *    search returned at step 4.
  * 4. FastPath decided confidently ⇒ return its outcome untouched; the planner is not consulted.
  * 5. **No provider configured ⇒ [CommandMessage.UnderstandingNeedsProvider]**, planner never
  *    consulted. This check lives *here*, in the gate, and not in the planner implementation (Этап
@@ -88,8 +104,10 @@ import kotlinx.coroutines.flow.first
  *    with the question, a verbatim clarify, an honest «model unavailable», what the binding found instead
  *    of a card («нет такого приложения», «не понял» for a value the device could not read — phase 3b,
  *    Task 6 — or a failure; the model is asked once and told none of it), or — when the model declines
- *    — FastPath's outcome untouched. Nothing here executes (`DOC-NYH-1`, Fork R4); the model is below
- *    gates 3, 5 and 6 (`DOC-ADL-3`). A bound reading also carries what it would teach
+ *    — FastPath's outcome untouched. A search FastPath yielded at step 1′ is the one exception, on both
+ *    `Declined` and `Unavailable`: it is run as FastPath would have run it (K1) — FastPath's own deterministic
+ *    action, not anything the model proposed. Otherwise nothing here executes (`DOC-NYH-1`, Fork R4); the
+ *    model is below gates 3, 5 and 6 (`DOC-ADL-3`). A bound reading also carries what it would teach
  *    ([CommandOutcome.Interpreted.learnable], A4′ phase 4 B-8): computed here, from the validated steps
  *    before binding, never inside `toCommandOutcome` (the remainder card shares that and teaches nothing);
  *    nothing is recorded here — the launcher records it once «Выполнить» has started the session.
@@ -175,8 +193,20 @@ class RouteCommandUseCase(
 ) {
 
     suspend fun route(rawInput: String): CommandOutcome {
-        // (1) FastPath first — unchanged, offline, runs exactly once (its recording side effect too).
-        val ruleOutcome = handleUserCommand.handle(rawInput)
+        // (0) Controller ruling K14: the three states that decide whether the model is reachable are read ONCE, here,
+        // and steps 1′, 3, 5 and 6 all use these values — there is no branch in which the path closed between the
+        // gate and the answer, because the gate is not read twice.
+        val localOnly = featureFlagRepository.getFlags().first().localOnlyMode
+        val provider = providerConfigRepository.activeConfig().first()
+        val online = connectivityChecker.isOnline()
+        val open = !localOnly && provider != null && online
+
+        // (1) FastPath first — offline, runs exactly once (its recording side effect too).
+        // (1′) Decision 13: Б — with the model reachable, a confident search is handed over, not run: `answer` returns
+        // it as `yielded` with `LowConfidence`, so the chain below treats the command as undecided. Not reachable
+        // (`open` false) ⇒ `answer` is exactly `handle`, byte for byte.
+        val fastPath = handleUserCommand.answer(rawInput, yieldToModel = open)
+        val ruleOutcome = fastPath.outcome
 
         // (2) A goal FastPath DECIDED but did not ACHIEVE: it understood "open X" and found no such
         // app. This is the one outcome A0 hands to the agent — not "any Message", not "anything that
@@ -231,8 +261,9 @@ class RouteCommandUseCase(
             }
         }
 
-        // (3) Local-only ⇒ exact FastPath parity; the planner is never consulted.
-        if (featureFlagRepository.getFlags().first().localOnlyMode) {
+        // (3) Local-only ⇒ exact FastPath parity; the planner is never consulted. No yield happened (`open` false),
+        // so a confident search was run by FastPath byte for byte and is returned here untouched.
+        if (localOnly) {
             return ruleOutcome.orHonestly(CommandMessage.UnderstandingLocalOnly)
         }
 
@@ -240,12 +271,12 @@ class RouteCommandUseCase(
         if (!ruleOutcome.isUndecided()) return ruleOutcome
 
         // (5) No provider ⇒ nothing may leave the device, and we say why (F4 — gate, not adapter).
-        if (providerConfigRepository.activeConfig().first() == null) {
+        if (provider == null) {
             return CommandOutcome.Message(CommandMessage.UnderstandingNeedsProvider)
         }
 
         // (6) Offline ⇒ honest "needs network"; never open a socket the planner would abandon.
-        if (!connectivityChecker.isOnline()) {
+        if (!online) {
             return CommandOutcome.Message(CommandMessage.UnderstandingNeedsNetwork)
         }
 
@@ -275,11 +306,22 @@ class RouteCommandUseCase(
             is ModelPlanning.ToAssistant -> CommandOutcome.OpenAssistant(answer.question)
             is ModelPlanning.Navigate -> CommandOutcome.Interpreted(Interpretation.Navigate(answer.destination))
             is ModelPlanning.Clarify -> CommandOutcome.Message(CommandMessage.Verbatim(answer.question))
-            ModelPlanning.Declined -> ruleOutcome
-            // Finding (c) of the A1″ acceptance: a broken key or a dead endpoint is said, not hidden.
-            is ModelPlanning.Unavailable -> CommandOutcome.Message(CommandMessage.UnderstandingModelUnavailable(answer.reason))
+            // K1: a search FastPath yielded and the model would not take is run exactly as FastPath would have run it.
+            ModelPlanning.Declined -> fastPath.runYieldedSearch() ?: ruleOutcome
+            // Finding (c) of the A1″ acceptance: a broken key or a dead endpoint is said, not hidden — unless FastPath
+            // yielded a search (K1): then the user gets that search, not «model unavailable» in place of a working one.
+            is ModelPlanning.Unavailable ->
+                fastPath.runYieldedSearch() ?: CommandOutcome.Message(CommandMessage.UnderstandingModelUnavailable(answer.reason))
         }
     }
+
+    /**
+     * Controller ruling K1 (A4′ acceptance tail plan §0.3): the search FastPath yielded at step 1′, run now because the
+     * model could not take it — `null` when nothing of that kind was yielded, and the caller answers as before.
+     * [HandleUserCommandUseCase.runYielded] resolves and executes without a second `intent_match` row.
+     */
+    private suspend fun FastPathAnswer.runYieldedSearch(): CommandOutcome? =
+        (yielded as? FastPathYield.Search)?.let { handleUserCommand.runYielded(it) }
 
     /**
      * Step 2c (A4′ phase 4, plan §0.2 B-5…B-7): [command] replayed from the one pinned form it fits, or `null` —

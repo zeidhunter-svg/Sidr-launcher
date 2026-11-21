@@ -22,6 +22,7 @@ import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
 import com.sidr.launcher.domain.intent.ExecutableAction
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
+import com.sidr.launcher.domain.intent.SearchTarget
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.preferences.FeatureFlags
 import com.sidr.launcher.domain.tool.ArgSource
@@ -149,14 +150,34 @@ class FastPathOverflowSeamTest {
         assertEquals(1, modelPlanner.planCallCount)
     }
 
-    /** Spec §5.2: «не понижаем весь рукав» — at the seam, not only in the matcher. */
+    /**
+     * Spec §5.2: «не понижаем весь рукав» — at the seam, not only in the matcher.
+     *
+     * **Flipped by owner decision 13: Б** (A4′ acceptance tail, review I1). This fixture's state — online, a
+     * provider, local-only off — makes the model reachable, so FastPath no longer runs its confident search first:
+     * it hands the search to the model, the fake declines, and FastPath runs exactly its own search (controller
+     * ruling K1). The arm is still not downgraded — a downgraded search (`LowConfidence`, nothing yielded) ends
+     * with nothing run, which the executed search below rules out. **The name is kept on purpose**: it is the
+     * `DOC-NYH-4` anchor in the doctrine matrix, and since decision 13 it is literally true only of its local-only
+     * twin below, which holds «FastPath searches, the model is not asked»; online the model IS asked, once.
+     */
     @Test
     fun `a search whose conjunction joins two nouns is still run by FastPath and the model is not asked`() = runTest {
         val outcome = router().route("найди рецепт хлеба и соли")
 
         assertEquals(CommandOutcome.Executed, outcome)
-        val search = executor.executedActions.single() as ExecutableAction.OpenSearchAction
-        assertEquals("рецепт хлеба и соли", search.query)
+        assertEquals(ExecutableAction.OpenSearchAction("рецепт хлеба и соли", SearchTarget.WEB), executor.executedActions.single())
+        assertEquals("online with a provider the search goes to the model first (decision 13: Б)", 1, modelPlanner.planCallCount)
+        assertEquals("найди рецепт хлеба и соли", modelPlanner.lastCommand)
+    }
+
+    /** The twin: `DOC-ADL-3` parity — local-only, no yield; FastPath runs the whole search and no model is asked. */
+    @Test
+    fun `a search whose conjunction joins two nouns is still run by FastPath in local-only mode and the model is not asked`() = runTest {
+        val outcome = router(localOnly = true).route("найди рецепт хлеба и соли")
+
+        assertEquals(CommandOutcome.Executed, outcome)
+        assertEquals(ExecutableAction.OpenSearchAction("рецепт хлеба и соли", SearchTarget.WEB), executor.executedActions.single())
         assertEquals(0, modelPlanner.planCallCount)
     }
 }

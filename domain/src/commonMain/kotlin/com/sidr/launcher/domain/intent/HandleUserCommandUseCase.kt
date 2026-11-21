@@ -14,7 +14,8 @@ import kotlinx.coroutines.launch
 /**
  * Use case: turns raw user command text into a single [CommandOutcome] for the UI.
  *
- * Pipeline: normalize → (empty?) → match → resolve a claimed launch → confidence gate → route →
+ * Pipeline: normalize → (empty?) → match → resolve a claimed launch → confidence gate → (a confident
+ * search, when the router says the model is reachable: yield it — [answer], [FastPathYield]) → route →
  * execute-when-safe.
  *
  * Invariants:
@@ -53,9 +54,31 @@ class HandleUserCommandUseCase(
     private val recordingScope: CoroutineScope,
 ) {
 
-    suspend fun handle(rawInput: String): CommandOutcome {
+    /** FastPath with no model to yield to — byte for byte what it was before decision 13: Б. */
+    suspend fun handle(rawInput: String): CommandOutcome = answer(rawInput, yieldToModel = false).outcome
+
+    /**
+     * Runs a search [answer] yielded and the model then could not take (`Declined`, `Unavailable` — controller
+     * ruling K1): resolve → execute, exactly what [answer] would have done without the yield. **Records nothing**:
+     * [answer] already wrote this command's `intent_match` row, and a second one would count it twice.
+     */
+    suspend fun runYielded(yielded: FastPathYield.Search): CommandOutcome =
+        when (val resolved = resolver.resolve(yielded.intent)) {
+            is OperationResult.Failure -> CommandOutcome.Failed(CommandFailure.Generic)
+            is OperationResult.Success -> routeAction(resolved.value)
+        }
+
+    /**
+     * FastPath's answer, with the router's «the model is reachable» as [yieldToModel] (owner decision 13: Б, A4′
+     * acceptance tail plan §0.2). When it is true, a **confident search** — a `SearchIntent` past the auto-execute
+     * gate — is not resolved or run: it comes back as [FastPathYield.Search] with [CommandOutcome.LowConfidence],
+     * so the router asks the model. Nothing else yields: a launch, a settings route, a simple command, a URL, a
+     * store search, and every outcome below the gate answer exactly as with [yieldToModel] false. The match is
+     * recorded either way, with the confidence the gate acted on — the yield is a route, not a confidence.
+     */
+    suspend fun answer(rawInput: String, yieldToModel: Boolean): FastPathAnswer {
         val normalized = CommandNormalizer.normalize(rawInput)
-        if (normalized.isEmpty()) return CommandOutcome.Empty
+        if (normalized.isEmpty()) return FastPathAnswer(CommandOutcome.Empty)
 
         val match = matcher.match(normalized)
         val intent = match.best.intent
@@ -83,13 +106,15 @@ class HandleUserCommandUseCase(
 
         // ── Confidence gate — runs before any execution ──────────────────────
         if (confidencePolicy.isLowConfidence(confidence)) {
-            return when (intent) {
-                is LauncherIntent.UnknownIntent -> CommandOutcome.Unknown(intent.originalInput)
-                else -> CommandOutcome.LowConfidence
-            }
+            return FastPathAnswer(
+                when (intent) {
+                    is LauncherIntent.UnknownIntent -> CommandOutcome.Unknown(intent.originalInput)
+                    else -> CommandOutcome.LowConfidence
+                },
+            )
         }
         if (!confidencePolicy.shouldAutoExecute(confidence)) {
-            return CommandOutcome.Suggest(intent, confidence)
+            return FastPathAnswer(CommandOutcome.Suggest(intent, confidence))
         }
 
         // ── High confidence — route by intent ────────────────────────────────
@@ -97,13 +122,22 @@ class HandleUserCommandUseCase(
         // identity into a generic action, and these routes (navigate / clear / show apps)
         // are UI/navigation concerns, not execution.
         if (intent is LauncherIntent.SimpleCommandIntent) {
-            return routeSimpleCommand(intent.command)
+            return FastPathAnswer(routeSimpleCommand(intent.command))
         }
 
-        return when (val resolved = launchResolution ?: resolver.resolve(intent)) {
-            is OperationResult.Failure -> CommandOutcome.Failed(CommandFailure.Generic)
-            is OperationResult.Success -> routeAction(resolved.value)
+        // (1′) Decision 13: Б — a reachable model gets a confident search before the browser does. Past the gate,
+        // before the resolver: nothing is resolved or run here, and the router runs it (`runYielded`) if the model
+        // cannot answer. Only a search: every other confident intent goes on below exactly as before.
+        if (yieldToModel && intent is LauncherIntent.SearchIntent) {
+            return FastPathAnswer(CommandOutcome.LowConfidence, FastPathYield.Search(intent))
         }
+
+        return FastPathAnswer(
+            when (val resolved = launchResolution ?: resolver.resolve(intent)) {
+                is OperationResult.Failure -> CommandOutcome.Failed(CommandFailure.Generic)
+                is OperationResult.Success -> routeAction(resolved.value)
+            },
+        )
     }
 
     /**

@@ -2,6 +2,7 @@ package com.sidr.launcher.domain.ai.router
 
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeAgentSessionStore
+import com.sidr.launcher.core.testing.FakeBridgeTransport
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
@@ -32,21 +33,27 @@ import com.sidr.launcher.domain.ai.bridge.AppChoice
 import com.sidr.launcher.domain.ai.bridge.Binding
 import com.sidr.launcher.domain.ai.bridge.BridgeFilter
 import com.sidr.launcher.domain.ai.bridge.BridgeFixtures
+import com.sidr.launcher.domain.ai.bridge.BridgeModelPlanner
 import com.sidr.launcher.domain.ai.bridge.Interpretation
+import com.sidr.launcher.domain.ai.bridge.ModelPlanner
 import com.sidr.launcher.domain.ai.bridge.ModelPlanning
 import com.sidr.launcher.domain.ai.bridge.PendingChoice
 import com.sidr.launcher.domain.ai.bridge.PrincipalId
 import com.sidr.launcher.domain.ai.bridge.ProposedStep
+import com.sidr.launcher.domain.ai.bridge.ReplyMeta
 import com.sidr.launcher.domain.ai.bridge.SidrDestination
+import com.sidr.launcher.domain.ai.bridge.TransportReply
 import com.sidr.launcher.domain.ai.bridge.ValueOrigin
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
+import com.sidr.launcher.domain.intent.ExecutableAction
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.intent.ModelUnavailableReason
+import com.sidr.launcher.domain.intent.SearchTarget
 import com.sidr.launcher.domain.intent.SimpleCommand
 import com.sidr.launcher.domain.memory.plan.CommandForm
 import com.sidr.launcher.domain.memory.plan.DefaultLearnedPlans
@@ -135,6 +142,7 @@ class RouteCommandUseCaseTest {
         localOnly: Boolean = false,
         agentPlanner: Planner = TemplatePlanner(),
         agentRegistry: ToolRegistry = toolRegistry,
+        modelPlanner: ModelPlanner = planner,
     ): RouteCommandUseCase = RouteCommandUseCase(
         handleUserCommand = HandleUserCommandUseCase(
             matcher = matcher,
@@ -143,7 +151,7 @@ class RouteCommandUseCaseTest {
             confidencePolicy = DefaultIntentConfidencePolicy(),
             recordingScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
         ),
-        modelPlanner = planner,
+        modelPlanner = modelPlanner,
         binder = binder,
         featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = localOnly)),
         providerConfigRepository = provider,
@@ -1254,8 +1262,181 @@ class RouteCommandUseCaseTest {
         assertEquals(0, planner.planCallCount)
     }
 
+    // --- A4′ acceptance tail, owner decision 13: Б — a FastPath search yields to a reachable model (K1, K14) -------
+
+    /** FastPath decides «найди лучший рецепт шашлыка» confidently: a web search, exactly what the real matcher claims. */
+    private fun driveConfidentSearch() {
+        matcher.intentToReturn = LauncherIntent.SearchIntent(SEARCH_QUERY, SearchTarget.WEB)
+        matcher.confidenceToReturn = 0.90f
+    }
+
+    /** What FastPath runs for that search — the executor's one action when FastPath (or `runYielded`) searches. */
+    private val fastPathSearch = ExecutableAction.OpenSearchAction(SEARCH_QUERY, SearchTarget.WEB)
+
+    /**
+     * The real bridge planner over a scripted transport, counted: [asked] is the model being consulted, and
+     * `transport.requests` is every body that would leave the device. The one scripted reply is a valid `web_search`
+     * reading, so a route that wrongly asked would get an answer — the assertions fail, not a missing script.
+     */
+    private class BridgeModel {
+        val transport = FakeBridgeTransport(
+            listOf(TransportReply.Answer(BridgeFixtures.plan("web_search", "query" to SEARCH_QUERY), ReplyMeta.NONE)),
+        )
+        private val bridge = BridgeModelPlanner(
+            BridgeFixtures.registry,
+            BridgeFixtures.descriptions,
+            transport,
+            BridgeFilter.ANDROID_OFFERED_LEVELS,
+        )
+        var asked = 0
+            private set
+        val planner = ModelPlanner { command ->
+            asked++
+            bridge.plan(command)
+        }
+    }
+
+    /**
+     * Decision 13: Б: online, with a provider, local-only off — the model is reachable, so FastPath's confident search
+     * is not run in the browser: the model is asked, and its reading is the card (task 4 of the tail plan turns a
+     * reading with no card owed into a started session; until then it is `Interpreted`). Nothing is executed.
+     */
+    @Test
+    fun `online with a provider a FastPath search goes to the model, not the browser`() = runTest {
+        driveConfidentSearch()
+        planner.answer = ModelPlanning.Proposed(
+            listOf(
+                ProposedStep(
+                    tool = WEB_SEARCH,
+                    args = mapOf("query" to SEARCH_QUERY),
+                    origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                    risk = ActionRiskLevel.SAFE,
+                    effect = ToolEffect.EXTERNAL,
+                ),
+            ),
+        )
+
+        val outcome = useCase().route("найди $SEARCH_QUERY")
+
+        assertEquals(
+            CommandOutcome.Interpreted(
+                Interpretation.Act(
+                    goal = freeGoal("найди $SEARCH_QUERY"),
+                    steps = listOf(
+                        PlanStep(
+                            index = 0,
+                            invocation = ToolInvocation(WEB_SEARCH, mapOf("query" to ArgSource.Literal(SEARCH_QUERY))),
+                            risk = ActionRiskLevel.SAFE,
+                            precondition = StepPrecondition.None,
+                            rationale = StepRationale.MODEL_PROPOSED,
+                        ),
+                    ),
+                    origins = mapOf(0 to mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER))),
+                    effects = mapOf(0 to ToolEffect.EXTERNAL),
+                    choices = emptyList(),
+                ),
+            ),
+            outcome,
+        )
+        assertTrue("FastPath's search is not run in the browser", executor.executedActions.isEmpty())
+        assertEquals("the model is asked once", 1, planner.planCallCount)
+        assertEquals("найди $SEARCH_QUERY", planner.lastCommand)
+        assertEquals("FastPath ran once", 1, matcher.callCount)
+    }
+
+    /** `DOC-ADL-3` parity: local-only — no yield, FastPath searches byte for byte; no model, no body leaves. */
+    @Test
+    fun `local-only a search runs on FastPath and the model is never asked`() = runTest {
+        driveConfidentSearch()
+        val model = BridgeModel()
+
+        val outcome = useCase(localOnly = true, modelPlanner = model.planner).route("найди $SEARCH_QUERY")
+
+        assertEquals(CommandOutcome.Executed, outcome)
+        assertEquals(listOf(fastPathSearch), executor.executedActions)
+        assertEquals("the model is never asked", 0, model.asked)
+        assertTrue("nothing is transmitted", model.transport.requests.isEmpty())
+    }
+
+    @Test
+    fun `no provider a search runs on FastPath and the model is never asked`() = runTest {
+        driveConfidentSearch()
+        provider.clearActiveConfig()
+        val model = BridgeModel()
+
+        val outcome = useCase(modelPlanner = model.planner).route("найди $SEARCH_QUERY")
+
+        assertEquals(CommandOutcome.Executed, outcome)
+        assertEquals(listOf(fastPathSearch), executor.executedActions)
+        assertEquals("the model is never asked", 0, model.asked)
+        assertTrue("nothing is transmitted", model.transport.requests.isEmpty())
+    }
+
+    @Test
+    fun `offline a search runs on FastPath and the model is never asked`() = runTest {
+        driveConfidentSearch()
+        connectivity.online = false
+        val model = BridgeModel()
+
+        val outcome = useCase(modelPlanner = model.planner).route("найди $SEARCH_QUERY")
+
+        assertEquals(CommandOutcome.Executed, outcome)
+        assertEquals(listOf(fastPathSearch), executor.executedActions)
+        assertEquals("the model is never asked", 0, model.asked)
+        assertTrue("nothing is transmitted", model.transport.requests.isEmpty())
+    }
+
+    /**
+     * K1: the model was reachable at the gate and could not answer — a broken key, a timeout, an unreadable reply.
+     * The user gets the search FastPath would have run, not «model unavailable» in place of a working search. Every
+     * reason, none collapsed; each time FastPath ran once (the search is `runYielded`, not a second `handle`).
+     */
+    @Test
+    fun `a yielded search whose model is unavailable runs the FastPath search`() = runTest {
+        driveConfidentSearch()
+        val route = useCase()
+
+        ModelUnavailableReason.entries.forEachIndexed { i, reason ->
+            planner.answer = ModelPlanning.Unavailable(reason)
+
+            assertEquals("$reason", CommandOutcome.Executed, route.route("найди $SEARCH_QUERY"))
+            assertEquals("$reason", List(i + 1) { fastPathSearch }, executor.executedActions)
+            assertEquals("$reason: FastPath matched once per command", i + 1, matcher.callCount)
+        }
+        assertEquals("every reason was asked of the model", ModelUnavailableReason.entries.size, planner.planCallCount)
+    }
+
+    /** K1: the model declines — the search FastPath would have run, run once. */
+    @Test
+    fun `a yielded search the model declines runs the FastPath search`() = runTest {
+        driveConfidentSearch()
+        planner.answer = ModelPlanning.Declined
+
+        val outcome = useCase().route("найди $SEARCH_QUERY")
+
+        assertEquals(CommandOutcome.Executed, outcome)
+        assertEquals(listOf(fastPathSearch), executor.executedActions)
+        assertEquals("the model is asked once", 1, planner.planCallCount)
+        assertEquals("FastPath matched once", 1, matcher.callCount)
+    }
+
+    /** The model reads the «search» as a question: the assistant, prefilled and unsent — the browser does not open. */
+    @Test
+    fun `a yielded search the model sends to the assistant opens the assistant`() = runTest {
+        driveConfidentSearch()
+        planner.answer = ModelPlanning.ToAssistant("какой рецепт шашлыка лучший")
+
+        val outcome = useCase().route("найди $SEARCH_QUERY")
+
+        assertEquals(CommandOutcome.OpenAssistant("какой рецепт шашлыка лучший"), outcome)
+        assertTrue("nothing is executed", executor.executedActions.isEmpty())
+        assertEquals(1, planner.planCallCount)
+    }
+
     private companion object {
         val LEARNED_UNINSTALL = ToolId("uninstall_app")
         val LEARNED_WEB_SEARCH = ToolId("web_search")
+        val WEB_SEARCH = ToolId("web_search")
+        const val SEARCH_QUERY = "лучший рецепт шашлыка"
     }
 }

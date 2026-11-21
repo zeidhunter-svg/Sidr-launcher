@@ -33,8 +33,9 @@ their original headings, so «`§HANDOFF` «Фаза 2 A4′»» resolves there.
 **Right now: A4′ is `CLOSED`** (2026-11-21, gate **1914**): five phases `CODE-GREEN`, one owner acceptance on the
 SM-A325F ([checklist](docs/superpowers/plans/2026-11-21-a4-device-acceptance.md); two defects fixed in the round,
 Part D done). Block ADR «2026-11-21 — Этап 6 (A4′) — рантайм полностью…»: acceptance, **twelve owner rulings as
-tasks**, residuals. **Next (owner's choice):** a «хвост приёмки A4′» plan (tasks 1–10), then the A2/A3 spec (tasks
-11–12 belong there) — `§HANDOFF`.
+tasks**, residuals. **Next** (owner 2026-11-21, `2: a · 6: a · ADL3: b · 5: a`): a hygiene session —
+`decisions.md` → archive + ~150-line orientation file, two §0 rules; then the «хвост приёмки A4′» plan (tasks 1–10 +
+task 13, FastPath «найди …»), then the A2/A3 spec (tasks 11–12) — `§HANDOFF`.
 
 Layers above the track plan: the **Master Plan** (blocks A0…A6, DoD, change-control, `Agentic Shell v1 =
 DONE`: [docs/governing/sidr-agentic-master-plan-v1.0.md](docs/governing/sidr-agentic-master-plan-v1.0.md))

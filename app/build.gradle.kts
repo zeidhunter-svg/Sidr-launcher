@@ -351,6 +351,16 @@ tasks.withType<Test>().configureEach {
         .withPropertyName("claudeMd")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 
+    // Context hygiene, 2026-11-21. `DecisionsOrientationGuardTest` reads the orientation file's size and
+    // checks that every `## ` heading of the ADR journal stands in it - both files are inputs, by the
+    // same trap as above: an edit to either must re-run the test, not be served FROM-CACHE.
+    inputs.file(rootProject.file("ai-context/decisions-orientation.md"))
+        .withPropertyName("decisionsOrientation")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.file(rootProject.file("ai-context/decisions.md"))
+        .withPropertyName("decisionsJournal")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
     // A1' device-acceptance defect, 2026-09-10. `DeviceDatabaseReadGuardTest` scans the fenced code
     // blocks of every checklist under `docs/superpowers/plans` - same silent-skip trap as the matrix
     // above, and the same fix. The scan and this declaration are the SAME directory on purpose; a

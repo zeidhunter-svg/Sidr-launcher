@@ -8,7 +8,7 @@
 -->
 <resources>
     <string name="assistant_title">Asistan</string>
-    <string name="assistant_provider_title">Yapay zeka sağlayıcısı</string>
+    <string name="assistant_provider_title">Yapay zekâ sağlayıcısı</string>
     <string name="assistant_back">Geri</string>
 
     <string name="assistant_refusal_note">Asistan bu isteği yanıtlamayı reddetti. Bir sorun oluşmadı; mesajı yeniden ifade edip tekrar gönderebilirsiniz.</string>

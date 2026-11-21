@@ -30,7 +30,7 @@
     <string name="settings_language_ru">Русский</string>
     <string name="settings_language_tr">Türkçe</string>
     <string name="settings_section_suggestions">Öneriler</string>
-    <string name="settings_ai_suggestions_title">Yapay zeka önerileri</string>
+    <string name="settings_ai_suggestions_title">Yapay zekâ önerileri</string>
     <string name="settings_ai_suggestions_description">Başlatıcı önerilerini göster ve arka planda ön hesaplama planlamasına izin ver.</string>
     <string name="settings_section_home">Ana ekran</string>
     <string name="settings_personalize_usage_title">Kullanıma göre kişiselleştir</string>
@@ -43,7 +43,7 @@
     <string name="settings_learned_choices_title">Öğrenilmiş seçimler</string>
     <string name="settings_learned_commands_title">Öğrenilmiş komutlar</string>
     <string name="settings_section_assistant">Asistan</string>
-    <string name="settings_ai_provider_title">Yapay zeka sağlayıcı ayarları</string>
+    <string name="settings_ai_provider_title">Yapay zekâ sağlayıcı ayarları</string>
     <string name="settings_local_only_title">Yalnızca yerel</string>
     <string name="settings_section_system">Sistem</string>
     <string name="settings_set_default_launcher_title">Varsayılan başlatıcı olarak ayarla</string>

@@ -12,7 +12,7 @@
   OWNER-REVIEWED block below).
 -->
 <!--
-  OWNER-REVIEWED 2026-08-19 sha256:337b02539d22a97c - the owner has read and approved this file's Russian/Turkish text
+  OWNER-REVIEWED 2026-11-21 sha256:f972c9695ebaa133 - the owner has read and approved this file's Russian/Turkish text
   against docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md (Class B, spec §7.2).
   Provenance, recorded deliberately: the review was performed by the owner; this token was typed
   by the agent on the owner's explicit instruction in the 2026-08-19 session. The gate cannot tell
@@ -20,8 +20,8 @@
 -->
 <resources>
     <string name="assistant_cloud_disclosure_title">Yanıtlar sağlayıcınızdan gelir</string>
-    <string name="assistant_cloud_disclosure_body">Mesaj gönder\'e dokunduğunuzda, yazdığınız mesaj yapılandırdığınız yapay zeka sağlayıcısına gönderilir. Bununla birlikte başka hiçbir şey gönderilmez — uygulamalar, geçmiş, konum ve bellek gönderilmez. API anahtarınız bu cihazın Keystore\'unda kalır; asla gösterilmez veya başka bir yere gönderilmez.</string>
-    <string name="assistant_no_provider_title">Yapay zeka sağlayıcısı yapılandırılmadı</string>
+    <string name="assistant_cloud_disclosure_body">Mesaj gönder\'e dokunduğunuzda, yazdığınız mesaj yapılandırdığınız yapay zekâ sağlayıcısına gönderilir. Bununla birlikte başka hiçbir şey gönderilmez — uygulamalar, geçmiş, konum ve bellek gönderilmez. API anahtarınız bu cihazın Keystore\'unda kalır; asla gösterilmez veya başka bir yere gönderilmez.</string>
+    <string name="assistant_no_provider_title">Yapay zekâ sağlayıcısı yapılandırılmadı</string>
     <string name="assistant_no_provider_body">Asistanın, sizin yapılandırdığınız ve ücretini ödediğiniz bir sağlayıcıya ihtiyacı var. O zamana kadar hiçbir yere hiçbir şey gönderilmez ve başlatıcının geri kalanı çevrimdışı çalışmaya devam eder.</string>
     <string name="assistant_error_next_retry">Hiçbir şey kaydedilmedi. Hazır olduğunuzda aynı mesajı tekrar gönderin.</string>
     <string name="assistant_error_next_reword">Hiçbir şey kaydedilmedi. Mesajı yeniden ifade etmek genellikle yardımcı olur.</string>

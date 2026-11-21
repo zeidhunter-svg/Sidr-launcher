@@ -38,7 +38,7 @@ learned-commands «Забыть» goes through `SidrForgetGate` (T8, `bb4656fa`,
 **Acceptance run 2026-11-21 (`ru`, owner, SM-A325F):** Part A/B done, `MigrationTest` 11/0 on the phone, two
 defects fixed in the round (timer/alarm `EXTRA_SKIP_UI = true`; learned-commands screen crash), gate **1914**;
 twelve owner rulings → tasks — [checklist](docs/superpowers/plans/2026-11-21-a4-device-acceptance.md).
-**Next: §A7 + Part D (Turkish), then the block ADR A4′.** Record: `§HANDOFF` «Фаза 4 A4′»
+§A7 + Part D (Turkish) done 2026-11-21 («Yapay zekâ» everywhere, two locked files re-signed). **Next: the block ADR A4′.** Record: `§HANDOFF` «Фаза 4 A4′»
 (archive); plan [2026-11-18-a4-phase4-learned-plan-cache.md](docs/superpowers/plans/2026-11-18-a4-phase4-learned-plan-cache.md).
 
 Layers above the track plan: the **Master Plan** (blocks A0…A6, DoD, change-control, `Agentic Shell v1 =

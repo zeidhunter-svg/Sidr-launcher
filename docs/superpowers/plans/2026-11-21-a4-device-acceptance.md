@@ -281,8 +281,14 @@ Rules 1–4 of the A1″ round stand unchanged ([2026-09-19-a1-second-device-acc
 
 ### A7. Turkish forms (3b) — locale `tr`
 
-- [ ] «telegramı aç» / «Telegram'ı kaldır» (Telegram installed) — ask «did you mean»; the uninstall then
+- [x] «telegramı aç» / «Telegram'ı kaldır» (Telegram installed) — ask «did you mean»; the uninstall then
       shows the engine's consent card **naming the package**. (Uninstall dialog → Отмена.)
+      *Corrected in place 2026-11-21: no app labelled «Telegram» is on this phone — the one Telegram client is
+      `org.telegram.plus`, label «Plus». Run as: «telegramı aç» → an honest no-such-app reading; «plusu aç» →
+      «… mı demek istediniz?» with Plus, nothing launched before the pick; «plusu kaldır» → the consent card naming
+      Plus / `org.telegram.plus` → «Onayla» → the Android dialog → **İptal**; «alarm kur» → a Play Store search, no
+      alarm set; Ayarlar → «Öğrenilmiş komutlar» opens in Turkish, no crash. Owner 2026-11-21, locale `tr`, build
+      with the Part D corrections: «все так как ты сказал» ✓.*
 
 ### A8. Pause, re-plan, undo (phases 0, 2)
 
@@ -463,6 +469,22 @@ phase, with their addresses:
 - phase 4 — eight, plus `launcher_forget_learned_command_title` (T8); this round — `launcher_agent_step_uninstall_one`,
   `launcher_agent_step_set_alias_one` (the crash fix). The two Class B lines (local-only
   description, the forget consequence) are already signed 2026-11-20.
+
+**Run 2026-11-21 (owner, native speaker), all 43 unsigned strings + the `SecondGoal` list read in one table
+(ru beside tr):**
+
+- interpretation card and bridge (11), agent card (10), learned commands (9), `SecondGoal` «ve» + twenty verbs —
+  **accepted as they stand** (straight quotes in `launcher_interpretation_choose_app` accepted with them);
+  phase 0's proposals not taken: «Plan tamamlandı — sonuç sistemde» and «Sürüm %1$s» stay;
+- provider errors (6) — accepted; the spelling is **«Yapay zekâ»** — applied to every `tr` string of the app
+  (seven lines still said «yapay zeka»: three in signed files — `assistant_cloud_disclosure_body`,
+  `assistant_no_provider_title`, `settings_local_only_description` — and four unsigned); the owner re-read the
+  three signed sentences and **re-signed 2026-11-21** (`sha256:f972c9695ebaa133` assistant,
+  `sha256:b3bdfacebde439da` settings), `checkOwnerReviewedLocaleStrings` green;
+- step lines (5) — accepted except `launcher_agent_step_set_alias_one`: «“%1$s” adını ver» → **«“%1$s” adını
+  belirle»**.
+
+Part D is **done**.
 
 ---
 

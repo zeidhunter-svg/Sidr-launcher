@@ -596,13 +596,17 @@ class AgentActingSeamTest {
      * **deterministically** fell through to steps (5)–(7) and its raw text went to the cloud model.
      *
      * Now the planner answers `Unresolved` and step 2b answers it on the device, so this test pins the
-     * opposite: «нет такого приложения» in the user's own word, no session, and the model never asked
-     * — with a provider configured and the network up, the state in which the fall-through was live.
+     * opposite: «нет такого приложения» in the user's own word, no session, and the model never asked.
+     *
+     * **Since controller ruling K2 (A4′ acceptance tail, task 2) this holds in local-only mode** — where it ran
+     * with a provider configured and the network up until then. K2 partly reverses fork 3b-E for exactly that
+     * state: online, with a provider, an EMPTY app target is asked of the model, which may correct the name —
+     * `online since K2 an unresolvable app target of a matched tool asks the model once, and its refusal is
+     * answered on the device`, below. Local-only, nothing changed, and the name of this test is still true.
      *
      * The first assertion is still what makes this a reproduction rather than a restatement: the
      * vocabulary *did* claim the text for `uninstall_app`; only [AppTargetResolver] found nothing. The
-     * non-vacuity of the zero is `the outbound seam is live when nothing in the vocabulary claims the
-     * text`, above, over the same wiring.
+     * non-vacuity of the zero is the online test below, over the same wiring and the same text.
      */
     @Test
     fun `R14-39 closed - an unresolvable target of a matched tool is answered on the device, the model never asked`() =
@@ -613,11 +617,28 @@ class AgentActingSeamTest {
                 ToolVocabulary().match(GOAL_UNINSTALL_UNKNOWN)?.id,
             )
 
-            val outcome = routeUseCase(federation()).route(GOAL_UNINSTALL_UNKNOWN)
+            val outcome = routeUseCase(federation(), localOnly = true).route(GOAL_UNINSTALL_UNKNOWN)
 
             assertEquals(CommandOutcome.Message(CommandMessage.NoAppFound(UNKNOWN_LABEL)), outcome)
             assertEquals("the model was asked about a target the device had claimed", 0, modelPlanner.planCallCount)
             assertNull("an outbound payload was recorded: ${modelPlanner.lastCommand}", modelPlanner.lastCommand)
+            assertEquals("nothing may be left at rest", null, (store.active() as OperationResult.Success).value)
+        }
+
+    /**
+     * Controller rulings K2 and K11 at the seam, through the real planner and the real route: online, with a
+     * provider, the same claimed text whose app target nothing on the phone answers is asked of the model ONCE —
+     * the command, as typed — and the model's refusal (the fake declines) is answered on the device exactly as
+     * before K2: «нет такого приложения» in the user's word, nothing at rest.
+     */
+    @Test
+    fun `online since K2 an unresolvable app target of a matched tool asks the model once, and its refusal is answered on the device`() =
+        runTest {
+            val outcome = routeUseCase(federation()).route(GOAL_UNINSTALL_UNKNOWN)
+
+            assertEquals(CommandOutcome.Message(CommandMessage.NoAppFound(UNKNOWN_LABEL)), outcome)
+            assertEquals("the model is asked once (K2)", 1, modelPlanner.planCallCount)
+            assertEquals(GOAL_UNINSTALL_UNKNOWN, modelPlanner.lastCommand)
             assertEquals("nothing may be left at rest", null, (store.active() as OperationResult.Success).value)
         }
 

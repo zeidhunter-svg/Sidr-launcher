@@ -46,6 +46,14 @@ import javax.inject.Inject
  * [AppChoice.confirm] — «Вы имели в виду…?» — never a bind. So is a name exact only after folding when the
  * tool's act cannot be undone (`uninstall_app`; owner decision 2026-11-17, [forIrreversible]).
  *
+ * **A name the MODEL wrote** (amendment D1, ADR «2026-11-22 — D1, поправка: имя приложения, исправленное
+ * моделью») — the mention `BridgeValidator` admitted as [ValueOrigin.ModelGenerated] because the user's words
+ * do not contain it («Claude» for «открой клод») — binds only to an installed label that is exactly it after the
+ * folding, or to an alias exactly ([AppTargetResolver.exactly]): one such app binds, several are the user's
+ * pick, none is [Binding.NotFound]. No word form is read for the model's word. The words the tool shows keep the
+ * model's mark; for an irreversible tool even an exact answer is a pick to confirm (the user did not type the
+ * name). [rebind] reads a remainder's kept words as the user's, as before: the plan on disk keeps no origin.
+ *
  * **Learned choices answer for `launch_app` only**, with FastPath's policy — a confident one binds
  * without asking, a weak one is offered first — and for a confirmation exactly as for a choice between
  * several (B-3): the same key, the same read, so a form confirmed three times binds without asking.
@@ -144,7 +152,9 @@ class DeviceMentionBinder @Inject constructor(
             is Values.Read -> values.args
             is Values.NotRead -> return StepBinding.Refused(values.binding)
         }
-        return bindMention(index, proposed, args)
+        // Amendment D1: the validator labels an app mention the user did not type as the model's.
+        val modelWritten = proposed.origins[AuthoredToolDescriptions.MENTION_ARG] == ValueOrigin.ModelGenerated
+        return bindMention(index, proposed, args, modelWritten)
     }
 
     /**
@@ -174,7 +184,8 @@ class DeviceMentionBinder @Inject constructor(
         val words = label?.let { literals[it] }
         if (label != null && words != null) {
             val again = asProposed(literals - appArg - label + (AuthoredToolDescriptions.MENTION_ARG to words))
-            return bindMention(index, again, again.args)
+            // The kept words are read as the user's (E11-P4), as before amendment D1: the plan on disk keeps no origin.
+            return bindMention(index, again, again.args, modelWritten = false)
         }
         val packageName = literals[appArg] ?: return step(index, kept, literals, kept.origins, choice = null)
         return when (appTargets.stillInstalled(packageName)) {
@@ -187,9 +198,12 @@ class DeviceMentionBinder @Inject constructor(
     /**
      * The mention branch — the ONE place an app mention becomes a package, a pick, «not found» or
      * «unavailable», for [bind] and [rebind] alike: [args] are the step's model-facing arguments, its app
-     * (if it has one) in the user's words under [AuthoredToolDescriptions.MENTION_ARG].
+     * (if it has one) under [AuthoredToolDescriptions.MENTION_ARG] — in the user's words, or, when
+     * [modelWritten] (amendment D1), in the MODEL's: then only an exact label or alias answers
+     * ([AppTargetResolver.exactly] — no word forms of the model's word), and the words the tool shows are
+     * marked the model's.
      */
-    private suspend fun bindMention(index: Int, proposed: ProposedStep, args: Map<String, String>): StepBinding {
+    private suspend fun bindMention(index: Int, proposed: ProposedStep, args: Map<String, String>, modelWritten: Boolean): StepBinding {
         val sort = sorts.appArgOf(proposed.tool)
         val mention = args[AuthoredToolDescriptions.MENTION_ARG]
         if (sort == null || mention == null) {
@@ -198,13 +212,16 @@ class DeviceMentionBinder @Inject constructor(
         val (appArg, sorted) = sort
         val words = (args - AuthoredToolDescriptions.MENTION_ARG) +
             listOfNotNull(sorted.labelArg?.let { it to mention })
+        val said = if (modelWritten) ValueOrigin.ModelGenerated else ValueOrigin.SaidBy(PrincipalId.USER)
         val wordOrigins = (proposed.origins - AuthoredToolDescriptions.MENTION_ARG) +
-            listOfNotNull(sorted.labelArg?.let { it to ValueOrigin.SaidBy(PrincipalId.USER) })
+            listOfNotNull(sorted.labelArg?.let { it to said })
 
         // Owner decision 2026-11-17: an irreversible tool binds only a name exact as typed (`forIrreversible`);
-        // a tool the registry does not know is treated as irreversible — the stricter reading.
+        // a tool the registry does not know is treated as irreversible — the stricter reading. A name the model
+        // wrote was not typed at all, so for such a tool it is a pick even when it is exact (`exactly`).
         val irreversible = registry.find(proposed.tool)?.durability.isIrreversible()
-        return when (val found = appTargets.candidates(mention).forIrreversible(irreversible)) {
+        val candidates = if (modelWritten) appTargets.exactly(mention) else appTargets.candidates(mention)
+        return when (val found = candidates.forIrreversible(irreversible)) {
             AppCandidates.None -> StepBinding.Refused(Binding.NotFound(mention))
             AppCandidates.Unavailable -> StepBinding.Refused(Binding.Unavailable)
             is AppCandidates.One ->

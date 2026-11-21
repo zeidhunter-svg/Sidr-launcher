@@ -54,12 +54,18 @@ import kotlinx.coroutines.flow.first
  *    model that could read it back as `open_url`; task 1 review round 1, ruling (a)), not an address FastPath
  *    opens, not a store search. If the model then cannot take it — `Declined`, `Unavailable` — step 7 runs exactly the
  *    search FastPath would have run ([HandleUserCommandUseCase.runYielded], controller ruling K1), so a broken
- *    key or a timeout never costs the user a working search. When the model is not reachable there is no yield,
- *    and FastPath answers byte for byte as before.
+ *    key or a timeout never costs the user a working search. **Owner decision 14** (task 2 of the tail plan): FastPath
+ *    yields its «нет такого приложения» the same way ([FastPathYield.MissingApp]) — the model is asked first and may
+ *    correct the name (amendment D1: «открой клод» → «Claude», bound on the device to an exact label or alias
+ *    only); the store plan is step 7's answer when the model cannot take the command (K1) or names an app that is
+ *    not here (K3), in the user's words. When the model is not reachable there is no yield, and FastPath answers
+ *    byte for byte as before.
  * 2. **A goal FastPath DECIDED but did not ACHIEVE ⇒ the agent** ([StartAgentSessionUseCase], A0
  *    Task 11). Exactly one outcome qualifies: [CommandMessage.NoAppFound] — FastPath understood
  *    "open X" and found no such app. Not "any Message", not "anything that did not execute";
- *    widening the list is a separate decision for a later block.
+ *    widening the list is a separate decision for a later block. Since decision 14 a DECIDED `NoAppFound` exists
+ *    only when the model is not reachable — reachable, it is yielded (1′) — so this step starts the store plan
+ *    in exactly the states it always did, and the same plan ([storePlan]) is step 7's fallback for the yield.
  * 2b. **A goal FastPath could not decide at all ⇒ offer it to the deterministic planner** (A1' Task
  *    9). The same [StartAgentSessionUseCase], and this gate learns **nothing** about tools: it hands
  *    over the raw command as a [GoalShape.Free] goal and the planner answers. A plan starts a session.
@@ -69,9 +75,14 @@ import kotlinx.coroutines.flow.first
  *    closed): a registered tool claimed the text and its target did not bind by itself, so the user
  *    gets «нет такого приложения» in their own words, a pick ([CommandOutcome.ChooseTarget]), or — the
  *    app list unreadable, or a value sort the device could not consult — a generic failure; the model is
- *    not asked. **A VALUE the vocabulary claimed and its sort cannot read is not answered here**: the
- *    planner gives `NoPlan` and the chain below runs as for any unclaimed text (controller ruling E6-R1,
- *    phase 3b Task 6 — a value sort is a pure function of the command text, so nothing of the device
+ *    not asked. **One exception, controller ruling K2** (task 2 of the tail plan): with the model reachable, an
+ *    APP target the device read and found NO candidate for («удали приложение клод») goes on down the chain to
+ *    step 7, the target remembered — the same class as decision 14's «нет такого приложения», so the model may
+ *    correct the name; if the model declines, cannot answer or names an app that is not here, the target is
+ *    answered on the device exactly as before (K11). This partly reverses fork 3b-E — online only, an empty app
+ *    target only; local-only, with no provider, offline it is as above. **A VALUE the vocabulary claimed and
+ *    its sort cannot read is not answered here**: the planner gives `NoPlan` and the chain below runs as for
+ *    any unclaimed text (controller ruling E6-R1, phase 3b Task 6 — a value sort is a pure function of the command text, so nothing of the device
  *    decides what is sent). `StartAgentSessionUseCase.planning`
  *    persists nothing, so an unrecognised or unresolved command leaves no `goal_text` row behind.
  * 2c. **A command the user taught ⇒ replay it on the device, without the model** (A4′ phase 4, spec §8;
@@ -107,9 +118,13 @@ import kotlinx.coroutines.flow.first
  *    with the question, a verbatim clarify, an honest «model unavailable», what the binding found instead
  *    of a card («нет такого приложения», «не понял» for a value the device could not read — phase 3b,
  *    Task 6 — or a failure; the model is asked once and told none of it), or — when the model declines
- *    — FastPath's outcome untouched. A search FastPath yielded at step 1′ is the one exception, on both
- *    `Declined` and `Unavailable`: it is run as FastPath would have run it (K1) — FastPath's own deterministic
- *    action, not anything the model proposed. Otherwise nothing here executes (`DOC-NYH-1`, Fork R4); the
+ *    — FastPath's outcome untouched. What was handed to the model is the exception, on both `Declined` and
+ *    `Unavailable` ([answerWithoutModel]): a search FastPath yielded at step 1′ is run as FastPath would have run
+ *    it (K1); a yielded «нет такого приложения» is A0's store plan (K1); 2b's empty app target is «нет такого
+ *    приложения» (K11) — the device's own deterministic answers, not anything the model proposed. And when the
+ *    model named an app that is not here ([Binding.NotFound]) for a yielded «нет такого приложения» or a 2b
+ *    target, the same device answer stands in the user's words ([notFoundWithoutModel], K3, K11) — the model's
+ *    word goes neither to the store nor to the screen. Otherwise nothing here executes (`DOC-NYH-1`, Fork R4); the
  *    model is below gates 3, 5 and 6 (`DOC-ADL-3`). A bound reading also carries what it would teach
  *    ([CommandOutcome.Interpreted.learnable], A4′ phase 4 B-8): computed here, from the validated steps
  *    before binding, never inside `toCommandOutcome` (the remainder card shares that and teaches nothing);
@@ -143,14 +158,18 @@ import kotlinx.coroutines.flow.first
  * nothing; so it can neither produce one of the three nor suppress another branch's. Whichever of
  * steps 3, 5 and 6 a command was going to reach, it still reaches, with the same message; the only
  * commands step 2b removes from that chain are the ones a registered tool matched, and those never
- * reach it at all. The exits are held separately: `all three causes at once - only the outermost is
+ * reach it at all. K2's fall-through with a remembered target (controller ruling K2) changes none of this: it
+ * happens only when the model is reachable — local-only off, a provider, online — the one state in which none of
+ * steps 3, 5 and 6 can answer. The exits are held separately: `all three causes at once - only the outermost is
  * reported` holds the fall-through — it runs with the default
  * [com.sidr.launcher.domain.agent.TemplatePlanner], which answers `NoPlan` to [GoalShape.Free], and it
  * passed unmodified across both changes — `a matching tool starts an agent session even in local-only
- * mode` holds the [CommandOutcome.AgentSessionStarted] exit, and `an unresolved 2b target is answered
- * on the device and the model is never asked`, `an unreadable 2b target fails on the device…`, `a
- * 2b pick starts the session on the tap…` hold the three device answers a production planner can reach;
- * `not understood is said in the user's words` holds the fail-safe.
+ * mode` holds the [CommandOutcome.AgentSessionStarted] exit, and `in local-only mode an unresolved 2b target is
+ * still answered on the device`, `an unreadable 2b target fails on the device…`, `a 2b pick starts the session on
+ * the tap…` hold the three device answers a production planner can reach (K2's: `online an unresolved 2b app with
+ * no candidates goes to the model` and, for its refusal, `online an unresolved 2b app the model declines, cannot
+ * answer or names something absent - no such app in the user's words`); `not understood is said in the user's
+ * words` holds the fail-safe.
  *
  * **An `Unresolved` answered above step 3 is `DOC-ADL-3` applied, not bent.** It consults no model and
  * transmits nothing — in local-only mode it replaces the "understanding is local-only" line with the
@@ -158,9 +177,12 @@ import kotlinx.coroutines.flow.first
  * decide, exactly what the rule's 2026-08-22 amendment permits.
  *
  * Steps 2 and 2b are disjoint by construction, not by ordering: `NoAppFound` is a decided
- * [CommandOutcome.Message], so `isUndecided()` is false for it and a `NoAppFound` that failed open at
- * step 2 is never re-planned at 2b. Step 2c is inside 2b's `NoPlan` arm, so it is disjoint from both the
- * same way: a 2b plan whose start failed falls through to step 3, not to 2c.
+ * [CommandOutcome.Message], so `isUndecided()` is false for it and a `NoAppFound` step 2 answered is never
+ * re-planned at 2b. A YIELDED «нет такого приложения» (decision 14, the model reachable) is not step 2's: its
+ * outcome is `LowConfidence`, undecided, so it goes down the chain as a yielded search does — 2b and 2c, as any
+ * undecided text, then step 7 — and the store plan is step 7's fallback. Step 2c is inside 2b's `NoPlan` arm, so
+ * it is disjoint from both the same way: a 2b plan whose start failed falls through to step 3, not to 2c, and so
+ * does K2's remembered target.
  *
  * **What the ordering DOES break, stated rather than glossed.** `DOC-ADL-3` used to read "…and
  * every outcome FastPath **decided** is returned byte-for-byte". `NoAppFound` is an outcome FastPath
@@ -218,18 +240,17 @@ class RouteCommandUseCase(
         // what the signed local-only copy promises ("nothing is sent to your AI provider"). It DOES falsify
         // DOC-ADL-3's byte-for-byte clause, which Task 14 Step 1 narrows per spec §8.1 — see the
         // class KDoc. Widening this list is a separate decision for a later block.
+        //
+        // Owner decision 14: a DECIDED «нет такого приложения» exists only when the model is not reachable
+        // (`open` false) — with the model reachable FastPath yields it instead (`FastPathYield.MissingApp`, its
+        // outcome `LowConfidence`), and the store plan is step 7's answer when the model cannot take the command or
+        // names an app that is not here (K1, K3). Keyed on what FastPath produced, so a decided `NoAppFound` is the
+        // store plan in every state, byte for byte as before.
         val message = (ruleOutcome as? CommandOutcome.Message)?.message
-        if (message is CommandMessage.NoAppFound) {
-            val goal = AgentGoal(
-                text = rawInput.trim(),
-                shape = GoalShape.AppNotInstalled(message.query),
-            )
-            // Fails open: NoPlan, or any store failure, leaves the FastPath outcome exactly as it was.
-            val started = startAgentSession.start(goal)
-            if (started is OperationResult.Success && started.value != null) {
-                return CommandOutcome.AgentSessionStarted(started.value)
-            }
-        }
+        if (message is CommandMessage.NoAppFound) return storePlan(rawInput, message.query)
+
+        // Controller ruling K2: the one target step 2b claimed that goes on to the model — set only when `open`.
+        var claimed: UnresolvedTarget? = null
 
         // (2b) FastPath could not decide, but a registered tool may match the text deterministically.
         // This use case learns NOTHING about tools: it offers the raw goal and the planner answers.
@@ -256,8 +277,13 @@ class RouteCommandUseCase(
                     }
                 }
                 // R14-39 closed (A4′ phase 3b, fork 3b-E): a target the vocabulary claimed is answered
-                // HERE and never reaches step 7 — whatever the local state, whatever the network.
-                is PlanningResult.Unresolved -> return answerOnDevice(planned.target)
+                // HERE and never reaches step 7 — except, since controller ruling K2, an APP target the device
+                // could read and found NOTHING for, with the model reachable: the same class as decision 14's
+                // «нет такого приложения», so the model may correct the name; its refusal is still answered
+                // here (K11). Local-only, with no provider, offline, a pick, an unreadable list — as before.
+                is PlanningResult.Unresolved -> {
+                    if (open && planned.target.namesNoApp()) claimed = planned.target else return answerOnDevice(planned.target)
+                }
                 // Nothing claimed it: step 2c — a command the user taught — and on its miss the chain below,
                 // exactly as before.
                 PlanningResult.NoPlan -> replayLearned(trimmed)?.let { return it }
@@ -302,29 +328,81 @@ class RouteCommandUseCase(
             // card shares: a remainder is not a fresh reading and teaches nothing. Nothing is recorded here —
             // the launcher records it once «Выполнить» has started the session.
             is ModelPlanning.Proposed -> {
-                val outcome = binder.bind(AgentGoal(text = command, shape = GoalShape.Free(command)), answer.steps).toCommandOutcome()
+                val binding = binder.bind(AgentGoal(text = command, shape = GoalShape.Free(command)), answer.steps)
+                // K3, K11: the model named an app that is not here — what was handed to it is answered on the device,
+                // in the user's words; the model's word goes nowhere.
+                if (binding is Binding.NotFound) notFoundWithoutModel(fastPath, claimed, rawInput)?.let { return it }
+                val outcome = binding.toCommandOutcome()
                 if (outcome is CommandOutcome.Interpreted) outcome.copy(learnable = learnedPlans.learnable(command, answer.steps)) else outcome
             }
             // Condition 3: a question goes to the assistant, prefilled and unsent — never to a web search.
             is ModelPlanning.ToAssistant -> CommandOutcome.OpenAssistant(answer.question)
             is ModelPlanning.Navigate -> CommandOutcome.Interpreted(Interpretation.Navigate(answer.destination))
             is ModelPlanning.Clarify -> CommandOutcome.Message(CommandMessage.Verbatim(answer.question))
-            // K1: a search FastPath yielded and the model would not take is run exactly as FastPath would have run it.
-            ModelPlanning.Declined -> fastPath.runYieldedSearch() ?: ruleOutcome
-            // Finding (c) of the A1″ acceptance: a broken key or a dead endpoint is said, not hidden — unless FastPath
-            // yielded a search (K1): then the user gets that search, not «model unavailable» in place of a working one.
+            // K1, K11: what FastPath yielded or 2b handed over, and the model would not take, is answered as the device
+            // would have answered it without the model.
+            ModelPlanning.Declined -> answerWithoutModel(fastPath, claimed, rawInput) ?: ruleOutcome
+            // Finding (c) of the A1″ acceptance: a broken key or a dead endpoint is said, not hidden — unless something
+            // was handed to the model (K1, K11): then the user gets the device's own answer, not «model unavailable» in
+            // place of a working search, a store plan or «нет такого приложения».
             is ModelPlanning.Unavailable ->
-                fastPath.runYieldedSearch() ?: CommandOutcome.Message(CommandMessage.UnderstandingModelUnavailable(answer.reason))
+                answerWithoutModel(fastPath, claimed, rawInput)
+                    ?: CommandOutcome.Message(CommandMessage.UnderstandingModelUnavailable(answer.reason))
         }
     }
 
     /**
-     * Controller ruling K1 (A4′ acceptance tail plan §0.3): the search FastPath yielded at step 1′, run now because the
-     * model could not take it — `null` when nothing of that kind was yielded, and the caller answers as before.
-     * [HandleUserCommandUseCase.runYielded] resolves and executes without a second `intent_match` row.
+     * What the device answers when the model could not take — `Declined`, `Unavailable` — what was handed to it, or
+     * `null` when nothing was and the caller answers as before:
+     *  - a search FastPath yielded at step 1′ is run exactly as FastPath would have run it (controller ruling K1);
+     *  [HandleUserCommandUseCase.runYielded] resolves and executes without a second `intent_match` row;
+     *  - FastPath's «нет такого приложения» yielded at step 1′ is A0's store plan, in the user's words (K1);
+     *  - step 2b's empty app target handed over by K2 is «нет такого приложения» in the user's words (K11).
+     * FastPath's yield comes first: it is what FastPath decided, and what the device did before decision 14.
      */
-    private suspend fun FastPathAnswer.runYieldedSearch(): CommandOutcome? =
-        (yielded as? FastPathYield.Search)?.let { handleUserCommand.runYielded(it) }
+    private suspend fun answerWithoutModel(fastPath: FastPathAnswer, claimed: UnresolvedTarget?, raw: String): CommandOutcome? =
+        when (val yielded = fastPath.yielded) {
+            is FastPathYield.Search -> handleUserCommand.runYielded(yielded)
+            is FastPathYield.MissingApp -> storePlan(raw, yielded.message.query)
+            null -> claimed?.let { answerOnDevice(it) }
+        }
+
+    /**
+     * The model answered, and the app it named is not on this phone (`Binding.NotFound`). What was handed to it for
+     * a missing app is answered on the device in the USER's words — the model's word never reaches the store or the
+     * screen (D1, egress): FastPath's yielded «нет такого приложения» is A0's store plan (controller ruling K3), 2b's
+     * empty app target «нет такого приложения» (K11). A yielded search, or nothing handed over, is `null`: the
+     * binding's own answer stands, as before.
+     */
+    private suspend fun notFoundWithoutModel(fastPath: FastPathAnswer, claimed: UnresolvedTarget?, raw: String): CommandOutcome? =
+        when (val yielded = fastPath.yielded) {
+            is FastPathYield.MissingApp -> storePlan(raw, yielded.message.query)
+            is FastPathYield.Search -> null
+            null -> claimed?.let { answerOnDevice(it) }
+        }
+
+    /**
+     * Step (2)'s own answer, also step 7's fallback for a yielded «нет такого приложения» (K1, K3): A0's two-step
+     * plan for [query] — the app name FastPath extracted, in the user's words — started as a session
+     * (`GoalShape.AppNotInstalled`); or, when no plan starts (`NoPlan`, any store failure), «нет такого приложения»
+     * in those words, byte for byte the outcome the chain returned before (a decided `NoAppFound` was returned
+     * untouched at step 3 or 4). Deterministic and offline: it consults no model and transmits nothing.
+     */
+    private suspend fun storePlan(raw: String, query: String): CommandOutcome {
+        val goal = AgentGoal(text = raw.trim(), shape = GoalShape.AppNotInstalled(query))
+        val started = startAgentSession.start(goal)
+        return if (started is OperationResult.Success && started.value != null) {
+            CommandOutcome.AgentSessionStarted(started.value)
+        } else {
+            CommandOutcome.Message(CommandMessage.NoAppFound(query))
+        }
+    }
+
+    /**
+     * Controller ruling K2's target: an APP target the device COULD read ([UnresolvedTarget.unreadable] false) and
+     * found no candidate for — not a pick, not a value sort, not a failed read.
+     */
+    private fun UnresolvedTarget.namesNoApp(): Boolean = sort == ArgSorts.APP && candidates.isEmpty() && !unreadable
 
     /**
      * Step 2c (A4′ phase 4, plan §0.2 B-5…B-7): [command] replayed from the one pinned form it fits, or `null` —

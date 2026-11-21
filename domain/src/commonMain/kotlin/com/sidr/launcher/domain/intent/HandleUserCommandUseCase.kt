@@ -15,8 +15,8 @@ import kotlinx.coroutines.launch
  * Use case: turns raw user command text into a single [CommandOutcome] for the UI.
  *
  * Pipeline: normalize → (empty?) → match → resolve a claimed launch → confidence gate → (a confident
- * search, when the router says the model is reachable: yield it — [answer], [FastPathYield]) → route →
- * execute-when-safe.
+ * search, or a confident launch of a name nothing installed answers, when the router says the model is
+ * reachable: yield it — [answer], [FastPathYield]) → route → execute-when-safe.
  *
  * Invariants:
  * - Never throws to the UI. Technical failures from the resolver/executor become
@@ -30,7 +30,9 @@ import kotlinx.coroutines.launch
  *   F1-3). A launch whose app name does not resolve keeps its claim when that is a fact about the
  *   world — "открой wattsupp", or an installed brand's variant that is not installed ("открой youtube
  *   music"): `NoAppFound`, and `RouteCommandUseCase` step (2) offers the store, byte for byte as A0
- *   shipped it. When the name carries a second goal ([SecondGoal]: "открой gmail и проверь почту"),
+ *   shipped it — or, with the model reachable (owner decision 14), the fact is yielded
+ *   ([FastPathYield.MissingApp]) and the model is asked first. When the name carries a second goal
+ *   ([SecondGoal]: "открой gmail и проверь почту"),
  *   the parse folded two goals into one name and the claim is withdrawn:
  *   [CommandOutcome.LowConfidence], undecided, so step 2b and the model get the command.
  */
@@ -72,11 +74,15 @@ class HandleUserCommandUseCase(
      * FastPath's answer, with the router's «the model is reachable» as [yieldToModel] (owner decision 13: Б, A4′
      * acceptance tail plan §0.2). When it is true, a **confident search read from a search verb** — a `SearchIntent`
      * past the auto-execute gate — is not resolved or run: it comes back as [FastPathYield.Search] with
-     * [CommandOutcome.LowConfidence], so the router asks the model. Nothing else yields, and answers exactly as with
-     * [yieldToModel] false: the search FastPath makes out of an unsafe address (`UrlDetector`'s `SearchFallback` —
-     * a defence, not a reading; [isAddressGuardSearch]), an address FastPath opens (`OpenUrlIntent`), a store search,
-     * a launch, a settings route, a simple command, and every outcome below the gate. The match is recorded either
-     * way, with the confidence the gate acted on — the yield is a route, not a confidence.
+     * [CommandOutcome.LowConfidence], so the router asks the model. **Owner decision 14** (task 2 of the tail plan):
+     * so does a **confident launch whose whole name resolved to nothing** — FastPath's `NoAppFound` — as
+     * [FastPathYield.MissingApp], so the model may correct the name before the store is offered; a name carrying a
+     * second goal is withdrawn at the gate as before (phase 1) and yields nothing. Nothing else yields, and answers
+     * exactly as with [yieldToModel] false: the search FastPath makes out of an unsafe address (`UrlDetector`'s
+     * `SearchFallback` — a defence, not a reading; [isAddressGuardSearch]), an address FastPath opens
+     * (`OpenUrlIntent`), a store search, a launch that resolved (or found several, or a form to confirm), a settings
+     * route, a simple command, and every outcome below the gate. The match is recorded either way, with the
+     * confidence the gate acted on — the yield is a route, not a confidence.
      */
     suspend fun answer(rawInput: String, yieldToModel: Boolean): FastPathAnswer {
         val normalized = CommandNormalizer.normalize(rawInput)
@@ -135,6 +141,16 @@ class HandleUserCommandUseCase(
             return FastPathAnswer(CommandOutcome.LowConfidence, FastPathYield.Search(intent))
         }
 
+        // (1″) Decision 14: a reachable model gets «нет такого приложения» before the store — it may correct the name
+        // («открой клод» → «Claude»). Only a confident launch whose WHOLE name resolved to nothing: a name carrying a
+        // second goal never gets here (its claim was withdrawn at the gate above, `overreaches`), and the read is
+        // the one already made (`launchResolution`), so nothing is read twice and nothing runs. The router starts the
+        // store plan itself if the model cannot take it (K1) or names an app that is not here (K3).
+        val missing = missingApp(launchResolution)
+        if (yieldToModel && missing != null) {
+            return FastPathAnswer(CommandOutcome.LowConfidence, FastPathYield.MissingApp(missing))
+        }
+
         return FastPathAnswer(
             when (val resolved = launchResolution ?: resolver.resolve(intent)) {
                 is OperationResult.Failure -> CommandOutcome.Failed(CommandFailure.Generic)
@@ -171,10 +187,13 @@ class HandleUserCommandUseCase(
         intent: LauncherIntent.LaunchAppIntent,
         resolution: OperationResult<ExecutableAction>,
     ): Boolean {
-        val shown = (resolution as? OperationResult.Success)?.value as? ExecutableAction.ShowMessageAction
-        if (shown?.message !is CommandMessage.NoAppFound) return false
+        if (missingApp(resolution) == null) return false
         return SecondGoal.carriedBy(intent.displayNameQuery)
     }
+
+    /** A launch's resolution that found no app — its «нет такого приложения» — or `null` for any other answer. */
+    private fun missingApp(resolution: OperationResult<ExecutableAction>?): CommandMessage.NoAppFound? =
+        ((resolution as? OperationResult.Success)?.value as? ExecutableAction.ShowMessageAction)?.message as? CommandMessage.NoAppFound
 
     private fun routeSimpleCommand(command: SimpleCommand): CommandOutcome = when (command) {
         SimpleCommand.OPEN_ASSISTANT -> CommandOutcome.OpenAssistant(question = null)

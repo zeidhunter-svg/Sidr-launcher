@@ -593,6 +593,93 @@ class DeviceMentionBinderTest {
         )
     }
 
+    // --- A4′ acceptance tail, task 2 — amendment D1: an app name the model wrote, not the user ----------------
+
+    /**
+     * A step whose app mention the MODEL wrote — `BridgeValidator` found its words nowhere in the command and
+     * admitted it as [ValueOrigin.ModelGenerated] (amendment D1: «открой клод» → «Claude»).
+     */
+    private fun modelWritten(tool: ToolId, mention: String, risk: ActionRiskLevel = ActionRiskLevel.SAFE) = ProposedStep(
+        tool = tool,
+        args = mapOf(AuthoredToolDescriptions.MENTION_ARG to mention),
+        origins = mapOf(AuthoredToolDescriptions.MENTION_ARG to ValueOrigin.ModelGenerated),
+        risk = risk,
+        effect = ToolEffect.EXTERNAL,
+    )
+
+    private val claude = InstalledApp(packageName = "net.fixture.qandril", label = "Claude")
+
+    /**
+     * Amendment D1: a name the model wrote binds ONLY to an installed label that is exactly it (after the folding)
+     * — the word forms that answer a user's own words («Claud» is a form of «Claude» by the edge rule) are never
+     * read for the model's. «Claude» binds and launches; the edge «Claud» is not found, where the user's own
+     * «Claud» would have been offered to confirm (the control). The words the tool shows are the model's, and
+     * marked so.
+     */
+    @Test
+    fun `a model-written app name binds only to an exact label`() = runTest {
+        val exact = binder(listOf(claude)).bind(goal, listOf(modelWritten(ToolIds.LAUNCH_APP, "Claude"))).act()
+
+        assertEquals(
+            mapOf("query" to ArgSource.Literal("Claude"), "app" to ArgSource.Literal("net.fixture.qandril")),
+            exact.steps.single().invocation.args,
+        )
+        assertEquals(mapOf("query" to ValueOrigin.ModelGenerated, "app" to ValueOrigin.Ours), exact.origins.getValue(0))
+        assertEquals(emptyList<PendingChoice>(), exact.choices)
+
+        assertEquals(Binding.NotFound("Claud"), binder(listOf(claude)).bind(goal, listOf(modelWritten(ToolIds.LAUNCH_APP, "Claud"))))
+
+        val users = binder(listOf(claude)).bind(goal, listOf(proposed(ToolIds.LAUNCH_APP, "app" to "Claud"))).act()
+        assertEquals("the control: the user's own edge is offered to confirm", listOf(claude), users.choices.single().choice.candidates)
+        assertTrue(users.choices.single().choice.confirm)
+    }
+
+    /** An alias is the user's explicit name for an app: a model-written name that is exactly the alias binds to its app. */
+    @Test
+    fun `a model-written app name binds to an exact alias`() = runTest {
+        val act = binder(listOf(zantor)).bind(goal, listOf(modelWritten(ToolIds.LAUNCH_APP, "телега"))).act()
+
+        assertEquals(
+            mapOf("query" to ArgSource.Literal("телега"), "app" to ArgSource.Literal("net.fixture.zantor")),
+            act.steps.single().invocation.args,
+        )
+        assertEquals(emptyList<PendingChoice>(), act.choices)
+        assertEquals(
+            "a form of the alias is not read for the model's word",
+            Binding.NotFound("телегу"),
+            binder(listOf(zantor)).bind(goal, listOf(modelWritten(ToolIds.LAUNCH_APP, "телегу"))),
+        )
+    }
+
+    /** Two installed apps answer the model's name exactly: the user picks, nothing is bound yet. */
+    @Test
+    fun `a model-written app name with two exact matches is a choice`() = runTest {
+        val act = binder(listOf(tessarOne, tessarTwo)).bind(goal, listOf(modelWritten(ToolIds.LAUNCH_APP, "Tessar"))).act()
+
+        assertEquals(listOf(tessarOne, tessarTwo), act.choices.single().choice.candidates)
+        assertEquals(false, act.choices.single().choice.confirm)
+        assertNull(act.steps.single().invocation.args["app"])
+    }
+
+    /**
+     * Owner decision 2026-11-17 kept under amendment D1: a tool whose act cannot be undone binds only a name exact
+     * AS THE USER TYPED IT, and a name the model wrote was not typed at all — so for `uninstall_app` even an exact
+     * label is a one-app pick marked to confirm, never a bind. The control: the same name for `open_app_info`
+     * (transient) binds.
+     */
+    @Test
+    fun `a model-written app name for an irreversible tool is a pick to confirm, never a bind`() = runTest {
+        val uninstall = binder(listOf(claude))
+            .bind(goal, listOf(modelWritten(Tier0ToolIds.UNINSTALL_APP, "Claude", risk = ActionRiskLevel.CONFIRM))).act()
+
+        assertEquals(listOf(claude), uninstall.choices.single().choice.candidates)
+        assertTrue(uninstall.choices.single().choice.confirm)
+        assertNull(uninstall.steps.single().invocation.args["app"])
+
+        val info = binder(listOf(claude)).bind(goal, listOf(modelWritten(Tier0ToolIds.OPEN_APP_INFO, "Claude"))).act()
+        assertEquals(mapOf("app" to ArgSource.Literal("net.fixture.qandril")), info.steps.single().invocation.args)
+    }
+
     // --- A4′ phase 3b, Task 11 (fork 3b-A, B-10): the remainder of a model plan that acted, bound again ------
 
     private val orvane = "net.fixture.orvane"

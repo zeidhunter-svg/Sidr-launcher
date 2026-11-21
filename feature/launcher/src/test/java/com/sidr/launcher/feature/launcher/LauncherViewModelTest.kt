@@ -3545,7 +3545,7 @@ class LauncherViewModelTest {
      * `ToolMatchPlanner` claims a tool's text — so the outcome the surface receives is the one step 2b
      * produces, and a 2b that fell through would reach [model].
      */
-    private fun claimingRoute(target: UnresolvedTarget, model: ModelPlanner): RouteCommandUseCase {
+    private fun claimingRoute(target: UnresolvedTarget, model: ModelPlanner, localOnly: Boolean = false): RouteCommandUseCase {
         val claims = object : Planner {
             override suspend fun plan(request: PlanningRequest, registry: ToolRegistry): PlanningResult =
                 if (request.goal == target.goal) PlanningResult.Unresolved(target) else PlanningResult.NoPlan
@@ -3560,7 +3560,8 @@ class LauncherViewModelTest {
             ),
             modelPlanner = model,
             binder = FakeMentionBinder(),
-            featureFlagRepository = fakeFlagRepo,
+            // The route's own flags: local-only for a test that must not reach the model (controller ruling K2).
+            featureFlagRepository = if (localOnly) FakeFeatureFlagRepository(FeatureFlags(usageHistoryEnabled = true, localOnlyMode = true)) else fakeFlagRepo,
             providerConfigRepository = configuredProvider(),
             connectivityChecker = FakeConnectivityChecker(),
             startAgentSession = StartAgentSessionUseCase(claims, fakeAgentStore, agentIds, agentRegistry),
@@ -3608,12 +3609,16 @@ class LauncherViewModelTest {
      * R14-39 closed, seen from the surface: a target nothing on the device answers to reads «нет такого
      * приложения» in the user's words at once. Had step 2b fallen through, [SlowModel] would still be
      * thinking a second later — the wait would be up and the line empty.
+     *
+     * **In local-only mode since controller ruling K2** (A4′ acceptance tail, task 2; review I1): online, with a
+     * provider, an empty app target is asked of the model first, so the wait is the model's there; without the
+     * model the device answers at once, as before.
      */
     @Test
     fun `a 2b target that is not found reads no such app with no wait`() = runTest(testDispatcher) {
         val target = tessarTarget("удали приложение вельтрикс").copy(words = "вельтрикс", candidates = emptyList())
         val model = SlowModel()
-        val vm = buildViewModel(route = CommandRouteStep { claimingRoute(target, model).route(it) })
+        val vm = buildViewModel(route = CommandRouteStep { claimingRoute(target, model, localOnly = true).route(it) })
 
         vm.onCommandSubmitted("удали приложение вельтрикс")
         advanceTimeBy(1_000)

@@ -10,6 +10,7 @@ import com.sidr.launcher.domain.ai.bridge.BridgeFixtures.plan
 import com.sidr.launcher.domain.ai.bridge.BridgeFixtures.registry
 import com.sidr.launcher.domain.ai.bridge.BridgeFixtures.step
 import com.sidr.launcher.domain.ai.bridge.BridgeFixtures.steps
+import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolId
 import org.junit.Assert.assertEquals
@@ -77,12 +78,74 @@ class BridgeValidatorTest {
         )
     }
 
-    /** Criterion 16, first half: an app argument the user did not type is not the user's app. */
+    /**
+     * Criterion 16, first half, **as amended by D1** (A4′ acceptance tail, task 2; ADR «2026-11-22 — D1, поправка:
+     * имя приложения, исправленное моделью»). Until the amendment an app argument the user did not type was
+     * refused as `UNDERIVABLE_MENTION`; there is no transliterating fold, so «открой клод» could never bind
+     * «Claude» whatever the model answered. Now an APP mention the user did not type is admitted — and labelled
+     * the MODEL's ([ValueOrigin.ModelGenerated]), which is what the binder reads to bind it only to an exact
+     * label or alias. The user's own words stay the user's (`a plan over an offered tool is valid…`, above).
+     */
     @Test
-    fun `an app mention the user did not type is rejected as underivable`() {
+    fun `an app the user did not name is admitted as the model's`() {
         assertEquals(
+            Verdict.Valid(
+                ModelPlanning.Proposed(
+                    listOf(
+                        ProposedStep(
+                            tool = ToolId("launch_app"),
+                            args = mapOf("app" to "Claude"),
+                            origins = mapOf("app" to ValueOrigin.ModelGenerated),
+                            risk = ActionRiskLevel.SAFE,
+                            effect = ToolEffect.EXTERNAL,
+                        ),
+                    ),
+                ),
+            ),
+            validate(plan("launch_app", "app" to "Claude", "query" to null, "url" to null), command = "открой клод"),
+        )
+    }
+
+    /**
+     * The amendment is for APPS only. A mention of another sort — a file the sandbox resolves by its name, whether
+     * its description declares the sort or (as `SandboxToolDescriptions` does) none — that the user did not type is
+     * refused exactly as before: the device would resolve it by word forms, as it resolves the user's words. The
+     * control: the same argument with the user's own words is valid.
+     */
+    @Test
+    fun `a non-app mention the user did not type is still refused`() {
+        val fileSorted = BridgeFilter.offeringOf(
+            chainRegistry,
+            BridgeFilter.ANDROID_OFFERED_LEVELS,
+            ToolDescriptions { id ->
+                if (id.value == "fixture_sieve") {
+                    ToolDescription(
+                        ToolNamespace.CONTENT,
+                        "Sieve a file.",
+                        listOf(ModelArg("name", "the file, in the user's own words", required = true, mention = true, sort = ArgSorts.FILE)),
+                    )
+                } else {
+                    null
+                }
+            },
+        )
+        val sieve = plan("fixture_sieve", "name" to "brennquist", "label" to null)
+
+        assertEquals(
+            "a FILE-sorted mention",
             Verdict.Rejected(BridgeError.UNDERIVABLE_MENTION),
-            validate(plan("launch_app", "app" to "lumora"), command = "открой мой мессенджер"),
+            BridgeValidator.validate(sieve, fileSorted, chainRegistry, "просей отчёт"),
+        )
+        assertEquals(
+            "a mention whose sort is not declared",
+            Verdict.Rejected(BridgeError.UNDERIVABLE_MENTION),
+            BridgeValidator.validate(sieve, chainOffering, chainRegistry, "просей отчёт"),
+        )
+        assertEquals(
+            "the control: the user's own words",
+            ValueOrigin.SaidBy(PrincipalId.USER),
+            ((BridgeValidator.validate(sieve, fileSorted, chainRegistry, "просей brennquist") as Verdict.Valid).planning as ModelPlanning.Proposed)
+                .steps.single().origins["name"],
         )
     }
 

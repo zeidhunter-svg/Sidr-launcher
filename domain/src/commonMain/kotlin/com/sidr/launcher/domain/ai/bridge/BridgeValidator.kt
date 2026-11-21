@@ -1,5 +1,6 @@
 package com.sidr.launcher.domain.ai.bridge
 
+import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.text.PlainTextFolding
 import com.sidr.launcher.domain.text.TextFolding
 import com.sidr.launcher.domain.tool.ToolId
@@ -19,7 +20,11 @@ sealed interface Verdict {
  *  - **membership in the offering** — not in the federation: `set_app_alias` and `shortcut:…` are
  *    registered and `SAFE`, the engine would not stop them, and `B13` would rest on one render filter;
  *  - **derivability** — an argument the description marks as a mention, given as words, holds the user's
- *    own words, compared after the platform's [TextFolding] (exact after folding, phase 3b B-17);
+ *    own words, compared after the platform's [TextFolding] (exact after folding, phase 3b B-17) — **except a
+ *    mention of the app sort** ([ModelArg.sort] = `ArgSorts.APP`; amendment D1, ADR «2026-11-22 — D1, поправка:
+ *    имя приложения, исправленное моделью»): an app the user did not name in those words is admitted, labelled
+ *    [ValueOrigin.ModelGenerated], and the device binds it only to an exact label or alias; every other mention
+ *    the user did not type is still `BridgeError.UNDERIVABLE_MENTION`. Every value's origin is recorded either way;
  *  - **references** (phase 3b, B-18) — judged after every step, over the plan as the model wrote it: a
  *    reference stands only on an argument whose tool's description accepts one, names an EARLIER step,
  *    and names an output that step's tool describes. Any other is `BridgeError.SHAPE` (B-9: no fifth code).
@@ -114,7 +119,10 @@ object BridgeValidator {
                 if (arg.required) return Judged.Refused(BridgeError.SHAPE)
                 continue
             }
-            if (arg.mention && !Derivability.isDerivable(value, command, folding)) {
+            // Amendment D1: an APP the user did not name in those words is admitted — the model may correct the name
+            // («открой клод» → «Claude») — and its origin says it is the model's, which is what the device's binder
+            // reads to bind it to an exact label or alias only. Any other mention the user did not type is refused.
+            if (arg.mention && arg.sort != ArgSorts.APP && !Derivability.isDerivable(value, command, folding)) {
                 return Judged.Refused(BridgeError.UNDERIVABLE_MENTION)
             }
             values[arg.name] = value

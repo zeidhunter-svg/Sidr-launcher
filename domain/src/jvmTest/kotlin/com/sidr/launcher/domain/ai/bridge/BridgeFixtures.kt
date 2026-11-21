@@ -3,6 +3,7 @@ package com.sidr.launcher.domain.ai.bridge
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.domain.action.ActionArg
 import com.sidr.launcher.domain.action.ActionRiskLevel
+import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.tool.ToolDescriptor
 import com.sidr.launcher.domain.tool.ToolDurability
 import com.sidr.launcher.domain.tool.ToolEffect
@@ -42,7 +43,8 @@ internal object BridgeFixtures {
             "launch_app" -> ToolDescription(
                 ToolNamespace.LAUNCHER,
                 "Open an app.",
-                listOf(ModelArg("app", "the app, in the user's own words", required = true, mention = true)),
+                // Of the app sort, as `AuthoredToolDescriptions` declares every app mention (amendment D1).
+                listOf(ModelArg("app", "the app, in the user's own words", required = true, mention = true, sort = ArgSorts.APP)),
             )
             "web_search" -> ToolDescription(
                 ToolNamespace.CONTENT,
@@ -144,7 +146,7 @@ internal object BridgeFixtures {
             "uninstall_app" -> ToolDescription(
                 ToolNamespace.DEVICE,
                 "Remove an app.",
-                listOf(ModelArg("app", "the app, in the user's own words", required = true, mention = true)),
+                listOf(ModelArg("app", "the app, in the user's own words", required = true, mention = true, sort = ArgSorts.APP)),
             )
             "web_search" -> ToolDescription(
                 ToolNamespace.CONTENT,

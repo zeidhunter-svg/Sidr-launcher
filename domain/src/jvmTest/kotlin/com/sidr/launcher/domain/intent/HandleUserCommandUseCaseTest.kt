@@ -574,6 +574,46 @@ class HandleUserCommandUseCaseTest {
         assertEquals("each address was searched once", addresses.size, fakeExecutor.callCount)
     }
 
+    // ── A4′ acceptance tail, owner decision 14 — «no such app» yields to a reachable model ──────────
+    // With the model reachable (`yieldToModel`, controller ruling K14) a confident launch whose name resolves to
+    // nothing is not answered «нет такого приложения» by FastPath: it hands the fact over
+    // (`FastPathYield.MissingApp`) and answers `LowConfidence`, so the router asks the model, which may correct
+    // the name. Without the model it is `NoAppFound` exactly as before, and step (2) offers the store.
+    // «клод» is installed nowhere here; «Lumora» is the only installed label.
+
+    @Test fun `a launch of a name that is not installed yields when asked to`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(InstalledApp("net.fixture.alpha", "Lumora"))
+        matcherReturns(LauncherIntent.LaunchAppIntent("клод"), 0.90f)
+
+        val yielding = useCase.answer("открой клод", yieldToModel = true)
+        val notYielding = useCase.answer("открой клод", yieldToModel = false)
+
+        assertEquals(
+            FastPathAnswer(CommandOutcome.LowConfidence, FastPathYield.MissingApp(CommandMessage.NoAppFound("клод"))),
+            yielding,
+        )
+        assertEquals(
+            "without the model: «нет такого приложения», byte for byte as before",
+            FastPathAnswer(CommandOutcome.Message(CommandMessage.NoAppFound("клод"))),
+            notYielding,
+        )
+        assertEquals(0, fakeExecutor.callCount)
+    }
+
+    /**
+     * Phase 1 is not changed by decision 14: a name that carries a second goal is the PARSE's failure, not the
+     * world's — its claim is withdrawn (`LowConfidence`, undecided) and nothing is yielded, with or without the
+     * model, so the router hands the whole command on as undecided text and never offers the store for it.
+     */
+    @Test fun `a launch whose name carries a second goal stays LowConfidence with nothing yielded`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(InstalledApp("net.fixture.alpha", "Lumora"))
+        matcherReturns(LauncherIntent.LaunchAppIntent("corvane and send the report"), 0.90f)
+
+        assertEquals(FastPathAnswer(CommandOutcome.LowConfidence), useCase.answer("open corvane and send the report", yieldToModel = true))
+        assertEquals(FastPathAnswer(CommandOutcome.LowConfidence), useCase.answer("open corvane and send the report", yieldToModel = false))
+        assertEquals(0, fakeExecutor.callCount)
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private fun matcherReturns(intent: LauncherIntent, confidence: Float) {

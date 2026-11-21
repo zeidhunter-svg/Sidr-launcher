@@ -4,6 +4,7 @@ import com.sidr.launcher.domain.ai.bridge.ModelArg
 import com.sidr.launcher.domain.ai.bridge.ToolDescription
 import com.sidr.launcher.domain.ai.bridge.ToolDescriptions
 import com.sidr.launcher.domain.ai.bridge.ToolNamespace
+import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
 import javax.inject.Inject
@@ -16,7 +17,8 @@ import javax.inject.Inject
  * **An app argument is a mention, not a package.** `uninstall_app` declares `app` as "Package of the app
  * to remove"; the model must never write a package, so every app-sort tool is described with one
  * argument, [MENTION_ARG], "the app, in the user's own words" — `BridgeValidator` checks those are the
- * user's words, `DeviceMentionBinder` turns them into a package. Every other argument keeps the tool's
+ * user's words, or (amendment D1: the mention is of `ArgSorts.APP`) admits a name the model corrected as the
+ * model's, and `DeviceMentionBinder` turns them into a package. Every other argument keeps the tool's
  * own name and requiredness (`AuthoredToolDescriptionsTest`).
  *
  * The three `launcher_memory` tools have no row: they are never offered (spec §7.5), and a missing
@@ -40,7 +42,9 @@ class AuthoredToolDescriptions internal constructor(
 
         private const val THE_APP = "the app, in the user's own words"
 
-        private fun mention() = ModelArg(MENTION_ARG, THE_APP, required = true, mention = true)
+        // Of the app sort (amendment D1): `BridgeValidator` admits a name the model corrected only for such a mention,
+        // and `DeviceMentionBinder` binds that name to an exact label or alias only.
+        private fun mention() = ModelArg(MENTION_ARG, THE_APP, required = true, mention = true, sort = ArgSorts.APP)
 
         private fun text(name: String, description: String) =
             ModelArg(name, description, required = true, mention = false)

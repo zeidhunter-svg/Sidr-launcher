@@ -702,6 +702,10 @@ class RouteCommandUseCaseTest {
      * Criterion 15, the other half (plan review): the deterministic paths get NO card. The model here
      * WOULD answer with a step, so "it was not asked" is not vacuous — FastPath's decision, A0's plan and
      * step 2b's tool match each return before step 7, and none of them waits on «Выполнить».
+     *
+     * **A0's plan is taken in local-only mode since owner decision 14** (A4′ acceptance tail, task 2; review I1):
+     * online, with a provider, «нет такого приложения» goes to the model first, so it is no longer a
+     * deterministic path there; without the model it is, byte for byte.
      */
     @Test
     fun `the deterministic paths never get an interpretation card`() = runTest {
@@ -722,7 +726,7 @@ class RouteCommandUseCaseTest {
 
         driveAppLaunch()
         appsRepo.appsToReturn = emptyList()
-        val a0 = useCase().route("открой убер")
+        val a0 = useCase(localOnly = true).route("открой убер")
 
         driveUnknown()
         val toolMatch = useCase(agentPlanner = plansOneStep()).route("do a barrel roll")
@@ -830,40 +834,18 @@ class RouteCommandUseCaseTest {
     }
 
     /**
-     * **R14-39 closed** (A4′ phase 3b, fork 3b-E; `DOC-ADL-3`). A registered tool claimed the command
-     * deterministically and its target resolved to nothing. Until this task that was `NoPlan`, and
-     * `NoPlan` at 2b falls through to step 7: the raw command left the device because one name did not
-     * resolve. Now the device answers in the user's own words and the model is never asked.
+     * Phase 3b close, final review B-M8 (and deferred E5-F8): in local-only mode the target a registered tool
+     * claimed is still the DEVICE's to answer — «нет такого приложения» in the user's own words, not the
+     * local-only line, which would blame the mode for a name that is simply not installed — and the model is
+     * not asked. The control is the same mode with a text no planner claims: the local-only line, as before — so
+     * the answer above is step 2b's, not the mode's.
      *
-     * The second half is the control: the same wiring, a text no planner claims, and the model IS asked
-     * — so the zero above is a fact about the route, not about a disconnected fake.
-     */
-    @Test
-    fun `an unresolved 2b target is answered on the device and the model is never asked`() = runTest {
-        driveUnknown()
-        val target = removeTarget("удали приложение вельтрикс", words = "вельтрикс", candidates = emptyList())
-        val route = useCase(agentPlanner = claims(target), agentRegistry = removeRegistry)
-
-        assertEquals(
-            CommandOutcome.Message(CommandMessage.NoAppFound("вельтрикс")),
-            route.route("удали приложение вельтрикс"),
-        )
-        assertEquals("the model was asked about a target the device had claimed", 0, planner.planCallCount)
-        assertTrue("nothing is persisted for a target nobody picked", agentStore.saved.isEmpty())
-
-        route.route("do a barrel roll")
-
-        assertEquals("the control: an unclaimed text does reach the model", 1, planner.planCallCount)
-        assertEquals("do a barrel roll", planner.lastCommand)
-    }
-
-    /**
-     * Phase 3b close, final review B-M8 (and deferred E5-F8): `DOC-ADL-3`'s cell says the unresolved 2b target
-     * reaches step 7 in NO state, and the test above holds one — online, a provider, local-only off. In
-     * local-only mode the target a registered tool claimed is still the DEVICE's to answer — «нет такого
-     * приложения» in the user's own words, not the local-only line, which would blame the mode for a name
-     * that is simply not installed — and the model is not asked. The control is the same mode with a text no
-     * planner claims: the local-only line, as before — so the answer above is step 2b's, not the mode's.
+     * **Since controller ruling K2 (A4′ acceptance tail, task 2) this is THE test of «answered on the device»**:
+     * its online sibling, `an unresolved 2b target is answered on the device and the model is never asked`, was
+     * deleted — online, with a provider, an empty readable app target now goes to the model, which may correct
+     * the name (`online an unresolved 2b app with no candidates goes to the model`), and its refusal is still
+     * answered here, on the device (K11). No provider and offline are held below
+     * (`with no provider or offline an unresolved 2b app is still answered on the device`).
      */
     @Test
     fun `in local-only mode an unresolved 2b target is still answered on the device`() = runTest {
@@ -1259,7 +1241,10 @@ class RouteCommandUseCaseTest {
         assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), planned)
         assertEquals(CommandOutcome.Message(CommandMessage.NoAppFound("Vemblic")), claimed)
         assertEquals("the learned plans were never read", 0, learnedStore.reads)
-        assertEquals(0, planner.planCallCount)
+        // Controller ruling K2 (A4′ acceptance tail, task 2): online, 2b's empty app target goes to the model — once —
+        // which declined here, so the device answered it (K11). The learned plans are still not read on that way.
+        assertEquals("only 2b's empty app target is asked of the model (K2)", 1, planner.planCallCount)
+        assertEquals("удали приложение Vemblic", planner.lastCommand)
     }
 
     // --- A4′ acceptance tail, owner decision 13: Б — a FastPath search yields to a reachable model (K1, K14) -------
@@ -1450,6 +1435,265 @@ class RouteCommandUseCaseTest {
         assertEquals(CommandOutcome.OpenAssistant("какой рецепт шашлыка лучший"), outcome)
         assertTrue("nothing is executed", executor.executedActions.isEmpty())
         assertEquals(1, planner.planCallCount)
+    }
+
+    // --- A4′ acceptance tail, task 2 — owner decision 14 + amendment D1 (K1, K2, K3, K11) ---------------------
+    // Online, with a provider, local-only off, «нет такого приложения» is asked of the model first, which may
+    // correct the name («открой клод» → «Claude»); the store — only if the model did not find it either. «клод» is
+    // installed nowhere here, and every model word is compared by equality.
+
+    /**
+     * The model's launch of an app it NAMED itself: its words are not the user's (`BridgeValidator`, amendment D1).
+     * `EXTERNAL`, as production's `launch_app` is (`SystemIntentToolSource`: every projected tool reaches another app).
+     */
+    private fun modelLaunch(app: String) = ProposedStep(
+        tool = ToolIds.LAUNCH_APP,
+        args = mapOf("app" to app),
+        origins = mapOf("app" to ValueOrigin.ModelGenerated),
+        risk = ActionRiskLevel.SAFE,
+        effect = ToolEffect.EXTERNAL,
+    )
+
+    /** The model's removal, through [removeAppTool], of an app it named itself. */
+    private fun modelRemoval(app: String) = ProposedStep(
+        tool = removeAppTool.id,
+        args = mapOf("app" to app),
+        origins = mapOf("app" to ValueOrigin.ModelGenerated),
+        risk = ActionRiskLevel.CONFIRM,
+        effect = ToolEffect.EXTERNAL,
+    )
+
+    /** A0's store plan for «открой клод», in the USER's words: the launch, then the store search bound to its result. */
+    private val storePlanForKlod = listOf(
+        ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal("клод"))),
+        ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.FromStep(0, "resolved_query"))),
+    )
+    private val storeGoalForKlod = AgentGoal("открой клод", GoalShape.AppNotInstalled("клод"))
+
+    /** The device's binding of the model's «Claude» to the one installed app labelled exactly so. */
+    private val boundClaude = Interpretation.Act(
+        goal = freeGoal("открой клод"),
+        steps = listOf(
+            PlanStep(
+                index = 0,
+                invocation = ToolInvocation(
+                    ToolIds.LAUNCH_APP,
+                    mapOf("query" to ArgSource.Literal("Claude"), "app" to ArgSource.Literal("net.fixture.qandril")),
+                ),
+                risk = ActionRiskLevel.SAFE,
+                precondition = StepPrecondition.None,
+                rationale = StepRationale.MODEL_PROPOSED,
+            ),
+        ),
+        origins = mapOf(0 to mapOf("query" to ValueOrigin.ModelGenerated, "app" to ValueOrigin.Ours)),
+        effects = mapOf(0 to ToolEffect.EXTERNAL),
+        choices = emptyList(),
+    )
+
+    /**
+     * Decision 14: online, FastPath's «нет такого приложения» is handed to the model (`FastPathYield.MissingApp`),
+     * the model writes the name it believes is meant, and the DEVICE binds it — here to the one app labelled
+     * exactly so. A0's store plan does not start. Task 4 of the tail plan turns a reading with no card owed into a
+     * started session; until then it is the card (`Interpreted`). Nothing is executed.
+     */
+    @Test
+    fun `online a missing app goes to the model and binds on the device`() = runTest {
+        driveAppLaunch("клод")
+        appsRepo.appsToReturn = emptyList()
+        planner.answer = ModelPlanning.Proposed(listOf(modelLaunch("Claude")))
+        binder.binding = { goal, steps ->
+            assertEquals("the binder gets the model's word, in the model's name", listOf(modelLaunch("Claude")), steps)
+            Binding.Bound(boundClaude.copy(goal = goal))
+        }
+
+        val outcome = useCase().route("открой клод")
+
+        assertEquals(CommandOutcome.Interpreted(boundClaude), outcome)
+        assertTrue("the store plan did not start", agentStore.saved.isEmpty())
+        assertEquals("the model is asked once", 1, planner.planCallCount)
+        assertEquals("открой клод", planner.lastCommand)
+        assertEquals(1, binder.bindCallCount)
+        assertTrue("nothing is executed", executor.executedActions.isEmpty())
+    }
+
+    /**
+     * Controller ruling K3: the model named an app that is not on this phone (`Binding.NotFound`). The user gets
+     * A0's store plan — in THEIR words («клод»), never the model's («Claudex»): the model's word does not go to
+     * the store (D1, egress). Compared whole: the goal and every saved invocation.
+     */
+    @Test
+    fun `online the model names an app that is not here - the store plan, in the user's words`() = runTest {
+        driveAppLaunch("клод")
+        appsRepo.appsToReturn = emptyList()
+        planner.answer = ModelPlanning.Proposed(listOf(modelLaunch("Claudex")))
+        binder.binding = { _, _ -> Binding.NotFound("Claudex") }
+
+        val outcome = useCase().route("открой клод")
+
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), outcome)
+        assertEquals(storeGoalForKlod, agentStore.saved.single().goal)
+        assertEquals(storePlanForKlod, agentStore.saved.single().plan.steps.map { it.invocation })
+        assertEquals("the model is asked once", 1, planner.planCallCount)
+    }
+
+    /** K1: the model declines — the store plan FastPath's «нет такого приложения» would have started, as before. */
+    @Test
+    fun `online a missing app the model declines - the store plan`() = runTest {
+        driveAppLaunch("клод")
+        appsRepo.appsToReturn = emptyList()
+        planner.answer = ModelPlanning.Declined
+
+        val outcome = useCase().route("открой клод")
+
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), outcome)
+        assertEquals(storeGoalForKlod, agentStore.saved.single().goal)
+        assertEquals(storePlanForKlod, agentStore.saved.single().plan.steps.map { it.invocation })
+        assertEquals("the model is asked once", 1, planner.planCallCount)
+        assertEquals("открой клод", planner.lastCommand)
+    }
+
+    /**
+     * K1: the model was reachable at the gate and could not answer — a broken key, a timeout, an unreadable reply.
+     * The user gets the store plan, not «model unavailable» in place of it. Every reason, none collapsed.
+     */
+    @Test
+    fun `online a missing app with the model unavailable - the store plan`() = runTest {
+        driveAppLaunch("клод")
+        appsRepo.appsToReturn = emptyList()
+        val route = useCase()
+
+        ModelUnavailableReason.entries.forEachIndexed { i, reason ->
+            planner.answer = ModelPlanning.Unavailable(reason)
+
+            assertEquals("$reason", CommandOutcome.AgentSessionStarted(AgentSessionId("s${i + 1}")), route.route("открой клод"))
+            assertEquals("$reason", storeGoalForKlod, agentStore.saved.last().goal)
+            assertEquals("$reason", storePlanForKlod, agentStore.saved.last().plan.steps.map { it.invocation })
+        }
+        assertEquals("every reason was asked of the model", ModelUnavailableReason.entries.size, planner.planCallCount)
+    }
+
+    /**
+     * The other states, one at a time (`the agent runs offline and with no provider configured…` above holds both at
+     * once): with no provider, and offline, the model is not reachable — no yield, and «нет такого приложения» is
+     * A0's store plan at step (2), byte for byte; the model is never asked.
+     */
+    @Test
+    fun `with no provider or offline a missing app is the store plan and the model is never asked`() = runTest {
+        driveAppLaunch("клод")
+        appsRepo.appsToReturn = emptyList()
+        planner.answer = ModelPlanning.Proposed(listOf(modelLaunch("Claude")))
+
+        connectivity.online = false
+        val offline = useCase().route("открой клод")
+        connectivity.online = true
+        provider.clearActiveConfig()
+        val noProvider = useCase().route("открой клод")
+
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), offline)
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s2")), noProvider)
+        assertEquals(listOf(storeGoalForKlod, storeGoalForKlod), agentStore.saved.map { it.goal })
+        assertEquals("the model is never asked", 0, planner.planCallCount)
+    }
+
+    /**
+     * Controller ruling K2: step 2b claimed «удали приложение клод» for a tool, and its APP target — readable — has
+     * no candidate at all. Online, with a provider, that is the same class as decision 14's «нет такого
+     * приложения»: the command goes on to the model, which may correct the name. It partly reverses fork 3b-E
+     * (R14-39 «never step 7») — online only, and for an empty app target only; local-only is held by `in
+     * local-only mode an unresolved 2b target is still answered on the device`.
+     */
+    @Test
+    fun `online an unresolved 2b app with no candidates goes to the model`() = runTest {
+        driveUnknown()
+        val target = removeTarget("удали приложение клод", words = "клод", candidates = emptyList())
+        planner.answer = ModelPlanning.Proposed(listOf(modelRemoval("Claude")))
+
+        val outcome = useCase(agentPlanner = claims(target), agentRegistry = removeRegistry).route("удали приложение клод")
+
+        assertEquals(
+            CommandOutcome.Interpreted(
+                Interpretation.Act(
+                    goal = freeGoal("удали приложение клод"),
+                    steps = listOf(
+                        PlanStep(
+                            index = 0,
+                            invocation = ToolInvocation(removeAppTool.id, mapOf("app" to ArgSource.Literal("Claude"))),
+                            risk = ActionRiskLevel.CONFIRM,
+                            precondition = StepPrecondition.None,
+                            rationale = StepRationale.MODEL_PROPOSED,
+                        ),
+                    ),
+                    origins = mapOf(0 to mapOf("app" to ValueOrigin.ModelGenerated)),
+                    effects = mapOf(0 to ToolEffect.EXTERNAL),
+                    choices = emptyList(),
+                ),
+            ),
+            outcome,
+        )
+        assertEquals("the model is asked once", 1, planner.planCallCount)
+        assertEquals("удали приложение клод", planner.lastCommand)
+        assertTrue("nothing starts before «Выполнить»", agentStore.saved.isEmpty())
+    }
+
+    /**
+     * Controller ruling K11: the 2b target K2 handed to the model, and the model declined, could not answer (every
+     * reason), or named an app that is not here — the device answers as it did before K2: «нет такого приложения»
+     * in the USER's word («клод»), never the model's («Claudex»), and nothing is persisted.
+     */
+    @Test
+    fun `online an unresolved 2b app the model declines, cannot answer or names something absent - no such app in the user's words`() = runTest {
+        driveUnknown()
+        val target = removeTarget("удали приложение клод", words = "клод", candidates = emptyList())
+        val route = useCase(agentPlanner = claims(target), agentRegistry = removeRegistry)
+        binder.binding = { _, _ -> Binding.NotFound("Claudex") }
+        val answers = listOf(ModelPlanning.Declined) +
+            ModelUnavailableReason.entries.map { ModelPlanning.Unavailable(it) } +
+            ModelPlanning.Proposed(listOf(modelRemoval("Claudex")))
+
+        answers.forEach { answer ->
+            planner.answer = answer
+
+            assertEquals("$answer", CommandOutcome.Message(CommandMessage.NoAppFound("клод")), route.route("удали приложение клод"))
+        }
+        assertEquals("each was asked of the model once", answers.size, planner.planCallCount)
+        assertEquals("only the model's answer that named an app was bound", 1, binder.bindCallCount)
+        assertTrue("nothing is persisted for a target nobody found", agentStore.saved.isEmpty())
+    }
+
+    /**
+     * K2 is for an EMPTY app target only. A target with candidates is the user's pick on the device, as before —
+     * the model, scripted to answer with a step so that asking it would change the outcome, is never asked.
+     */
+    @Test
+    fun `online an unresolved 2b target WITH candidates is still a pick on the device`() = runTest {
+        driveUnknown()
+        val target = removeTarget("удали приложение tessar", words = "tessar", candidates = listOf(tessarOne, tessarTwo))
+        planner.answer = ModelPlanning.Proposed(listOf(modelRemoval("Tessar")))
+
+        val outcome = useCase(agentPlanner = claims(target), agentRegistry = removeRegistry).route("удали приложение tessar")
+
+        assertEquals(CommandOutcome.ChooseTarget(target), outcome)
+        assertEquals("the model is never asked", 0, planner.planCallCount)
+        assertTrue("nothing starts before the pick", agentStore.saved.isEmpty())
+    }
+
+    /** K2 is online-with-a-provider only: with no provider, and offline, the empty 2b target is answered on the device. */
+    @Test
+    fun `with no provider or offline an unresolved 2b app is still answered on the device`() = runTest {
+        driveUnknown()
+        val target = removeTarget("удали приложение клод", words = "клод", candidates = emptyList())
+        planner.answer = ModelPlanning.Proposed(listOf(modelRemoval("Claude")))
+
+        connectivity.online = false
+        val offline = useCase(agentPlanner = claims(target), agentRegistry = removeRegistry).route("удали приложение клод")
+        connectivity.online = true
+        provider.clearActiveConfig()
+        val noProvider = useCase(agentPlanner = claims(target), agentRegistry = removeRegistry).route("удали приложение клод")
+
+        assertEquals(CommandOutcome.Message(CommandMessage.NoAppFound("клод")), offline)
+        assertEquals(CommandOutcome.Message(CommandMessage.NoAppFound("клод")), noProvider)
+        assertEquals("the model is never asked", 0, planner.planCallCount)
+        assertTrue(agentStore.saved.isEmpty())
     }
 
     private companion object {

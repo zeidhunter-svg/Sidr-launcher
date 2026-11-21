@@ -2,6 +2,7 @@ package com.sidr.launcher.data.repository.agent
 
 import com.sidr.launcher.data.repository.action.DefaultActionCatalog
 import com.sidr.launcher.domain.ai.bridge.ModelOutput
+import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.tool.ToolId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -42,6 +43,25 @@ class AuthoredToolDescriptionsTest {
             val expected = if (sorts.appArgOf(id) != null) listOf(AuthoredToolDescriptions.MENTION_ARG) else emptyList()
             assertEquals(id.value, expected, description.args.filter { it.mention }.map { it.name })
         }
+    }
+
+    /**
+     * Amendment D1 (A4′ acceptance tail, task 2): `BridgeValidator` admits a name the model corrected only for a
+     * mention of the APP sort, so every app mention must say so — and nothing else may: a mention row without the
+     * sort would leave «открой клод» unbindable on the phone with every per-tool test green, and a non-mention
+     * argument carrying it would mean nothing. Read over the production rows and sorts.
+     */
+    @Test
+    fun `every app mention declares the app sort, and no other argument does`() {
+        val sorts = CatalogArgumentSorts()
+        descriptions.rows().forEach { (id, description) ->
+            description.args.forEach { arg ->
+                val expected = if (arg.mention && sorts.appArgOf(id) != null) ArgSorts.APP else null
+                assertEquals("${id.value}.${arg.name}", expected, arg.sort)
+            }
+        }
+        // The control: the rows really carry app mentions, so "every one declares it" is not "there are none".
+        assertEquals(3, descriptions.rows().values.sumOf { description -> description.args.count { it.sort == ArgSorts.APP } })
     }
 
     @Test

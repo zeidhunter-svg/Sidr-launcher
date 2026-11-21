@@ -88,11 +88,34 @@ class FastPathOverflowSeamTest {
      * shapes: a one-word name, a two-word name with nothing of it installed, and an installed brand's
      * variant that is not installed — owner fork F1-3 (2026-09-26): the world, not the parse, so the
      * store offer stays.
+     *
+     * **Flipped by owner decision 14** (A4′ acceptance tail, task 2; review I1 — the task 1 pattern). This
+     * fixture's state — online, a provider, local-only off — makes the model reachable, so FastPath's «нет такого
+     * приложения» is asked of the model first (once per command), the fake declines, and A0's plan starts exactly
+     * as before (controller ruling K1): the goals and the steps are still byte for byte. «The model is not asked»
+     * is held by the local-only twin below (`DOC-ADL-3` parity).
      */
     @Test
     fun `a launch naming nothing installed still becomes the A0 launch-then-store plan, byte for byte`() = runTest {
-        val outcomes = listOf("открой veltrix", "открой quendor saga", "открой lumora studio").map { router().route(it) }
+        val commands = listOf("открой veltrix", "открой quendor saga", "открой lumora studio")
+        val outcomes = commands.map { router().route(it) }
 
+        assertA0StorePlans(outcomes)
+        assertEquals("online with a provider each missing app goes to the model first (decision 14)", 3, modelPlanner.planCallCount)
+        assertEquals("открой lumora studio", modelPlanner.lastCommand)
+    }
+
+    /** The twin: `DOC-ADL-3` parity — local-only, no yield; A0's plan byte for byte, and no model is asked. */
+    @Test
+    fun `a launch naming nothing installed is the A0 launch-then-store plan in local-only mode and the model is not asked`() = runTest {
+        val outcomes = listOf("открой veltrix", "открой quendor saga", "открой lumora studio").map { router(localOnly = true).route(it) }
+
+        assertA0StorePlans(outcomes)
+        assertEquals(0, modelPlanner.planCallCount)
+    }
+
+    /** The three A0 sessions those commands start: their goals in the user's words, and the first plan's two steps. */
+    private fun assertA0StorePlans(outcomes: List<CommandOutcome>) {
         outcomes.forEach { assertTrue("expected an agent session, was $it", it is CommandOutcome.AgentSessionStarted) }
         assertEquals(
             listOf(
@@ -109,7 +132,6 @@ class FastPathOverflowSeamTest {
             ),
             agentStore.saved.first().plan.steps.map { it.invocation },
         )
-        assertEquals(0, modelPlanner.planCallCount)
     }
 
     @Test

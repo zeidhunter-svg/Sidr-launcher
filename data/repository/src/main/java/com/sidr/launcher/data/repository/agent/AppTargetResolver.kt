@@ -102,6 +102,21 @@ class AppTargetResolver @Inject constructor(
     }
 
     /**
+     * What a name the MODEL wrote can mean (amendment D1, ADR «2026-11-22 — D1, поправка: имя приложения,
+     * исправленное моделью»; `DeviceMentionBinder`): [candidates] with the word forms taken away — an alias
+     * exactly, or a whole label exactly after the folding; a form of either ([AppCandidates.Confirm]) is
+     * [AppCandidates.None], since the forms exist to meet the USER's words («миравину» for «Миравин»), never the
+     * model's. One answer is never typed as the user typed it — the user did not type it at all — so it is
+     * [AppCandidates.One.foldedOnly], and an irreversible tool makes it a pick ([forIrreversible], owner decision
+     * 2026-11-17), never a bind.
+     */
+    suspend fun exactly(name: String): AppCandidates = when (val found = candidates(name)) {
+        is AppCandidates.Confirm -> AppCandidates.None
+        is AppCandidates.One -> found.copy(foldedOnly = true)
+        else -> found
+    }
+
+    /**
      * Step 2b's search (phase 3b, fork 3b-E as refined in §0.1), read by `ToolMatchPlanner`: the whole
      * slot first, exactly as [candidates]; if nothing answers it, the longest windows of its words that
      * match a label ([AppNameMatcher.matchWindows]). **A window short of the slot is never

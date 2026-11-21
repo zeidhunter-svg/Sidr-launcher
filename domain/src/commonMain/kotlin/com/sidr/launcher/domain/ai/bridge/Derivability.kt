@@ -8,8 +8,12 @@ import com.sidr.launcher.domain.text.TextFolding
  * derivable when its words appear, whole and in order, in the command — compared after [TextFolding]
  * (case, the two dropped mark ranges, Arabic letter variants, an apostrophe inside a word), punctuation
  * ignored. **Exact after folding** (A4′ phase 3b, B-17): «телегу» is not «телега», «Vemblic» is not the
- * «Vemblic'i» the user typed, and a reference to an earlier turn is not in the command at all. Each ends
- * as an honest refusal, never as a guess; relating a typed form to a label is the binder's job, not this one's.
+ * «Vemblic'i» the user typed, and a reference to an earlier turn is not in the command at all. None of them
+ * is a guess: relating a typed form to a label is the binder's job, not this one's. What `BridgeValidator`
+ * makes of a value that is not derivable depends on the mention since amendment D1 (ADR «2026-11-22 — D1,
+ * поправка: имя приложения, исправленное моделью»): an APP mention is admitted as the model's
+ * ([ValueOrigin.ModelGenerated]) — «Claude» for the user's «клод», which no fold relates — and bound by the
+ * device to an exact label or alias only; any other mention is an honest refusal, as before.
  *
  * The default [PlainTextFolding] segments nothing; the bridge passes the platform's folding.
  */

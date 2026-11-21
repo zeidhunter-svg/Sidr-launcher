@@ -36,12 +36,16 @@ import org.junit.Test
 /**
  * A0's agent has no path off the device: the planner is deterministic and both tools are system
  * intents. This proves it rather than asserting it — a sentinel planted in the goal text must reach no
- * outbound channel, in every state including the ones where a model *would* have been consulted.
+ * outbound channel from the session, in every state; and in the four local states it reaches none at all.
  *
  * A4′ phase 3a added the model planner (`ModelPlanner`, asked at `RouteCommandUseCase` step 7 only);
- * this test is where its outbound path is reconciled with the agent branch: the branch still returns
- * before step 7, so the seam is never asked on it. What the bridge sends when it IS asked is
- * `BridgePayloadGuardTest`'s subject (`:app`), read off the payload.
+ * this test is where its outbound path is reconciled with the agent branch. **In the four local states**
+ * (local-only on, online or offline; local-only off and offline; no provider) the branch returns before
+ * step 7 and the seam is never asked. **Online, with a provider, local-only off** — since owner decision 14
+ * (A4′ acceptance tail, task 2; ADR «2026-11-22 — D1, поправка: имя приложения, исправленное моделью») — the
+ * missing app is asked of the model ONCE, with the command, and the session that follows sends nothing more:
+ * one body in all. What the bridge sends when it IS asked is `BridgePayloadGuardTest`'s subject (`:app`), read
+ * off the payload.
  *
  * **Which channel this watches, and why it is the only one.** The agent branch is entered from
  * [RouteCommandUseCase], and that use case takes exactly one dependency that can leave the device: a
@@ -63,7 +67,8 @@ import org.junit.Test
  *    the session, so "it never left" is not "it was never there".
  *  - `the outbound seam is live when the agent branch is not taken` — the same fake planner, wired the
  *    same way, does receive the sentinel on the path where consulting a model is correct. So
- *    `planCallCount == 0` below is a property of the agent branch and not of a disconnected fake.
+ *    `planCallCount == 0` in the local states below (and `== 1` online) is a property of the route and the
+ *    agent branch, not of a disconnected fake.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AgentEgressSentinelGuardTest {
@@ -115,6 +120,9 @@ class AgentEgressSentinelGuardTest {
         appsRepo.appsToReturn = emptyList()
     }
 
+    /** How many bodies the ROUTE had sent when the session started — what the run then adds is the difference. */
+    private var bodiesAtRoute = -1
+
     /**
      * Route the sentinel command and then drive the whole session to a terminal state through the real
      * engine, granting the one consent the A0 plan asks for. Returns the tools that were called.
@@ -124,6 +132,7 @@ class AgentEgressSentinelGuardTest {
 
         val outcome = useCase(localOnly).route("открой $sentinel")
         assertTrue("expected an agent session, was $outcome", outcome is CommandOutcome.AgentSessionStarted)
+        bodiesAtRoute = modelPlanner.planCallCount
 
         val tools = FakeToolExecutor(listOf(notInstalled(), ToolResult.Effected()))
         val run = RunAgentSessionUseCase(AgentExecutor(registry, tools, RuntimeBudget.Default), agentStore)
@@ -154,11 +163,23 @@ class AgentEgressSentinelGuardTest {
         assertNull("an outbound payload was recorded: ${modelPlanner.lastCommand}", modelPlanner.lastCommand)
     }
 
+    /**
+     * **Rewritten on purpose, not weakened** (A4′ acceptance tail, task 2 — owner decision 14, ADR «2026-11-22 —
+     * D1, поправка: имя приложения, исправленное моделью»; plan review C2). Online, with a provider and local-only
+     * off — the one state of the five in which the model is reachable — a recognised launch of an app that is not
+     * installed is now asked of the model ONCE, with the command, before the store plan: the owner-accepted
+     * outbound widening «в сети распознанный запуск отсутствующего приложения уходит модели». The fake declines,
+     * so the store plan starts exactly as before (K1). What this test still holds, as hard as before: **the
+     * session that follows sends nothing more** — one body for the whole session, the command, and not one ask
+     * from the run, its consent or its later steps. The four local states below keep zero bodies.
+     */
     @Test
-    fun `local-only off and online - the whole session runs and nothing leaves the device`() = runTest {
+    fun `local-only off and online - asks the model once and the session sends nothing more`() = runTest {
         connectivity.online = true
         runFullSession(localOnly = false)
-        assertNothingLeft()
+        assertEquals("the route asks the model once, before the store plan", 1, bodiesAtRoute)
+        assertEquals("one body for the whole session: the run, its consent and its steps send none", 1, modelPlanner.planCallCount)
+        assertEquals("the one body is the command itself", "открой $sentinel", modelPlanner.lastCommand)
     }
 
     @Test
@@ -217,7 +238,8 @@ class AgentEgressSentinelGuardTest {
      * Non-vacuity, half two — the assertion this guard would be worthless without. The same
      * [FakeModelPlanner] instance, constructed by the same [useCase] wiring, DOES record the sentinel
      * when FastPath decides nothing and a model is legitimately consulted. So a zero call count in the
-     * six tests above is a fact about the agent branch, not about a fake that was never connected.
+     * four local-state tests above is a fact about the agent branch, not about a fake that was never
+     * connected — and so is the online test's count of exactly one.
      */
     @Test
     fun `the outbound seam is live when the agent branch is not taken`() = runTest {

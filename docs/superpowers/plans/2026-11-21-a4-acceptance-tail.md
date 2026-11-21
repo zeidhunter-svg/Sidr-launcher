@@ -277,6 +277,10 @@
 - [ ] **Шаг 1: падающие тесты:**
   - `IntentActionResolverTest > open with an alias launches the alias target`: алиас «tg» → `org.telegram.plus`,
     «открой tg» → `LaunchAppAction(org.telegram.plus)`; `… an alias whose app is gone is not found` → `NoAppFound`.
+  - `IntentActionResolverTest > a word form of an alias is offered, never launched` (владелец 2026-11-21, телефон:
+    «открой телегу» при алиасе «телега» ушло в магазин) — `AppNameMatcher.wordsMatch(typed, aliasPhrase) == false`
+    (край) → `AmbiguousAppAction(confirm = true)` с одним кандидатом-пакетом алиаса («Вы имели в виду «Plus»?»), как
+    край метки (B-2); точное — запуск.
   - `IntentActionResolverTest > an installed label beats an alias of the same words` — приложение «Камера» и алиас
     «камера» → чужой пакет: запускается установленная «Камера» (Фокус ревью 3).
   - `AppTargetResolverTest > the app slot reads an alias` — «удали приложение tg» → один пакет, без выбора.
@@ -287,7 +291,9 @@
     «Два принципа»).
 - [ ] **Шаг 2: RED** — `--scoped :domain:jvmTest`, затем `--scoped :data:repository:testDebugUnitTest`.
 - [ ] **Шаг 3: реализовать.** Порядок в `IntentActionResolver`: точная метка → алиас (точное совпадение фразы после
-  `CommandNormalizer`) → формы слова (`AppNameMatcher`) → `NoAppFound`. Роутер: шаг «1a» — после FastPath, только при
+  `CommandNormalizer`) → формы слова меток и алиасов (`AppNameMatcher`, край — только предложение) → `NoAppFound`.
+  Замер телефона 2026-11-21 (`intent_match`): «открой телега», «открой tg», «открой телегу» — `LAUNCH_APP` 0.90 →
+  магазин; голые «tg» / «телега» — `UNKNOWN`; алиасы `tg`, `телега` → `org.telegram.plus` на месте. Роутер: шаг «1a» — после FastPath, только при
   `isUndecided()`, **выше** шага 2b; стоит выше шага 3 — это `DOC-ADL-3` применённый (детерминированная память меняет
   исход, который FastPath не решил; модель не спрошена, ничего не ушло) — абзац в KDoc класса, назвать в ADR задачи.
 - [ ] **Шаг 4: GREEN** по обоим модулям; `:domain` ≈ **640**, `:data:repository` ≈ **478**.

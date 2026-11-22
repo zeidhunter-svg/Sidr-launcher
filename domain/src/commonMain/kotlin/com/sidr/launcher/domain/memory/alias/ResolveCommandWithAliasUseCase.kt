@@ -17,13 +17,17 @@ fun interface ResolvedCommandStep {
  * every non-Unknown or already-auto-resolved result passes through unchanged.
  *
  * **Since the A4′ acceptance tail — a fallback path; whether to delete it is the owner's call** (task 3), together
- * with `CommandFeedback.UnknownCommand` (`:feature:launcher`), which is dead in production online. An alias
- * is now read where the command is routed: the whole command at `RouteCommandUseCase` step 1a, an alias and its word
- * forms in FastPath's launch (`IntentActionResolver`, «открой tg»). This class answers only a [CommandOutcome.Unknown]
- * the route hands back, and the route no longer hands one back for a bare alias in any state (step 1a starts its
- * session first); in every state — since task 5 of the tail, for ANY input (local-only, no provider, offline and a model
- * that declines each answer with a `Message`; a decline is `UnderstoodNoAction`) — its `Unknown` branch is dead (plan
- * review M15). Kept, not deleted: an alias whose app the route could not launch still falls through to here unchanged.
+ * with `CommandFeedback.UnknownCommand` (`:feature:launcher`), which is dead in production in every state (the route
+ * returns no `Unknown` since task 5 of the tail; batch 1 review M-1). An alias is now read where the command is routed:
+ * the whole command at `RouteCommandUseCase` step 1a, an alias and its word forms in FastPath's launch
+ * (`IntentActionResolver`, «открой tg»). This class answers only a [CommandOutcome.Unknown] the route hands back, and
+ * the route no longer hands one back for a bare alias in any state (step 1a starts its session first); in every state —
+ * since task 5 of the tail, for ANY input (local-only, no provider, offline and a model that declines each answer with
+ * a `Message`; a decline is `UnderstoodNoAction`) — its `Unknown` branch is dead (plan review M15). Kept, not deleted
+ * (the owner's call): an alias whose step-1a start failed (a store write, registry drift) goes on down the chain — online
+ * to the model, whose decline is «понял, но Sidr так пока не умеет» — and that answer passes through here unchanged;
+ * before task 5 the decline arrived as `Unknown` and the alias was launched here. That narrow regression is named in
+ * the batch-1 ADR of the tail.
  */
 class ResolveCommandWithAliasUseCase(
     private val inner: ResolvedCommandStep,

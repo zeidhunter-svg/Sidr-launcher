@@ -79,8 +79,9 @@ sealed interface CommandMessage {
     data class UnderstandingModelUnavailable(val reason: ModelUnavailableReason) : CommandMessage
 
     /**
-     * The model read the command and found no tool that fits (`ModelPlanning.Declined` at step 7), and FastPath had
-     * yielded nothing the device could answer instead (A4′ acceptance tail, task 5; owner decision 2: б). Not one
+     * The model read the command and found no tool that fits (`ModelPlanning.Declined` at step 7), and nothing had been
+     * handed to it that the device answers instead — no FastPath yield (K1), no step-2b target (K11) — (A4′ acceptance
+     * tail, task 5; owner decision 2: б). Not one
      * of the four «understanding unavailable» states above: understanding happened, only acting is missing — the
      * line says «понял, но так пока не умею», where «неизвестная команда» blamed the command (ADR 1/4 rule 3 now
      * holds for an understood command too). Reached only past the local-only / provider / network gates, so it

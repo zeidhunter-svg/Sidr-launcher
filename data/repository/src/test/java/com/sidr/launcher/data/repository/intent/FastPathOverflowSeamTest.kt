@@ -220,8 +220,9 @@ class FastPathOverflowSeamTest {
      * Task 1 review round 1, Important 1 (controller ruling (a)), the seam half: with the REAL matcher, a bare address
      * `UrlDetector` refuses to open — a Cyrillic «а» (U+0430) in the host, a homograph — is FastPath's defensive
      * search, and it is searched by FastPath even online with a provider; the model is not asked. This is the evidence
-     * that `HandleUserCommandUseCase`'s predicate fires on what the production matcher produces: it classifies the same
-     * normalized text the matcher classified.
+     * that `HandleUserCommandUseCase`'s predicate fires on what the production matcher produces: since batch 1 review
+     * I-1 it classifies the search's QUERY — here the term the matcher's bare-address rule took from `UrlDetector`,
+     * which classifies as an unsafe address again (the two verb twins are below).
      */
     @Test
     fun `online an unsafe bare address is searched by FastPath with the real matcher and the model is not asked`() = runTest {

@@ -72,9 +72,11 @@ sealed interface CommandOutcome {
 
     /**
      * A goal has been handed to the agent, and [id] identifies the session now in flight: a goal FastPath
-     * decided but did not achieve — the app does not exist — (routing step 2), a registered tool's match
-     * (step 2b), a learned command replayed (step 2c, A4′ phase 4), or a card's «Выполнить». The command
-     * surface stops rendering a message and starts rendering session state.
+     * decided but did not achieve — the app does not exist — (routing step 2, and step 7's fallback for a yielded
+     * «нет такого приложения»), a bare alias (step 1a, A4′ acceptance tail task 3), a registered tool's match
+     * (step 2b), a learned command replayed (step 2c, A4′ phase 4), a fresh model reading that needed no card (step 7,
+     * [proposedByModel]), or a card's «Выполнить». The command surface stops rendering a message and starts rendering
+     * session state.
      *
      * [learned] is the form of the learned command this session replays (plan §0.2 B-7, B-10) — the mark the
      * launcher shows while that session is on screen — and `null` for every other start.

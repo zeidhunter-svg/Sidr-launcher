@@ -21,8 +21,9 @@ fun interface ResolvedCommandStep {
  * is now read where the command is routed: the whole command at `RouteCommandUseCase` step 1a, an alias and its word
  * forms in FastPath's launch (`IntentActionResolver`, «открой tg»). This class answers only a [CommandOutcome.Unknown]
  * the route hands back, and the route no longer hands one back for a bare alias in any state (step 1a starts its
- * session first); online — since task 5 of the tail, for ANY input (a model that declines is `UnderstoodNoAction`) — its
- * `Unknown` branch is dead (plan review M15). Kept, not deleted: an alias whose app the route could not launch still falls through to here unchanged.
+ * session first); in every state — since task 5 of the tail, for ANY input (local-only, no provider, offline and a model
+ * that declines each answer with a `Message`; a decline is `UnderstoodNoAction`) — its `Unknown` branch is dead (plan
+ * review M15). Kept, not deleted: an alias whose app the route could not launch still falls through to here unchanged.
  */
 class ResolveCommandWithAliasUseCase(
     private val inner: ResolvedCommandStep,

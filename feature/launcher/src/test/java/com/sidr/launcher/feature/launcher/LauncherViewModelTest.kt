@@ -849,7 +849,7 @@ class LauncherViewModelTest {
             assertEquals(0, fakeExecutor.callCount)
             // The REAL router runs here (`routeUseCase`: local-only off, a provider, online, a model that declines):
             // task 5 of the tail plan — the model read the command and found no tool, so the line says that, not
-            // «unknown command» (which `CommandFeedback.UnknownCommand` still renders where FastPath alone decides).
+            // «unknown command».
             assertEquals(CommandFeedback.Domain(CommandMessage.UnderstoodNoAction), vm.commandFeedback.value)
             // unknown input is preserved so the user can edit it
             assertEquals("zzz", vm.commandInput.value)

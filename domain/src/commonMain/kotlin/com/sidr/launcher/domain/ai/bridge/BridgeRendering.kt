@@ -38,9 +38,14 @@ object BridgeRendering {
      * retry notes. The answer form is `steps` since phase 3b Task 8 (fork 3b-B), from one to
      * [MAX_STEPS_OFFERED], each step `{"tool", "args"}` in an array (`steps = [{…}]`, controller ruling
      * E8-I1: under `PROMPT_ONLY` the model sees no schema); it never mentions references (B-8 — those are
-     * the offering's). 1 187 characters — `ToolSchemaWeightTest` (the cap's «1» → «8» in Task 9 is one
+     * the offering's). 1 292 characters — `ToolSchemaWeightTest` (the cap's «1» → «8» in Task 9 is one
      * character for one; since Task 9's fix round 1 the plan line defines a plan as one or more actions,
-     * in order, one step per action — it no longer contradicts the cap sentence, finding I2).
+     * in order, one step per action — it no longer contradicts the cap sentence, finding I2). Since the A4′
+     * acceptance tail, task 2 (amendment D1, controller ruling T2-R1; 1 187 → 1 292), the app sentence lets the
+     * model write the usual name of an app the user misspelt or transliterated — the validator admits it as the
+     * model's (`ArgSorts.APP` mentions only) and the device binds it to an exact label or alias only; never a
+     * package. `:consumer:jvm` sends this text too: its file mentions carry no app sort, so a «corrected» file name
+     * is still refused (`UNDERIVABLE_MENTION`) and retried once — no binding follows from it.
      */
     val INSTRUCTION: String =
         "You read one request typed into Sidr, an Android home screen, and say what it asks for. You see " +
@@ -58,7 +63,8 @@ object BridgeRendering {
             "destination are null.\n" +
             "\"decline\": nothing listed fits. steps, question and destination are null.\n" +
             "A plan has from one to $MAX_STEPS_OFFERED steps, in order. An argument marked \"app\" must repeat the " +
-            "user's own words for the app exactly as they typed them, never a package name. Never invent a tool, " +
+            "user's own words for the app as they typed them; if those words misspell or transliterate the name of " +
+            "an app you know, write that app's usual name instead. Never write a package name. Never invent a tool, " +
             "an argument or a destination."
 
     /**

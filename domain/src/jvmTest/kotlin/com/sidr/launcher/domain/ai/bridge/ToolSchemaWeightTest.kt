@@ -39,6 +39,13 @@ import org.junit.Test
  * 1 689 → 1 715, the band moved by the same 26 and kept its width (40) and offsets; the marginal cost
  * unchanged (25.10).
  *
+ * Re-measured in the A4′ acceptance tail, task 2 (amendment D1, controller ruling T2-R1), when the app sentence
+ * stopped demanding the user's words «exactly as they typed them» and let the model write the usual name of a
+ * misspelt or transliterated app it knows (119 → 224 characters, +105, predicted from the two sentences before the
+ * run): the instruction 1 187 → 1 292; fifteen tools 1 715 → 1 820, the band moved by the same 105 and kept its
+ * width (40) and offsets; the marginal cost unchanged (25.10). Recorded in ADR «2026-11-22 — D1, поправка: имя
+ * приложения, исправленное моделью».
+ *
  * `B3`'s conclusion stands on the real renderer: two hundred synthetic tools render to about 1 600
  * tokens — the prompt size was never the barrier.
  */
@@ -53,12 +60,12 @@ class ToolSchemaWeightTest {
 
         assertEquals(
             "BridgeRendering.INSTRUCTION changed length; re-measure and update the ADR rather than this pin",
-            1_187,
+            1_292,
             render(0).length,
         )
         val marginal = (render(120).length - render(2).length) / 118.0
         assertTrue("marginal per-tool cost drifted to $marginal (measured ~25.1)", marginal in 24.0..26.5)
-        assertTrue("15 tools render to ${render(15).length} (measured 1 715)", render(15).length in 1_697..1_737)
+        assertTrue("15 tools render to ${render(15).length} (measured 1 820)", render(15).length in 1_802..1_842)
     }
 
     private fun render(n: Int): String {

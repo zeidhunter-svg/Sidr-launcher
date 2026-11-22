@@ -133,6 +133,25 @@ class BridgeRenderingTest {
         )
     }
 
+    /**
+     * Amendment D1, controller ruling T2-R1 (A4′ acceptance tail, task 2): the validator admits an app name the
+     * model corrected, so the instruction must let it write one — «открой клод» → «Claude» — and it would not while
+     * it demanded the user's words «exactly as they typed them». The app is still the user's words as typed, a
+     * misspelling or a transliteration of an app the model knows becomes that app's usual name, and never a
+     * package. Compared whole, as the one sentence it is; the old demand is gone.
+     */
+    @Test
+    fun `the instruction lets the model write the usual name of a misspelt or transliterated app, never a package`() {
+        assertTrue(
+            BridgeRendering.INSTRUCTION.contains(
+                "An argument marked \"app\" must repeat the user's own words for the app as they typed them; if those " +
+                    "words misspell or transliterate the name of an app you know, write that app's usual name instead. " +
+                    "Never write a package name.",
+            ),
+        )
+        assertFalse(BridgeRendering.INSTRUCTION.contains("exactly as they typed them"))
+    }
+
     /** Strict-compatible (D2, b′): every object closes its properties and requires every one of them. */
     @Test
     fun `every object in the schema closes its properties and requires all of them`() {

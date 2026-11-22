@@ -12023,6 +12023,9 @@ C1 ревью плана хвоста приёмки A4′; план `docs/super
 команда, чью цель-приложение шаг 2b не нашёл. Уходит ровно то же, что при любом вопросе шага 7: текст команды
 пользователя дословно, наш статический текст, схема и пределы генерации (`OutboundContextPolicy` не расширяется, нового
 класса содержимого нет). Из мира телефона — ничего: привязка — после ответа, и её исход модели не отдаётся (D1).
+**Исходящее, второе (решение контроллера T2-R1, отдельный коммит той же задачи): изменилось одно авторское предложение
+инструкции** (`BridgeRendering.INSTRUCTION`, ниже); новый класс содержимого не добавлен — это тот же
+`STATIC_SYSTEM_PROMPT`, наш литерал, просканированный `BridgeRenderingTest` на запрещённые и секретные термины.
 
 **Что поправка делает ложным — и где исправлено.**
 - KDoc `Derivability` («Each ends as an honest refusal, never as a guess; relating a typed form to a label is the
@@ -12035,6 +12038,18 @@ C1 ревью плана хвоста приёмки A4′; план `docs/super
   (`BridgeValidatorTest > an app mention the user did not type is rejected as underivable`) удалён и заменён двумя:
   `… > an app the user did not name is admitted as the model's`, `… > a non-app mention the user did not type is still
   refused` (мутация «выводимо всегда» по-прежнему краснит оба).
+- **Инструкция моста** (`BridgeRendering.INSTRUCTION`) требовала «An argument marked "app" must repeat the user's own
+  words for the app exactly as they typed them, never a package name.» — с ней модель, которая слушается, написала бы
+  «клод», и поправка была бы пустой на телефоне. Исправлено решением контроллера T2-R1: «An argument marked "app" must
+  repeat the user's own words for the app as they typed them; if those words misspell or transliterate the name of an
+  app you know, write that app's usual name instead. Never write a package name.» Предложение 119 → 224 символа (+105,
+  предсказано до прогона); `ToolSchemaWeightTest`: инструкция 1 187 → **1 292**, пятнадцать синтетических инструментов
+  1 715 → **1 820** (полоса 1 802…1 842, ширина 40), предельная цена инструмента не изменилась (25,10). Пин нового
+  предложения — `BridgeRenderingTest > the instruction lets the model write the usual name of a misspelt or
+  transliterated app, never a package`. `:consumer:jvm` шлёт тот же текст: у упоминаний файлов сорта нет, так что
+  «исправленное» моделью имя файла по-прежнему отклоняется (`UNDERIVABLE_MENTION`, один повтор) и ни к какой привязке
+  не ведёт — безвредно для песочницы (в худшем случае лишний повтор). Заметка повтора `UNDERIVABLE_MENTION` («Copy the
+  user's own words for the app») не менялась: на Android для упоминаний приложения она больше недостижима.
 - KDoc `RouteCommandUseCase` (шаги 1′, 2, 2b, 7 и доводы о порядке), `HandleUserCommandUseCase`, `FastPathYield`,
   `DeviceMentionBinder`, `AppTargetResolver` — переписаны.
 - Матрица: ячейка `DOC-ADL-3` и строка журнала §6 2026-11-22; `AgentEgressSentinelGuardTest` переписан намеренно (в
@@ -12046,11 +12061,9 @@ C1 ревью плана хвоста приёмки A4′; план `docs/super
   плана хвоста, по чеклисту §0.
 
 **Чего поправка не обещает — находки задачи 2, названы для владельца и задачи 4.**
-- **Инструкция моста не менялась** (`BridgeRendering.INSTRUCTION`: «An argument marked "app" must repeat the user's own
-  words for the app exactly as they typed them»). Модель, которая ей следует, напишет «клод» — это не свяжется, и
-  пользователь получит план магазина (K3). Исправление имени работает, когда модель от этой фразы отступает; шов
-  `MissingAppToModelSeamTest` держит путь от ответа «Claude» до привязки, а не то, что модель его даст. Правка текста —
-  исходящее содержимое и решение владельца/контроллера, не этой задачи.
+- **Что модель напишет «Claude», не держит ни один тест**: инструкция теперь это разрешает (T2-R1, выше), а шов
+  `MissingAppToModelSeamTest` держит путь от ответа «Claude» до привязки; ответ настоящей модели виден только на
+  телефоне.
 - **`launch_app` в продакшене — `EXTERNAL`, не `LOCAL`** (`SystemIntentToolSource`: все проецируемые инструменты
   достают другое приложение). Слова, которые шаг показывает (`query`), — слова модели и помечены
   `ModelGenerated`; поэтому `needsCard()` для исправленного имени **истинен**, и «сразу запуск» задачи 4 не наступит

@@ -82,7 +82,9 @@ sealed interface CommandOutcome {
      * [proposedByModel] (A4′ acceptance tail, task 4 — D3, second amendment; controller ruling K4): the session was
      * started by routing step 7 from a FRESH model reading that needed no interpretation card — no pick owed, no
      * model-written text going out ([com.sidr.launcher.domain.memory.plan.needsCard]) — so the user saw nothing
-     * before it ran; the launcher marks its session card «Предложено моделью». `false` for every other start: a
+     * before it ran; the launcher marks its session card «Предложено моделью» — when that card is shown at all: a simple
+     * session (one `SAFE` step that acted, nothing to undo) closes itself and is never shown (owner answer I12; I12 × K4
+     * is an open owner question, ADR «2026-11-22 — D3, вторая поправка…»). `false` for every other start: a
      * card's «Выполнить», a learned command (it carries [learned] instead), FastPath's and 2b's deterministic plans.
      * Such a start teaches nothing (owner answer I5 «не засчитывать»): there is no `learnable` here on purpose.
      */

@@ -125,7 +125,8 @@ absent).
 - **Learned-plan cache (A4′ phase 4)** — a model reading confirmed three times (one form + template) is kept as
   a form with slots + the validated answer (`learned_plans`, schema 5); step **2c** replays it on the device
   through the same validator, binder and engine, in every network state; a card only for an owed pick or model
-  text going out; the session card says «Выученная команда» + «Забыть»; Settings → «Выученные команды»; databases
+  text going out; the session card says «Выученная команда» + «Забыть» (not a simple one: it closes itself,
+  I12 — only Settings remains); Settings → «Выученные команды»; databases
   and DataStore out of Auto Backup / transfer (`BackupRulesGuardTest`); `:consumer:jvm` parity over a JSON file.
 - **A4′** — see the stage table and its block ADR. **PREVIEW surfaces** (Tasks / Agents / Activity / Terminal) —
   non-functional badged mock-ups, zero fabricated data (owner decision 2026-08-18: they stay).
@@ -257,7 +258,7 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
   **Nothing the model proposes runs before the interpretation card's «Выполнить», and then only through
   the engine — except a learned command** (a form + template the user confirmed three times, step 2c) **and a
   fresh reading that owes no pick and sends no model-written text out** (`needsCard()` false, step 7; marked
-  «Предложено моделью», teaches nothing — ADR «2026-11-22 — D3, вторая поправка…»): each starts its session through
+  «Предложено моделью» on a card that stays, teaches nothing — ADR «2026-11-22 — D3, вторая поправка…»): each starts its session through
   the same engine with no gate skipped; a risky step's consent card is asked every
   time (Fork R4, D3 amended by ADR «2026-11-20 — D3, поправка: выученная команда», signed 2026-11-20;
   `OneModelPathGuardTest` holds that the router is gone and that the launcher's one direct `LauncherAction`

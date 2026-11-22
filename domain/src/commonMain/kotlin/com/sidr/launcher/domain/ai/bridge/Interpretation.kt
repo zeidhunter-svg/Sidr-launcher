@@ -103,6 +103,13 @@ fun Interpretation.Act.plan(): ExecutionPlan? = if (choices.isNotEmpty()) null e
  * [ArgSource.Literal] — **except the words naming the step's app** ([Interpretation.Act.appWords]; controller ruling
  * T2-R2, A4′ acceptance tail task 4): those are bound to a package on this device, and the package — not the words —
  * is what reaches the world. In the step's origin order, as the card lists them.
+ *
+ * **A latent assumption, named** (task 4 review, m5): an [ArgSource.FromStep] argument is never counted — its value is
+ * made by an earlier step at run time. `launch_app` outputs `resolved_query`, which is its label (`query`) — for a name
+ * the model corrected, the MODEL's word. Should an authored description ever make that output referable (`outputs` /
+ * `acceptsRef`), `[launch_app(Claude), web_search(query ← resolved_query)]` would send the model's word out with no card.
+ * No authored Android description declares `outputs` or `acceptsRef` today (`AuthoredToolDescriptions`), so the bridge
+ * admits no such plan; whoever declares one decides whether a reference to a model-written label is model text.
  */
 fun Interpretation.Act.modelTextGoingOut(step: PlanStep): List<String> {
     if (effects[step.index] != ToolEffect.EXTERNAL) return emptyList()

@@ -464,7 +464,8 @@ internal class LauncherCommandSession(
             // A4′ phase 4 (B-7, B-10): a learned command's session — started at once by step 2c, or by a learned
             // card's «Выполнить» — carries its form on into the agent surface, which marks that session's card.
             // A4′ acceptance tail, task 4 (K4): so does a session a fresh model reading started without the card — the
-            // model's mark («Предложено моделью»), the after-the-fact half of `DOC-NYH-1`.
+            // model's mark («Предложено моделью»), the after-the-fact half of `DOC-NYH-1` — drawn only if the session's card
+            // is shown: a simple session closes itself and shows nothing (I12 × K4, an open owner question).
             is CommandOutcome.AgentSessionStarted -> {
                 _feedback.value = CommandFeedback.None
                 agentSession.attach(outcome.id, outcome.learned, outcome.proposedByModel)

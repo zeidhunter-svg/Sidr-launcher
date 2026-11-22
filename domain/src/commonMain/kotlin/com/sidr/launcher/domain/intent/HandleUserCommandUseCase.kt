@@ -79,9 +79,9 @@ class HandleUserCommandUseCase(
      * so does a **confident launch whose whole name resolved to nothing** — FastPath's `NoAppFound` — as
      * [FastPathYield.MissingApp], so the model may correct the name before the store is offered; a name carrying a
      * second goal is withdrawn at the gate as before (phase 1) and yields nothing. Nothing else yields, and answers
-     * exactly as with [yieldToModel] false: a search or a missing app whose words are an unsafe address
-     * (`UrlDetector`'s `SearchFallback` — a defence, not a reading; [isUnsafeAddress]: bare, «найди <адрес>», «открой
-     * <адрес>»), an address FastPath opens (`OpenUrlIntent`), a store search, a launch that resolved (or found several,
+     * exactly as with [yieldToModel] false: a search or a missing app whose words carry an unsafe address
+     * (`UrlDetector`'s `SearchFallback` — a defence, not a reading; [carriesUnsafeAddress]: bare, after a verb, among
+     * other words, touched by punctuation or quotes), an address FastPath opens (`OpenUrlIntent`), a store search, a launch that resolved (or found several,
      * or a form to confirm), a settings route, a simple command, and every outcome below the gate. The match is
      * recorded either way, with the confidence the gate acted on — the yield is a route, not a confidence.
      */
@@ -136,10 +136,10 @@ class HandleUserCommandUseCase(
 
         // (1′) Decision 13: Б — a reachable model gets a confident search before the browser does. Past the gate,
         // before the resolver: nothing is resolved or run here, and the router runs it (`runYielded`) if the model
-        // cannot answer. Only a search, and only one that is a reading of a search: a search of an unsafe address —
-        // bare or after a verb (`isUnsafeAddress`, batch 1 review I-1) — and every other confident intent go on below
-        // exactly as before.
-        if (yieldToModel && intent is LauncherIntent.SearchIntent && !isUnsafeAddress(intent.query)) {
+        // cannot answer. Only a search, and only one that is a reading of a search: a search whose words carry an unsafe
+        // address (`carriesUnsafeAddress`, batch 1 review I-1, re-review B1-I1b) and every other confident intent go on
+        // below exactly as before.
+        if (yieldToModel && intent is LauncherIntent.SearchIntent && !carriesUnsafeAddress(intent.query)) {
             return FastPathAnswer(CommandOutcome.LowConfidence, FastPathYield.Search(intent))
         }
 
@@ -147,11 +147,12 @@ class HandleUserCommandUseCase(
         // («открой клод» → «Claude»). Only a confident launch whose WHOLE name resolved to nothing: a name carrying a
         // second goal never gets here (its claim was withdrawn at the gate above, `overreaches`), and the read is
         // the one already made (`launchResolution`), so nothing is read twice and nothing runs. The router starts the
-        // store plan itself if the model cannot take it (K1) or names an app that is not here (K3). Not a name that is an
-        // unsafe address («открой https://аpple.com» — the matcher opens only a safe one; `isUnsafeAddress`, batch 1
-        // review I-1): that stays FastPath's «нет такого приложения», and step (2) offers the store, as before.
+        // store plan itself if the model cannot take it (K1) or names an app that is not here (K3). Not a name that
+        // carries an unsafe address («открой https://аpple.com», «открой сайт https://аpple.com» — the matcher opens only a
+        // safe one; `carriesUnsafeAddress`, batch 1 review I-1, re-review B1-I1b): that stays FastPath's «нет такого
+        // приложения», and step (2) offers the store, as before.
         val missing = missingApp(launchResolution)
-        if (yieldToModel && missing != null && !isUnsafeAddress(missing.query)) {
+        if (yieldToModel && missing != null && !carriesUnsafeAddress(missing.query)) {
             return FastPathAnswer(CommandOutcome.LowConfidence, FastPathYield.MissingApp(missing))
         }
 
@@ -164,23 +165,38 @@ class HandleUserCommandUseCase(
     }
 
     /**
-     * Whether the words FastPath would hand over are an **address it must not open** (task 1 review round 1,
-     * controller ruling (a); batch 1 review I-1, ruling B1-I1): [UrlDetector] judges [remainder] a domain-shaped but
-     * unsafe address — [UrlClassification.SearchFallback]: a non-ASCII host (a homograph's Cyrillic «а»), punycode, an
-     * unknown TLD, an address carrying a query. Such words are searched (or, after «открой», answered «нет такого
-     * приложения») precisely so that nothing opens them. Handed to the model they could come back as `open_url` in the
-     * user's own words — a reading that owes no card and starts at once (D3, second amendment), the engine's consent
-     * card the only thing left before a look-alike host opens — so they are never yielded, in any state.
+     * Whether the words FastPath would hand over **carry an address it must not open** (task 1 review round 1,
+     * controller ruling (a); batch 1 review I-1, ruling B1-I1; its re-review, ruling B1-I1b): some word of [remainder],
+     * stripped of the punctuation and quotes around it ([ADDRESS_WRAPPING]), is what [UrlDetector] judges a
+     * domain-shaped but unsafe address — [UrlClassification.SearchFallback]: a non-ASCII host (a homograph's Cyrillic
+     * «а»), punycode, an unknown TLD, an address carrying a query. Such words are searched (or, after «открой», answered
+     * «нет такого приложения») precisely so that nothing opens them. Handed to the model they could come back as
+     * `open_url` in the user's own words — a reading that owes no card and starts at once (D3, second amendment), the
+     * engine's consent card the only thing left before a look-alike host opens — so they are never yielded, in any
+     * state: FastPath answers exactly as without the model, as it did before the batch.
      *
-     * Judged on the **remainder** — a search's `query`, a missing app's name — and not on the whole command: a verb
-     * is followed by a space, and [UrlDetector] answers [UrlClassification.None] for any text with whitespace in it,
-     * so the round-1 predicate, which read the whole command, let «найди https://аpple.com» through (the batch review's
-     * I-1). The bare address is covered too: the matcher's bare-address rule searches exactly the term [UrlDetector]
-     * returned, and that term classifies as `SearchFallback` again. **Not covered, named:** an address inside a longer
-     * remainder («найди https://аpple.com отзывы») is no address to [UrlDetector] and still yields.
+     * Judged on the **remainder** — a search's `query`, a missing app's name — **word by word**, because [UrlDetector]
+     * classifies one bare token and answers [UrlClassification.None] for anything else: text with whitespace in it (so
+     * the round-1 predicate, which read the whole command, let «найди https://аpple.com» through — the batch review's
+     * I-1 — and the fix wave's, which read the whole remainder, let «открой сайт https://аpple.com» and «найди
+     * https://аpple.com отзывы» through), and an address touched by punctuation the normalizer keeps («…com.» is an empty
+     * last label, «…com,» / «…com!» a TLD that is not letters, ««https://…»» a scheme that is not `https` — the
+     * re-review's shape (b)). The bare address is covered too: the matcher's bare-address rule searches exactly the term
+     * [UrlDetector] returned, and that term classifies as `SearchFallback` again.
+     *
+     * **The cost, named** (ruling B1-I1b): any domain-shaped word [UrlDetector] would not open keeps the whole command
+     * from the model — «найди node.js туториал» («js» is no curated TLD) is FastPath's search, «открой config.yaml» its
+     * «нет такого приложения», as they were before decision 13 and decision 14. A SAFE address does not: «найди отзывы о
+     * lumora.com» still yields. **Not covered here** (no FastPath verb, or nothing [UrlDetector] calls unsafe): an
+     * undecided command carrying an address («зайди на https://аpple.com») reaches the model as it has since phase 3a,
+     * and a homograph in the TLD («https://apple.cоm», a Cyrillic «о») is no address to [UrlDetector] at all — both named
+     * in the batch-1 ADR for the owner (a host check where an address is opened).
      */
-    private fun isUnsafeAddress(remainder: String): Boolean =
-        UrlDetector.classify(remainder) is UrlClassification.SearchFallback
+    private fun carriesUnsafeAddress(remainder: String): Boolean =
+        remainder.split(WHITESPACE).any { word ->
+            val bare = word.trim { it in ADDRESS_WRAPPING }
+            bare.isNotEmpty() && UrlDetector.classify(bare) is UrlClassification.SearchFallback
+        }
 
     /**
      * A claimed launch whose app name did not resolve: is that a fact about the WORLD (no such app —
@@ -272,6 +288,16 @@ class HandleUserCommandUseCase(
          * launch a name that does not resolve — named here, not guarded.
          */
         const val UNEARNED_LAUNCH_CONFIDENCE = 0.30f
+
+        /** Words of a remainder, as `CommandNormalizer` leaves them: separated by whitespace. */
+        val WHITESPACE = Regex("\\s+")
+
+        /**
+         * What may touch an address in typed text and is not part of it (ruling B1-I1b): quotes and guillemets of the
+         * three locales, brackets, and sentence punctuation. Stripped from both ends of a word — wider than «trailing
+         * `.,!?;:`», which is harmless: stripping can only find MORE unsafe addresses, never open one.
+         */
+        const val ADDRESS_WRAPPING = "«»“”„‟\"'‘’‚‹›()[]{}<>.,!?;:…"
     }
 
     private fun LauncherIntent.toMatchType(): IntentMatchType = when (this) {

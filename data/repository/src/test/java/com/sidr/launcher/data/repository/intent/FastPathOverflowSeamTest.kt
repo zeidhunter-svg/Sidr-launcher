@@ -287,4 +287,53 @@ class FastPathOverflowSeamTest {
         assertEquals(0, modelPlanner.planCallCount)
         assertTrue("nothing is executed by the route", executor.executedActions.isEmpty())
     }
+
+    /**
+     * Batch 1 fix-wave re-review (controller ruling B1-I1b), the seam half of shape (a): with the REAL matcher an unsafe
+     * address among other words — «найди <омограф> отзывы» (a search whose query is two words), «открой сайт <омограф>»
+     * (a launch of «сайт <омограф>», which no app answers) — is FastPath's online, as before the batch: the search runs,
+     * A0's store plan starts in the user's words. The model, scripted to open the homograph, is not asked.
+     */
+    @Test
+    fun `online an unsafe address among other words stays FastPath's with the real matcher and the model is not asked`() = runTest {
+        modelPlanner.answer = opensTheHomograph
+
+        val search = router().route("найди https://\u0430pple.com отзывы")
+        val launch = router().route("открой сайт https://\u0430pple.com")
+
+        assertEquals(CommandOutcome.Executed, search)
+        assertEquals(ExecutableAction.OpenSearchAction("https://\u0430pple.com отзывы", SearchTarget.WEB), executor.executedActions.single())
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), launch)
+        assertEquals(
+            AgentGoal("открой сайт https://\u0430pple.com", GoalShape.AppNotInstalled("сайт https://\u0430pple.com")),
+            agentStore.saved.single().goal,
+        )
+        assertEquals(0, modelPlanner.planCallCount)
+    }
+
+    /**
+     * The seam half of shape (b): the real matcher and `CommandNormalizer` keep a full stop, an exclamation mark or
+     * guillemets touching the address, and `UrlDetector` alone then sees no address at all. Online each is FastPath's,
+     * as before the batch; the model is not asked.
+     */
+    @Test
+    fun `online an unsafe address touched by punctuation stays FastPath's with the real matcher and the model is not asked`() = runTest {
+        modelPlanner.answer = opensTheHomograph
+
+        val stop = router().route("найди https://\u0430pple.com.")
+        val bang = router().route("открой https://\u0430pple.com!")
+        val quoted = router().route("открой «https://\u0430pple.com»")
+
+        assertEquals(CommandOutcome.Executed, stop)
+        assertEquals(ExecutableAction.OpenSearchAction("https://\u0430pple.com.", SearchTarget.WEB), executor.executedActions.single())
+        assertEquals(listOf(CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), CommandOutcome.AgentSessionStarted(AgentSessionId("s2"))), listOf(bang, quoted))
+        assertEquals(
+            listOf(
+                AgentGoal("открой https://\u0430pple.com!", GoalShape.AppNotInstalled("https://\u0430pple.com!")),
+                AgentGoal("открой «https://\u0430pple.com»", GoalShape.AppNotInstalled("«https://\u0430pple.com»")),
+            ),
+            agentStore.saved.map { it.goal },
+        )
+        assertEquals(0, modelPlanner.planCallCount)
+    }
 }

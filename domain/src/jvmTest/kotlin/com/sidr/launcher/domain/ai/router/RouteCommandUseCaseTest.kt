@@ -1757,6 +1757,80 @@ class RouteCommandUseCaseTest {
         assertEquals("the model is never asked", 0, planner.planCallCount)
     }
 
+    /**
+     * Batch 1 fix-wave re-review (controller ruling B1-I1b): the same holds for an unsafe address that is not the whole
+     * remainder — (a) among other words, (b) touched by punctuation or quotes. Online, each search is FastPath's and
+     * each launch is A0's store plan in the user's words; the model — scripted to open the look-alike address in the
+     * user's own words, a reading with no card owed — is never asked.
+     */
+    @Test
+    fun `online an unsafe address among other words or touched by punctuation stays FastPath's and the model is never asked`() = runTest {
+        planner.answer = opensTheHomograph()
+        val searches = UNSAFE_TOUCHED + "$HOMOGRAPH_ADDRESS отзывы"
+        val launches = UNSAFE_TOUCHED + "сайт $HOMOGRAPH_ADDRESS"
+        val route = useCase()
+
+        val searched = searches.map { remainder ->
+            matcher.intentToReturn = LauncherIntent.SearchIntent(remainder, SearchTarget.WEB)
+            matcher.confidenceToReturn = 0.90f
+            route.route("найди $remainder")
+        }
+        appsRepo.appsToReturn = emptyList()
+        val launched = launches.map { remainder ->
+            driveAppLaunch(remainder)
+            route.route("открой $remainder")
+        }
+
+        assertEquals(searches.map { CommandOutcome.Executed }, searched)
+        assertEquals(searches.map { ExecutableAction.OpenSearchAction(it, SearchTarget.WEB) }, executor.executedActions)
+        assertEquals(launches.indices.map { CommandOutcome.AgentSessionStarted(AgentSessionId("s${it + 1}")) }, launched)
+        assertEquals(
+            "A0's store plan for each, in the user's words",
+            launches.map { AgentGoal("открой $it", GoalShape.AppNotInstalled(it)) },
+            agentStore.saved.map { it.goal },
+        )
+        assertEquals("the model is never asked", 0, planner.planCallCount)
+    }
+
+    /**
+     * The control of B1-I1b, pinned as it is: a verb command naming a SAFE, ASCII, domain-shaped address — among other
+     * words, or touched by a full stop — still goes to the model online (decision 13: Б, 14); here the model declines,
+     * and the device answers as FastPath would (K1): the search, the store plan.
+     */
+    @Test
+    fun `online a verb command naming a safe address still goes to the model`() = runTest {
+        planner.answer = ModelPlanning.Declined
+        val route = useCase()
+
+        matcher.intentToReturn = LauncherIntent.SearchIntent("отзывы о lumora.com", SearchTarget.WEB)
+        matcher.confidenceToReturn = 0.90f
+        val review = route.route("найди отзывы о lumora.com")
+        matcher.intentToReturn = LauncherIntent.SearchIntent("lumora.com.", SearchTarget.WEB)
+        val stopped = route.route("найди lumora.com.")
+        driveAppLaunch("сайт lumora.com")
+        appsRepo.appsToReturn = emptyList()
+        val site = route.route("открой сайт lumora.com")
+
+        assertEquals(CommandOutcome.Executed, review)
+        assertEquals(CommandOutcome.Executed, stopped)
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), site)
+        assertEquals(AgentGoal("открой сайт lumora.com", GoalShape.AppNotInstalled("сайт lumora.com")), agentStore.saved.single().goal)
+        assertEquals("each was asked of the model", 3, planner.planCallCount)
+    }
+
+    /** The model's `open_url` of the homograph in the USER's words — no card owed, so a route that asked would start it. */
+    private fun opensTheHomograph() = ModelPlanning.Proposed(
+        listOf(
+            ProposedStep(
+                tool = OPEN_URL,
+                args = mapOf("url" to HOMOGRAPH_ADDRESS),
+                origins = mapOf("url" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                risk = ActionRiskLevel.CONFIRM,
+                effect = ToolEffect.EXTERNAL,
+            ),
+        ),
+    )
+
     /** The model reads the «search» as a question: the assistant, prefilled and unsent — the browser does not open. */
     @Test
     fun `a yielded search the model sends to the assistant opens the assistant`() = runTest {
@@ -1903,7 +1977,8 @@ class RouteCommandUseCaseTest {
     /**
      * The control of M-5: the fallback is for what FastPath YIELDED. A 2b target K2 handed over keeps K11 as it is —
      * «нет такого приложения» in the user's words for `NotFound` (held above); a binding that failed short of that is
-     * the binding's own answer, as before the batch: «не понял» in the words written for it, or a failure.
+     * the binding's own answer, as before the fix wave (before batch 1 such a target never reached the model at all —
+     * R14-39, partly reversed by K2): «не понял» in the words written for it, or a failure.
      */
     @Test
     fun `a 2b target whose reading fails short of not found keeps the binding's own answer`() = runTest {
@@ -2407,5 +2482,8 @@ class RouteCommandUseCaseTest {
 
         /** «apple.com» with a Cyrillic «а» (U+0430): a non-ASCII host, which `UrlDetector` routes to a search. */
         const val HOMOGRAPH_ADDRESS = "https://\u0430pple.com"
+
+        /** [HOMOGRAPH_ADDRESS] touched by what a command carries and the normalizer keeps (B1-I1b): `UrlDetector` alone says none. */
+        val UNSAFE_TOUCHED = listOf("$HOMOGRAPH_ADDRESS.", "$HOMOGRAPH_ADDRESS,", "$HOMOGRAPH_ADDRESS!", "«$HOMOGRAPH_ADDRESS»", "\"$HOMOGRAPH_ADDRESS\"")
     }
 }

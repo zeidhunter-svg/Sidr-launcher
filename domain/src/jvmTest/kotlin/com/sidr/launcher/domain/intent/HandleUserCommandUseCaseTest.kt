@@ -604,6 +604,67 @@ class HandleUserCommandUseCaseTest {
         assertEquals("each search ran once; no launch ran", addresses.size, fakeExecutor.callCount)
     }
 
+    /**
+     * Batch 1 fix-wave re-review (controller ruling B1-I1b): the defence holds for an unsafe address that is not the
+     * whole remainder — (a) among other words («найди <адрес> отзывы», «открой сайт <адрес>») and (b) touched by
+     * punctuation or quotes («<адрес>.», «<адрес>,», «<адрес>!», ««<адрес>»», «"<адрес>"»), which `CommandNormalizer`
+     * keeps. The precondition pins that `UrlDetector` alone answers no unsafe address for each remainder — the
+     * one-token predicate of the fix wave let every one of them through — and FastPath answers each exactly as with
+     * the model unreachable: the search runs, «нет такого приложения» is decided.
+     */
+    @Test fun `an unsafe address among other words or touched by punctuation is never yielded`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(InstalledApp("net.fixture.calc", "Калькулятор"))
+        val searches = UNSAFE_TOUCHED + "https://\u0430pple.com отзывы"
+        val launches = UNSAFE_TOUCHED + "сайт https://\u0430pple.com"
+
+        (searches + launches).forEach { remainder ->
+            assertTrue(remainder, UrlDetector.classify(remainder) !is UrlClassification.SearchFallback)
+        }
+        searches.forEach { remainder ->
+            matcherReturns(LauncherIntent.SearchIntent(remainder, SearchTarget.WEB), 0.90f)
+            assertEquals(remainder, FastPathAnswer(CommandOutcome.Executed), useCase.answer("найди $remainder", yieldToModel = true))
+            assertEquals(remainder, ExecutableAction.OpenSearchAction(remainder, SearchTarget.WEB), fakeExecutor.executedActions.last())
+        }
+        launches.forEach { remainder ->
+            matcherReturns(LauncherIntent.LaunchAppIntent(remainder), 0.90f)
+            assertEquals(
+                remainder,
+                FastPathAnswer(CommandOutcome.Message(CommandMessage.NoAppFound(remainder))),
+                useCase.answer("открой $remainder", yieldToModel = true),
+            )
+        }
+        assertEquals("each search ran once; no launch ran", searches.size, fakeExecutor.callCount)
+    }
+
+    /**
+     * The control of B1-I1b, pinned as it is, not changed: a verb command naming a SAFE, ASCII, domain-shaped address —
+     * among other words, bare, or touched by a full stop — still yields to the model, a search as a search and a
+     * launch as a missing app. The token-wise reading takes nothing from a search or a launch whose address is safe.
+     */
+    @Test fun `a verb command naming a safe address still yields as before`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(InstalledApp("net.fixture.calc", "Калькулятор"))
+        val searches = listOf("отзывы о lumora.com", "lumora.com", "lumora.com.")
+        val launches = listOf("сайт lumora.com")
+
+        searches.forEach { remainder ->
+            matcherReturns(LauncherIntent.SearchIntent(remainder, SearchTarget.WEB), 0.90f)
+            assertEquals(
+                remainder,
+                FastPathAnswer(CommandOutcome.LowConfidence, FastPathYield.Search(LauncherIntent.SearchIntent(remainder, SearchTarget.WEB))),
+                useCase.answer("найди $remainder", yieldToModel = true),
+            )
+        }
+        launches.forEach { remainder ->
+            matcherReturns(LauncherIntent.LaunchAppIntent(remainder), 0.90f)
+            assertEquals(
+                remainder,
+                FastPathAnswer(CommandOutcome.LowConfidence, FastPathYield.MissingApp(CommandMessage.NoAppFound(remainder))),
+                useCase.answer("открой $remainder", yieldToModel = true),
+            )
+        }
+        assertEquals("nothing is executed before the model is asked", 0, fakeExecutor.callCount)
+    }
+
     // ── A4′ acceptance tail, owner decision 14 — «no such app» yields to a reachable model ──────────
     // With the model reachable (`yieldToModel`, controller ruling K14) a confident launch whose name resolves to
     // nothing is not answered «нет такого приложения» by FastPath: it hands the fact over
@@ -681,5 +742,20 @@ class HandleUserCommandUseCaseTest {
             if (throwOnRecord) throw RuntimeException("boom")
             return result
         }
+    }
+
+    private companion object {
+        /**
+         * One unsafe address (the Cyrillic «а», U+0430, of a homograph) touched by what a typed command carries and
+         * `CommandNormalizer` keeps: a full stop (an empty last label for `UrlDetector`), a comma and an exclamation mark
+         * (the TLD is no longer letters), guillemets and straight quotes (the scheme reads «https / "https).
+         */
+        val UNSAFE_TOUCHED = listOf(
+            "https://\u0430pple.com.",
+            "https://\u0430pple.com,",
+            "https://\u0430pple.com!",
+            "«https://\u0430pple.com»",
+            "\"https://\u0430pple.com\"",
+        )
     }
 }

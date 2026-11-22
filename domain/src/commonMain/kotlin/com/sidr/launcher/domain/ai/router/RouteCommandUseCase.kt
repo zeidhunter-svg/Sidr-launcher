@@ -159,9 +159,11 @@ import kotlinx.coroutines.flow.first
  *    ([CommandOutcome.Interpreted.learnable], A4′ phase 4 B-8): computed here, from the validated steps
  *    before binding, never inside `toCommandOutcome` (the remainder card shares that and teaches nothing);
  *    nothing is recorded here — the launcher records it once «Выполнить» has started the session. A reading started
- *    without a card teaches nothing (owner answer I5 «не засчитывать»): the cache is not asked. A reading for
- *    2b's empty app target (K2), or after a yielded «нет такого приложения», teaches nothing (review round 1 of
- *    task 2, I1: 2c, where a lesson is replayed, is not on its way back without the model).
+ *    without a card teaches nothing (owner answer I5 «не засчитывать»): the cache is not asked — nor for a reading
+ *    that needed no card and is on it only because its start failed (batch 1 review M-6: a reading teaches only when
+ *    [needsCard] is true). A reading for 2b's empty app target (K2), or after a yielded «нет такого приложения»,
+ *    teaches nothing (review round 1 of task 2, I1: 2c, where a lesson is replayed, is not on its way back without
+ *    the model).
  *
  * **Step 1a sits above step 3, and that is `DOC-ADL-3` applied, not bent** (A4′ acceptance tail, task 3; no
  * amendment). The rule's parity is two claims — the model planner is not consulted, and nothing leaves the device —
@@ -408,12 +410,18 @@ class RouteCommandUseCase(
                 // decided store plan, answered before 2c. Three confirmations would pin a learned command that never
                 // runs in those states. (Online a yielded missing app is undecided and does reach 2c — ruled out all
                 // the same: one rule for both, the lesson is not offered.)
-                val teaches = claimed == null && fastPath.yielded !is FastPathYield.MissingApp
+                //
+                // Batch 1 review M-6 (controller ruling B1-M6): and only a reading that NEEDED the card teaches —
+                // `needsCard()`, a pick owed or the model's text going out. A reading that needed none is on the card
+                // below only because its start failed; its lesson is the no-card form owner answer I5 keeps out.
+                val teaches = claimed == null && fastPath.yielded !is FastPathYield.MissingApp &&
+                    (binding as? Binding.Bound)?.interpretation?.needsCard() == true
                 // D3, second amendment (A4′ acceptance tail, task 4; owner answer «13 / D3: да»): a bound reading that
                 // owes no pick and sends none of the model's own text off the phone starts at once, through the engine —
                 // the same rule as a learned command at 2c ([needsCard]); a risky step still stops at the engine's
                 // consent card. Such a start teaches nothing (owner answer I5 «не засчитывать»): the cache is not even
-                // asked. A start that fails is not lost — the reading comes back as the card, as before the amendment.
+                // asked. A start that fails is not lost — the reading comes back as the card, as before the amendment,
+                // and teaches nothing either (`teaches` above: it did not need the card, M-6).
                 if (binding is Binding.Bound) startWithoutCard(binding.interpretation)?.let { return it }
                 if (outcome is CommandOutcome.Interpreted) {
                     outcome.copy(learnable = if (teaches) learnedPlans.learnable(command, answer.steps) else null)
@@ -543,7 +551,8 @@ class RouteCommandUseCase(
      * of the engine is unchanged: `startPlanned` validates the plan against the registry, and the engine's consent
      * checkpoint stops a risky step (`requiresConsent(risk)`, `DOC-ADL-1`) — `uninstall_app`, `open_url`. `null` — the
      * reading needs the card, or the start failed ([OperationResult.Failure], a plan the registry refuses) — and step 7
-     * answers with the card exactly as before the amendment.
+     * answers with the card as before the amendment; after a failed start that card teaches nothing (batch 1 review
+     * M-6: the reading did not need it).
      */
     private suspend fun startWithoutCard(act: Interpretation.Act): CommandOutcome? {
         val plan = act.plan() ?: return null

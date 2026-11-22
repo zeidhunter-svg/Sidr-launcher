@@ -816,8 +816,16 @@ class RouteCommandUseCaseTest {
 
     /**
      * D3, second amendment: a reading that would start at once but whose start FAILS — the store refused the save, or
-     * the registry refuses the plan — is not lost: it comes back as the card, as before the amendment, with what it
-     * would teach (a card's «Выполнить» is a confirmation, B-8). Nothing is started.
+     * the registry refuses the plan — is not lost: it comes back as the card, as before the amendment. Nothing is
+     * started.
+     *
+     * **It teaches nothing** (batch 1 review M-6, controller ruling B1-M6; was «with what it would teach»): a reading
+     * teaches only when it NEEDED the card — `needsCard()` true, a pick owed or the model's text going out (owner answer
+     * I5 «не засчитывать»). This one needed none; it is on the card only because its start failed, and its lesson —
+     * «поищи <slot>» → `web_search(slot)` in the user's words — is exactly the form I5 keeps out of the cache (three of
+     * them would pin a learned «поищи …» that cancels decision 13: Б). The cache is not even asked. The control — a
+     * reading that needs the card is asked and its lesson rides on it — is `a session started without a card teaches
+     * nothing`'s second half.
      */
     @Test
     fun `a fresh reading whose start fails keeps the card`() = runTest {
@@ -842,12 +850,14 @@ class RouteCommandUseCaseTest {
             choices = emptyList(),
         )
 
+        val lessons = CountingLessons(lesson)
         agentStore.failNextSave = true
-        val storeFailed = useCase(learnedPlans = CountingLessons(lesson)).route("поищи орвелин")
-        val refused = useCase(agentRegistry = FakeToolRegistry(emptyList()), learnedPlans = CountingLessons(lesson)).route("поищи орвелин")
+        val storeFailed = useCase(learnedPlans = lessons).route("поищи орвелин")
+        val refused = useCase(agentRegistry = FakeToolRegistry(emptyList()), learnedPlans = lessons).route("поищи орвелин")
 
-        assertEquals("the store refused the save", CommandOutcome.Interpreted(card, learnable = lesson), storeFailed)
-        assertEquals("the registry refused the plan", CommandOutcome.Interpreted(card, learnable = lesson), refused)
+        assertEquals("the store refused the save", CommandOutcome.Interpreted(card, learnable = null), storeFailed)
+        assertEquals("the registry refused the plan", CommandOutcome.Interpreted(card, learnable = null), refused)
+        assertEquals("a card owed only to a failed start is not asked what it would teach", 0, lessons.asked)
         assertTrue("nothing is started", agentStore.saved.isEmpty())
     }
 

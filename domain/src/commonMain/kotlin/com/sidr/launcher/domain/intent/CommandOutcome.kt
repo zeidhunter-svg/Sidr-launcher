@@ -106,7 +106,8 @@ sealed interface CommandOutcome {
      * (`needsCard`) or when its start without a card failed; any other fresh reading is started at once and comes
      * back as [AgentSessionStarted] with [AgentSessionStarted.proposedByModel]:
      *  - [learnable] — what a fresh, bound reading would teach if it runs (B-8), set by step 7 only; `null` for
-     *    a reading with nothing to learn, a replay, and a remainder card;
+     *    a reading with nothing to learn, a replay, a remainder card, and — batch 1 review M-6 — a reading that is on
+     *    the card only because its start without one failed (only a reading that needed the card teaches);
      *  - [learned] — the form a replay came from, for the card's «Выполнить» to carry the mark on into
      *    [AgentSessionStarted.learned] (the launcher's half, phase 4 Task 7); `null` for a fresh reading.
      */

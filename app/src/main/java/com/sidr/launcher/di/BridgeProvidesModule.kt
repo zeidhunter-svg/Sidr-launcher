@@ -19,10 +19,12 @@ import com.sidr.launcher.domain.ai.bridge.ToolDescriptions
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
 import com.sidr.launcher.domain.connectivity.ConnectivityChecker
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
+import com.sidr.launcher.domain.memory.alias.AliasStore
 import com.sidr.launcher.domain.memory.plan.DefaultLearnedPlans
 import com.sidr.launcher.domain.memory.plan.LearnedPlanStore
 import com.sidr.launcher.domain.memory.plan.LearnedPlans
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
+import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.domain.security.SecureSecretStore
 import com.sidr.launcher.domain.text.TextFolding
 import com.sidr.launcher.domain.tool.ToolRegistry
@@ -120,7 +122,14 @@ object BridgeProvidesModule {
         folding: TextFolding,
     ): LearnedPlans = DefaultLearnedPlans(store, registry, descriptions, BridgeFilter.ANDROID_OFFERED_LEVELS, binder, folding)
 
-    /** [learnedPlans] has no default here (B-12): the graph cannot build a route without step 2c's cache. */
+    /**
+     * [learnedPlans] has no default here (B-12): the graph cannot build a route without step 2c's cache.
+     *
+     * Step 1a's [aliases] and [installedApps] (A4′ acceptance tail, task 3) — the one [AliasStore] binding
+     * (`MemoryBindsModule`) and the one app list — DO carry defaults, for the hand-built call in
+     * `BridgePayloadGuardTest` only: Hilt passes every parameter and ignores a Kotlin default, so the graph always
+     * builds the route with the device's store and list.
+     */
     @Provides
     @Singleton
     fun provideRouteCommandUseCase(
@@ -132,6 +141,8 @@ object BridgeProvidesModule {
         connectivityChecker: ConnectivityChecker,
         startAgentSession: StartAgentSessionUseCase,
         learnedPlans: LearnedPlans,
+        aliases: AliasStore = AliasStore.NONE,
+        installedApps: InstalledAppsRepository? = null,
     ): RouteCommandUseCase = RouteCommandUseCase(
         handleUserCommand = handleUserCommand,
         modelPlanner = modelPlanner,
@@ -141,5 +152,7 @@ object BridgeProvidesModule {
         connectivityChecker = connectivityChecker,
         startAgentSession = startAgentSession,
         learnedPlans = learnedPlans,
+        aliases = aliases,
+        installedApps = installedApps,
     )
 }

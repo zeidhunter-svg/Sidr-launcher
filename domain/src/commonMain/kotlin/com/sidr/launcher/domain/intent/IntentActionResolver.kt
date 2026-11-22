@@ -1,11 +1,17 @@
 package com.sidr.launcher.domain.intent
 
+import com.sidr.launcher.domain.memory.alias.Alias
+import com.sidr.launcher.domain.memory.alias.AliasStore
+import com.sidr.launcher.domain.memory.alias.appPackageOrNull
+import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.text.AppNameMatcher
 import com.sidr.launcher.domain.text.NameMatch
 import com.sidr.launcher.domain.text.PlainTextFolding
 import com.sidr.launcher.domain.text.TextFolding
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
 
 /**
  * Use case: maps a [LauncherIntent] to an [ExecutableAction].
@@ -21,10 +27,31 @@ import com.sidr.launcher.domain.text.TextFolding
  * with only «Lumora» installed is still «no such app», because the extra words may name another app. One
  * exact label launches; several are a choice; a word FORM of one or more labels («миравину» for
  * «Миравин») is only ever offered, never launched — [ExecutableAction.AmbiguousAppAction.confirm].
+ *
+ * **An alias is read first** (A4′ acceptance tail, task 3; owner decision 3, controller ruling K10). An alias is the
+ * user's explicit naming of an app (`set_app_alias`, the aliases screen), so it answers before a label, as in
+ * `AppTargetResolver` (step 2b, the bridge) — one order on every path. The order, over [aliases] and the installed
+ * apps, an alias counting only while its app is installed:
+ *  1. the alias stored under exactly these words, or one the words name exactly after the [folding] — launches
+ *     («открой tg»; «камера» as an alias opens its app, not the app labelled «Камера»); several aliases' apps are a
+ *     choice;
+ *  2. an exact label, as before — unless a FORM of an alias also answers (3);
+ *  3. a word FORM of an alias («телегу» for «телега») **launches** — owner 2026-11-21: «алиасы не спрашивать — лишний
+ *     слой» — when no label of another app answers too; when one does (its form or the very label), the alias's app
+ *     and that app are offered as a choice ([ExecutableAction.AmbiguousAppAction], `confirm` false), nothing guessed;
+ *  4. a word form of a label alone is offered for confirmation, as before (B-2);
+ *  5. else «нет такого приложения».
+ * A pinned launch (below) reads no alias. **An unreadable alias store leaves the launch to the labels** — what
+ * FastPath answered before it read aliases at all: a `find` that fails is «no alias under these words», a list that
+ * throws is «no aliases». That is NOT `AppTargetResolver`'s rule (it answers `Unavailable`, ruling E4-F1, because it
+ * feeds an irreversible tool); a launch is `SAFE`, and a broken alias table does not stop every typed launch.
  */
 class IntentActionResolver(
     private val repository: InstalledAppsRepository,
     private val folding: TextFolding = PlainTextFolding,
+    // A4′ acceptance tail, task 3: `NONE` by default, so every construction site that predates it resolves exactly as
+    // before; the production provider passes the device's store (`IntentProvidesModule.provideIntentActionResolver`).
+    private val aliases: AliasStore = AliasStore.NONE,
 ) {
     suspend fun resolve(intent: LauncherIntent): OperationResult<ExecutableAction> = when (intent) {
         is LauncherIntent.LaunchAppIntent -> resolveAppLaunch(intent)
@@ -69,24 +96,79 @@ class IntentActionResolver(
             )
         }
 
-        return OperationResult.Success(
-            when (val match = AppNameMatcher.matchWhole(intent.displayNameQuery, apps, folding)) {
-                is NameMatch.Exact -> if (match.apps.size == 1) {
-                    ExecutableAction.LaunchAppAction(
-                        packageName = match.apps[0].packageName,
-                        activityName = match.apps[0].activityName,
-                    )
-                } else {
-                    ExecutableAction.AmbiguousAppAction(query = intent.displayNameQuery, candidates = match.apps)
-                }
-                is NameMatch.Edge -> ExecutableAction.AmbiguousAppAction(
-                    query = intent.displayNameQuery,
-                    candidates = match.apps,
-                    confirm = true,
-                )
-                NameMatch.None -> ExecutableAction.ShowMessageAction(CommandMessage.NoAppFound(intent.displayNameQuery))
-            },
-        )
+        return OperationResult.Success(byName(intent.displayNameQuery, apps))
+    }
+
+    /** The order of the class KDoc: an alias exactly, a label exactly, a form of an alias, a form of a label, none. */
+    private suspend fun byName(query: String, apps: List<InstalledApp>): ExecutableAction {
+        // (1) The alias stored under exactly these words — while its app is installed.
+        storedAliasPackage(CommandNormalizer.normalize(query))
+            ?.let { pkg -> apps.firstOrNull { it.packageName == pkg } }
+            ?.let { return launch(it) }
+
+        // (1) …or an alias the words name exactly after the folding (a stress mark the stored key does not carry).
+        val byAlias = AppNameMatcher.matchWhole(query, aliasNamed(apps), folding)
+        if (byAlias is NameMatch.Exact) return launchOrChoose(query, installedTargetsOf(byAlias.apps, apps))
+
+        val byLabel = AppNameMatcher.matchWhole(query, apps, folding)
+
+        // (3) A form of an alias launches its app — unless a label of ANOTHER app answers too: then both are a choice.
+        if (byAlias is NameMatch.Edge) {
+            val aliased = installedTargetsOf(byAlias.apps, apps)
+            val others = appsOf(byLabel).filter { label -> aliased.none { it.packageName == label.packageName } }
+            return if (others.isEmpty()) {
+                launchOrChoose(query, aliased)
+            } else {
+                ExecutableAction.AmbiguousAppAction(query = query, candidates = aliased + others)
+            }
+        }
+
+        // (2), (4), (5) — labels alone, exactly as before task 3.
+        return when (byLabel) {
+            is NameMatch.Exact -> launchOrChoose(query, byLabel.apps)
+            is NameMatch.Edge -> ExecutableAction.AmbiguousAppAction(query = query, candidates = byLabel.apps, confirm = true)
+            NameMatch.None -> ExecutableAction.ShowMessageAction(CommandMessage.NoAppFound(query))
+        }
+    }
+
+    private fun launch(app: InstalledApp): ExecutableAction =
+        ExecutableAction.LaunchAppAction(packageName = app.packageName, activityName = app.activityName)
+
+    /** One app launches; several are the user's choice — never one picked. */
+    private fun launchOrChoose(query: String, apps: List<InstalledApp>): ExecutableAction =
+        if (apps.size == 1) launch(apps.single()) else ExecutableAction.AmbiguousAppAction(query = query, candidates = apps)
+
+    /** The package the alias stored under [phrase] names, or `null` — none, a non-app target, or a read that failed. */
+    private suspend fun storedAliasPackage(phrase: String): String? =
+        (aliases.find(phrase) as? OperationResult.Success)?.value?.target?.appPackageOrNull()
+
+    /**
+     * Every alias whose app is installed, as an app labelled by the alias's PHRASE — so the one matcher compares
+     * aliases and labels alike (`AppTargetResolver`'s shape). A list that throws is no aliases (class KDoc).
+     */
+    private suspend fun aliasNamed(apps: List<InstalledApp>): List<InstalledApp> {
+        val all: List<Alias> = try {
+            aliases.observeAll().first()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return emptyList()
+        }
+        return all.mapNotNull { alias ->
+            alias.target.appPackageOrNull()
+                ?.takeIf { pkg -> apps.any { it.packageName == pkg } }
+                ?.let { pkg -> InstalledApp(packageName = pkg, label = alias.phrase) }
+        }
+    }
+
+    /** Alias pseudo-apps back to the installed apps they name, one per package, in the aliases' order. */
+    private fun installedTargetsOf(named: List<InstalledApp>, apps: List<InstalledApp>): List<InstalledApp> =
+        named.map { it.packageName }.distinct().mapNotNull { pkg -> apps.firstOrNull { it.packageName == pkg } }
+
+    private fun appsOf(match: NameMatch): List<InstalledApp> = when (match) {
+        is NameMatch.Exact -> match.apps
+        is NameMatch.Edge -> match.apps
+        NameMatch.None -> emptyList()
     }
 
     private fun resolveSimpleCommand(command: SimpleCommand): ExecutableAction = when (command) {

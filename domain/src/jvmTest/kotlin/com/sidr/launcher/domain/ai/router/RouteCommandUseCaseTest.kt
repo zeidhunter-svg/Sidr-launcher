@@ -2,6 +2,7 @@ package com.sidr.launcher.domain.ai.router
 
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.FakeAgentSessionStore
+import com.sidr.launcher.core.testing.FakeAliasStore
 import com.sidr.launcher.core.testing.FakeBridgeTransport
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
@@ -55,6 +56,9 @@ import com.sidr.launcher.domain.intent.LauncherIntent
 import com.sidr.launcher.domain.intent.ModelUnavailableReason
 import com.sidr.launcher.domain.intent.SearchTarget
 import com.sidr.launcher.domain.intent.SimpleCommand
+import com.sidr.launcher.domain.memory.alias.Alias
+import com.sidr.launcher.domain.memory.alias.AliasStore
+import com.sidr.launcher.domain.memory.alias.AliasTarget
 import com.sidr.launcher.domain.memory.plan.CommandForm
 import com.sidr.launcher.domain.memory.plan.DefaultLearnedPlans
 import com.sidr.launcher.domain.memory.plan.LearnedPlanFixtures
@@ -143,10 +147,13 @@ class RouteCommandUseCaseTest {
         agentPlanner: Planner = TemplatePlanner(),
         agentRegistry: ToolRegistry = toolRegistry,
         modelPlanner: ModelPlanner = planner,
+        // A4′ acceptance tail, task 3: the one alias store FastPath's resolver and step 1a read — as the graph hands it
+        // to both. `AliasStore.NONE` by default, so every earlier test builds the route exactly as it did.
+        aliases: AliasStore = AliasStore.NONE,
     ): RouteCommandUseCase = RouteCommandUseCase(
         handleUserCommand = HandleUserCommandUseCase(
             matcher = matcher,
-            resolver = IntentActionResolver(appsRepo),
+            resolver = IntentActionResolver(appsRepo, PlainTextFolding, aliases),
             executor = executor,
             confidencePolicy = DefaultIntentConfidencePolicy(),
             recordingScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
@@ -157,6 +164,8 @@ class RouteCommandUseCaseTest {
         providerConfigRepository = provider,
         connectivityChecker = connectivity,
         startAgentSession = StartAgentSessionUseCase(agentPlanner, agentStore, agentIds, agentRegistry),
+        aliases = aliases,
+        installedApps = appsRepo,
     )
 
     private fun driveUnknown() {
@@ -1739,6 +1748,178 @@ class RouteCommandUseCaseTest {
         assertEquals(CommandOutcome.Message(CommandMessage.NoAppFound("клод")), noProvider)
         assertEquals("the model is never asked", 0, planner.planCallCount)
         assertTrue(agentStore.saved.isEmpty())
+    }
+
+    // --- A4′ acceptance tail, task 3 — owner decision 3, K10: an alias before the model, before a label -----------
+    // The phone, 2026-11-21: the bare «tg» / «телега» — the aliases themselves — were `UNKNOWN` and went on to the
+    // model; the alias decorator (`ResolveCommandWithAliasUseCase`) answers only an `Unknown` the route no longer
+    // returns. Step 1a reads the alias on the device, only for a command FastPath did not decide, above 2b.
+
+    private val telegramPlus = InstalledApp("org.telegram.plus", "Plus Messenger", activityName = ".Main")
+
+    private suspend fun aliased(vararg phrases: Pair<String, String>): FakeAliasStore = FakeAliasStore().apply {
+        phrases.forEach { (phrase, pkg) -> upsert(Alias(phrase, AliasTarget.App(pkg), createdAtEpochMs = 0L)) }
+    }
+
+    /** What step 1a starts for [words]: one `launch_app` pinned to the alias's package, the user's words beside it. */
+    private fun aliasLaunch(words: String, pkg: String) = ExecutionPlan(
+        listOf(
+            PlanStep(
+                index = 0,
+                invocation = ToolInvocation(
+                    ToolIds.LAUNCH_APP,
+                    mapOf("query" to ArgSource.Literal(words), "app" to ArgSource.Literal(pkg)),
+                ),
+                risk = ActionRiskLevel.SAFE,
+                precondition = StepPrecondition.None,
+                rationale = StepRationale.GOAL_DIRECT,
+            ),
+        ),
+    )
+
+    /**
+     * Decision 3 (the owner accepted aliases in local-only): the bare alias «tg» starts its launch through the engine
+     * — online, where step 7 WOULD ask the model (scripted to answer, so asking it would change the outcome), and in
+     * local-only. The model is never asked; the plan is the one launch of the alias's package.
+     */
+    @Test
+    fun `a bare alias starts its launch on the device and the model is never asked`() = runTest {
+        driveUnknown()
+        appsRepo.appsToReturn = listOf(telegramPlus)
+        val aliases = aliased("tg" to "org.telegram.plus")
+        planner.answer = ModelPlanning.Navigate(SidrDestination.APP_GRID)
+
+        val online = useCase(aliases = aliases).route("tg")
+        val localOnly = useCase(localOnly = true, aliases = aliases).route(" tg ")
+
+        assertEquals("the model is never asked", 0, planner.planCallCount)
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), online)
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s2")), localOnly)
+        assertEquals(listOf(freeGoal("tg"), freeGoal("tg")), agentStore.saved.map { it.goal })
+        assertEquals(listOf(aliasLaunch("tg", "org.telegram.plus"), aliasLaunch("tg", "org.telegram.plus")), agentStore.saved.map { it.plan })
+        assertTrue("nothing is executed by the route", executor.executedActions.isEmpty())
+    }
+
+    /**
+     * Step 1a reads only a command FastPath did NOT decide: «помощь» is FastPath's `Help`, answered byte for byte,
+     * though the user also made «помощь» an alias. A decided outcome is never shadowed.
+     */
+    @Test
+    fun `a bare alias never shadows a decided FastPath outcome`() = runTest {
+        matcher.intentToReturn = LauncherIntent.SimpleCommandIntent(SimpleCommand.HELP)
+        matcher.confidenceToReturn = 0.99f
+        appsRepo.appsToReturn = listOf(telegramPlus)
+
+        val outcome = useCase(aliases = aliased("помощь" to "org.telegram.plus")).route("помощь")
+
+        assertTrue("no session is started for a decided outcome", agentStore.saved.isEmpty())
+        assertEquals(CommandOutcome.Message(CommandMessage.Help), outcome)
+    }
+
+    /**
+     * K10: the alias is the user's explicit memory, so it is read ABOVE step 2b — «камера» as an alias opens its app,
+     * and the tool 2b would have planned for the same word (`open_camera`) is never planned: the 2b planner is never
+     * consulted.
+     */
+    @Test
+    fun `a bare alias shadows a 2b tool trigger`() = runTest {
+        driveUnknown()
+        val lumora = InstalledApp("net.fixture.lumora", "Lumora")
+        appsRepo.appsToReturn = listOf(lumora)
+        val openCamera = ToolDescriptor(
+            id = ToolId("open_camera"),
+            level = ToolLevels.SYSTEM_INTENT,
+            effect = ToolEffect.EXTERNAL,
+            risk = ActionRiskLevel.SAFE,
+            durability = ToolDurability.TRANSIENT,
+        )
+        var consulted = 0
+        val camera2b = object : Planner {
+            override suspend fun plan(request: PlanningRequest, registry: ToolRegistry): PlanningResult {
+                consulted++
+                return PlanningResult.Planned(
+                    ExecutionPlan(
+                        listOf(
+                            PlanStep(
+                                index = 0,
+                                invocation = ToolInvocation(openCamera.id, emptyMap()),
+                                risk = ActionRiskLevel.SAFE,
+                                precondition = StepPrecondition.None,
+                                rationale = StepRationale.GOAL_DIRECT,
+                            ),
+                        ),
+                    ),
+                )
+            }
+        }
+        val registry = FakeToolRegistry(FakeToolRegistry.withA0Tools().all() + openCamera)
+
+        val outcome = useCase(agentPlanner = camera2b, agentRegistry = registry, aliases = aliased("камера" to lumora.packageName))
+            .route("камера")
+
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), outcome)
+        assertEquals(listOf(aliasLaunch("камера", lumora.packageName)), agentStore.saved.map { it.plan })
+        assertEquals("the 2b planner is never consulted", 0, consulted)
+        assertEquals(0, planner.planCallCount)
+    }
+
+    /**
+     * Principle 2 («whatever can run on the device runs there»): the words of an alias are answered on the phone, so
+     * they never reach the model. The real bridge planner over a counted transport, online, with a provider: not one
+     * body is sent for «tg».
+     */
+    @Test
+    fun `the words of an alias never reach the model`() = runTest {
+        driveUnknown()
+        appsRepo.appsToReturn = listOf(telegramPlus)
+        val model = BridgeModel()
+
+        val outcome = useCase(modelPlanner = model.planner, aliases = aliased("tg" to "org.telegram.plus")).route("tg")
+
+        assertTrue("nothing is transmitted: ${model.transport.requests}", model.transport.requests.isEmpty())
+        assertEquals("the model is never asked", 0, model.asked)
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), outcome)
+    }
+
+    /**
+     * Decision 14 meets an alias: «открой tg» resolves the alias in FastPath's own launch (`IntentActionResolver`), so
+     * there is no «нет такого приложения» to yield — FastPath launches the alias's app, online, and the model (scripted
+     * to answer) is never asked; no store plan starts.
+     */
+    @Test
+    fun `online open with an alias launches it and the model is never asked`() = runTest {
+        driveAppLaunch("tg")
+        appsRepo.appsToReturn = listOf(telegramPlus)
+        planner.answer = ModelPlanning.Proposed(listOf(modelLaunch("Telegram")))
+
+        val outcome = useCase(aliases = aliased("tg" to "org.telegram.plus")).route("открой tg")
+
+        assertEquals("the model is never asked", 0, planner.planCallCount)
+        assertEquals(CommandOutcome.Executed, outcome)
+        assertEquals(listOf(ExecutableAction.LaunchAppAction("org.telegram.plus", ".Main")), executor.executedActions)
+        assertTrue("no store plan starts", agentStore.saved.isEmpty())
+    }
+
+    /**
+     * A command FastPath decided and YIELDED (decision 13: Б) is not undecided for step 1a: without the model the same
+     * command is FastPath's decided search, which 1a never reads, so online it is not read either. Here the user's
+     * alias table holds the whole command «найди tg» as a phrase — the one way 1a could ever match a yielded command,
+     * since it compares the WHOLE command with a phrase — and still the model gets the search, and on its refusal
+     * FastPath searches (K1). No session starts.
+     */
+    @Test
+    fun `a yielded search never becomes a bare alias`() = runTest {
+        matcher.intentToReturn = LauncherIntent.SearchIntent("tg", SearchTarget.WEB)
+        matcher.confidenceToReturn = 0.90f
+        appsRepo.appsToReturn = listOf(telegramPlus)
+        planner.answer = ModelPlanning.Declined
+
+        val outcome = useCase(aliases = aliased("найди tg" to "org.telegram.plus", "tg" to "org.telegram.plus")).route("найди tg")
+
+        assertTrue("no alias session starts for a yielded command", agentStore.saved.isEmpty())
+        assertEquals("the yielded search is the model's", 1, planner.planCallCount)
+        assertEquals(CommandOutcome.Executed, outcome)
+        assertEquals(listOf(ExecutableAction.OpenSearchAction("tg", SearchTarget.WEB)), executor.executedActions)
     }
 
     private companion object {

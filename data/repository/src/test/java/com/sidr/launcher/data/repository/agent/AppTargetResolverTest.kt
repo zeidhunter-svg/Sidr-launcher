@@ -206,4 +206,20 @@ class AppTargetResolverTest {
         assertEquals(AppCandidates.Confirm(listOf(miravin)), resolver.candidates("миравину"))
         assertNull(resolver.resolve("миравину"))
     }
+
+    /**
+     * A4′ acceptance tail, task 3 (K10) — a regression pin of step 2b's own slot ([AppTargetResolver.windows], what
+     * `ToolMatchPlanner` reads; the tests above go through [AppTargetResolver.candidates]). An alias is read before a
+     * label there too — «кварцелот» is the alias of Zantor and the label of another app, and Zantor binds — and a FORM
+     * of the alias is offered beside a form of the label, never bound: 2b feeds `uninstall_app`. FastPath's launch
+     * binds a form of an alias since task 3 (`IntentActionResolver`); this slot does not, and task 3 leaves it so.
+     */
+    @Test
+    fun `in step 2b's slot an alias wins over a label, and a form of it is offered`() = runTest {
+        val other = app("Кварцелот", "net.fixture.other")
+        val resolver = AppTargetResolver(FakeApps(listOf(zantor, other)), aliasedZantor(), PlainTextFolding)
+
+        assertEquals(AppCandidates.One(zantor), resolver.windows("кварцелот"))
+        assertEquals(AppCandidates.Confirm(listOf(zantor, other)), resolver.windows("кварцелота"))
+    }
 }

@@ -11,6 +11,7 @@ import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.intent.IntentConfidencePolicy
 import com.sidr.launcher.domain.intent.IntentMatcher
+import com.sidr.launcher.domain.memory.alias.AliasStore
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.domain.text.TextFolding
 import dagger.Module
@@ -49,13 +50,18 @@ object IntentProvidesModule {
      * FastPath's app names are matched by the device's one [TextFolding] (A4′ phase 3b, Task 7): the
      * binding `BridgeProvidesModule.provideTextFolding` makes once, injected here and passed on — never a
      * second binding, never the resolver's `PlainTextFolding` default (`TextFoldingBindingGuardTest`).
+     *
+     * Since the A4′ acceptance tail, task 3 (K10), FastPath's launch reads the user's aliases first — the one
+     * [AliasStore] binding (`MemoryBindsModule`), injected here. The parameter's default exists for the hand-built
+     * call in `TextFoldingBindingGuardTest` only; Hilt passes every parameter and ignores a Kotlin default.
      */
     @Provides
     @Singleton
     fun provideIntentActionResolver(
         repository: InstalledAppsRepository,
         folding: TextFolding,
-    ): IntentActionResolver = IntentActionResolver(repository, folding)
+        aliases: AliasStore = AliasStore.NONE,
+    ): IntentActionResolver = IntentActionResolver(repository, folding, aliases)
 
     /**
      * Executes a `LauncherAction` over the same resolver/executor path the rule pipeline uses. Since A4′

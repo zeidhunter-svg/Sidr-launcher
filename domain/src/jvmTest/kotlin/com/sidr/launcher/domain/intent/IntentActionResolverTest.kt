@@ -1,9 +1,15 @@
 package com.sidr.launcher.domain.intent
 
+import com.sidr.launcher.core.testing.FakeAliasStore
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
+import com.sidr.launcher.domain.memory.alias.Alias
+import com.sidr.launcher.domain.memory.alias.AliasStore
+import com.sidr.launcher.domain.memory.alias.AliasTarget
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.text.AppNameMatcher
+import com.sidr.launcher.domain.text.PlainTextFolding
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -218,9 +224,108 @@ class IntentActionResolverTest {
         assertEquals(ExecutableAction.LaunchAppAction("net.fixture.wexdor", ".Main"), action)
     }
 
+    // --- LaunchAppIntent: aliases (A4′ acceptance tail, task 3; owner decision 3, K10) ---
+    // The phone, 2026-11-21: «открой tg», «открой телега», «открой телегу» with the aliases `tg` and `телега` →
+    // `org.telegram.plus` claimed `LAUNCH_APP` 0.90 and went to the store — FastPath never read an alias. An alias
+    // is the user's explicit naming of an app («алиасы не спрашивать — лишний слой»): read FIRST, before a label,
+    // and a form of it launches.
+
+    private val telegramPlus = InstalledApp("org.telegram.plus", "Plus Messenger", activityName = ".Main")
+
+    private suspend fun aliased(vararg phrases: Pair<String, String>): FakeAliasStore = FakeAliasStore().apply {
+        phrases.forEach { (phrase, pkg) -> upsert(Alias(phrase, AliasTarget.App(pkg), createdAtEpochMs = 0L)) }
+    }
+
+    private fun withAliases(store: AliasStore) = IntentActionResolver(fakeRepo, PlainTextFolding, store)
+
+    @Test fun `open with an alias launches the alias target`() = runTest {
+        fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"), telegramPlus)
+        val resolver = withAliases(aliased("tg" to "org.telegram.plus"))
+
+        val action = resolveSuccess(resolver, LauncherIntent.LaunchAppIntent("tg"))
+
+        assertEquals(ExecutableAction.LaunchAppAction("org.telegram.plus", ".Main"), action)
+    }
+
+    /** The alias row outlives its app: a launch at a package that is not installed is «нет такого приложения», in the user's words. */
+    @Test fun `an alias whose app is gone is not found`() = runTest {
+        fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
+        val resolver = withAliases(aliased("tg" to "org.telegram.plus"))
+
+        val action = resolveSuccess(resolver, LauncherIntent.LaunchAppIntent("tg"))
+
+        assertEquals(ExecutableAction.ShowMessageAction(CommandMessage.NoAppFound("tg")), action)
+    }
+
+    /**
+     * K10: the same side as `AppTargetResolver` (`an alias wins over a label and is matched on its normalized phrase`).
+     * «камера» is the alias of one app and the label of another; the alias's app launches, not the label's.
+     */
+    @Test fun `an alias beats an installed label of the same words`() = runTest {
+        val aliasTarget = InstalledApp("net.fixture.lumora", "Lumora", activityName = ".Main")
+        fakeRepo.appsToReturn = listOf(InstalledApp("net.fixture.kamera", "Камера"), aliasTarget)
+        val resolver = withAliases(aliased("камера" to "net.fixture.lumora"))
+
+        val action = resolveSuccess(resolver, LauncherIntent.LaunchAppIntent("камера"))
+
+        assertEquals(ExecutableAction.LaunchAppAction("net.fixture.lumora", ".Main"), action)
+    }
+
+    /**
+     * Owner, 2026-11-21: «алиасы не спрашивать — лишний слой». «телегу» is a FORM of the alias «телега» (an edge pair:
+     * `wordsMatch` is `false`), and no label answers it: the alias's app launches — no «Вы имели в виду».
+     */
+    @Test fun `a word form of an alias launches it`() = runTest {
+        assertEquals("the premise: an edge pair, not an exact one", false, AppNameMatcher.wordsMatch("телегу", "телега"))
+        fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"), telegramPlus)
+        val resolver = withAliases(aliased("телега" to "org.telegram.plus"))
+
+        val action = resolveSuccess(resolver, LauncherIntent.LaunchAppIntent("телегу"))
+
+        assertEquals(ExecutableAction.LaunchAppAction("org.telegram.plus", ".Main"), action)
+    }
+
+    /**
+     * A form of the alias that is also a form — or the very label — of ANOTHER app: neither is guessed, both are
+     * offered as a choice and nothing launches. Compared whole, the order the alias's app first.
+     */
+    @Test fun `a word form that fits an alias and another app's label is a choice`() = runTest {
+        val resolver = withAliases(aliased("телега" to "org.telegram.plus"))
+
+        val formOfLabel = InstalledApp("net.fixture.telegi", "Телеги")
+        fakeRepo.appsToReturn = listOf(formOfLabel, telegramPlus)
+        assertEquals(
+            ExecutableAction.AmbiguousAppAction(query = "телегу", candidates = listOf(telegramPlus, formOfLabel)),
+            resolveSuccess(resolver, LauncherIntent.LaunchAppIntent("телегу")),
+        )
+
+        val exactLabel = InstalledApp("net.fixture.telegu", "Телегу")
+        fakeRepo.appsToReturn = listOf(exactLabel, telegramPlus)
+        assertEquals(
+            ExecutableAction.AmbiguousAppAction(query = "телегу", candidates = listOf(telegramPlus, exactLabel)),
+            resolveSuccess(resolver, LauncherIntent.LaunchAppIntent("телегу")),
+        )
+    }
+
+    /**
+     * An alias store that cannot be read leaves FastPath's launch to the labels — what FastPath answered before it read
+     * aliases at all (task 3's ruling, named in the resolver's KDoc; `AppTargetResolver`, which feeds an irreversible
+     * tool, answers `Unavailable` instead).
+     */
+    @Test fun `an unreadable alias store leaves the launch to the labels`() = runTest {
+        fakeRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram", activityName = ".Main"))
+        val resolver = withAliases(FakeAliasStore(failReads = true))
+
+        val action = resolveSuccess(resolver, LauncherIntent.LaunchAppIntent("telegram"))
+
+        assertEquals(ExecutableAction.LaunchAppAction("org.telegram.messenger", ".Main"), action)
+    }
+
     // --- helpers ---
 
-    private suspend fun resolveSuccess(intent: LauncherIntent): ExecutableAction {
+    private suspend fun resolveSuccess(intent: LauncherIntent): ExecutableAction = resolveSuccess(resolver, intent)
+
+    private suspend fun resolveSuccess(resolver: IntentActionResolver, intent: LauncherIntent): ExecutableAction {
         val result = resolver.resolve(intent)
         assertTrue("Expected Success but got $result", result is OperationResult.Success)
         return (result as OperationResult.Success).value

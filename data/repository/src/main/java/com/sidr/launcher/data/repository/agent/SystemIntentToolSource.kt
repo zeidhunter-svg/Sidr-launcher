@@ -100,8 +100,11 @@ class SystemIntentToolSource @Inject constructor(
 
         /**
          * `launch_app`'s pin (A4′ phase 3a, plan §0.2 B-3). A property of the TOOL, like
-         * [RESOLVED_QUERY] — `ActionDescriptor` has no such argument. Optional: every path but the
-         * bridge leaves it out, and the device, never the model, fills it (`DeviceMentionBinder`).
+         * [RESOLVED_QUERY] — `ActionDescriptor` has no such argument. Optional: every path leaves it out
+         * but two, and on both the device, never the model, fills it — the bridge's binder
+         * (`DeviceMentionBinder`) and, since task 3 of the A4′ acceptance tail, `RouteCommandUseCase`'s
+         * step 1a (a bare alias), which spells this name as a literal (`:domain` has no edge here;
+         * `AliasBindingGuardTest` holds the two spellings together over the production registry).
          */
         internal const val PIN_ARG = "app"
 

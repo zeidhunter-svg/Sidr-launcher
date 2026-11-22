@@ -8,7 +8,6 @@ import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeIntentMatcher
 import com.sidr.launcher.core.testing.FakeMentionBinder
-import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.core.testing.configuredProvider
 import com.sidr.launcher.di.BridgeProvidesModule
 import com.sidr.launcher.di.IntentProvidesModule
@@ -30,6 +29,9 @@ import com.sidr.launcher.domain.memory.plan.LearnedPlans
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.text.PlainTextFolding
+import com.sidr.launcher.domain.tool.ArgSource
+import com.sidr.launcher.domain.tool.ToolIds
+import com.sidr.launcher.domain.tool.ToolInvocation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
@@ -64,6 +66,13 @@ class AliasBindingGuardTest {
         )
     }
 
+    /**
+     * Review round 1, Minor 3: step 1a spells `launch_app`'s two arguments as literals in `:domain` (`"query"`,
+     * `"app"` — `SystemIntentToolSource.PIN_ARG` lives in `:data:repository`), and its plan is validated against the
+     * registry it starts in. That registry is the PRODUCTION one here ([ProductionGraph.federation]), so a rename on
+     * either side makes the plan unrunnable — step 1a answers `null`, the model is asked — and this test goes red,
+     * instead of every per-path test passing over `FakeToolRegistry.withA0Tools()`'s copy of the names.
+     */
     @Test
     fun `the route is built with the alias store and the app list it is given`() = runTest {
         var asked = 0
@@ -87,7 +96,7 @@ class AliasBindingGuardTest {
                 object : AgentSessionIdFactory {
                     override fun newId() = AgentSessionId("alias-guard")
                 },
-                FakeToolRegistry.withA0Tools(),
+                ProductionGraph.federation().registry,
             ),
             learnedPlans = LearnedPlans.NONE,
             aliases = aliased("tg"),
@@ -96,6 +105,15 @@ class AliasBindingGuardTest {
 
         assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("alias-guard")), route.route("tg"))
         assertEquals("the model is never asked for an alias", 0, asked)
-        assertEquals(1, store.saved.size)
+        assertEquals(
+            "the pinned launch, in the production registry's own argument names",
+            listOf(
+                ToolInvocation(
+                    ToolIds.LAUNCH_APP,
+                    mapOf("query" to ArgSource.Literal("tg"), "app" to ArgSource.Literal("org.telegram.plus")),
+                ),
+            ),
+            store.saved.single().plan.steps.map { it.invocation },
+        )
     }
 }

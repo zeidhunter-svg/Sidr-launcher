@@ -570,7 +570,9 @@ class RouteCommandUseCase(
         /**
          * `launch_app`'s two arguments, spelled in `:data:repository` (`SystemIntentToolSource`: the catalog's `query`,
          * and `PIN_ARG`), which `:domain` has no edge to. A drift fails closed: `startPlanned` validates the step
-         * against the registry, an undeclared argument is not runnable, and step 1a answers `null`.
+         * against the registry, an undeclared argument is not runnable, and step 1a answers `null` — and then, online,
+         * the alias's words would go on to the model. So the drift is held, not only failed closed:
+         * `AliasBindingGuardTest` (`:app`) starts step 1a's plan against the PRODUCTION registry.
          */
         const val LAUNCH_QUERY_ARG = "query"
         const val LAUNCH_PIN_ARG = "app"

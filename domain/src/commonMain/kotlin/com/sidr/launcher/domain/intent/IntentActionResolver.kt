@@ -30,8 +30,12 @@ import kotlinx.coroutines.flow.first
  *
  * **An alias is read first** (A4′ acceptance tail, task 3; owner decision 3, controller ruling K10). An alias is the
  * user's explicit naming of an app (`set_app_alias`, the aliases screen), so it answers before a label, as in
- * `AppTargetResolver` (step 2b, the bridge) — one order on every path. The order, over [aliases] and the installed
- * apps, an alias counting only while its app is installed:
+ * `AppTargetResolver` (step 2b, the bridge): an exact alias before an exact label on every path. **What a FORM of an
+ * alias does is NOT the same on every path, and that asymmetry is named, not hidden:** here it launches (3 below), and
+ * a form of an alias that meets another app's EXACT label is a choice of both; in `AppTargetResolver` (`wholeName`) an
+ * exact label binds before any form of an alias is looked at, and a form of an alias is only offered (`Confirm`) —
+ * that resolver feeds `uninstall_app`, and task 3 left it unchanged (an owner question, task 3's report). The order
+ * here, over [aliases] and the installed apps, an alias counting only while its app is installed:
  *  1. the alias stored under exactly these words, or one the words name exactly after the [folding] — launches
  *     («открой tg»; «камера» as an alias opens its app, not the app labelled «Камера»); several aliases' apps are a
  *     choice;
@@ -82,8 +86,10 @@ class IntentActionResolver(
         val apps = (appsResult as OperationResult.Success).value
 
         // A4′ phase 3a (plan §0.2 B-3): a launch the device already pinned to a package opens exactly
-        // that package. `LaunchAppIntent.packageName` existed unused until then; nothing but the bridge
-        // sets it, so every unpinned launch takes the name match below. Gone since the pin was made →
+        // that package. `LaunchAppIntent.packageName` existed unused until then; only the device sets it —
+        // the bridge's binder (`DeviceMentionBinder`, also on a learned replay) and, since task 3 of the A4′
+        // acceptance tail, the route's step 1a (a bare alias) — so every unpinned launch takes the name
+        // match below. Gone since the pin was made →
         // "not found" under the words the user typed, never a fallback to the label.
         intent.packageName?.let { pinned ->
             val app = apps.firstOrNull { it.packageName == pinned }

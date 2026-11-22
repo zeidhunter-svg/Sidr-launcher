@@ -1801,6 +1801,28 @@ class RouteCommandUseCaseTest {
     }
 
     /**
+     * The alias row outlives its app (review round 1, Important 1): «tg» still names `org.telegram.plus`, which is no
+     * longer installed — only `org.telegram.messenger` is. Step 1a answers `null`, so the chain runs exactly as if there
+     * were no alias: online the model is asked (scripted to answer, and its reading is what comes back), no plan of
+     * step 1a is started; in local-only the honest local-only line. Never a launch of a package that is not here.
+     */
+    @Test
+    fun `a bare alias whose app is gone goes on as if there were no alias`() = runTest {
+        driveUnknown()
+        appsRepo.appsToReturn = listOf(InstalledApp("org.telegram.messenger", "Telegram"))
+        val aliases = aliased("tg" to "org.telegram.plus")
+        planner.answer = ModelPlanning.Navigate(SidrDestination.APP_GRID)
+
+        val online = useCase(aliases = aliases).route("tg")
+        val localOnly = useCase(localOnly = true, aliases = aliases).route("tg")
+
+        assertTrue("no plan of step 1a is started: ${agentStore.saved}", agentStore.saved.isEmpty())
+        assertEquals("online the model is asked, as for any undecided text", 1, planner.planCallCount)
+        assertEquals(CommandOutcome.Interpreted(Interpretation.Navigate(SidrDestination.APP_GRID)), online)
+        assertEquals(CommandOutcome.Message(CommandMessage.UnderstandingLocalOnly), localOnly)
+    }
+
+    /**
      * Step 1a reads only a command FastPath did NOT decide: «помощь» is FastPath's `Help`, answered byte for byte,
      * though the user also made «помощь» an alias. A decided outcome is never shadowed.
      */

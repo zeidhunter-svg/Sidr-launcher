@@ -5,7 +5,10 @@ import com.sidr.launcher.domain.model.InstalledApp
 /**
  * How a typed name answers to installed labels (A4′ phase 3b, B-2). [Exact] — every word is the label's
  * word; [Edge] — at least one word is a FORM of the label's word (a case ending, a suffix, a prefix), the
- * rest exact. An edge match is only ever offered for the user's confirmation, never bound.
+ * rest exact. An edge match against a LABEL is only ever offered for the user's confirmation, never bound. The one
+ * exception is an alias's phrase in FastPath's launch (A4′ acceptance tail, task 3; owner 2026-11-21 «алиасы не
+ * спрашивать»): there an edge of the user's own alias launches its app (`IntentActionResolver`); step 2b and the
+ * bridge still only offer a form of an alias (`AppTargetResolver`).
  */
 sealed interface NameMatch {
     data class Exact(val apps: List<InstalledApp>) : NameMatch
@@ -28,8 +31,10 @@ data class WindowMatch(val match: NameMatch, val whole: Boolean)
  *  - (ii) a PREFIX — `b` has at least [MIN_STEM] letters and occurs in `a` at offset 1..[MAX_PREFIX], with
  *    at most [MAX_ENDING] letters after it («بالسنداف» / «سنداف»).
  *
- * The constants are **chosen, not measured** (B-2). A wrong value costs one question, never a bind,
- * because an edge match is only ever offered.
+ * The constants are **chosen, not measured** (B-2). Against a label a wrong value costs one question, never a bind,
+ * because an edge match of a label is only ever offered. Against an alias's phrase in FastPath's launch (task 3 of the
+ * A4′ acceptance tail) a wrong value CAN launch: a word the constants wrongly take for a form of the user's alias opens
+ * that alias's app — a `SAFE` launch of an app the user named, not an irreversible act; 2b and the bridge still offer it.
  *
  * **Two uses** (§0.1 refinement):
  *  - [matchWhole] — wherever a whole name is matched: the bridge's mention, step 2b's first look at the

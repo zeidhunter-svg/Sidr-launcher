@@ -14,9 +14,15 @@
 > above 2b and the model (step 1a), a reading with no pick and no model text going out starts at once and teaches nothing
 > (D3 second amendment, I5; a simple session closes itself, I12), a decline reads «Понял команду, но Sidr так пока не
 > умеет», the wait shows only while the model is asked. The batch review's Important — a homograph address after a verb
-> reached the model and, with no card owed, only the consent card stood before it — is fixed: such a search or missing
-> app is never yielded (`7b297d9f`). **Boundary gate `GATE GREEN` 2008 / 0 / 0**, 557 executed (`:domain` 673 · `:data:repository` 493 ·
-> `:feature:launcher` 309 · `:app` 98 · `:consumer:jvm` 101 · `:feature:settings` 35 · other seven 299 — exactly as predicted); floor `BASELINE_TESTS` 1918 → 2008;
+> reached the model and, with no card owed, only the consent card stood before it — is fixed **for FastPath's verb
+> commands**: a search or missing app none of whose words is an address `UrlDetector` only searches is the only kind
+> yielded (`7b297d9f`, then word by word with punctuation stripped after the re-review, `ea9ecd1d`). **Not fixed, named
+> for the owner (question 2):** undecided text carrying an address («зайди на https://аpple.com», at the model since 3a)
+> and a homograph in the TLD («https://apple.cоm», no address to `UrlDetector`) still reach a card-less `open_url` and
+> its consent card. **Boundary gate `GATE GREEN` 2014 / 0 / 0** after the
+> re-review fix (2008 after the fix wave), 557 executed (`:domain` 677 · `:data:repository` 495 · `:feature:launcher` 309 ·
+> `:app` 98 · `:consumer:jvm` 101 · `:feature:settings` 35 · other seven 299 — exactly as predicted); floor
+> `BASELINE_TESTS` 1918 → 2014;
 > `:app:assembleRelease` red only at `checkOwnerReviewedLocaleStrings` (the `tr` draft of `settings_local_only_description`,
 > unsigned). Six owner questions in the ADR; batches 2–3 and the one acceptance are next); prior 2026-11-21
 > (**context hygiene — `decisions.md` stays whole as an archive by address, `ai-context/decisions-orientation.md` beside

@@ -36,7 +36,7 @@ Part D done). Block ADR «2026-11-21 — Этап 6 (A4′) — рантайм �
 tasks**, residuals. The hygiene session (owner `5: a`) is done 2026-11-21: `decisions.md` is an archive by address,
 [decisions-orientation.md](ai-context/decisions-orientation.md) beside it is read whole, rules 2 and 6 are in §0.
 **Now:** the «хвост приёмки A4′» plan ([plan](docs/superpowers/plans/2026-11-21-a4-acceptance-tail.md); block-ADR
-tasks 1–10 + task 13): **batch 1** (route + card, plan tasks 1–6) `CODE-GREEN` 2026-11-22, ADR «2026-11-22 — Пачка 1
+tasks 1–10 + task 13): **batch 1** (route + card, plan tasks 1–6) `CODE-GREEN` 2026-11-23, ADR «2026-11-22 — Пачка 1
 хвоста A4′…» — six owner questions there, release blocked until the owner signs `tr`; batches 2–3 next, one acceptance
 at the end; then the A2/A3 spec (tasks 11–12) — `§HANDOFF`.
 
@@ -70,7 +70,7 @@ are not offered).
 | **5** A1′ federated `ToolRegistry` | ✅ `CLOSED` 2026-09-10 (`ru-RU` only) | ADR «Этап 5 (A1′)» |
 | **5.5 / 5.5b** A1″ tool mass + selection, phases 0–3b | ✅ `CLOSED` 2026-09-20, gate **1439**, `ru`/`tr`/`en`; signed build `db1e75d` **unfixed** | ADR «Этап 5.5 (A1″)» |
 | **6** A4′ runtime, spec [2026-09-21-a4-runtime-design.md](docs/superpowers/specs/2026-09-21-a4-runtime-design.md) | ✅ `CLOSED` 2026-11-21, gate **1914**, `ru` + `tr`: phases 0 **1463** · 1 **1485** · 2 **1560** · 3a **1673** · 3b **1821** · 4 **1910**, one owner acceptance at the end | block ADR «2026-11-21 — Этап 6 (A4′)…»; phase ADRs 3a (two), 3b, 4, «D3, поправка»; records in the `§HANDOFF` archive |
-| **7** A4′ acceptance tail (twelve tasks), then A2/A3/A5/A6 | tail plan: batch 1 `CODE-GREEN` 2026-11-22, gate **2008**; A2/A3/A5/A6 their own spec (`brainstorm → spec → plan → build`) | ADRs «Пачка 1 хвоста A4′…», «D1, поправка…», «D3, вторая поправка…» |
+| **7** A4′ acceptance tail (twelve tasks), then A2/A3/A5/A6 | tail plan: batch 1 `CODE-GREEN` 2026-11-23, gate **2014**; A2/A3/A5/A6 their own spec (`brainstorm → spec → plan → build`) | ADRs «Пачка 1 хвоста A4′…», «D1, поправка…», «D3, вторая поправка…» |
 
 The four strategic ADRs (2026-08-19): **1/4** understanding belongs to the model, execution to the
 deterministic layer — `llmRouterEnabled` inverted onto `localOnlyMode` / `flag_local_only`, default
@@ -97,7 +97,9 @@ absent).
   **locale-blind**, only rendered strings need a locale switch.
 - **BYOK cloud AI** — Assistant (SSE, OpenAI-compatible, key in Keystore) + **the bridge**, the one model
   path: a FastPath miss past the local-only / provider / connectivity gates (each blocked state says which) —
-  and, online, FastPath's own confident search or missing app (tail batch 1; never an unsafe address) —
+  and, online, FastPath's own confident search or missing app (tail batch 1) unless a word of it is an address
+  `UrlDetector` only searches (non-ASCII / punycode host, unknown TLD; undecided text with an address and a homograph
+  in the TLD still reach the model — batch-1 ADR, owner question 2) —
   sends the command and our tool descriptions; an interpretation card comes back; nothing runs before
   «Выполнить» (but a learned command and, since 2026-11-22, a reading with no pick and no model text going out —
   D3 amended twice), then only through the engine.
@@ -292,7 +294,7 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
   plus `:core:ui:verifyRoborazziDebug` whenever `core/ui` is touched, and `:app:assembleRelease` for
   release-affecting work. **`:domain:jvmTest` and `:consumer:jvm:test` must be listed explicitly:**
   `testDebugUnitTest` has not reached `:domain` since it went KMP, and it never reaches `:consumer:jvm`
-  at all. **Baseline: the floor in `tools/gate.sh` (`BASELINE_TESTS`, 2008 since batch 1 of the A4′ tail, 2026-11-22; 1914 at A4′'s close), 557 actionable tasks executed, `build/test-results` cleared first) — compare a
+  at all. **Baseline: the floor in `tools/gate.sh` (`BASELINE_TESTS`, 2014 since batch 1 of the A4′ tail, 2026-11-23; 1914 at A4′'s close), 557 actionable tasks executed, `build/test-results` cleared first) — compare a
   fresh gate against the floor and against the active phase's predicted chain (its plan), not against
   any number quoted in an older ADR.** The decomposition by module is derived **before** every boundary
   run and compared with it — a sum alone cannot tell «two added» from «two added and two lost»; the chains

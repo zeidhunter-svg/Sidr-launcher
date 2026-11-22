@@ -1677,6 +1677,51 @@ class RouteCommandUseCaseTest {
         assertTrue("nothing starts before the pick", agentStore.saved.isEmpty())
     }
 
+    /**
+     * Review round 1, I1 (controller ruling (a)): a reading the model gave for 2b's empty app target (K2) teaches
+     * nothing — step 2c, where a lesson is replayed, is not on that target's way: online K2 passes 2c by (2c is 2b's
+     * `NoPlan` arm), and without the model 2b answers the target on the device. Three confirmations would pin a
+     * «learned command» that never runs. The control: the same reading for a text nothing claimed DOES carry a lesson,
+     * so the `null` is the route's refusal, not a reading that could teach nothing anyway.
+     */
+    @Test
+    fun `a reading reached by K2 teaches nothing`() = runTest {
+        driveUnknown()
+        val target = removeTarget("удали приложение клод", words = "клод", candidates = emptyList())
+        planner.answer = ModelPlanning.Proposed(listOf(modelText(LEARNED_UNINSTALL, "app" to "Vemblic")))
+
+        val claimed = learnedRoute(agentPlanner = claims(target), agentRegistry = removeRegistry).route("удали приложение клод")
+        val unclaimed = learnedRoute().route("удали приложение клод")
+
+        assertEquals("the model was asked for the claimed target", "удали приложение клод", planner.lastCommand)
+        assertNull("a reading reached by K2 teaches nothing", (claimed as CommandOutcome.Interpreted).learnable)
+        assertTrue("the control: the same reading, unclaimed, would teach", (unclaimed as CommandOutcome.Interpreted).learnable != null)
+        assertEquals(2, planner.planCallCount)
+    }
+
+    /**
+     * Review round 1, I1 (controller ruling (a)): a reading the model gave after FastPath YIELDED «нет такого
+     * приложения» teaches nothing — without the model the same command is FastPath's decided `NoAppFound`, which
+     * step (2) answers with the store plan before 2c is reached. The control, as above: the same reading for a text
+     * FastPath did not decide carries a lesson.
+     */
+    @Test
+    fun `a reading after a missing-app yield teaches nothing`() = runTest {
+        driveAppLaunch("клод")
+        appsRepo.appsToReturn = emptyList()
+        installedByName["Claude"] = listOf(InstalledApp("net.fixture.qandril", "Claude"))
+        planner.answer = ModelPlanning.Proposed(listOf(modelLaunch("Claude")))
+
+        val yielded = learnedRoute().route("открой клод")
+        driveUnknown()
+        val undecided = learnedRoute().route("открой клод")
+
+        assertNull("a reading after a missing-app yield teaches nothing", (yielded as CommandOutcome.Interpreted).learnable)
+        assertTrue("the control: the same reading, FastPath undecided, would teach", (undecided as CommandOutcome.Interpreted).learnable != null)
+        assertTrue("the store plan did not start", agentStore.saved.isEmpty())
+        assertEquals(2, planner.planCallCount)
+    }
+
     /** K2 is online-with-a-provider only: with no provider, and offline, the empty 2b target is answered on the device. */
     @Test
     fun `with no provider or offline an unresolved 2b app is still answered on the device`() = runTest {

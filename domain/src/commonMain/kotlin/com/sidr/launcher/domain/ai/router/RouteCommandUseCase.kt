@@ -128,7 +128,9 @@ import kotlinx.coroutines.flow.first
  *    model is below gates 3, 5 and 6 (`DOC-ADL-3`). A bound reading also carries what it would teach
  *    ([CommandOutcome.Interpreted.learnable], A4′ phase 4 B-8): computed here, from the validated steps
  *    before binding, never inside `toCommandOutcome` (the remainder card shares that and teaches nothing);
- *    nothing is recorded here — the launcher records it once «Выполнить» has started the session.
+ *    nothing is recorded here — the launcher records it once «Выполнить» has started the session. A reading for
+ *    2b's empty app target (K2), or after a yielded «нет такого приложения», teaches nothing (review round 1 of
+ *    task 2, I1: 2c, where a lesson is replayed, is not on its way back without the model).
  *
  * **Step 2c sits above step 3, and that is `DOC-ADL-3` applied, not bent** (plan §0.2 B-6; no amendment).
  * The rule's parity is two claims — the model planner is not consulted, and nothing leaves the device — and
@@ -333,7 +335,19 @@ class RouteCommandUseCase(
                 // in the user's words; the model's word goes nowhere.
                 if (binding is Binding.NotFound) notFoundWithoutModel(fastPath, claimed, rawInput)?.let { return it }
                 val outcome = binding.toCommandOutcome()
-                if (outcome is CommandOutcome.Interpreted) outcome.copy(learnable = learnedPlans.learnable(command, answer.steps)) else outcome
+                // Review round 1, I1 (controller ruling (a)): a reading for 2b's empty app target (K2), or after
+                // FastPath's «нет такого приложения» was yielded (decision 14), teaches nothing. A lesson is replayed
+                // at 2c only, and K2's target passes 2c by (2c is 2b's `NoPlan` arm) while without the model 2b
+                // answers it on the device; a yielded «нет такого приложения» is, without the model, step (2)'s
+                // decided store plan, answered before 2c. Three confirmations would pin a learned command that never
+                // runs in those states. (Online a yielded missing app is undecided and does reach 2c — ruled out all
+                // the same: one rule for both, the lesson is not offered.)
+                val teaches = claimed == null && fastPath.yielded !is FastPathYield.MissingApp
+                if (outcome is CommandOutcome.Interpreted) {
+                    outcome.copy(learnable = if (teaches) learnedPlans.learnable(command, answer.steps) else null)
+                } else {
+                    outcome
+                }
             }
             // Condition 3: a question goes to the assistant, prefilled and unsent — never to a web search.
             is ModelPlanning.ToAssistant -> CommandOutcome.OpenAssistant(answer.question)
@@ -372,7 +386,10 @@ class RouteCommandUseCase(
      * a missing app is answered on the device in the USER's words — the model's word never reaches the store or the
      * screen (D1, egress): FastPath's yielded «нет такого приложения» is A0's store plan (controller ruling K3), 2b's
      * empty app target «нет такого приложения» (K11). A yielded search, or nothing handed over, is `null`: the
-     * binding's own answer stands, as before.
+     * binding's own answer stands — `NoAppFound(mention)`, which since amendment D1 may be the MODEL's word («нет
+     * такого приложения «Claudex»»), said with no model mark (the E6-R2 class; a marked line is the owner's
+     * decision — ADR «2026-11-22 — D1, поправка…», «Чего поправка не обещает»). So is a 2b target when FastPath also
+     * yielded a search: the yield answers first, and this returns `null` for it.
      */
     private suspend fun notFoundWithoutModel(fastPath: FastPathAnswer, claimed: UnresolvedTarget?, raw: String): CommandOutcome? =
         when (val yielded = fastPath.yielded) {

@@ -239,6 +239,32 @@ class InterpretationSurfaceTest {
         compose.onNodeWithText("Suggested by the model", substring = true).assertDoesNotExist()
     }
 
+    /**
+     * Controller ruling T2-R2 (A4′ acceptance tail, task 4): the card draws model text going out from the domain's ONE
+     * reading of it (`modelTextGoingOut`), the reading `needsCard()` counts — so the name the MODEL wrote for an app
+     * the device bound (the step's app words, here after the user's pick) carries no model mark: the package goes
+     * out, not the word. The control: the same words not marked as the app's are drawn as the model's.
+     */
+    @Test
+    fun `the model's name for a bound app carries no model mark, as the card predicate reads it`() {
+        val modelNamed = act("launch_app", "query", "Vorandel", ValueOrigin.ModelGenerated, twoAppsSharingALabel)
+        val picked = requireNotNull(modelNamed.copy(appWords = mapOf(0 to "query")).choose("net.fixture.ondrami"))
+        render(picked)
+
+        compose.onNodeWithText("Open Vorandel (net.fixture.ondrami)").assertExists()
+        compose.onNodeWithText("Suggested by the model", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun `the same model words not marked as the app's are drawn as the model's`() {
+        val picked = requireNotNull(
+            act("launch_app", "query", "Vorandel", ValueOrigin.ModelGenerated, twoAppsSharingALabel).choose("net.fixture.ondrami"),
+        )
+        render(picked)
+
+        compose.onNodeWithText("Suggested by the model: Vorandel").assertExists()
+    }
+
     /** T6: a step that needs consent is drawn with the CONFIRM tone, not the SAFE one. */
     @Test
     fun `a step that needs consent is drawn with the confirm tone`() {

@@ -121,9 +121,14 @@ class LearnedPlanSeamTest {
     /** Every intent the Tier-0 worker issues. Empty is an assertion: nothing reaches the world before consent. */
     private val launched = mutableListOf<Intent>()
 
+    // Two «Lumora» apps (A4′ acceptance tail, task 4): since the D3 second amendment a reading that owes no pick and
+    // sends no model text out starts at once and teaches nothing (owner answer I5), so «сотри lumora» must owe the
+    // user a pick to stay on the card — the only reading that can teach. The pick is the card's; the lesson is the
+    // same validated reading's, and the replays below name «Vemblic» and «Miravin», one app each.
     private val apps = FakeInstalledAppsRepository().apply {
         appsToReturn = listOf(
             InstalledApp(packageName = LUMORA_PACKAGE, label = "Lumora"),
+            InstalledApp(packageName = LUMORA_TWO_PACKAGE, label = "Lumora"),
             InstalledApp(packageName = VEMBLIC_PACKAGE, label = "Vemblic"),
             InstalledApp(packageName = MIRAVIN_PACKAGE, label = "Miravin"),
         )
@@ -261,7 +266,12 @@ class LearnedPlanSeamTest {
         PlanTemplate(listOf(TemplateStep(Tier0ToolIds.UNINSTALL_APP, mapOf("app" to TemplateArg.Slot(0))))),
     )
 
-    /** Three step-7 readings of «сотри lumora», each recorded as the launcher's «Выполнить» will record it. */
+    /**
+     * Three step-7 readings of «сотри lumora», each recorded as the launcher's «Выполнить» will record it. Each is the
+     * card because it owes a pick between the two «Lumora» apps (task 4: a reading with nothing to show would start at
+     * once and teach nothing); what it teaches is computed from the validated steps, before binding, so the pick does
+     * not enter the lesson.
+     */
     private suspend fun confirmEraseThreeTimes() {
         modelPlanner.answer = modelReadsUninstall(LEARNED_COMMAND, "lumora")
         repeat(3) { n ->
@@ -341,6 +351,7 @@ class LearnedPlanSeamTest {
     private companion object {
         const val LEARNED_COMMAND = "сотри lumora"
         const val LUMORA_PACKAGE = "net.fixture.lumora"
+        const val LUMORA_TWO_PACKAGE = "net.fixture.lumora.two"
         const val VEMBLIC_PACKAGE = "net.fixture.vemblic"
         const val MIRAVIN_PACKAGE = "net.fixture.miravin"
         const val OWN_PACKAGE = "net.ownward.shell"

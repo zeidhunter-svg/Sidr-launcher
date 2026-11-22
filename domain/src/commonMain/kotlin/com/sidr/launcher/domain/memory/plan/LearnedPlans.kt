@@ -12,6 +12,7 @@ import com.sidr.launcher.domain.ai.bridge.ProposedStep
 import com.sidr.launcher.domain.ai.bridge.ToolDescriptions
 import com.sidr.launcher.domain.ai.bridge.ValueOrigin
 import com.sidr.launcher.domain.ai.bridge.Verdict
+import com.sidr.launcher.domain.ai.bridge.modelTextGoingOut
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.text.TextFolding
 import com.sidr.launcher.domain.tool.ArgSource
@@ -108,16 +109,18 @@ class DefaultLearnedPlans(
 }
 
 /**
- * Whether a bound reading needs the interpretation card before it runs (B-7): a pick is owed, or a step whose
- * effect leaves the phone ([ToolEffect.EXTERNAL]) carries a [ValueOrigin.ModelGenerated] value — exactly what
- * the card's `ModelValues` draws (`feature/launcher`, `InterpretationSurface`, `DOC-MZN-2`): per step, keyed on
- * its index, an `EXTERNAL` effect, and an origin `ModelGenerated` whose argument is an [ArgSource.Literal]. The
- * user's own words going out need no card; they are theirs.
+ * Whether a bound reading needs the interpretation card before it runs (B-7): a pick is owed, or some step carries
+ * the model's own text out of the phone — [modelTextGoingOut], the ONE function the card's `ModelValues` draws from
+ * too (`feature/launcher`, `InterpretationSurface`, `DOC-MZN-2`), so «the card shows model text» and «the card is
+ * needed for model text» are the same reading by construction: per step, keyed on its index, an
+ * [ToolEffect.EXTERNAL] effect and a [ValueOrigin.ModelGenerated] origin whose argument is an [ArgSource.Literal] —
+ * except the words that name the step's app ([Interpretation.Act.appWords], controller ruling T2-R2): the package the
+ * device bound reaches the world, not the model's name for it. The user's own words going out need no card; they are
+ * theirs.
+ *
+ * **One rule for two callers** (A4′ acceptance tail, task 4 — D3, second amendment): a learned command replayed at
+ * step 2c and a FRESH model reading at step 7 start at once exactly when this is `false`; either way the engine's
+ * consent card for a risky step is unchanged (`requiresConsent(risk)`, `DOC-ADL-1`).
  */
 fun Interpretation.Act.needsCard(): Boolean =
-    choices.isNotEmpty() || steps.any { step ->
-        effects[step.index] == ToolEffect.EXTERNAL &&
-            origins[step.index].orEmpty().any { (name, origin) ->
-                origin == ValueOrigin.ModelGenerated && step.invocation.args[name] is ArgSource.Literal
-            }
-    }
+    choices.isNotEmpty() || steps.any { step -> modelTextGoingOut(step).isNotEmpty() }

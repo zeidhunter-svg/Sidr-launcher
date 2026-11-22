@@ -147,6 +147,44 @@ class LearnedPlanReplayTest {
         assertFalse(search("поищи что-нибудь про орвелин", "орвелин история", ValueOrigin.ModelGenerated, ToolEffect.LOCAL).needsCard())
     }
 
+    /**
+     * Controller ruling T2-R2 (A4′ acceptance tail, task 4; the owner's C1 «исправление — сразу запуск»): the words the
+     * MODEL wrote to name an app — «Claude» for the user's «клод», `launch_app`'s `query` beside the package the device
+     * bound — are not model text going out: `launch_app` is `EXTERNAL`, but what reaches the world is the package. The
+     * binder marks those words ([Interpretation.Act.appWords]); the same words NOT so marked still need the card, and
+     * the mark on one step does not excuse the model's text on another. One rule for a fresh reading and a replay.
+     */
+    @Test
+    fun `the words the model wrote for an app the device bound are not model text going out`() {
+        val launch = ProposedStep(
+            LAUNCH_APP,
+            mapOf("query" to "Claude", "app" to CLAUDE),
+            emptyMap(),
+            ActionRiskLevel.SAFE,
+            ToolEffect.EXTERNAL,
+        ).let { it.toPlanStep(0, it.args) }
+        val bound = Interpretation.Act(
+            goal = goal("открой клод"),
+            steps = listOf(launch),
+            origins = mapOf(0 to mapOf("query" to ValueOrigin.ModelGenerated, "app" to ValueOrigin.Ours)),
+            effects = mapOf(0 to ToolEffect.EXTERNAL),
+            choices = emptyList(),
+            appWords = mapOf(0 to "query"),
+        )
+
+        assertFalse("the model's name for a bound app goes nowhere", bound.needsCard())
+        assertTrue("the same words not marked as the app's are model text going out", bound.copy(appWords = emptyMap()).needsCard())
+
+        val search = ProposedStep(WEB_SEARCH, mapOf("query" to "орвелин история"), emptyMap(), ActionRiskLevel.SAFE, ToolEffect.EXTERNAL)
+            .let { it.toPlanStep(1, it.args) }
+        val twoSteps = bound.copy(
+            steps = listOf(launch, search),
+            origins = bound.origins + (1 to mapOf("query" to ValueOrigin.ModelGenerated)),
+            effects = bound.effects + (1 to ToolEffect.EXTERNAL),
+        )
+        assertTrue("step 0's mark does not excuse step 1's model text", twoSteps.needsCard())
+    }
+
     // --- fixtures ---------------------------------------------------------------------------------------
 
     private fun bound(replay: Replay): Replay.Bound {
@@ -176,6 +214,8 @@ class LearnedPlanReplayTest {
     private companion object {
         val UNINSTALL_APP = ToolId("uninstall_app")
         val WEB_SEARCH = ToolId("web_search")
+        val LAUNCH_APP = ToolId("launch_app")
+        const val CLAUDE = "net.fixture.qandril"
         val USER = ValueOrigin.SaidBy(PrincipalId.USER)
         const val LUMORA = "net.fixture.lumora"
         const val VEMBLIC = "net.fixture.vemblic"

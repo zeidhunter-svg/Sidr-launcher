@@ -26,10 +26,13 @@
   riding it.
   Re-signed 2026-11-20 (A4' phase 4, owner answer «I1: a», then «подпись: да» to the exact text shown in the
   session): settings_local_only_description rewritten. Token typed by the agent on that instruction.
+  2026-11-22 (A4' acceptance tail, task 4): settings_local_only_description rewritten as an AGENT DRAFT from the
+  owner-signed Russian text (owner answer C4). It is NOT owner-reviewed: the signature above is left stale on
+  purpose, so checkOwnerReviewedLocaleStrings stays red until the owner reads this Turkish text and signs it.
 -->
 <resources>
     <string name="settings_stored_locally">Yalnızca bu cihazda saklanır.</string>
-    <string name="settings_local_only_description">Kapalı: bu başlatıcının yerel olarak eşleştiremediği komutlar anlaşılmak üzere yapay zekâ sağlayıcınıza gönderilir. Açık: yapay zekâ sağlayıcınıza hiçbir şey gönderilmez; komutlar yalnızca bu cihazda anlaşılır. Her iki durumda da önerilen bir eylem, aynı komutu üç kez onaylamadıysanız çalıştırılmadan önce onay ister; riskli bir adım ise her zaman onay ister. İstediğiniz aramalar ve bağlantılar tarayıcınızda açılır.</string>
+    <string name="settings_local_only_description">Kapalı: internete bağlıyken, bu başlatıcının kendi başına yerine getirmediği komutlar, ayrıca aramalar ve telefonda olmayan bir uygulamayı açma istekleri, anlaşılmak üzere yapay zekâ sağlayıcınıza gönderilir. Açık: yapay zekâ sağlayıcınıza hiçbir şey gönderilmez; komutlar yalnızca bu cihazda anlaşılır. Her iki durumda da riskli bir adım her zaman onay ister; bir seçim yapmanız gerekiyorsa ya da model tarafından yazılan bir metin telefondan dışarı gidecekse, anlaşılan komutu çalıştırılmadan önce bir kartta görürsünüz. İstediğiniz aramalar ve bağlantılar tarayıcınızda açılır.</string>
     <string name="settings_forget_alias_consequence">"\"%1$s\" artık %2$s uygulamasını açmayacak.\nAyarlardan tekrar ekleyebilirsiniz."</string>
     <string name="settings_aliases_empty_message">Henüz takma ad yok\nTakma adlar burada eklendikten sonra görünür.\nYalnızca bu cihazda saklanır.</string>
     <string name="settings_learned_choices_empty_message">Henüz öğrenilmiş seçim yok\nTercihler yalnızca onaylanan seçimlerden sonra görünür.\nYalnızca bu cihazda saklanır.</string>

@@ -10,7 +10,7 @@
   retyped) out of this module's ordinary values-ru/strings.xml - no copy change.
 -->
 <!--
-  OWNER-REVIEWED 2026-11-20 sha256:26c8b173d891df98 - the owner has read and approved this file's
+  OWNER-REVIEWED 2026-11-22 sha256:c7fe81b5c25ed99b - the owner has read and approved this file's
   Russian/Turkish text against docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md (Class B,
   spec §7.2). Provenance, recorded deliberately: the review was performed by the owner; this token
   was typed by the agent on the owner's explicit instruction. The gate cannot tell the two apart,
@@ -26,10 +26,15 @@
   riding it.
   Re-signed 2026-11-20 (A4' phase 4, owner answer «I1: a», then «подпись: да» to the exact text shown in the
   session): settings_local_only_description rewritten. Token typed by the agent on that instruction.
+  Re-signed 2026-11-22 (A4' acceptance tail, task 4; owner answer C4 to the plan review: the Russian text of
+  settings_local_only_description signed verbatim, ledger .superpowers/sdd/2026-11-21-a4-acceptance-tail/progress.md):
+  the egress sentence now names the online search and the launch of a missing app, and the card sentence says
+  when the understood command is shown. Token typed by the agent on that signature; the Turkish file is NOT
+  re-signed - its draft awaits the owner's reading.
 -->
 <resources>
     <string name="settings_stored_locally">Хранится только на этом устройстве.</string>
-    <string name="settings_local_only_description">Выключено: команды, которые лаунчер не распознал локально, отправляются вашему ИИ-провайдеру для понимания. Включено: вашему ИИ-провайдеру ничего не отправляется, команды понимаются только на этом устройстве. В обоих случаях предложенное действие запрашивает подтверждение перед выполнением, если вы не подтвердили эту же команду трижды, а рискованный шаг подтверждается всегда. Поиск и ссылки, о которых вы просите, открываются в браузере.</string>
+    <string name="settings_local_only_description">Выключено: при подключении к сети команды, которые лаунчер не выполнил сам, а также поиск и запуск приложения, которого нет на телефоне, отправляются вашему ИИ-провайдеру для понимания. Включено: вашему ИИ-провайдеру ничего не отправляется, команды понимаются только на этом устройстве. В обоих случаях рискованный шаг подтверждается всегда, а понятую команду вы видите на карточке до выполнения, если нужно выбрать или если наружу уйдёт текст, написанный моделью. Поиск и ссылки, о которых вы просите, открываются в браузере.</string>
     <string name="settings_forget_alias_consequence">"\"%1$s\" больше не будет открывать %2$s.\nВы можете добавить его снова в настройках."</string>
     <string name="settings_aliases_empty_message">Пока нет псевдонимов\nПсевдонимы появятся здесь после того, как вы их добавите.\nХранится только на этом устройстве.</string>
     <string name="settings_learned_choices_empty_message">Изученных выборов пока нет\nПредпочтения появляются только после подтверждённых выборов.\nХранится только на этом устройстве.</string>

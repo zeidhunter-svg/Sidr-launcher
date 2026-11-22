@@ -260,7 +260,8 @@ private fun SettingsContent(
             SidrNavigationRow(title = sidrString(R.string.settings_ai_provider_title), onClick = onAssistantProvider)
             // Этап 4.0 (ADR 1/4) — the local-only opt-OUT that replaced the AIL-4 router opt-in.
             // Off by default: a command FastPath can't handle is routed to the provider configured
-            // above (proposals always confirm, never auto-execute). On, nothing leaves the device and
+            // above (a reading that owes a pick or sends the model's text out waits on the card; any other starts
+            // through the engine, a risky step at its consent card — D3 amended twice). On, nothing leaves the device and
             // an unrecognized command says so instead of pretending it was never understandable.
             SidrToggleRow(
                 title = sidrString(R.string.settings_local_only_title),

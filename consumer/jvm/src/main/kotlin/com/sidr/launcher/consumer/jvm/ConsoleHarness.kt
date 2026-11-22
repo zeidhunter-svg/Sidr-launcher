@@ -78,7 +78,10 @@ import kotlin.coroutines.EmptyCoroutineContext
  * [SandboxToolDescriptions]), this platform's folding, the injected [BridgeTransport] — then the validator's
  * verdict is bound on this computer ([SandboxMentionBinder]: the sandbox root by the device, a file the user
  * named through `SandboxFileSort`, references kept), then printed as a card. Nothing runs before a `y` to
- * the card; then `startPlanned` and the same engine, with its consent prompts unchanged. Every answer that is
+ * the card; then `startPlanned` and the same engine, with its consent prompts unchanged. **Since the D3 second
+ * amendment (controller ruling K12, A4′ acceptance tail task 4) a reading that owes no pick and sends no model text
+ * out is printed under the model's mark and started at once instead ([startedByModel]) — on this consumer that is
+ * every bound reading today.** Every answer that is
  * not a plan, and every binding that is not one, is said and starts nothing. An unconfirmed reading is never stored
  * (a card refused or left unanswered is dropped; a confirmed one's form and template are kept in the
  * learned-plan file, below). `remove …` / `rename …` keep the deterministic `FilePlanner` — the model
@@ -266,7 +269,13 @@ class ConsoleHarness(
         val goal = AgentGoal(text = command, shape = GoalShape.Free(command))
         return when (val planning = modelPlanner.plan(command)) {
             is ModelPlanning.Proposed -> when (val binding = binder.bind(goal, planning.steps)) {
-                is Binding.Bound -> card(binding.interpretation, learnable = learnedPlans.learnable(command, planning.steps))
+                // K12 (A4′ acceptance tail, task 4): D3's second amendment, as on Android — a reading that owes no pick
+                // and sends no model text out starts at once, under the model's mark, and teaches nothing (I5).
+                is Binding.Bound -> if (binding.interpretation.needsCard()) {
+                    card(binding.interpretation, learnable = learnedPlans.learnable(command, planning.steps))
+                } else {
+                    startedByModel(binding.interpretation)
+                }
                 is Binding.NotFound -> notStarted("No file in the sandbox answers to \"${binding.mention}\". Nothing ran.")
                 is Binding.NotUnderstood -> notStarted("Could not read \"${binding.words}\". Nothing ran.")
                 Binding.Unavailable -> notStarted(
@@ -283,16 +292,25 @@ class ConsoleHarness(
     }
 
     /**
-     * The interpretation card: every step with the values it will be called with and who said each — the
-     * user, this device, or the model — and every reference as the earlier step's output it names. Only a
-     * `y` starts it, through `startPlanned`; anything else, or no answer at all, drops the reading
-     * (`Cancelled`: the person did not say yes; nothing was started, nothing is stored).
+     * D3, second amendment on this consumer (controller ruling K12, A4′ acceptance tail task 4): a fresh bound reading
+     * that owes no pick and sends no model-written text off this computer (`needsCard()` false) is printed under the
+     * model's mark — the JVM's «Предложено моделью» (K4) — and started at once, exactly as a learned command is
+     * ([startAtOnce]); the engine's consent prompt of a risky step (`delete_file`) is asked as for every plan. It
+     * records nothing (owner answer I5 «не засчитывать»: only a reading confirmed on the card teaches).
+     *
+     * **A named consequence:** every sandbox tool is `LOCAL` and [SandboxMentionBinder] owes no pick (it fails a file
+     * choice closed), so no sandbox reading needs the card today — `ask` starts every bound reading here, the [card]
+     * branch is reached only by a future `EXTERNAL` tool or a binder that owes a pick, and a reading can no longer
+     * teach the learned-plan file through `ask` (the file is still read by [replayOrInterpret]).
      */
-    private suspend fun card(act: Interpretation.Act, learnable: LearnedPlanShape?): Interpreted {
-        // No pick is ever owed from this consumer's binder (it fails a file choice closed); were one owed,
-        // nothing would start.
-        val plan = act.plan() ?: return notStarted("A pick is owed before this reading can run, and this harness takes none. Nothing ran.")
-        out("The model's reading of \"${act.goal.text}\":")
+    private suspend fun startedByModel(act: Interpretation.Act): Interpreted {
+        printReading("Suggested by the model, started at once — \"${act.goal.text}\":", act)
+        return startAtOnce(act)
+    }
+
+    /** One line per step: the values it will be called with and who said each, every reference as the step it names. */
+    private fun printReading(header: String, act: Interpretation.Act) {
+        out(header)
         act.steps.forEach { step ->
             val origins = act.origins[step.index].orEmpty()
             val args = step.invocation.args.entries.joinToString(", ") { (name, source) ->
@@ -303,6 +321,20 @@ class ConsoleHarness(
             }
             out("  ${step.index}. ${step.invocation.id.value}($args) — risk ${step.risk}")
         }
+    }
+
+    /**
+     * The interpretation card: every step with the values it will be called with and who said each — the
+     * user, this device, or the model — and every reference as the earlier step's output it names. Only a
+     * `y` starts it, through `startPlanned`; anything else, or no answer at all, drops the reading
+     * (`Cancelled`: the person did not say yes; nothing was started, nothing is stored). Since K12 only a reading
+     * that [needsCard] reaches it ([startedByModel]).
+     */
+    private suspend fun card(act: Interpretation.Act, learnable: LearnedPlanShape?): Interpreted {
+        // No pick is ever owed from this consumer's binder (it fails a file choice closed); were one owed,
+        // nothing would start.
+        val plan = act.plan() ?: return notStarted("A pick is owed before this reading can run, and this harness takes none. Nothing ran.")
+        printReading("The model's reading of \"${act.goal.text}\":", act)
         out("Run this plan? [y/N]")
         val answer = ask() ?: return notStarted("No answer given — the reading is dropped; nothing was started.", ExecutionState.Cancelled)
         if (answer.trim().lowercase() != "y") return notStarted("Not run.", ExecutionState.Cancelled)

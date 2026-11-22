@@ -96,7 +96,8 @@ absent).
 - **BYOK cloud AI** — Assistant (SSE, OpenAI-compatible, key in Keystore) + **the bridge**, the one model
   path: a FastPath miss past the local-only / provider / connectivity gates (each blocked state says which)
   sends the command and our tool descriptions; an interpretation card comes back; nothing runs before
-  «Выполнить» (but a learned command, D3 as amended), then only through the engine.
+  «Выполнить» (but a learned command and, since 2026-11-22, a reading with no pick and no model text going out —
+  D3 amended twice), then only through the engine.
 - **Memory** (learned resolutions at streak ≥ 3, aliases; on-device, correctable) · **Suggestions**
   (time/usage offline, calendar/location permission-gated, WorkManager) · **Prayer** (offline `adhan2`,
   bundled city index, location rounded to 2dp before the port, never persisted) · **Design system v1.1**
@@ -254,8 +255,10 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
   different port from `IntentMatcher` (→ `IntentMatchResult`) and from the structured `Planner` and the
   bridge's `ModelPlanner` — those are different *shapes of answer*, and that separation is unaffected.
   **Nothing the model proposes runs before the interpretation card's «Выполнить», and then only through
-  the engine — except a learned command** (a form + template the user confirmed three times, step 2c), which
-  starts its session through the same engine with no gate skipped; a risky step's consent card is asked every
+  the engine — except a learned command** (a form + template the user confirmed three times, step 2c) **and a
+  fresh reading that owes no pick and sends no model-written text out** (`needsCard()` false, step 7; marked
+  «Предложено моделью», teaches nothing — ADR «2026-11-22 — D3, вторая поправка…»): each starts its session through
+  the same engine with no gate skipped; a risky step's consent card is asked every
   time (Fork R4, D3 amended by ADR «2026-11-20 — D3, поправка: выученная команда», signed 2026-11-20;
   `OneModelPathGuardTest` holds that the router is gone and that the launcher's one direct `LauncherAction`
   execution is the web chip the user points).

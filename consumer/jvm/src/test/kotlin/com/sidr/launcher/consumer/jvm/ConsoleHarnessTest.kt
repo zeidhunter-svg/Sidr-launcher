@@ -1,9 +1,11 @@
 package com.sidr.launcher.consumer.jvm
 
+import com.sidr.launcher.consumer.jvm.bridge.SandboxToolDescriptions
 import com.sidr.launcher.consumer.jvm.plan.FilePlanner
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionIdFactory
 import com.sidr.launcher.consumer.jvm.store.JvmAgentSessionStore
 import com.sidr.launcher.consumer.jvm.store.JvmLearnedPlanStore
+import com.sidr.launcher.consumer.jvm.text.JdkTextFolding
 import com.sidr.launcher.consumer.jvm.tool.SandboxKeys
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolIds
 import com.sidr.launcher.consumer.jvm.tool.SandboxToolSource
@@ -18,19 +20,26 @@ import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.StepRationale
+import com.sidr.launcher.domain.ai.bridge.BridgeModelPlanner
 import com.sidr.launcher.domain.ai.bridge.BridgeRequest
 import com.sidr.launcher.domain.ai.bridge.BridgeTransport
+import com.sidr.launcher.domain.ai.bridge.ModelPlanning
 import com.sidr.launcher.domain.ai.bridge.RawAnswer
 import com.sidr.launcher.domain.ai.bridge.RawArg
 import com.sidr.launcher.domain.ai.bridge.RawStep
 import com.sidr.launcher.domain.ai.bridge.ReplyMeta
 import com.sidr.launcher.domain.ai.bridge.TransportReply
+import com.sidr.launcher.domain.memory.plan.LearnedForms
 import com.sidr.launcher.domain.memory.plan.LearnedPlan
+import com.sidr.launcher.domain.memory.plan.RecordLearnedPlanUseCase
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ResolvedInvocation
+import com.sidr.launcher.domain.tool.ToolAdapter
 import com.sidr.launcher.domain.tool.ToolExecutor
+import com.sidr.launcher.domain.tool.ToolFederation
 import com.sidr.launcher.domain.tool.ToolInvocation
+import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.trace.TraceEvent
 import kotlinx.coroutines.test.runTest
@@ -105,17 +114,22 @@ class ConsoleHarnessTest {
     /**
      * A4′ phase 3b, Task 13 — the JVM consumer's model path (B-12, B-13): `ask <goal>` goes to the SAME bridge
      * `:domain` holds, over this consumer's offering (the sandbox level); its answer is validated, bound on
-     * this computer (the root by the device), printed as a card, and only a `y` to the card starts it through
-     * `startPlanned` — after which the engine's consent prompt is the one the deterministic path has always had.
+     * this computer (the root by the device), and started through `startPlanned` — after which the engine's consent
+     * prompt is the one the deterministic path has always had.
+     *
+     * **K12 — the D3 second amendment on the JVM, as on Android** (A4′ acceptance tail, task 4): a fresh reading that
+     * owes no pick and sends no model-written text off this computer (`needsCard()` false) is NOT put on a card first —
+     * it is printed under the model's mark and started at once. The delete is still `DANGEROUS`: the engine's prompt
+     * asks, and the one `y` given here is that prompt's. Before task 4 this test read «…, the card, then the engine».
      */
     @Test
-    fun `a free goal goes through the model, the card, then the engine`() = runTest {
+    fun `a fresh reading with nothing to show starts at once`() = runTest {
         val orvelle = temp.newFile("orvelle.txt").toPath().toRealPath()
         temp.newFile("pallimer.md")
         val sandbox = temp.root.toPath().toRealPath()
         val transport = ScriptedTransport(findThenDelete)
 
-        val state = harness(mutableListOf("y", "y"), transport).run("ask find orvelle.txt and delete it")
+        val state = harness(mutableListOf("y"), transport).run("ask find orvelle.txt and delete it")
 
         assertEquals(ExecutionState.Completed, state)
         assertEquals(listOf("find orvelle.txt and delete it"), transport.requests.map { it.command })
@@ -128,16 +142,16 @@ class ConsoleHarnessTest {
                 world.forEach { trace -> assertFalse("«$trace» reached the model's request", part.contains(trace)) }
             }
         }
-        val card = listOf(
-            "The model's reading of \"find orvelle.txt and delete it\":",
+        val reading = listOf(
+            "Suggested by the model, started at once — \"find orvelle.txt and delete it\":",
             "  0. find_file(query=orvelle.txt [user], root=$sandbox [device]) — risk SAFE",
             "  1. delete_file(path ← step 0 resolved_path) — risk DANGEROUS",
-            "Run this plan? [y/N]",
         )
-        val at = printed.indexOf(card.first())
-        assertTrue("the card is printed:\n${printed.joinToString("\n")}", at >= 0)
-        assertEquals(card, printed.subList(at, minOf(printed.size, at + card.size)))
-        assertTrue("the engine starts only after the card", printed.indexOf("  PlanCreated(stepCount=2)") > at)
+        val at = printed.indexOf(reading.first())
+        assertTrue("the reading is printed under the model's mark:\n${printed.joinToString("\n")}", at >= 0)
+        assertEquals(reading, printed.subList(at, minOf(printed.size, at + reading.size)))
+        assertFalse("no card is asked", printed.contains("Run this plan? [y/N]"))
+        assertTrue("the engine starts after the reading is printed", printed.indexOf("  PlanCreated(stepCount=2)") > at)
         assertTrue("the consent prompt names the file found", printed.contains("  Arguments: path=$orvelle"))
         assertFalse("the file the model named is deleted", File(temp.root, "orvelle.txt").exists())
         assertTrue("nothing else is touched", File(temp.root, "pallimer.md").exists())
@@ -167,13 +181,27 @@ class ConsoleHarnessTest {
         lateinit var reply: (String) -> TransportReply
     }
 
-    /** Teaches «find … and delete it» three times, each through a fresh harness over the same sandbox (the file is the memory). */
+    /**
+     * Teaches «find … and delete it» three times, as three CONFIRMED readings would — written straight into the learned
+     * plan file (the file is the memory). The lesson is the one the harness itself computes: the bridge's validated
+     * steps for the command ([BridgeModelPlanner] over this consumer's offering and folding), learned by
+     * [LearnedForms.learn], recorded by [RecordLearnedPlanUseCase].
+     *
+     * **Why not through the harness any more** (A4′ acceptance tail, task 4 — K12 + owner answer I5): only a reading
+     * confirmed on the card teaches, and since the D3 second amendment no sandbox reading needs the card — every
+     * sandbox tool is `LOCAL` and this binder owes no pick — so `ask` starts every bound reading at once and teaches
+     * nothing. Named in the task-4 report: the JVM learned-plan cache can be read but no longer written by `ask`.
+     */
     private suspend fun teachFindDelete(transport: FindDeleteTransport) {
+        val root = temp.root.toPath()
+        val registry = ToolFederation(listOf(ToolAdapter(ToolLevels.SANDBOX, SandboxToolSource(), SandboxToolWorker(root)))).registry
+        val bridge = BridgeModelPlanner(registry, SandboxToolDescriptions(), transport, SandboxToolDescriptions.OFFERED_LEVELS, folding = JdkTextFolding)
+        val record = RecordLearnedPlanUseCase(JvmLearnedPlanStore(root.resolve(".sidr-agent/learned-plans.json")))
         listOf("orvelle.txt", "pallimer.md", "quembly.txt").forEach { name ->
-            temp.newFile(name)
-            val state = harness(mutableListOf("y", "y"), transport).run("ask find $name and delete it")
-            assertEquals(ExecutionState.Completed, state)
-            assertFalse(File(temp.root, name).exists())
+            val command = "find $name and delete it"
+            val steps = (bridge.plan(command) as ModelPlanning.Proposed).steps
+            val lesson = checkNotNull(LearnedForms.learn(command, steps, JdkTextFolding)) { "«$command» was expected to teach" }
+            assertEquals(OperationResult.Success(Unit), record.record(lesson))
         }
     }
 
@@ -218,19 +246,8 @@ class ConsoleHarnessTest {
         assertTrue("nothing is deleted", File(temp.root, "kestun.txt").exists())
     }
 
-    /**
-     * Task 13 fix round 1 (review I1): «nothing runs before a `y` to the card». The refused reading is one that
-     * WOULD act with no further question — `rename_file` is `SAFE`, so the engine's consent gate would not stop
-     * it — so an «n» the harness ignored would show up as a renamed file, a started session and a different
-     * state. The card is asserted printed first (the file named in words is bound on this computer, through
-     * the file sort), so the refusal is the card's and not an earlier stop.
-     */
-    @Test
-    fun `a refused card starts nothing`() = runTest {
-        val orvelle = temp.newFile("orvelle.txt").toPath().toRealPath()
-        orvelle.toFile().writeText("SNTL-UNTOUCHED-ORVELLE")
-        val before = tree()
-        val transport = ScriptedTransport(
+    /** The model's reading of «rename orvelle.txt to quembly.txt»: one `SAFE` rename, both names the user's words. */
+    private fun renameOrvelle() = ScriptedTransport(
             TransportReply.Answer(
                 RawAnswer(
                     kind = "plan",
@@ -244,60 +261,61 @@ class ConsoleHarnessTest {
             ),
         )
 
-        val state = harness(mutableListOf("n"), transport).run("ask rename orvelle.txt to quembly.txt")
+    /**
+     * K12, the stark half of the D3 second amendment on this consumer (A4′ acceptance tail, task 4). Before it this
+     * test was «a refused card starts nothing» (Task 13 fix round 1, review I1: «nothing runs before a `y` to the
+     * card»). A `SAFE`, `LOCAL` rename whose names are the user's own words owes no pick and sends no model text
+     * anywhere, so it is NOT put on a card: it is printed under the model's mark and runs at once, and the engine
+     * asks nothing either (`SAFE`). No answer is scripted — a question asked here would get none and end the run
+     * `Cancelled`. The rename is undoable, and the harness offers it.
+     */
+    @Test
+    fun `a fresh SAFE reading runs at once and nothing asks first`() = runTest {
+        val orvelle = temp.newFile("orvelle.txt").toPath().toRealPath()
+        orvelle.toFile().writeText("SNTL-MOVED-ORVELLE")
+        val transport = renameOrvelle()
 
-        val card = listOf(
-            "The model's reading of \"rename orvelle.txt to quembly.txt\":",
+        val state = harness(mutableListOf(), transport).run("ask rename orvelle.txt to quembly.txt")
+
+        val reading = listOf(
+            "Suggested by the model, started at once — \"rename orvelle.txt to quembly.txt\":",
             "  0. rename_file(path=$orvelle [device], new_name=quembly.txt [user]) — risk SAFE",
-            "Run this plan? [y/N]",
         )
-        val at = printed.indexOf(card.first())
-        assertTrue("the card is printed:\n${printed.joinToString("\n")}", at >= 0)
-        assertEquals(card, printed.subList(at, minOf(printed.size, at + card.size)))
-        assertEquals(ExecutionState.Cancelled, state)
+        val at = printed.indexOf(reading.first())
+        assertTrue("the reading is printed under the model's mark:\n${printed.joinToString("\n")}", at >= 0)
+        assertEquals(reading, printed.subList(at, minOf(printed.size, at + reading.size)))
+        assertEquals(ExecutionState.Completed, state)
         assertEquals("the model is asked once", 1, transport.requests.size)
-        assertEquals("no session is started", emptyList<String>(), printed.filter { it.startsWith("  PlanCreated") })
-        assertEquals(before, tree())
-        assertEquals(
-            "the store holds no session",
-            OperationResult.Success(null),
-            JvmAgentSessionStore(temp.root.toPath().resolve(".sidr-agent/session.json")).active(),
-        )
+        assertFalse("no card is asked", printed.contains("Run this plan? [y/N]"))
+        assertFalse("no consent is asked for a SAFE step", printed.contains("Proceed? [y/N]"))
+        assertFalse(File(temp.root, "orvelle.txt").exists())
+        assertEquals("SNTL-MOVED-ORVELLE", File(temp.root, "quembly.txt").readText())
     }
 
     /**
-     * B-8, Task 9 fix round 1 (review Important 1): a refused card teaches nothing. `rename_file` is `SAFE`, so
-     * a form learned from refused readings would replay with no card and no prompt. Three refusals of one
-     * form leave the learned-plan file empty, and the fourth ask reaches the model and prints the card again.
+     * Owner answer I5 «не засчитывать», on this consumer (K12): a reading started without the card teaches nothing.
+     * Three runs of one form — each renaming, each answered by «n» to the offered undo — leave the learned-plan file
+     * empty, and the fourth ask reaches the model again and is not a learned command. Before task 4 this test was
+     * «a refused card teaches nothing» (B-8, Task 9 fix round 1); no sandbox reading reaches the card any more.
      */
     @Test
-    fun `a refused card teaches nothing`() = runTest {
-        temp.newFile("orvelle.txt")
-        val transport = ScriptedTransport(
-            TransportReply.Answer(
-                RawAnswer(
-                    kind = "plan",
-                    steps = listOf(
-                        RawStep("rename_file", mapOf("name" to null, "new_name" to RawArg.Text("quembly.txt"), "path" to RawArg.Text("orvelle.txt"))),
-                    ),
-                    question = null,
-                    destination = null,
-                ),
-                ReplyMeta.NONE,
-            ),
-        )
+    fun `a reading started at once teaches nothing`() = runTest {
+        val transport = renameOrvelle()
         val learned = JvmLearnedPlanStore(temp.root.toPath().resolve(".sidr-agent/learned-plans.json"))
 
-        repeat(3) { harness(mutableListOf("n"), transport).run("ask rename orvelle.txt to quembly.txt") }
-        assertEquals("nothing learned from refusals", OperationResult.Success(emptyList<LearnedPlan>()), learned.all())
+        repeat(3) {
+            File(temp.root, "orvelle.txt").writeText("SNTL-ORVELLE")
+            File(temp.root, "quembly.txt").delete()
+            assertEquals(ExecutionState.Completed, harness(mutableListOf("n"), transport).run("ask rename orvelle.txt to quembly.txt"))
+        }
+        assertEquals("nothing learned from readings started at once", OperationResult.Success(emptyList<LearnedPlan>()), learned.all())
         printed.clear()
-        val state = harness(mutableListOf("n"), transport).run("ask rename orvelle.txt to quembly.txt")
+        File(temp.root, "orvelle.txt").writeText("SNTL-ORVELLE")
+        File(temp.root, "quembly.txt").delete()
+        harness(mutableListOf("n"), transport).run("ask rename orvelle.txt to quembly.txt")
 
         assertEquals("the fourth ask reaches the model", 4, transport.requests.size)
-        assertTrue("and shows the card:\n${printed.joinToString("\n")}", printed.contains("Run this plan? [y/N]"))
-        assertFalse("not a learned command", printed.any { it.startsWith("Learned command") })
-        assertEquals(ExecutionState.Cancelled, state)
-        assertTrue(File(temp.root, "orvelle.txt").exists())
+        assertFalse("not a learned command:\n${printed.joinToString("\n")}", printed.any { it.startsWith("Learned command") })
     }
 
     /**

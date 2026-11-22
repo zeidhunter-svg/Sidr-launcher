@@ -1,5 +1,6 @@
 package com.sidr.launcher.feature.launcher.agent
 
+import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.AgentSession
 import com.sidr.launcher.domain.agent.AgentSessionId
@@ -16,6 +17,9 @@ import com.sidr.launcher.domain.agent.UndoAgentSessionUseCase
 import com.sidr.launcher.domain.memory.plan.CommandForm
 import com.sidr.launcher.domain.memory.plan.ForgetLearnedPlanUseCase
 import com.sidr.launcher.domain.result.OperationResult
+import com.sidr.launcher.domain.tool.ToolResult
+import com.sidr.launcher.domain.tool.Undo
+import com.sidr.launcher.domain.trace.TraceEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,7 +52,10 @@ import kotlinx.coroutines.launch
  * to take the card down and put nothing in its place.
  *
  * The session a learned command started carries that command's form ([learned], A4′ phase 4, B-10) while it is
- * the one on screen, and «Забыть» forgets the form ([forgetLearned]).
+ * the one on screen, and «Забыть» forgets the form ([forgetLearned]). The session a fresh model reading started
+ * without the interpretation card carries the model's mark ([proposedByModel]; A4′ acceptance tail, task 4, K4), and
+ * a simple session — one `SAFE` step that acted, nothing to undo — takes its own card down when it finishes ([attach],
+ * owner answer I12).
  *
  * Everything it touches is a `:domain` port, so it is unit-testable without Android or Compose.
  */
@@ -66,6 +73,11 @@ internal class LauncherAgentSession(
     private val onRemainder: (AgentGoal, ExecutionPlan) -> Unit,
     /** «Забыть» on the card of a learned command's session (A4′ phase 4, B-10): deletes that command's form. */
     private val forgetLearnedPlan: ForgetLearnedPlanUseCase,
+    /**
+     * A simple session closed itself (owner answer I12, A4′ acceptance tail task 4): its goal, for the ViewModel to put
+     * the launcher back at rest when the buffer still holds that command. Defaulted: a caller with no buffer does nothing.
+     */
+    private val onClosedItself: (AgentGoal) -> Unit = {},
 ) {
     private val _session = MutableStateFlow<AgentSession?>(null)
     val session: StateFlow<AgentSession?> = _session.asStateFlow()
@@ -117,6 +129,16 @@ internal class LauncherAgentSession(
     val learned: StateFlow<CommandForm?> = _learned.asStateFlow()
     private var learnedMark: Pair<AgentSessionId, CommandForm>? = null
 
+    /**
+     * Whether the session on screen was started by a FRESH model reading without the interpretation card (A4′ acceptance
+     * tail, task 4 — D3, second amendment; controller ruling K4): the card says «Предложено моделью» while it is true.
+     * Held as [modelMark] — the session id — exactly as [learnedMark] is: set only by [attach], dropped by [show] for any
+     * other session (or none), and by [restoreOnStart] outright; it lives in memory, never in the store.
+     */
+    private val _proposedByModel = MutableStateFlow(false)
+    val proposedByModel: StateFlow<Boolean> = _proposedByModel.asStateFlow()
+    private var modelMark: AgentSessionId? = null
+
     private fun show(next: AgentSession?) {
         _session.value = next
         _undoReview.value = next?.let(undoSession::review).orEmpty()
@@ -125,6 +147,8 @@ internal class LauncherAgentSession(
             ?.let(resumeSession::remainder) != null
         learnedMark = learnedMark?.takeIf { (id, _) -> id == next?.id }
         _learned.value = learnedMark?.second
+        modelMark = modelMark?.takeIf { it == next?.id }
+        _proposedByModel.value = modelMark != null
     }
 
     /**
@@ -135,14 +159,44 @@ internal class LauncherAgentSession(
      * **Set once the run has returned, immediately before [show]** (Task 7 review, fix round 1). While the run is
      * in flight the screen still shows the previous card and that card's mark: a mark set earlier would belong to
      * a session not yet on screen, and «Забыть» under the old card ([forgetLearned]) would forget the command still
-     * running — or «Закрыть» on it would drop the new session's mark before it arrived.
+     * running — or «Закрыть» on it would drop the new session's mark before it arrived. [proposedByModel] — the
+     * model's mark (K4) — is set the same way, at the same moment, for the same reason.
+     *
+     * **A simple session closes itself** (owner answer I12 «простая — закрывается сама», A4′ acceptance tail task 4):
+     * one that finished as [closesItself] reads is not shown at all — its card comes off Home, as FastPath's own
+     * `Executed` leaves nothing — and [onClosedItself] is told, so the launcher can be put back at rest. For every
+     * start that reaches here: a session started without a card (a fresh model reading, a learned command, 2b, the
+     * alias, step (2)'s store plan — two steps, so it stays) and one a card's «Выполнить» or a 2b pick started.
      */
-    fun attach(id: AgentSessionId, learned: CommandForm? = null) = scope.launch {
+    fun attach(id: AgentSessionId, learned: CommandForm? = null, proposedByModel: Boolean = false) = scope.launch {
         val active = (store.active() as? OperationResult.Success)?.value ?: return@launch
         if (active.id != id) return@launch
         val ran = (runSession.run(active) as? OperationResult.Success)?.value
+        if (ran != null && ran.closesItself()) {
+            show(null)
+            onClosedItself(ran.goal)
+            return@launch
+        }
         if (learned != null) learnedMark = id to learned
+        if (proposedByModel) modelMark = id
         show(ran)
+    }
+
+    /**
+     * Owner answer I12: the session is ONE `SAFE` step that ACTED (`ToolResult.Effected`), finished `Completed`, asked
+     * no consent on the way (no `ConsentRequested` — a missing permission or a durable effect asks even for a `SAFE`
+     * risk) and has nothing to undo (no `Undo.By` in the review «Отменить» reads). Anything else keeps its card, as
+     * before: two steps or more, a risky step, an undo, and — read strictly, named in the task report — a step that
+     * only LOOKED (`Observed`: the app was not there), whose card is the one thing telling the user nothing opened.
+     * The session is already gone from the store: a terminal run is saved and deleted by `RunAgentSessionUseCase`.
+     */
+    private fun AgentSession.closesItself(): Boolean {
+        val step = plan.steps.singleOrNull() ?: return false
+        return state == ExecutionState.Completed &&
+            step.risk == ActionRiskLevel.SAFE &&
+            trace.events.none { it is TraceEvent.ConsentRequested } &&
+            observations[step.index] is ToolResult.Effected &&
+            undoSession.review(this).none { it.undo is Undo.By }
     }
 
     /**
@@ -177,9 +231,12 @@ internal class LauncherAgentSession(
      * this branch the trace grows by a row on every start for as long as the plan sits unanswered.
      */
     fun restoreOnStart() = scope.launch {
-        // Fork 4-5's named limit (B-10): no mark survives into a restored session — see [learned].
+        // Fork 4-5's named limit (B-10): no mark survives into a restored session — see [learned]. The model's mark
+        // (task 4) is held the same way and is dropped the same way.
         learnedMark = null
         _learned.value = null
+        modelMark = null
+        _proposedByModel.value = false
         val active = (store.active() as? OperationResult.Success)?.value ?: return@launch
 
         if (active.state.isTerminal) {

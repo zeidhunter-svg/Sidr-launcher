@@ -26,7 +26,9 @@ data class SettingsUiState(
     /**
      * Mirrors `FeatureFlags.localOnlyMode` (Этап 4.0, ADR 1/4). **Off by default** — understanding
      * belongs to the model, so a command FastPath can't handle is routed to the configured provider
-     * (proposals always confirm, never auto-execute). On, nothing understanding-related leaves the
+     * (a reading that owes a pick or sends the model's text out waits on the card; any other — and a learned
+     * command — starts through the engine, whose consent card for a risky step is never skipped: D3 as amended
+     * twice, the second time by A4′ acceptance tail task 4). On, nothing understanding-related leaves the
      * device and routing is byte-for-byte the FastPath-only launcher.
      *
      * Replaces the inverted `llmRouterEnabled`, which made understanding itself opt-in.

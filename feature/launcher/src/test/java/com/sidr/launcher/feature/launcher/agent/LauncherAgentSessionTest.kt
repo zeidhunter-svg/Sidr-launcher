@@ -562,6 +562,16 @@ class LauncherAgentSessionTest {
     // --- A4′ phase 4, Task 7 (plan §0.2 B-10): the mark of a learned command --------------------------------------
 
     private val searchTool = ToolId("web_search")
+
+    /**
+     * A4′ acceptance tail, task 4 (owner answer I12 «простая — закрывается сама»): a session of ONE `SAFE` step that
+     * acted and has nothing to undo now takes its card down when it finishes. The learned searches below are given an
+     * undo so that they keep their card — the mark needs a card to sit under; the property under test (the mark
+     * belongs to its session) is unchanged. The undo is never run here.
+     */
+    private val searchUndoable = ToolInverses { forward, _ ->
+        if (forward.id == searchTool) Undo.By(ToolInvocation(searchTool, emptyMap())) else Undo.NotUndoable
+    }
     private val searchForm = CommandForm(listOf(FormPart.Word("поищи"), FormPart.Slot))
     private val eraseForm = CommandForm(listOf(FormPart.Word("сотри"), FormPart.Slot))
 
@@ -600,7 +610,7 @@ class LauncherAgentSessionTest {
     fun `a learned session says so and Forget deletes its form`() = runTest {
         learnedStore.upsert(learnedRow(searchForm, searchTool, "query"))
         learnedStore.upsert(learnedRow(eraseForm, ToolId("uninstall_app"), "app"))
-        val agent = collaborator(FakeToolExecutor(listOf(ToolResult.Effected())), this)
+        val agent = collaborator(FakeToolExecutor(listOf(ToolResult.Effected())), this, inverses = searchUndoable)
         agent.attach(startedSearch(), searchForm)
         advanceUntilIdle()
         check(agent.session.value?.state == ExecutionState.Completed) { "seed expected Completed, was ${agent.session.value?.state}" }
@@ -626,7 +636,7 @@ class LauncherAgentSessionTest {
      */
     @Test
     fun `the mark stays with its session only`() = runTest {
-        val agent = collaborator(FakeToolExecutor(listOf(ToolResult.Effected(), ToolResult.Effected(), ToolResult.Effected())), this)
+        val agent = collaborator(FakeToolExecutor(listOf(ToolResult.Effected(), ToolResult.Effected(), ToolResult.Effected())), this, inverses = searchUndoable)
 
         // Another session on screen: a command that was not learned.
         agent.attach(startedSearch(), searchForm)
@@ -658,6 +668,45 @@ class LauncherAgentSessionTest {
         assertEquals(waiting, agent.session.value?.id)
         assertEquals(ExecutionState.Paused, agent.session.value?.state)
         assertNull("a session restored at start carries no mark (fork 4-5)", agent.learned.value)
+    }
+
+    /**
+     * Owner answer I12 (A4′ acceptance tail, task 4), the collaborator's half: a learned search — one `SAFE` step that
+     * acted, nothing to undo — closes itself when it finishes: no card, so no mark either, and the collaborator says
+     * so once, with the session's goal, for the ViewModel to put the launcher back at rest. The model's mark (K4) goes
+     * the same way.
+     */
+    @Test
+    fun `a simple session closes itself, its marks with it`() = runTest {
+        val closed = mutableListOf<AgentGoal>()
+        val runner = RunAgentSessionUseCase(AgentExecutor(registry, FakeToolExecutor(listOf(ToolResult.Effected(), ToolResult.Effected())), RuntimeBudget.Default), store)
+        val agent = LauncherAgentSession(
+            runSession = runner,
+            resolveConsent = ResolveConsentUseCase(store, runner),
+            cancelSession = CancelAgentSessionUseCase(store),
+            store = store,
+            scope = this,
+            resumeSession = ResumeAgentSessionUseCase(StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry), runner),
+            undoSession = UndoAgentSessionUseCase(StartAgentSessionUseCase(TemplatePlanner(), store, ids, registry), { _, _ -> Undo.NotUndoable }, registry),
+            onReroute = { rerouted += it },
+            onRemainder = { goal, plan -> remainders += goal to plan },
+            forgetLearnedPlan = ForgetLearnedPlanUseCase(learnedStore),
+            onClosedItself = { closed += it },
+        )
+
+        agent.attach(startedSearch(), searchForm)
+        advanceUntilIdle()
+
+        assertNull("the finished simple session took its card down", agent.session.value)
+        assertNull("no card, no learned mark", agent.learned.value)
+        assertEquals("the collaborator says so once, with the goal", listOf(AgentGoal("поищи глимсар", GoalShape.Free("поищи глимсар"))), closed)
+
+        agent.attach(startedSearch(), proposedByModel = true)
+        advanceUntilIdle()
+
+        assertNull(agent.session.value)
+        assertEquals("no card, no model mark", false, agent.proposedByModel.value)
+        assertEquals(2, closed.size)
     }
 
     /** Answers every call `Effected`, but holds the call at [gateAt] until [gate] completes. */
@@ -693,7 +742,7 @@ class LauncherAgentSessionTest {
         )
         val gate = CompletableDeferred<Unit>()
         val tools = GatedToolExecutor(gateAt = 1, gate = gate)
-        val agent = collaborator(tools, this)
+        val agent = collaborator(tools, this, inverses = searchUndoable)
         val shown = startedSearch()
         agent.attach(shown, searchForm)
         runCurrent()

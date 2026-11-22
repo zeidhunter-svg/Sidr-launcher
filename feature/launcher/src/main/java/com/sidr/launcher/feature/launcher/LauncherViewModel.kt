@@ -305,6 +305,11 @@ class LauncherViewModel @Inject constructor(
         // interpretation card, bound again on the device — the same forward reference as [onReroute].
         onRemainder = { goal, plan -> commandSession.showRemainder(goal, plan) },
         forgetLearnedPlan = forgetLearnedPlan,
+        // A4′ acceptance tail, task 4 (owner answer I12): a simple session took its card down — the launcher goes back
+        // to rest exactly as «Закрыть» puts it there ([leaveAgentSurface]), but only while the buffer still holds the
+        // command that started it: a newer command typed meanwhile is the user's, and is not cancelled. The same
+        // forward reference as [onReroute].
+        onClosedItself = { goal -> if (commandSession.input.value.trim() == goal.text.trim()) leaveAgentSurface() },
     )
 
     /** The agent runtime's current session, or null when none is on screen. */
@@ -324,6 +329,9 @@ class LauncherViewModel @Inject constructor(
 
     /** A4′ phase 4, Task 7 (B-10): the form of the learned command whose session is on screen, or null. */
     val agentLearnedCommand: StateFlow<CommandForm?> get() = agentSession.learned
+
+    /** A4′ acceptance tail, task 4 (K4): the session on screen was started by a fresh model reading without the card. */
+    val agentProposedByModel: StateFlow<Boolean> get() = agentSession.proposedByModel
 
     /**
      * Task 10 / A1'. The registry's provenance, projected to the two fields the surface may see, so the

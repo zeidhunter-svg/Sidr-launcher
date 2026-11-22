@@ -78,8 +78,19 @@ sealed interface CommandOutcome {
      *
      * [learned] is the form of the learned command this session replays (plan §0.2 B-7, B-10) — the mark the
      * launcher shows while that session is on screen — and `null` for every other start.
+     *
+     * [proposedByModel] (A4′ acceptance tail, task 4 — D3, second amendment; controller ruling K4): the session was
+     * started by routing step 7 from a FRESH model reading that needed no interpretation card — no pick owed, no
+     * model-written text going out ([com.sidr.launcher.domain.memory.plan.needsCard]) — so the user saw nothing
+     * before it ran; the launcher marks its session card «Предложено моделью». `false` for every other start: a
+     * card's «Выполнить», a learned command (it carries [learned] instead), FastPath's and 2b's deterministic plans.
+     * Such a start teaches nothing (owner answer I5 «не засчитывать»): there is no `learnable` here on purpose.
      */
-    data class AgentSessionStarted(val id: AgentSessionId, val learned: CommandForm? = null) : CommandOutcome
+    data class AgentSessionStarted(
+        val id: AgentSessionId,
+        val learned: CommandForm? = null,
+        val proposedByModel: Boolean = false,
+    ) : CommandOutcome
 
     /**
      * The model's reading of a command, bound to this device and shown BEFORE anything runs (A4′ phase
@@ -87,8 +98,11 @@ sealed interface CommandOutcome {
      * «Выполнить» starts a session, through the engine, which gates it by risk like any plan. It replaced
      * the deleted router's proposal outcome (A4′ phase 3a, D3).
      *
-     * Since A4′ phase 4 the reading is fresh from the model (routing step 7) or a learned command replayed on
-     * the device (step 2c) that still owes a pick or sends the model's own text off the phone (plan §0.2 B-7):
+     * Since A4′ phase 4 the reading is a learned command replayed on the device (step 2c) that still owes a pick or
+     * sends the model's own text off the phone (plan §0.2 B-7) — and, since D3's second amendment (A4′ acceptance
+     * tail, task 4), a reading fresh from the model (routing step 7) is this card on exactly the same condition
+     * (`needsCard`) or when its start without a card failed; any other fresh reading is started at once and comes
+     * back as [AgentSessionStarted] with [AgentSessionStarted.proposedByModel]:
      *  - [learnable] — what a fresh, bound reading would teach if it runs (B-8), set by step 7 only; `null` for
      *    a reading with nothing to learn, a replay, and a remainder card;
      *  - [learned] — the form a replay came from, for the card's «Выполнить» to carry the mark on into

@@ -15,7 +15,10 @@ import com.sidr.launcher.domain.tool.ToolInvocation
  * What the card shows BEFORE anything runs (spec §7.12.3 condition 1). Transient: held by the command
  * session in memory, never written anywhere (plan §0.2 B-12). Only the user's «Выполнить» turns it into
  * a session, through `StartAgentSessionUseCase.startPlanned` and the unchanged engine — except a learned
- * command at step 2c (D3 as amended, B-15), which starts through the same engine with every consent gate.
+ * command at step 2c (D3 as amended, B-15) and, since D3's second amendment (A4′ acceptance tail, task 4), a FRESH
+ * reading at step 7 that owes no pick and sends none of the model's own text off the phone
+ * (`needsCard`, [modelTextGoingOut]): both start through the same engine with every consent gate, and neither is
+ * shown on the card first.
  */
 sealed interface Interpretation {
 
@@ -24,6 +27,13 @@ sealed interface Interpretation {
      * device — or awaiting the user's pick: [choices] holds every pick still owed, in step order, and only
      * its HEAD is answered ([choose]). [origins] and [effects] are keyed on the step's position in [steps];
      * each step's origins on the TOOL's argument names after binding.
+     *
+     * [appWords] (A4′ acceptance tail, task 4; controller ruling T2-R2), keyed on the step's position too: the
+     * argument that holds the WORDS naming the step's app — the label beside an app-sorted argument
+     * (`launch_app`'s `query`, `uninstall_app`'s `app_label`) — when the MODEL wrote them (amendment D1: «Claude»
+     * for the user's «клод»). The device binds those words to a package (an exact label or alias) or asks the
+     * user to pick; what reaches the world is the package, never the words, so they are not model text going out
+     * ([modelTextGoingOut]). Empty for the user's own words (theirs, never counted) and wherever no binder sets it.
      */
     data class Act(
         val goal: AgentGoal,
@@ -31,6 +41,7 @@ sealed interface Interpretation {
         val origins: Map<Int, Map<String, ValueOrigin>>,
         val effects: Map<Int, ToolEffect>,
         val choices: List<PendingChoice>,
+        val appWords: Map<Int, String> = emptyMap(),
     ) : Interpretation
 
     /** A screen of Sidr itself (plan §0.2 B-9) — opened only by «Выполнить», like everything else here. */
@@ -83,6 +94,24 @@ fun Interpretation.Act.choose(packageName: String): Interpretation.Act? {
 
 /** The plan «Выполнить» starts — only once no pick is owed on any step. */
 fun Interpretation.Act.plan(): ExecutionPlan? = if (choices.isNotEmpty()) null else ExecutionPlan(steps)
+
+/**
+ * The values the MODEL wrote that leave the phone with [step] (spec §7.12.1, `DOC-MZN-2`) — the ONE reading of «model
+ * text going out»: what the card draws under that step (`feature/launcher`, `InterpretationSurface`'s `ModelValues`)
+ * and what `needsCard` counts (`domain/memory/plan`), so the two cannot disagree. A value counts when the step's
+ * effect is [ToolEffect.EXTERNAL], its origin is [ValueOrigin.ModelGenerated] and its argument is an
+ * [ArgSource.Literal] — **except the words naming the step's app** ([Interpretation.Act.appWords]; controller ruling
+ * T2-R2, A4′ acceptance tail task 4): those are bound to a package on this device, and the package — not the words —
+ * is what reaches the world. In the step's origin order, as the card lists them.
+ */
+fun Interpretation.Act.modelTextGoingOut(step: PlanStep): List<String> {
+    if (effects[step.index] != ToolEffect.EXTERNAL) return emptyList()
+    val appWords = appWords[step.index]
+    return origins[step.index].orEmpty()
+        .filter { (name, origin) -> origin == ValueOrigin.ModelGenerated && name != appWords }
+        .keys
+        .mapNotNull { name -> (step.invocation.args[name] as? ArgSource.Literal)?.value }
+}
 
 /**
  * The ONE conversion of a validated model step into the plan's step (controller ruling E9-P3) — the

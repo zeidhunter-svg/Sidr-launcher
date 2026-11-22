@@ -12085,3 +12085,117 @@ C1 ревью плана хвоста приёмки A4′; план `docs/super
   уступленное «нет такого приложения» без модели — решённый исход шага (2), он отвечает раньше 2c. Названо точно: в сети
   уступленная команда неопределённа и 2c достигает, так что для неё урок мог бы повторяться онлайн — правило одно для
   обоих путей, урок не предлагается.
+
+
+## 2026-11-22 — D3, вторая поправка: прочтение без выбора и без текста модели
+
+**Status: принято — решение владельца 2026-11-22** («13 / D3: «да» поправке», план хвоста приёмки A4′
+`docs/superpowers/plans/2026-11-21-a4-acceptance-tail.md` §0.2; там же ответы I5 «не засчитывать», I12 «простая —
+закрывается сама», C1 «исправление — сразу запуск»). Построено задачей 4 плана хвоста — `CODE-GREEN`, на телефоне не
+видел никто. Первая поправка — «2026-11-20 — D3, поправка: выученная команда»; эта — вторая, рядом с ней.
+
+**Было** (D3 с первой поправкой; жёсткое правило `CLAUDE.md`): «ничто, предложенное моделью, не исполняется до
+«Выполнить» на карточке толкования, и тогда — только через движок, — кроме выученной команды».
+
+**Стало:** «… кроме выученной команды **и свежего прочтения модели, которому не нужен выбор и которое не выносит
+наружу текст, написанный моделью**». Правило одно для обоих путей — `Interpretation.Act.needsCard()`: карточка нужна,
+когда задолжен выбор или какой-то шаг с эффектом `EXTERNAL` несёт значение `ValueOrigin.ModelGenerated`. Такое
+прочтение шаг 7 стартует сразу через `StartAgentSessionUseCase.startPlanned` и тот же движок; исход —
+`AgentSessionStarted(proposedByModel = true)`, и карточка сессии говорит «Предложено моделью» (решение контроллера
+K4: `DOC-NYH-1` «показывает, как поняла» — после, а не до). Неудачный старт (отказ хранилища, план, который реестр не
+принимает) возвращает карточку, как до поправки. **Пол не тронут:** рискованный шаг останавливается на карточке
+согласия движка (`requiresConsent(risk)`, `DOC-ADL-1`; пол риска `maxOf(step.risk, registry risk)`), это держит тест
+движка, не роутера: `ModelReadingConsentTest > a model reading with a risky step starts and stops at the engine's
+consent` (форма `uninstall_app`, `CONFIRM`/`DURABLE`) и `… > a model reading that opens an address starts and stops at
+the engine's consent, the host on the step` (`open_url` с хостом-омографом — остаток задачи 1 «найди https://аpple.com»:
+карточка согласия называет хост).
+
+**Одна функция для карточки и для правила.** `modelTextGoingOut(step)` (`domain/ai/bridge/Interpretation.kt`) — то,
+что карточка рисует под шагом (`InterpretationSurface`, `ModelValues`, `DOC-MZN-2`), и то, что считает `needsCard()`.
+До поправки это были два списания одного условия (KDoc `needsCard` говорил «exactly what the card draws»); теперь
+«exactly» — по построению.
+
+**Решение контроллера T2-R2 (задача 2 → задача 4), часть этой поправки.** `launch_app` — `ToolEffect.EXTERNAL`
+(`SystemIntentToolSource`: «reach another app»), а с поправки D1 имя приложения, написанное моделью («Claude» на «клод»),
+стоит в `query` с меткой `ModelGenerated` — без решения `needsCard()` был бы истинен, и «сразу запуск» владельца (C1)
+не наступил бы. Решено: **слова, называющие приложение шага, которое устройство связало, не считаются текстом модели
+наружу** — в мир уходит пакет устройства, не слова модели (`IntentActionResolver`: закреплённый пакет запускается, а
+пропавший — «нет такого приложения», без поиска по словам). Механизм — поле `Interpretation.Act.appWords` (на шаг: имя
+аргумента-подписи рядом с аргументом сорта «приложение» — `query` у `launch_app`, `app_label` у `uninstall_app`);
+ставит его `DeviceMentionBinder` только для имени, написанного моделью; слова пользователя не помечаются (их и так не
+считают). То же правило — у повтора выученной команды (2c читает тот же `needsCard`). Тесты:
+`LearnedPlanReplayTest > the words the model wrote for an app the device bound are not model text going out`,
+`DeviceMentionBinderTest > the model's name for an app is marked as the step's app words and needs no card`,
+`RouteCommandUseCaseTest > online a missing app goes to the model, binds on the device and starts at once`,
+`MissingAppToModelSeamTest > open klod binds Claude through the real bridge and starts at once` (+ `open cloude …`), а
+обратное — текст модели не-приложения (`web_search`) по-прежнему карточка: `RouteCommandUseCaseTest > a fresh reading
+that sends the model's text off the phone gets the card`. Для `uninstall_app` имя модели — всё равно выбор с
+подтверждением (решение владельца 2026-11-17), то есть карточка. **Цена:** исправленное моделью имя запускается без
+показа исправления до запуска — после виден знак «Предложено моделью» (если карточка сессии осталась, см. I12 ниже).
+
+**I5 «не засчитывать».** Сессия, стартовавшая без карточки, не учит: шаг 7 даже не спрашивает кэш, что прочтение
+научило бы (`RouteCommandUseCaseTest > a session started without a card teaches nothing`), у `AgentSessionStarted` поля
+`learnable` нет (решение P1 снято). Учится только прочтение, подтверждённое «Выполнить» на карточке (B-8 первой поправки).
+
+**I12 «простая — закрывается сама».** Сессия из **одного** шага `SAFE`, который **сделал действие** (`Effected`), без
+запроса согласия и без «Отменить», по завершении снимает свою карточку с Home, и лаунчер возвращается в покой (буфер
+очищается, как «Закрыть» — находка устройства 2026-09-10), если буфер ещё держит команду этой сессии
+(`LauncherAgentSession.attach` / `closesItself`, `LauncherViewModel` `onClosedItself`). Многошаговая, рискованная, с
+«Отменить» — остаётся (`LauncherViewModelTest > a simple finished session closes itself`, `… > a finished session with an
+undo stays`, `… > a finished plan of two steps stays`). Применяется ко **всем** стартам, что проходят `attach`: без
+карточки (шаг 7, 2c, 2b, алиас 1a; план магазина — два шага, остаётся) и с карточки («Выполнить», выбор 2b) — правило
+владельца сформулировано про сессию, не про путь старта.
+
+**K12 — `:consumer:jvm`.** `ConsoleHarness.interpret` стартует сразу при `!needsCard()`, печатая прочтение под знаком
+«Suggested by the model, started at once», как `replayOrInterpret` → `startAtOnce` первой поправки; согласие
+`delete_file` спрашивается как прежде (`ConsoleHarnessTest > a fresh reading with nothing to show starts at once`, `… > a
+fresh SAFE reading runs at once and nothing asks first`, `… > a reading started at once teaches nothing`).
+
+**Что поправка делает ложным — и где исправлено.**
+- Жёсткое правило `CLAUDE.md` («Nothing the model proposes runs before … «Выполнить» … except a learned command») —
+  второе исключение вписано; строка «Shipped surface» про мост — тоже.
+- KDoc: `Interpretation.kt` (объявление `Interpretation`; «Only the user's «Выполнить» turns it into a session»),
+  `RouteCommandUseCase.kt` (класс: «nothing the planner proposes auto-executes»; шаг 7: «Nothing here executes», «nothing
+  here runs anything», «Nothing is started here either way»), `CommandOutcome.Interpreted` и `AgentSessionStarted`,
+  `needsCard` («exactly what the card draws» — теперь по построению), `InterpretationSurface.ModelValues`,
+  `DeviceMentionBinder`, `ConsoleHarness` — переписаны.
+- Матрица: ячейка `DOC-NYH-1` (скобка «сессия не стартует» переписана, четыре имени теста; формулировка правила не
+  менялась) и строка журнала §6 2026-11-22.
+- **Class B, шаг 0** (правило §0 ф4 — сверка обещания с закреплёнными строками; `grep -rn -i "подтвер\|Выполнить\|confirm\|onay"`
+  по `strings_locked.xml`, до правки): девять попаданий-ключей — три ключа × три локали — и одна строка комментария
+  (`feature/settings/.../values/strings_locked.xml:32`); иных нет, все ожидаемые —
+  - `settings_local_only_description` ×3 — заменена: `ru` — текст, подписанный владельцем 2026-11-22 дословно (C4),
+    подпись `OWNER-REVIEWED 2026-11-22 sha256:c7fe81b5c25ed99b` в `values-ru`, токен набран агентом по этой подписи;
+    `en` — по нему; `tr` — **черновик агента, владельцем не прочитан**: подпись `values-tr` оставлена старой намеренно,
+    `checkOwnerReviewedLocaleStrings` (а с ним `:app:assembleRelease`) красный, пока владелец не прочтёт и не подпишет
+    `tr` (`sha256:47e82f4b1a1b93b0` — дайджест текущего текста) — прецедент «I1: a» первой поправки;
+  - `settings_learned_choices_empty_message` ×3 («только после подтверждённых выборов») — истинна: старт без карточки
+    выбора не задолжал, выученные выборы по-прежнему пишутся только «Выполнить» с выбором;
+  - `launcher_forget_learned_command_consequence` ×3 — вторая фраза («подтвердите её ещё три раза») истинна при I5;
+    **первая («больше не будет выполняться без вопроса») — находка для владельца:** выучиться может только прочтение с
+    карточкой, то есть с выбором или с текстом модели; если выбор — запуск, его выученный выбор после трёх «Выполнить»
+    решает сам (`DeviceMentionBinder`, `AutoResolve`), и после «Забыть» то же свежее прочтение в сети карточки уже не
+    требует — команда снова выполняется без вопроса. Строка Class B, агент её не меняет; решать владельцу (переписать
+    или принять как названный предел).
+
+**Названные остатки.**
+- **M13:** сирота `Running` (остаток A4′ 3a (1)) теперь доходит и до шага 7: сессия пишется в маршруте, до того как
+  лаунчер применил исход; отменённая между ними команда оставляет строку `Running`, которую следующий старт покажет
+  `Paused`.
+- **M14:** `goal_text` пишется в маршруте для каждого прочтения без карточки (A1′ (10) шире: больше строк с сырым текстом
+  команды в файле SQLite).
+- **M16:** решение 1 («одна карточка Sidr») выполнено только для рискованного прочтения **без выбора**: `uninstall_app` с
+  именем, точным только после свёртки, — выбор (`AppTargetResolver.forIrreversible`), то есть карточка и затем согласие:
+  два касания.
+- **I12 гасит знак K4 у простой сессии:** «Предложено моделью» простой сессии виден только пока она идёт (запуск
+  приложения уводит с Home сразу) — «показывает, как поняла» после факта держится лишь для сессий, что остаются.
+- **I12, прочтение строгое:** шаг, который только посмотрел (`Observed`, «приложения нет»), карточку не снимает — иначе
+  пропало бы единственное «ничего не открылось» (`LauncherViewModelTest > a finished session that only looked stays`).
+- **`:consumer:jvm` — карточка прочтения недостижима:** все инструменты песочницы `LOCAL`, `SandboxMentionBinder` выбора
+  не задолжает (выбор файла закрывается отказом) — значит `needsCard()` там всегда ложен, `ask` стартует любое связанное
+  прочтение, ветка `card` осталась для будущего `EXTERNAL`-инструмента; а с I5 файл выученных планов через `ask` больше
+  **не пополняется** (только читается). Тесты выученной команды JVM пишут урок прямо в файл (`teachFindDelete`). Пункт
+  плана «`… with a pick shows the card`» на JVM не построить — выбора там не бывает.
+- **Турецкие строки на суд:** `launcher_agent_model_mark` «Model tarafından önerildi» (строка из плана; рядом в том же
+  файле `launcher_interpretation_model_value` — «Modelin önerisi: %1$s», владелец может захотеть одно слово) и черновик
+  `settings_local_only_description`.

@@ -31,13 +31,18 @@
     Rewritten a second time on 2026-11-20 (A4' phase 4, owner answer «I1: a»): since step 2c a command the
     user confirmed three times runs without asking, so «always ask before running» stopped being true, and
     «nothing leaves this device» never was for a search the user asks for. Re-signed 2026-11-20 (`072889ca`).
+    Rewritten a third time on 2026-11-22 (A4' acceptance tail, task 4; owner answer C4, Russian text signed
+    verbatim): online, a search and the launch of an app that is not installed go to the model first (owner
+    decisions 13 and 14), and a fresh model reading runs at once unless a pick is owed or model-written text would
+    leave the phone (D3, second amendment) - so the card sentence now says when the card is shown. The Turkish
+    file's signature is left stale until the owner reads its draft.
 
   Russian and Turkish values in the corresponding values-ru/values-tr strings_locked.xml were
   agent-drafted and are owner-reviewed (see the OWNER-REVIEWED line in each file).
 -->
 <resources>
     <string name="settings_stored_locally">Stored only on this device.</string>
-    <string name="settings_local_only_description">Off: commands this launcher cannot match locally are sent to your AI provider to be understood. On: nothing is sent to your AI provider; commands are understood only on this device. Either way, a suggested action asks before running unless you have confirmed the same command three times, and a risky step always asks. A search or link you ask for opens in your browser.</string>
+    <string name="settings_local_only_description">Off: when you are online, commands this launcher did not carry out itself, as well as searches and launching an app that is not on this phone, are sent to your AI provider to be understood. On: nothing is sent to your AI provider; commands are understood only on this device. Either way, a risky step always asks, and you see the understood command on a card before it runs if there is a choice to make or if text written by the model would leave the phone. A search or link you ask for opens in your browser.</string>
     <string name="settings_forget_alias_consequence">"\"%1$s\" will no longer open %2$s.\nYou can add it again from Settings."</string>
     <string name="settings_aliases_empty_message">No aliases yet\nAliases appear after you add them here.\nStored only on this device.</string>
     <string name="settings_learned_choices_empty_message">No learned choices yet\nPreferences appear only after confirmed choices.\nStored only on this device.</string>

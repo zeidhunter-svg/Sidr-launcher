@@ -45,6 +45,7 @@ import com.sidr.launcher.domain.ai.bridge.ReplyMeta
 import com.sidr.launcher.domain.ai.bridge.SidrDestination
 import com.sidr.launcher.domain.ai.bridge.TransportReply
 import com.sidr.launcher.domain.ai.bridge.ValueOrigin
+import com.sidr.launcher.domain.ai.bridge.toPlanStep
 import com.sidr.launcher.domain.intent.CommandFailure
 import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.intent.CommandOutcome
@@ -68,6 +69,7 @@ import com.sidr.launcher.domain.memory.plan.LearnedPlanFixtures.said
 import com.sidr.launcher.domain.memory.plan.LearnedPlanShape
 import com.sidr.launcher.domain.memory.plan.LearnedPlans
 import com.sidr.launcher.domain.memory.plan.PlanTemplate
+import com.sidr.launcher.domain.memory.plan.Replay
 import com.sidr.launcher.domain.memory.plan.TemplateArg
 import com.sidr.launcher.domain.memory.plan.TemplateStep
 import com.sidr.launcher.domain.model.InstalledApp
@@ -113,7 +115,10 @@ import org.junit.Test
  * would be testing the lie.
  *
  * **`DOC-NYH-1` - nothing auto-executes.** A model reading surfaces only as a non-executing
- * [CommandOutcome.Interpreted] (Fork R4; A4′ phase 3a, spec §7.12.3 condition 1).
+ * [CommandOutcome.Interpreted] (Fork R4; A4′ phase 3a, spec §7.12.3 condition 1) — **since D3's second amendment
+ * (A4′ acceptance tail, task 4) only when it owes a pick or sends the model's own text out**; any other fresh reading
+ * starts its session at once, marked as the model's, and runs nothing here: the engine runs it behind its consent gate
+ * (`ModelReadingConsentTest`).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RouteCommandUseCaseTest {
@@ -150,6 +155,9 @@ class RouteCommandUseCaseTest {
         // A4′ acceptance tail, task 3: the one alias store FastPath's resolver and step 1a read — as the graph hands it
         // to both. `AliasStore.NONE` by default, so every earlier test builds the route exactly as it did.
         aliases: AliasStore = AliasStore.NONE,
+        // A4′ acceptance tail, task 4 (I5): what step 7 asks the cache to teach, for the tests that count it. `NONE` by
+        // default, so every earlier test builds the route exactly as it did.
+        learnedPlans: LearnedPlans = LearnedPlans.NONE,
     ): RouteCommandUseCase = RouteCommandUseCase(
         handleUserCommand = HandleUserCommandUseCase(
             matcher = matcher,
@@ -164,6 +172,7 @@ class RouteCommandUseCaseTest {
         providerConfigRepository = provider,
         connectivityChecker = connectivity,
         startAgentSession = StartAgentSessionUseCase(agentPlanner, agentStore, agentIds, agentRegistry),
+        learnedPlans = learnedPlans,
         aliases = aliases,
         installedApps = appsRepo,
     )
@@ -571,14 +580,19 @@ class RouteCommandUseCaseTest {
     // --- A4′ phase 3a: the one model path (spec §7.12.3) ----------------------------------------
 
     /**
-     * Criterion 15, the route half: the model's reading becomes a card; NO session is started.
+     * D3, second amendment (A4′ acceptance tail, task 4; owner answer «13 / D3: да»): a FRESH model reading that owes
+     * no pick and sends none of the model's own text off the phone ([needsCard] false) starts its session at once,
+     * through `startPlanned` and the engine, and the outcome carries the model's mark (`proposedByModel`, controller
+     * ruling K4). Replaces criterion 15's route half («the reading becomes a card; NO session is started») for exactly
+     * these readings. The step is `CONFIRM`: starting is not running — the engine's consent card stops it
+     * (`ModelReadingConsentTest`), and nothing is executed here.
      *
-     * The padded input pins step 7's trim twice over (Task 11 ruling on hole H1): what the MODEL is asked,
-     * and the goal the card will start — the trimmed command under [GoalShape.Free], never
-     * `AppNotInstalled`, which is block (2)'s shape and which `TemplatePlanner` would claim.
+     * The padded input still pins step 7's trim twice over (Task 11 ruling on hole H1): what the MODEL is asked, and
+     * the goal the session starts with — the trimmed command under [GoalShape.Free], never `AppNotInstalled`, which
+     * is block (2)'s shape and which `TemplatePlanner` would claim.
      */
     @Test
-    fun `a model plan becomes an interpretation, and no session is started`() = runTest {
+    fun `a fresh reading with no pick and no model text going out starts at once, marked as the model's`() = runTest {
         driveUnknown()
         planner.answer = ModelPlanning.Proposed(
             listOf(
@@ -594,14 +608,193 @@ class RouteCommandUseCaseTest {
 
         val outcome = useCase().route("  найди lumora в магазине  ")
 
-        val act = (outcome as CommandOutcome.Interpreted).interpretation as Interpretation.Act
-        assertEquals(ToolIds.PLAY_STORE_SEARCH, act.steps.single().invocation.id)
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1"), proposedByModel = true), outcome)
         assertEquals("the model is asked the trimmed command", "найди lumora в магазине", planner.lastCommand)
+        val started = agentStore.saved.single()
         assertEquals(
             AgentGoal(text = "найди lumora в магазине", shape = GoalShape.Free("найди lumora в магазине")),
-            act.goal,
+            started.goal,
         )
-        assertTrue("nothing is started before «Выполнить»", agentStore.saved.isEmpty())
+        assertEquals(
+            listOf(ToolInvocation(ToolIds.PLAY_STORE_SEARCH, mapOf("query" to ArgSource.Literal("lumora")))),
+            started.plan.steps.map { it.invocation },
+        )
+        assertTrue("the route starts a session; it runs nothing", executor.executedActions.isEmpty())
+    }
+
+    /** The pick the binder owes for «открой tessar»: two apps answer the words exactly. */
+    private fun owedTessarPick() = Interpretation.Act(
+        goal = freeGoal("открой tessar"),
+        steps = listOf(
+            PlanStep(
+                index = 0,
+                invocation = ToolInvocation(ToolIds.LAUNCH_APP, mapOf("query" to ArgSource.Literal("tessar"))),
+                risk = ActionRiskLevel.SAFE,
+                precondition = StepPrecondition.None,
+                rationale = StepRationale.MODEL_PROPOSED,
+            ),
+        ),
+        origins = mapOf(0 to mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER))),
+        effects = mapOf(0 to ToolEffect.EXTERNAL),
+        choices = listOf(PendingChoice(0, AppChoice("app", "tessar", listOf(tessarOne, tessarTwo), learning = null))),
+    )
+
+    /** D3, second amendment: a reading that owes the user a pick is the card, as before — nothing starts. */
+    @Test
+    fun `a fresh reading that owes a pick gets the card`() = runTest {
+        driveUnknown()
+        planner.answer = ModelPlanning.Proposed(
+            listOf(
+                ProposedStep(
+                    tool = ToolIds.LAUNCH_APP,
+                    args = mapOf("app" to "tessar"),
+                    origins = mapOf("app" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                    risk = ActionRiskLevel.SAFE,
+                    effect = ToolEffect.EXTERNAL,
+                ),
+            ),
+        )
+        binder.binding = { _, _ -> Binding.Bound(owedTessarPick()) }
+
+        val outcome = useCase().route("открой tessar")
+
+        assertEquals(CommandOutcome.Interpreted(owedTessarPick()), outcome)
+        assertTrue("nothing starts before the pick and «Выполнить»", agentStore.saved.isEmpty())
+    }
+
+    /**
+     * D3, second amendment, `DOC-MZN-2`: a search whose text the MODEL wrote would leave the phone with that text — the
+     * card shows it first and nothing starts. The same search in the USER's words is theirs going out: it starts at
+     * once, marked as the model's. The two readings differ in the origin of the one value and in nothing else.
+     */
+    @Test
+    fun `a fresh reading that sends the model's text off the phone gets the card`() = runTest {
+        driveUnknown()
+        fun search(origin: ValueOrigin) = ModelPlanning.Proposed(
+            listOf(
+                ProposedStep(
+                    tool = WEB_SEARCH,
+                    args = mapOf("query" to "орвелин история"),
+                    origins = mapOf("query" to origin),
+                    risk = ActionRiskLevel.SAFE,
+                    effect = ToolEffect.EXTERNAL,
+                ),
+            ),
+        )
+        val route = useCase()
+
+        planner.answer = search(ValueOrigin.ModelGenerated)
+        val modelText = route.route("поищи что-нибудь про орвелин")
+        assertEquals(
+            CommandOutcome.Interpreted(
+                Interpretation.Act(
+                    goal = freeGoal("поищи что-нибудь про орвелин"),
+                    steps = listOf(
+                        PlanStep(
+                            index = 0,
+                            invocation = ToolInvocation(WEB_SEARCH, mapOf("query" to ArgSource.Literal("орвелин история"))),
+                            risk = ActionRiskLevel.SAFE,
+                            precondition = StepPrecondition.None,
+                            rationale = StepRationale.MODEL_PROPOSED,
+                        ),
+                    ),
+                    origins = mapOf(0 to mapOf("query" to ValueOrigin.ModelGenerated)),
+                    effects = mapOf(0 to ToolEffect.EXTERNAL),
+                    choices = emptyList(),
+                ),
+            ),
+            modelText,
+        )
+        assertTrue("the model's text going out waits on the card", agentStore.saved.isEmpty())
+
+        planner.answer = search(ValueOrigin.SaidBy(PrincipalId.USER))
+        val usersWords = route.route("поищи орвелин история")
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1"), proposedByModel = true), usersWords)
+        assertEquals(
+            listOf(ToolInvocation(WEB_SEARCH, mapOf("query" to ArgSource.Literal("орвелин история")))),
+            agentStore.saved.single().plan.steps.map { it.invocation },
+        )
+    }
+
+    /** A cache that teaches [shape] for any reading and counts how often step 7 asks it to — and replays nothing. */
+    private class CountingLessons(private val shape: LearnedPlanShape) : LearnedPlans {
+        var asked = 0
+            private set
+
+        override suspend fun replay(command: String): Replay = Replay.Miss
+        override fun learnable(command: String, steps: List<ProposedStep>): LearnedPlanShape? {
+            asked++
+            return shape
+        }
+    }
+
+    /**
+     * Owner answer I5 «не засчитывать»: a session that started without the interpretation card teaches NOTHING — step
+     * 7 does not even ask what it would teach, and `AgentSessionStarted` has no lesson to carry. Only a reading the
+     * user confirmed on the card may teach (B-8). The control: the same cache, asked for a reading that needs the card
+     * (model text going out), is asked once and its lesson rides on the card.
+     */
+    @Test
+    fun `a session started without a card teaches nothing`() = runTest {
+        driveUnknown()
+        val lesson = LearnedPlanShape(
+            CommandForm.parse("поищи …"),
+            PlanTemplate(listOf(TemplateStep(WEB_SEARCH, mapOf("query" to TemplateArg.Slot(0))))),
+        )
+        val lessons = CountingLessons(lesson)
+        val route = useCase(learnedPlans = lessons)
+        fun search(origin: ValueOrigin) = ModelPlanning.Proposed(
+            listOf(ProposedStep(WEB_SEARCH, mapOf("query" to "орвелин"), mapOf("query" to origin), ActionRiskLevel.SAFE, ToolEffect.EXTERNAL)),
+        )
+
+        planner.answer = search(ValueOrigin.SaidBy(PrincipalId.USER))
+        val started = route.route("поищи орвелин")
+
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1"), proposedByModel = true), started)
+        assertEquals("a no-card start is not asked what it would teach", 0, lessons.asked)
+
+        planner.answer = search(ValueOrigin.ModelGenerated)
+        val card = route.route("поищи орвелин")
+
+        assertEquals("the control: a card's reading is asked once", 1, lessons.asked)
+        assertEquals(lesson, (card as CommandOutcome.Interpreted).learnable)
+    }
+
+    /**
+     * D3, second amendment: a reading that would start at once but whose start FAILS — the store refused the save, or
+     * the registry refuses the plan — is not lost: it comes back as the card, as before the amendment, with what it
+     * would teach (a card's «Выполнить» is a confirmation, B-8). Nothing is started.
+     */
+    @Test
+    fun `a fresh reading whose start fails keeps the card`() = runTest {
+        driveUnknown()
+        val lesson = LearnedPlanShape(
+            CommandForm.parse("поищи …"),
+            PlanTemplate(listOf(TemplateStep(WEB_SEARCH, mapOf("query" to TemplateArg.Slot(0))))),
+        )
+        val search = ProposedStep(
+            WEB_SEARCH,
+            mapOf("query" to "орвелин"),
+            mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+            ActionRiskLevel.SAFE,
+            ToolEffect.EXTERNAL,
+        )
+        planner.answer = ModelPlanning.Proposed(listOf(search))
+        val card = Interpretation.Act(
+            goal = freeGoal("поищи орвелин"),
+            steps = listOf(search.toPlanStep(0, search.args)),
+            origins = mapOf(0 to mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER))),
+            effects = mapOf(0 to ToolEffect.EXTERNAL),
+            choices = emptyList(),
+        )
+
+        agentStore.failNextSave = true
+        val storeFailed = useCase(learnedPlans = CountingLessons(lesson)).route("поищи орвелин")
+        val refused = useCase(agentRegistry = FakeToolRegistry(emptyList()), learnedPlans = CountingLessons(lesson)).route("поищи орвелин")
+
+        assertEquals("the store refused the save", CommandOutcome.Interpreted(card, learnable = lesson), storeFailed)
+        assertEquals("the registry refused the plan", CommandOutcome.Interpreted(card, learnable = lesson), refused)
+        assertTrue("nothing is started", agentStore.saved.isEmpty())
     }
 
     /**
@@ -611,6 +804,10 @@ class RouteCommandUseCaseTest {
      * made of the whole reading; the expected card is spelled out, by equality. The plan is RUNNABLE in
      * [toolRegistry] — every step gives its required `query`, no reference — so a start, had step 7 tried
      * one, would pass `startPlanned`'s check and be saved: the empty store is evidence (finding E9-M1).
+     *
+     * **Since the D3 second amendment (task 4) the first step's text is the MODEL's** — a reading of two steps the user
+     * said entirely would start at once — so the card is owed for that one value, and the whole reading still comes
+     * back as one card: the property under test (one card for N steps) is unchanged.
      */
     @Test
     fun `a two-step model reading is one card and nothing is started`() = runTest {
@@ -620,7 +817,7 @@ class RouteCommandUseCaseTest {
                 ProposedStep(
                     tool = ToolIds.PLAY_STORE_SEARCH,
                     args = mapOf("query" to "lumora"),
-                    origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                    origins = mapOf("query" to ValueOrigin.ModelGenerated),
                     risk = ActionRiskLevel.CONFIRM,
                     effect = ToolEffect.EXTERNAL,
                 ),
@@ -657,7 +854,7 @@ class RouteCommandUseCaseTest {
                         ),
                     ),
                     origins = mapOf(
-                        0 to mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                        0 to mapOf("query" to ValueOrigin.ModelGenerated),
                         1 to mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
                     ),
                     effects = mapOf(0 to ToolEffect.EXTERNAL, 1 to ToolEffect.LOCAL),
@@ -1201,26 +1398,32 @@ class RouteCommandUseCaseTest {
      * 7 from the VALIDATED steps (`ModelPlanning.Proposed.steps`, before binding: no package, the user's words a
      * slot) — and no mark (`learned`: it was not replayed). A reading with no word of its own (the command is all
      * slot) teaches nothing.
+     *
+     * **Only a reading with a card carries a lesson since the D3 second amendment** (task 4 of the tail plan; owner
+     * answer I5): a reading that needs no card starts at once and teaches nothing (`a session started without a card
+     * teaches nothing`). So both readings here owe the user a pick — two «Vemblic» apps — and the lesson rides on the
+     * card; the property under test is unchanged.
      */
     @Test
     fun `a fresh model reading carries what it teaches, and one that cannot be learned carries nothing`() = runTest {
         driveUnknown()
+        installedByName["Vemblic"] = listOf(vemblic, vemblicTwo)
         val route = learnedRoute()
 
-        planner.answer = ModelPlanning.Proposed(listOf(said(LEARNED_WEB_SEARCH, "query" to "орвелин")))
-        val searched = route.route("поищи орвелин") as CommandOutcome.Interpreted
+        planner.answer = ModelPlanning.Proposed(listOf(said(LEARNED_UNINSTALL, "app" to "Vemblic")))
+        val erased = route.route("сотри Vemblic") as CommandOutcome.Interpreted
 
         assertEquals(
             LearnedPlanShape(
-                CommandForm.parse("поищи …"),
-                PlanTemplate(listOf(TemplateStep(LEARNED_WEB_SEARCH, mapOf("query" to TemplateArg.Slot(0))))),
+                CommandForm.parse("сотри …"),
+                PlanTemplate(listOf(TemplateStep(LEARNED_UNINSTALL, mapOf("app" to TemplateArg.Slot(0))))),
             ),
-            searched.learnable,
+            erased.learnable,
         )
-        assertNull("a fresh reading is not a replay", searched.learned)
+        assertNull("a fresh reading is not a replay", erased.learned)
 
-        planner.answer = ModelPlanning.Proposed(listOf(said(LEARNED_WEB_SEARCH, "query" to "lumora")))
-        val bare = route.route("lumora") as CommandOutcome.Interpreted
+        planner.answer = ModelPlanning.Proposed(listOf(said(LEARNED_UNINSTALL, "app" to "Vemblic")))
+        val bare = route.route("Vemblic") as CommandOutcome.Interpreted
 
         assertNull("a form with no word of its own is not learned", bare.learnable)
         assertNull(bare.learned)
@@ -1292,8 +1495,9 @@ class RouteCommandUseCaseTest {
 
     /**
      * Decision 13: Б: online, with a provider, local-only off — the model is reachable, so FastPath's confident search
-     * is not run in the browser: the model is asked, and its reading is the card (task 4 of the tail plan turns a
-     * reading with no card owed into a started session; until then it is `Interpreted`). Nothing is executed.
+     * is not run in the browser: the model is asked, and its reading — the search in the user's words, no card owed —
+     * starts at once through the engine (task 4 of the tail plan, the D3 second amendment), marked as the model's.
+     * Nothing is executed by the route.
      */
     @Test
     fun `online with a provider a FastPath search goes to the model, not the browser`() = runTest {
@@ -1312,25 +1516,11 @@ class RouteCommandUseCaseTest {
 
         val outcome = useCase().route("найди $SEARCH_QUERY")
 
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1"), proposedByModel = true), outcome)
+        assertEquals(freeGoal("найди $SEARCH_QUERY"), agentStore.saved.single().goal)
         assertEquals(
-            CommandOutcome.Interpreted(
-                Interpretation.Act(
-                    goal = freeGoal("найди $SEARCH_QUERY"),
-                    steps = listOf(
-                        PlanStep(
-                            index = 0,
-                            invocation = ToolInvocation(WEB_SEARCH, mapOf("query" to ArgSource.Literal(SEARCH_QUERY))),
-                            risk = ActionRiskLevel.SAFE,
-                            precondition = StepPrecondition.None,
-                            rationale = StepRationale.MODEL_PROPOSED,
-                        ),
-                    ),
-                    origins = mapOf(0 to mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER))),
-                    effects = mapOf(0 to ToolEffect.EXTERNAL),
-                    choices = emptyList(),
-                ),
-            ),
-            outcome,
+            listOf(ToolInvocation(WEB_SEARCH, mapOf("query" to ArgSource.Literal(SEARCH_QUERY)))),
+            agentStore.saved.single().plan.steps.map { it.invocation },
         )
         assertTrue("FastPath's search is not run in the browser", executor.executedActions.isEmpty())
         assertEquals("the model is asked once", 1, planner.planCallCount)
@@ -1497,16 +1687,22 @@ class RouteCommandUseCaseTest {
         origins = mapOf(0 to mapOf("query" to ValueOrigin.ModelGenerated, "app" to ValueOrigin.Ours)),
         effects = mapOf(0 to ToolEffect.EXTERNAL),
         choices = emptyList(),
+        // Controller ruling T2-R2 (task 4): the binder marks the model's «Claude» as the words naming the step's app.
+        appWords = mapOf(0 to "query"),
     )
 
     /**
      * Decision 14: online, FastPath's «нет такого приложения» is handed to the model (`FastPathYield.MissingApp`),
      * the model writes the name it believes is meant, and the DEVICE binds it — here to the one app labelled
-     * exactly so. A0's store plan does not start. Task 4 of the tail plan turns a reading with no card owed into a
-     * started session; until then it is the card (`Interpreted`). Nothing is executed.
+     * exactly so. A0's store plan does not start.
+     *
+     * **Controller ruling T2-R2 (task 4), the owner's C1 «исправление — сразу запуск»:** the reading starts at once,
+     * marked as the model's. `launch_app` is `EXTERNAL` and its words («Claude») are the MODEL's, but they are the
+     * words naming the step's app ([Interpretation.Act.appWords]) — what reaches the world is the package the device
+     * bound, never the words — so `needsCard()` does not count them. Nothing is executed by the route.
      */
     @Test
-    fun `online a missing app goes to the model and binds on the device`() = runTest {
+    fun `online a missing app goes to the model, binds on the device and starts at once`() = runTest {
         driveAppLaunch("клод")
         appsRepo.appsToReturn = emptyList()
         planner.answer = ModelPlanning.Proposed(listOf(modelLaunch("Claude")))
@@ -1517,8 +1713,9 @@ class RouteCommandUseCaseTest {
 
         val outcome = useCase().route("открой клод")
 
-        assertEquals(CommandOutcome.Interpreted(boundClaude), outcome)
-        assertTrue("the store plan did not start", agentStore.saved.isEmpty())
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1"), proposedByModel = true), outcome)
+        assertEquals("the store plan did not start: the session is the model's reading", freeGoal("открой клод"), agentStore.saved.single().goal)
+        assertEquals(boundClaude.steps, agentStore.saved.single().plan.steps)
         assertEquals("the model is asked once", 1, planner.planCallCount)
         assertEquals("открой клод", planner.lastCommand)
         assertEquals(1, binder.bindCallCount)
@@ -1698,6 +1895,9 @@ class RouteCommandUseCaseTest {
         driveUnknown()
         val target = removeTarget("удали приложение клод", words = "клод", candidates = emptyList())
         planner.answer = ModelPlanning.Proposed(listOf(modelText(LEARNED_UNINSTALL, "app" to "Vemblic")))
+        // Task 4 (D3, second amendment): a reading with no card owed starts at once and teaches nothing anyway (I5), so
+        // the readings here owe a pick — two «Vemblic» apps — to keep them on the card, where a lesson could ride.
+        installedByName["Vemblic"] = listOf(vemblic, vemblicTwo)
 
         val claimed = learnedRoute(agentPlanner = claims(target), agentRegistry = removeRegistry).route("удали приложение клод")
         val unclaimed = learnedRoute().route("удали приложение клод")
@@ -1718,7 +1918,8 @@ class RouteCommandUseCaseTest {
     fun `a reading after a missing-app yield teaches nothing`() = runTest {
         driveAppLaunch("клод")
         appsRepo.appsToReturn = emptyList()
-        installedByName["Claude"] = listOf(InstalledApp("net.fixture.qandril", "Claude"))
+        // Task 4 (D3, second amendment): two «Claude» apps owe a pick, so the readings stay on the card (see above).
+        installedByName["Claude"] = listOf(InstalledApp("net.fixture.qandril", "Claude"), InstalledApp("net.fixture.qandril.two", "Claude"))
         planner.answer = ModelPlanning.Proposed(listOf(modelLaunch("Claude")))
 
         val yielded = learnedRoute().route("открой клод")

@@ -38,13 +38,11 @@ import com.sidr.launcher.domain.agent.TemplatePlanner
 import com.sidr.launcher.domain.ai.bridge.BridgeFilter
 import com.sidr.launcher.domain.ai.bridge.BridgeModelPlanner
 import com.sidr.launcher.domain.ai.bridge.BridgeRendering
-import com.sidr.launcher.domain.ai.bridge.Interpretation
 import com.sidr.launcher.domain.ai.bridge.RawAnswer
 import com.sidr.launcher.domain.ai.bridge.RawArg
 import com.sidr.launcher.domain.ai.bridge.RawStep
 import com.sidr.launcher.domain.ai.bridge.ReplyMeta
 import com.sidr.launcher.domain.ai.bridge.TransportReply
-import com.sidr.launcher.domain.ai.bridge.ValueOrigin
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
 import com.sidr.launcher.domain.intent.CommandOutcome
 import com.sidr.launcher.domain.intent.DefaultIntentConfidencePolicy
@@ -57,7 +55,6 @@ import com.sidr.launcher.domain.text.PlainTextFolding
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ResolvedInvocation
 import com.sidr.launcher.domain.tool.ToolAdapter
-import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolFederation
 import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
@@ -174,27 +171,19 @@ class MissingAppToModelSeamTest {
     )
 
     /**
-     * The card «открой …» comes back as when the model's «Claude» bound: one launch of the one app labelled exactly
-     * so — the package the device's, the words the MODEL's and marked so. `EXTERNAL`: production's `launch_app`.
+     * The plan «открой …» starts as when the model's «Claude» bound: one launch of the one app labelled exactly so —
+     * the package the device's, the words the MODEL's. `EXTERNAL`: production's `launch_app`.
      */
-    private fun launchesClaude(command: String) = CommandOutcome.Interpreted(
-        Interpretation.Act(
-            goal = AgentGoal(command, GoalShape.Free(command)),
-            steps = listOf(
-                PlanStep(
-                    index = 0,
-                    invocation = ToolInvocation(
-                        ToolIds.LAUNCH_APP,
-                        mapOf("query" to ArgSource.Literal("Claude"), "app" to ArgSource.Literal(claude.packageName)),
-                    ),
-                    risk = ActionRiskLevel.SAFE,
-                    precondition = StepPrecondition.None,
-                    rationale = StepRationale.MODEL_PROPOSED,
-                ),
+    private val launchesClaude = listOf(
+        PlanStep(
+            index = 0,
+            invocation = ToolInvocation(
+                ToolIds.LAUNCH_APP,
+                mapOf("query" to ArgSource.Literal("Claude"), "app" to ArgSource.Literal(claude.packageName)),
             ),
-            origins = mapOf(0 to mapOf("query" to ValueOrigin.ModelGenerated, "app" to ValueOrigin.Ours)),
-            effects = mapOf(0 to ToolEffect.EXTERNAL),
-            choices = emptyList(),
+            risk = ActionRiskLevel.SAFE,
+            precondition = StepPrecondition.None,
+            rationale = StepRationale.MODEL_PROPOSED,
         ),
     )
 
@@ -202,31 +191,37 @@ class MissingAppToModelSeamTest {
      * Decision 14's first example. FastPath reads «открой клод» as a launch of «клод», which nothing installed is
      * named — and there is no transliterating fold, so the device alone could never bind it. Online it is asked of
      * the model once, with the command as typed; the model's «Claude» is admitted as the model's word and binds to
-     * the app labelled exactly «Claude». The store plan does not start; nothing is executed. Task 4 of the tail plan
-     * turns a reading with no card owed into a started session; until then it is the card (`Interpreted`).
+     * the app labelled exactly «Claude». The store plan does not start; nothing is executed.
+     *
+     * **Task 4 of the tail plan — the owner's C1 «исправление — сразу запуск», controller ruling T2-R2:** the reading
+     * starts its session AT ONCE, marked as the model's. Real here, end to end: the binder marks the model's «Claude»
+     * as the words naming the step's app, and `needsCard()` does not count them — the package goes out, not the word.
+     * The session started is the model's reading (`GoalShape.Free`), not A0's store plan (`AppNotInstalled`).
      */
     @Test
-    fun `open klod binds Claude through the real bridge`() = runTest {
+    fun `open klod binds Claude through the real bridge and starts at once`() = runTest {
         val transport = modelLaunches("Claude")
 
         val outcome = router(transport).route("открой клод")
 
-        assertEquals(launchesClaude("открой клод"), outcome)
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1"), proposedByModel = true), outcome)
         assertEquals("one ask, no retry: the answer passed the validator", listOf("открой клод"), transport.requests.map { it.command })
-        assertTrue("the store plan did not start", agentStore.saved.isEmpty())
+        assertEquals("the model's reading started, not the store plan", AgentGoal("открой клод", GoalShape.Free("открой клод")), agentStore.saved.single().goal)
+        assertEquals(launchesClaude, agentStore.saved.single().plan.steps)
         assertTrue("nothing is executed", executor.executedActions.isEmpty())
     }
 
     /** Decision 14's second example: a misspelling in the same script, which the edge rule does not reach either. */
     @Test
-    fun `open cloude binds Claude through the real bridge`() = runTest {
+    fun `open cloude binds Claude through the real bridge and starts at once`() = runTest {
         val transport = modelLaunches("Claude")
 
         val outcome = router(transport).route("открой cloude")
 
-        assertEquals(launchesClaude("открой cloude"), outcome)
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1"), proposedByModel = true), outcome)
         assertEquals(listOf("открой cloude"), transport.requests.map { it.command })
-        assertTrue(agentStore.saved.isEmpty())
+        assertEquals(AgentGoal("открой cloude", GoalShape.Free("открой cloude")), agentStore.saved.single().goal)
+        assertEquals(launchesClaude, agentStore.saved.single().plan.steps)
     }
 
     /**

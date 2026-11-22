@@ -30,6 +30,7 @@ import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.memory.alias.Alias
 import com.sidr.launcher.domain.memory.alias.AliasTarget
+import com.sidr.launcher.domain.memory.plan.needsCard
 import com.sidr.launcher.domain.memory.resolution.CandidateSet
 import com.sidr.launcher.domain.memory.resolution.CapabilityKey
 import com.sidr.launcher.domain.memory.resolution.DefaultResolutionPreferencePolicy
@@ -63,6 +64,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -678,6 +680,48 @@ class DeviceMentionBinderTest {
 
         val info = binder(listOf(claude)).bind(goal, listOf(modelWritten(Tier0ToolIds.OPEN_APP_INFO, "Claude"))).act()
         assertEquals(mapOf("app" to ArgSource.Literal("net.fixture.qandril")), info.steps.single().invocation.args)
+    }
+
+    /**
+     * Controller ruling T2-R2 (A4′ acceptance tail, task 4), the binder's half: the words the MODEL wrote to name an
+     * app are recorded as the step's app words ([Interpretation.Act.appWords]) — the label argument beside the app,
+     * `query` for `launch_app`, `app_label` for `uninstall_app` — so `needsCard()` does not count them: the package
+     * bound here reaches the world, not the model's name for it. «открой клод» → «Claude» → the one «Claude» bound
+     * needs no card. Recorded on the step that carries them only (a later step's model text is still the card's), and
+     * not at all for the user's own words (theirs, never counted) or for a tool with no label (`open_app_info`).
+     */
+    @Test
+    fun `the model's name for an app is marked as the step's app words and needs no card`() = runTest {
+        val launch = binder(listOf(claude)).bind(goal, listOf(modelWritten(ToolIds.LAUNCH_APP, "Claude"))).act()
+        assertEquals(mapOf(0 to "query"), launch.appWords)
+        assertFalse("«Claude» bound to the one «Claude» starts at once", launch.needsCard())
+
+        val withSearch = binder(listOf(claude)).bind(
+            goal,
+            listOf(
+                modelWritten(ToolIds.LAUNCH_APP, "Claude"),
+                ProposedStep(
+                    InAppToolIds.WEB_SEARCH,
+                    mapOf("query" to "ostravel lectures"),
+                    mapOf("query" to ValueOrigin.ModelGenerated),
+                    ActionRiskLevel.SAFE,
+                    ToolEffect.EXTERNAL,
+                ),
+            ),
+        ).act()
+        assertEquals("the app words are the launch step's only", mapOf(0 to "query"), withSearch.appWords)
+        assertTrue("a later step's model text still needs the card", withSearch.needsCard())
+
+        val uninstall = binder(listOf(claude))
+            .bind(goal, listOf(modelWritten(Tier0ToolIds.UNINSTALL_APP, "Claude", risk = ActionRiskLevel.CONFIRM))).act()
+        assertEquals(mapOf(0 to "app_label"), uninstall.appWords)
+        assertTrue("an irreversible tool still owes its pick to confirm", uninstall.needsCard())
+
+        val users = binder(listOf(claude)).bind(goal, listOf(proposed(ToolIds.LAUNCH_APP, "app" to "Claude"))).act()
+        assertEquals("the user's own words are theirs: no mark", emptyMap<Int, String>(), users.appWords)
+
+        val info = binder(listOf(claude)).bind(goal, listOf(modelWritten(Tier0ToolIds.OPEN_APP_INFO, "Claude"))).act()
+        assertEquals("a tool with no label carries no app words", emptyMap<Int, String>(), info.appWords)
     }
 
     // --- A4′ phase 3b, Task 11 (fork 3b-A, B-10): the remainder of a model plan that acted, bound again ------

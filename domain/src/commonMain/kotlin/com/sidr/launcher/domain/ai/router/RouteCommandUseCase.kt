@@ -46,8 +46,10 @@ import kotlinx.coroutines.flow.first
  * ([HandleUserCommandUseCase]) is a latency optimization, not a filter on understanding: it answers
  * frequent exact commands without a model, and a FastPath *miss* is no longer grounds to answer
  * "Unknown command". What stays deterministic is everything on the execution side — nothing the
- * planner proposes auto-executes (Fork R4) except a learned command (step 2c, D3 as amended), and every
- * reason understanding is unavailable is stated
+ * planner proposes auto-executes (Fork R4) except a learned command (step 2c, D3 as amended) and, since D3's second
+ * amendment (A4′ acceptance tail, task 4), a fresh reading that owes no pick and sends no model text off the phone
+ * (step 7) — both start their sessions through the engine, whose consent card for a risky step is never skipped — and
+ * every reason understanding is unavailable is stated
  * honestly rather than disguised as an unrecognized command.
  *
  * Order of decision — an ordered chain of early returns, so **at most one** of the three
@@ -135,7 +137,10 @@ import kotlinx.coroutines.flow.first
  *    the gate decides *whether to ask*, never touches secrets.
  * 6. **Offline ⇒ [CommandMessage.UnderstandingNeedsNetwork]** — no socket the planner would abandon.
  * 7. **The one model path** (A4′ phase 3a, D3): ask the [ModelPlanner]; bind its step on the device
- *    ([MentionBinder]); hand back a reading for the card ([CommandOutcome.Interpreted]), the assistant
+ *    ([MentionBinder]); **start a bound reading at once when it needs no card** ([needsCard] `false`: no pick owed,
+ *    no model-written text going out — D3, second amendment, A4′ acceptance tail task 4; the outcome carries
+ *    [CommandOutcome.AgentSessionStarted.proposedByModel], and the engine's consent card still stops a risky step;
+ *    a start that fails falls back to the card), or hand back a reading for the card ([CommandOutcome.Interpreted]), the assistant
  *    with the question, a verbatim clarify, an honest «model unavailable», what the binding found instead
  *    of a card («нет такого приложения», «не понял» for a value the device could not read — phase 3b,
  *    Task 6 — or a failure; the model is asked once and told none of it), or — when the model declines
@@ -145,11 +150,13 @@ import kotlinx.coroutines.flow.first
  *    приложения» (K11) — the device's own deterministic answers, not anything the model proposed. And when the
  *    model named an app that is not here ([Binding.NotFound]) for a yielded «нет такого приложения» or a 2b
  *    target, the same device answer stands in the user's words ([notFoundWithoutModel], K3, K11) — the model's
- *    word goes neither to the store nor to the screen. Otherwise nothing here executes (`DOC-NYH-1`, Fork R4); the
- *    model is below gates 3, 5 and 6 (`DOC-ADL-3`). A bound reading also carries what it would teach
+ *    word goes neither to the store nor to the screen. Otherwise nothing here executes (`DOC-NYH-1`, Fork R4): a
+ *    session started without a card has acted on nothing yet — the engine runs it, behind its consent gate; the
+ *    model is below gates 3, 5 and 6 (`DOC-ADL-3`). A bound reading on the card also carries what it would teach
  *    ([CommandOutcome.Interpreted.learnable], A4′ phase 4 B-8): computed here, from the validated steps
  *    before binding, never inside `toCommandOutcome` (the remainder card shares that and teaches nothing);
- *    nothing is recorded here — the launcher records it once «Выполнить» has started the session. A reading for
+ *    nothing is recorded here — the launcher records it once «Выполнить» has started the session. A reading started
+ *    without a card teaches nothing (owner answer I5 «не засчитывать»): the cache is not asked. A reading for
  *    2b's empty app target (K2), or after a yielded «нет такого приложения», teaches nothing (review round 1 of
  *    task 2, I1: 2c, where a lesson is replayed, is not on its way back without the model).
  *
@@ -361,14 +368,16 @@ class RouteCommandUseCase(
         // descriptions — nothing of this phone (D1). The device then binds the model's words to this
         // phone, and NOTHING the binding finds is sent back: a pick, a "not found", a value not understood
         // go to the user. And
-        // nothing here runs anything (condition 1): a reading becomes a card, and only the user's
-        // «Выполнить» starts a session, through the engine.
+        // nothing here runs anything (condition 1): a reading that owes a pick or sends the model's own text out becomes
+        // a card, and only the user's «Выполнить» starts its session; any other bound reading starts its session at
+        // once (D3, second amendment, task 4 of the tail plan) — a session, not an act: the engine runs it, and stops a
+        // risky step at its consent card.
         val command = rawInput.trim()
         return when (val answer = modelPlanner.plan(command)) {
             // The answer form is `steps` since phase 3b Task 8; since Task 9 the bridge offers and admits up to
             // the engine's own cap (`BridgeRendering.MAX_STEPS_OFFERED`, held by `BridgeValidator`'s size
-            // check). The binder takes the WHOLE reading: one card for all of its steps, or one answer — the
-            // first step it cannot bind — for all of them. Nothing is started here either way.
+            // check). The binder takes the WHOLE reading: one card (or one session) for all of its steps, or one
+            // answer — the first step it cannot bind — for all of them.
             //
             // A4′ phase 4 (B-8): a BOUND reading carries what it would teach — `learnable`, from the validated
             // steps as the model wrote them (`ModelPlanning.Proposed.steps`, before binding: no package, the
@@ -389,6 +398,12 @@ class RouteCommandUseCase(
                 // runs in those states. (Online a yielded missing app is undecided and does reach 2c — ruled out all
                 // the same: one rule for both, the lesson is not offered.)
                 val teaches = claimed == null && fastPath.yielded !is FastPathYield.MissingApp
+                // D3, second amendment (A4′ acceptance tail, task 4; owner answer «13 / D3: да»): a bound reading that
+                // owes no pick and sends none of the model's own text off the phone starts at once, through the engine —
+                // the same rule as a learned command at 2c ([needsCard]); a risky step still stops at the engine's
+                // consent card. Such a start teaches nothing (owner answer I5 «не засчитывать»): the cache is not even
+                // asked. A start that fails is not lost — the reading comes back as the card, as before the amendment.
+                if (binding is Binding.Bound) startWithoutCard(binding.interpretation)?.let { return it }
                 if (outcome is CommandOutcome.Interpreted) {
                     outcome.copy(learnable = if (teaches) learnedPlans.learnable(command, answer.steps) else null)
                 } else {
@@ -503,6 +518,27 @@ class RouteCommandUseCase(
      * found no candidate for — not a pick, not a value sort, not a failed read.
      */
     private fun UnresolvedTarget.namesNoApp(): Boolean = sort == ArgSorts.APP && candidates.isEmpty() && !unreadable
+
+    /**
+     * Step 7's start without a card (D3, second amendment; A4′ acceptance tail, task 4): a FRESH bound reading whose
+     * plan owes no pick and sends none of the model's own text off the phone ([needsCard] `false` — the rule a learned
+     * command replays by at 2c) is started at once through [StartAgentSessionUseCase.startPlanned], and the outcome
+     * carries the model's mark ([CommandOutcome.AgentSessionStarted.proposedByModel], controller ruling K4). Every gate
+     * of the engine is unchanged: `startPlanned` validates the plan against the registry, and the engine's consent
+     * checkpoint stops a risky step (`requiresConsent(risk)`, `DOC-ADL-1`) — `uninstall_app`, `open_url`. `null` — the
+     * reading needs the card, or the start failed ([OperationResult.Failure], a plan the registry refuses) — and step 7
+     * answers with the card exactly as before the amendment.
+     */
+    private suspend fun startWithoutCard(act: Interpretation.Act): CommandOutcome? {
+        val plan = act.plan() ?: return null
+        if (act.needsCard()) return null
+        val started = startAgentSession.startPlanned(act.goal, plan)
+        return if (started is OperationResult.Success && started.value != null) {
+            CommandOutcome.AgentSessionStarted(started.value.id, proposedByModel = true)
+        } else {
+            null
+        }
+    }
 
     /**
      * Step 2c (A4′ phase 4, plan §0.2 B-5…B-7): [command] replayed from the one pinned form it fits, or `null` —

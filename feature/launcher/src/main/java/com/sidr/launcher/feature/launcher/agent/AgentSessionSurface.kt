@@ -51,6 +51,10 @@ import com.sidr.launcher.feature.launcher.R
  * while that session is on screen (`LauncherAgentSession.learned`) — carries the line «Выученная команда» and
  * «Забыть» ([onForgetLearned]) under its card. Any other session is drawn exactly as before, with no node added;
  * a session that draws no card (`Cancelled` before any step acted) draws no mark either.
+ *
+ * A4′ acceptance tail, task 4 (controller ruling K4): the session a FRESH model reading started without the
+ * interpretation card — [proposedByModel], `LauncherAgentSession.proposedByModel` — carries the line «Предложено
+ * моделью» under its card, the same way; any other session draws no such node.
  */
 @Composable
 internal fun AgentSessionSurface(
@@ -73,9 +77,11 @@ internal fun AgentSessionSurface(
     // A4′ phase 4, Task 7. Defaulted like undo: a caller that shows no learned command draws no mark.
     learned: CommandForm? = null,
     onForgetLearned: () -> Unit = {},
+    // A4′ acceptance tail, task 4 (K4). Defaulted like the learned mark: a caller that shows no model session draws none.
+    proposedByModel: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    if (learned == null || session.title() == null) {
+    if ((learned == null && !proposedByModel) || session.title() == null) {
         AgentSessionCard(
             session, toolProvenance, dynamicLabels, confirming, onConfirm, onDeny, onContinue, onDismiss,
             undoReview, onUndo, remainderOffered, onRetryRemainder, modifier,
@@ -87,7 +93,8 @@ internal fun AgentSessionSurface(
             session, toolProvenance, dynamicLabels, confirming, onConfirm, onDeny, onContinue, onDismiss,
             undoReview, onUndo, remainderOffered, onRetryRemainder, Modifier,
         )
-        LearnedCommandMark(onForget = onForgetLearned)
+        if (proposedByModel) ModelProposalMark()
+        if (learned != null) LearnedCommandMark(onForget = onForgetLearned)
     }
 }
 
@@ -340,6 +347,20 @@ private fun LearnedCommandMark(onForget: () -> Unit) {
         )
         SidrTertiaryButton(text = sidrString(R.string.launcher_agent_learned_forget), onClick = onForget)
     }
+}
+
+/**
+ * «Предложено моделью» (A4′ acceptance tail, task 4 — D3, second amendment; controller ruling K4; `DOC-NYH-1`
+ * «показывает, как поняла» — after the fact): under the card of a session a fresh model reading started without the
+ * interpretation card. Shipped primitives only (nothing added to `core/ui`); no action — the card's own controls stand.
+ */
+@Composable
+private fun ModelProposalMark() {
+    SidrText(
+        text = sidrString(R.string.launcher_agent_model_mark),
+        role = SidrTextRole.PROVENANCE,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 /** The plain framed block the two in-flight states share; the safety surfaces bring their own. */

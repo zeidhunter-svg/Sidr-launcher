@@ -238,6 +238,9 @@
          to forget the command (its form is deleted; the card stays). Class A, not locked. -->
     <string name="launcher_agent_learned_mark">Learned command</string>
     <string name="launcher_agent_learned_forget">Forget</string>
+    <!-- A4′ acceptance tail, task 4 (controller ruling K4; DOC-NYH-1): the card of a session a fresh model reading
+         started WITHOUT the interpretation card (D3, second amendment) says so. Class A, not locked. -->
+    <string name="launcher_agent_model_mark">Suggested by the model</string>
     <!-- A4′ phase 4, Task 8 (plan §0.2 B-11): the screen of learned commands (DOC-AML-5), reached from Settings.
          Class A, not locked. «learning» is a streak below the threshold: «2 / 3». -->
     <string name="launcher_learned_commands_title">Learned commands</string>

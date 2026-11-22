@@ -51,8 +51,11 @@ import javax.inject.Inject
  * do not contain it («Claude» for «открой клод») — binds only to an installed label that is exactly it after the
  * folding, or to an alias exactly ([AppTargetResolver.exactly]): one such app binds, several are the user's
  * pick, none is [Binding.NotFound]. No word form is read for the model's word. The words the tool shows keep the
- * model's mark; for an irreversible tool even an exact answer is a pick to confirm (the user did not type the
- * name). [rebind] reads a remainder's kept words as the user's, as before: the plan on disk keeps no origin.
+ * model's mark, and are recorded as the step's app words ([Interpretation.Act.appWords]; controller ruling T2-R2, A4′
+ * acceptance tail task 4): they name the app this binding turns into a package, and the package — not the words —
+ * reaches the world, so `needsCard()` and the card's model values do not count them («открой клод» → «Claude» starts
+ * at once, the owner's C1). For an irreversible tool even an exact answer is a pick to confirm (the user did not type
+ * the name). [rebind] reads a remainder's kept words as the user's, as before: the plan on disk keeps no origin.
  *
  * **Learned choices answer for `launch_app` only**, with FastPath's policy — a confident one binds
  * without asking, a weak one is offered first — and for a confirmation exactly as for a choice between
@@ -142,6 +145,7 @@ class DeviceMentionBinder @Inject constructor(
         origins = bound.associate { it.step.index to it.origins },
         effects = bound.associate { it.step.index to it.effect },
         choices = bound.mapNotNull { step -> step.choice?.let { PendingChoice(step.step.index, it) } },
+        appWords = bound.mapNotNull { step -> step.appWords?.let { step.step.index to it } }.toMap(),
     )
 
     /** One step at plan position [index], bound exactly as a one-step reading always was. */
@@ -215,6 +219,11 @@ class DeviceMentionBinder @Inject constructor(
         val said = if (modelWritten) ValueOrigin.ModelGenerated else ValueOrigin.SaidBy(PrincipalId.USER)
         val wordOrigins = (proposed.origins - AuthoredToolDescriptions.MENTION_ARG) +
             listOfNotNull(sorted.labelArg?.let { it to said })
+        // Controller ruling T2-R2 (A4′ acceptance tail, task 4): the model's words for the app are the words NAMING the
+        // step's app — bound here to a package (or picked by the user), never sent anywhere — so they are marked as the
+        // step's app words, which `needsCard()` and the card's model values do not count. The user's own words need no
+        // mark: they are theirs, and never counted.
+        val appWords = sorted.labelArg?.takeIf { modelWritten }
 
         // Owner decision 2026-11-17: an irreversible tool binds only a name exact as typed (`forIrreversible`);
         // a tool the registry does not know is treated as irreversible — the stricter reading. A name the model
@@ -225,9 +234,9 @@ class DeviceMentionBinder @Inject constructor(
             AppCandidates.None -> StepBinding.Refused(Binding.NotFound(mention))
             AppCandidates.Unavailable -> StepBinding.Refused(Binding.Unavailable)
             is AppCandidates.One ->
-                step(index, proposed, words + (appArg to found.app.packageName), wordOrigins + (appArg to ValueOrigin.Ours), choice = null)
-            is AppCandidates.Several -> choice(index, proposed, appArg, mention, found.apps, words, wordOrigins, confirm = false)
-            is AppCandidates.Confirm -> choice(index, proposed, appArg, mention, found.apps, words, wordOrigins, confirm = true)
+                step(index, proposed, words + (appArg to found.app.packageName), wordOrigins + (appArg to ValueOrigin.Ours), choice = null, appWords = appWords)
+            is AppCandidates.Several -> choice(index, proposed, appArg, mention, found.apps, words, wordOrigins, confirm = false, appWords = appWords)
+            is AppCandidates.Confirm -> choice(index, proposed, appArg, mention, found.apps, words, wordOrigins, confirm = true, appWords = appWords)
         }
     }
 
@@ -241,9 +250,10 @@ class DeviceMentionBinder @Inject constructor(
         words: Map<String, String>,
         origins: Map<String, ValueOrigin>,
         confirm: Boolean,
+        appWords: String?,
     ): StepBinding.Bound {
         if (proposed.tool != ToolIds.LAUNCH_APP) {
-            return step(index, proposed, words, origins, AppChoice(appArg, mention, apps, learning = null, confirm = confirm))
+            return step(index, proposed, words, origins, AppChoice(appArg, mention, apps, learning = null, confirm = confirm), appWords)
         }
         val candidates = CandidateSet(apps.map { ResolvedTarget.App(it.packageName) })
         val key = LearnedChoiceKeys.launch(mention, folding)
@@ -258,16 +268,16 @@ class DeviceMentionBinder @Inject constructor(
         return when (val decision = policy.decide(preference, candidates, proposed.risk)) {
             is ResolutionDecision.AutoResolve -> {
                 val target = when (val t = decision.target) { is ResolvedTarget.App -> t.packageName }
-                step(index, proposed, words + (appArg to target), origins + (appArg to ValueOrigin.Ours), choice = null)
+                step(index, proposed, words + (appArg to target), origins + (appArg to ValueOrigin.Ours), choice = null, appWords = appWords)
             }
             is ResolutionDecision.RankFirst -> {
                 val first = when (val t = decision.target) { is ResolvedTarget.App -> t.packageName }
-                step(index, proposed, words, origins, AppChoice(appArg, mention, apps.sortedByDescending { it.packageName == first }, token, confirm))
+                step(index, proposed, words, origins, AppChoice(appArg, mention, apps.sortedByDescending { it.packageName == first }, token, confirm), appWords)
             }
-            ResolutionDecision.NoPreference -> step(index, proposed, words, origins, AppChoice(appArg, mention, apps, token, confirm))
+            ResolutionDecision.NoPreference -> step(index, proposed, words, origins, AppChoice(appArg, mention, apps, token, confirm), appWords)
             is ResolutionDecision.Stale -> {
                 preferences.delete(key, ResolutionContext.None) // best-effort prune, as FastPath's decorator does
-                step(index, proposed, words, origins, AppChoice(appArg, mention, apps, token, confirm))
+                step(index, proposed, words, origins, AppChoice(appArg, mention, apps, token, confirm), appWords)
             }
         }
     }
@@ -314,9 +324,18 @@ class DeviceMentionBinder @Inject constructor(
         data class NotRead(val binding: Binding) : Values
     }
 
-    /** [bindStep]'s answer: the step bound (a pick may still be owed on it), or the reading's answer for all of it. */
+    /**
+     * [bindStep]'s answer: the step bound (a pick may still be owed on it), or the reading's answer for all of it.
+     * [appWords] — the step's label argument when the MODEL wrote the app's name (ruling T2-R2), else `null`.
+     */
     private sealed interface StepBinding {
-        data class Bound(val step: PlanStep, val origins: Map<String, ValueOrigin>, val effect: ToolEffect, val choice: AppChoice?) : StepBinding
+        data class Bound(
+            val step: PlanStep,
+            val origins: Map<String, ValueOrigin>,
+            val effect: ToolEffect,
+            val choice: AppChoice?,
+            val appWords: String? = null,
+        ) : StepBinding
         data class Refused(val binding: Binding) : StepBinding
     }
 
@@ -327,5 +346,6 @@ class DeviceMentionBinder @Inject constructor(
         words: Map<String, String>,
         origins: Map<String, ValueOrigin>,
         choice: AppChoice?,
-    ) = StepBinding.Bound(proposed.toPlanStep(index, words), origins, proposed.effect, choice)
+        appWords: String? = null,
+    ) = StepBinding.Bound(proposed.toPlanStep(index, words), origins, proposed.effect, choice, appWords)
 }

@@ -19,14 +19,11 @@ import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Sizes
 import com.sidr.launcher.core.ui.theme.Spacing
 import com.sidr.launcher.domain.action.requiresConsent
-import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.ai.bridge.AppChoice
 import com.sidr.launcher.domain.ai.bridge.Interpretation
 import com.sidr.launcher.domain.ai.bridge.SidrDestination
-import com.sidr.launcher.domain.ai.bridge.ValueOrigin
+import com.sidr.launcher.domain.ai.bridge.modelTextGoingOut
 import com.sidr.launcher.domain.model.InstalledApp
-import com.sidr.launcher.domain.tool.ArgSource
-import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.feature.launcher.agent.AgentStepProvenance
 import com.sidr.launcher.feature.launcher.agent.DynamicToolLabel
@@ -96,7 +93,7 @@ internal fun InterpretationArea(
                     },
                     provenance = {
                         interpretation.steps.forEach { step ->
-                            ModelValues(step, interpretation.origins[step.index].orEmpty(), interpretation.effects[step.index])
+                            ModelValues(interpretation.modelTextGoingOut(step))
                             AgentStepProvenance(provenance[step.invocation.id])
                         }
                     },
@@ -134,17 +131,16 @@ internal fun ThinkingArea(onCancel: () -> Unit, modifier: Modifier = Modifier) {
  * wrote it (trimmed); for an address it is the NORMALISED form (scheme lower-cased by the URL sort before the card,
  * A4′ phase 3b Task 6), i.e. the address that will open. A value the user said needs no mark — it is
  * theirs.
+ *
+ * [values] are the domain's ONE reading of «model text going out» (`modelTextGoingOut`, A4′ acceptance tail task 4) —
+ * the same function `needsCard()` counts, so the card draws exactly what it is shown for; the model's name for an app
+ * the device bound (controller ruling T2-R2) is not among them: the package goes out, not the word.
  */
 @Composable
-private fun ModelValues(step: PlanStep, origins: Map<String, ValueOrigin>, effect: ToolEffect?) {
-    if (effect != ToolEffect.EXTERNAL) return
-    origins
-        .filterValues { it == ValueOrigin.ModelGenerated }
-        .keys
-        .mapNotNull { name -> (step.invocation.args[name] as? ArgSource.Literal)?.value }
-        .forEach { value ->
-            SidrText(text = sidrString(R.string.launcher_interpretation_model_value, value), role = SidrTextRole.PROVENANCE)
-        }
+private fun ModelValues(values: List<String>) {
+    values.forEach { value ->
+        SidrText(text = sidrString(R.string.launcher_interpretation_model_value, value), role = SidrTextRole.PROVENANCE)
+    }
 }
 
 /**

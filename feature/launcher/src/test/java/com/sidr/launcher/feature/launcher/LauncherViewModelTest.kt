@@ -385,6 +385,9 @@ class LauncherViewModelTest {
         answer: ModelPlanning,
         online: Boolean = true,
         resolutionStore: FakeResolutionPreferenceStore = fakeResolutionStore,
+        // A4′ acceptance tail, task 4: what the started session's tools observe, for the tests of a session that
+        // starts without a card. Defaulted to the shared fixture, so every earlier caller is unchanged.
+        runAgent: RunAgentSessionUseCase = runAgentSession,
     ): LauncherViewModel {
         fakeMatcher.intentToReturn = LauncherIntent.UnknownIntent(originalInput = "nl command", reason = "x")
         fakeMatcher.confidenceToReturn = 0.0f
@@ -418,10 +421,10 @@ class LauncherViewModelTest {
             speechInputSource = fakeSpeech,
             connectivityChecker = FakeConnectivityChecker(),
             getPrayerContext = defaultGetPrayerContext,
-            runAgentSession = runAgentSession,
-            resolveAgentConsent = ResolveConsentUseCase(fakeAgentStore, runAgentSession),
+            runAgentSession = runAgent,
+            resolveAgentConsent = ResolveConsentUseCase(fakeAgentStore, runAgent),
             cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
-            resumeAgentSession = resumeOver(fakeAgentStore, runAgentSession, agentRegistry),
+            resumeAgentSession = resumeOver(fakeAgentStore, runAgent, agentRegistry),
             undoAgentSession = undoOver(fakeAgentStore, agentRegistry),
             agentSessionStore = fakeAgentStore,
             startAgentSession = startAgentSession,
@@ -3373,7 +3376,14 @@ class LauncherViewModelTest {
             assertEquals(CommandFeedback.LowConfidence, vm.commandFeedback.value)
         }
 
-    /** End to end through the real route: the model's reading waits on the card; «Выполнить» starts it. */
+    /**
+     * End to end through the real route: the model's reading waits on the card; «Выполнить» starts it.
+     *
+     * **Since the D3 second amendment (task 4 of the tail plan) the store search's text is the MODEL's** — the same
+     * search in the user's words would start at once (`a model session started without a card shows the model mark`)
+     * — so the card is owed, and the property under test is unchanged. A session the user started from the card
+     * carries no model mark: the card already showed how the command was understood.
+     */
     @Test
     fun `a model plan through the real route waits on the card, and Run starts an engine session`() = runTest(testDispatcher) {
         val vm = buildBridgeViewModel(
@@ -3382,7 +3392,7 @@ class LauncherViewModelTest {
                     ProposedStep(
                         tool = ToolIds.PLAY_STORE_SEARCH,
                         args = mapOf("query" to "lumora"),
-                        origins = mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                        origins = mapOf("query" to ValueOrigin.ModelGenerated),
                         risk = ActionRiskLevel.CONFIRM,
                         effect = ToolEffect.EXTERNAL,
                     ),
@@ -3398,6 +3408,7 @@ class LauncherViewModelTest {
         advanceUntilIdle()
 
         assertEquals(ExecutionState.AwaitingConsent, vm.agentSessionState.value?.state)
+        assertFalse("a session started from the card carries no model mark", vm.agentProposedByModel.value)
     }
 
     /**
@@ -3777,5 +3788,171 @@ class LauncherViewModelTest {
         assertEquals("the learned session is the one on screen", reading.goal, vm.agentSessionState.value?.goal)
         assertEquals(form, vm.agentLearnedCommand.value)
         assertEquals("a replay card teaches nothing", emptyMap<String, LearnedPlan>(), fakeLearnedPlanStore.rows)
+    }
+
+    // ── A4′ acceptance tail, task 4: one Sidr card — a fresh reading with nothing to show starts at once ──────────────
+
+    /** One step the model proposed in the user's own words — no pick, no model text going out: no card is owed. */
+    private fun usersOwn(tool: ToolId, arg: String, value: String, risk: ActionRiskLevel) = ModelPlanning.Proposed(
+        listOf(ProposedStep(tool, mapOf(arg to value), mapOf(arg to ValueOrigin.SaidBy(PrincipalId.USER)), risk, ToolEffect.EXTERNAL)),
+    )
+
+    /** The engine over [registry], answering each call in turn with [results] — the run a started session gets. */
+    private fun runOver(registry: ToolRegistry, tools: FakeToolExecutor) =
+        RunAgentSessionUseCase(AgentExecutor(registry, tools, RuntimeBudget.Default), fakeAgentStore)
+
+    /**
+     * D3, second amendment + controller ruling K4, the launcher's half — end to end through the REAL route: a fresh
+     * reading with nothing to show (a store search in the user's own words) starts at once, no card is drawn, and the
+     * session's card carries the model's mark. The step is `CONFIRM`: the engine stops it at its consent card, so the
+     * session stays on screen with the mark, and nothing is executed. The mark goes with the session.
+     */
+    @Test
+    fun `a model session started without a card shows the model mark`() = runTest(testDispatcher) {
+        val vm = buildBridgeViewModel(answer = usersOwn(ToolIds.PLAY_STORE_SEARCH, "query", "lumora", ActionRiskLevel.CONFIRM))
+
+        vm.onCommandSubmitted("найди lumora в магазине")
+        advanceUntilIdle()
+
+        assertNull("no interpretation card was drawn", vm.interpretation.value)
+        assertEquals("the engine stopped the risky step at its consent card", ExecutionState.AwaitingConsent, vm.agentSessionState.value?.state)
+        assertTrue("the session's card says the model proposed it", vm.agentProposedByModel.value)
+        assertTrue("nothing was executed", fakeExecutor.executedActions.isEmpty())
+
+        vm.dismissAgentSession()
+        advanceUntilIdle()
+
+        assertNull(vm.agentSessionState.value)
+        assertFalse("the mark goes with its session", vm.agentProposedByModel.value)
+    }
+
+    /**
+     * Owner answer I12 «простая — закрывается сама»: a session of ONE `SAFE` step that acted (`Effected`), asked no
+     * consent and has nothing to undo takes its card off Home when it finishes — as FastPath's `Executed` leaves
+     * nothing — and the launcher is put back at rest (the buffer cleared, so the home body returns; the 2026-09-10
+     * device finding). Here a web search the model read in the user's words, started at once through the real route.
+     */
+    @Test
+    fun `a simple finished session closes itself`() = runTest(testDispatcher) {
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
+        val vm = buildBridgeViewModel(
+            answer = usersOwn(ToolId("web_search"), "query", "ostravel lectures", ActionRiskLevel.SAFE),
+            runAgent = runOver(agentRegistry, tools),
+        )
+
+        vm.onCommandSubmitted("найди ostravel lectures")
+        advanceUntilIdle()
+
+        assertEquals("the search ran through the engine", listOf(ToolId("web_search")), tools.invocations.map { it.id })
+        assertNull("the finished simple session took its card down", vm.agentSessionState.value)
+        assertFalse(vm.agentProposedByModel.value)
+        assertEquals("the launcher is back at rest", "", vm.commandInput.value)
+        assertNull(vm.interpretation.value)
+    }
+
+    /** I12: a single `SAFE` step that can be undone keeps its card — «Отменить» is on it. */
+    @Test
+    fun `a finished session with an undo stays`() = runTest(testDispatcher) {
+        val setAlias = ToolId("set_app_alias")
+        val forgetAlias = ToolId("forget_app_alias")
+        val registry = FakeToolRegistry(
+            listOf(
+                ToolDescriptor(
+                    id = setAlias,
+                    level = ToolLevels.LAUNCHER_MEMORY,
+                    effect = ToolEffect.LOCAL,
+                    argSchema = listOf("app", "phrase").map { ActionArg(it, description = "fixture") },
+                    risk = ActionRiskLevel.SAFE,
+                    durability = ToolDurability.TRANSIENT,
+                ),
+                ToolDescriptor(
+                    id = forgetAlias,
+                    level = ToolLevels.LAUNCHER_MEMORY,
+                    effect = ToolEffect.LOCAL,
+                    argSchema = listOf(ActionArg("phrase", description = "fixture")),
+                    risk = ActionRiskLevel.SAFE,
+                    durability = ToolDurability.TRANSIENT,
+                ),
+            ),
+        )
+        val inverses = ToolInverses { forward, _ ->
+            if (forward.id == setAlias) {
+                Undo.By(ToolInvocation(forgetAlias, mapOf("phrase" to ArgSource.Literal(forward.args.getValue("phrase")))))
+            } else {
+                Undo.NotUndoable
+            }
+        }
+        val goal = AgentGoal("назови лумору вельтрикс", GoalShape.Free("назови лумору вельтрикс"))
+        val plan = ExecutionPlan(
+            listOf(
+                PlanStep(
+                    index = 0,
+                    invocation = ToolInvocation(
+                        setAlias,
+                        mapOf("app" to ArgSource.Literal("net.fixture.quill"), "phrase" to ArgSource.Literal("вельтрикс")),
+                    ),
+                    risk = ActionRiskLevel.SAFE,
+                    precondition = StepPrecondition.None,
+                    rationale = StepRationale.MODEL_PROPOSED,
+                ),
+            ),
+        )
+        val start = StartAgentSessionUseCase(TemplatePlanner(), fakeAgentStore, agentIds, registry)
+        val vm = buildViewModel(
+            runAgent = runOver(registry, FakeToolExecutor(listOf(ToolResult.Effected()))),
+            route = CommandRouteStep {
+                val started = requireNotNull((start.startPlanned(goal, plan) as OperationResult.Success).value) { "the fixture plan must validate" }
+                CommandOutcome.AgentSessionStarted(started.id, proposedByModel = true)
+            },
+            undoInverses = inverses,
+        )
+
+        vm.submitAgentCommand(goal.text)
+        advanceUntilIdle()
+
+        assertEquals(ExecutionState.Completed, vm.agentSessionState.value?.state)
+        assertTrue("«Отменить» has something to undo", vm.agentUndoReview.value.any { it.undo is Undo.By })
+        assertTrue("the card keeps its mark", vm.agentProposedByModel.value)
+    }
+
+    /** I12: a plan of two `SAFE` steps that both acted keeps its card — only a single step closes itself. */
+    @Test
+    fun `a finished plan of two steps stays`() = runTest(testDispatcher) {
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected(), ToolResult.Effected()))
+        val vm = buildBridgeViewModel(
+            answer = ModelPlanning.Proposed(
+                listOf("ostravel lectures", "vorandel maps").map { query ->
+                    ProposedStep(ToolId("web_search"), mapOf("query" to query), mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER)), ActionRiskLevel.SAFE, ToolEffect.EXTERNAL)
+                },
+            ),
+            runAgent = runOver(agentRegistry, tools),
+        )
+
+        vm.onCommandSubmitted("найди ostravel lectures и vorandel maps")
+        advanceUntilIdle()
+
+        assertEquals("both steps ran", 2, tools.invocations.size)
+        assertEquals(ExecutionState.Completed, vm.agentSessionState.value?.state)
+        assertTrue(vm.agentProposedByModel.value)
+    }
+
+    /**
+     * I12, read strictly: a single `SAFE` step that did NOT act — it looked, and found the app gone
+     * (`APP_NOT_INSTALLED`, `Observed`) — keeps its card: closing it would hide that nothing opened. Named in the task
+     * report (the owner's rule says «по завершении»; the session is `Completed`, the act is not).
+     */
+    @Test
+    fun `a finished session that only looked stays`() = runTest(testDispatcher) {
+        val tools = FakeToolExecutor(listOf(ToolResult.Observed(ObservedFact.APP_NOT_INSTALLED, ToolOutput(mapOf("resolved_query" to "vorandel")))))
+        val vm = buildBridgeViewModel(
+            answer = usersOwn(ToolIds.LAUNCH_APP, "query", "vorandel", ActionRiskLevel.SAFE),
+            runAgent = runOver(agentRegistry, tools),
+        )
+
+        vm.onCommandSubmitted("открой vorandel")
+        advanceUntilIdle()
+
+        assertEquals(1, tools.invocations.size)
+        assertEquals(ExecutionState.Completed, vm.agentSessionState.value?.state)
     }
 }

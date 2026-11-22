@@ -279,6 +279,9 @@ class BridgePayloadGuardTest {
         capture: Capture,
         baseUrl: String = "https://api.example.com/v1",
         learnedStore: FakeLearnedPlanStore = plantedLearnedPlans(),
+        // A4′ acceptance tail, task 4: where a reading that needs no card starts its session (D3, second amendment),
+        // so the controls can read the package the device bound off the started session.
+        agentStore: FakeAgentSessionStore = FakeAgentSessionStore(),
     ): RouteCommandUseCase {
         val descriptions = BridgeProvidesModule.provideToolDescriptions(AuthoredToolDescriptions())
         val binder = binder()
@@ -310,7 +313,7 @@ class BridgePayloadGuardTest {
             connectivityChecker = FakeConnectivityChecker(initiallyOnline = true),
             startAgentSession = StartAgentSessionUseCase(
                 TemplatePlanner(),
-                FakeAgentSessionStore(),
+                agentStore,
                 object : AgentSessionIdFactory {
                     private var n = 0
                     override fun newId() = AgentSessionId("guard-${++n}")
@@ -340,7 +343,8 @@ class BridgePayloadGuardTest {
 
     /**
      * [routed] has one entry per body: the command whose `route()` call was running when that body was sent.
-     * [learnedReads] is how many times the run's planted learned-plan store was read.
+     * [learnedReads] is how many times the run's planted learned-plan store was read. [started] — every session the
+     * route started (task 4: a reading that needs no card starts at once), as the run's store saved it.
      */
     private data class Run(
         val mode: BridgeTransportMode,
@@ -348,20 +352,22 @@ class BridgePayloadGuardTest {
         val routed: List<String>,
         val outcomes: List<CommandOutcome>,
         val learnedReads: Int,
+        val started: List<AgentSession>,
     )
 
     private val runs: List<Run> by lazy {
         BridgeTransportMode.entries.map { mode ->
             val capture = Capture(mode)
             val learnedStore = plantedLearnedPlans()
-            val route = route(mode, capture, learnedStore = learnedStore)
+            val agentStore = FakeAgentSessionStore()
+            val route = route(mode, capture, learnedStore = learnedStore, agentStore = agentStore)
             val routed = mutableListOf<String>()
             val outcomes = commands.map { command ->
                 val outcome = runBlocking { route.route(command) }
                 repeat(capture.bodies.size - routed.size) { routed += command }
                 outcome
             }
-            Run(mode, capture.bodies.toList(), routed.toList(), outcomes, learnedStore.reads)
+            Run(mode, capture.bodies.toList(), routed.toList(), outcomes, learnedStore.reads, agentStore.saved.toList())
         }
     }
 
@@ -551,12 +557,19 @@ class BridgePayloadGuardTest {
     fun `the controls - the device read every planted source, and the command and offering are in the body`() {
         assertTrue(federation.registry.all().any { it.id.value.startsWith(ShortcutToolIds.PREFIX) && "net.fixture.qorvath" in it.id.value })
         runs.forEach { run ->
-            val bound = run.outcomes.map { (it as CommandOutcome.Interpreted).interpretation as Interpretation.Act }
-            fun pinned(index: Int) = (bound[index].steps.single().invocation.args["app"] as? ArgSource.Literal)?.value
+            // A4′ acceptance tail, task 4 (D3, second amendment; plan review C3): commands 0–2 bind ONE app in the
+            // user's own words — nothing to pick, no model text going out — so each starts its session at once, and
+            // the package the device bound is read off that session. Command 3 owes a pick: it is still the card.
+            run.outcomes.take(3).forEachIndexed { i, outcome ->
+                assertEquals("${run.mode}: «${commands[i]}» starts at once", true, (outcome as CommandOutcome.AgentSessionStarted).proposedByModel)
+            }
+            fun pinned(index: Int) = run.started.single { it.goal.text == commands[index] }
+                .plan.steps.single().invocation.args["app"].let { (it as? ArgSource.Literal)?.value }
+            val card = (run.outcomes[3] as CommandOutcome.Interpreted).interpretation as Interpretation.Act
             assertEquals("${run.mode}: installed apps", "net.fixture.lumora", pinned(0))
             assertEquals("${run.mode}: alias table", "net.fixture.zantor", pinned(1))
             assertEquals("${run.mode}: learned choices", "net.fixture.tessar.two", pinned(2))
-            assertEquals("${run.mode}: a choice", listOf("net.fixture.pellix.one", "net.fixture.pellix.two"), bound[3].choices.single().choice.candidates.map { it.packageName })
+            assertEquals("${run.mode}: a choice", listOf("net.fixture.pellix.one", "net.fixture.pellix.two"), card.choices.single().choice.candidates.map { it.packageName })
             // A4′ phase 4: step 2c read the learned-plan cache — whole — once for every command, before the
             // model was asked, and none of its forms fit (every command still reached step 7, below).
             assertEquals("${run.mode}: learned plans", commands.size, run.learnedReads)

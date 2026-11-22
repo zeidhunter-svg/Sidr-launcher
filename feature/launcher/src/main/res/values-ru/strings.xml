@@ -75,6 +75,7 @@
     <string name="launcher_understanding_needs_provider">ИИ-провайдер ещё не настроен.</string>
     <string name="launcher_understanding_provider_action">Настроить провайдера</string>
     <string name="launcher_understanding_needs_network">Чтобы понять эту команду, нужна сеть.</string>
+    <string name="launcher_model_declined">Понял команду, но Sidr так пока не умеет.</string>
 
     <!-- A4′ phase 3a — the interpretation card (spec §7.12.2/§7.12.3), the visible wait and the six reasons
          the model gave nothing usable (finding (c) of the A1″ acceptance). Class A, not locked. -->

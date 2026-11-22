@@ -89,6 +89,7 @@ import com.sidr.launcher.domain.tool.ToolRegistry
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -294,15 +295,64 @@ class RouteCommandUseCaseTest {
         assertEquals(0, planner.planCallCount)
     }
 
+    /**
+     * A4′ acceptance tail, task 5 (owner decision 2: б): the model read the command and found no tool for it — the
+     * user is told so («Понял команду, но Sidr так пока не умеет»), not that the command is «unknown», which blames
+     * the command for what is a limit of the tool set. Before the tail this kept FastPath's `Unknown`.
+     */
     @Test
-    fun `the model declines - keeps the FastPath outcome`() = runTest {
+    fun `the model declines - says it understood and Sidr cannot do it yet`() = runTest {
         driveUnknown()
         planner.answer = ModelPlanning.Declined
 
         val outcome = useCase().route("do a barrel roll")
 
-        assertEquals(CommandOutcome.Unknown("do a barrel roll"), outcome)
+        assertEquals(CommandOutcome.Message(CommandMessage.UnderstoodNoAction), outcome)
         assertEquals(1, planner.planCallCount)
+    }
+
+    /**
+     * K1 outranks the line: what FastPath yielded to the model (a search, a «нет такого приложения») and the model
+     * declined is answered as FastPath would have answered it — a search run, a store plan — never «понял, но не
+     * умею» in place of a working search.
+     */
+    @Test
+    fun `a yielded command the model declines is not this line`() = runTest {
+        driveConfidentSearch()
+        planner.answer = ModelPlanning.Declined
+
+        val search = useCase().route("найди $SEARCH_QUERY")
+
+        assertNotEquals(CommandOutcome.Message(CommandMessage.UnderstoodNoAction), search)
+        assertEquals("the search FastPath would have run", CommandOutcome.Executed, search)
+        assertEquals(listOf(fastPathSearch), executor.executedActions)
+
+        driveAppLaunch("клод")
+        appsRepo.appsToReturn = emptyList()
+
+        val missing = useCase().route("открой клод")
+
+        assertNotEquals(CommandOutcome.Message(CommandMessage.UnderstoodNoAction), missing)
+        assertEquals("the store plan FastPath's «нет такого приложения» would have started",
+            CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), missing)
+        assertEquals(storeGoalForKlod, agentStore.saved.single().goal)
+    }
+
+    /**
+     * K11 outranks the line: a 2b app target the model was handed (K2) and declined is answered on the device —
+     * «нет такого приложения» in the user's word — not «понял, но не умею».
+     */
+    @Test
+    fun `a 2b target the model declines answers on the device, not this line`() = runTest {
+        driveUnknown()
+        val target = removeTarget("удали приложение клод", words = "клод", candidates = emptyList())
+        planner.answer = ModelPlanning.Declined
+
+        val outcome = useCase(agentPlanner = claims(target), agentRegistry = removeRegistry).route("удали приложение клод")
+
+        assertNotEquals(CommandOutcome.Message(CommandMessage.UnderstoodNoAction), outcome)
+        assertEquals(CommandOutcome.Message(CommandMessage.NoAppFound("клод")), outcome)
+        assertEquals("the model was asked once", 1, planner.planCallCount)
     }
 
     @Test
@@ -1380,7 +1430,7 @@ class RouteCommandUseCaseTest {
 
         val online = learnedRoute().route("сотри все фотографии")
 
-        assertEquals("the model declined: FastPath's outcome, untouched", CommandOutcome.Unknown("do a barrel roll"), online)
+        assertEquals("the model declined: said so, not «unknown»", CommandOutcome.Message(CommandMessage.UnderstoodNoAction), online)
         assertEquals("online, the model is asked once", 1, planner.planCallCount)
         assertEquals("сотри все фотографии", planner.lastCommand)
 

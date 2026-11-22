@@ -138,7 +138,9 @@ class FastPathOverflowSeamTest {
     fun `a launch carrying a second goal reaches the model instead of the store, even when its app is installed`() = runTest {
         val outcome = router().route("открой lumora и проверь почту")
 
-        assertEquals(CommandOutcome.LowConfidence, outcome)
+        // A4′ acceptance tail, task 5: the model was asked and declined (the fake's default) — said so, not FastPath's
+        // downgraded `LowConfidence`; the property under test is unchanged: it reached the model, nothing ran.
+        assertEquals(CommandOutcome.Message(CommandMessage.UnderstoodNoAction), outcome)
         assertEquals("the model is asked exactly once", 1, modelPlanner.planCallCount)
         assertTrue("no store plan may start", agentStore.saved.isEmpty())
         assertTrue("nothing is launched", executor.executedActions.isEmpty())
@@ -158,7 +160,9 @@ class FastPathOverflowSeamTest {
     fun `a launch carrying a second goal with nothing of it installed reaches the model too`() = runTest {
         val outcome = router().route("open corvane and send the report")
 
-        assertEquals(CommandOutcome.LowConfidence, outcome)
+        // A4′ acceptance tail, task 5: the model was asked and declined (the fake's default) — said so, not FastPath's
+        // downgraded `LowConfidence`; the property under test is unchanged: it reached the model, nothing ran.
+        assertEquals(CommandOutcome.Message(CommandMessage.UnderstoodNoAction), outcome)
         assertEquals(1, modelPlanner.planCallCount)
         assertTrue(agentStore.saved.isEmpty())
     }
@@ -167,7 +171,9 @@ class FastPathOverflowSeamTest {
     fun `a search carrying a second goal is not run and reaches the model`() = runTest {
         val outcome = router().route("найди билеты в казань и закажи такси")
 
-        assertEquals(CommandOutcome.LowConfidence, outcome)
+        // A4′ acceptance tail, task 5: the model was asked and declined (the fake's default) — said so, not FastPath's
+        // downgraded `LowConfidence`; the property under test is unchanged: it reached the model, nothing ran.
+        assertEquals(CommandOutcome.Message(CommandMessage.UnderstoodNoAction), outcome)
         assertTrue("the search must not run with the second goal inside it", executor.executedActions.isEmpty())
         assertEquals(1, modelPlanner.planCallCount)
     }

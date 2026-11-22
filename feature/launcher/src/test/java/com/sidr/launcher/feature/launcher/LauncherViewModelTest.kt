@@ -251,9 +251,10 @@ class LauncherViewModelTest {
 
     // AIL-4: the VM routes through RouteCommandUseCase. Этап 4.0 re-pointed this fixture at the new
     // default posture — local-only OFF, a provider configured, online — with a model planner that
-    // declines (FakeModelPlanner's default; A4′ phase 3a). That combination still yields the FastPath outcome
-    // byte-for-byte, so every existing VM test keeps testing what it was written to test: the VM's
-    // CommandOutcome -> CommandFeedback mapping, not the gate. Leaving the provider unconfigured
+    // declines (FakeModelPlanner's default; A4′ phase 3a). That combination yields the FastPath outcome
+    // byte-for-byte for everything FastPath decides (and, since task 5 of the acceptance tail, «понял, но так пока
+    // не умею» for a command it left undecided), so every existing VM test keeps testing what it was written to
+    // test: the VM's CommandOutcome -> CommandFeedback mapping, not the gate. Leaving the provider unconfigured
     // would instead make every unknown command surface UnderstandingNeedsProvider and quietly turn
     // this whole suite into a test of the gate. The gate itself is proven in RouteCommandUseCaseTest.
     private val routeUseCase = RouteCommandUseCase(
@@ -846,7 +847,10 @@ class LauncherViewModelTest {
             advanceUntilIdle()
 
             assertEquals(0, fakeExecutor.callCount)
-            assertTrue(vm.commandFeedback.value is CommandFeedback.UnknownCommand)
+            // The REAL router runs here (`routeUseCase`: local-only off, a provider, online, a model that declines):
+            // task 5 of the tail plan — the model read the command and found no tool, so the line says that, not
+            // «unknown command» (which `CommandFeedback.UnknownCommand` still renders where FastPath alone decides).
+            assertEquals(CommandFeedback.Domain(CommandMessage.UnderstoodNoAction), vm.commandFeedback.value)
             // unknown input is preserved so the user can edit it
             assertEquals("zzz", vm.commandInput.value)
         }
@@ -2100,7 +2104,11 @@ class LauncherViewModelTest {
             )
             fakeMatcher.confidenceToReturn = 0.10f
             fakeAliasStore.upsert(Alias("work chat", AliasTarget.App("com.telegram"), 1L))
-            val vm = buildViewModel()
+            // A4′ acceptance tail, task 5: the REAL router no longer hands back `Unknown` once a model is reachable
+            // (a decline is «понял, но так пока не умею»), so this fixture feeds the decorator the `Unknown` it
+            // answers — the fallback path `ResolveCommandWithAliasUseCase`'s KDoc names. The alias read by the router
+            // itself (step 1a) is `RouteCommandUseCaseTest`'s and `AliasBindingGuardTest`'s.
+            val vm = buildViewModel(route = CommandRouteStep { CommandOutcome.Unknown("Work   Chat") })
             advanceUntilIdle()
             vm.onCommandChanged("Work   Chat")
 

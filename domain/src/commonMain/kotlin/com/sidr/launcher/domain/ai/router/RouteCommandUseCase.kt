@@ -416,7 +416,12 @@ class RouteCommandUseCase(
             is ModelPlanning.Clarify -> CommandOutcome.Message(CommandMessage.Verbatim(answer.question))
             // K1, K11: what FastPath yielded or 2b handed over, and the model would not take, is answered as the device
             // would have answered it without the model.
-            ModelPlanning.Declined -> answerWithoutModel(fastPath, claimed, rawInput) ?: ruleOutcome
+            //
+            // With nothing handed over, the model READ the command and found no tool for it: the user is told that
+            // (task 5 of the tail plan; owner decision 2: б), not FastPath's «unknown command» — `ruleOutcome` is
+            // undecided here (step 4 returned any decided one), and what it says blames the command.
+            ModelPlanning.Declined ->
+                answerWithoutModel(fastPath, claimed, rawInput) ?: CommandOutcome.Message(CommandMessage.UnderstoodNoAction)
             // Finding (c) of the A1″ acceptance: a broken key or a dead endpoint is said, not hidden — unless something
             // was handed to the model (K1, K11): then the user gets the device's own answer, not «model unavailable» in
             // place of a working search, a store plan or «нет такого приложения».

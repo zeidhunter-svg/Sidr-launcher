@@ -205,6 +205,20 @@ class LauncherPresentationTest {
         )
     }
 
+    /**
+     * A4′ acceptance tail, task 5: the model's refusal of a command it read is its own sentence — not «unknown
+     * command» (`launcher_feedback_unknown_command`), not one of the four «understanding unavailable» states — and
+     * offers no provider setup (nothing there to fix: understanding worked).
+     */
+    @Test
+    fun `a command the model declined says it was understood and cannot be done yet`() {
+        val text = requireNotNull(feedbackText(CommandFeedback.Domain(CommandMessage.UnderstoodNoAction)))
+
+        assertEquals(R.string.launcher_model_declined, text.id)
+        assertEquals(emptyList<Any>(), text.args)
+        assertFalse(CommandMessage.UnderstoodNoAction.offersProviderSetup())
+    }
+
     /** Finding (c) of the A1″ acceptance: each reason the model gave nothing usable is its own sentence. */
     @Test
     fun `each model-unavailable reason has its own sentence`() {

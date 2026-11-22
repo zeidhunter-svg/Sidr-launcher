@@ -111,6 +111,8 @@
     <string name="launcher_understanding_needs_provider">No AI provider is set up yet.</string>
     <string name="launcher_understanding_provider_action">Set up provider</string>
     <string name="launcher_understanding_needs_network">Understanding this command needs a network connection.</string>
+    <!-- A4′ acceptance tail, task 5: the model read the command and found no tool for it. Not «unknown command». -->
+    <string name="launcher_model_declined">Understood, but Sidr can\'t do that yet.</string>
 
     <!-- A4′ phase 3a — the interpretation card (spec §7.12.2/§7.12.3), the visible wait and the six reasons
          the model gave nothing usable (finding (c) of the A1″ acceptance). Class A, not locked. -->

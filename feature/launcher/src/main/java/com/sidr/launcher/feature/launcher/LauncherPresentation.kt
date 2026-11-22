@@ -73,6 +73,8 @@ internal fun feedbackText(feedback: CommandFeedback): FeedbackText? = when (feed
             FeedbackText(R.string.launcher_understanding_needs_provider)
         CommandMessage.UnderstandingNeedsNetwork ->
             FeedbackText(R.string.launcher_understanding_needs_network)
+        // A4′ acceptance tail, task 5 (owner decision 2: б): the model read the command and found no tool for it.
+        CommandMessage.UnderstoodNoAction -> FeedbackText(R.string.launcher_model_declined)
         is CommandMessage.UnderstandingModelUnavailable -> FeedbackText(
             when (m.reason) {
                 ModelUnavailableReason.CREDENTIALS -> R.string.launcher_model_unavailable_credentials

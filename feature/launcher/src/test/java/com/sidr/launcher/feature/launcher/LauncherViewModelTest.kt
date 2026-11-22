@@ -2910,7 +2910,7 @@ class LauncherViewModelTest {
      * The cancel and its three assertions are unchanged.
      */
     @Test
-    fun `the wait shows after a moment and cancelling it applies nothing`() = runTest(testDispatcher) {
+    fun `the wait shows once the model is asked and cancelling it applies nothing`() = runTest(testDispatcher) {
         val vm = buildViewModel(
             route = CommandRouteStep {
                 modelAskedEvents.modelAsked()

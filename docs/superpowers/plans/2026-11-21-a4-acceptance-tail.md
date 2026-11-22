@@ -524,7 +524,8 @@ git-ignored; суть — здесь):
   path shows no wait` (фейк-маршрут с задержкой 1 с виртуального времени, сигнала нет → `thinking` ни разу не `true`),
   `> the wait shows the moment the model is asked`.
 - [ ] **Шаг 2: переворачиваются (ревью I8)** — тесты ожидания, чьи медленные фейки сигнала не подают: `LauncherViewModelTest
-  > the wait shows after a moment and cancelling it applies nothing`, `> a newer command supersedes a slow answer still on
+  > the wait shows once the model is asked and cancelling it applies nothing` (до фикса ревью задачи 6 —
+  `> the wait shows after a moment and cancelling it applies nothing`), `> a newer command supersedes a slow answer still on
   its way`, `> editing the command during the wait abandons it`, `> a dictated Final with no Partial dismisses the standing
   interpretation before its answer lands`, `> the web chip supersedes…`, `> a tap on an app supersedes…`, `> a suggestion
   that opens a screen supersedes…`, `> the ASK chip abandons a command still waiting on the model`;

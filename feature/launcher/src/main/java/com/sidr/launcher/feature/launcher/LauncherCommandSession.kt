@@ -31,13 +31,15 @@ import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.feature.launcher.agent.LauncherAgentSession
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -102,6 +104,9 @@ internal class LauncherCommandSession(
     // A4′ phase 4, Task 7 (B-8): «Выполнить» on a fresh reading records what it teaches once its session started —
     // on [applicationScope], like `LauncherAppLaunch.recordChoiceIfPending`, so the write survives the ViewModel.
     private val recordLearnedPlan: RecordLearnedPlanUseCase,
+    // A4′ acceptance tail, task 6 (controller ruling K9): «the model is being asked» — [ModelAskedEvents.events], raised
+    // by the route right before it asks. The one thing the wait is shown on ([submit]).
+    private val modelAsked: Flow<Unit>,
     private val applicationScope: CoroutineScope,
     private val scope: CoroutineScope,
     private val onNavigate: (String) -> Unit,
@@ -159,7 +164,8 @@ internal class LauncherCommandSession(
     private var learnable: LearnedPlanShape? = null
     private var learned: CommandForm? = null
 
-    // ── The visible wait (spec §7.12.2, plan §0.2 B-10) and the command it waits for. ──
+    // ── The visible wait (spec §7.12.2, plan §0.2 B-10) and the command it waits for. Since the acceptance tail's task 6
+    // (K9) the wait is the model's: up while [pending] is being read by the model, never on a timer ([submit]). ──
     private val _thinking = MutableStateFlow(false)
     val thinking: StateFlow<Boolean> = _thinking
     private var pending: Job? = null
@@ -211,12 +217,23 @@ internal class LauncherCommandSession(
             return
         }
         pending?.cancel()
-        pending = scope.launch {
-            // Plan §0.2 B-10: FastPath answers before 300 ms and shows nothing; only a slow answer — the
-            // model's — shows the wait, with «Отмена».
-            val wait = launch {
-                delay(THINKING_DELAY_MS)
-                _thinking.value = true
+        // The wait belongs to the command now pending (A4′ acceptance tail, task 6; K9): the one replaced takes its wait
+        // with it here, and its own end — however late it comes — no longer touches the wait (the `finally` below).
+        _thinking.value = false
+        // Started lazily so that [pending] IS this command before its first line runs: on an immediate dispatcher the
+        // body would otherwise run before the assignment, and the checks below would compare against the command it
+        // replaced.
+        val command = scope.launch(start = CoroutineStart.LAZY) {
+            val self = coroutineContext.job
+            // A4′ acceptance tail, task 6 (owner decision 6, controller ruling K9): the wait — «Разбираю команду…», with
+            // «Отмена» — is shown the moment the route asks the model ([modelAsked], raised right before step 7's one
+            // `modelPlanner.plan`), and on nothing else: no timer, so an answer from the device shows no wait however
+            // long it takes. Subscribed before the route runs (UNDISPATCHED), as a CHILD of this command: cancelled with
+            // it, so a signal still on its way when the command is superseded, cancelled or edited is never delivered
+            // (a cancelled coroutine is not resumed with a value); and a newer command subscribes after it, with nothing
+            // replayed, so it never sees an older command's signal. `pending === self`: only the live pending command.
+            val wait = launch(start = CoroutineStart.UNDISPATCHED) {
+                modelAsked.collect { if (pending === self) _thinking.value = true }
             }
             try {
                 when (val resolved = resolveCommand.resolve(text)) {
@@ -255,9 +272,16 @@ internal class LauncherCommandSession(
                 }
             } finally {
                 wait.cancel()
-                _thinking.value = false
+                // Only the command still pending takes the wait down — the one that answered, or that the scope ended.
+                // A superseded command can end after its replacement asked the model (a cancellation that has to wind
+                // an off-main-thread call down first); the wait it would clear is the replacement's. Every gesture that
+                // abandons a command ([onChanged], [cancelThinking], [supersedeWaitingCommand], a newer [submit]) has
+                // already taken the wait down itself.
+                if (pending === self) _thinking.value = false
             }
         }
+        pending = command
+        command.start()
     }
 
     /**
@@ -674,7 +698,5 @@ internal class LauncherCommandSession(
         const val SEARCH_VERB_PREFIX = "search "
         // SavedStateHandle key for the typed command text (H3 process-death restoration).
         const val KEY_COMMAND_INPUT = "command_input"
-        // A4′ phase 3a (plan §0.2 B-10): how long a command may take before the wait is shown.
-        const val THINKING_DELAY_MS = 300L
     }
 }

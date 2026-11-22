@@ -177,6 +177,12 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -257,6 +263,13 @@ class LauncherViewModelTest {
     // test: the VM's CommandOutcome -> CommandFeedback mapping, not the gate. Leaving the provider unconfigured
     // would instead make every unknown command surface UnderstandingNeedsProvider and quietly turn
     // this whole suite into a test of the gate. The gate itself is proven in RouteCommandUseCaseTest.
+    //
+    // A4′ acceptance tail, task 6 (K9): the wait is the model's — the route raises [modelAskedEvents] right before it
+    // asks the model, and the ViewModel shows «Разбираю команду…» on it. ONE instance, handed to every real route
+    // and every ViewModel built here, as the graph hands its singleton to both (`BridgeProvidesModule`); a stubbed
+    // slow route raises it itself, before its delay, where the real one would have asked the model.
+    private val modelAskedEvents = ModelAskedEvents()
+
     private val routeUseCase = RouteCommandUseCase(
         handleUserCommand = useCase,
         modelPlanner = FakeModelPlanner(),
@@ -265,6 +278,7 @@ class LauncherViewModelTest {
         providerConfigRepository = configuredProvider(),
         connectivityChecker = FakeConnectivityChecker(),
         startAgentSession = startAgentSession,
+        modelAsked = modelAskedEvents,
     )
 
     // The web chip's act, through the same resolver/executor path (the router's confirm card that also
@@ -364,6 +378,7 @@ class LauncherViewModelTest {
         // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
         // and every step line renders exactly as it did before the dynamic arm existed.
         dynamicToolLabels = DynamicToolLabels { emptyMap() },
+        modelAskedEvents = modelAskedEvents,
         ioDispatcher = testDispatcher,
         applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
         savedStateHandle = savedStateHandle,
@@ -389,12 +404,15 @@ class LauncherViewModelTest {
         // A4′ acceptance tail, task 4: what the started session's tools observe, for the tests of a session that
         // starts without a card. Defaulted to the shared fixture, so every earlier caller is unchanged.
         runAgent: RunAgentSessionUseCase = runAgentSession,
+        // A4′ acceptance tail, task 6: the model itself, for the test that makes it slow. Defaulted to answering
+        // [answer] at once, so every earlier caller is unchanged.
+        model: ModelPlanner = FakeModelPlanner(answer),
     ): LauncherViewModel {
         fakeMatcher.intentToReturn = LauncherIntent.UnknownIntent(originalInput = "nl command", reason = "x")
         fakeMatcher.confidenceToReturn = 0.0f
         val route = RouteCommandUseCase(
             handleUserCommand = useCase,
-            modelPlanner = FakeModelPlanner(answer),
+            modelPlanner = model,
             binder = FakeMentionBinder(),
             featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = false)),
             // Этап 4.0: the gate refuses to consult the planner unless a provider is configured
@@ -402,6 +420,7 @@ class LauncherViewModelTest {
             providerConfigRepository = configuredProvider(),
             connectivityChecker = FakeConnectivityChecker(initiallyOnline = online),
             startAgentSession = startAgentSession,
+            modelAsked = modelAskedEvents,
         )
         return LauncherViewModel(
             installedAppsRepository = fakeRepo,
@@ -434,6 +453,7 @@ class LauncherViewModelTest {
             // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
             // and every step line renders exactly as it did before the dynamic arm existed.
             dynamicToolLabels = DynamicToolLabels { emptyMap() },
+            modelAskedEvents = modelAskedEvents,
             ioDispatcher = testDispatcher,
             applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),
@@ -675,6 +695,7 @@ class LauncherViewModelTest {
             // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
             // and every step line renders exactly as it did before the dynamic arm existed.
             dynamicToolLabels = DynamicToolLabels { emptyMap() },
+            modelAskedEvents = modelAskedEvents,
             ioDispatcher = testDispatcher,
             applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),
@@ -940,6 +961,7 @@ class LauncherViewModelTest {
             // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
             // and every step line renders exactly as it did before the dynamic arm existed.
             dynamicToolLabels = DynamicToolLabels { emptyMap() },
+            modelAskedEvents = modelAskedEvents,
             ioDispatcher = testDispatcher,
             applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),
@@ -2786,8 +2808,8 @@ class LauncherViewModelTest {
         assertEquals(reading, vm.interpretation.value)
         assertTrue(fakeAgentStore.saved.isEmpty())
         assertTrue(fakeExecutor.executedActions.isEmpty())
-        // advanceUntilIdle has run virtual time well past the 300 ms threshold: a wait left armed after
-        // the answer arrived would have fired by now.
+        // A4′ acceptance tail, task 6 (K9): the stubbed route never asked the model, so there was no wait to show —
+        // and none is left standing once the answer arrived.
         assertFalse("a quick answer never shows the wait", vm.thinking.value)
     }
 
@@ -2880,20 +2902,23 @@ class LauncherViewModelTest {
         assertEquals(1, fakeAgentStore.saved.map { it.id }.distinct().size)
     }
 
-    /** Criterion 19: the wait is visible after a moment, and cancelling it applies nothing. */
+    /**
+     * Criterion 19: the wait is visible, and cancelling it applies nothing.
+     *
+     * A4′ acceptance tail, task 6 (K9): visible from the moment the model is asked — the slow stub raises the signal
+     * before its delay, where the real route asks the model — not after a 300 ms timer, so the 299/301 ms probes went.
+     * The cancel and its three assertions are unchanged.
+     */
     @Test
     fun `the wait shows after a moment and cancelling it applies nothing`() = runTest(testDispatcher) {
         val vm = buildViewModel(
             route = CommandRouteStep {
+                modelAskedEvents.modelAsked()
                 delay(10_000)
                 CommandOutcome.Interpreted(storeStepReading())
             },
         )
         vm.onCommandSubmitted("найди lumora в магазине")
-        advanceTimeBy(299)
-        runCurrent()
-        assertFalse("no wait shown at 299 ms of a slow answer", vm.thinking.value)
-        advanceTimeBy(2)
         runCurrent()
         assertTrue(vm.thinking.value)
 
@@ -3276,6 +3301,8 @@ class LauncherViewModelTest {
         val vm = buildViewModel(
             route = CommandRouteStep { text ->
                 if (text == "найди lumora в магазине") {
+                    // A4′ acceptance tail, task 6 (K9): the slow answer is the model's — raised where the real route asks it.
+                    modelAskedEvents.modelAsked()
                     delay(10_000)
                     CommandOutcome.Interpreted(storeStepReading())
                 } else {
@@ -3305,6 +3332,8 @@ class LauncherViewModelTest {
         var answered = false
         val vm = buildViewModel(
             route = CommandRouteStep {
+                // A4′ acceptance tail, task 6 (K9): the slow answer is the model's — raised where the real route asks it.
+                modelAskedEvents.modelAsked()
                 delay(10_000)
                 answered = true
                 CommandOutcome.Interpreted(storeStepReading())
@@ -3359,6 +3388,8 @@ class LauncherViewModelTest {
                     if (text == "найди lumora в магазине") {
                         CommandOutcome.Interpreted(storeStepReading())
                     } else {
+                        // A4′ acceptance tail, task 6 (K9): the slow answer is the model's — raised where the real route asks it.
+                        modelAskedEvents.modelAsked()
                         delay(10_000)
                         CommandOutcome.LowConfidence
                     }
@@ -3430,6 +3461,8 @@ class LauncherViewModelTest {
         var answered = false
         val vm = buildViewModel(
             route = CommandRouteStep {
+                // A4′ acceptance tail, task 6 (K9): the slow answer is the model's — raised where the real route asks it.
+                modelAskedEvents.modelAsked()
                 delay(10_000)
                 answered = true
                 CommandOutcome.OpenAssistant("почему небо синее")
@@ -3465,6 +3498,8 @@ class LauncherViewModelTest {
         var answered = false
         val vm = buildViewModel(
             route = CommandRouteStep {
+                // A4′ acceptance tail, task 6 (K9): the slow answer is the model's — raised where the real route asks it.
+                modelAskedEvents.modelAsked()
                 delay(10_000)
                 answered = true
                 CommandOutcome.Interpreted(storeStepReading())
@@ -3499,6 +3534,8 @@ class LauncherViewModelTest {
         var answered = false
         val vm = buildViewModel(
             route = CommandRouteStep {
+                // A4′ acceptance tail, task 6 (K9): the slow answer is the model's — raised where the real route asks it.
+                modelAskedEvents.modelAsked()
                 delay(10_000)
                 answered = true
                 CommandOutcome.OpenAssistant("почему небо синее")
@@ -3547,7 +3584,10 @@ class LauncherViewModelTest {
         confirm = false,
     )
 
-    /** A model that answers only after ten seconds: a command that reached it would show the wait at 300 ms. */
+    /**
+     * A model that answers only after ten seconds: a command that reached it would show the wait while it is asked
+     * ([claimingRoute] raises the launcher's [modelAskedEvents] before asking it, as the graph's route does).
+     */
     private class SlowModel : ModelPlanner {
         var asked = 0
             private set
@@ -3584,6 +3624,7 @@ class LauncherViewModelTest {
             providerConfigRepository = configuredProvider(),
             connectivityChecker = FakeConnectivityChecker(),
             startAgentSession = StartAgentSessionUseCase(claims, fakeAgentStore, agentIds, agentRegistry),
+            modelAsked = modelAskedEvents,
         )
     }
 
@@ -3962,5 +4003,173 @@ class LauncherViewModelTest {
 
         assertEquals(1, tools.invocations.size)
         assertEquals(ExecutionState.Completed, vm.agentSessionState.value?.state)
+    }
+
+    // ── A4′ acceptance tail, task 6 (K9; owner decision 6): «Разбираю команду…» — only while the model is asked ───────
+
+    /**
+     * Every value [vm]'s wait takes from its construction on, in order. The watcher runs the moment the value changes
+     * (unconfined, on the test's scheduler), so a wait put up and taken down between two of the test's own samples is
+     * still seen — «never shown» is then a claim about every change, not about the instants a test happened to look.
+     * A plain scope, not `backgroundScope` — see subscribeToPrayerContext; [stop] it at the end of the test.
+     */
+    private class WaitWatch(vm: LauncherViewModel, scheduler: TestCoroutineScheduler) {
+        private val scope = CoroutineScope(UnconfinedTestDispatcher(scheduler) + Job())
+        val shown = mutableListOf<Boolean>()
+
+        init {
+            scope.launch { vm.thinking.collect { shown += it } }
+        }
+
+        fun stop() = scope.cancel()
+    }
+
+    /**
+     * K9: a command that takes its time on the DEVICE — a second of virtual time, and no model asked — shows no wait at
+     * any moment. The wait is the model's, not a clock's: under the 300 ms timer this command showed it.
+     */
+    @Test
+    fun `a slow local path shows no wait`() = runTest(testDispatcher) {
+        val vm = buildViewModel(
+            route = CommandRouteStep {
+                delay(1_000)
+                CommandOutcome.LowConfidence
+            },
+        )
+        val watch = WaitWatch(vm, testScheduler)
+
+        vm.onCommandSubmitted("открой vemblic")
+        advanceTimeBy(999)
+        runCurrent()
+        assertEquals("999 ms in, the answer is still on its way", CommandFeedback.None, vm.commandFeedback.value)
+        advanceUntilIdle()
+
+        assertEquals("the answer landed", CommandFeedback.LowConfidence, vm.commandFeedback.value)
+        assertEquals("the wait was never shown", listOf(false), watch.shown)
+        watch.stop()
+    }
+
+    /**
+     * K9, end to end through the REAL route: the wait is up the moment the route asks the model — before any virtual
+     * time has passed, so no timer could have put it up — and stays up while the model takes its ten seconds. It goes
+     * when the answer is applied, and the answer here is a reading with nothing to show, which starts its session at
+     * once (D3, second amendment — task 4 of the tail plan): a started session takes the wait down like any outcome.
+     */
+    @Test
+    fun `the wait shows the moment the model is asked`() = runTest(testDispatcher) {
+        val reading = usersOwn(ToolIds.PLAY_STORE_SEARCH, "query", "lumora", ActionRiskLevel.CONFIRM)
+        val vm = buildBridgeViewModel(
+            answer = reading,
+            model = ModelPlanner {
+                delay(10_000)
+                reading
+            },
+        )
+        val watch = WaitWatch(vm, testScheduler)
+        val start = currentTime
+
+        vm.onCommandSubmitted("найди lumora в магазине")
+        runCurrent()
+
+        assertTrue("the wait is up the moment the model is asked", vm.thinking.value)
+        assertEquals("and no time has passed", start, currentTime)
+        advanceTimeBy(9_000)
+        runCurrent()
+        assertTrue("it stays up while the model is asked", vm.thinking.value)
+
+        advanceUntilIdle()
+
+        assertEquals("put up once, taken down once", listOf(false, true, false), watch.shown)
+        assertEquals("the answer was applied: its session started", ExecutionState.AwaitingConsent, vm.agentSessionState.value?.state)
+        assertTrue("a session the model's reading started", vm.agentProposedByModel.value)
+        assertNull("no card was drawn", vm.interpretation.value)
+        watch.stop()
+    }
+
+    /**
+     * K9's concurrency — the wait belongs to the command now pending. A signal still on its way to the launcher, raised
+     * by the waiting command's route and not yet delivered, when that command is superseded by a newer one, cancelled
+     * («Отмена») or edited, shows nothing: not for the newer command, which never asks the model, and not after the
+     * cancel or the edit. The waiting route is a stub that waits for ever, so the test raises the signal on its behalf —
+     * the same event the real route raises right before asking the model — and gestures before the scheduler has
+     * delivered it, as a tap queued on the main thread ahead of that delivery would.
+     */
+    @Test
+    fun `a signal still in flight when its command is superseded, cancelled or edited shows no wait`() = runTest(testDispatcher) {
+        val waiting = "найди lumora в магазине"
+        val vm = buildViewModel(
+            route = CommandRouteStep { text ->
+                if (text == waiting) awaitCancellation()
+                delay(1_000)
+                CommandOutcome.LowConfidence
+            },
+        )
+        val watch = WaitWatch(vm, testScheduler)
+
+        vm.onCommandSubmitted(waiting)
+        runCurrent()
+        modelAskedEvents.modelAsked()
+        vm.onCommandSubmitted("открой vemblic")
+        advanceUntilIdle()
+        assertEquals("the newer command's own answer landed", CommandFeedback.LowConfidence, vm.commandFeedback.value)
+
+        vm.onCommandSubmitted(waiting)
+        runCurrent()
+        modelAskedEvents.modelAsked()
+        vm.cancelThinking()
+        advanceUntilIdle()
+
+        vm.onCommandSubmitted(waiting)
+        runCurrent()
+        modelAskedEvents.modelAsked()
+        vm.onCommandChanged("открой vemblic и ещё")
+        advanceUntilIdle()
+
+        assertEquals("not one of the three signals in flight showed the wait", listOf(false), watch.shown)
+        watch.stop()
+    }
+
+    /**
+     * K9's concurrency, the other way round: a superseded command's END does not take the wait of the command that
+     * replaced it down. The superseded one asked the model, and its cancellation takes five seconds to finish (an
+     * off-main-thread call winding down is the real case); it ends while its replacement is still waiting on the model,
+     * and the replacement's wait stays up until ITS answer lands.
+     */
+    @Test
+    fun `a superseded command's late end leaves the newer command's wait up`() = runTest(testDispatcher) {
+        var supersededEnded = false
+        val vm = buildViewModel(
+            route = CommandRouteStep { text ->
+                modelAskedEvents.modelAsked()
+                if (text == "найди lumora в магазине") {
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        withContext(NonCancellable) {
+                            delay(5_000)
+                            supersededEnded = true
+                        }
+                    }
+                }
+                delay(10_000)
+                CommandOutcome.LowConfidence
+            },
+        )
+        vm.onCommandSubmitted("найди lumora в магазине")
+        runCurrent()
+        assertTrue("the first command is waiting on the model", vm.thinking.value)
+
+        vm.onCommandSubmitted("открой vemblic")
+        runCurrent()
+        assertTrue("the newer command is waiting on the model", vm.thinking.value)
+        advanceTimeBy(6_000)
+        runCurrent()
+        assertTrue("the superseded command has ended", supersededEnded)
+        assertTrue("and the newer one is still waiting on the model", vm.thinking.value)
+
+        advanceUntilIdle()
+
+        assertFalse("the newer command's answer took its wait down", vm.thinking.value)
+        assertEquals(CommandFeedback.LowConfidence, vm.commandFeedback.value)
     }
 }

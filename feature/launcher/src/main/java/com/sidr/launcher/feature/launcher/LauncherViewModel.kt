@@ -126,6 +126,10 @@ class LauncherViewModel @Inject constructor(
     // copy by contract, and because the strings are third-party: they must not cross into `:domain`.
     // `:app` projects it from `:data:repository`'s `DynamicToolNames` — there is no feature -> data edge.
     private val dynamicToolLabels: DynamicToolLabels,
+    // A4′ acceptance tail, task 6 (controller ruling K9): «the model is being asked», raised by the route right before
+    // it asks — the one thing the wait is shown on. A `@Singleton` of this module; `:app` binds the domain port the
+    // route is built with to this same instance (`BridgeProvidesModule.provideModelAskedSignal`).
+    private val modelAskedEvents: ModelAskedEvents,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     // S2-1 Task 11: fire-and-forget scope for recording a learned choice — survives the launch's own
     // viewModelScope coroutine (Block-F recordUsage precedent) so a quick nav-away never drops it.
@@ -386,6 +390,7 @@ class LauncherViewModel @Inject constructor(
         startAgentSession = startAgentSession,
         binder = mentionBinder,
         recordLearnedPlan = recordLearnedPlan,
+        modelAsked = modelAskedEvents.events,
         applicationScope = applicationScope,
         scope = viewModelScope,
         onNavigate = { route -> navigateTo(route) },
@@ -398,7 +403,10 @@ class LauncherViewModel @Inject constructor(
     /** A4′ phase 3a: the model's reading, shown before anything runs (spec §7.12.3 condition 1). */
     val interpretation: StateFlow<Interpretation?> get() = commandSession.interpretation
 
-    /** A4′ phase 3a: a command has not answered within 300 ms — the model is being asked. */
+    /**
+     * The model is being asked about the command now pending (A4′ phase 3a; since the acceptance tail's task 6, K9, from
+     * the moment the route asks it — no 300 ms timer: a slow answer on the device shows nothing).
+     */
     val thinking: StateFlow<Boolean> get() = commandSession.thinking
 
     /** A4′ phase 3b (B-7): a target step 2b claimed, waiting on the user's pick — not an interpretation card. */

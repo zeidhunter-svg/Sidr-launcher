@@ -136,7 +136,9 @@ import kotlinx.coroutines.flow.first
  *    and gains no new module edge (ADR 3/4). The API key deliberately stays the planner's business:
  *    the gate decides *whether to ask*, never touches secrets.
  * 6. **Offline ⇒ [CommandMessage.UnderstandingNeedsNetwork]** — no socket the planner would abandon.
- * 7. **The one model path** (A4′ phase 3a, D3): ask the [ModelPlanner]; bind its step on the device
+ * 7. **The one model path** (A4′ phase 3a, D3): ask the [ModelPlanner] — having said so first, once, through
+ *    [ModelAskedSignal]: the launcher shows its wait on that and on nothing else (A4′ acceptance tail, task 6, controller
+ *    ruling K9), so no path above, all of them answered on the device, raises it; bind its step on the device
  *    ([MentionBinder]); **start a bound reading at once when it needs no card** ([needsCard] `false`: no pick owed,
  *    no model-written text going out — D3, second amendment, A4′ acceptance tail task 4; the outcome carries
  *    [CommandOutcome.AgentSessionStarted.proposedByModel], and the engine's consent card still stops a risky step;
@@ -264,6 +266,11 @@ class RouteCommandUseCase(
     // (`BridgeProvidesModule.provideRouteCommandUseCase`).
     private val aliases: AliasStore = AliasStore.NONE,
     private val installedApps: InstalledAppsRepository? = null,
+    // A4′ acceptance tail, task 6 (owner decision 6, controller ruling K9): said once, immediately before step 7's one
+    // `modelPlanner.plan`, so the launcher's wait is shown only while the model is asked. `NONE` by default, so every
+    // construction site that predates it routes exactly as before; the production provider passes the launcher's own
+    // events (`BridgeProvidesModule.provideRouteCommandUseCase`, held by `ModelAskedSignalBindingGuardTest`).
+    private val modelAsked: ModelAskedSignal = ModelAskedSignal.NONE,
 ) {
 
     suspend fun route(rawInput: String): CommandOutcome {
@@ -373,6 +380,9 @@ class RouteCommandUseCase(
         // once (D3, second amendment, task 4 of the tail plan) — a session, not an act: the engine runs it, and stops a
         // risky step at its consent card.
         val command = rawInput.trim()
+        // A4′ acceptance tail, task 6 (owner decision 6, controller ruling K9): the launcher's wait is shown from HERE —
+        // once, immediately before the one call to the model — and on no path above, which all answer on the device.
+        modelAsked.modelAsked()
         return when (val answer = modelPlanner.plan(command)) {
             // The answer form is `steps` since phase 3b Task 8; since Task 9 the bridge offers and admits up to
             // the engine's own cap (`BridgeRendering.MAX_STEPS_OFFERED`, held by `BridgeValidator`'s size

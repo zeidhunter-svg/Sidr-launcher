@@ -197,6 +197,8 @@ class LauncherScreenPrayerStripTest {
             // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
             // and every step line renders exactly as it did before the dynamic arm existed.
             dynamicToolLabels = DynamicToolLabels { emptyMap() },
+            // A4′ acceptance tail, task 6: compile-follow — no command here waits on the model.
+            modelAskedEvents = ModelAskedEvents(),
             ioDispatcher = dispatcher,
             applicationScope = CoroutineScope(dispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),

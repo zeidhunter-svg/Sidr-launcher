@@ -290,6 +290,8 @@ class LauncherScreenAgentProvenanceTest {
             mentionBinder = FakeMentionBinder(),
             toolRegistry = agentRegistry,
             dynamicToolLabels = agentToolLabels,
+            // A4′ acceptance tail, task 6: compile-follow — no command here waits on the model.
+            modelAskedEvents = ModelAskedEvents(),
             ioDispatcher = dispatcher,
             applicationScope = CoroutineScope(dispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),

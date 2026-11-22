@@ -16,6 +16,7 @@ import com.sidr.launcher.domain.ai.bridge.BridgeTransport
 import com.sidr.launcher.domain.ai.bridge.MentionBinder
 import com.sidr.launcher.domain.ai.bridge.ModelPlanner
 import com.sidr.launcher.domain.ai.bridge.ToolDescriptions
+import com.sidr.launcher.domain.ai.router.ModelAskedSignal
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
 import com.sidr.launcher.domain.connectivity.ConnectivityChecker
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
@@ -28,6 +29,7 @@ import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.domain.security.SecureSecretStore
 import com.sidr.launcher.domain.text.TextFolding
 import com.sidr.launcher.domain.tool.ToolRegistry
+import com.sidr.launcher.feature.launcher.ModelAskedEvents
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -123,12 +125,22 @@ object BridgeProvidesModule {
     ): LearnedPlans = DefaultLearnedPlans(store, registry, descriptions, BridgeFilter.ANDROID_OFFERED_LEVELS, binder, folding)
 
     /**
+     * «The model is being asked» (A4′ acceptance tail, task 6; controller ruling K9): the domain port the route raises
+     * right before step 7 asks the model, bound to the launcher's own [ModelAskedEvents] — the `@Singleton` the
+     * launcher's ViewModel injects and puts its wait up on. One instance, so what the route raises is what the launcher
+     * sees (`ModelAskedSignalBindingGuardTest`). Unscoped: it hands out the one singleton every time.
+     */
+    @Provides
+    fun provideModelAskedSignal(events: ModelAskedEvents): ModelAskedSignal = events
+
+    /**
      * [learnedPlans] has no default here (B-12): the graph cannot build a route without step 2c's cache.
      *
      * Step 1a's [aliases] and [installedApps] (A4′ acceptance tail, task 3) — the one [AliasStore] binding
      * (`MemoryBindsModule`) and the one app list — DO carry defaults, for the hand-built call in
      * `BridgePayloadGuardTest` only: Hilt passes every parameter and ignores a Kotlin default, so the graph always
-     * builds the route with the device's store and list.
+     * builds the route with the device's store and list. So does [modelAsked] (task 6, K9): the graph passes the
+     * launcher's events ([provideModelAskedSignal]); `ModelAskedSignalBindingGuardTest` holds that this body hands them on.
      */
     @Provides
     @Singleton
@@ -143,6 +155,7 @@ object BridgeProvidesModule {
         learnedPlans: LearnedPlans,
         aliases: AliasStore = AliasStore.NONE,
         installedApps: InstalledAppsRepository? = null,
+        modelAsked: ModelAskedSignal = ModelAskedSignal.NONE,
     ): RouteCommandUseCase = RouteCommandUseCase(
         handleUserCommand = handleUserCommand,
         modelPlanner = modelPlanner,
@@ -154,5 +167,6 @@ object BridgeProvidesModule {
         learnedPlans = learnedPlans,
         aliases = aliases,
         installedApps = installedApps,
+        modelAsked = modelAsked,
     )
 }

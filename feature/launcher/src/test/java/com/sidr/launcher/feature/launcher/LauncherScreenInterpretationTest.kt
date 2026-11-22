@@ -124,6 +124,9 @@ class LauncherScreenInterpretationTest {
     // answers for the one test that runs two SAFE steps; every other test here stops at a consent gate
     // before any invocation, so the script reaches none of them.
     private val toolExecutor = FakeToolExecutor(listOf(ToolResult.Effected(), ToolResult.Effected()))
+    // A4′ acceptance tail, task 6 (K9): the wait is shown on this signal — the one the real route raises right before it
+    // asks the model. A stubbed slow route raises it itself, where the real one would ask.
+    private val modelAskedEvents = ModelAskedEvents()
 
     @Before
     fun setUp() {
@@ -180,17 +183,23 @@ class LauncherScreenInterpretationTest {
         assertEquals("Run reached the engine and saved one session", 1, agentStore.saved.map { it.id }.distinct().size)
     }
 
-    /** Wiring 2: while a command waits on the model the wait is drawn, and its «Cancel» cancels it. */
+    /**
+     * Wiring 2: while a command waits on the model the wait is drawn, and its «Cancel» cancels it.
+     *
+     * A4′ acceptance tail, task 6 (K9): drawn from the moment the model is asked — the stub raises the signal where the
+     * real route asks — not after a 300 ms timer, so the 301 ms advance went. «Cancel» and its assertion are unchanged.
+     */
     @Test
     fun `while the model is thinking the wait is drawn, and Cancel takes it down`() {
-        val vm = show(CommandRouteStep { awaitCancellation() })
-
-        vm.onCommandSubmitted("kelmora goal")
-        compose.waitForIdle()
+        val vm = show(
+            CommandRouteStep {
+                modelAskedEvents.modelAsked()
+                awaitCancellation()
+            },
+        )
         compose.onNodeWithText("Working out what you meant…").assertDoesNotExist()
 
-        scheduler.advanceTimeBy(301)
-        scheduler.runCurrent()
+        vm.onCommandSubmitted("kelmora goal")
         compose.waitForIdle()
         compose.onNodeWithText("Working out what you meant…").assertExists()
 
@@ -242,6 +251,8 @@ class LauncherScreenInterpretationTest {
         var answered = false
         val vm = show(
             CommandRouteStep {
+                // A4′ acceptance tail, task 6 (K9): the slow answer is the model's — raised where the real route asks it.
+                modelAskedEvents.modelAsked()
                 delay(10_000)
                 answered = true
                 CommandOutcome.OpenAssistant("почему небо синее")
@@ -442,6 +453,7 @@ class LauncherScreenInterpretationTest {
             mentionBinder = com.sidr.launcher.core.testing.FakeMentionBinder(),
             toolRegistry = agentRegistry,
             dynamicToolLabels = com.sidr.launcher.feature.launcher.agent.DynamicToolLabels { emptyMap() },
+            modelAskedEvents = modelAskedEvents,
             ioDispatcher = dispatcher,
             applicationScope = CoroutineScope(dispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),

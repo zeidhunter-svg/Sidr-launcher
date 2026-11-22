@@ -159,6 +159,9 @@ class RouteCommandUseCaseTest {
         // A4′ acceptance tail, task 4 (I5): what step 7 asks the cache to teach, for the tests that count it. `NONE` by
         // default, so every earlier test builds the route exactly as it did.
         learnedPlans: LearnedPlans = LearnedPlans.NONE,
+        // A4′ acceptance tail, task 6 (K9): what the route tells the launcher when it asks the model. `NONE` by default,
+        // so every earlier test builds the route exactly as it did.
+        modelAsked: ModelAskedSignal = ModelAskedSignal.NONE,
     ): RouteCommandUseCase = RouteCommandUseCase(
         handleUserCommand = HandleUserCommandUseCase(
             matcher = matcher,
@@ -176,6 +179,7 @@ class RouteCommandUseCaseTest {
         learnedPlans = learnedPlans,
         aliases = aliases,
         installedApps = appsRepo,
+        modelAsked = modelAsked,
     )
 
     private fun driveUnknown() {
@@ -1272,6 +1276,10 @@ class RouteCommandUseCaseTest {
         localOnly: Boolean = false,
         agentPlanner: Planner = TemplatePlanner(),
         agentRegistry: ToolRegistry = BridgeFixtures.learnedRegistry,
+        // A4′ acceptance tail, task 6 (K9): the model and the signal, for the test that logs both. Defaulted to the
+        // shared planner and `NONE`, so every earlier caller builds the route exactly as it did.
+        modelPlanner: ModelPlanner = planner,
+        modelAsked: ModelAskedSignal = ModelAskedSignal.NONE,
     ): RouteCommandUseCase {
         binder.binding = { goal, steps -> LearnedPlanFixtures.bindApps(goal, steps) { installedByName[it].orEmpty() } }
         val learned: LearnedPlans = DefaultLearnedPlans(
@@ -1290,13 +1298,14 @@ class RouteCommandUseCaseTest {
                 confidencePolicy = DefaultIntentConfidencePolicy(),
                 recordingScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
             ),
-            modelPlanner = planner,
+            modelPlanner = modelPlanner,
             binder = binder,
             featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = localOnly)),
             providerConfigRepository = provider,
             connectivityChecker = connectivity,
             startAgentSession = StartAgentSessionUseCase(agentPlanner, agentStore, agentIds, agentRegistry),
             learnedPlans = learned,
+            modelAsked = modelAsked,
         )
     }
 
@@ -2193,6 +2202,78 @@ class RouteCommandUseCaseTest {
         assertEquals("the yielded search is the model's", 1, planner.planCallCount)
         assertEquals(CommandOutcome.Executed, outcome)
         assertEquals(listOf(ExecutableAction.OpenSearchAction("tg", SearchTarget.WEB)), executor.executedActions)
+    }
+
+    // --- A4′ acceptance tail, task 6 (K9): «Разбираю команду…» — only while the model is asked -------------------------
+
+    /**
+     * Controller ruling K9 (owner decision 6): the launcher shows its wait the moment the model is asked, and only then —
+     * the route says so through [ModelAskedSignal], ONCE per command, immediately before step 7's one
+     * `modelPlanner.plan`. Every path that answers on the device says nothing: FastPath's decision, a bare alias (1a), a
+     * 2b plan, a learned command (2c), and the three states in which the model is not reachable — local-only, no
+     * provider, offline. Every path that hands the command to the model says it once, first: an undecided command, a
+     * search FastPath yielded (1′, task 1 of the tail plan), and 2b's empty app target (K2, task 2). The signal and the
+     * model write to ONE log, so «right before» is an order and «once» a count, read together. The model declines (the
+     * shared planner's default), so every route ends on the device and the log is the whole of what it asked.
+     */
+    @Test
+    fun `the model-asked signal fires once, right before the model, and never on a local path`() = runTest {
+        val log = mutableListOf<String>()
+        val signal = ModelAskedSignal { log += "signal" }
+        val model = ModelPlanner { command ->
+            log += "model"
+            planner.plan(command)
+        }
+        val seen = linkedMapOf<String, List<String>>()
+        suspend fun case(path: String, route: RouteCommandUseCase, command: String) {
+            log.clear()
+            route.route(command)
+            seen[path] = log.toList()
+        }
+        appsRepo.appsToReturn = listOf(telegramPlus)
+        val aliases = aliased("tg" to telegramPlus.packageName)
+        val target = removeTarget("удали приложение клод", words = "клод", candidates = emptyList())
+
+        driveConfidentShowApps()
+        case("FastPath decided", useCase(modelPlanner = model, modelAsked = signal), "apps")
+        driveUnknown()
+        case("1a: a bare alias", useCase(modelPlanner = model, modelAsked = signal, aliases = aliases), "tg")
+        case("2b: a tool plan", useCase(agentPlanner = plansOneStep(), modelPlanner = model, modelAsked = signal), "do a barrel roll")
+        case("7: an undecided command", useCase(modelPlanner = model, modelAsked = signal), "do a barrel roll")
+        case(
+            "K2: 2b's empty app target",
+            useCase(agentPlanner = claims(target), agentRegistry = removeRegistry, modelPlanner = model, modelAsked = signal),
+            "удали приложение клод",
+        )
+        pinErase()
+        case("2c: a learned command", learnedRoute(modelPlanner = model, modelAsked = signal), "сотри Vemblic")
+        driveConfidentSearch()
+        case("1′: a yielded search", useCase(modelPlanner = model, modelAsked = signal), "найди $SEARCH_QUERY")
+        driveUnknown()
+        case("local-only", useCase(localOnly = true, modelPlanner = model, modelAsked = signal), "do a barrel roll")
+        connectivity.online = false
+        case("offline", useCase(modelPlanner = model, modelAsked = signal), "do a barrel roll")
+        connectivity.online = true
+        provider.clearActiveConfig()
+        case("no provider", useCase(modelPlanner = model, modelAsked = signal), "do a barrel roll")
+
+        val none = emptyList<String>()
+        val once = listOf("signal", "model")
+        assertEquals(
+            mapOf(
+                "FastPath decided" to none,
+                "1a: a bare alias" to none,
+                "2b: a tool plan" to none,
+                "7: an undecided command" to once,
+                "K2: 2b's empty app target" to once,
+                "2c: a learned command" to none,
+                "1′: a yielded search" to once,
+                "local-only" to none,
+                "offline" to none,
+                "no provider" to none,
+            ),
+            seen,
+        )
     }
 
     private companion object {

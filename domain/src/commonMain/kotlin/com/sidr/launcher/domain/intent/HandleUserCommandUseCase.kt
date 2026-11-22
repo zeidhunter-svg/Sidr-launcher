@@ -61,7 +61,8 @@ class HandleUserCommandUseCase(
 
     /**
      * Runs a search [answer] yielded and the model then could not take (`Declined`, `Unavailable` — controller
-     * ruling K1): resolve → execute, exactly what [answer] would have done without the yield. **Records nothing**:
+     * ruling K1), or answered with a reading the device could not bind (batch 1 review M-5): resolve → execute, exactly
+     * what [answer] would have done without the yield. **Records nothing**:
      * [answer] already wrote this command's `intent_match` row, and a second one would count it twice.
      */
     suspend fun runYielded(yielded: FastPathYield.Search): CommandOutcome =

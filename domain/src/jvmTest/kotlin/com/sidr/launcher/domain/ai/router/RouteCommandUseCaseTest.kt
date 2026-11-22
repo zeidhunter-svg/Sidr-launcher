@@ -1674,6 +1674,32 @@ class RouteCommandUseCaseTest {
     }
 
     /**
+     * Batch 1 review M-5 (controller ruling B1-M5; review focus 1, «пользователь получает то, что сделал бы FastPath»):
+     * the model answered a yielded search with a step the device could not bind — «найди погоду» read as
+     * `launch_app("Погода")`, and no such app (`NotFound`), its words not understood (`NotUnderstood`), the app list
+     * unreadable (`Unavailable`). Every one of them is the search FastPath would have run, run once — not «нет такого
+     * приложения «Погода»» in the model's word, not a failure in place of a working search.
+     */
+    @Test
+    fun `a yielded search whose reading the device cannot bind runs the FastPath search`() = runTest {
+        driveConfidentSearch()
+        planner.answer = ModelPlanning.Proposed(listOf(modelLaunch("Погода")))
+        val route = useCase()
+        val failures = listOf(Binding.NotFound("Погода"), Binding.NotUnderstood("Погода"), Binding.Unavailable)
+
+        failures.forEachIndexed { i, failure ->
+            binder.binding = { _, _ -> failure }
+
+            assertEquals("$failure", CommandOutcome.Executed, route.route("найди $SEARCH_QUERY"))
+            assertEquals("$failure", List(i + 1) { fastPathSearch }, executor.executedActions)
+            assertEquals("$failure: FastPath matched once per command", i + 1, matcher.callCount)
+        }
+        assertEquals("each was asked of the model once", failures.size, planner.planCallCount)
+        assertEquals("each answer was bound once", failures.size, binder.bindCallCount)
+        assertTrue("no session starts", agentStore.saved.isEmpty())
+    }
+
+    /**
      * Review round 1, Important 1 (controller ruling (a)): online, with a provider — the model reachable — a search
      * FastPath made out of an unsafe address (`UrlDetector`'s `SearchFallback`; here the Cyrillic «а» of a homograph)
      * is not yielded: FastPath searches it, and the model — scripted to send it to the assistant, so asking it would
@@ -1848,6 +1874,53 @@ class RouteCommandUseCaseTest {
         assertEquals(storeGoalForKlod, agentStore.saved.single().goal)
         assertEquals(storePlanForKlod, agentStore.saved.single().plan.steps.map { it.invocation })
         assertEquals("the model is asked once", 1, planner.planCallCount)
+    }
+
+    /**
+     * Batch 1 review M-5 (controller ruling B1-M5): every way the device can fail to bind the model's reading of a
+     * yielded «нет такого приложения» — the app it named is not here (`NotFound`, K3 above), its words not understood
+     * (`NotUnderstood`), the app list unreadable (`Unavailable`) — is A0's store plan in the USER's words, as FastPath
+     * would have answered without the model. The model's word («Claude») goes neither to the store nor to the screen.
+     */
+    @Test
+    fun `online a missing app whose reading the device cannot bind - the store plan, in the user's words`() = runTest {
+        driveAppLaunch("клод")
+        appsRepo.appsToReturn = emptyList()
+        planner.answer = ModelPlanning.Proposed(listOf(modelLaunch("Claude")))
+        val route = useCase()
+        val failures = listOf(Binding.NotFound("Claude"), Binding.NotUnderstood("Claude"), Binding.Unavailable)
+
+        failures.forEachIndexed { i, failure ->
+            binder.binding = { _, _ -> failure }
+
+            assertEquals("$failure", CommandOutcome.AgentSessionStarted(AgentSessionId("s${i + 1}")), route.route("открой клод"))
+            assertEquals("$failure", storeGoalForKlod, agentStore.saved.last().goal)
+            assertEquals("$failure", storePlanForKlod, agentStore.saved.last().plan.steps.map { it.invocation })
+        }
+        assertEquals("each was asked of the model once", failures.size, planner.planCallCount)
+    }
+
+    /**
+     * The control of M-5: the fallback is for what FastPath YIELDED. A 2b target K2 handed over keeps K11 as it is —
+     * «нет такого приложения» in the user's words for `NotFound` (held above); a binding that failed short of that is
+     * the binding's own answer, as before the batch: «не понял» in the words written for it, or a failure.
+     */
+    @Test
+    fun `a 2b target whose reading fails short of not found keeps the binding's own answer`() = runTest {
+        driveUnknown()
+        val target = removeTarget("удали приложение клод", words = "клод", candidates = emptyList())
+        planner.answer = ModelPlanning.Proposed(listOf(modelRemoval("Claude")))
+        val route = useCase(agentPlanner = claims(target), agentRegistry = removeRegistry)
+
+        binder.binding = { _, _ -> Binding.NotUnderstood("Claude") }
+        val notUnderstood = route.route("удали приложение клод")
+        binder.binding = { _, _ -> Binding.Unavailable }
+        val unavailable = route.route("удали приложение клод")
+
+        assertEquals(CommandOutcome.Message(CommandMessage.ValueNotUnderstood("Claude")), notUnderstood)
+        assertEquals(CommandOutcome.Failed(CommandFailure.Generic), unavailable)
+        assertEquals(2, planner.planCallCount)
+        assertTrue("nothing is persisted", agentStore.saved.isEmpty())
     }
 
     /** K1: the model declines — the store plan FastPath's «нет такого приложения» would have started, as before. */

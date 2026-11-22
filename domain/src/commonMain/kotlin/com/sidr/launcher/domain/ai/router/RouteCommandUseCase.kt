@@ -67,13 +67,14 @@ import kotlinx.coroutines.flow.first
  *    (`UrlDetector`'s `SearchFallback`: a defence that keeps a homograph or an unknown TLD from being opened, never
  *    handed to a model that could read it back as `open_url`; task 1 review round 1, ruling (a); batch 1 review I-1,
  *    ruling B1-I1 — «найди https://аpple.com» is searched and «открой https://аpple.com» is step (2)'s store plan,
- *    in every state), not an address FastPath opens, not a store search. If the model then cannot take it — `Declined`, `Unavailable` — step 7 runs exactly the
- *    search FastPath would have run ([HandleUserCommandUseCase.runYielded], controller ruling K1), so a broken
- *    key or a timeout never costs the user a working search. **Owner decision 14** (task 2 of the tail plan): FastPath
+ *    in every state), not an address FastPath opens, not a store search. If the model then cannot take it —
+ *    `Declined`, `Unavailable` — or the device cannot bind its reading (batch 1 review M-5), step 7 runs exactly the
+ *    search FastPath would have run ([HandleUserCommandUseCase.runYielded], controller ruling K1), so a broken key, a
+ *    timeout or an unreadable app list never costs the user a working search. **Owner decision 14** (task 2 of the tail plan): FastPath
  *    yields its «нет такого приложения» the same way ([FastPathYield.MissingApp]) — the model is asked first and may
  *    correct the name (amendment D1: «открой клод» → «Claude», bound on the device to an exact label or alias
- *    only); the store plan is step 7's answer when the model cannot take the command (K1) or names an app that is
- *    not here (K3), in the user's words. When the model is not reachable there is no yield, and FastPath answers
+ *    only); the store plan is step 7's answer when the model cannot take the command (K1), names an app that is
+ *    not here (K3) or gives a reading the device cannot bind (M-5), in the user's words. When the model is not reachable there is no yield, and FastPath answers
  *    byte for byte as before.
  * 1a. **The whole command is an alias ⇒ its app opens, on the device** (A4′ acceptance tail, task 3; owner decision 3,
  *    controller ruling K10 — «алиасы не спрашивать»). Only when FastPath did not decide — `isUndecided()` and nothing
@@ -143,17 +144,20 @@ import kotlinx.coroutines.flow.first
  *    ([MentionBinder]); **start a bound reading at once when it needs no card** ([needsCard] `false`: no pick owed,
  *    no model-written text going out — D3, second amendment, A4′ acceptance tail task 4; the outcome carries
  *    [CommandOutcome.AgentSessionStarted.proposedByModel], and the engine's consent card still stops a risky step;
- *    a start that fails falls back to the card), or hand back a reading for the card ([CommandOutcome.Interpreted]), the assistant
- *    with the question, a verbatim clarify, an honest «model unavailable», what the binding found instead
- *    of a card («нет такого приложения», «не понял» for a value the device could not read — phase 3b,
- *    Task 6 — or a failure; the model is asked once and told none of it), or — when the model declines
- *    — FastPath's outcome untouched. What was handed to the model is the exception, on both `Declined` and
- *    `Unavailable` ([answerWithoutModel]): a search FastPath yielded at step 1′ is run as FastPath would have run
- *    it (K1); a yielded «нет такого приложения» is A0's store plan (K1); 2b's empty app target is «нет такого
- *    приложения» (K11) — the device's own deterministic answers, not anything the model proposed. And when the
- *    model named an app that is not here ([Binding.NotFound]) for a yielded «нет такого приложения» or a 2b
- *    target, the same device answer stands in the user's words ([notFoundWithoutModel], K3, K11) — the model's
- *    word goes neither to the store nor to the screen. Otherwise nothing here executes (`DOC-NYH-1`, Fork R4): a
+ *    a start that fails falls back to the card), or hand back a reading for the card ([CommandOutcome.Interpreted]),
+ *    the assistant with the question, a verbatim clarify, an honest «model unavailable», what the binding found
+ *    instead of a card («нет такого приложения», «не понял» for a value the device could not read — phase 3b,
+ *    Task 6 — or a failure; the model is asked once and told none of it), or — when the model declines and nothing
+ *    was handed to it — «понял команду, но Sidr так пока не умеет» ([CommandMessage.UnderstoodNoAction], task 5 of the
+ *    tail plan, owner decision 2: б; never FastPath's «unknown command»). What was handed to the model is the
+ *    exception, on both `Declined` and `Unavailable` ([answerWithoutModel]): a search FastPath yielded at step 1′ is
+ *    run as FastPath would have run it (K1); a yielded «нет такого приложения» is A0's store plan (K1); 2b's empty app
+ *    target is «нет такого приложения» (K11) — the device's own deterministic answers, not anything the model
+ *    proposed. The same holds when the model answered and the device could not bind its reading
+ *    ([unboundWithoutModel]): what FastPath yielded is answered as FastPath would have answered it, whichever way the
+ *    binding failed — `NotFound`, `NotUnderstood`, `Unavailable` (batch 1 review M-5) — and 2b's target for a
+ *    `NotFound` (K11); the store gets the user's words (K3), and the model's word goes neither to the store nor to
+ *    the screen. Otherwise nothing here executes (`DOC-NYH-1`, Fork R4): a
  *    session started without a card has acted on nothing yet — the engine runs it, behind its consent gate; the
  *    model is below gates 3, 5 and 6 (`DOC-ADL-3`). A bound reading on the card also carries what it would teach
  *    ([CommandOutcome.Interpreted.learnable], A4′ phase 4 B-8): computed here, from the validated steps
@@ -399,9 +403,10 @@ class RouteCommandUseCase(
             // the launcher records it once «Выполнить» has started the session.
             is ModelPlanning.Proposed -> {
                 val binding = binder.bind(AgentGoal(text = command, shape = GoalShape.Free(command)), answer.steps)
-                // K3, K11: the model named an app that is not here — what was handed to it is answered on the device,
-                // in the user's words; the model's word goes nowhere.
-                if (binding is Binding.NotFound) notFoundWithoutModel(fastPath, claimed, rawInput)?.let { return it }
+                // K3, K11, M-5: the device could not bind the reading — what FastPath yielded is answered as FastPath
+                // would have answered it, whichever way the binding failed; 2b's target K2 handed over, for a `NotFound`;
+                // the user's words, never the model's.
+                if (binding !is Binding.Bound) unboundWithoutModel(binding, fastPath, claimed, rawInput)?.let { return it }
                 val outcome = binding.toCommandOutcome()
                 // Review round 1, I1 (controller ruling (a)): a reading for 2b's empty app target (K2), or after
                 // FastPath's «нет такого приложения» was yielded (decision 14), teaches nothing. A lesson is replayed
@@ -451,8 +456,9 @@ class RouteCommandUseCase(
     }
 
     /**
-     * What the device answers when the model could not take — `Declined`, `Unavailable` — what was handed to it, or
-     * `null` when nothing was and the caller answers as before:
+     * What the device answers when the model could not take — `Declined`, `Unavailable`, or (for what FastPath
+     * yielded) a reading the device could not bind, [unboundWithoutModel] — what was handed to it, or `null` when
+     * nothing was and the caller answers as before:
      *  - a search FastPath yielded at step 1′ is run exactly as FastPath would have run it (controller ruling K1);
      *  [HandleUserCommandUseCase.runYielded] resolves and executes without a second `intent_match` row;
      *  - FastPath's «нет такого приложения» yielded at step 1′ is A0's store plan, in the user's words (K1);
@@ -467,21 +473,33 @@ class RouteCommandUseCase(
         }
 
     /**
-     * The model answered, and the app it named is not on this phone (`Binding.NotFound`). What was handed to it for
-     * a missing app is answered on the device in the USER's words — the model's word never reaches the store or the
-     * screen (D1, egress): FastPath's yielded «нет такого приложения» is A0's store plan (controller ruling K3), 2b's
-     * empty app target «нет такого приложения» (K11). A yielded search, or nothing handed over, is `null`: the
-     * binding's own answer stands — `NoAppFound(mention)`, which since amendment D1 may be the MODEL's word («нет
-     * такого приложения «Claudex»»), said with no model mark (the E6-R2 class; a marked line is the owner's
-     * decision — ADR «2026-11-22 — D1, поправка…», «Чего поправка не обещает»). So is a 2b target when FastPath also
-     * yielded a search: the yield answers first, and this returns `null` for it.
+     * The model answered, and the device could not bind its reading — the app it named is not here
+     * ([Binding.NotFound]), words its sort could not read ([Binding.NotUnderstood]), an unreadable app list
+     * ([Binding.Unavailable]). What FastPath **yielded** is answered exactly as when the model could not take it
+     * ([answerWithoutModel]), **whichever way the binding failed** (batch 1 review M-5, controller ruling B1-M5; review
+     * focus 1 of the tail plan, «пользователь получает то, что сделал бы FastPath»): a yielded search is run (K1's
+     * fallback) — online «найди погоду» read as `launch_app("Погода")` with the app list unreadable is the search, not
+     * a failure; a yielded «нет такого приложения» is A0's store plan in the USER's words (K3 — the model's word
+     * reaches neither the store nor the screen). FastPath's yield comes first, as in [answerWithoutModel]: a 2b target
+     * claimed beside a yielded search is answered by the search.
+     *
+     * With nothing yielded, 2b's empty app target that K2 handed over keeps K11 as it was: a `NotFound` is «нет
+     * такого приложения» in the user's words ([answerOnDevice]); a binding that failed short of that is `null`, and so
+     * is anything with nothing handed over — the binding's own answer stands ([toCommandOutcome]). For an undecided
+     * command that is `NoAppFound(mention)`, which since amendment D1 may be the MODEL's word («нет такого приложения
+     * «Claudex»»), said with no model mark (the E6-R2 class; a marked line is the owner's decision — ADR «2026-11-22 —
+     * D1, поправка…», «Чего поправка не обещает»; since M-5 a yielded search no longer reaches it).
      */
-    private suspend fun notFoundWithoutModel(fastPath: FastPathAnswer, claimed: UnresolvedTarget?, raw: String): CommandOutcome? =
-        when (val yielded = fastPath.yielded) {
-            is FastPathYield.MissingApp -> storePlan(raw, yielded.message.query)
-            is FastPathYield.Search -> null
-            null -> claimed?.let { answerOnDevice(it) }
-        }
+    private suspend fun unboundWithoutModel(
+        binding: Binding,
+        fastPath: FastPathAnswer,
+        claimed: UnresolvedTarget?,
+        raw: String,
+    ): CommandOutcome? = when {
+        fastPath.yielded != null -> answerWithoutModel(fastPath, claimed, raw)
+        binding is Binding.NotFound -> claimed?.let { answerOnDevice(it) }
+        else -> null
+    }
 
     /**
      * Step (2)'s own answer, also step 7's fallback for a yielded «нет такого приложения» (K1, K3): A0's two-step

@@ -35,8 +35,10 @@ SM-A325F ([checklist](docs/superpowers/plans/2026-11-21-a4-device-acceptance.md)
 Part D done). Block ADR «2026-11-21 — Этап 6 (A4′) — рантайм полностью…»: acceptance, **twelve owner rulings as
 tasks**, residuals. The hygiene session (owner `5: a`) is done 2026-11-21: `decisions.md` is an archive by address,
 [decisions-orientation.md](ai-context/decisions-orientation.md) beside it is read whole, rules 2 and 6 are in §0.
-**Next:** the «хвост приёмки A4′» plan (tasks 1–10 + task 13, FastPath «найди …»; opens with a measurement, rule 2), then
-the A2/A3 spec (tasks 11–12) — `§HANDOFF`.
+**Now:** the «хвост приёмки A4′» plan ([plan](docs/superpowers/plans/2026-11-21-a4-acceptance-tail.md); block-ADR
+tasks 1–10 + task 13): **batch 1** (route + card, plan tasks 1–6) `CODE-GREEN` 2026-11-22, ADR «2026-11-22 — Пачка 1
+хвоста A4′…» — six owner questions there, release blocked until the owner signs `tr`; batches 2–3 next, one acceptance
+at the end; then the A2/A3 spec (tasks 11–12) — `§HANDOFF`.
 
 Layers above the track plan: the **Master Plan** (blocks A0…A6, DoD, change-control, `Agentic Shell v1 =
 DONE`: [docs/governing/sidr-agentic-master-plan-v1.0.md](docs/governing/sidr-agentic-master-plan-v1.0.md))
@@ -68,7 +70,7 @@ are not offered).
 | **5** A1′ federated `ToolRegistry` | ✅ `CLOSED` 2026-09-10 (`ru-RU` only) | ADR «Этап 5 (A1′)» |
 | **5.5 / 5.5b** A1″ tool mass + selection, phases 0–3b | ✅ `CLOSED` 2026-09-20, gate **1439**, `ru`/`tr`/`en`; signed build `db1e75d` **unfixed** | ADR «Этап 5.5 (A1″)» |
 | **6** A4′ runtime, spec [2026-09-21-a4-runtime-design.md](docs/superpowers/specs/2026-09-21-a4-runtime-design.md) | ✅ `CLOSED` 2026-11-21, gate **1914**, `ru` + `tr`: phases 0 **1463** · 1 **1485** · 2 **1560** · 3a **1673** · 3b **1821** · 4 **1910**, one owner acceptance at the end | block ADR «2026-11-21 — Этап 6 (A4′)…»; phase ADRs 3a (two), 3b, 4, «D3, поправка»; records in the `§HANDOFF` archive |
-| **7** A4′ acceptance tail (twelve tasks), then A2/A3/A5/A6 | each its own plan; A2/A3/A5/A6 their own spec (`brainstorm → spec → plan → build`) | |
+| **7** A4′ acceptance tail (twelve tasks), then A2/A3/A5/A6 | tail plan: batch 1 `CODE-GREEN` 2026-11-22, gate **2008**; A2/A3/A5/A6 their own spec (`brainstorm → spec → plan → build`) | ADRs «Пачка 1 хвоста A4′…», «D1, поправка…», «D3, вторая поправка…» |
 
 The four strategic ADRs (2026-08-19): **1/4** understanding belongs to the model, execution to the
 deterministic layer — `llmRouterEnabled` inverted onto `localOnlyMode` / `flag_local_only`, default
@@ -84,8 +86,8 @@ vocabulary + federation, identity C — `ToolId`/`ToolDescriptor` are the agent'
 ## Shipped surface (2026-11-21)
 
 Everything below is on `launcher--7` and `CODE-GREEN`; most of it `DEVICE-ACCEPTED` on the SM-A325F
-(Android 13, the owner's own run; A4′ on 2026-11-21) **except** DS-5, I18N-1 and FastPath's `tr` forms —
-`CODE-GREEN` only, see Known debt. Status vocabulary (Этап 0.5): `CODE-GREEN` (gate green,
+(Android 13, the owner's own run; A4′ on 2026-11-21) **except** DS-5, I18N-1, FastPath's `tr` forms and the A4′
+tail's batch 1 (2026-11-22) — `CODE-GREEN` only, see Known debt. Status vocabulary (Этап 0.5): `CODE-GREEN` (gate green,
 no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off — an agent-driven
 `adb`/`uiautomator` pass does not count) / `CLOSED` (both, plus any residual limitation named, not implied
 absent).
@@ -94,7 +96,8 @@ absent).
   `RuleBasedIntentMatcher`, `en`/`ru`/`tr` vocabulary (`FastPathLocaleGuardTest`); trigger matching is
   **locale-blind**, only rendered strings need a locale switch.
 - **BYOK cloud AI** — Assistant (SSE, OpenAI-compatible, key in Keystore) + **the bridge**, the one model
-  path: a FastPath miss past the local-only / provider / connectivity gates (each blocked state says which)
+  path: a FastPath miss past the local-only / provider / connectivity gates (each blocked state says which) —
+  and, online, FastPath's own confident search or missing app (tail batch 1; never an unsafe address) —
   sends the command and our tool descriptions; an interpretation card comes back; nothing runs before
   «Выполнить» (but a learned command and, since 2026-11-22, a reading with no pick and no model text going out —
   D3 amended twice), then only through the engine.
@@ -127,7 +130,8 @@ absent).
   through the same validator, binder and engine, in every network state; a card only for an owed pick or model
   text going out; the session card says «Выученная команда» + «Забыть» (not a simple one: it closes itself,
   I12 — only Settings remains); Settings → «Выученные команды»; databases
-  and DataStore out of Auto Backup / transfer (`BackupRulesGuardTest`); `:consumer:jvm` parity over a JSON file.
+  and DataStore out of Auto Backup / transfer (`BackupRulesGuardTest`); `:consumer:jvm` replays from a JSON file,
+  but since tail batch 1 its `ask` never needs a card there and so never teaches (K12 + I5).
 - **A4′** — see the stage table and its block ADR. **PREVIEW surfaces** (Tasks / Agents / Activity / Terminal) —
   non-functional badged mock-ups, zero fabricated data (owner decision 2026-08-18: they stay).
 
@@ -187,7 +191,7 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
 - **A4′ (block ADR «2026-11-21 — Этап 6 (A4′)…», `CLOSED` 2026-11-21):** accepted on the phone; items **not run**
   are listed in that ADR («Чего раунд НЕ покрыл»), the **twelve owner rulings** are its task table (not debt).
   3a residuals (`§HANDOFF` «Фаза 3a A4′»): **(1)** orphan `Running` row on a mid-save supersede/cancel (2c too);
-  **(2)** F3a-C — a bare alias goes to the model (seen 2026-11-21) → task 3 «alias before the model»; **(3)** learned
+  **(2)** F3a-C — closed in code by the tail's task 3 (step 1a, `CODE-GREEN`, not yet seen); **(3)** learned
   choices across FastPath/bridge — closed by 3b Task 7 (one key); **(4)** closed (`UrlSort`); **(5)** the bridge
   ceiling is cooperative; **(6)** budget pinned per host (40 s OpenRouter + cap, 50 s elsewhere), corpus labels the
   agent's draft; **(7)** closed. **3b named limits** (archive): a fold-exact name binds with no pick on FastPath
@@ -201,6 +205,10 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
   defaults on a new phone; **(6)** closed, seen; **(7)** a replayed URL ending «)» is cut (not produced on the phone);
   **(8)** a forgotten row stays in SQLite free pages (A1′ (10)). **Ruled 2026-11-21 (`ADL3: b`):** FastPath answering «найди …»
   confidently with the remainder as query (B15, §A1) is FastPath behaviour, not a `DOC-ADL-3` breach — **task 13**.
+- **A4′ tail, batch 1 (ADR «2026-11-22 — Пачка 1 хвоста A4′: маршрут команды и карточка», `CODE-GREEN`, not on the
+  phone):** its residuals and six owner questions are in that ADR (I12 × K4 no trace; homograph links beyond the cheap
+  fix; `tr` signatures — `:app:assembleRelease` red at `checkOwnerReviewedLocaleStrings` until signed; a partly false
+  locked line; alias forms + the dead alias decorator; `DOC-NYH-4` anchor name); FastPath-hit latency → task 14.
 - **A0 engine gaps:** the engine stops **waiting** at the budget (phase 2), not the **act**; binder never
   measured; the clock is the dispatcher's, not a port; a persisted `Failed` loses its `CommandFailure`
   variant; `GoalShape` stays at one value (A4′ declined `B1`'s licence, spec §10.2). **Guards D1–D11** (`§HANDOFF`
@@ -284,7 +292,7 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
   plus `:core:ui:verifyRoborazziDebug` whenever `core/ui` is touched, and `:app:assembleRelease` for
   release-affecting work. **`:domain:jvmTest` and `:consumer:jvm:test` must be listed explicitly:**
   `testDebugUnitTest` has not reached `:domain` since it went KMP, and it never reaches `:consumer:jvm`
-  at all. **Baseline: the floor in `tools/gate.sh` (`BASELINE_TESTS`, 1918 since the context-hygiene session, 2026-11-21; 1914 at A4′'s close), 557 actionable tasks executed, `build/test-results` cleared first) — compare a
+  at all. **Baseline: the floor in `tools/gate.sh` (`BASELINE_TESTS`, 2008 since batch 1 of the A4′ tail, 2026-11-22; 1914 at A4′'s close), 557 actionable tasks executed, `build/test-results` cleared first) — compare a
   fresh gate against the floor and against the active phase's predicted chain (its plan), not against
   any number quoted in an older ADR.** The decomposition by module is derived **before** every boundary
   run and compared with it — a sum alone cannot tell «two added» from «two added and two lost»; the chains

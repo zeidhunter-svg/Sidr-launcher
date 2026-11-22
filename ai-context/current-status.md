@@ -5,7 +5,20 @@
 > digest); per-phase plans carry their own checklists.** This file is the status snapshot — if it
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
-> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-11-21
+> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-11-22
+> (**A4′ acceptance tail, batch 1 — «маршрут команды и карточка», plan tasks 1–6 — `CODE-GREEN`, nothing seen on a
+> phone; ADR «2026-11-22 — Пачка 1 хвоста A4′: маршрут команды и карточка»** (beside the batch's two amendment ADRs,
+> «D1, поправка…» and «D3, вторая поправка…»). Online FastPath yields its confident search and its «нет такого
+> приложения» to the model (owner 13: Б, 14; the device answers as FastPath would when the model cannot take it or its
+> reading does not bind — K1, K3, review M-5), the model may correct an app name (D1), a bare alias opens its app on the device,
+> above 2b and the model (step 1a), a reading with no pick and no model text going out starts at once and teaches nothing
+> (D3 second amendment, I5; a simple session closes itself, I12), a decline reads «Понял команду, но Sidr так пока не
+> умеет», the wait shows only while the model is asked. The batch review's Important — a homograph address after a verb
+> reached the model and, with no card owed, only the consent card stood before it — is fixed: such a search or missing
+> app is never yielded (`7b297d9f`). **Boundary gate `GATE GREEN` 2008 / 0 / 0**, 557 executed (`:domain` 673 · `:data:repository` 493 ·
+> `:feature:launcher` 309 · `:app` 98 · `:consumer:jvm` 101 · `:feature:settings` 35 · other seven 299 — exactly as predicted); floor `BASELINE_TESTS` 1918 → 2008;
+> `:app:assembleRelease` red only at `checkOwnerReviewedLocaleStrings` (the `tr` draft of `settings_local_only_description`,
+> unsigned). Six owner questions in the ADR; batches 2–3 and the one acceptance are next); prior 2026-11-21
 > (**context hygiene — `decisions.md` stays whole as an archive by address, `ai-context/decisions-orientation.md` beside
 > it is read whole (every journal heading verbatim with an in-force / replaced / history mark), held by
 > `DecisionsOrientationGuardTest` (`:app`, +4, mutation-proved by `mutation-prover`: five plants as predicted, the
@@ -1772,7 +1785,9 @@ line. **Not claimed by design:** that the budget stops the **act** (it stops the
 binder behaves; that the bridge ceiling interrupts a blocking read; that 50 s suits hosts without the reasoning cap;
 that a learned command is multilingual (each wording pins on its own streak); that «Забыть» erases the bytes (SQLite
 free pages, A1′ residual (10)); that memory or settings move to a new phone (they start from defaults). **The twelve
-owner rulings of the round are tasks, none built** (the block ADR's table). The Master Plan DoD line «local-only /
+owner rulings of the round are tasks** (the block ADR's table) — *re-based 2026-11-22:* the tail plan's batch 1 built
+its first six (plan tasks 1–6, `CODE-GREEN`, ADR «2026-11-22 — Пачка 1 хвоста A4′…»), **none of them seen on a phone**:
+the yield to the model, the corrected app name, step 1a, the start without a card, the decline line, the wait. The Master Plan DoD line «local-only /
 offline / no-key behave as today», knowingly false since phase 1, was corrected at this close to `DOC-ADL-3`'s text.
 
 **Context hygiene (2026-11-11) claims nothing on a phone and nothing about tokens directly:** every number
@@ -1794,10 +1809,11 @@ loose before the session (placeholders like `<date> — A4′ ф3a…`, fragment
 
 > **Re-based 2026-09-20 — this list had been stale since 2026-07-11 and pointed two tracks back.**
 
-- Current state + hard rules + gate (NOT a session digest since Этап 0.4; re-compressed 2026-11-11 to ~42 KB, ~47 KB at A4′ phase 4's close, ~45 KB at the block's close, ~43 KB after the 2026-11-21 hygiene session moved its History map out, under the 48 000-byte ceiling held by `ClaudeMdSizeGuardTest`): `CLAUDE.md`
+- Current state + hard rules + gate (NOT a session digest since Этап 0.4; re-compressed 2026-11-11 to ~42 KB, ~47 KB at A4′ phase 4's close, ~45 KB at the block's close, ~43 KB after the 2026-11-21 hygiene session moved its History map out, ~45 KB after the tail's batch 1, under the 48 000-byte ceiling held by `ClaudeMdSizeGuardTest`): `CLAUDE.md`
 - **Orientation — read whole, before the journal:** `ai-context/decisions-orientation.md` (since 2026-11-21): what is
   in force, and every `## ` heading of the journal verbatim with its mark — the journal's address book. Latest ADR:
-  «2026-11-21 — Гигиена контекста: ориентир по решениям и два правила §0» (docs + one guard class).
+  «2026-11-22 — Пачка 1 хвоста A4′: маршрут команды и карточка» (before it the batch's «D1, поправка…» and «D3, вторая
+  поправка…»; the orientation file itself came with «2026-11-21 — Гигиена контекста: ориентир по решениям и два правила §0»).
 - Decisions log — an archive by address, appended and never cut (2026-11-21) — **latest block ADR: «2026-11-21 — Этап 6 (A4′) — рантайм полностью: фазы 0–4, одна приёмка на
   устройстве, блок `CLOSED`»**, whose sections «Приёмка на устройстве», the twelve-task table and the residuals are
   the owner's round of 2026-11-21; the block ADR before it is «2026-09-19 — Этап 5.5 (A1″)». Inside A4′ phase 3a wrote
@@ -1827,8 +1843,10 @@ loose before the session (placeholders like `<date> — A4′ ф3a…`, fragment
   `docs/superpowers/plans/2026-11-21-a4-device-acceptance.md` (run, lines corrected in place). Before it **A1″ (Этап
   5.5), `CLOSED` 2026-09-20** — spec `docs/superpowers/specs/2026-09-12-a1-second-tool-mass-and-selection-design.md`,
   checklist `docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md`.
-- No active block: the next is the owner's choice (`§HANDOFF`) — a «хвост приёмки A4′» plan for the block ADR's tasks
-  1–10 and task 13 (opens with a measurement — §0 rule 2), then the A2/A3 spec (tasks 11–12). The closed block's trail: **A4′ runtime (Этап 6)** — spec
+- Active: the «хвост приёмки A4′» plan `docs/superpowers/plans/2026-11-21-a4-acceptance-tail.md` (the block ADR's tasks
+  1–10 and task 13) — batch 1 `CODE-GREEN` 2026-11-22 (ADR «2026-11-22 — Пачка 1 хвоста A4′…»; ledger
+  `.superpowers/sdd/2026-11-21-a4-acceptance-tail/progress.md`, git-ignored), batches 2–3 and the one acceptance next;
+  then the A2/A3 spec (tasks 11–12). The closed block's trail: **A4′ runtime (Этап 6)** — spec
   `docs/superpowers/specs/2026-09-21-a4-runtime-design.md` (owner-approved 2026-09-21); **phase 0
   `CODE-GREEN` 2026-09-26**, plan `docs/superpowers/plans/2026-09-22-a4-phase0-engine-preconditions.md`,
   record in the track plan's `§HANDOFF` («Фаза 0 A4′»); **phase 1 `CODE-GREEN` 2026-09-26**, plan
@@ -1866,6 +1884,9 @@ error (Этап 0.5).
 
 *Applied 2026-11-21 at A4′'s close:* the six per-phase «nothing seen on a phone» paragraphs of «Not claimed done»
 were replaced, not appended to, and «Source of truth» no longer says A4′ has no block ADR.
+
+*Applied 2026-11-22 by batch 1 of the A4′ tail:* «Not claimed done» no longer says the twelve rulings are «none built»
+(six are, none seen on a phone); «Source of truth» names the active plan and the latest ADR instead of «no active block».
 
 *Applied 2026-11-21 by the context-hygiene session:* «Source of truth» names the orientation file and the journal as an
 archive by address; «Not claimed done» says what the new guard does not hold. The header's first sentence («history

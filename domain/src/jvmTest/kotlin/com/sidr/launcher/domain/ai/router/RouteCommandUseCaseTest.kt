@@ -1682,6 +1682,45 @@ class RouteCommandUseCaseTest {
         assertEquals("the model is never asked", 0, planner.planCallCount)
     }
 
+    /**
+     * Batch 1 review, I-1 (controller ruling B1-I1): the same unsafe address after a VERB stays FastPath's online —
+     * «найди <омограф>» is searched (decision 13 does not take it), «открой <омограф>» is A0's store plan in the user's
+     * words (decision 14 does not take it either), exactly as before the batch. The model is scripted to open the
+     * address in the USER's words: a reading that owes no card and would start at once (D3, second amendment), leaving
+     * only the engine's consent card between the user and a look-alike host. It is never asked.
+     */
+    @Test
+    fun `online a verb with an unsafe address stays FastPath's and the model is never asked`() = runTest {
+        planner.answer = ModelPlanning.Proposed(
+            listOf(
+                ProposedStep(
+                    tool = OPEN_URL,
+                    args = mapOf("url" to HOMOGRAPH_ADDRESS),
+                    origins = mapOf("url" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                    risk = ActionRiskLevel.CONFIRM,
+                    effect = ToolEffect.EXTERNAL,
+                ),
+            ),
+        )
+        matcher.intentToReturn = LauncherIntent.SearchIntent(HOMOGRAPH_ADDRESS, SearchTarget.WEB)
+        matcher.confidenceToReturn = 0.90f
+        val search = useCase().route("найди $HOMOGRAPH_ADDRESS")
+
+        driveAppLaunch(HOMOGRAPH_ADDRESS)
+        appsRepo.appsToReturn = emptyList()
+        val launch = useCase().route("открой $HOMOGRAPH_ADDRESS")
+
+        assertEquals(CommandOutcome.Executed, search)
+        assertEquals(listOf(ExecutableAction.OpenSearchAction(HOMOGRAPH_ADDRESS, SearchTarget.WEB)), executor.executedActions)
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), launch)
+        assertEquals(
+            "A0's store plan, in the user's words",
+            AgentGoal("открой $HOMOGRAPH_ADDRESS", GoalShape.AppNotInstalled(HOMOGRAPH_ADDRESS)),
+            agentStore.saved.single().goal,
+        )
+        assertEquals("the model is never asked", 0, planner.planCallCount)
+    }
+
     /** The model reads the «search» as a question: the assistant, prefilled and unsent — the browser does not open. */
     @Test
     fun `a yielded search the model sends to the assistant opens the assistant`() = runTest {
@@ -2280,6 +2319,7 @@ class RouteCommandUseCaseTest {
         val LEARNED_UNINSTALL = ToolId("uninstall_app")
         val LEARNED_WEB_SEARCH = ToolId("web_search")
         val WEB_SEARCH = ToolId("web_search")
+        val OPEN_URL = ToolId("open_url")
         const val SEARCH_QUERY = "лучший рецепт шашлыка"
 
         /** «apple.com» with a Cyrillic «а» (U+0430): a non-ASCII host, which `UrlDetector` routes to a search. */

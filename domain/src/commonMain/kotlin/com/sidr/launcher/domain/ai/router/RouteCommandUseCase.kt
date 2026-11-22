@@ -63,10 +63,11 @@ import kotlinx.coroutines.flow.first
  *    local-only, a provider, online — FastPath does not run a **confident search read from a search verb**: it
  *    answers [CommandOutcome.LowConfidence] and hands the search over ([FastPathYield.Search]), so the command is
  *    undecided and goes down the chain — 2b and 2c first, as any undecided text, then step 7 — to the model.
- *    Nothing else yields — not the search FastPath makes out of an unsafe address (`UrlDetector`'s
- *    `SearchFallback`: a defence that keeps a homograph or an unknown TLD from being opened, never handed to a
- *    model that could read it back as `open_url`; task 1 review round 1, ruling (a)), not an address FastPath
- *    opens, not a store search. If the model then cannot take it — `Declined`, `Unavailable` — step 7 runs exactly the
+ *    Nothing else yields — not a search, nor a missing app, whose words are an unsafe address, bare or after a verb
+ *    (`UrlDetector`'s `SearchFallback`: a defence that keeps a homograph or an unknown TLD from being opened, never
+ *    handed to a model that could read it back as `open_url`; task 1 review round 1, ruling (a); batch 1 review I-1,
+ *    ruling B1-I1 — «найди https://аpple.com» is searched and «открой https://аpple.com» is step (2)'s store plan,
+ *    in every state), not an address FastPath opens, not a store search. If the model then cannot take it — `Declined`, `Unavailable` — step 7 runs exactly the
  *    search FastPath would have run ([HandleUserCommandUseCase.runYielded], controller ruling K1), so a broken
  *    key or a timeout never costs the user a working search. **Owner decision 14** (task 2 of the tail plan): FastPath
  *    yields its «нет такого приложения» the same way ([FastPathYield.MissingApp]) — the model is asked first and may

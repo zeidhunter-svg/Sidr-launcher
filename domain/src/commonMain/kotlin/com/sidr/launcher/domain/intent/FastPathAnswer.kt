@@ -10,14 +10,18 @@ package com.sidr.launcher.domain.intent
  */
 sealed interface FastPathYield {
 
-    /** A confident web search (`LauncherIntent.SearchIntent` past the auto-execute gate), not yet resolved or run. */
+    /**
+     * A confident web search (`LauncherIntent.SearchIntent` past the auto-execute gate), not yet resolved or run — never
+     * one whose query is an unsafe address (`UrlDetector`'s `SearchFallback`; batch 1 review I-1), which FastPath runs.
+     */
     data class Search(val intent: LauncherIntent.SearchIntent) : FastPathYield
 
     /**
      * «No such app», handed to the model before the store (owner decision 14; task 2 of the tail plan): a confident
-     * launch whose whole name resolved to nothing. The model may correct the name (amendment D1); if it cannot take
-     * the command, or names an app that is not here, the router starts A0's store plan in the user's words
-     * ([message]'s `query` — controller rulings K1, K3).
+     * launch whose whole name resolved to nothing — never a name that is an unsafe address («открой https://аpple.com»,
+     * batch 1 review I-1), which stays FastPath's «нет такого приложения». The model may correct the name (amendment
+     * D1); if it cannot take the command, or names an app that is not here, the router starts A0's store plan in the
+     * user's words ([message]'s `query` — controller rulings K1, K3).
      */
     data class MissingApp(val message: CommandMessage.NoAppFound) : FastPathYield
 }

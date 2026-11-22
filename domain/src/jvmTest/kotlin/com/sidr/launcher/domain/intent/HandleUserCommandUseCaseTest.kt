@@ -574,6 +574,36 @@ class HandleUserCommandUseCaseTest {
         assertEquals("each address was searched once", addresses.size, fakeExecutor.callCount)
     }
 
+    /**
+     * Batch 1 review, I-1 (controller ruling B1-I1): the same defence when the address follows a VERB. «найди <адрес>»
+     * is a search whose REMAINDER `UrlDetector` refuses to open; «открой <адрес>» is a launch whose name — the same
+     * remainder — is no app (`RuleBasedIntentMatcher` opens only a safe address after a launch verb). Neither is handed
+     * to the model, which could read the address back as `open_url` in the user's own words — a reading that owes no
+     * card (D3, second amendment) — so FastPath answers both exactly as with the model unreachable: the search runs, and
+     * «нет такого приложения» is decided (the router's step (2) offers the store). The precondition pins that each
+     * remainder really is `SearchFallback` for the real `UrlDetector` while the WHOLE command is not: a predicate that
+     * judged the whole command could not see it.
+     */
+    @Test fun `a verb followed by an unsafe address is never yielded`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(InstalledApp("net.fixture.calc", "Калькулятор"))
+        val addresses = listOf("https://аpple.com", "xn--80ak6aa92e.com", "lumora.zzq", "lumora.com/?q=x")
+
+        addresses.forEach { address ->
+            assertTrue(address, UrlDetector.classify(address) is UrlClassification.SearchFallback)
+            assertEquals(address, UrlClassification.None, UrlDetector.classify("найди $address"))
+
+            matcherReturns(LauncherIntent.SearchIntent(address, SearchTarget.WEB), 0.90f)
+            val search = useCase.answer("найди $address", yieldToModel = true)
+            assertEquals(address, FastPathAnswer(CommandOutcome.Executed), search)
+            assertEquals(address, ExecutableAction.OpenSearchAction(address, SearchTarget.WEB), fakeExecutor.executedActions.last())
+
+            matcherReturns(LauncherIntent.LaunchAppIntent(address), 0.90f)
+            val launch = useCase.answer("открой $address", yieldToModel = true)
+            assertEquals(address, FastPathAnswer(CommandOutcome.Message(CommandMessage.NoAppFound(address))), launch)
+        }
+        assertEquals("each search ran once; no launch ran", addresses.size, fakeExecutor.callCount)
+    }
+
     // ── A4′ acceptance tail, owner decision 14 — «no such app» yields to a reachable model ──────────
     // With the model reachable (`yieldToModel`, controller ruling K14) a confident launch whose name resolves to
     // nothing is not answered «нет такого приложения» by FastPath: it hands the fact over

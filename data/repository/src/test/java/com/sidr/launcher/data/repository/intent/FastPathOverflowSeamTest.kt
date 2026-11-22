@@ -9,12 +9,17 @@ import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.core.testing.configuredProvider
+import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.AgentSessionIdFactory
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.TemplatePlanner
+import com.sidr.launcher.domain.ai.bridge.ModelPlanning
+import com.sidr.launcher.domain.ai.bridge.PrincipalId
+import com.sidr.launcher.domain.ai.bridge.ProposedStep
+import com.sidr.launcher.domain.ai.bridge.ValueOrigin
 import com.sidr.launcher.domain.ai.router.RouteCommandUseCase
 import com.sidr.launcher.domain.intent.CommandMessage
 import com.sidr.launcher.domain.intent.CommandOutcome
@@ -26,6 +31,8 @@ import com.sidr.launcher.domain.intent.SearchTarget
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.preferences.FeatureFlags
 import com.sidr.launcher.domain.tool.ArgSource
+import com.sidr.launcher.domain.tool.ToolEffect
+import com.sidr.launcher.domain.tool.ToolId
 import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
 import kotlinx.coroutines.CoroutineScope
@@ -223,5 +230,60 @@ class FastPathOverflowSeamTest {
         assertEquals(CommandOutcome.Executed, outcome)
         assertEquals(ExecutableAction.OpenSearchAction("https://\u0430pple.com", SearchTarget.WEB), executor.executedActions.single())
         assertEquals(0, modelPlanner.planCallCount)
+    }
+
+    /**
+     * What the model is scripted to answer in the two tests below, had it been asked: open the look-alike address in
+     * the USER's own words — a reading that owes no card and starts at once (D3, second amendment), with the engine's
+     * consent card the only thing left between the user and the homograph. Asking the model changes the outcome.
+     */
+    private val opensTheHomograph = ModelPlanning.Proposed(
+        listOf(
+            ProposedStep(
+                tool = ToolId("open_url"),
+                args = mapOf("url" to "https://\u0430pple.com"),
+                origins = mapOf("url" to ValueOrigin.SaidBy(PrincipalId.USER)),
+                risk = ActionRiskLevel.CONFIRM,
+                effect = ToolEffect.EXTERNAL,
+            ),
+        ),
+    )
+
+    /**
+     * Batch 1 review, I-1 (controller ruling B1-I1), the seam half for a SEARCH verb: with the REAL matcher «найди
+     * <омограф>» is a search whose remainder `UrlDetector` refuses to open — the whole command, with its space, it
+     * would classify as no address at all. Online with a provider it is searched by FastPath, as before decision 13;
+     * the model is not asked.
+     */
+    @Test
+    fun `online find with an unsafe address is searched by FastPath with the real matcher and the model is not asked`() = runTest {
+        modelPlanner.answer = opensTheHomograph
+
+        val outcome = router().route("найди https://\u0430pple.com")
+
+        assertEquals(CommandOutcome.Executed, outcome)
+        assertEquals(ExecutableAction.OpenSearchAction("https://\u0430pple.com", SearchTarget.WEB), executor.executedActions.single())
+        assertEquals(0, modelPlanner.planCallCount)
+        assertTrue("no session starts", agentStore.saved.isEmpty())
+    }
+
+    /**
+     * The same, for a LAUNCH verb: the real matcher opens only a safe address after «открой», so «открой <омограф>» is
+     * a launch of a name no app answers. Online with a provider it is A0's store plan in the user's words, as before
+     * decision 14; the model is not asked.
+     */
+    @Test
+    fun `online open with an unsafe address is the A0 store plan with the real matcher and the model is not asked`() = runTest {
+        modelPlanner.answer = opensTheHomograph
+
+        val outcome = router().route("открой https://\u0430pple.com")
+
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), outcome)
+        assertEquals(
+            AgentGoal("открой https://\u0430pple.com", GoalShape.AppNotInstalled("https://\u0430pple.com")),
+            agentStore.saved.single().goal,
+        )
+        assertEquals(0, modelPlanner.planCallCount)
+        assertTrue("nothing is executed by the route", executor.executedActions.isEmpty())
     }
 }

@@ -54,8 +54,9 @@ import org.junit.Test
  * never invoked. A route test alone could not show this: «started» is not «ran».
  *
  * Two risky shapes: a removal shaped like `uninstall_app` (`CONFIRM`, `DURABLE`) — the review focus — and `open_url`
- * (`CONFIRM`) carrying a homograph host, the task-1 residual («найди https://аpple.com» reaches the model, and its
- * `open_url` must stop at the consent card that names the host). Same build as `AgentEgressSentinelGuardTest`.
+ * (`CONFIRM`) carrying a homograph host — an undecided command with an address reaches the model, and its `open_url`
+ * must stop at the consent card that names the host (since batch 1 review I-1 «найди https://аpple.com» itself is
+ * FastPath's again, not the model's). Same build as `AgentEgressSentinelGuardTest`.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ModelReadingConsentTest {
@@ -153,9 +154,14 @@ class ModelReadingConsentTest {
     }
 
     /**
-     * The task-1 residual: a verb and an address whose host is a homograph («аpple.com», a Cyrillic «а») reaches the
+     * An undecided command carrying an address whose host is a homograph («аpple.com», a Cyrillic «а») reaches the
      * model, which may read it back as `open_url` in the user's own words — no card owed. The session starts, and the
      * engine stops it at the consent card; the step it stops on carries the host exactly, for that card to name it.
+     *
+     * The matcher here is driven to `Unknown` for every command, so the text is undecided whatever it says. With the
+     * real matcher «найди <омограф>» no longer gets here — since batch 1 review I-1 FastPath searches it and the model
+     * is not asked (`FastPathOverflowSeamTest`); a command FastPath has no verb for («зайди на https://аpple.com») does,
+     * as it has since phase 3a.
      */
     @Test
     fun `a model reading that opens an address starts and stops at the engine's consent, the host on the step`() = runTest {

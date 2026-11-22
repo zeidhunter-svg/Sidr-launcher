@@ -586,7 +586,7 @@ class HandleUserCommandUseCaseTest {
      */
     @Test fun `a verb followed by an unsafe address is never yielded`() = runTest(testDispatcher) {
         fakeRepo.appsToReturn = listOf(InstalledApp("net.fixture.calc", "Калькулятор"))
-        val addresses = listOf("https://аpple.com", "xn--80ak6aa92e.com", "lumora.zzq", "lumora.com/?q=x")
+        val addresses = listOf("https://\u0430pple.com", "xn--80ak6aa92e.com", "lumora.zzq", "lumora.com/?q=x")
 
         addresses.forEach { address ->
             assertTrue(address, UrlDetector.classify(address) is UrlClassification.SearchFallback)

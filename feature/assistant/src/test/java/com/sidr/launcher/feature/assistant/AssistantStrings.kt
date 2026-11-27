@@ -7,8 +7,9 @@ import javax.xml.parsers.DocumentBuilderFactory
 /**
  * Reads this module's **shipped English** string resources straight off disk (I18N-1 Task 10).
  *
- * `:feature:assistant` has no Robolectric host, so a plain JVM test cannot resolve a `@StringRes` id
- * to its text. Extracting copy into resources would therefore have silently turned every
+ * A plain JVM test cannot resolve a `@StringRes` id to its text, and this module's tests are mostly
+ * plain JVM tests (a Robolectric host exists here since A4' tail task 10, for the compose tests only).
+ * Extracting copy into resources would therefore have silently turned every
  * "this sentence says X" assertion into a vacuous one. This helper keeps them real: the tests still
  * pin the exact words that ship, and now they pin them in the file that actually ships rather than in
  * a Kotlin constant that no longer exists.

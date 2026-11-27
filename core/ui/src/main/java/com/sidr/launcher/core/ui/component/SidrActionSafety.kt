@@ -178,6 +178,7 @@ fun SidrResultSurface(
     provenance: (@Composable (() -> Unit))? = null,
     primaryAction: SidrSurfaceAction? = null,
     secondaryAction: SidrSurfaceAction? = null,
+    equalWidth: Boolean = false,
 ) {
     val surfaceTone = if (tone == SidrResultTone.Failed) SidrSurfaceTone.RISK else SidrSurfaceTone.SURFACE
     SidrSurface(tone = surfaceTone, modifier = modifier.fillMaxWidth(), shape = SidrShapes.medium) {
@@ -195,7 +196,7 @@ fun SidrResultSurface(
             body?.let { SidrText(text = it, role = SidrTextRole.HUMAN_BODY) }
             provenance?.invoke()
             if (primaryAction != null || secondaryAction != null) {
-                SidrSurfaceActions(primary = primaryAction, secondary = secondaryAction)
+                SidrSurfaceActions(primary = primaryAction, secondary = secondaryAction, equalWidth = equalWidth)
             }
         }
     }
@@ -308,6 +309,7 @@ internal fun SidrSurfaceActions(
     modifier: Modifier = Modifier,
     primaryLoading: Boolean = false,
     enabled: Boolean = true,
+    equalWidth: Boolean = false,
 ) {
     val stacked = LocalDensity.current.fontScale >= 1.7f
     if (stacked) {
@@ -334,15 +336,19 @@ internal fun SidrSurfaceActions(
             }
         }
     } else {
+        // K5 (task 9): equal width only when there are two buttons — a lone one keeps its natural size.
+        val shareWidth = equalWidth && primary != null && secondary != null
         Row(
             modifier = modifier.fillMaxWidth().padding(top = Spacing.sm),
-            horizontalArrangement = Arrangement.End,
+            // The gap sits between the two weighted slots, not inside the primary's, so the buttons stay equal.
+            horizontalArrangement = if (shareWidth) Arrangement.spacedBy(Spacing.md) else Arrangement.End,
         ) {
             secondary?.let {
                 SidrSecondaryButton(
                     text = it.label,
                     onClick = it.onClick,
                     enabled = enabled && !primaryLoading,
+                    modifier = if (shareWidth) Modifier.weight(1f) else Modifier,
                 )
             }
             primary?.let {
@@ -351,7 +357,11 @@ internal fun SidrSurfaceActions(
                     onClick = it.onClick,
                     enabled = enabled,
                     loading = primaryLoading,
-                    modifier = Modifier.padding(start = if (secondary != null) Spacing.md else 0.dp),
+                    modifier = if (shareWidth) {
+                        Modifier.weight(1f)
+                    } else {
+                        Modifier.padding(start = if (secondary != null) Spacing.md else 0.dp)
+                    },
                 )
             }
         }

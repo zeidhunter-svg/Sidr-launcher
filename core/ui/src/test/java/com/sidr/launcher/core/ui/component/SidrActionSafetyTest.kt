@@ -3,6 +3,7 @@ package com.sidr.launcher.core.ui.component
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -186,5 +187,40 @@ class SidrActionSafetyTest {
         compose.onNodeWithText("OFFLINE").assertIsDisplayed()
         compose.onNodeWithText("BLOCKED").assertIsDisplayed()
         compose.onNodeWithText("App launch still works.").assertIsDisplayed()
+    }
+
+    /** K5 (owner ruling 7): with `equalWidth` the two buttons take the same width whatever their labels; without it
+     *  (every other card) each keeps its natural width, so a long and a short label differ. */
+    @Test fun surface_actions_equal_width_makes_both_buttons_the_same_width() {
+        fun widthsOf(equalWidth: Boolean): Pair<Float, Float> {
+            compose.setContent {
+                SidrTheme(darkTheme = true) {
+                    SidrSurfaceActions(
+                        primary = SidrSurfaceAction("Close") {},
+                        secondary = SidrSurfaceAction("Cancel the whole plan") {},
+                        equalWidth = equalWidth,
+                    )
+                }
+            }
+            val a = compose.onNodeWithText("Close").getUnclippedBoundsInRoot()
+            val b = compose.onNodeWithText("Cancel the whole plan").getUnclippedBoundsInRoot()
+            return (a.right - a.left).value to (b.right - b.left).value
+        }
+        val (closeEqual, cancelEqual) = widthsOf(equalWidth = true)
+        assertEquals(closeEqual, cancelEqual, 1f)
+    }
+
+    @Test fun surface_actions_keep_natural_widths_by_default() {
+        compose.setContent {
+            SidrTheme(darkTheme = true) {
+                SidrSurfaceActions(
+                    primary = SidrSurfaceAction("Close") {},
+                    secondary = SidrSurfaceAction("Cancel the whole plan") {},
+                )
+            }
+        }
+        val a = compose.onNodeWithText("Close").getUnclippedBoundsInRoot()
+        val b = compose.onNodeWithText("Cancel the whole plan").getUnclippedBoundsInRoot()
+        assertNotEquals((a.right - a.left).value, (b.right - b.left).value)
     }
 }

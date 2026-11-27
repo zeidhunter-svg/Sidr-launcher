@@ -1,12 +1,16 @@
 package com.sidr.launcher.feature.launcher.agent
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentGoal
@@ -31,12 +35,14 @@ import com.sidr.launcher.domain.tool.ToolOutput
 import com.sidr.launcher.domain.tool.ToolResult
 import com.sidr.launcher.domain.tool.Undo
 import com.sidr.launcher.domain.trace.ExecutionTrace
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * A4′ phase 2, owner fork F2-3.3 — `B14`'s «что откатить» as an action on the same card. The card
@@ -116,6 +122,43 @@ class AgentSessionSurfaceUndoTest {
         compose.onNodeWithText("Undo").performClick()
 
         assertTrue(undone)
+    }
+
+    /**
+     * Owner ruling 7 (K5): the finished-plan card's close and undo buttons are one size. At the default font scale
+     * both short labels sit on the button's minimum width (58dp), so the proof needs labels that outgrow it: under
+     * `ru` — the owner's language, «Закрыть» and «Отменить» differ in length — at font scale 1.5 their natural
+     * widths differ, so equal widths prove `equalWidth = true` is passed (verified red without it).
+     */
+    @Test
+    @Config(qualifiers = "ru")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `a finished plan's close and undo buttons are the same width`() {
+        val density = Density(density = 1f, fontScale = 1.5f)
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides density) {
+                SidrTheme(darkTheme = true) {
+                    AgentSessionSurface(
+                        session = session(ExecutionState.Completed, listOf(aliasStep(0)), mapOf(0 to ToolResult.Effected())),
+                        toolProvenance = emptyMap(),
+                        dynamicLabels = emptyMap(),
+                        confirming = false,
+                        onConfirm = {},
+                        onDeny = {},
+                        onContinue = {},
+                        onDismiss = {},
+                        undoReview = listOf(StepUndo(0, byUndo)),
+                        onUndo = {},
+                    )
+                }
+            }
+        }
+        compose.waitForIdle()
+
+        val close = compose.onNodeWithText("Закрыть").getUnclippedBoundsInRoot()
+        val undo = compose.onNodeWithText("Отменить").getUnclippedBoundsInRoot()
+
+        assertEquals((close.right - close.left).value, (undo.right - undo.left).value, 1f)
     }
 
     @Test

@@ -39,8 +39,9 @@ tasks**, residuals. The hygiene session (owner `5: a`) is done 2026-11-21: `deci
 tasks 1–10 + task 13): **batch 1** (route + card, plan tasks 1–6) `CODE-GREEN` 2026-11-23, ADR «2026-11-22 — Пачка 1
 хвоста A4′…» — owner questions there (question 2 answered 2026-11-27: no host check, homographs are the browser's), release blocked until the owner signs `tr`;
 **batch 2** (UI, plan tasks 7–12) `CODE-GREEN` 2026-11-27, gate **2073**, ADR «2026-11-27 — Пачка 2 хвоста A4′: интерфейс» —
-four owner questions there; batch 3 (plan task 13) next, one acceptance at the end (task 14); then the A2/A3 spec
-(tasks 11–12) — `§HANDOFF`.
+four owner questions there; **batch 3** (plan task 13, word-form slot) `CODE-GREEN` 2026-11-27, gate **2078**, ADR
+«2026-11-27 — Пачка 3 хвоста A4′: слот выученной формы по формам слова» — one owner question there; task 14 next
+(closing, one acceptance); then the A2/A3 spec (tasks 11–12) — `§HANDOFF`.
 
 Layers above the track plan: the **Master Plan** (blocks A0…A6, DoD, change-control, `Agentic Shell v1 =
 DONE`: [docs/governing/sidr-agentic-master-plan-v1.0.md](docs/governing/sidr-agentic-master-plan-v1.0.md))
@@ -72,7 +73,7 @@ are not offered).
 | **5** A1′ federated `ToolRegistry` | ✅ `CLOSED` 2026-09-10 (`ru-RU` only) | ADR «Этап 5 (A1′)» |
 | **5.5 / 5.5b** A1″ tool mass + selection, phases 0–3b | ✅ `CLOSED` 2026-09-20, gate **1439**, `ru`/`tr`/`en`; signed build `db1e75d` **unfixed** | ADR «Этап 5.5 (A1″)» |
 | **6** A4′ runtime, spec [2026-09-21-a4-runtime-design.md](docs/superpowers/specs/2026-09-21-a4-runtime-design.md) | ✅ `CLOSED` 2026-11-21, gate **1914**, `ru` + `tr`: phases 0 **1463** · 1 **1485** · 2 **1560** · 3a **1673** · 3b **1821** · 4 **1910**, one owner acceptance at the end | block ADR «2026-11-21 — Этап 6 (A4′)…»; phase ADRs 3a (two), 3b, 4, «D3, поправка»; records in the `§HANDOFF` archive |
-| **7** A4′ acceptance tail (twelve tasks), then A2/A3/A5/A6 | tail plan: batch 1 `CODE-GREEN` 2026-11-23, gate **2014** (a host check built and dropped 2026-11-27); batch 2 `CODE-GREEN` 2026-11-27, gate **2073**; A2/A3/A5/A6 their own spec (`brainstorm → spec → plan → build`) | ADRs «Пачка 1 хвоста A4′…», «D1, поправка…», «D3, вторая поправка…», «Пачка 2 хвоста A4′…» |
+| **7** A4′ acceptance tail (twelve tasks), then A2/A3/A5/A6 | tail plan: batch 1 `CODE-GREEN` 2026-11-23, gate **2014** (a host check built and dropped 2026-11-27); batch 2 `CODE-GREEN` 2026-11-27, gate **2073**; batch 3 `CODE-GREEN` 2026-11-27, gate **2078**; A2/A3/A5/A6 their own spec (`brainstorm → spec → plan → build`) | ADRs «Пачка 1 хвоста A4′…», «D1, поправка…», «D3, вторая поправка…», «Пачка 2 хвоста A4′…», «Пачка 3 хвоста A4′…» |
 
 The four strategic ADRs (2026-08-19): **1/4** understanding belongs to the model, execution to the
 deterministic layer — `llmRouterEnabled` inverted onto `localOnlyMode` / `flag_local_only`, default
@@ -89,7 +90,7 @@ vocabulary + federation, identity C — `ToolId`/`ToolDescriptor` are the agent'
 
 Everything below is on `launcher--7` and `CODE-GREEN`; most of it `DEVICE-ACCEPTED` on the SM-A325F
 (Android 13, the owner's own run; A4′ on 2026-11-21) **except** DS-5, I18N-1, FastPath's `tr` forms and the A4′
-tail's batches 1–2 (2026-11-22/27) — `CODE-GREEN` only, see Known debt. Status vocabulary (Этап 0.5): `CODE-GREEN` (gate green,
+tail's batches 1–3 (2026-11-22/27) — `CODE-GREEN` only, see Known debt. Status vocabulary (Этап 0.5): `CODE-GREEN` (gate green,
 no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off — an agent-driven
 `adb`/`uiautomator` pass does not count) / `CLOSED` (both, plus any residual limitation named, not implied
 absent).
@@ -131,7 +132,7 @@ absent).
   gate (fork F5) so the `CONFIRM` card names the package; permissions keyed on the registry; worker throws
   contained at the single call site; two-slot form `<A> <infix> <B> <suffix>`.
 - **Learned-plan cache (A4′ phase 4)** — a model reading confirmed three times (one form + template) is kept as
-  a form with slots + the validated answer (`learned_plans`, schema 5); step **2c** replays it on the device
+  a form with slots (the user's words, word forms too since batch 3, except `web_search`/`open_url`) + the validated answer (`learned_plans`, schema 5); step **2c** replays it on the device
   through the same validator, binder and engine, in every network state; a card only for an owed pick or model
   text going out; the session card says «Выученная команда» + «Забыть» (not a simple one: it closes itself,
   I12 — only Settings remains); Settings → «Выученные команды»; databases
@@ -205,7 +206,7 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
   `NeedsCard` drops an acted step's undo (latent). **Phase 4** (ADR «2026-11-20 — A4′ ф4…»): **(1)** the learned mark
   is process memory (fork 4-5); **(2)** B-5 fails open online (JVM ends it); **(3)** not learnable: no-space scripts,
   a value cutting a token, a form with no word, adjacent slots, > 64 chars; each wording its own streak (§8.1
-  «multilingual for free» not delivered; a slot needs the user's words byte for byte → task 8); **(4)** closed —
+  «multilingual for free» not delivered; a slot takes the user's word forms since batch 3, a search/address keeps a constant); **(4)** closed —
   `MigrationTest` 11/0 on the phone; **(5)** backup rules `CODE-GREEN` only, memory **and every setting** start from
   defaults on a new phone; **(6)** closed, seen; **(7)** a replayed URL ending «)» is cut (not produced on the phone);
   **(8)** a forgotten row stays in SQLite free pages (A1′ (10)). **Ruled 2026-11-21 (`ADL3: b`):** FastPath answering «найди …»
@@ -216,6 +217,9 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
   locked line; alias forms + the dead alias decorator; `DOC-NYH-4` anchor name); FastPath-hit latency → task 14.
 - **A4′ tail, batch 2 (ADR «2026-11-27 — Пачка 2 хвоста A4′: интерфейс», `CODE-GREEN`, not on the phone):** residuals
   (alarm chip, nav-bar gap over the keyboard, favourites writes) and four owner questions are in that ADR.
+- **A4′ tail, batch 3 (ADR «2026-11-27 — Пачка 3 хвоста A4′: слот выученной формы по формам слова», `CODE-GREEN`, not on
+  the phone):** residuals (`play_store_search` outside the constant set, the set is hand-kept, a model correction taken
+  for a form) and one owner question are in that ADR.
 - **A0 engine gaps:** the engine stops **waiting** at the budget (phase 2), not the **act**; binder never
   measured; the clock is the dispatcher's, not a port; a persisted `Failed` loses its `CommandFailure`
   variant; `GoalShape` stays at one value (A4′ declined `B1`'s licence, spec §10.2). **Guards D1–D11** (`§HANDOFF`
@@ -299,7 +303,7 @@ ADRs and KDoc cite them. `CLOSED` is never a zero-debt claim (DS-6B precedent).
   plus `:core:ui:verifyRoborazziDebug` whenever `core/ui` is touched, and `:app:assembleRelease` for
   release-affecting work. **`:domain:jvmTest` and `:consumer:jvm:test` must be listed explicitly:**
   `testDebugUnitTest` has not reached `:domain` since it went KMP, and it never reaches `:consumer:jvm`
-  at all. **Baseline: the floor in `tools/gate.sh` (`BASELINE_TESTS`, 2073 since batch 2 of the A4′ tail, 2026-11-27; 1914 at A4′'s close), 584 actionable tasks executed, `build/test-results` cleared first) — compare a
+  at all. **Baseline: the floor in `tools/gate.sh` (`BASELINE_TESTS`, 2078 since batch 3 of the A4′ tail, 2026-11-27; 1914 at A4′'s close), 584 actionable tasks executed, `build/test-results` cleared first) — compare a
   fresh gate against the floor and against the active phase's predicted chain (its plan), not against
   any number quoted in an older ADR.** The decomposition by module is derived **before** every boundary
   run and compared with it — a sum alone cannot tell «two added» from «two added and two lost»; the chains

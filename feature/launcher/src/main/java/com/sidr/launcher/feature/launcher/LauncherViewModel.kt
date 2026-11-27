@@ -79,6 +79,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.Clock
 import javax.inject.Inject
 
@@ -711,12 +713,19 @@ class LauncherViewModel @Inject constructor(
     /** «Убрать с главного»: take [packageName] out of the automatic places (and unpin it); its usage history stays. */
     fun hideFavorite(packageName: String) = editFavorites { FavoriteEdits.hide(it, packageName) }
 
+    // One favourites edit at a time: each is read → edit → write of the WHOLE preferences object, so two quick toggles in
+    // the picker would both read the same snapshot and the second write would drop the first (lost update). The mutex
+    // serialises that read-edit-write across edits; the repository interface stays as it is (no transform method).
+    private val favoritesEditLock = Mutex()
+
     private fun editFavorites(edit: (UserPreferences) -> UserPreferences) {
         viewModelScope.launch(ioDispatcher) {
             try {
-                val current = userPreferencesRepository.getPreferences().first()
-                val edited = edit(current)
-                if (edited != current) userPreferencesRepository.updatePreferences(edited)
+                favoritesEditLock.withLock {
+                    val current = userPreferencesRepository.getPreferences().first()
+                    val edited = edit(current)
+                    if (edited != current) userPreferencesRepository.updatePreferences(edited)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Throwable) {

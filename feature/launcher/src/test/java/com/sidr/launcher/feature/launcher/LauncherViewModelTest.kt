@@ -1725,6 +1725,30 @@ class LauncherViewModelTest {
         assertEquals(setOf("com.a"), saved.hiddenFavorites)
     }
 
+    /** A repository whose write takes time, so a second edit can start while the first is still writing. */
+    private class SlowWritePreferencesRepository(
+        private val inner: FakeUserPreferencesRepository,
+    ) : UserPreferencesRepository by inner {
+        override suspend fun updatePreferences(preferences: UserPreferences): OperationResult<Unit> {
+            kotlinx.coroutines.delay(100)
+            return inner.updatePreferences(preferences)
+        }
+    }
+
+    @Test
+    fun `two pins issued back to back both end up pinned`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(InstalledApp("com.a", "Alpha"), InstalledApp("com.b", "Beta"))
+        val store = FakeUserPreferencesRepository()
+        val vm = buildViewModel(prefsRepo = SlowWritePreferencesRepository(store))
+        advanceUntilIdle()
+
+        vm.pinFavorite("com.a")
+        vm.pinFavorite("com.b")
+        advanceUntilIdle()
+
+        assertEquals(listOf("com.a", "com.b"), store.getPreferences().first().pinnedFavorites)
+    }
+
     @Test
     fun `a failed favourites write changes nothing and does not crash`() = runTest(testDispatcher) {
         fakeRepo.appsToReturn = listOf(InstalledApp("com.a", "Alpha"))

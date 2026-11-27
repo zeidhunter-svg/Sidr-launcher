@@ -40,6 +40,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -619,10 +620,14 @@ private fun HomeContent(
         var pickerOpen by remember { mutableStateOf(false) }
         SidrSectionHeader(
             text = sidrString(R.string.launcher_home_favorites_header),
-            modifier = Modifier.clickable(
-                onClickLabel = sidrString(R.string.launcher_favorites_edit_title),
-                role = Role.Button,
-            ) { pickerOpen = true },
+            // The header's own tap target is at least the 48 dp minimum (the label alone is smaller): the size modifier
+            // goes AFTER `clickable`, so the clickable area is the enlarged box, not the label inside it.
+            modifier = Modifier
+                .clickable(
+                    onClickLabel = sidrString(R.string.launcher_favorites_edit_title),
+                    role = Role.Button,
+                ) { pickerOpen = true }
+                .minimumInteractiveComponentSize(),
         )
         if (state.favorites.isNotEmpty()) {
             FavoritesGrid(favorites = state.favorites, onAppClick = onAppClick)

@@ -2,6 +2,7 @@ package com.sidr.launcher.feature.launcher
 
 import com.sidr.launcher.domain.history.AppUsageRecord
 import com.sidr.launcher.domain.model.InstalledApp
+import com.sidr.launcher.domain.preferences.FavoriteEdits
 import com.sidr.launcher.domain.preferences.UserPreferences
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -73,9 +74,16 @@ class LauncherAppListFavoritesTest {
 
     @Test
     fun `pinning a hidden app unhides it`() {
+        val records = listOf(record("a"), record("b"))
         val hidden = UserPreferences(hiddenFavorites = setOf("com.b"))
-        val pinned = com.sidr.launcher.domain.preferences.FavoriteEdits.pin(hidden, "com.b")
-        assertEquals(listOf("com.b", "com.a"), derive(listOf(record("a")), pinned))
+        assertEquals(listOf("com.a"), derive(records, hidden))
+
+        val pinned = FavoriteEdits.pin(hidden, "com.b")
+        // The pin took «b» out of the hidden set, not merely onto the pinned list...
+        assertEquals(emptySet<String>(), pinned.hiddenFavorites)
+        assertEquals(listOf("com.b", "com.a"), derive(records, pinned))
+        // ...so unpinning it later returns it as an automatic place instead of leaving it hidden.
+        assertEquals(listOf("com.a", "com.b"), derive(records, FavoriteEdits.unpin(pinned, "com.b")))
     }
 
     @Test

@@ -3,6 +3,9 @@ package com.sidr.launcher.feature.launcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertWidthIsAtLeast
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -143,7 +146,8 @@ class LauncherScreenFavoritesTest {
         show(vm)
 
         compose.onNodeWithTag(FAVORITES_PICKER_TEST_TAG).assertDoesNotExist()
-        header().assertIsDisplayed().performClick()
+        // The tap target is at least the 48 dp minimum.
+        header().assertIsDisplayed().assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp).performClick()
         compose.waitForIdle()
 
         compose.onNodeWithTag(FAVORITES_PICKER_TEST_TAG).assertIsDisplayed()

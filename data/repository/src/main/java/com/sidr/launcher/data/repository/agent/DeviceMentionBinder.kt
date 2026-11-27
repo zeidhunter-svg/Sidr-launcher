@@ -73,8 +73,7 @@ import javax.inject.Inject
  * (`Map<ArgSort, SortResolver>`, `SortProvidesModule` in `:app`) holds for it, before the app mention is
  * bound: `HTTPS://…` reaches the card as `https://…`, and «полчасика», an address with a space in it, or one
  * whose host is not plain ASCII (`UrlSort`'s host check, owner ruling on batch 1 question 2, 2026-11-27 — a
- * homograph «https://аpple.com», punycode, userinfo) or that holds a backslash (ruling B1-Q2b — «https://\/аpple.com»,
- * whose host a browser reads past the `\`)
+ * homograph «https://аpple.com», punycode, userinfo)
  * is [Binding.NotUnderstood] — said to the user, never a card that fails after «Выполнить». The app sort's
  * registry entry is not read here: the mention keeps its own binding above, with learned choices.
  * **A named limit (controller ruling E6-R2):** the words [Binding.NotUnderstood] carries are what the

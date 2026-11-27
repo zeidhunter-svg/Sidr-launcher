@@ -85,9 +85,8 @@ class HandleUserCommandUseCase(
      * found several, or a form to confirm), a settings route, a simple command, and every outcome below the gate. That
      * predicate is an extra layer, not the closure: an address glued to a word inside its token
      * («[apple](https://аpple.com)», «сайт:https://аpple.com») and a homograph in the TLD («https://apple.cоm») are no
-     * address to `UrlDetector`, so such a command IS yielded; what keeps an IDN look-alike host from opening on every
-     * path is `UrlSort`'s host check where the address is opened (owner ruling on batch 1 question 2, 2026-11-27), with
-     * its refusal of any backslash (ruling B1-Q2b); an ASCII look-alike is not that class. The match is
+     * address to `UrlDetector`, so such a command IS yielded; what keeps a look-alike host from opening on every path is
+     * `UrlSort`'s host check where the address is opened (owner ruling on batch 1 question 2, 2026-11-27). The match is
      * recorded either way, with the confidence the gate acted on — the yield is a route, not a confidence.
      */
     suspend fun answer(rawInput: String, yieldToModel: Boolean): FastPathAnswer {
@@ -203,11 +202,9 @@ class HandleUserCommandUseCase(
      * («https://apple.cоm», a Cyrillic «о») — no address to [UrlDetector] at all, yielded after a verb since tasks 1 and 2
      * of the batch; and an undecided command carrying an address («зайди на https://аpple.com»), at the model since phase
      * 3a. Every one of them is closed where the address is opened: `UrlSort.normalized` refuses a host with any
-     * non-ASCII character, a `%`, userinfo or an `xn--` label, and any address holding a backslash (ruling B1-Q2b: a
-     * browser reads `\` as `/`, so «https://\/аpple.com» hid its host behind one) — read by the bridge's binder
-     * before any card or session and by `open_url`'s worker below the consent card — so a yielded command whose
-     * reading opens such a host is answered as FastPath would have answered it (`RouteCommandUseCase`, batch 1 review
-     * M-5), and nothing opens it.
+     * non-ASCII character, a `%`, userinfo or an `xn--` label — read by the bridge's binder before any card or session
+     * and by `open_url`'s worker below the consent card — so a yielded command whose reading opens such a host is
+     * answered as FastPath would have answered it (`RouteCommandUseCase`, batch 1 review M-5), and nothing opens it.
      */
     private fun carriesUnsafeAddress(remainder: String): Boolean =
         remainder.split(WHITESPACE).any { word ->
@@ -315,8 +312,8 @@ class HandleUserCommandUseCase(
          * ends of a word. Stripping is not one-way: it can also turn a word [UrlDetector] would only search into one it
          * opens — «https://apple.com?» (a query) becomes «https://apple.com», an unclosed ««apple.com» becomes
          * «apple.com» — and that command is then yielded; but only with a safe host: stripping never yields an unsafe host
-         * the unstripped word held back. Whatever is yielded, `UrlSort`'s host check refuses a non-ASCII, `%`, userinfo or
-         * `xn--` host, and any address holding a backslash, where the address is opened.
+         * the unstripped word held back. Whatever is yielded, `UrlSort`'s host check refuses an unsafe host where the
+         * address is opened.
          */
         const val ADDRESS_WRAPPING = "«»“”„‟\"'‘’‚‹›()[]{}<>.,!?;:…"
     }

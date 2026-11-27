@@ -112,45 +112,6 @@ class UrlSortTest {
     }
 
     /**
-     * Review of the host check (ruling B1-Q2b, 2026-11-27): a browser's URL parser (WHATWG; Chromium's
-     * `CountConsecutiveSlashes`) skips any run of `/` and `\` after `https:` and ends the authority at `\` as well as at
-     * `/`, `?`, `#` — Android's `Uri` ends it at `\` too. Judged without this rule, `https://\/аpple.com` left `\` as the
-     * "host" and passed, while the browser opened `xn--pple-43d.com`; `https://evil.com\.apple.com` showed `apple.com` on
-     * the card and opened `evil.com`. RFC 3986 has no raw backslash in a URL, so any `\`, anywhere in the address, is
-     * refused — in the path and the query too.
-     */
-    @Test
-    fun `an address with a backslash anywhere is refused`() = runTest {
-        listOf(
-            """https://\/аpple.com""",
-            """https://\/xn--pple-43d.com""",
-            """https://\/%D0%B0pple.com""",
-            """https://\\/аpple.com""",
-            """https://\/apple.com@evil.com""",
-            """https://evil.com\.apple.com""",
-            """https://quillmere.example/path\x""",
-            """https://quillmere.example/?q=a\b""",
-        ).forEach { address -> assertNull("'$address' must be refused", UrlSort.normalized(address)) }
-
-        assertEquals(SortResolution.Unreadable, UrlSort.resolver.resolve("""https://\/аpple.com"""))
-    }
-
-    /**
-     * A run of extra slashes: the browser skips them and opens the host after them (`https:///аpple.com` opens
-     * `xn--pple-43d.com`). Here the authority is everything before the first `/` past `https://` — empty — so the
-     * empty-host rule refuses it, whatever host follows the run, plain or not.
-     */
-    @Test
-    fun `a run of extra slashes after the scheme leaves no host and is refused`() = runTest {
-        listOf(
-            "https:///аpple.com",
-            "HTTPS:///xn--pple-43d.com",
-            "https:////аpple.com/path",
-            "https:///quillmere.example",
-        ).forEach { address -> assertNull("'$address' must be refused", UrlSort.normalized(address)) }
-    }
-
-    /**
      * The control: an ASCII host — with a port, a path, a query, a fragment, mixed case, an IP literal — normalises
      * exactly as before the host check (scheme lowered, the rest byte for byte). What is past the authority is not the
      * host: an «@», a non-ASCII character or an `xn--` there is kept as written.

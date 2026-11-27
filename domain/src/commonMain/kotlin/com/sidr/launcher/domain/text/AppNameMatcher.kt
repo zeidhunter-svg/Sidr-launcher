@@ -38,8 +38,8 @@ data class WindowMatch(val match: NameMatch, val whole: Boolean)
  *
  * **A third reader** is `LearnedForms` (A4′ tail, task 13): it finds a model-written value in the user's command by
  * word forms. The cost argument above is different for it: a wrong edge is not a question but a silent swap — the
- * model's text goes out of the learned template and the user's own words take its place in a slot, only for a step
- * that stays on the phone.
+ * model's text goes out of the learned template and the user's own words take its place in a slot, for every tool
+ * except `web_search` and `open_url` (their model-written value stays a constant).
  *
  * **Two uses** (§0.1 refinement), of the app-name readers:
  *  - [matchWhole] — wherever a whole name is matched: the bridge's mention, step 2b's first look at the

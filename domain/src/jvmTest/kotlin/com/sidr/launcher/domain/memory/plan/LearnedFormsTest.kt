@@ -23,7 +23,8 @@ import org.junit.Test
  * [ProposedStep]s built directly, as `ModelPlanning.Proposed` hands them over before binding.
  *
  * Fixtures (R14-43): the apps «Lumora» and «Vemblic» are the phase's fixtures, never real apps; every
- * assertion compares by equality.
+ * assertion compares by equality. A step's `effect` is the one the real descriptor carries: `EXTERNAL` for
+ * every Android tool (the helper's default), `LOCAL` for the sandbox's file tools of `:consumer:jvm`.
  */
 class LearnedFormsTest {
 
@@ -39,7 +40,7 @@ class LearnedFormsTest {
         tool: ToolId,
         vararg args: Pair<String, Given>,
         refs: Map<String, StepRef> = emptyMap(),
-        effect: ToolEffect = ToolEffect.LOCAL,
+        effect: ToolEffect = ToolEffect.EXTERNAL,
     ) =
         ProposedStep(
             tool = tool,
@@ -85,8 +86,8 @@ class LearnedFormsTest {
     fun `a reference stays a reference`() {
         val shape = learned(
             "сотри orvelle.txt",
-            step(FIND_FILE, "name" to said("orvelle.txt")),
-            step(DELETE_FILE, refs = mapOf("path" to StepRef(0, "path"))),
+            step(FIND_FILE, "name" to said("orvelle.txt"), effect = ToolEffect.LOCAL),
+            step(DELETE_FILE, refs = mapOf("path" to StepRef(0, "path")), effect = ToolEffect.LOCAL),
         )
 
         assertEquals("сотри …", shape.form.key)
@@ -213,7 +214,7 @@ class LearnedFormsTest {
     fun `an address slot keeps the user's text whole`() {
         val shape = learned(
             "открой HTTPS://Quillmere.example/Path",
-            step(OPEN_URL, "url" to said("https://quillmere.example/path"), effect = ToolEffect.EXTERNAL),
+            step(OPEN_URL, "url" to said("https://quillmere.example/path")),
         )
         assertEquals("открой …", shape.form.key)
 
@@ -237,7 +238,7 @@ class LearnedFormsTest {
         assertNull(
             LearnedForms.learn(
                 "найди книгу в магазине в центре",
-                listOf(step(WEB_SEARCH, "query" to said("книгу в магазине"), "near" to said("центре"), effect = ToolEffect.EXTERNAL)),
+                listOf(step(WEB_SEARCH, "query" to said("книгу в магазине"), "near" to said("центре"))),
                 folding,
             ),
         )
@@ -250,7 +251,7 @@ class LearnedFormsTest {
      */
     @Test
     fun `two slots are numbered in the order the command says them`() {
-        val shape = learned("найди книгу в центре", step(WEB_SEARCH, "near" to said("центре"), "query" to said("книгу"), effect = ToolEffect.EXTERNAL))
+        val shape = learned("найди книгу в центре", step(WEB_SEARCH, "near" to said("центре"), "query" to said("книгу")))
 
         assertEquals("найди … в …", shape.form.key)
         assertEquals(
@@ -272,7 +273,8 @@ class LearnedFormsTest {
 
     /**
      * Task 13 (decision 8): the model wrote «лумора» for the user's «лумору» — a form of the word, not the same
-     * word — in a step that stays on the phone, and still the user's words are what the form takes next time.
+     * word — in a launch (`EXTERNAL`, like every Android tool),
+     * and still the user's words are what the form takes next time.
      * The command has no verbatim copy of the value (that would be `SaidBy`), as `BridgeValidator` hands it over.
      */
     @Test
@@ -295,14 +297,15 @@ class LearnedFormsTest {
     }
 
     /**
-     * Owner 2026-11-27 («не для шагов наружу»): a step that leaves the phone keeps the model's text as a constant,
-     * as before task 13 — a slot would let three confirmed searches answer any «поищи …» without the model (I5).
+     * Owner 2026-11-27 (the two tools named): `web_search` and `open_url` keep the model's text as a constant, as
+     * before task 13, whatever the form search would find — a slot would let three confirmed searches answer any
+     * «поищи …» without the model (I5).
      */
     @Test
-    fun `a model value for a step that leaves the phone stays a constant`() {
+    fun `a model value for a search or an address stays a constant`() {
         val shape = learned(
             "поищи погоду в казани",
-            step(WEB_SEARCH, "query" to model("погода в казани"), effect = ToolEffect.EXTERNAL),
+            step(WEB_SEARCH, "query" to model("погода в казани")),
         )
 
         assertEquals("поищи погоду в казани", shape.form.key)
@@ -324,7 +327,7 @@ class LearnedFormsTest {
 
     @Test
     fun `a model value with no word of the user stays a constant`() {
-        val shape = learned("поищи погоду", step(WEB_SEARCH, "query" to model("солнечно"), effect = ToolEffect.EXTERNAL))
+        val shape = learned("поищи погоду", step(WEB_SEARCH, "query" to model("солнечно")))
 
         assertEquals("поищи погоду", shape.form.key)
         assertEquals(PlanTemplate(listOf(TemplateStep(WEB_SEARCH, mapOf("query" to TemplateArg.Constant("солнечно"))))), shape.template)

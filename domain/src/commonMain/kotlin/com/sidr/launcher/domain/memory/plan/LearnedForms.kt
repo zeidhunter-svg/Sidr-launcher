@@ -1,5 +1,6 @@
 package com.sidr.launcher.domain.memory.plan
 
+import com.sidr.launcher.domain.action.ActionIds
 import com.sidr.launcher.domain.ai.bridge.BridgeRendering
 import com.sidr.launcher.domain.ai.bridge.ProposedStep
 import com.sidr.launcher.domain.ai.bridge.RawAnswer
@@ -8,7 +9,7 @@ import com.sidr.launcher.domain.ai.bridge.RawStep
 import com.sidr.launcher.domain.ai.bridge.ValueOrigin
 import com.sidr.launcher.domain.text.AppNameMatcher
 import com.sidr.launcher.domain.text.TextFolding
-import com.sidr.launcher.domain.tool.ToolEffect
+import com.sidr.launcher.domain.tool.ToolId
 
 /**
  * What a confirmed reading teaches, and how a later command is read back against it (A4′ phase 4, plan §0.2
@@ -21,13 +22,20 @@ import com.sidr.launcher.domain.tool.ToolEffect
  * **A form never holds a package** (spec §8.2): a value the user said becomes a slot, re-bound on every
  * replay; a value the model wrote stays the model's text — unless it is the user's own words in another form
  * (A4′ tail, task 13: the model wrote «лумора» for the user's «лумору») standing in **exactly one** place of
- * the command, in a step that stays on the phone, which becomes a slot of the user's words too; two such
- * places make the **whole reading** unlearnable (which of them is the slot is a guess); for a step that
- * leaves the phone ([ToolEffect.EXTERNAL]) the model's value is always a constant (owner 2026-11-27: a slot
- * there would let three confirmed searches answer any «поищи …» with no model and no card, undoing 13: Б);
- * a reference stays a reference.
+ * the command, which becomes a slot of the user's words too; two such places make the **whole reading**
+ * unlearnable (which of them is the slot is a guess); for a step of `web_search` or `open_url` the model's
+ * value is always a constant (owner 2026-11-27: a slot there would let three confirmed searches answer any
+ * «поищи …» with no model and no card, undoing 13: Б); a reference stays a reference.
  */
 object LearnedForms {
+
+    /**
+     * The tools whose model-written value goes out of the phone as text (a search query, an address) — frozen
+     * action ids projected as tool ids, as `SystemIntentToolSource` does (identity C). Their value stays a
+     * constant; add a future tool that sends text out here.
+     */
+    private val MODEL_TEXT_OUT: Set<ToolId> =
+        setOf(ActionIds.WEB_SEARCH, ActionIds.OPEN_URL).map { ToolId(it.value) }.toSet()
 
     /**
      * The form and template a confirmed reading teaches, or `null` (B-2). [steps] are the validated steps
@@ -36,13 +44,13 @@ object LearnedForms {
      *  - an argument [ValueOrigin.SaidBy] the user: its words must occur in `W` **exactly once**, starting at
      *    a token's first word and ending at a token's last word; two arguments over the same words share one
      *    slot, two over overlapping different words are not learned;
-     *  - an argument of a step whose effect is [ToolEffect.EXTERNAL] (`web_search`, `open_url`) and which is not
-     *    `SaidBy`: always [TemplateArg.Constant] of its value, at most [MAX_CONSTANT_LENGTH] characters, and the
+     *  - an argument of a `web_search` or an `open_url` step ([MODEL_TEXT_OUT]) that is not `SaidBy`:
+     *    always [TemplateArg.Constant] of its value, at most [MAX_CONSTANT_LENGTH] characters, and the
      *    word-form search below is not run at all (owner 2026-11-27, «не для шагов наружу»): a slot there would
      *    let three confirmed searches pin «поищи <слот>», and step 2c would then answer every «поищи X» with no
      *    model and no card, in any network state — the pin owner answer I5 exists to prevent;
      *  - an argument the model wrote ([ValueOrigin.ModelGenerated] or any origin but `SaidBy`) of any other
-     *    step: its words are looked for in `W` as consecutive words, each pair [AppNameMatcher.wordsMatch] exact
+     *    step (a launch, an alias, an app's details, an uninstall, a shortcut, a settings screen…): its words are looked for in `W` as consecutive words, each pair [AppNameMatcher.wordsMatch] exact
      *    or edge (a form of the word), starting at a token's first word and ending at a token's last word. No
      *    such place: [TemplateArg.Constant] of its value, at most [MAX_CONSTANT_LENGTH] characters. Exactly one
      *    place, and at least one pair an edge: **a slot of the user's words**, like a `SaidBy` one (same
@@ -71,7 +79,7 @@ object LearnedForms {
                     val span = found.single()
                     if (!reading.startsToken(span.first) || !reading.endsToken(span.last)) return null
                     said[index to name] = span
-                } else if (step.effect == ToolEffect.EXTERNAL) {
+                } else if (step.tool in MODEL_TEXT_OUT) {
                     if (value.length > MAX_CONSTANT_LENGTH) return null
                 } else {
                     val places = reading.occurrencesOfForms(folding.words(value))

@@ -47,6 +47,12 @@ internal object PreferencesKeys {
     // Block X6 deferred UI prefs. All three names are denylist-clean (no forbidden term):
     // "favorites"/"count", "mic"/"input" (deliberately NOT "voice"), "setup"/"hint"/"dismissed".
     val USER_FAVORITES_COUNT        = intPreferencesKey("user_favorites_count")
+    // A4′ acceptance tail, task 12 — the apps the user pinned to / removed from Home's favourites. Package names
+    // only. Pinned is ONE string, packages joined by `\n` (a package name never contains a line break), because
+    // the pinning ORDER is the display order and a string set has none; hidden is a set. Both names are
+    // denylist-clean ("favorites"/"pinned"/"hidden"); both live in the same DataStore file that is out of Auto Backup.
+    val USER_FAVORITES_PINNED       = stringPreferencesKey("user_favorites_pinned")
+    val USER_FAVORITES_HIDDEN       = stringSetPreferencesKey("user_favorites_hidden")
     val USER_MIC_INPUT_ENABLED      = booleanPreferencesKey("user_mic_input_enabled")
     val USER_SETUP_HINT_DISMISSED   = booleanPreferencesKey("user_setup_hint_dismissed")
 
@@ -149,6 +155,8 @@ internal object PreferencesKeys {
         USER_ACCENT_COLOR.name,
         USER_COMMAND_INPUT_ENABLED.name,
         USER_FAVORITES_COUNT.name,
+        USER_FAVORITES_PINNED.name,
+        USER_FAVORITES_HIDDEN.name,
         USER_MIC_INPUT_ENABLED.name,
         USER_SETUP_HINT_DISMISSED.name,
         WEB_PROVIDER_TEMPLATE.name,

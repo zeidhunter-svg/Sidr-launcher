@@ -59,6 +59,12 @@
     <!-- I18N-1 Task 13: LauncherScreen.kt home shell -->
     <string name="launcher_home_no_apps_found">No apps found</string>
     <string name="launcher_home_favorites_header">Favorites</string>
+    <!-- A4′ acceptance tail, task 12 (owner ruling 15): the favourites picker opened by tapping the header. -->
+    <string name="launcher_favorites_edit_title">Favorites</string>
+    <string name="launcher_favorites_pin">Pin</string>
+    <string name="launcher_favorites_hide">Remove from Home</string>
+    <string name="launcher_favorites_edit_hint">Pinned apps come first; the other places are filled with what you open most.</string>
+    <string name="launcher_favorites_edit_done">Done</string>
     <!-- A4′ acceptance tail, task 8 (owner ruling 5: а): the next-alarm chip at the start of the date line.
          The time is formatted by the device's 12/24-hour setting in LauncherScreen. -->
     <string name="launcher_home_next_alarm">⏰ %1$s</string>

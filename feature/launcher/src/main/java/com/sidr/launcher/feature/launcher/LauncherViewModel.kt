@@ -40,6 +40,7 @@ import com.sidr.launcher.domain.memory.plan.RecordLearnedPlanUseCase
 import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
 import com.sidr.launcher.domain.connectivity.ConnectivityChecker
 import com.sidr.launcher.domain.input.UniversalInputRouter
+import com.sidr.launcher.domain.preferences.FavoriteEdits
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.preferences.SuggestionsCacheRepository
 import com.sidr.launcher.domain.preferences.UserPreferences
@@ -64,6 +65,7 @@ import com.sidr.launcher.feature.launcher.agent.DynamicToolLabel
 import com.sidr.launcher.feature.launcher.agent.DynamicToolLabels
 import com.sidr.launcher.feature.launcher.agent.StepProvenance
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
@@ -71,10 +73,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import java.time.Clock
 import javax.inject.Inject
 
 @HiltViewModel
@@ -142,6 +147,9 @@ class LauncherViewModel @Inject constructor(
     // route is built with to this same instance (`BridgeProvidesModule.provideModelAskedSignal`).
     private val modelAskedEvents: ModelAskedEvents,
     private val nextAlarmSource: NextAlarmSource,
+    // A4′ acceptance tail, task 12: the time favourites' freshness (14 days) is judged by. `:app` binds
+    // `Clock.systemUTC()` (`ClockModule`); the default serves a Kotlin caller only — Hilt injects the binding.
+    private val clock: Clock = Clock.systemUTC(),
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     // S2-1 Task 11: fire-and-forget scope for recording a learned choice — survives the launch's own
     // viewModelScope coroutine (Block-F recordUsage precedent) so a quick nav-away never drops it.
@@ -214,13 +222,14 @@ class LauncherViewModel @Inject constructor(
         ioDispatcher = ioDispatcher,
         scope = viewModelScope,
         suggestions = suggestionsSection,
+        nowMs = { clock.millis() },
     )
 
     // Block X6: deferred UI preferences (favorites row size, mic toggle, first-run nudge flag).
     // Held as a hot StateFlow so both [showMic] and startVoiceInput()'s mic-enabled gate read a
     // consistent snapshot. Task 3 moved [uiState]'s own copy of this collection into LauncherAppList,
     // so this instance no longer feeds uiState — only the two voice-input read sites below do.
-    // A read failure degrades to defaults (mic on, 8 favorites).
+    // A read failure degrades to defaults (mic on, 12 favorites).
     private val userPreferences: StateFlow<UserPreferences> =
         userPreferencesRepository.getPreferences()
             .catch { emit(UserPreferences()) }
@@ -686,6 +695,34 @@ class LauncherViewModel @Inject constructor(
      */
     fun dismissSetupHint() {
         appList.dismissSetupHint()
+    }
+
+    /**
+     * Pin [packageName] to Home's favourites, after the apps already pinned; a hidden app is unhidden (A4′ acceptance
+     * tail, task 12; owner ruling 15). The rule is [FavoriteEdits]'s; this reads, applies and writes through the
+     * preferences repository, like the Settings count. A failed write changes nothing — the picker's switches read
+     * the stored preferences, so they simply do not move.
+     */
+    fun pinFavorite(packageName: String) = editFavorites { FavoriteEdits.pin(it, packageName) }
+
+    /** Unpin [packageName]: it competes for an automatic place again. */
+    fun unpinFavorite(packageName: String) = editFavorites { FavoriteEdits.unpin(it, packageName) }
+
+    /** «Убрать с главного»: take [packageName] out of the automatic places (and unpin it); its usage history stays. */
+    fun hideFavorite(packageName: String) = editFavorites { FavoriteEdits.hide(it, packageName) }
+
+    private fun editFavorites(edit: (UserPreferences) -> UserPreferences) {
+        viewModelScope.launch(ioDispatcher) {
+            try {
+                val current = userPreferencesRepository.getPreferences().first()
+                val edited = edit(current)
+                if (edited != current) userPreferencesRepository.updatePreferences(edited)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                // A purely presentational preference: a failed read or write leaves Home as it was.
+            }
+        }
     }
 }
 

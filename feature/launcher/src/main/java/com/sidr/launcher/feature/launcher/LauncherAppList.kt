@@ -52,6 +52,9 @@ internal class LauncherAppList(
     private val ioDispatcher: CoroutineDispatcher,
     private val scope: CoroutineScope,
     private val suggestions: LauncherSuggestions,
+    // A4′ acceptance tail, task 12: the clock freshness is judged by (epoch ms). `LauncherViewModel` passes its own
+    // injected [java.time.Clock]; never `System.currentTimeMillis()` inside [deriveFavorites].
+    private val nowMs: () -> Long,
 ) {
 
     // Raw app-list load result; null = the full launcher app inventory is still loading in the
@@ -60,7 +63,7 @@ internal class LauncherAppList(
     val rawAppsResult: StateFlow<OperationResult<List<InstalledApp>>?> = _rawAppsResult
 
     // Block X6: deferred UI preferences (favorites row size, first-run nudge flag) read here purely
-    // for the [state] combine below. A read failure degrades to defaults (8 favorites, hint shown).
+    // for the [state] combine below. A read failure degrades to defaults (12 favorites, hint shown).
     private val userPreferences: StateFlow<UserPreferences> =
         userPreferencesRepository.getPreferences()
             .catch { emit(UserPreferences()) }
@@ -101,7 +104,8 @@ internal class LauncherAppList(
                         LauncherUiState(
                             apps = sorted,
                             suggestions = suggestions.resolveLabels(suggestionsList, sorted),
-                            favorites = deriveFavorites(usageRecords, sorted, prefs.favoritesCount),
+                            favorites = deriveFavorites(usageRecords, sorted, prefs, nowMs()),
+                            pinnedPackages = prefs.pinnedFavorites,
                             setupHintDismissed = prefs.setupHintDismissed,
                         ),
                     )
@@ -151,24 +155,6 @@ internal class LauncherAppList(
         return sorted + withoutHistory
     }
 
-    // ── Favorites (Block X2) ───────────────────────────────────────────────
-    // The decluttered home shows a small top-N most-used row instead of the full grid.
-    // [usageRecords] arrives most-used-first (UsageHistoryRepository contract); we map each to its
-    // currently-installed app (dropping records for apps that are gone) and cap at [favoritesCount]
-    // (Block X6 — user-configurable via Settings). Empty history (fresh install) → empty favorites
-    // (an alphabetical fallback is a later block).
-    private fun deriveFavorites(
-        usageRecords: List<AppUsageRecord>,
-        installed: List<InstalledApp>,
-        favoritesCount: Int,
-    ): List<InstalledApp> {
-        if (usageRecords.isEmpty() || favoritesCount <= 0) return emptyList()
-        val byPackage = installed.associateBy { it.packageName }
-        return usageRecords
-            .mapNotNull { byPackage[it.packageName] }
-            .take(favoritesCount)
-    }
-
     /**
      * Dismiss the one-shot first-run "set as default launcher" nudge (Block X6). Persisted so the
      * hint never resurfaces. Idempotent; a write failure leaves the flag unset (the nudge may show
@@ -188,4 +174,36 @@ internal class LauncherAppList(
             }
         }
     }
+}
+
+/** An automatically placed favourite not opened within this long leaves its place (A4′ acceptance tail, task 12; K8). */
+internal const val FAVORITES_FRESH_MS: Long = 14L * 24 * 60 * 60 * 1000
+
+/**
+ * Home's favourites (Block X2, reshaped by A4′ acceptance tail task 12 / owner ruling 15): first the apps the user
+ * **pinned**, in the order they were pinned (only the installed ones — a pinned app that is gone is skipped, and it is
+ * never pushed out by the automatic ones); then the usage records in their given order — [usageRecords] arrive
+ * most-used-first (the `UsageHistoryRepository` contract) — **except** the hidden ones, the already pinned ones and
+ * those not opened for 14 days ([FAVORITES_FRESH_MS], judged by `lastUsedEpochMs` against [nowMs]); all of it capped at
+ * [UserPreferences.favoritesCount]. No history and nothing pinned — empty (Home still draws the header, so there is
+ * something to tap and pin from). Pure: [nowMs] comes in from the caller's clock.
+ */
+internal fun deriveFavorites(
+    usageRecords: List<AppUsageRecord>,
+    installed: List<InstalledApp>,
+    prefs: UserPreferences,
+    nowMs: Long,
+): List<InstalledApp> {
+    if (prefs.favoritesCount <= 0) return emptyList()
+    val byPackage = installed.associateBy { it.packageName }
+    val pinned = prefs.pinnedFavorites.distinct().mapNotNull { byPackage[it] }
+    val pinnedPackages = pinned.mapTo(HashSet()) { it.packageName }
+    val automatic = usageRecords
+        .asSequence()
+        .filter { it.packageName !in pinnedPackages && it.packageName !in prefs.hiddenFavorites }
+        .filter { it.lastUsedEpochMs >= nowMs - FAVORITES_FRESH_MS }
+        .mapNotNull { byPackage[it.packageName] }
+        .distinctBy { it.packageName }
+        .toList()
+    return (pinned + automatic).take(prefs.favoritesCount)
 }

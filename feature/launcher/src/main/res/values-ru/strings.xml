@@ -41,6 +41,12 @@
 
     <string name="launcher_home_no_apps_found">Приложения не найдены</string>
     <string name="launcher_home_favorites_header">Избранное</string>
+    <!-- A4′ acceptance tail, task 12 (owner ruling 15): окно выбора избранного — касание заголовка. -->
+    <string name="launcher_favorites_edit_title">Избранное</string>
+    <string name="launcher_favorites_pin">Закрепить</string>
+    <string name="launcher_favorites_hide">Убрать с главного</string>
+    <string name="launcher_favorites_edit_hint">Закреплённые стоят первыми, остальные места заполняются тем, что вы открываете чаще.</string>
+    <string name="launcher_favorites_edit_done">Готово</string>
     <string name="launcher_home_next_alarm">⏰ %1$s</string>
     <string name="launcher_home_next_alarm_cd">Следующий будильник: %1$s</string>
 

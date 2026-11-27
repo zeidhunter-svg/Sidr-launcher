@@ -52,6 +52,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -393,6 +394,9 @@ fun LauncherScreen(
                             }
                         },
                         onDismissHint = viewModel::dismissSetupHint,
+                        onPinFavorite = viewModel::pinFavorite,
+                        onUnpinFavorite = viewModel::unpinFavorite,
+                        onHideFavorite = viewModel::hideFavorite,
                         suggestionsContent = suggestionsContent,
                     )
                 }
@@ -593,6 +597,9 @@ private fun HomeContent(
     showSetupHint: Boolean,
     onSetDefault: () -> Unit,
     onDismissHint: () -> Unit,
+    onPinFavorite: (String) -> Unit,
+    onUnpinFavorite: (String) -> Unit,
+    onHideFavorite: (String) -> Unit,
     suggestionsContent: @Composable (suggestions: List<Suggestion>, onSuggestionTap: (Suggestion) -> Unit) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -607,9 +614,29 @@ private fun HomeContent(
         if (state.suggestions.isNotEmpty()) {
             suggestionsContent(state.suggestions, onSuggestionTap)
         }
+        // A4′ acceptance tail, task 12 (owner ruling 15): the header is drawn even with no favourites — on a fresh
+        // install there would be nothing to pin from otherwise — and tapping it opens the picker.
+        var pickerOpen by remember { mutableStateOf(false) }
+        SidrSectionHeader(
+            text = sidrString(R.string.launcher_home_favorites_header),
+            modifier = Modifier.clickable(
+                onClickLabel = sidrString(R.string.launcher_favorites_edit_title),
+                role = Role.Button,
+            ) { pickerOpen = true },
+        )
         if (state.favorites.isNotEmpty()) {
-            SidrSectionHeader(text = sidrString(R.string.launcher_home_favorites_header))
             FavoritesGrid(favorites = state.favorites, onAppClick = onAppClick)
+        }
+        if (pickerOpen) {
+            FavoritesPicker(
+                apps = state.apps,
+                pinned = state.pinnedPackages,
+                favorites = state.favorites,
+                onPin = onPinFavorite,
+                onUnpin = onUnpinFavorite,
+                onHide = onHideFavorite,
+                onDismiss = { pickerOpen = false },
+            )
         }
     }
 }

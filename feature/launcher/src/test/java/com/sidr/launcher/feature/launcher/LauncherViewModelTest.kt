@@ -167,6 +167,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -356,6 +357,9 @@ class LauncherViewModelTest {
         nextAlarms: NextAlarmSource = FakeNextAlarmSource(),
         registry: ToolRegistry = agentRegistry,
         startAgent: StartAgentSessionUseCase = startAgentSession,
+        // A4′ acceptance tail, task 12: the clock favourites' freshness is judged by — fixed at 5000 ms, so the
+        // small `lastUsedEpochMs` the older tests use are all fresh.
+        clock: Clock = Clock.fixed(Instant.ofEpochMilli(5_000L), ZoneOffset.UTC),
     ) = LauncherViewModel(
         installedAppsRepository = fakeRepo,
         resolveCommand = aliasAwareResolveCommand(
@@ -390,6 +394,7 @@ class LauncherViewModelTest {
         dynamicToolLabels = DynamicToolLabels { emptyMap() },
         modelAskedEvents = modelAskedEvents,
         nextAlarmSource = nextAlarms,
+        clock = clock,
         ioDispatcher = testDispatcher,
         applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
         savedStateHandle = savedStateHandle,
@@ -1608,21 +1613,21 @@ class LauncherViewModelTest {
 
     @Test
     fun `favorites are capped at FAVORITES_COUNT`() = runTest(testDispatcher) {
-        val apps = (0 until 10).map { InstalledApp("com.app$it", "App $it") }
+        val apps = (0 until 14).map { InstalledApp("com.app$it", "App $it") }
         fakeRepo.appsToReturn = apps
         fakeUsageRepo.setRecords(
             apps.mapIndexed { i, app ->
-                AppUsageRecord(app.packageName, lastUsedEpochMs = (10 - i).toLong(), launchCount = 10 - i)
+                AppUsageRecord(app.packageName, lastUsedEpochMs = (14 - i).toLong(), launchCount = 14 - i)
             },
         )
         val vm = buildViewModel()
         advanceUntilIdle()
 
         val favorites = (vm.uiState.value as UiState.Success).data.favorites
-        assertEquals("Favorites must be capped at 8", 8, favorites.size)
-        // The 8 most-used (first 8 records) are kept, in order.
+        assertEquals("Favorites must be capped at 12 (the default since task 12)", 12, favorites.size)
+        // The 12 most-used (first 12 records) are kept, in order.
         assertEquals(
-            (0 until 8).map { "com.app$it" },
+            (0 until 12).map { "com.app$it" },
             favorites.map { it.packageName },
         )
     }
@@ -1691,6 +1696,65 @@ class LauncherViewModelTest {
             assertEquals("Changing the count must not re-query PackageManager", 1, fakeRepo.callCount)
             assertEquals(
                 listOf("com.app0"),
+                (vm.uiState.value as UiState.Success).data.favorites.map { it.packageName },
+            )
+        }
+
+    @Test
+    fun `pin unpin and hide are written through the preferences repository`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(InstalledApp("com.a", "Alpha"), InstalledApp("com.b", "Beta"))
+        val prefsRepo = FakeUserPreferencesRepository()
+        val vm = buildViewModel(prefsRepo = prefsRepo)
+        advanceUntilIdle()
+
+        vm.pinFavorite("com.b")
+        vm.pinFavorite("com.a")
+        advanceUntilIdle()
+        assertEquals(listOf("com.b", "com.a"), prefsRepo.getPreferences().first().pinnedFavorites)
+        assertEquals(listOf("com.b", "com.a"), (vm.uiState.value as UiState.Success).data.favorites.map { it.packageName })
+        assertEquals(listOf("com.b", "com.a"), (vm.uiState.value as UiState.Success).data.pinnedPackages)
+
+        vm.unpinFavorite("com.b")
+        advanceUntilIdle()
+        assertEquals(listOf("com.a"), prefsRepo.getPreferences().first().pinnedFavorites)
+
+        vm.hideFavorite("com.a")
+        advanceUntilIdle()
+        val saved = prefsRepo.getPreferences().first()
+        assertEquals(emptyList<String>(), saved.pinnedFavorites)
+        assertEquals(setOf("com.a"), saved.hiddenFavorites)
+    }
+
+    @Test
+    fun `a failed favourites write changes nothing and does not crash`() = runTest(testDispatcher) {
+        fakeRepo.appsToReturn = listOf(InstalledApp("com.a", "Alpha"))
+        val prefsRepo = FakeUserPreferencesRepository().apply {
+            errorToReturn = OperationError.UnknownError("datastore down")
+        }
+        val vm = buildViewModel(prefsRepo = prefsRepo)
+        advanceUntilIdle()
+
+        vm.pinFavorite("com.a")
+        advanceUntilIdle()
+
+        assertEquals(emptyList<String>(), prefsRepo.getPreferences().first().pinnedFavorites)
+        assertTrue((vm.uiState.value as UiState.Success).data.favorites.isEmpty())
+    }
+
+    @Test
+    fun `an app not opened for 14 days is out of the automatic places on the real clock of the view model`() =
+        runTest(testDispatcher) {
+            fakeRepo.appsToReturn = listOf(InstalledApp("com.a", "Alpha"), InstalledApp("com.b", "Beta"))
+            val day = 24L * 60 * 60 * 1000
+            fakeUsageRepo.setRecords(listOf(
+                AppUsageRecord("com.a", lastUsedEpochMs = 100 * day - 15 * day, launchCount = 9),
+                AppUsageRecord("com.b", lastUsedEpochMs = 100 * day - 2 * day, launchCount = 1),
+            ))
+            val vm = buildViewModel(clock = Clock.fixed(Instant.ofEpochMilli(100 * day), ZoneOffset.UTC))
+            advanceUntilIdle()
+
+            assertEquals(
+                listOf("com.b"),
                 (vm.uiState.value as UiState.Success).data.favorites.map { it.packageName },
             )
         }

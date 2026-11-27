@@ -17,7 +17,7 @@ data class SettingsUiState(
     val themeName: String = ThemeOption.SYSTEM,
     /** Mirrors `UserPreferences.accentColor` — the brand accent (`grey | green | amber`), AIL-6 / DF-7. */
     val accentColor: String = AccentOption.GREY,
-    val favoritesCount: Int = 8,
+    val favoritesCount: Int = 12,
     val micInputEnabled: Boolean = true,
     /** Mirrors `UserPreferences.autoHideNavBar` — when on, the bottom navigation recedes after idle
      *  and is summoned back via a handle. **Off by default** since DS-11 (2026-08-10): pinned chrome
@@ -47,7 +47,7 @@ data class SettingsUiState(
 )
 
 /** Selectable sizes for the home Favorites row (Block X6). */
-val FAVORITES_COUNT_OPTIONS: List<Int> = listOf(4, 6, 8, 10)
+val FAVORITES_COUNT_OPTIONS: List<Int> = listOf(4, 6, 8, 10, 12)
 
 /** The three brand accents (AIL-6 / DF-7; grey reactivated as default 2026-07-12). Values match
  *  `UserPreferences.accentColor`. */

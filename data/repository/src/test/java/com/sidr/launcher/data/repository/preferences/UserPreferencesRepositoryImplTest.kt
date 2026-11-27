@@ -85,4 +85,46 @@ class UserPreferencesRepositoryImplTest {
         assertEquals(updated, reopened.getPreferences().first())
         readScope.cancel()
     }
+    @Test
+    fun `pinned apps round-trip in the order of pinning and hidden apps as a set`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher + Job())
+        val repo = UserPreferencesRepositoryImpl(createTestDataStore(file(), scope), dispatcher)
+
+        val updated = UserPreferences(
+            pinnedFavorites = listOf("com.zeta", "com.alpha", "org.mid.app"),
+            hiddenFavorites = setOf("com.hidden.one", "com.hidden.two"),
+        )
+        assertTrue(repo.updatePreferences(updated) is OperationResult.Success)
+
+        val read = repo.getPreferences().first()
+        assertEquals(listOf("com.zeta", "com.alpha", "org.mid.app"), read.pinnedFavorites)
+        assertEquals(setOf("com.hidden.one", "com.hidden.two"), read.hiddenFavorites)
+        scope.cancel()
+    }
+
+    @Test
+    fun `an empty pinned list reads back empty and a fresh store has none`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher + Job())
+        val repo = UserPreferencesRepositoryImpl(createTestDataStore(file(), scope), dispatcher)
+
+        assertEquals(emptyList<String>(), repo.getPreferences().first().pinnedFavorites)
+        repo.updatePreferences(UserPreferences(pinnedFavorites = listOf("com.a")))
+        repo.updatePreferences(UserPreferences(pinnedFavorites = emptyList()))
+        assertEquals(emptyList<String>(), repo.getPreferences().first().pinnedFavorites)
+        scope.cancel()
+    }
+
+    @Test
+    fun `an unset favorites count reads 12 and a stored one is read back`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher + Job())
+        val repo = UserPreferencesRepositoryImpl(createTestDataStore(file(), scope), dispatcher)
+
+        assertEquals(12, repo.getPreferences().first().favoritesCount)
+        repo.updatePreferences(UserPreferences(favoritesCount = 8))
+        assertEquals(8, repo.getPreferences().first().favoritesCount)
+        scope.cancel()
+    }
 }

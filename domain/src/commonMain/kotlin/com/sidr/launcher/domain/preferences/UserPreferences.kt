@@ -12,8 +12,15 @@ data class UserPreferences(
     val accentColor: String = "grey",          // "grey" | "green" | "amber"
     val commandInputEnabled: Boolean = true,
     // Block X6 — deferred UI preferences.
-    // Home "Favorites" row size (top-N most-used apps); read by LauncherViewModel.deriveFavorites.
-    val favoritesCount: Int = 8,
+    // Home "Favorites" size: how many places the pinned apps and the most-used ones share (`deriveFavorites`).
+    // Default 12 since A4′ acceptance tail task 12 (owner ruling 15). A stored value always beats the default, so a
+    // user who ever chose a size keeps it; only a store with nothing written for this key now reads 12.
+    val favoritesCount: Int = 12,
+    // Task 12: the apps the user pinned to Home, in the order they were pinned (first pinned stands first). They
+    // always come before the automatic places and are never pushed out by them. Package names only.
+    val pinnedFavorites: List<String> = emptyList(),
+    // Task 12: apps the user removed from the automatic places. Their usage history is untouched; pinning one unhides it.
+    val hiddenFavorites: Set<String> = emptySet(),
     // Whether the mic affordance / voice-input path is offered. Gated together with recognizer
     // availability (isVoiceInputAvailable && micInputEnabled). Key is denylist-clean ("mic", not "voice").
     val micInputEnabled: Boolean = true,

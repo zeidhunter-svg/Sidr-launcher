@@ -25,6 +25,8 @@ internal object PreferencesMapper {
         encodeDefaults = true
     }
 
+    private const val PINNED_SEPARATOR = "\n"
+
     // ── User preferences ──────────────────────────────────────────────────────
     fun toUserPreferences(prefs: Preferences): UserPreferences {
         val defaults = UserPreferences()
@@ -34,6 +36,10 @@ internal object PreferencesMapper {
             commandInputEnabled = prefs[PreferencesKeys.USER_COMMAND_INPUT_ENABLED]
                 ?: defaults.commandInputEnabled,
             favoritesCount = prefs[PreferencesKeys.USER_FAVORITES_COUNT] ?: defaults.favoritesCount,
+            pinnedFavorites = prefs[PreferencesKeys.USER_FAVORITES_PINNED]
+                ?.split(PINNED_SEPARATOR)?.filter { it.isNotEmpty() }
+                ?: defaults.pinnedFavorites,
+            hiddenFavorites = prefs[PreferencesKeys.USER_FAVORITES_HIDDEN] ?: defaults.hiddenFavorites,
             micInputEnabled = prefs[PreferencesKeys.USER_MIC_INPUT_ENABLED] ?: defaults.micInputEnabled,
             setupHintDismissed = prefs[PreferencesKeys.USER_SETUP_HINT_DISMISSED]
                 ?: defaults.setupHintDismissed,
@@ -49,6 +55,8 @@ internal object PreferencesMapper {
         prefs[PreferencesKeys.USER_ACCENT_COLOR] = value.accentColor
         prefs[PreferencesKeys.USER_COMMAND_INPUT_ENABLED] = value.commandInputEnabled
         prefs[PreferencesKeys.USER_FAVORITES_COUNT] = value.favoritesCount
+        prefs[PreferencesKeys.USER_FAVORITES_PINNED] = value.pinnedFavorites.joinToString(PINNED_SEPARATOR)
+        prefs[PreferencesKeys.USER_FAVORITES_HIDDEN] = value.hiddenFavorites
         prefs[PreferencesKeys.USER_MIC_INPUT_ENABLED] = value.micInputEnabled
         prefs[PreferencesKeys.USER_SETUP_HINT_DISMISSED] = value.setupHintDismissed
         prefs[PreferencesKeys.WEB_PROVIDER_TEMPLATE] = value.webProviderTemplate

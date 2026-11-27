@@ -246,6 +246,32 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `the count defaults to 12 and offers 12`() = runTest(testDispatcher) {
+        val vm = buildViewModel(prefsRepo = FakeUserPreferencesRepository(UserPreferences()))
+        advanceUntilIdle()
+
+        assertEquals(12, vm.uiState.value.favoritesCount)
+        assertEquals(listOf(4, 6, 8, 10, 12), FAVORITES_COUNT_OPTIONS)
+        assertEquals(12, SettingsUiState().favoritesCount)
+    }
+
+    @Test
+    fun `selecting a favorites count leaves the pinned and hidden apps alone`() = runTest(testDispatcher) {
+        val prefsRepo = FakeUserPreferencesRepository(
+            UserPreferences(pinnedFavorites = listOf("com.b", "com.a"), hiddenFavorites = setOf("com.c")),
+        )
+        val vm = buildViewModel(prefsRepo = prefsRepo)
+
+        vm.setFavoritesCount(6)
+        advanceUntilIdle()
+
+        val saved = prefsRepo.getPreferences().first()
+        assertEquals(6, saved.favoritesCount)
+        assertEquals(listOf("com.b", "com.a"), saved.pinnedFavorites)
+        assertEquals(setOf("com.c"), saved.hiddenFavorites)
+    }
+
+    @Test
     fun `favorites count write failure surfaces a safe error`() = runTest(testDispatcher) {
         val prefsRepo = FakeUserPreferencesRepository(UserPreferences(favoritesCount = 8)).apply {
             errorToReturn = OperationError.UnknownError("datastore down")

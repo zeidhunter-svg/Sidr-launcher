@@ -41,6 +41,12 @@
 
     <string name="launcher_home_no_apps_found">Uygulama bulunamadı</string>
     <string name="launcher_home_favorites_header">Favoriler</string>
+    <!-- A4′ acceptance tail, task 12 (owner ruling 15): favori seçim penceresi — başlığa dokununca açılır. Türkçe metin sahibin onayına tabidir. -->
+    <string name="launcher_favorites_edit_title">Favoriler</string>
+    <string name="launcher_favorites_pin">Sabitle</string>
+    <string name="launcher_favorites_hide">Ana ekrandan kaldır</string>
+    <string name="launcher_favorites_edit_hint">Sabitlenen uygulamalar başta durur, kalan yerler en çok açtıklarınızla dolar.</string>
+    <string name="launcher_favorites_edit_done">Bitti</string>
     <string name="launcher_home_next_alarm">⏰ %1$s</string>
     <string name="launcher_home_next_alarm_cd">Sonraki alarm: %1$s</string>
 

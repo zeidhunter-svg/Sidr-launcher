@@ -56,6 +56,8 @@
     <string name="settings_accent_green">Yeşil</string>
     <string name="settings_accent_amber">Amber</string>
 
+    <string name="settings_aliases_tab_mine">Takma adlarım</string>
+    <string name="settings_aliases_tab_add">Ekle</string>
     <string name="settings_add_alias_header">Takma ad ekle</string>
     <string name="settings_target_app_header">Hedef uygulama</string>
     <string name="settings_no_apps_available">Başlatılabilir uygulama yok.</string>

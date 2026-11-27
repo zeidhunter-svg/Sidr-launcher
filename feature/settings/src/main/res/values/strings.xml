@@ -64,6 +64,8 @@
     <string name="settings_accent_amber">Amber</string>
 
     <!-- AliasesScreen.kt -->
+    <string name="settings_aliases_tab_mine">My aliases</string>
+    <string name="settings_aliases_tab_add">Add</string>
     <string name="settings_add_alias_header">ADD ALIAS</string>
     <string name="settings_target_app_header">TARGET APP</string>
     <string name="settings_no_apps_available">No launchable apps available.</string>

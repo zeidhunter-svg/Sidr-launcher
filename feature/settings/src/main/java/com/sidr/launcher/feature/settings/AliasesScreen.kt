@@ -46,6 +46,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sidr.launcher.core.ui.component.EmptyState
 import com.sidr.launcher.core.ui.component.ErrorState
 import com.sidr.launcher.core.ui.component.SidrChoiceRow
+import com.sidr.launcher.core.ui.component.SidrFilterChip
 import com.sidr.launcher.core.ui.component.SidrForgetGate
 import com.sidr.launcher.core.ui.component.SidrIconButton
 import com.sidr.launcher.core.ui.component.SidrMemoryItem
@@ -87,7 +88,7 @@ fun AliasesScreen(
 }
 
 @Composable
-private fun AliasesContent(
+internal fun AliasesContent(
     uiState: AliasesUiState,
     onBack: () -> Unit,
     onRetry: () -> Unit,
@@ -98,6 +99,16 @@ private fun AliasesContent(
     var phrase by rememberSaveable { mutableStateOf("") }
     var selectedPackageName by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingForget by remember { mutableStateOf<AliasMemoryUiModel?>(null) }
+
+    // The tab is screen state (this screen keeps its form state with rememberSaveable too). `null` = the
+    // user has not chosen yet: the screen opens on the aliases when there are any, else on the form. The
+    // choice is pinned once the list has loaded, so adding the first alias does not jump the screen away
+    // from the form; forgetting the last alias on «My aliases» leaves the user there, on its empty state.
+    var tab by rememberSaveable { mutableStateOf<AliasTab?>(null) }
+    val effectiveTab = tab ?: if (uiState.aliases.isNotEmpty()) AliasTab.Mine else AliasTab.Add
+    LaunchedEffect(uiState.isLoading, uiState.errorMessage) {
+        if (tab == null && !uiState.isLoading && uiState.errorMessage == null) tab = effectiveTab
+    }
 
     LaunchedEffect(uiState.pickerApps) {
         val current = selectedPackageName
@@ -141,74 +152,108 @@ private fun AliasesContent(
                     )
                 }
                 else -> {
-                    item { SidrSectionHeader(text = sidrString(R.string.settings_add_alias_header)) }
-                    item {
-                        AliasPhraseForm(
-                            phrase = phrase,
-                            selectedApp = uiState.pickerApps.firstOrNull { it.packageName == selectedPackageName },
-                            onPhraseChange = { phrase = it },
-                            onSave = {
-                                val packageName = selectedPackageName ?: return@AliasPhraseForm
-                                onSave(phrase, packageName)
-                                phrase = ""
-                            },
+                    item(key = "tabs") {
+                        AliasTabs(
+                            selected = effectiveTab,
+                            onSelect = { tab = it },
                             modifier = Modifier.padding(horizontal = Spacing.sm),
                         )
                     }
-
-                    item { SidrSectionHeader(text = sidrString(R.string.settings_target_app_header)) }
-                    if (uiState.pickerApps.isEmpty()) {
+                    if (effectiveTab == AliasTab.Add) {
+                        item { SidrSectionHeader(text = sidrString(R.string.settings_add_alias_header)) }
                         item {
-                            EmptyState(
-                                message = sidrString(R.string.settings_no_apps_available),
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-                    } else {
-                        items(uiState.pickerApps, key = { "picker:${it.packageName}" }) { app ->
-                            SidrChoiceRow(
-                                title = app.label,
-                                selected = app.packageName == selectedPackageName,
-                                onClick = { selectedPackageName = app.packageName },
-                            )
-                        }
-                    }
-
-                    item { SidrSectionHeader(text = sidrString(R.string.settings_aliases_section_header)) }
-                    pendingForget?.let { alias ->
-                        item(key = "forget:${alias.stableId}") {
-                            SidrForgetGate(
-                                title = sidrString(R.string.settings_forget_alias_title),
-                                consequence = sidrString(
-                                    R.string.settings_forget_alias_consequence,
-                                    alias.phrase,
-                                    alias.targetLabel,
-                                ),
-                                evidence = sidrString(R.string.settings_stored_locally),
-                                onCancel = { pendingForget = null },
-                                onForget = {
-                                    onDelete(alias.stableId)
-                                    pendingForget = null
+                            AliasPhraseForm(
+                                phrase = phrase,
+                                selectedApp = uiState.pickerApps.firstOrNull { it.packageName == selectedPackageName },
+                                onPhraseChange = { phrase = it },
+                                onSave = {
+                                    val packageName = selectedPackageName ?: return@AliasPhraseForm
+                                    onSave(phrase, packageName)
+                                    phrase = ""
                                 },
-                                modifier = Modifier.padding(Spacing.md),
+                                modifier = Modifier.padding(horizontal = Spacing.sm),
                             )
                         }
-                    }
-                    if (uiState.aliases.isEmpty()) {
-                        item {
-                            EmptyState(
-                                message = sidrString(R.string.settings_aliases_empty_message),
-                                modifier = Modifier.fillMaxWidth(),
-                            )
+
+                        item { SidrSectionHeader(text = sidrString(R.string.settings_target_app_header)) }
+                        if (uiState.pickerApps.isEmpty()) {
+                            item {
+                                EmptyState(
+                                    message = sidrString(R.string.settings_no_apps_available),
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        } else {
+                            items(uiState.pickerApps, key = { "picker:${it.packageName}" }) { app ->
+                                SidrChoiceRow(
+                                    title = app.label,
+                                    selected = app.packageName == selectedPackageName,
+                                    onClick = { selectedPackageName = app.packageName },
+                                )
+                            }
                         }
                     } else {
-                        items(uiState.aliases, key = { it.stableId }) { alias ->
-                            AliasItem(alias = alias, onForget = { pendingForget = alias })
+                        item { SidrSectionHeader(text = sidrString(R.string.settings_aliases_section_header)) }
+                        pendingForget?.let { alias ->
+                            item(key = "forget:${alias.stableId}") {
+                                SidrForgetGate(
+                                    title = sidrString(R.string.settings_forget_alias_title),
+                                    consequence = sidrString(
+                                        R.string.settings_forget_alias_consequence,
+                                        alias.phrase,
+                                        alias.targetLabel,
+                                    ),
+                                    evidence = sidrString(R.string.settings_stored_locally),
+                                    onCancel = { pendingForget = null },
+                                    onForget = {
+                                        onDelete(alias.stableId)
+                                        pendingForget = null
+                                    },
+                                    modifier = Modifier.padding(Spacing.md),
+                                )
+                            }
+                        }
+                        if (uiState.aliases.isEmpty()) {
+                            item {
+                                EmptyState(
+                                    message = sidrString(R.string.settings_aliases_empty_message),
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        } else {
+                            items(uiState.aliases, key = { it.stableId }) { alias ->
+                                AliasItem(alias = alias, onForget = { pendingForget = alias })
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+private enum class AliasTab { Mine, Add }
+
+@Composable
+private fun AliasTabs(
+    selected: AliasTab,
+    onSelect: (AliasTab) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+    ) {
+        SidrFilterChip(
+            label = sidrString(R.string.settings_aliases_tab_mine),
+            selected = selected == AliasTab.Mine,
+            onClick = { onSelect(AliasTab.Mine) },
+        )
+        SidrFilterChip(
+            label = sidrString(R.string.settings_aliases_tab_add),
+            selected = selected == AliasTab.Add,
+            onClick = { onSelect(AliasTab.Add) },
+        )
     }
 }
 

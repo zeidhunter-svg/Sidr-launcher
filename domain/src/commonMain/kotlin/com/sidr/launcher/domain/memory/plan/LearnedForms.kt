@@ -6,6 +6,7 @@ import com.sidr.launcher.domain.ai.bridge.RawAnswer
 import com.sidr.launcher.domain.ai.bridge.RawArg
 import com.sidr.launcher.domain.ai.bridge.RawStep
 import com.sidr.launcher.domain.ai.bridge.ValueOrigin
+import com.sidr.launcher.domain.text.AppNameMatcher
 import com.sidr.launcher.domain.text.TextFolding
 
 /**
@@ -17,7 +18,9 @@ import com.sidr.launcher.domain.text.TextFolding
  * slot always covers whole tokens, so «lumora» is never a slot of «lumora-studio».
  *
  * **A form never holds a package** (spec §8.2): a value the user said becomes a slot, re-bound on every
- * replay; a value the model wrote stays the model's text; a reference stays a reference.
+ * replay; a value the model wrote stays the model's text — unless it is the user's own words in another form
+ * (A4′ tail, task 13: the model wrote «погода» for the user's «погоду»), which becomes a slot of the user's
+ * words too; a reference stays a reference.
  */
 object LearnedForms {
 
@@ -28,7 +31,15 @@ object LearnedForms {
      *  - an argument [ValueOrigin.SaidBy] the user: its words must occur in `W` **exactly once**, starting at
      *    a token's first word and ending at a token's last word; two arguments over the same words share one
      *    slot, two over overlapping different words are not learned;
-     *  - any other argument: [TemplateArg.Constant] of its value, at most [MAX_CONSTANT_LENGTH] characters;
+     *  - an argument the model wrote ([ValueOrigin.ModelGenerated] or any origin but `SaidBy`): its words are
+     *    looked for in `W` as consecutive words, each pair [AppNameMatcher.wordsMatch] exact or edge (a form of
+     *    the word), starting at a token's first word and ending at a token's last word. No such place:
+     *    [TemplateArg.Constant] of its value, at most [MAX_CONSTANT_LENGTH] characters. Exactly one place, and
+     *    at least one pair an edge: **a slot of the user's words**, like a `SaidBy` one (same numbering, same
+     *    overlap rule, same self-check below) — the model's text is not kept, so on a replay the slot holds what
+     *    the user typed and the validator itself recognises those words as said by the user; [Derivability] is
+     *    untouched. Exactly one place with every pair exact: a constant, as before. Two places or more, exact or
+     *    edge («поищи погоду и погода»): not learned — the slot would be a guess;
      *  - a reference: [TemplateArg.Ref].
      *
      * Slots are numbered in the order their words occur in the command. Not learned either: a form with no
@@ -46,8 +57,15 @@ object LearnedForms {
                     val span = found.single()
                     if (!reading.startsToken(span.first) || !reading.endsToken(span.last)) return null
                     said[index to name] = span
-                } else if (value.length > MAX_CONSTANT_LENGTH) {
-                    return null
+                } else {
+                    val places = reading.occurrencesOfForms(folding.words(value))
+                    if (places.size > 1) return null
+                    val place = places.singleOrNull()
+                    if (place != null && place.edge) {
+                        said[index to name] = place.span
+                    } else if (value.length > MAX_CONSTANT_LENGTH) {
+                        return null
+                    }
                 }
             }
         }
@@ -166,6 +184,9 @@ object LearnedForms {
     }
 }
 
+/** A place a model's value stands in `W` by word forms; [edge] — at least one pair was a form, not the same word. */
+private class FormPlace(val span: IntRange, val edge: Boolean)
+
 /**
  * A command read as B-1 reads it: the trimmed [text], its words `W`, and for each word the token it came
  * from. A token with no word (a lone «—» or «!») holds no word; it is inside a slot's value only when it
@@ -187,6 +208,33 @@ private class CommandReading(
         return (0..words.size - wanted.size)
             .filter { start -> words.subList(start, start + wanted.size) == wanted }
             .map { start -> start until start + wanted.size }
+    }
+
+    /**
+     * Every place [wanted] stands in `W` by word forms: consecutive words, each pair
+     * [AppNameMatcher.wordsMatch] (typed = the command's word, label = the wanted one) exact or edge, the place
+     * starting at a token's first word and ending at a token's last. Each place says whether any pair was an
+     * edge. None for no words.
+     */
+    fun occurrencesOfForms(wanted: List<String>): List<FormPlace> {
+        if (wanted.isEmpty()) return emptyList()
+        val places = mutableListOf<FormPlace>()
+        for (start in 0..words.size - wanted.size) {
+            val last = start + wanted.size - 1
+            if (!startsToken(start) || !endsToken(last)) continue
+            var edge = false
+            var whole = true
+            for (offset in wanted.indices) {
+                val pair = AppNameMatcher.wordsMatch(words[start + offset], wanted[offset])
+                if (pair == null) {
+                    whole = false
+                    break
+                }
+                if (!pair) edge = true
+            }
+            if (whole) places += FormPlace(start..last, edge)
+        }
+        return places
     }
 
     /** The text of the tokens [span]'s words come from, as typed, edge punctuation stripped. */

@@ -265,6 +265,51 @@ class LearnedFormsTest {
         assertNull(LearnedForms.match(CommandForm.parse("найди … в …"), "найди книгу-в магазине", folding))
     }
 
+    /**
+     * Task 13 (decision 8): the model declined the user's word «погоду» to «погода» — a form of it, not the same
+     * word — and still the user's words are what the form takes next time.
+     */
+    @Test
+    fun `a value the model declined is learned as the user's slot`() {
+        val shape = learned("поищи погоду в казани", step(WEB_SEARCH, "query" to model("погода в казани")))
+
+        assertEquals("поищи …", shape.form.key)
+        assertEquals(PlanTemplate(listOf(TemplateStep(WEB_SEARCH, mapOf("query" to TemplateArg.Slot(0))))), shape.template)
+        val values = LearnedForms.match(shape.form, "поищи погоду в москве", folding)
+        assertEquals(listOf("погоду в москве"), values)
+        assertEquals(
+            RawAnswer(
+                kind = BridgeRendering.KIND_PLAN,
+                steps = listOf(RawStep(WEB_SEARCH.value, mapOf("query" to RawArg.Text("погоду в москве")))),
+                question = null,
+                destination = null,
+            ),
+            LearnedForms.fill(shape.template, values!!),
+        )
+    }
+
+    /** Focus 4: «погода» stands in «поищи погоду и погода» twice (a form, then the word itself) — learned wrongly, so not learned. */
+    @Test
+    fun `two places of the same form - not learned`() {
+        assertNull(LearnedForms.learn("поищи погоду и погода", listOf(step(WEB_SEARCH, "query" to model("погода"))), folding))
+    }
+
+    @Test
+    fun `a model value with no word of the user stays a constant`() {
+        val shape = learned("поищи погоду", step(WEB_SEARCH, "query" to model("солнечно")))
+
+        assertEquals("поищи погоду", shape.form.key)
+        assertEquals(PlanTemplate(listOf(TemplateStep(WEB_SEARCH, mapOf("query" to TemplateArg.Constant("солнечно"))))), shape.template)
+    }
+
+    @Test
+    fun `a model value standing exactly once in the command stays a constant`() {
+        val shape = learned("поищи погода", step(WEB_SEARCH, "query" to model("погода")))
+
+        assertEquals("поищи погода", shape.form.key)
+        assertEquals(PlanTemplate(listOf(TemplateStep(WEB_SEARCH, mapOf("query" to TemplateArg.Constant("погода"))))), shape.template)
+    }
+
     private companion object {
         val UNINSTALL_APP = ToolId("uninstall_app")
         val SET_ALARM = ToolId("set_alarm")

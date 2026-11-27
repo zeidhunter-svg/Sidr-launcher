@@ -6,6 +6,20 @@
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
 > / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-11-27
+> (**A4′ acceptance tail, batch 2 — «интерфейс», plan tasks 7–12 — `CODE-GREEN`, nothing seen on a phone; ADR
+> «2026-11-27 — Пачка 2 хвоста A4′: интерфейс»** (commits `c421c45d..a668b5bf`). Both cards number their steps when a plan
+> has two or more; Home's date line carries a chip with the clock app's next alarm at its left edge (only the clock's own
+> alarm — another app's sooner one hides it), and a tap starts a one-step `show_alarms` session through the engine (K7);
+> «Отменить» and «Закрыть» on a finished plan are of equal width; the provider key field and Save stay above the keyboard
+> (`imePadding` + `bringIntoView`; a nav-bar-tall gap remains while it is open); learned aliases have their own tab;
+> Favourites gain pinned apps first, a 14-day freshness rule, a picker behind the header, «убрать с главного» and up to 12
+> places (default 12 — in practice only on fresh installs; an install that ever wrote a setting keeps its stored 8, owner
+> question 3). **Boundary gate `GATE GREEN` 2073 / 0 / 0**, 584 executed (`:domain` 683 · `:data:repository` 498 ·
+> `:feature:launcher` 339 · `:app` 98 · `:consumer:jvm` 101 · `:feature:settings` 41 · `:core:ui` 134 · `:core:android` 18
+> · `:feature:assistant` 40 · other four 121 — exactly as predicted); floor `BASELINE_TESTS` 2014 → 2073;
+> `:core:ui:verifyRoborazziDebug` green, goldens 36 → 38. Batch review APPROVE, 0 C / 0 I; its three false comments made
+> true at the close. Batch-2 strings are Class A, so the release stays blocked only by batch 1's unsigned `tr` Class B line.
+> Four owner questions in the ADR; batch 3 (plan task 13) and the one acceptance (task 14) are next); prior 2026-11-27
 > (**A4′ acceptance tail, batch 1 — «маршрут команды и карточка», plan tasks 1–6 — `CODE-GREEN`, nothing seen on a
 > phone; ADR «2026-11-22 — Пачка 1 хвоста A4′: маршрут команды и карточка»** (beside the batch's two amendment ADRs,
 > «D1, поправка…» and «D3, вторая поправка…»). Online FastPath yields its confident search and its «нет такого
@@ -1794,7 +1808,12 @@ that a learned command is multilingual (each wording pins on its own streak); th
 free pages, A1′ residual (10)); that memory or settings move to a new phone (they start from defaults). **The twelve
 owner rulings of the round are tasks** (the block ADR's table) — *re-based 2026-11-22:* the tail plan's batch 1 built
 its first six (plan tasks 1–6, `CODE-GREEN`, ADR «2026-11-22 — Пачка 1 хвоста A4′…»), **none of them seen on a phone**:
-the yield to the model, the corrected app name, step 1a, the start without a card, the decline line, the wait. No
+the yield to the model, the corrected app name, step 1a, the start without a card, the decline line, the wait.
+*Re-based 2026-11-27:* batch 2 built six more (plan tasks 7–12, `CODE-GREEN`, ADR «2026-11-27 — Пачка 2 хвоста A4′:
+интерфейс»), **none seen on a phone either**: numbered steps, the Home alarm chip (the `RECEIVER_NOT_EXPORTED` broadcast on
+the SM-A325F, the Find My Mobile case), equal buttons, the key field above a real keyboard, the alias tabs, favourites
+(pin / hide / the picker / count 12). Left of the rulings: slots by word form (batch 3, task 13), a full assistant and a
+dialogue on clarify (the A2/A3 spec). No
 `open_url` host check exists (owner question 2, 2026-11-27: built, then dropped — homographs are the browser's). The Master Plan DoD line «local-only /
 offline / no-key behave as today», knowingly false since phase 1, was corrected at this close to `DOC-ADL-3`'s text.
 
@@ -1817,11 +1836,11 @@ loose before the session (placeholders like `<date> — A4′ ф3a…`, fragment
 
 > **Re-based 2026-09-20 — this list had been stale since 2026-07-11 and pointed two tracks back.**
 
-- Current state + hard rules + gate (NOT a session digest since Этап 0.4; re-compressed 2026-11-11 to ~42 KB, ~47 KB at A4′ phase 4's close, ~45 KB at the block's close, ~43 KB after the 2026-11-21 hygiene session moved its History map out, ~45 KB after the tail's batch 1, under the 48 000-byte ceiling held by `ClaudeMdSizeGuardTest`): `CLAUDE.md`
+- Current state + hard rules + gate (NOT a session digest since Этап 0.4; re-compressed 2026-11-11 to ~42 KB, ~47 KB at A4′ phase 4's close, ~45 KB at the block's close, ~43 KB after the 2026-11-21 hygiene session moved its History map out, ~45 KB after the tail's batch 1, ~46 KB after its batch 2, under the 48 000-byte ceiling held by `ClaudeMdSizeGuardTest`): `CLAUDE.md`
 - **Orientation — read whole, before the journal:** `ai-context/decisions-orientation.md` (since 2026-11-21): what is
   in force, and every `## ` heading of the journal verbatim with its mark — the journal's address book. Latest ADR:
-  «2026-11-22 — Пачка 1 хвоста A4′: маршрут команды и карточка» (before it the batch's «D1, поправка…» and «D3, вторая
-  поправка…»; the orientation file itself came with «2026-11-21 — Гигиена контекста: ориентир по решениям и два правила §0»).
+  «2026-11-27 — Пачка 2 хвоста A4′: интерфейс»; before it «2026-11-22 — Пачка 1 хвоста A4′: маршрут команды и карточка»
+  (and that batch's «D1, поправка…» and «D3, вторая поправка…»; the orientation file itself came with «2026-11-21 — Гигиена контекста: ориентир по решениям и два правила §0»).
 - Decisions log — an archive by address, appended and never cut (2026-11-21) — **latest block ADR: «2026-11-21 — Этап 6 (A4′) — рантайм полностью: фазы 0–4, одна приёмка на
   устройстве, блок `CLOSED`»**, whose sections «Приёмка на устройстве», the twelve-task table and the residuals are
   the owner's round of 2026-11-21; the block ADR before it is «2026-09-19 — Этап 5.5 (A1″)». Inside A4′ phase 3a wrote
@@ -1852,8 +1871,9 @@ loose before the session (placeholders like `<date> — A4′ ф3a…`, fragment
   5.5), `CLOSED` 2026-09-20** — spec `docs/superpowers/specs/2026-09-12-a1-second-tool-mass-and-selection-design.md`,
   checklist `docs/superpowers/plans/2026-09-19-a1-second-device-acceptance.md`.
 - Active: the «хвост приёмки A4′» plan `docs/superpowers/plans/2026-11-21-a4-acceptance-tail.md` (the block ADR's tasks
-  1–10 and task 13) — batch 1 `CODE-GREEN` 2026-11-22 (ADR «2026-11-22 — Пачка 1 хвоста A4′…»; ledger
-  `.superpowers/sdd/2026-11-21-a4-acceptance-tail/progress.md`, git-ignored), batches 2–3 and the one acceptance next;
+  1–10 and task 13) — batch 1 `CODE-GREEN` 2026-11-22 (ADR «2026-11-22 — Пачка 1 хвоста A4′…»), batch 2 `CODE-GREEN`
+  2026-11-27 (ADR «2026-11-27 — Пачка 2 хвоста A4′: интерфейс»; ledger
+  `.superpowers/sdd/2026-11-21-a4-acceptance-tail/progress.md`, git-ignored), batch 3 and the one acceptance next;
   then the A2/A3 spec (tasks 11–12). The closed block's trail: **A4′ runtime (Этап 6)** — spec
   `docs/superpowers/specs/2026-09-21-a4-runtime-design.md` (owner-approved 2026-09-21); **phase 0
   `CODE-GREEN` 2026-09-26**, plan `docs/superpowers/plans/2026-09-22-a4-phase0-engine-preconditions.md`,
@@ -1895,6 +1915,10 @@ were replaced, not appended to, and «Source of truth» no longer says A4′ has
 
 *Applied 2026-11-22 by batch 1 of the A4′ tail:* «Not claimed done» no longer says the twelve rulings are «none built»
 (six are, none seen on a phone); «Source of truth» names the active plan and the latest ADR instead of «no active block».
+
+*Applied 2026-11-27 by batch 2 of the A4′ tail:* «Not claimed done» names batch 2's six items as built and unseen and
+what is left of the rulings; «Source of truth» names the new latest ADR, batch 2 in the active plan's line and
+`CLAUDE.md`'s size after it.
 
 *Applied 2026-11-27 after the owner dropped the host check:* the header and «Not claimed done» no longer claim an `open_url`
 host check or a 2025 floor; the entry below describes a check that was reverted. «Source of truth» needed no change.

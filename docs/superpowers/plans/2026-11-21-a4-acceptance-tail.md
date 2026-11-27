@@ -551,13 +551,13 @@ git-ignored; суть — здесь):
 `feature/launcher/.../InterpretationSurface.kt` (`:89-91` — строки шагов карточки толкования, без слова состояния,
 ревью I11), строки `en`/`ru`/`tr`; тесты — `AgentSessionPresentationTest.kt`, `LauncherScreenInterpretationTest.kt`.
 
-- [ ] **Шаг 1:** `a plan of two or more steps numbers its lines from one` (карточка сессии, `"1. %s — %s"`); `the
+- [x] **Шаг 1:** `a plan of two or more steps numbers its lines from one` (карточка сессии, `"1. %s — %s"`); `the
   interpretation card numbers its steps the same way` (`"1. %s"`); `a one-step plan is not numbered` (обе карточки);
   `«← из шага N» names the number the interpretation card shows`.
-- [ ] **Шаг 2: RED → реализовать → GREEN.** Две новые строки: `launcher_agent_step_line_numbered` `%1$d. %2$s — %3$s`
+- [x] **Шаг 2: RED → реализовать → GREEN.** Две новые строки: `launcher_agent_step_line_numbered` `%1$d. %2$s — %3$s`
   (сессия) и `launcher_interpretation_step_numbered` `%1$d. %2$s` (толкование), во всех трёх локалях (турецкий порядок —
   на суд); однoшаговый план — прежние строки.
-- [ ] **Шаг 3: коммит** `feat(a4-tail/4): шаги обеих карточек пронумерованы`.
+- [x] **Шаг 3: коммит** `feat(a4-tail/4): шаги обеих карточек пронумерованы`.
 
 ### Задача 8: чип будильника в строке даты (решение 5: а, у левого края)
 
@@ -576,18 +576,18 @@ git-ignored; суть — здесь):
 - Тесты: `core/android/src/test/.../AndroidNextAlarmSourceTest.kt` (Robolectric `ShadowAlarmManager`),
   `LauncherViewModelTest.kt`, compose-семантический тест размещения в `:feature:launcher` (`LauncherScreenAlarmChipTest`)
 
-- [ ] **Шаг 1:** `AndroidNextAlarmSourceTest`: `the clock's own alarm is shown`, `an alarm set by another app is not`
+- [x] **Шаг 1:** `AndroidNextAlarmSourceTest`: `the clock's own alarm is shown`, `an alarm set by another app is not`
   (creator `com.samsung.android.fmm` → `null`; Фокус ревью 5), `no alarm - null`, `a change broadcast re-reads`.
   `LauncherViewModelTest > tapping the alarm chip starts show_alarms through the engine` — `startPlanned` с одним шагом
   **`TIER0_SHOW_ALARMS`** (`AgentSessionPresentation.kt:109`, не литерал; ревью M9) и реестром, где `show_alarms` есть
   (`withA0Tools()` его не содержит — тест-регистр добавляет); сессия закрывается сама (I12, задача 4).
   `LauncherScreenAlarmChipTest > the chip sits at the start of the date line and hides while typing`.
-- [ ] **Шаг 2: RED → реализовать → GREEN.** Время — `DateFormat.getTimeFormat(context)`, форматируется в feature-слое.
+- [x] **Шаг 2: RED → реализовать → GREEN.** Время — `DateFormat.getTimeFormat(context)`, форматируется в feature-слое.
   Строки: `launcher_home_next_alarm` `⏰ %1$s` (`en`/`ru`/`tr` одинаково), `launcher_home_next_alarm_cd` `ru`
   «Следующий будильник: %1$s», `en` "Next alarm: %1$s", `tr` "Sonraki alarm: %1$s".
-- [ ] **Шаг 3: золотые** — `:core:ui:recordRoborazziDebug` только для `next_alarm_chip`, затем
+- [x] **Шаг 3: золотые** — `:core:ui:recordRoborazziDebug` только для `next_alarm_chip`, затем
   `:core:ui:verifyRoborazziDebug` GREEN; изменение чужих снимков — стоп.
-- [ ] **Шаг 4: коммит** `feat(a4-tail/5): чип будильника часов в строке даты`.
+- [x] **Шаг 4: коммит** `feat(a4-tail/5): чип будильника часов в строке даты`.
 
 ### Задача 9: «Отменить» и «Закрыть» одного размера (решение 7)
 
@@ -595,10 +595,10 @@ git-ignored; суть — здесь):
 equalWidth: Boolean = false)` — в ветке `Row` обе кнопки `Modifier.weight(1f)`), параметр протянуть через
 `SidrResultSurface`; включить на карточке законченного плана (`AgentSessionSurface.kt`); золотые `core/ui`.
 
-- [ ] **Шаг 1:** Roborazzi-сценарий `result_surface_equal_actions` (обе кнопки, равная ширина) — новый снимок;
+- [x] **Шаг 1:** Roborazzi-сценарий `result_surface_equal_actions` (обе кнопки, равная ширина) — новый снимок;
   существующие 36 снимков **не меняются** (`verifyRoborazziDebug` зелёный на них).
-- [ ] **Шаг 2: реализовать → `recordRoborazziDebug` нового → `verifyRoborazziDebug` GREEN.**
-- [ ] **Шаг 3: коммит** `feat(a4-tail/7): кнопки законченного плана — равной ширины`.
+- [x] **Шаг 2: реализовать → `recordRoborazziDebug` нового → `verifyRoborazziDebug` GREEN.**
+- [x] **Шаг 3: коммит** `feat(a4-tail/7): кнопки законченного плана — равной ширины`.
 
 ### Задача 10: поле ключа над клавиатурой (решение 9)
 
@@ -607,12 +607,12 @@ equalWidth: Boolean = false)` — в ветке `Row` обе кнопки `Modif
 `BringIntoViewRequester.bringIntoView()`); `feature/assistant/build.gradle.kts` — Robolectric + compose ui-test +
 `testOptions.unitTests.isIncludeAndroidResources = true` (K13).
 
-- [ ] **Шаг 1:** Compose-тест (Robolectric) `focusing the key field asks to be brought into view` — проверяется через
+- [x] **Шаг 1:** Compose-тест (Robolectric) `focusing the key field asks to be brought into view` — проверяется через
   **инжектируемый колбэк фокуса** (`onKeyFieldFocused: () -> Unit` с умолчанием, вызывающим `bringIntoView`), не через
   фейк-реквестер: `BringIntoViewRequester` в Compose — `sealed` (ревью M10; сверить с foundation 1.12.0). Подъём над
   настоящей IME тестом не доказуем — **строка чеклиста приёмки**.
-- [ ] **Шаг 2: RED → реализовать → GREEN** (`:feature:assistant:testDebugUnitTest`).
-- [ ] **Шаг 3: коммит** `fix(a4-tail/9): поле ключа провайдера не прячется под клавиатурой`.
+- [x] **Шаг 2: RED → реализовать → GREEN** (`:feature:assistant:testDebugUnitTest`).
+- [x] **Шаг 3: коммит** `fix(a4-tail/9): поле ключа провайдера не прячется под клавиатурой`.
 
 ### Задача 11: выученные алиасы — своей вкладкой (решение 10)
 
@@ -622,10 +622,10 @@ equalWidth: Boolean = false)` — в ветке `Row` обе кнопки `Modif
 `feature/settings/build.gradle.kts` — Robolectric + compose ui-test + `isIncludeAndroidResources` (K13); тест — новый
 `feature/settings/src/test/.../AliasesScreenTest.kt`.
 
-- [ ] **Шаг 1:** `with aliases the screen opens on them, not on the app list`; `«Забыть» still goes through the forget
+- [x] **Шаг 1:** `with aliases the screen opens on them, not on the app list`; `«Забыть» still goes through the forget
   gate` (`SidrForgetGate`, `DOC-AML-5` — как сейчас); `with none it opens on Add`.
-- [ ] **Шаг 2: RED → реализовать → GREEN** (`:feature:settings`).
-- [ ] **Шаг 3: коммит** `feat(a4-tail/10): выученные алиасы — отдельной вкладкой`.
+- [x] **Шаг 2: RED → реализовать → GREEN** (`:feature:settings`).
+- [x] **Шаг 3: коммит** `feat(a4-tail/10): выученные алиасы — отдельной вкладкой`.
 
 ### Задача 12: избранное — закреплённые, свежесть, окно выбора, до 12 мест (решение 15)
 
@@ -648,23 +648,23 @@ equalWidth: Boolean = false)` — в ветке `Row` обе кнопки `Modif
 использования по прежнему порядку, **кроме** скрытых, закреплённых и тех, чей `lastUsedEpochMs < nowMs − 14 дней`;
 всё — до `favoritesCount`. Пустая история и нет закреплённых — пусто (заголовок есть, сетки нет).
 
-- [ ] **Шаг 1:** `pinned apps come first and are never pushed out`; `an app not opened for 14 days leaves the automatic
+- [x] **Шаг 1:** `pinned apps come first and are never pushed out`; `an app not opened for 14 days leaves the automatic
   places`; `a new app enters once it outranks the last fresh one` (по таблице §0.1); `a hidden app is not shown and its
   history stays`; `pinning a hidden app unhides it`; `an uninstalled pinned app is skipped`; `the count defaults to 12 and
   offers 12` (`SettingsViewModelTest`); маппер — круговой тест двух новых ключей, включая порядок закреплённых;
   `the header is drawn with no favourites and opens the picker`.
-- [ ] **Шаг 2: RED → реализовать → GREEN.** Окно выбора — `SidrSurface` с `LazyColumn` строк `SidrToggleRow`
+- [x] **Шаг 2: RED → реализовать → GREEN.** Окно выбора — `SidrSurface` с `LazyColumn` строк `SidrToggleRow`
   (закреплено / нет) над всеми установленными приложениями, закреплённые сверху; у автоматически попавших — действие
   «Убрать» (`hide`). Строки: `launcher_favorites_edit_title` «Избранное», `launcher_favorites_pin` «Закрепить»,
   `launcher_favorites_hide` «Убрать с главного», `launcher_favorites_edit_hint` «Закреплённые стоят первыми, остальные
   места заполняются тем, что вы открываете чаще.» (`en`/`tr` — на суд).
-- [ ] **Шаг 3: правила резервной копии.** Новые ключи DataStore — тот же файл, что исключён из Auto Backup
+- [x] **Шаг 3: правила резервной копии.** Новые ключи DataStore — тот же файл, что исключён из Auto Backup
   (`BackupRulesGuardTest` зелёный без правки; правка — находка).
-- [ ] **Шаг 4: коммит** `feat(a4-tail/15): избранное — закреплённые, свежесть 14 дней, окно выбора, до 12 мест`.
+- [x] **Шаг 4: коммит** `feat(a4-tail/15): избранное — закреплённые, свежесть 14 дней, окно выбора, до 12 мест`.
 
 ### Граница пачки 2
 
-- [ ] `gradlew --stop`; разбивка; `tools/gate.sh` → `GATE GREEN`; `:core:ui:verifyRoborazziDebug` GREEN; ревью пачки.
+- [x] `gradlew --stop`; разбивка; `tools/gate.sh` → `GATE GREEN`; `:core:ui:verifyRoborazziDebug` GREEN; ревью пачки.
 
 ---
 

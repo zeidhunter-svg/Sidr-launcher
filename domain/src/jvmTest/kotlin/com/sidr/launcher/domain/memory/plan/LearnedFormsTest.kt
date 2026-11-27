@@ -35,13 +35,18 @@ class LearnedFormsTest {
     private fun said(value: String) = Given(value, ValueOrigin.SaidBy(PrincipalId.USER))
     private fun model(value: String) = Given(value, ValueOrigin.ModelGenerated)
 
-    private fun step(tool: ToolId, vararg args: Pair<String, Given>, refs: Map<String, StepRef> = emptyMap()) =
+    private fun step(
+        tool: ToolId,
+        vararg args: Pair<String, Given>,
+        refs: Map<String, StepRef> = emptyMap(),
+        effect: ToolEffect = ToolEffect.LOCAL,
+    ) =
         ProposedStep(
             tool = tool,
             args = args.associate { (name, given) -> name to given.value },
             origins = args.associate { (name, given) -> name to given.origin },
             risk = ActionRiskLevel.SAFE,
-            effect = ToolEffect.LOCAL,
+            effect = effect,
             refs = refs,
         )
 
@@ -208,7 +213,7 @@ class LearnedFormsTest {
     fun `an address slot keeps the user's text whole`() {
         val shape = learned(
             "открой HTTPS://Quillmere.example/Path",
-            step(OPEN_URL, "url" to said("https://quillmere.example/path")),
+            step(OPEN_URL, "url" to said("https://quillmere.example/path"), effect = ToolEffect.EXTERNAL),
         )
         assertEquals("открой …", shape.form.key)
 
@@ -232,7 +237,7 @@ class LearnedFormsTest {
         assertNull(
             LearnedForms.learn(
                 "найди книгу в магазине в центре",
-                listOf(step(WEB_SEARCH, "query" to said("книгу в магазине"), "near" to said("центре"))),
+                listOf(step(WEB_SEARCH, "query" to said("книгу в магазине"), "near" to said("центре"), effect = ToolEffect.EXTERNAL)),
                 folding,
             ),
         )
@@ -245,7 +250,7 @@ class LearnedFormsTest {
      */
     @Test
     fun `two slots are numbered in the order the command says them`() {
-        val shape = learned("найди книгу в центре", step(WEB_SEARCH, "near" to said("центре"), "query" to said("книгу")))
+        val shape = learned("найди книгу в центре", step(WEB_SEARCH, "near" to said("центре"), "query" to said("книгу"), effect = ToolEffect.EXTERNAL))
 
         assertEquals("найди … в …", shape.form.key)
         assertEquals(
@@ -266,21 +271,22 @@ class LearnedFormsTest {
     }
 
     /**
-     * Task 13 (decision 8): the model declined the user's word «погоду» to «погода» — a form of it, not the same
-     * word — and still the user's words are what the form takes next time.
+     * Task 13 (decision 8): the model wrote «лумора» for the user's «лумору» — a form of the word, not the same
+     * word — in a step that stays on the phone, and still the user's words are what the form takes next time.
+     * The command has no verbatim copy of the value (that would be `SaidBy`), as `BridgeValidator` hands it over.
      */
     @Test
-    fun `a value the model declined is learned as the user's slot`() {
-        val shape = learned("поищи погоду в казани", step(WEB_SEARCH, "query" to model("погода в казани")))
+    fun `a model value in another form of the user's words is learned as the user's slot`() {
+        val shape = learned("открой лумору", step(LAUNCH_APP, "app" to model("лумора")))
 
-        assertEquals("поищи …", shape.form.key)
-        assertEquals(PlanTemplate(listOf(TemplateStep(WEB_SEARCH, mapOf("query" to TemplateArg.Slot(0))))), shape.template)
-        val values = LearnedForms.match(shape.form, "поищи погоду в москве", folding)
-        assertEquals(listOf("погоду в москве"), values)
+        assertEquals("открой …", shape.form.key)
+        assertEquals(PlanTemplate(listOf(TemplateStep(LAUNCH_APP, mapOf("app" to TemplateArg.Slot(0))))), shape.template)
+        val values = LearnedForms.match(shape.form, "открой вемблику", folding)
+        assertEquals(listOf("вемблику"), values)
         assertEquals(
             RawAnswer(
                 kind = BridgeRendering.KIND_PLAN,
-                steps = listOf(RawStep(WEB_SEARCH.value, mapOf("query" to RawArg.Text("погоду в москве")))),
+                steps = listOf(RawStep(LAUNCH_APP.value, mapOf("app" to RawArg.Text("вемблику")))),
                 question = null,
                 destination = null,
             ),
@@ -288,26 +294,53 @@ class LearnedFormsTest {
         )
     }
 
-    /** Focus 4: «погода» stands in «поищи погоду и погода» twice (a form, then the word itself) — learned wrongly, so not learned. */
+    /**
+     * Owner 2026-11-27 («не для шагов наружу»): a step that leaves the phone keeps the model's text as a constant,
+     * as before task 13 — a slot would let three confirmed searches answer any «поищи …» without the model (I5).
+     */
+    @Test
+    fun `a model value for a step that leaves the phone stays a constant`() {
+        val shape = learned(
+            "поищи погоду в казани",
+            step(WEB_SEARCH, "query" to model("погода в казани"), effect = ToolEffect.EXTERNAL),
+        )
+
+        assertEquals("поищи погоду в казани", shape.form.key)
+        assertEquals(
+            PlanTemplate(listOf(TemplateStep(WEB_SEARCH, mapOf("query" to TemplateArg.Constant("погода в казани"))))),
+            shape.template,
+        )
+    }
+
+    /**
+     * Review Focus 4, honestly: «лумору» and «луморы» are both forms (edges) of «лумора»; there is no verbatim copy
+     * in the command (that would be `SaidBy`, not reachable here). Two places, so which one the user meant is a
+     * guess — the whole reading is not learned.
+     */
     @Test
     fun `two places of the same form - not learned`() {
-        assertNull(LearnedForms.learn("поищи погоду и погода", listOf(step(WEB_SEARCH, "query" to model("погода"))), folding))
+        assertNull(LearnedForms.learn("открой лумору и луморы", listOf(step(LAUNCH_APP, "app" to model("лумора"))), folding))
     }
 
     @Test
     fun `a model value with no word of the user stays a constant`() {
-        val shape = learned("поищи погоду", step(WEB_SEARCH, "query" to model("солнечно")))
+        val shape = learned("поищи погоду", step(WEB_SEARCH, "query" to model("солнечно"), effect = ToolEffect.EXTERNAL))
 
         assertEquals("поищи погоду", shape.form.key)
         assertEquals(PlanTemplate(listOf(TemplateStep(WEB_SEARCH, mapOf("query" to TemplateArg.Constant("солнечно"))))), shape.template)
     }
 
+    /**
+     * The plan's rule as written: one place with every pair exact is a constant. Through `BridgeValidator` this
+     * input does not arrive (a verbatim copy is `SaidBy`, never `ModelGenerated`); the test holds the rule for a
+     * `learn` call that bypasses the validator.
+     */
     @Test
     fun `a model value standing exactly once in the command stays a constant`() {
-        val shape = learned("поищи погода", step(WEB_SEARCH, "query" to model("погода")))
+        val shape = learned("открой лумора", step(LAUNCH_APP, "app" to model("лумора")))
 
-        assertEquals("поищи погода", shape.form.key)
-        assertEquals(PlanTemplate(listOf(TemplateStep(WEB_SEARCH, mapOf("query" to TemplateArg.Constant("погода"))))), shape.template)
+        assertEquals("открой лумора", shape.form.key)
+        assertEquals(PlanTemplate(listOf(TemplateStep(LAUNCH_APP, mapOf("app" to TemplateArg.Constant("лумора"))))), shape.template)
     }
 
     private companion object {

@@ -36,7 +36,12 @@ data class WindowMatch(val match: NameMatch, val whole: Boolean)
  * A4′ acceptance tail) a wrong value CAN launch: a word the constants wrongly take for a form of the user's alias opens
  * that alias's app — a `SAFE` launch of an app the user named, not an irreversible act; 2b and the bridge still offer it.
  *
- * **Two uses** (§0.1 refinement):
+ * **A third reader** is `LearnedForms` (A4′ tail, task 13): it finds a model-written value in the user's command by
+ * word forms. The cost argument above is different for it: a wrong edge is not a question but a silent swap — the
+ * model's text goes out of the learned template and the user's own words take its place in a slot, only for a step
+ * that stays on the phone.
+ *
+ * **Two uses** (§0.1 refinement), of the app-name readers:
  *  - [matchWhole] — wherever a whole name is matched: the bridge's mention, step 2b's first look at the
  *    whole slot (`AppTargetResolver.windows`, wired in Task 5), and FastPath's launch
  *    (`IntentActionResolver`, Task 7);

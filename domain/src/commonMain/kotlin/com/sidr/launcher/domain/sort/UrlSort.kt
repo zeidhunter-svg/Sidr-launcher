@@ -10,7 +10,10 @@ package com.sidr.launcher.domain.sort
  * `open_url`'s worker (`SystemIntentToolWorker`) reads its argument through [normalized], so the
  * web-only rule (final review A3 of phase 3a: the address is the MODEL's, and `ACTION_VIEW` opens
  * whatever app claims a scheme — `quillpay://…` is a payment or a deep link, not a page) holds in the
- * execution layer below the consent card, whoever wrote the address.
+ * execution layer below the consent card, whoever wrote the address. The host is not checked: a
+ * look-alike («https://аpple.com», a Cyrillic «а») opens after the consent card, which shows it as
+ * written; homograph detection is left to the browser (owner decision, batch-1 ADR, subsection
+ * «Проверка хоста снята решением владельца (2026-11-27)»).
  */
 object UrlSort {
 

@@ -80,8 +80,9 @@ class HandleUserCommandUseCase(
      * [FastPathYield.MissingApp], so the model may correct the name before the store is offered; a name carrying a
      * second goal is withdrawn at the gate as before (phase 1) and yields nothing. Nothing else yields, and answers
      * exactly as with [yieldToModel] false: a search or a missing app whose words carry an unsafe address
-     * (`UrlDetector`'s `SearchFallback` — a defence, not a reading; [carriesUnsafeAddress]: bare, after a verb, among
-     * other words, touched by punctuation or quotes), an address FastPath opens (`OpenUrlIntent`), a store search, a launch that resolved (or found several,
+     * (`UrlDetector`'s `SearchFallback` — a defence, not a reading; [carriesUnsafeAddress]: a whitespace-separated word
+     * of the remainder, trimmed of [ADDRESS_WRAPPING] at both ends — not an address glued inside a word, nor a
+     * homograph in the TLD; those yield), an address FastPath opens (`OpenUrlIntent`), a store search, a launch that resolved (or found several,
      * or a form to confirm), a settings route, a simple command, and every outcome below the gate. The match is
      * recorded either way, with the confidence the gate acted on — the yield is a route, not a confidence.
      */
@@ -188,9 +189,13 @@ class HandleUserCommandUseCase(
      * from the model — «найди node.js туториал» («js» is no curated TLD) is FastPath's search, «открой config.yaml» its
      * «нет такого приложения», as they were before decision 13 and decision 14. A SAFE address does not: «найди отзывы о
      * lumora.com» still yields. **Not covered here** (no FastPath verb, or nothing [UrlDetector] calls unsafe): an
-     * undecided command carrying an address («зайди на https://аpple.com») reaches the model as it has since phase 3a,
-     * and a homograph in the TLD («https://apple.cоm», a Cyrillic «о») is no address to [UrlDetector] at all — both named
-     * in the batch-1 ADR for the owner (a host check where an address is opened).
+     * undecided command carrying an address («зайди на https://аpple.com») reaches the model as it has since phase 3a;
+     * after a verb, an address glued to other characters inside a word («[apple](https://аpple.com)»,
+     * «сайт:https://аpple.com» — the split is on whitespace only) and a homograph in the TLD («https://apple.cоm», a
+     * Cyrillic «о» — no address to [UrlDetector] at all) are yielded, and their command text goes to the model. Nothing
+     * downstream checks the host: whatever the model proposes opens after the consent card, which shows the host as
+     * written; homograph detection is left to the browser (owner decision, batch-1 ADR «Пачка 1 хвоста A4′…»,
+     * subsection «Проверка хоста снята решением владельца (2026-11-27)»).
      */
     private fun carriesUnsafeAddress(remainder: String): Boolean =
         remainder.split(WHITESPACE).any { word ->
@@ -294,8 +299,11 @@ class HandleUserCommandUseCase(
 
         /**
          * What may touch an address in typed text and is not part of it (ruling B1-I1b): quotes and guillemets of the
-         * three locales, brackets, and sentence punctuation. Stripped from both ends of a word — wider than «trailing
-         * `.,!?;:`», which is harmless: stripping can only find MORE unsafe addresses, never open one.
+         * three locales, brackets, and sentence punctuation. Stripped from both ends of a word. Not one-way: it can turn
+         * a word [UrlDetector] searches into one it opens («https://apple.com?» → «https://apple.com») and so yield the
+         * command — but it never yields an unsafe host: a word that yields is, stripped, a [UrlClassification.Url],
+         * whose host [UrlDetector] opens, or no address to [UrlDetector] at all (the TLD homograph named on
+         * [carriesUnsafeAddress]).
          */
         const val ADDRESS_WRAPPING = "«»“”„‟\"'‘’‚‹›()[]{}<>.,!?;:…"
     }

@@ -56,7 +56,9 @@ import org.junit.Test
  * Two risky shapes: a removal shaped like `uninstall_app` (`CONFIRM`, `DURABLE`) — the review focus — and `open_url`
  * (`CONFIRM`) carrying a homograph host — an undecided command with an address reaches the model, and its `open_url`
  * must stop at the consent card that names the host (since batch 1 review I-1 «найди https://аpple.com» itself is
- * FastPath's again, not the model's). Same build as `AgentEgressSentinelGuardTest`.
+ * FastPath's again, not the model's). The card names the host as written, so a look-alike is not visible there; no
+ * layer checks the host — homograph detection is left to the browser (batch-1 ADR, subsection «Проверка хоста снята
+ * решением владельца (2026-11-27)»). Same build as `AgentEgressSentinelGuardTest`.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ModelReadingConsentTest {

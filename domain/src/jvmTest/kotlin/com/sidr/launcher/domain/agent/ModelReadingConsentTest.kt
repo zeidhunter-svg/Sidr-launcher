@@ -56,10 +56,7 @@ import org.junit.Test
  * Two risky shapes: a removal shaped like `uninstall_app` (`CONFIRM`, `DURABLE`) — the review focus — and `open_url`
  * (`CONFIRM`) carrying a homograph host — an undecided command with an address reaches the model, and its `open_url`
  * must stop at the consent card that names the host (since batch 1 review I-1 «найди https://аpple.com» itself is
- * FastPath's again, not the model's). Same build as `AgentEgressSentinelGuardTest`. Since the owner's ruling on batch 1
- * question 2 (2026-11-27) the production binder refuses a homograph host before any session (`UrlSort`'s host check);
- * the second case binds through [FakeMentionBinder], which reads no value, so it holds the engine's floor BENEATH that
- * check, not a path production takes.
+ * FastPath's again, not the model's). Same build as `AgentEgressSentinelGuardTest`.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ModelReadingConsentTest {
@@ -165,13 +162,6 @@ class ModelReadingConsentTest {
      * real matcher «найди <омограф>» no longer gets here — since batch 1 review I-1 FastPath searches it and the model
      * is not asked (`FastPathOverflowSeamTest`); a command FastPath has no verb for («зайди на https://аpple.com») does,
      * as it has since phase 3a.
-     *
-     * **Not a production path since 2026-11-27** (owner ruling on batch 1 question 2, «отказ»): the production binder
-     * reads `open_url`'s address through `UrlSort`, whose host check refuses this host before any card or session — the
-     * user is told «не понял «…»» and nothing starts (`FastPathOverflowSeamTest > online undecided text carrying a
-     * homograph reaches the model, and its address is not understood - no session`). The binder here is the fake, which
-     * binds the address as the model wrote it; so this case holds the floor beneath the host check: were a look-alike
-     * host ever bound, the engine would still stop it at the consent card, the host on the step.
      */
     @Test
     fun `a model reading that opens an address starts and stops at the engine's consent, the host on the step`() = runTest {

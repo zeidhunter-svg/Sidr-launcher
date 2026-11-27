@@ -79,14 +79,10 @@ class HandleUserCommandUseCase(
      * so does a **confident launch whose whole name resolved to nothing** — FastPath's `NoAppFound` — as
      * [FastPathYield.MissingApp], so the model may correct the name before the store is offered; a name carrying a
      * second goal is withdrawn at the gate as before (phase 1) and yields nothing. Nothing else yields, and answers
-     * exactly as with [yieldToModel] false: a search or a missing app one of whose whitespace words, stripped of the
-     * punctuation and quotes around it, `UrlDetector` would only search (`SearchFallback` — a defence, not a reading;
-     * [carriesUnsafeAddress]), an address FastPath opens (`OpenUrlIntent`), a store search, a launch that resolved (or
-     * found several, or a form to confirm), a settings route, a simple command, and every outcome below the gate. That
-     * predicate is an extra layer, not the closure: an address glued to a word inside its token
-     * («[apple](https://аpple.com)», «сайт:https://аpple.com») and a homograph in the TLD («https://apple.cоm») are no
-     * address to `UrlDetector`, so such a command IS yielded; what keeps a look-alike host from opening on every path is
-     * `UrlSort`'s host check where the address is opened (owner ruling on batch 1 question 2, 2026-11-27). The match is
+     * exactly as with [yieldToModel] false: a search or a missing app whose words carry an unsafe address
+     * (`UrlDetector`'s `SearchFallback` — a defence, not a reading; [carriesUnsafeAddress]: bare, after a verb, among
+     * other words, touched by punctuation or quotes), an address FastPath opens (`OpenUrlIntent`), a store search, a launch that resolved (or found several,
+     * or a form to confirm), a settings route, a simple command, and every outcome below the gate. The match is
      * recorded either way, with the confidence the gate acted on — the yield is a route, not a confidence.
      */
     suspend fun answer(rawInput: String, yieldToModel: Boolean): FastPathAnswer {
@@ -191,20 +187,10 @@ class HandleUserCommandUseCase(
      * **The cost, named** (ruling B1-I1b): any domain-shaped word [UrlDetector] would not open keeps the whole command
      * from the model — «найди node.js туториал» («js» is no curated TLD) is FastPath's search, «открой config.yaml» its
      * «нет такого приложения», as they were before decision 13 and decision 14. A SAFE address does not: «найди отзывы о
-     * lumora.com» still yields.
-     *
-     * **What this predicate does not see, and what closes it** (batch 1 scoped re-review, Important 1; owner ruling on
-     * question 2, 2026-11-27, «отказ»). It holds exactly this: no yield when some whitespace word, trimmed of
-     * [ADDRESS_WRAPPING], is `SearchFallback` to [UrlDetector]. It is not extended, and it does not see: an address glued
-     * to a word inside its token («[apple](https://аpple.com)», «сайт:https://аpple.com», «ссылку(https://аpple.com)»,
-     * «https://аpple.com—», the mistyped «https:/аpple.com») — [UrlDetector] answers [UrlClassification.None], the
-     * command is yielded, and the model may write the address back in the user's words; a homograph in the TLD
-     * («https://apple.cоm», a Cyrillic «о») — no address to [UrlDetector] at all, yielded after a verb since tasks 1 and 2
-     * of the batch; and an undecided command carrying an address («зайди на https://аpple.com»), at the model since phase
-     * 3a. Every one of them is closed where the address is opened: `UrlSort.normalized` refuses a host with any
-     * non-ASCII character, a `%`, userinfo or an `xn--` label — read by the bridge's binder before any card or session
-     * and by `open_url`'s worker below the consent card — so a yielded command whose reading opens such a host is
-     * answered as FastPath would have answered it (`RouteCommandUseCase`, batch 1 review M-5), and nothing opens it.
+     * lumora.com» still yields. **Not covered here** (no FastPath verb, or nothing [UrlDetector] calls unsafe): an
+     * undecided command carrying an address («зайди на https://аpple.com») reaches the model as it has since phase 3a,
+     * and a homograph in the TLD («https://apple.cоm», a Cyrillic «о») is no address to [UrlDetector] at all — both named
+     * in the batch-1 ADR for the owner (a host check where an address is opened).
      */
     private fun carriesUnsafeAddress(remainder: String): Boolean =
         remainder.split(WHITESPACE).any { word ->
@@ -307,13 +293,9 @@ class HandleUserCommandUseCase(
         val WHITESPACE = Regex("\\s+")
 
         /**
-         * What may touch an address in typed text and is not part of it (ruling B1-I1b: «surrounding punctuation and
-         * quotes»): quotes and guillemets of the three locales, brackets, and sentence punctuation, stripped from both
-         * ends of a word. Stripping is not one-way: it can also turn a word [UrlDetector] would only search into one it
-         * opens — «https://apple.com?» (a query) becomes «https://apple.com», an unclosed ««apple.com» becomes
-         * «apple.com» — and that command is then yielded; but only with a safe host: stripping never yields an unsafe host
-         * the unstripped word held back. Whatever is yielded, `UrlSort`'s host check refuses an unsafe host where the
-         * address is opened.
+         * What may touch an address in typed text and is not part of it (ruling B1-I1b): quotes and guillemets of the
+         * three locales, brackets, and sentence punctuation. Stripped from both ends of a word — wider than «trailing
+         * `.,!?;:`», which is harmless: stripping can only find MORE unsafe addresses, never open one.
          */
         const val ADDRESS_WRAPPING = "«»“”„‟\"'‘’‚‹›()[]{}<>.,!?;:…"
     }

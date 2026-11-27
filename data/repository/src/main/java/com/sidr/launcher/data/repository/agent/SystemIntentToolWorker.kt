@@ -49,9 +49,7 @@ class SystemIntentToolWorker @Inject constructor(
      * the action path ends in `ACTION_VIEW`, which opens whatever app claims the scheme —
      * `quillpay://…` is a payment or a deep link, not a page. FastPath's `UrlDetector` guards only the
      * typed path and never sees this one, so the tool path holds the rule here, in the execution layer
-     * below the consent card. The same read refuses a host that is not plain ASCII (owner ruling on
-     * batch 1 question 2, 2026-11-27, «отказ»: any non-ASCII character, a `%`, userinfo, an `xn--` label —
-     * [UrlSort]'s host check), so a look-alike host fails closed here whatever card stood above it.
+     * below the consent card.
      */
     private fun actionFor(invocation: ResolvedInvocation): LauncherAction? {
         fun arg(name: String): String? = invocation.args[name]?.trim()?.takeIf { it.isNotEmpty() }

@@ -7,14 +7,8 @@ import com.sidr.launcher.core.testing.FakeModelPlanner
 import com.sidr.launcher.core.testing.FakeConnectivityChecker
 import com.sidr.launcher.core.testing.FakeFeatureFlagRepository
 import com.sidr.launcher.core.testing.FakeInstalledAppsRepository
-import com.sidr.launcher.core.testing.FakeAliasStore
-import com.sidr.launcher.core.testing.FakeResolutionPreferenceStore
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.core.testing.configuredProvider
-import com.sidr.launcher.data.repository.agent.AppTargetResolver
-import com.sidr.launcher.data.repository.agent.CatalogArgumentSorts
-import com.sidr.launcher.data.repository.agent.DeviceMentionBinder
-import com.sidr.launcher.data.repository.agent.sortResolversOf
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentGoal
 import com.sidr.launcher.domain.agent.AgentSessionId
@@ -22,7 +16,6 @@ import com.sidr.launcher.domain.agent.AgentSessionIdFactory
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.TemplatePlanner
-import com.sidr.launcher.domain.ai.bridge.MentionBinder
 import com.sidr.launcher.domain.ai.bridge.ModelPlanning
 import com.sidr.launcher.domain.ai.bridge.PrincipalId
 import com.sidr.launcher.domain.ai.bridge.ProposedStep
@@ -35,10 +28,8 @@ import com.sidr.launcher.domain.intent.ExecutableAction
 import com.sidr.launcher.domain.intent.HandleUserCommandUseCase
 import com.sidr.launcher.domain.intent.IntentActionResolver
 import com.sidr.launcher.domain.intent.SearchTarget
-import com.sidr.launcher.domain.memory.resolution.DefaultResolutionPreferencePolicy
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.preferences.FeatureFlags
-import com.sidr.launcher.domain.text.PlainTextFolding
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ToolEffect
 import com.sidr.launcher.domain.tool.ToolId
@@ -81,7 +72,7 @@ class FastPathOverflowSeamTest {
         override fun newId() = AgentSessionId("s${++n}")
     }
 
-    private fun router(localOnly: Boolean = false, binder: MentionBinder = FakeMentionBinder()) = RouteCommandUseCase(
+    private fun router(localOnly: Boolean = false) = RouteCommandUseCase(
         handleUserCommand = HandleUserCommandUseCase(
             matcher = RuleBasedIntentMatcher(),
             resolver = IntentActionResolver(apps),
@@ -90,7 +81,7 @@ class FastPathOverflowSeamTest {
             recordingScope = CoroutineScope(SupervisorJob()),
         ),
         modelPlanner = modelPlanner,
-        binder = binder,
+        binder = FakeMentionBinder(),
         featureFlagRepository = FakeFeatureFlagRepository(FeatureFlags(localOnlyMode = localOnly)),
         providerConfigRepository = configuredProvider(),
         connectivityChecker = FakeConnectivityChecker(initiallyOnline = true),
@@ -344,151 +335,5 @@ class FastPathOverflowSeamTest {
             agentStore.saved.map { it.goal },
         )
         assertEquals(0, modelPlanner.planCallCount)
-    }
-
-    /**
-     * The production binder over the same world (owner ruling on batch 1 question 2, 2026-11-27, «отказ»): every value
-     * the model wrote for a sorted argument is read on the device before any card or session — `open_url`'s address
-     * through `UrlSort.resolver`, the same four sort rows `SortProvidesModule` registers (`sortResolversOf`).
-     */
-    private fun deviceBinder(): DeviceMentionBinder {
-        val appTargets = AppTargetResolver(apps, FakeAliasStore(), PlainTextFolding)
-        return DeviceMentionBinder(
-            appTargets,
-            CatalogArgumentSorts(),
-            sortResolversOf(appTargets),
-            FakeResolutionPreferenceStore(),
-            DefaultResolutionPreferencePolicy(),
-            PlainTextFolding,
-            FakeToolRegistry.withA0Tools(),
-        )
-    }
-
-    /** The model's `open_url` of [address] in the USER's own words — a reading that owes no card and would start at once. */
-    private fun opens(address: String) = ModelPlanning.Proposed(
-        listOf(
-            ProposedStep(
-                tool = ToolId("open_url"),
-                args = mapOf("url" to address),
-                origins = mapOf("url" to ValueOrigin.SaidBy(PrincipalId.USER)),
-                risk = ActionRiskLevel.CONFIRM,
-                effect = ToolEffect.EXTERNAL,
-            ),
-        ),
-    )
-
-    /** No saved session — any write of any session — carries an `open_url` step. */
-    private fun assertNoSessionOpensAnAddress() = assertTrue(
-        "no session opens the address",
-        agentStore.saved.none { session -> session.plan.steps.any { it.invocation.id == ToolId("open_url") } },
-    )
-
-    /**
-     * Owner ruling on batch 1 question 2 (2026-11-27, «отказ»), the seam half of the batch-1 scoped re-review's Important
-     * 1. An address glued to a word inside its token — a pasted markdown link, «сайт:», «отзывы:», «ссылку(», a dash, a
-     * mistyped scheme — is no address to `UrlDetector` (`None`), so FastPath's predicate sees nothing unsafe and yields
-     * the command online, and the model — scripted to open the homograph in the user's own words, no card owed — is asked.
-     * With the REAL binder its address is refused on the device before any card or session (`UrlSort`'s host check), and
-     * the device answers as FastPath would have without the model (batch 1 review M-5): each search runs, each launch is
-     * A0's store plan in the user's words. No session opens the address.
-     */
-    @Test
-    fun `online a homograph glued into a word is yielded, and the real binder refuses its host before any session`() = runTest {
-        modelPlanner.answer = opensTheHomograph
-        val searches = listOf("[apple](https://\u0430pple.com)", "отзывы:https://\u0430pple.com")
-        val launches = listOf(
-            "[apple](https://\u0430pple.com)",
-            "сайт:https://\u0430pple.com",
-            "ссылку(https://\u0430pple.com)",
-            "https://\u0430pple.com\u2014",
-            "https:/\u0430pple.com",
-            "сайт:\u0430pple.com",
-        )
-        val route = router(binder = deviceBinder())
-
-        val searched = searches.map { route.route("найди $it") }
-        val launched = launches.map { route.route("открой $it") }
-
-        assertEquals(searches.map { CommandOutcome.Executed }, searched)
-        assertEquals(searches.map { ExecutableAction.OpenSearchAction(it, SearchTarget.WEB) }, executor.executedActions)
-        assertEquals(launches.indices.map { CommandOutcome.AgentSessionStarted(AgentSessionId("s${it + 1}")) }, launched)
-        assertEquals(
-            "A0's store plan for each, in the user's words",
-            launches.map { AgentGoal("открой $it", GoalShape.AppNotInstalled(it)) },
-            agentStore.saved.map { it.goal },
-        )
-        assertNoSessionOpensAnAddress()
-        assertEquals("each was yielded to the model", searches.size + launches.size, modelPlanner.planCallCount)
-    }
-
-    /**
-     * The same ruling for a homograph in the TLD after a verb («https://apple.cоm», a Cyrillic «о», U+043E) — the reach
-     * tasks 1 and 2 created: `UrlDetector` answers `None` (the TLD is not `[a-z]{2,}`), so «найди / открой» it is yielded,
-     * and the model, scripted to open it in the user's words, is asked. The real binder refuses the host; the search
-     * runs, the launch is A0's store plan, no session opens the address.
-     */
-    @Test
-    fun `online a homograph in the TLD after a verb is yielded, and the real binder refuses its host before any session`() = runTest {
-        modelPlanner.answer = opens("https://apple.c\u043em")
-        val route = router(binder = deviceBinder())
-
-        val search = route.route("найди https://apple.c\u043em")
-        val launch = route.route("открой https://apple.c\u043em")
-
-        assertEquals(CommandOutcome.Executed, search)
-        assertEquals(ExecutableAction.OpenSearchAction("https://apple.c\u043em", SearchTarget.WEB), executor.executedActions.single())
-        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), launch)
-        assertEquals(
-            AgentGoal("открой https://apple.c\u043em", GoalShape.AppNotInstalled("https://apple.c\u043em")),
-            agentStore.saved.single().goal,
-        )
-        assertNoSessionOpensAnAddress()
-        assertEquals("both were yielded to the model", 2, modelPlanner.planCallCount)
-    }
-
-    /**
-     * Undecided text carrying a homograph — no FastPath verb, so nothing is yielded and nothing FastPath would answer —
-     * reaches the model as it has since phase 3a. The real binder refuses the host the model wrote back, so no session
-     * starts and no consent card is asked: the user is told the binding's own answer, «не понял «…»» in the words
-     * written for the argument (`CommandMessage.ValueNotUnderstood`, phase 3b Task 6).
-     */
-    @Test
-    fun `online undecided text carrying a homograph reaches the model, and its address is not understood - no session`() = runTest {
-        val route = router(binder = deviceBinder())
-
-        modelPlanner.answer = opensTheHomograph
-        val host = route.route("зайди на https://\u0430pple.com")
-        modelPlanner.answer = opens("https://apple.c\u043em")
-        val tld = route.route("зайди на https://apple.c\u043em")
-
-        assertEquals(
-            listOf(
-                CommandOutcome.Message(CommandMessage.ValueNotUnderstood("https://\u0430pple.com")),
-                CommandOutcome.Message(CommandMessage.ValueNotUnderstood("https://apple.c\u043em")),
-            ),
-            listOf(host, tld),
-        )
-        assertTrue("no session starts", agentStore.saved.isEmpty())
-        assertTrue("nothing is executed", executor.executedActions.isEmpty())
-        assertEquals(2, modelPlanner.planCallCount)
-    }
-
-    /**
-     * The control: the same undecided command naming a plain ASCII host still starts at once with the real binder — the
-     * model's `open_url` in the user's words, no card owed (D3, second amendment), the address on the step exactly as
-     * written. The host check refuses look-alikes, not addresses.
-     */
-    @Test
-    fun `online undecided text carrying a plain ASCII address still starts at once with the real binder`() = runTest {
-        modelPlanner.answer = opens("https://quillmere.example/path")
-
-        val outcome = router(binder = deviceBinder()).route("зайди на https://quillmere.example/path")
-
-        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1"), proposedByModel = true), outcome)
-        assertEquals(
-            listOf(ToolInvocation(ToolId("open_url"), mapOf("url" to ArgSource.Literal("https://quillmere.example/path")))),
-            agentStore.saved.single().plan.steps.map { it.invocation },
-        )
-        assertEquals(1, modelPlanner.planCallCount)
     }
 }

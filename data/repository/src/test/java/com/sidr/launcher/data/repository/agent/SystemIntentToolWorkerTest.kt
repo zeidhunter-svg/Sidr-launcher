@@ -205,6 +205,21 @@ class SystemIntentToolWorkerTest {
         assertTrue("nothing reached the action path", actionExecutor.executedActions.isEmpty())
     }
 
+    /**
+     * Ruling B1-Q2b (2026-11-27): a browser skips `\` like `/` after `https:` and ends the host at it, so
+     * `https://\/аpple.com` (Cyrillic «а») opens `xn--pple-43d.com` while the host check saw only `\`. Below the consent
+     * card the worker refuses any backslash: it fails closed and nothing is opened.
+     */
+    @Test
+    fun `an address with a backslash fails closed and opens nothing`() = runTest {
+        val url = """https://\/аpple.com"""
+
+        val result = executor().invoke(ResolvedInvocation(InAppToolIds.OPEN_URL, mapOf("url" to url)))
+
+        assertEquals("'$url' must fail closed", ToolResult.Failed(CommandFailure.Generic), result)
+        assertTrue("nothing reached the action path", actionExecutor.executedActions.isEmpty())
+    }
+
     @Test
     fun `a pinned launch opens the pinned package even when two apps share the label`() = runTest {
         apps.appsToReturn = listOf(

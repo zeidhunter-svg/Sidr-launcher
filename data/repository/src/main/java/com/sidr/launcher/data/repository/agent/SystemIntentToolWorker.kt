@@ -51,7 +51,9 @@ class SystemIntentToolWorker @Inject constructor(
      * typed path and never sees this one, so the tool path holds the rule here, in the execution layer
      * below the consent card. The same read refuses a host that is not plain ASCII (owner ruling on
      * batch 1 question 2, 2026-11-27, «отказ»: any non-ASCII character, a `%`, userinfo, an `xn--` label —
-     * [UrlSort]'s host check), so a look-alike host fails closed here whatever card stood above it.
+     * [UrlSort]'s host check) and any address holding a backslash (ruling B1-Q2b: a browser reads `\` as `/`, so
+     * `https://\/аpple.com` hid its host behind one), so an IDN look-alike host fails closed here whatever card stood
+     * above it. An ASCII look-alike or a numeric host is not that class and opens as written.
      */
     private fun actionFor(invocation: ResolvedInvocation): LauncherAction? {
         fun arg(name: String): String? = invocation.args[name]?.trim()?.takeIf { it.isNotEmpty() }

@@ -16,7 +16,7 @@
 #   boundary (default) — the run that closes a task, and takes NO task list of its own (it is the
 #                        full gate by definition — see the two refusals below). Clears every module's
 #                        results, passes `--rerun-tasks`, and REQUIRES the total to reach the
-#                        baseline floor (`BASELINE_TESTS` below — 2014 after batch 1 of the A4′ acceptance tail, its fix wave and the re-review fix B1-I1b (2026-11-23), 2008 after the fix wave (2026-11-22), 1918 after the context-hygiene session (2026-11-21, +4 `:app`), 1914 after the A4′ device acceptance's two in-round fixes (2026-11-21), 1912 after the owner's answers to A4′ phase 4 (T8 forget gate, 2026-11-20), 1910 after phase 4, 1841 after the answers to A4′ phase 3b's close, 1821 after phase 3b, 1673 after
+#                        baseline floor (`BASELINE_TESTS` below — 2025 after batch 1 of the A4′ acceptance tail and its host check (2026-11-27), 2014 after the re-review fix B1-I1b (2026-11-23), 2008 after the fix wave (2026-11-22), 1918 after the context-hygiene session (2026-11-21, +4 `:app`), 1914 after the A4′ device acceptance's two in-round fixes (2026-11-21), 1912 after the owner's answers to A4′ phase 4 (T8 forget gate, 2026-11-20), 1910 after phase 4, 1841 after the answers to A4′ phase 3b's close, 1821 after phase 3b, 1673 after
 #                        phase 3a, 1560 after phase 2, 1485 after phase 1, 1463 after phase 0, 1440 before) before it will
 #                        say `GATE GREEN`; short of the floor, or any failure/error, it says `GATE RED`.
 #   --scoped           — a run inside a task: a TDD step or a mutation. Keeps its OWN task list
@@ -192,7 +192,7 @@ from xml.etree import ElementTree as ET
 
 root, mode = sys.argv[1], sys.argv[2]
 named = list(dict.fromkeys(sys.argv[3:]))
-BASELINE_TESTS = 2014  # after batch 1 of the A4′ acceptance tail, its fix wave and the re-review fix B1-I1b, 2026-11-23 (2008 after the fix wave, 2026-11-22, 1918 after the context-hygiene session's DecisionsOrientationGuardTest, 2026-11-21, 1914 after the A4′ device acceptance's in-round fixes, 1912 after the owner's answers to A4′ phase 4 (T8 forget gate), 1910 after A4′ phase 4, the learned-plan cache, 1841 after the owner's answers to A4′ phase 3b's close, 1839 after the five, 1821 after phase 3b, 1673 after phase 3a, 1560 after phase 2, 1485 after phase 1, 1463 after phase 0, 1440 before it); a boundary total below this is RED
+BASELINE_TESTS = 2025  # after batch 1 of the A4′ acceptance tail and its host check (owner question 2), 2026-11-27 (2014 after the re-review fix B1-I1b, 2026-11-23, 2008 after the fix wave, 2026-11-22, 1918 after the context-hygiene session's DecisionsOrientationGuardTest, 2026-11-21, 1914 after the A4′ device acceptance's in-round fixes, 1912 after the owner's answers to A4′ phase 4 (T8 forget gate), 1910 after A4′ phase 4, the learned-plan cache, 1841 after the owner's answers to A4′ phase 3b's close, 1839 after the five, 1821 after phase 3b, 1673 after phase 3a, 1560 after phase 2, 1485 after phase 1, 1463 after phase 0, 1440 before it); a boundary total below this is RED
 per_module, failed = {}, []
 for path in glob.glob(os.path.join(root, "**", "build", "test-results", "**", "*.xml"),
                       recursive=True):

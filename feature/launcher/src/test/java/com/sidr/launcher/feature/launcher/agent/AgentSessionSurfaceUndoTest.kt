@@ -218,8 +218,8 @@ class AgentSessionSurfaceUndoTest {
         compose.onNodeWithText("Plan stopped").assertExists()
         compose.onNodeWithText("Dismiss").assertExists()
         compose.onNodeWithText("Sidr stopped this plan because it could no longer follow it safely. Nothing further will run.").assertDoesNotExist()
-        compose.onNodeWithText("Call “Lumora” “вельтрикс” — done").assertExists()
-        compose.onNodeWithText("Remove Orvelle (net.fixture.orvelle) — not started").assertExists()
+        compose.onNodeWithText("1. Call “Lumora” “вельтрикс” — done").assertExists()
+        compose.onNodeWithText("2. Remove Orvelle (net.fixture.orvelle) — not started").assertExists()
         compose.onNodeWithText("Undo").performClick()
         assertTrue("Undo on the cancelled card calls the undo", undone)
     }
@@ -267,8 +267,8 @@ class AgentSessionSurfaceUndoTest {
         compose.onNodeWithText("Plan stopped").assertExists()
         compose.onNodeWithText("Dismiss").assertExists()
         compose.onNodeWithText("Undo").assertDoesNotExist()
-        compose.onNodeWithText("Open Vemblic (net.fixture.vemblic) — handed to the system").assertExists()
-        compose.onNodeWithText("Remove Orvelle (net.fixture.orvelle) — not started").assertExists()
+        compose.onNodeWithText("1. Open Vemblic (net.fixture.vemblic) — handed to the system").assertExists()
+        compose.onNodeWithText("2. Remove Orvelle (net.fixture.orvelle) — not started").assertExists()
         compose.onNodeWithContentDescription("source SIDR · EXTERNAL").assertExists()
         compose.onNodeWithContentDescription("source SYSTEM INTENT · EXTERNAL").assertExists()
     }

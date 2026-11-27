@@ -324,7 +324,7 @@ class InterpretationSurfaceTest {
             ),
         )
 
-        compose.onNodeWithText("Open Vemblic (net.fixture.vemblic)\nSearch the web: ostravel lectures").assertExists()
+        compose.onNodeWithText("1. Open Vemblic (net.fixture.vemblic)\n2. Search the web: ostravel lectures").assertExists()
     }
 
     /**
@@ -343,7 +343,7 @@ class InterpretationSurfaceTest {
             ),
         )
 
-        compose.onNodeWithText("Open Lumora\nSearch the web: ← from step 1").assertExists()
+        compose.onNodeWithText("1. Open Lumora\n2. Search the web: ← from step 1").assertExists()
     }
 
     /**
@@ -384,5 +384,56 @@ class InterpretationSurfaceTest {
 
         compose.onNodeWithText("CONFIRM").assertExists()
         compose.onNodeWithText("SAFE").assertDoesNotExist()
+    }
+
+    // ── A4′ acceptance tail, task 7 (owner ruling 4): the steps are numbered ─────────────────
+
+    /** A reading of two or more steps numbers its lines from one — `"1. %s"`, the same on every line. */
+    @Test
+    fun `the interpretation card numbers its steps the same way`() {
+        render(
+            reading(
+                listOf(
+                    step(0, "forget_app_alias", mapOf("phrase" to ArgSource.Literal("кварцелот"))),
+                    step(1, "web_search", mapOf("query" to ArgSource.Literal("ostravel lectures"))),
+                    step(2, "launch_app", mapOf("query" to ArgSource.Literal("Vemblic"), "app" to ArgSource.Literal("net.fixture.vemblic"))),
+                ),
+            ),
+        )
+
+        compose.onNodeWithText(
+            "1. Forget the alias “кварцелот”\n2. Search the web: ostravel lectures\n3. Open Vemblic (net.fixture.vemblic)",
+        ).assertExists()
+    }
+
+    /** A one-step reading keeps the line it always had: no «1.» in front of the only step. */
+    @Test
+    fun `a one-step reading is not numbered`() {
+        render(reading(listOf(step(0, "web_search", mapOf("query" to ArgSource.Literal("ostravel lectures"))))))
+
+        compose.onNodeWithText("Search the web: ostravel lectures").assertExists()
+        compose.onNodeWithText("1. Search the web: ostravel lectures").assertDoesNotExist()
+    }
+
+    /**
+     * «← from step N» names the number the card shows: the reference in the THIRD line points at the step
+     * drawn as «2.» — the plan's index 1 — not at index 1 read as a position or at the line before it. The
+     * fixture's step 0 and step 1 are different tools, so a 0-based or off-by-one N reads a different line.
+     */
+    @Test
+    fun `from-step N names the number the interpretation card shows`() {
+        render(
+            reading(
+                listOf(
+                    step(0, "forget_app_alias", mapOf("phrase" to ArgSource.Literal("кварцелот"))),
+                    step(1, "launch_app", mapOf("query" to ArgSource.Literal("Vemblic"), "app" to ArgSource.Literal("net.fixture.vemblic"))),
+                    step(2, "web_search", mapOf("query" to ArgSource.FromStep(stepIndex = 1, key = "resolved_query"))),
+                ),
+            ),
+        )
+
+        compose.onNodeWithText(
+            "1. Forget the alias “кварцелот”\n2. Open Vemblic (net.fixture.vemblic)\n3. Search the web: ← from step 2",
+        ).assertExists()
     }
 }

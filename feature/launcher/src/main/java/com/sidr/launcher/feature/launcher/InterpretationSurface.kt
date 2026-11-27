@@ -83,8 +83,17 @@ internal fun InterpretationArea(
                 SidrActionProposal(
                     title = sidrString(R.string.launcher_interpretation_title),
                     // Nothing has run before «Выполнить»: an empty record, so a reference reads its source step.
+                    // A reading of two or more steps numbers its lines from one (task 7, ruling 4) — `index + 1`,
+                    // the same number a later step's «← из шага N» names; one step keeps its line.
                     description = interpretation.steps
-                        .map { step -> step.line(subject, dynamicLabels, observations = emptyMap()) }
+                        .map { step ->
+                            val line = step.line(subject, dynamicLabels, observations = emptyMap())
+                            if (interpretation.steps.size > 1) {
+                                sidrString(R.string.launcher_interpretation_step_numbered, step.index + 1, line)
+                            } else {
+                                line
+                            }
+                        }
                         .joinToString(STEP_LINE_SEPARATOR),
                     tone = if (interpretation.steps.any { requiresConsent(it.risk) }) {
                         SidrActionProposalTone.Confirm

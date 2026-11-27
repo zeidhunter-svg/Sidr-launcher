@@ -89,6 +89,7 @@
     <string name="launcher_interpretation_candidate">%1$s (%2$s)</string>
     <string name="launcher_interpretation_did_you_mean">Вы имели в виду «%1$s»?</string>
     <string name="launcher_interpretation_from_step">← из шага %1$d</string>
+    <string name="launcher_interpretation_step_numbered">%1$d. %2$s</string>
     <string name="launcher_thinking">Разбираю команду…</string>
     <string name="launcher_model_unavailable_credentials">Ключ ИИ-провайдера не найден или не принят.</string>
     <string name="launcher_model_unavailable_request_rejected">ИИ-провайдер отклонил запрос. Проверьте настройки провайдера.</string>
@@ -144,6 +145,7 @@
     <string name="launcher_agent_completed_handed_off_title">План пройден — исход за системой</string>
     <string name="launcher_agent_completed_handed_off_body">Sidr прошёл план до конца. Как минимум один шаг передан системе, и что было дальше, Sidr не видит.</string>
     <string name="launcher_agent_step_line">%1$s — %2$s</string>
+    <string name="launcher_agent_step_line_numbered">%1$d. %2$s — %3$s</string>
     <string name="launcher_agent_step_state_done">выполнено</string>
     <string name="launcher_agent_step_state_skipped">не потребовалось</string>
     <string name="launcher_agent_step_state_failed">не получилось</string>

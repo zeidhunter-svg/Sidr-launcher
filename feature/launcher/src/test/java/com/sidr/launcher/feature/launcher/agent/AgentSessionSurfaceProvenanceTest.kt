@@ -191,8 +191,8 @@ class AgentSessionSurfaceProvenanceTest {
     fun `the A0 two-step plan renders the two sentences it always has`() {
         render(a0Session(), emptyMap())
 
-        compose.onNodeWithText("Open убер — waiting for you").assertExists()
-        compose.onNodeWithText("Find убер in the app store — not started").assertExists()
+        compose.onNodeWithText("1. Open убер — waiting for you").assertExists()
+        compose.onNodeWithText("2. Find убер in the app store — not started").assertExists()
     }
 
     /**

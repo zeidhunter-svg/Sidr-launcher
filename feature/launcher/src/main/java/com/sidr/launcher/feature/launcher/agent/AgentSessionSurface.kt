@@ -404,16 +404,20 @@ private fun AgentPlanSteps(
     toolProvenance: Map<ToolId, StepProvenance>,
     dynamicLabels: Map<ToolId, DynamicToolLabel>,
 ) {
+    val numbered = session.plan.steps.size > 1
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
         session.plan.steps.forEach { step ->
             val state = session.stateOf(step)
+            // A plan of two or more steps numbers its lines from one — the number «← из шага N» on the
+            // interpretation card names (`stepIndex + 1`); a one-step plan keeps its line (task 7, ruling 4).
+            val line = step.line(subject, dynamicLabels)
             SidrStatusMarker(
                 status = state.marker(),
-                label = sidrString(
-                    R.string.launcher_agent_step_line,
-                    step.line(subject, dynamicLabels),
-                    state.word(),
-                ),
+                label = if (numbered) {
+                    sidrString(R.string.launcher_agent_step_line_numbered, step.index + 1, line, state.word())
+                } else {
+                    sidrString(R.string.launcher_agent_step_line, line, state.word())
+                },
             )
             AgentStepProvenance(toolProvenance[step.invocation.id])
         }

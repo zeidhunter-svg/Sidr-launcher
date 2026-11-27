@@ -371,7 +371,7 @@ class LauncherScreenInterpretationTest {
 
         vm.onCommandSubmitted("kelmora goal")
         compose.waitForIdle()
-        compose.onNodeWithText("Open Vemblic (net.fixture.vemblic)\nSearch the web: ostravel lectures").assertExists()
+        compose.onNodeWithText("1. Open Vemblic (net.fixture.vemblic)\n2. Search the web: ostravel lectures").assertExists()
         assertTrue("drawing the card invokes nothing", toolExecutor.invocations.isEmpty())
 
         compose.onNodeWithText("Run").performClick()

@@ -444,4 +444,67 @@ class AgentSessionPresentationTest {
         compose.onNodeWithText("Sidr will do this next: Find Lumora in the app store. Nothing runs until you confirm.")
             .assertExists()
     }
+
+    // ── A4′ acceptance tail, task 7 (owner ruling 4): the plan list numbers its steps ──────────
+
+    private fun stepOf(index: Int, tool: ToolId, query: String) = PlanStep(
+        index = index,
+        invocation = ToolInvocation(tool, mapOf("query" to ArgSource.Literal(query))),
+        risk = ActionRiskLevel.SAFE,
+        precondition = StepPrecondition.None,
+        rationale = StepRationale.MODEL_PROPOSED,
+    )
+
+    /** A paused session over [steps] (cursor 0), drawn by the real surface; the goal's text is on no expected line. */
+    private fun renderPausedPlan(steps: List<PlanStep>) {
+        val paused = AgentSession(
+            id = AgentSessionId("s1"),
+            goal = AgentGoal("цель без слов шагов", GoalShape.Free("цель без слов шагов")),
+            plan = ExecutionPlan(steps),
+            cursor = 0,
+            state = ExecutionState.Paused,
+            observations = emptyMap(),
+            consents = emptyMap(),
+            trace = ExecutionTrace(emptyList()),
+        )
+        compose.setContent {
+            SidrTheme {
+                AgentSessionSurface(
+                    session = paused,
+                    toolProvenance = emptyMap(),
+                    dynamicLabels = emptyMap(),
+                    confirming = false,
+                    onConfirm = {},
+                    onDeny = {},
+                    onContinue = {},
+                    onDismiss = {},
+                )
+            }
+        }
+        compose.waitForIdle()
+    }
+
+    /** Two or more steps: «N. line — state», N from one, the same number the interpretation card gave the step. */
+    @Test
+    fun `a plan of two or more steps numbers its lines from one`() {
+        renderPausedPlan(
+            listOf(
+                stepOf(0, ToolIds.LAUNCH_APP, "лумора"),
+                stepOf(1, ToolIds.PLAY_STORE_SEARCH, "Lumora"),
+            ),
+        )
+
+        compose.onNodeWithText("1. Open лумора — waiting for you").assertExists()
+        compose.onNodeWithText("2. Find Lumora in the app store — not started").assertExists()
+        compose.onNodeWithText("Open лумора — waiting for you").assertDoesNotExist()
+    }
+
+    /** A one-step plan keeps its line: nothing to number. */
+    @Test
+    fun `a one-step plan is not numbered`() {
+        renderPausedPlan(listOf(stepOf(0, ToolIds.LAUNCH_APP, "лумора")))
+
+        compose.onNodeWithText("Open лумора — waiting for you").assertExists()
+        compose.onNodeWithText("1. Open лумора — waiting for you").assertDoesNotExist()
+    }
 }

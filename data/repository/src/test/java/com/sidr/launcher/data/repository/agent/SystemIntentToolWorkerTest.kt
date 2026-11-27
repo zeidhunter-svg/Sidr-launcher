@@ -183,6 +183,28 @@ class SystemIntentToolWorkerTest {
         assertTrue("nothing reached the action path", actionExecutor.executedActions.isEmpty())
     }
 
+    /**
+     * Owner ruling on batch 1 question 2 (2026-11-27, «отказ»): below the consent card the worker opens an address only
+     * when its host is plain ASCII with no punycode label — whoever wrote it, and whatever the card above it showed.
+     * A Cyrillic «а» in the host, a Cyrillic «о» in the TLD, a punycode label, a percent-encoded host, userinfo: each
+     * fails closed and nothing is opened. Each form passes the scheme check — none is refused for its scheme.
+     */
+    @Test
+    fun `an address whose host is not plain ASCII fails closed and opens nothing`() = runTest {
+        listOf(
+            "https://аpple.com",
+            "https://apple.cоm",
+            "https://xn--pple-43d.com",
+            "https://%D0%B0pple.com",
+            "https://apple.com@quillmere.example",
+        ).forEach { url ->
+            val result = executor().invoke(ResolvedInvocation(InAppToolIds.OPEN_URL, mapOf("url" to url)))
+
+            assertEquals("'$url' must fail closed", ToolResult.Failed(CommandFailure.Generic), result)
+        }
+        assertTrue("nothing reached the action path", actionExecutor.executedActions.isEmpty())
+    }
+
     @Test
     fun `a pinned launch opens the pinned package even when two apps share the label`() = runTest {
         apps.appsToReturn = listOf(

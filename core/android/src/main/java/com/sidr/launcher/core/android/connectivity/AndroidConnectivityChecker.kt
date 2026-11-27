@@ -22,8 +22,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  * to avoid redundant rapid-fire emissions.
  *
  * Plain class (no Hilt annotations); constructed in `:app`'s [ConnectivityModule] with the
- * application [Context]. Not unit-tested in `core/android` (no test deps there — the
- * [AndroidPermissionChecker] precedent); router logic is fully covered via [FakeConnectivityChecker].
+ * application [Context]. Not unit-tested in `core/android` (written when it had no Android test deps —
+ * Robolectric arrived there with the A4′ tail's task 8; the [AndroidPermissionChecker] precedent); router logic is
+ * fully covered via [FakeConnectivityChecker].
  */
 class AndroidConnectivityChecker(
     private val context: Context,

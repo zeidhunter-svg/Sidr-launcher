@@ -382,7 +382,9 @@ internal class LauncherCommandSession(
      *    reachable during a wait: the strip hides while the field holds text, but «Продолжить» on a
      *    model-written plan re-routes its goal with the field empty;
      *  - a remainder card brought up from the agent surface — [showRemainder] (A4′ phase 3b, Task 11), held by
-     *    no test.
+     *    no test;
+     *  - the date line's next-alarm chip — [startAtOnce] (A4′ acceptance tail, task 8). Reachable during a wait as
+     *    the prayer strip's details are (the line hides while the field holds text); held by no test.
      * [submitSite] needs no call: it is a [submit], which supersedes on its own. [onChanged] and
      * [cancelThinking] keep their own lines, written out where they are.
      *
@@ -603,8 +605,24 @@ internal class LauncherCommandSession(
         val target = _targetPick.value ?: return
         val plan = target.bind(packageName) ?: return
         _targetPick.value = null
+        start(target.goal, plan)
+    }
+
+    /**
+     * A Home gesture that names its own plan — the date line's next-alarm chip (A4′ acceptance tail, task 8; controller
+     * ruling K7): the plan starts at once through `startPlanned`, exactly as a 2b pick's does ([chooseTarget]) —
+     * validated against the registry, every step gated by the engine — and a command still waiting on the model is
+     * abandoned first, as for every Home gesture that takes the user elsewhere ([supersedeWaitingCommand]).
+     */
+    fun startAtOnce(goal: AgentGoal, plan: ExecutionPlan) {
+        supersedeWaitingCommand()
+        start(goal, plan)
+    }
+
+    /** [plan] through `startPlanned`; its session goes to the agent surface, or the failure to the feedback line. */
+    private fun start(goal: AgentGoal, plan: ExecutionPlan) {
         scope.launch {
-            val started = (startAgentSession.startPlanned(target.goal, plan) as? OperationResult.Success)?.value
+            val started = (startAgentSession.startPlanned(goal, plan) as? OperationResult.Success)?.value
             applyOutcome(
                 if (started != null) CommandOutcome.AgentSessionStarted(started.id)
                 else CommandOutcome.Failed(CommandFailure.Generic),

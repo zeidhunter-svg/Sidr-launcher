@@ -292,6 +292,7 @@ class LauncherScreenAgentProvenanceTest {
             dynamicToolLabels = agentToolLabels,
             // A4′ acceptance tail, task 6: compile-follow — no command here waits on the model.
             modelAskedEvents = ModelAskedEvents(),
+            nextAlarmSource = com.sidr.launcher.core.testing.FakeNextAlarmSource(),
             ioDispatcher = dispatcher,
             applicationScope = CoroutineScope(dispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),

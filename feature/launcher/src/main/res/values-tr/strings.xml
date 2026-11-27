@@ -41,6 +41,8 @@
 
     <string name="launcher_home_no_apps_found">Uygulama bulunamadı</string>
     <string name="launcher_home_favorites_header">Favoriler</string>
+    <string name="launcher_home_next_alarm">⏰ %1$s</string>
+    <string name="launcher_home_next_alarm_cd">Sonraki alarm: %1$s</string>
 
     <string name="launcher_route_app">UYGULAMA</string>
     <string name="launcher_route_web">WEB</string>

@@ -454,6 +454,7 @@ class LauncherScreenInterpretationTest {
             toolRegistry = agentRegistry,
             dynamicToolLabels = com.sidr.launcher.feature.launcher.agent.DynamicToolLabels { emptyMap() },
             modelAskedEvents = modelAskedEvents,
+            nextAlarmSource = com.sidr.launcher.core.testing.FakeNextAlarmSource(),
             ioDispatcher = dispatcher,
             applicationScope = CoroutineScope(dispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),

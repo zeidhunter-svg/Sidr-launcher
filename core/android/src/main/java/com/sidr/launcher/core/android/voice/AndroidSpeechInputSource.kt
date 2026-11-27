@@ -50,8 +50,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Plain class (no Hilt annotations) so `core/android` stays DI-framework-free; constructed in
  * `:app` with the application [Context] (the [com.sidr.launcher.core.android.permission.AndroidPermissionChecker]
- * / `AndroidConnectivityChecker` precedent). Not unit-tested in `core/android` (no test deps there —
- * the JVM-only `:core:testing` rule); covered by `FakeSpeechInputSource` + a device run (OQ#4).
+ * / `AndroidConnectivityChecker` precedent). Not unit-tested in `core/android` (written when it had no Android
+ * test deps — Robolectric arrived there with the A4′ tail's task 8 — and the JVM-only `:core:testing` rule);
+ * covered by `FakeSpeechInputSource` + a device run (OQ#4).
  */
 class AndroidSpeechInputSource(
     private val context: Context,

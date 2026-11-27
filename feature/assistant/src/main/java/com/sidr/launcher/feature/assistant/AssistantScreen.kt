@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
@@ -21,8 +23,10 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
@@ -33,6 +37,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import com.sidr.launcher.core.ui.component.SidrAssistantComposer
 import com.sidr.launcher.core.ui.component.SidrErrorSurface
 import com.sidr.launcher.core.ui.component.SidrIconButton
@@ -107,7 +112,14 @@ fun AssistantProviderScreen(
         modifier = modifier,
     ) { contentModifier ->
         Column(
-            modifier = contentModifier.verticalScroll(rememberScrollState()),
+            // `imePadding()` lifts the scroll area above the soft keyboard (owner ruling 9: the key field
+            // was hidden under it). Effective here: the Activity is edge-to-edge
+            // (`setDecorFitsSystemWindows(false)`), so the window is not resized and the IME inset
+            // reaches Compose, and `SidrScaffold`'s inner padding is systemBars only (no IME), so the
+            // inset is not counted twice.
+            modifier = contentModifier
+                .imePadding()
+                .verticalScroll(rememberScrollState()),
         ) {
             Spacer(modifier = Modifier.height(Spacing.lg))
             AssistantProviderPanel(
@@ -409,6 +421,8 @@ internal fun AssistantProviderPanel(
     form: ProviderFormState,
     onSave: (baseUrl: String, model: String, apiKey: String) -> Unit,
     modifier: Modifier = Modifier,
+    keyFieldRequester: BringIntoViewRequester = remember { BringIntoViewRequester() },
+    onKeyFieldFocused: () -> Unit = rememberBringIntoView(keyFieldRequester),
 ) {
     var baseUrl by remember(form.baseUrl) { mutableStateOf(form.baseUrl) }
     var model by remember(form.modelId) { mutableStateOf(form.modelId) }
@@ -462,6 +476,8 @@ internal fun AssistantProviderPanel(
                 placeholder = sidrString(R.string.assistant_placeholder_api_key),
                 visualTransformation = PasswordVisualTransformation(),
                 isPassword = true,
+                modifier = Modifier.bringIntoViewRequester(keyFieldRequester),
+                onFocused = onKeyFieldFocused,
             )
             if (form.keySet) {
                 SidrText(
@@ -488,6 +504,18 @@ internal fun AssistantProviderPanel(
 }
 
 /**
+ * The default focus reaction of the key field: ask [requester] to scroll the field into view, so a
+ * soft keyboard that has just opened does not leave it under the IME. Kept out of the panel body so
+ * a test can replace the reaction ([AssistantProviderPanel]'s `onKeyFieldFocused`) —
+ * [BringIntoViewRequester] is a sealed interface and cannot be faked.
+ */
+@Composable
+private fun rememberBringIntoView(requester: BringIntoViewRequester): () -> Unit {
+    val scope = rememberCoroutineScope()
+    return remember(requester, scope) { { scope.launch { requester.bringIntoView() } ; Unit } }
+}
+
+/**
  * Local labeled-field composition for the provider form: a [SidrSectionHeader] label over a
  * [SidrSurface]-wrapped mono [BasicTextField], matching the idiom used by the App Drawer's
  * `DrawerSearchField` and the assistant composer. Feature-local — not promoted to `core/ui` since no
@@ -505,6 +533,7 @@ private fun ProviderField(
     modifier: Modifier = Modifier,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     isPassword: Boolean = false,
+    onFocused: (() -> Unit)? = null,
 ) {
     val colors = SidrTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -537,6 +566,7 @@ private fun ProviderField(
                     visualTransformation = visualTransformation,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .onFocusChanged { if (it.hasFocus) onFocused?.invoke() }
                         .semantics {
                             contentDescription = label
                             if (isPassword) password()

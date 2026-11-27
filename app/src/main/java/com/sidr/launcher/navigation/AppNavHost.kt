@@ -100,15 +100,16 @@ private fun navigateToTab(navController: NavHostController, tab: SidrTab) {
  * (e.g. the status bar) that this outer Scaffold already accounted for, double-padding the top of
  * the screen. Consuming here keeps that inner Scaffold's own inset calculation correct.
  *
- * `contentWindowInsets = WindowInsets.systemBars` (2026-07-12, part of the keyboard-bug fix): M3
- * [Scaffold]'s own default is `WindowInsets.safeDrawing`, which — unlike the name suggests —
- * includes the **IME** inset, not just status/navigation bars; restricting this outer chrome
- * Scaffold to `systemBars` stops it reacting to the keyboard at the Compose-insets level. The
- * other half of that fix is in [com.sidr.launcher.LauncherActivity]: without
+ * `contentWindowInsets = WindowInsets.systemBars` (2026-07-12, added with the keyboard-bug fix): M3
+ * 1.4.0 [Scaffold]'s own default (`ScaffoldDefaults.contentWindowInsets`) is
+ * `systemBarsForVisualComponents` = `systemBars` ∪ `displayCutout` — it does **not** include the IME
+ * inset (checked with `javap` on the 1.4.0 classes, A4′ tail batch 2 review). The override therefore
+ * has no keyboard inset to remove: the only thing it drops from [inner] is the display cutout. The
+ * keyboard fix rests on [com.sidr.launcher.LauncherActivity]: without
  * `WindowCompat.setDecorFitsSystemWindows(window, false)` there, `windowSoftInputMode="adjustResize"`
  * (manifest) makes the OS physically shrink the whole Activity window when the IME opens on API<35
- * devices, which this Scaffold's own `contentWindowInsets` alone cannot undo — the window itself has
- * to stop resizing. The screens that actually need to dodge the keyboard apply their own
+ * devices, which no Scaffold's `contentWindowInsets` can undo — the window itself has to stop
+ * resizing. The screens that actually need to dodge the keyboard apply their own
  * `Modifier.imePadding()` at the right level ([LauncherScreen], [com.sidr.launcher.feature.launcher.preview.TerminalPreviewScreen]).
  */
 @Composable

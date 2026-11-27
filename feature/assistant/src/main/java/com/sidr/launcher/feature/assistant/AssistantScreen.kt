@@ -115,8 +115,13 @@ fun AssistantProviderScreen(
             // `imePadding()` lifts the scroll area above the soft keyboard (owner ruling 9: the key field
             // was hidden under it). Effective here: the Activity is edge-to-edge
             // (`setDecorFitsSystemWindows(false)`), so the window is not resized and the IME inset
-            // reaches Compose, and `SidrScaffold`'s inner padding is systemBars only (no IME), so the
-            // inset is not counted twice.
+            // reaches Compose, and `SidrScaffold`'s inner padding is M3's default systemBars ∪
+            // displayCutout (no IME), so the IME inset is not counted twice. The navigation-bar inset
+            // IS counted twice while the keyboard is open: `AssistantShell` applies `padding(inner)`
+            // (bottom = the nav bar), M3's Scaffold consumes no insets, and `imePadding()` adds the
+            // whole IME inset, which already spans the nav bar — so a gap one nav bar tall sits
+            // between Save and the keyboard. It hides nothing; `consumeWindowInsets` is deliberately
+            // not added (ruling B2-M2: the shell also hosts the device-accepted chat composer).
             modifier = contentModifier
                 .imePadding()
                 .verticalScroll(rememberScrollState()),

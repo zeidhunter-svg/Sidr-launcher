@@ -13,8 +13,10 @@ data class UserPreferences(
     val commandInputEnabled: Boolean = true,
     // Block X6 — deferred UI preferences.
     // Home "Favorites" size: how many places the pinned apps and the most-used ones share (`deriveFavorites`).
-    // Default 12 since A4′ acceptance tail task 12 (owner ruling 15). A stored value always beats the default, so a
-    // user who ever chose a size keeps it; only a store with nothing written for this key now reads 12.
+    // Default 12 since A4′ acceptance tail task 12 (owner ruling 15). A stored value always beats the default, and
+    // `UserPreferencesRepositoryImpl.updatePreferences` writes the whole object, so any install that ever wrote ANY
+    // preference (setup hint, theme, accent, mic toggle…) has this count stored and keeps it — usually the old
+    // default 8. In practice 12 reaches only fresh installs (nothing stored for this key); no migration (owner question).
     val favoritesCount: Int = 12,
     // Task 12: the apps the user pinned to Home, in the order they were pinned (first pinned stands first). They
     // always come before the automatic places and are never pushed out by them. Package names only.

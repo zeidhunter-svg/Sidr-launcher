@@ -81,16 +81,19 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * A4′ acceptance tail, task 8 (owner ruling 5: а; K13): the next-alarm chip's PLACE on Home, by semantics — Home has
  * no goldens and gets none. The chip stands at the very start of the date line, the date stays centred on that line
  * and never runs under the chip (plan review M9), and the whole line — chip with it — hides while the user types, as
  * the date line always has (`HomeDateLine`'s `visible`). The real [LauncherScreen] over a real [LauncherViewModel]
- * wired from `:core:testing` fakes, as `LauncherScreenPrayerStripTest` builds it.
+ * wired from `:core:testing` fakes, as `LauncherScreenPrayerStripTest` builds it; native graphics, so text has its real
+ * width. The date is today's (`HomeDateLine` reads the clock), so the assertions are invariants that hold for any date.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
 class LauncherScreenAlarmChipTest {
 
@@ -119,22 +122,7 @@ class LauncherScreenAlarmChipTest {
         }
         compose.waitForIdle()
 
-        val time = DateFormat.getTimeFormat(context).format(Date(ALARM_AT))
-        val chip = compose.onNodeWithContentDescription("Next alarm: $time").assertIsDisplayed()
-        compose.onNodeWithText("⏰ $time").assertIsDisplayed()
-
-        val line = compose.onNodeWithTag(HOME_DATE_LINE_TEST_TAG).getBoundsInRoot()
-        val chipBounds = chip.getBoundsInRoot()
-        val date = compose.onNodeWithText(" · ", substring = true).getBoundsInRoot()
-        val tolerance = 1.dp
-
-        assertTrue("the chip starts where the date line starts: $chipBounds in $line", abs(chipBounds.left - line.left) <= tolerance)
-        assertTrue("the chip is ON the date line: $chipBounds in $line", chipBounds.top >= line.top - tolerance && chipBounds.bottom <= line.bottom + tolerance)
-        assertTrue("the date never runs under the chip: $date vs $chipBounds", date.left >= chipBounds.right - tolerance)
-        assertTrue(
-            "the date stays centred on its line: $date in $line",
-            abs((date.left + date.right) / 2 - (line.left + line.right) / 2) <= tolerance,
-        )
+        assertChipAtTheStartAndTheDateCentredBesideIt()
 
         vm.onCommandChanged("telegram")
         compose.waitForIdle()
@@ -155,6 +143,46 @@ class LauncherScreenAlarmChipTest {
 
         compose.onNodeWithContentDescription("Next alarm:", substring = true).assertDoesNotExist()
         compose.onNodeWithText(" · ", substring = true).assertIsDisplayed()
+    }
+
+    /**
+     * Plan review M9, held where it bites: on a screen as narrow as 240 dp ANY date this line can show, centred on the
+     * whole width, would start left of the chip's right edge — the date must instead be measured narrower by the chip's
+     * width on both sides (it wraps) and stay centred, clear of the chip. Native graphics, so text has its real width
+     * (Robolectric's legacy text measurement makes every string a few dp wide and the property vacuous). The default
+     * 320 dp screen above does not reach it on most days: there a short date fits beside the chip either way.
+     */
+    @Test
+    @Config(qualifiers = "w240dp")
+    fun `on a narrow screen the date wraps beside the chip rather than running under it`() {
+        val vm = buildViewModel(FakeNextAlarmSource(NextAlarm(ALARM_AT)))
+        compose.setContent {
+            SidrTheme(darkTheme = true) {
+                LauncherScreen(viewModel = vm)
+            }
+        }
+        compose.waitForIdle()
+
+        assertChipAtTheStartAndTheDateCentredBesideIt()
+    }
+
+    private fun assertChipAtTheStartAndTheDateCentredBesideIt() {
+        val time = DateFormat.getTimeFormat(context).format(Date(ALARM_AT))
+        val chip = compose.onNodeWithContentDescription("Next alarm: $time").assertIsDisplayed()
+        compose.onNodeWithText("⏰ $time").assertIsDisplayed()
+
+        val line = compose.onNodeWithTag(HOME_DATE_LINE_TEST_TAG).getBoundsInRoot()
+        val chipBounds = chip.getBoundsInRoot()
+        val date = compose.onNodeWithText(" · ", substring = true).getBoundsInRoot()
+        val tolerance = 1.dp
+
+        assertTrue("the chip starts where the date line starts: $chipBounds in $line", abs(chipBounds.left - line.left) <= tolerance)
+        assertTrue("the chip is ON the date line: $chipBounds in $line", chipBounds.top >= line.top - tolerance && chipBounds.bottom <= line.bottom + tolerance)
+        assertTrue("the date never runs under the chip: $date vs $chipBounds", date.left >= chipBounds.right - tolerance)
+        assertTrue(
+            "the date stays centred on its line: $date in $line",
+            abs((date.left + date.right) / 2 - (line.left + line.right) / 2) <= tolerance,
+        )
     }
 
     private fun buildViewModel(nextAlarms: FakeNextAlarmSource): LauncherViewModel {

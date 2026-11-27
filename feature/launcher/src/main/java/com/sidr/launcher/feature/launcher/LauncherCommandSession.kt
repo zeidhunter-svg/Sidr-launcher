@@ -613,6 +613,11 @@ internal class LauncherCommandSession(
      * ruling K7): the plan starts at once through `startPlanned`, exactly as a 2b pick's does ([chooseTarget]) —
      * validated against the registry, every step gated by the engine — and a command still waiting on the model is
      * abandoned first, as for every Home gesture that takes the user elsewhere ([supersedeWaitingCommand]).
+     *
+     * **Named limit — the tap replaces the session on Home.** It starts a NEW session, and saving it replaces whatever
+     * session the store held (one session at rest, `StartAgentSessionUseCase.startPlanned`): a restored Paused card or a
+     * card awaiting consent is dropped without the user choosing on it. It fails safe — nothing of the dropped plan
+     * runs, a risky step included — and it is what a typed command that starts a session does too.
      */
     fun startAtOnce(goal: AgentGoal, plan: ExecutionPlan) {
         supersedeWaitingCommand()

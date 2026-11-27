@@ -33,6 +33,11 @@ import kotlinx.coroutines.flow.map
  * one clock — is `null`, never a guess. The manifest's `<queries>` already declares `SHOW_ALARMS` (A1″ phase 3b), so
  * the clock is visible to [PackageManager.resolveActivity] under package-visibility rules.
  *
+ * **Named limit — a sooner alarm of another app hides the clock's own.** `getNextAlarmClock()` reports only the SOONEST
+ * alarm clock across every app; no public API reads «the clock's own next alarm». So when another app (Find My Mobile)
+ * has an alarm clock set before the clock's, this source returns `null` and no chip shows, although the clock has a
+ * later alarm — it fails closed (no chip), never showing a time that is not the clock's.
+ *
  * **No permission** — neither `getNextAlarmClock`, nor the broadcast, nor the resolve needs one, so nothing here can
  * block startup; and nothing runs before the first collector (the ViewModel shares it `WhileSubscribed`).
  *

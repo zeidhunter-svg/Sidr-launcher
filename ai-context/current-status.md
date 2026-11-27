@@ -5,7 +5,7 @@
 > digest); per-phase plans carry their own checklists.** This file is the status snapshot — if it
 > disagrees with an ADR, the ADR wins. Status labels follow Этап 0.5's vocabulary: `CODE-GREEN`
 > (gate green, no device claim) / `DEVICE-ACCEPTED` (owner ran on-device verification and signed off)
-> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-11-22
+> / `CLOSED` (both, with any residual limitation named, not implied absent). Last re-based: 2026-11-27
 > (**A4′ acceptance tail, batch 1 — «маршрут команды и карточка», plan tasks 1–6 — `CODE-GREEN`, nothing seen on a
 > phone; ADR «2026-11-22 — Пачка 1 хвоста A4′: маршрут команды и карточка»** (beside the batch's two amendment ADRs,
 > «D1, поправка…» and «D3, вторая поправка…»). Online FastPath yields its confident search and its «нет такого
@@ -13,18 +13,21 @@
 > reading does not bind — K1, K3, review M-5), the model may correct an app name (D1), a bare alias opens its app on the device,
 > above 2b and the model (step 1a), a reading with no pick and no model text going out starts at once and teaches nothing
 > (D3 second amendment, I5; a simple session closes itself, I12), a decline reads «Понял команду, но Sidr так пока не
-> умеет», the wait shows only while the model is asked. The batch review's Important — a homograph address after a verb
-> reached the model and, with no card owed, only the consent card stood before it — is fixed **for FastPath's verb
-> commands**: a search or missing app none of whose words is an address `UrlDetector` only searches is the only kind
-> yielded (`7b297d9f`, then word by word with punctuation stripped after the re-review, `ea9ecd1d`). **Not fixed, named
-> for the owner (question 2):** undecided text carrying an address («зайди на https://аpple.com», at the model since 3a)
-> and a homograph in the TLD («https://apple.cоm», no address to `UrlDetector`) still reach a card-less `open_url` and
-> its consent card. **Boundary gate `GATE GREEN` 2014 / 0 / 0** after the
-> re-review fix (2008 after the fix wave), 557 executed (`:domain` 677 · `:data:repository` 495 · `:feature:launcher` 309 ·
-> `:app` 98 · `:consumer:jvm` 101 · `:feature:settings` 35 · other seven 299 — exactly as predicted); floor
-> `BASELINE_TESTS` 1918 → 2014;
+> умеет», the wait shows only while the model is asked. The batch review's Important — a homograph address reached the
+> model and, with no card owed, only the consent card stood before it — is closed **where the address is opened** (owner,
+> question 2, 2026-11-27: «отказ»; `821bca73`): `UrlSort.normalized` refuses an `open_url` host with any non-ASCII
+> character, a `%`, userinfo or an `xn--` label — read by the bridge's binder before any card or session (step 7, the 2c
+> replay) and by the worker below the consent card; a legitimate IDN site («пример.рф») cannot be opened through the
+> model. FastPath's predicate stays an extra layer (`7b297d9f`, `ea9ecd1d`: a verb command one of whose whitespace words
+> `UrlDetector` only searches is not yielded); it does not see an address glued to a word
+> («[apple](https://аpple.com)»), a homograph in the TLD («https://apple.cоm») or undecided text — those reach the
+> model and are refused at the binder (FastPath's own answer for a yielded command, «Не понял «…»» otherwise).
+> **Boundary gate `GATE GREEN` 2025 / 0 / 0** after the host check (2014 after the re-review fix, 2008 after the fix
+> wave), 557 executed (`:domain` 683 · `:data:repository` 500 · `:feature:launcher` 309 · `:app` 98 · `:consumer:jvm` 101
+> · `:feature:settings` 35 · other seven 299 — exactly as predicted); floor `BASELINE_TESTS` 2014 → 2025;
 > `:app:assembleRelease` red only at `checkOwnerReviewedLocaleStrings` (the `tr` draft of `settings_local_only_description`,
-> unsigned). Six owner questions in the ADR; batches 2–3 and the one acceptance are next); prior 2026-11-21
+> unsigned). Owner questions in the ADR (question 2 answered 2026-11-27; a new one on the refusal line); batches 2–3 and
+> the one acceptance are next); prior 2026-11-21
 > (**context hygiene — `decisions.md` stays whole as an archive by address, `ai-context/decisions-orientation.md` beside
 > it is read whole (every journal heading verbatim with an in-force / replaced / history mark), held by
 > `DecisionsOrientationGuardTest` (`:app`, +4, mutation-proved by `mutation-prover`: five plants as predicted, the
@@ -1793,7 +1796,8 @@ that a learned command is multilingual (each wording pins on its own streak); th
 free pages, A1′ residual (10)); that memory or settings move to a new phone (they start from defaults). **The twelve
 owner rulings of the round are tasks** (the block ADR's table) — *re-based 2026-11-22:* the tail plan's batch 1 built
 its first six (plan tasks 1–6, `CODE-GREEN`, ADR «2026-11-22 — Пачка 1 хвоста A4′…»), **none of them seen on a phone**:
-the yield to the model, the corrected app name, step 1a, the start without a card, the decline line, the wait. The Master Plan DoD line «local-only /
+the yield to the model, the corrected app name, step 1a, the start without a card, the decline line, the wait — nor its
+`open_url` host check (owner question 2, 2026-11-27). The Master Plan DoD line «local-only /
 offline / no-key behave as today», knowingly false since phase 1, was corrected at this close to `DOC-ADL-3`'s text.
 
 **Context hygiene (2026-11-11) claims nothing on a phone and nothing about tokens directly:** every number
@@ -1893,6 +1897,9 @@ were replaced, not appended to, and «Source of truth» no longer says A4′ has
 
 *Applied 2026-11-22 by batch 1 of the A4′ tail:* «Not claimed done» no longer says the twelve rulings are «none built»
 (six are, none seen on a phone); «Source of truth» names the active plan and the latest ADR instead of «no active block».
+
+*Applied 2026-11-27 by batch 1's host check (owner question 2):* «Not claimed done» names the `open_url` host check among
+the batch's items no one has seen on a phone; «Source of truth» needed no change.
 
 *Applied 2026-11-21 by the context-hygiene session:* «Source of truth» names the orientation file and the journal as an
 archive by address; «Not claimed done» says what the new guard does not hold. The header's first sentence («history

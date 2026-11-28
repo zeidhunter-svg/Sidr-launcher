@@ -35,8 +35,6 @@ class AppDrawerViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
     private val fakeRepo = FakeInstalledAppsRepository()
     private val fakeExecutor = FakeActionExecutor()
-    private val fakeUsageRepo = FakeUsageHistoryRepository()
-    private val fakeFlagRepo = FakeFeatureFlagRepository(FeatureFlags(usageHistoryEnabled = true))
 
     @Before
     fun setUp() {
@@ -47,17 +45,12 @@ class AppDrawerViewModelTest {
     fun tearDown() {
         fakeRepo.reset()
         fakeExecutor.reset()
-        fakeUsageRepo.reset()
         Dispatchers.resetMain()
     }
 
-    private fun buildViewModel(
-        flagRepo: FeatureFlagRepository = fakeFlagRepo,
-    ) = AppDrawerViewModel(
+    private fun buildViewModel() = AppDrawerViewModel(
         installedAppsRepository = fakeRepo,
         actionExecutor = fakeExecutor,
-        usageHistoryRepository = fakeUsageRepo,
-        featureFlagRepository = flagRepo,
         ioDispatcher = testDispatcher,
     )
 
@@ -172,7 +165,7 @@ class AppDrawerViewModelTest {
     }
 
     @Test
-    fun `onAppClicked launches through executor and records usage`() = runTest(testDispatcher) {
+    fun `onAppClicked launches through executor`() = runTest(testDispatcher) {
         val vm = buildViewModel()
         advanceUntilIdle()
 
@@ -183,32 +176,6 @@ class AppDrawerViewModelTest {
         val action = fakeExecutor.executedActions.single()
         assertTrue(action is ExecutableAction.LaunchAppAction)
         assertEquals("com.example.app", (action as ExecutableAction.LaunchAppAction).packageName)
-        assertEquals(listOf("com.example.app"), fakeUsageRepo.recordedLaunches)
-    }
-
-    @Test
-    fun `usage is not recorded when the flag is disabled`() = runTest(testDispatcher) {
-        val vm = buildViewModel(flagRepo = FakeFeatureFlagRepository(FeatureFlags(usageHistoryEnabled = false)))
-        advanceUntilIdle()
-
-        vm.onAppClicked(InstalledApp("com.example.app", "Example"))
-        advanceUntilIdle()
-
-        assertEquals(1, fakeExecutor.callCount)
-        assertTrue(fakeUsageRepo.recordedLaunches.isEmpty())
-    }
-
-    @Test
-    fun `usage is not recorded when the launch fails`() = runTest(testDispatcher) {
-        fakeExecutor.resultToReturn = ActionExecutionResult.Failure(CommandFailure.Generic)
-        val vm = buildViewModel()
-        advanceUntilIdle()
-
-        vm.onAppClicked(InstalledApp("com.example.app", "Example"))
-        advanceUntilIdle()
-
-        assertEquals(1, fakeExecutor.callCount)
-        assertTrue(fakeUsageRepo.recordedLaunches.isEmpty())
     }
 
     @Test
@@ -288,7 +255,6 @@ class AppDrawerViewModelTest {
         assertTrue(action is ExecutableAction.LaunchAppAction)
         // Top match = first alphabetical section entry ("Calculator" < "Calendar").
         assertEquals("p.calc", (action as ExecutableAction.LaunchAppAction).packageName)
-        assertEquals(listOf("p.calc"), fakeUsageRepo.recordedLaunches)
     }
 
     @Test

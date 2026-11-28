@@ -1,6 +1,5 @@
 package com.sidr.launcher.feature.launcher
 
-import com.sidr.launcher.domain.history.UsageHistoryRepository
 import com.sidr.launcher.domain.intent.ActionExecutionResult
 import com.sidr.launcher.domain.intent.ActionExecutor
 import com.sidr.launcher.domain.intent.CommandFailure
@@ -8,15 +7,13 @@ import com.sidr.launcher.domain.intent.ExecutableAction
 import com.sidr.launcher.domain.memory.resolution.RecordResolutionChoiceUseCase
 import com.sidr.launcher.domain.memory.resolution.ResolutionLearningToken
 import com.sidr.launcher.domain.memory.resolution.ResolvedTarget
-import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * Task 3 / A0. `launchApp()`/`recordUsage()`/`recordChoiceIfPending()` extracted unchanged from
+ * Task 3 / A0. `launchApp()`/`recordChoiceIfPending()` extracted unchanged from
  * `LauncherViewModel` — they are called from both the app grid ([LauncherAppList]'s tap path) and
  * the command pipeline (`onCommandSubmitted`'s AutoLaunch branch), so a shared collaborator both
  * sides hold is what keeps [LauncherAppList] and the future `LauncherCommandSession` (Task 4) from
@@ -34,17 +31,13 @@ import kotlinx.coroutines.launch
  * [LauncherVoiceInput]'s callbacks).
  *
  * The scope split is load-bearing and preserved exactly: [launch] itself — and therefore the
- * feedback write and [recordUsage] it triggers on success — runs on [scope] (`viewModelScope`), so
+ * feedback write it triggers — runs on [scope] (`viewModelScope`), so
  * it is cancelled if the ViewModel is cleared mid-flight, same as before. [recordChoiceIfPending]'s
  * actual store write runs on [applicationScope] on purpose (S2-1 Task 11): it must survive the user
  * navigating away right after a launch, which cancels `viewModelScope` but not the application scope.
  */
 internal class LauncherAppLaunch(
     private val actionExecutor: ActionExecutor,
-    private val usageHistoryRepository: UsageHistoryRepository,
-    // Not part of the brief's illustrative constructor, but recordUsage() (moved verbatim) needs it
-    // to gate the write on the usageHistoryEnabled flag exactly as before.
-    private val featureFlagRepository: FeatureFlagRepository,
     private val recordResolutionChoice: RecordResolutionChoiceUseCase,
     private val applicationScope: CoroutineScope,
     private val scope: CoroutineScope,
@@ -82,26 +75,9 @@ internal class LauncherAppLaunch(
                     is ActionExecutionResult.Unsupported -> CommandFeedback.Failure(CommandFailure.Generic)
                 },
             )
-            // Record usage only on a successful launch — soft-wrapped, never blocks the launch.
-            // Command-executed launches (CommandOutcome.Executed) are not tracked here because
-            // the package name is not available at the ViewModel boundary; a future slice can
-            // extend HandleUserCommandUseCase to carry it in the outcome.
-            if (result is ActionExecutionResult.Success) {
-                recordUsage(packageName)
-            }
+            // Usage is not recorded here: every launch — this one, the drawer's, a command's — is recorded by the
+            // one `UsageRecordingActionExecutor` the `ActionExecutor` binding wears (A4′ tail fix round, task 2).
             onResult?.invoke(result is ActionExecutionResult.Success)
-        }
-    }
-
-    private suspend fun recordUsage(packageName: String) {
-        try {
-            // Gate: skip the write when the user has not enabled usage-history tracking.
-            if (!featureFlagRepository.getFlags().first().usageHistoryEnabled) return
-            usageHistoryRepository.recordLaunch(packageName, System.currentTimeMillis())
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Throwable) {
-            // Non-critical — launch already completed successfully.
         }
     }
 

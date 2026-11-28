@@ -320,8 +320,6 @@ class LauncherViewModel @Inject constructor(
     // stylistic — the mutual forward reference otherwise trips a Kotlin compiler recursive-inference bug.
     private val appLaunch: LauncherAppLaunch = LauncherAppLaunch(
         actionExecutor = actionExecutor,
-        usageHistoryRepository = usageHistoryRepository,
-        featureFlagRepository = featureFlagRepository,
         recordResolutionChoice = recordResolutionChoice,
         applicationScope = applicationScope,
         scope = viewModelScope,

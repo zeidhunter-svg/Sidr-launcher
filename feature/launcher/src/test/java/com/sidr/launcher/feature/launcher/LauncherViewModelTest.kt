@@ -1352,11 +1352,10 @@ class LauncherViewModelTest {
             val action = fakeExecutor.executedActions.single() as ExecutableAction.LaunchAppAction
             assertEquals("com.direct.package", action.packageName)
             assertEquals(null, action.activityName)
-            assertEquals(listOf("com.direct.package"), fakeUsageRepo.recordedLaunches)
         }
 
     @Test
-    fun `package suggestion tap respects usage history gate`() = runTest(testDispatcher) {
+    fun `package suggestion tap launches the installed app with its activity`() = runTest(testDispatcher) {
         fakeRepo.appsToReturn = listOf(
             InstalledApp(
                 packageName = "org.telegram.messenger",
@@ -1365,9 +1364,7 @@ class LauncherViewModelTest {
             ),
         )
         val vm = buildViewModel(
-            flagRepo = FakeFeatureFlagRepository(
-                FeatureFlags(aiSuggestionsEnabled = true, usageHistoryEnabled = false),
-            ),
+            flagRepo = FakeFeatureFlagRepository(FeatureFlags(aiSuggestionsEnabled = true)),
         )
         advanceUntilIdle()
 
@@ -1384,7 +1381,6 @@ class LauncherViewModelTest {
         val action = fakeExecutor.executedActions.single() as ExecutableAction.LaunchAppAction
         assertEquals("org.telegram.messenger", action.packageName)
         assertEquals("org.telegram.messenger.MainActivity", action.activityName)
-        assertTrue(fakeUsageRepo.recordedLaunches.isEmpty())
     }
 
     @Test
@@ -1476,94 +1472,23 @@ class LauncherViewModelTest {
         assertEquals(appsInOrder, (vm.uiState.value as UiState.Success).data.apps)
     }
 
-    // ── Usage recording (F6) ───────────────────────────────────────────────
+    // ── Usage recording (F6) — since the A4′ tail fix round, task 2, the executor's decorator records ──
 
     @Test
-    fun `successful tap-to-launch records usage for the launched package`() =
+    fun `a grid tap reaches the executor once and the ViewModel itself writes no usage`() =
         runTest(testDispatcher) {
             val vm = buildViewModel()
 
             vm.onAppClicked(InstalledApp("org.telegram.messenger", "Telegram"))
             advanceUntilIdle()
 
-            assertEquals(listOf("org.telegram.messenger"), fakeUsageRepo.recordedLaunches)
-        }
-
-    @Test
-    fun `failed tap-to-launch does not record usage`() = runTest(testDispatcher) {
-        fakeExecutor.resultToReturn = ActionExecutionResult.Failure(CommandFailure.CantOpenApp)
-        val vm = buildViewModel()
-
-        vm.onAppClicked(InstalledApp("com.missing", "Missing"))
-        advanceUntilIdle()
-
-        assertTrue(fakeUsageRepo.recordedLaunches.isEmpty())
-    }
-
-    @Test
-    fun `usage recording failure does not affect launch feedback`() = runTest(testDispatcher) {
-        fakeUsageRepo.errorToReturn = OperationError.UnknownError("db down")
-        val vm = buildViewModel()
-
-        vm.onAppClicked(InstalledApp("org.telegram.messenger", "Telegram"))
-        advanceUntilIdle()
-
-        // Launch succeeds; feedback is None despite the history write failing
-        assertEquals(CommandFeedback.None, vm.commandFeedback.value)
-        assertEquals(1, fakeExecutor.callCount)
-    }
-
-    // ── Feature-flag gate for usage recording (Block F remediation) ───────────
-
-    @Test
-    fun `onAppClicked does not record usage when usageHistoryEnabled is false`() =
-        runTest(testDispatcher) {
-            val vm = buildViewModel(
-                flagRepo = FakeFeatureFlagRepository(FeatureFlags(usageHistoryEnabled = false))
-            )
-
-            vm.onAppClicked(InstalledApp("org.telegram.messenger", "Telegram"))
-            advanceUntilIdle()
-
-            // Launch still happens; only the history write is suppressed.
+            // The one write is the executor decorator's (UsageRecordingActionExecutorTest: one execute → one
+            // recorded launch); a second write here would be the double count the review's focus 1 names.
             assertEquals(1, fakeExecutor.callCount)
-            assertTrue(
-                "No usage recording expected when flag is false",
-                fakeUsageRepo.recordedLaunches.isEmpty(),
+            assertEquals(
+                "org.telegram.messenger",
+                (fakeExecutor.executedActions.single() as ExecutableAction.LaunchAppAction).packageName,
             )
-        }
-
-    @Test
-    fun `onAppClicked records usage when usageHistoryEnabled is true`() =
-        runTest(testDispatcher) {
-            val vm = buildViewModel(
-                flagRepo = FakeFeatureFlagRepository(FeatureFlags(usageHistoryEnabled = true))
-            )
-
-            vm.onAppClicked(InstalledApp("org.telegram.messenger", "Telegram"))
-            advanceUntilIdle()
-
-            assertEquals(listOf("org.telegram.messenger"), fakeUsageRepo.recordedLaunches)
-        }
-
-    @Test
-    fun `recordUsage swallows non-cancellation error from getFlags`() =
-        runTest(testDispatcher) {
-            val throwingFlagRepo = object : FeatureFlagRepository {
-                override fun getFlags(): Flow<FeatureFlags> =
-                    flow { throw RuntimeException("flag read error") }
-                override suspend fun updateFlags(flags: FeatureFlags): OperationResult<Unit> =
-                    OperationResult.Success(Unit)
-            }
-            val vm = buildViewModel(flagRepo = throwingFlagRepo)
-
-            vm.onAppClicked(InstalledApp("org.telegram.messenger", "Telegram"))
-            advanceUntilIdle()
-
-            // Launch still happened; the flag-read error is swallowed by the catch-all.
-            assertEquals(1, fakeExecutor.callCount)
-            assertEquals(CommandFeedback.None, vm.commandFeedback.value)
-            // No usage recorded — flag could not be read.
             assertTrue(fakeUsageRepo.recordedLaunches.isEmpty())
         }
 

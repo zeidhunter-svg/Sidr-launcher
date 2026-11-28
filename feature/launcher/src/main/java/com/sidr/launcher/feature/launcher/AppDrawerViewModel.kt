@@ -6,17 +6,13 @@ import com.sidr.launcher.core.common.UiError
 import com.sidr.launcher.core.common.UiState
 import com.sidr.launcher.core.common.di.IoDispatcher
 import com.sidr.launcher.core.common.navigation.NavigationEvent
-import com.sidr.launcher.domain.history.UsageHistoryRepository
-import com.sidr.launcher.domain.intent.ActionExecutionResult
 import com.sidr.launcher.domain.intent.ActionExecutor
 import com.sidr.launcher.domain.intent.ExecutableAction
 import com.sidr.launcher.domain.model.InstalledApp
-import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.domain.result.OperationError
 import com.sidr.launcher.domain.result.OperationResult
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -26,7 +22,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -36,19 +31,17 @@ import javax.inject.Inject
 /**
  * ViewModel for the App Drawer (Block X3): loads the full installed-app list and exposes it grouped
  * alphabetically for the drawer's sectioned list. Tapping an app launches it through the existing
- * [ActionExecutor] path and records usage exactly like the home screen, so drawer launches still
+ * [ActionExecutor] path; the executor's usage decorator records it, so drawer launches still
  * feed Favorites / Suggestions on home.
  *
  * Deliberately narrow: it does NOT parse commands (no [com.sidr.launcher.domain.intent.HandleUserCommandUseCase]
- * / IntentMatcher). The launch + usage logic is a small verbatim copy of [LauncherViewModel]'s (per
+ * / IntentMatcher). The launch logic is a small verbatim copy of [LauncherViewModel]'s (per
  * the Block X3 ADR — a shared use-case was judged premature for a two-caller path).
  */
 @HiltViewModel
 class AppDrawerViewModel @Inject constructor(
     private val installedAppsRepository: InstalledAppsRepository,
     private val actionExecutor: ActionExecutor,
-    private val usageHistoryRepository: UsageHistoryRepository,
-    private val featureFlagRepository: FeatureFlagRepository,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
 
@@ -168,29 +161,15 @@ class AppDrawerViewModel @Inject constructor(
         launchApp(packageName = top.packageName, activityName = top.activityName)
     }
 
-    // Verbatim copy of LauncherViewModel.launchApp/recordUsage (Block X3 ADR): same executor path,
-    // same usageHistoryEnabled gate, CancellationException re-thrown, non-critical errors swallowed.
+    // The same executor path as LauncherViewModel.launchApp (Block X3 ADR). Usage is recorded by the one
+    // `UsageRecordingActionExecutor` the binding wears, not here (A4′ tail fix round, task 2).
     private fun launchApp(packageName: String, activityName: String?) {
         viewModelScope.launch {
             val action = ExecutableAction.LaunchAppAction(
                 packageName = packageName,
                 activityName = activityName,
             )
-            val result = actionExecutor.execute(action)
-            if (result is ActionExecutionResult.Success) {
-                recordUsage(packageName)
-            }
-        }
-    }
-
-    private suspend fun recordUsage(packageName: String) {
-        try {
-            if (!featureFlagRepository.getFlags().first().usageHistoryEnabled) return
-            usageHistoryRepository.recordLaunch(packageName, System.currentTimeMillis())
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Throwable) {
-            // Non-critical — the launch already completed successfully.
+            actionExecutor.execute(action)
         }
     }
 

@@ -115,7 +115,7 @@
 
 ## Группа 1 — без решений и малое
 
-### Задача 1: подпись `OWNER-REVIEWED` для `tr` Class B
+### Task 1: подпись `OWNER-REVIEWED` для `tr` Class B
 
 **Файлы:** тот `values-tr/strings_locked.xml`, который держит `settings_local_only_description` (найти:
 `grep -rln settings_local_only_description --include=strings_locked.xml */*/src/main/res/values-tr`).
@@ -126,7 +126,7 @@
   `feature/permission_education/src/main/res/values-tr/strings_locked.xml:4`); повтор задачи — зелёный.
 - [ ] **Шаг 3: коммит** `chore(a4-tail/fix): подпись владельца для tr Class B (приёмка 2026-11-28)`.
 
-### Задача 2: запуск записывается в одном месте — декоратор `ActionExecutor` (Ф5)
+### Task 2: запуск записывается в одном месте — декоратор `ActionExecutor` (Ф5)
 
 **Файлы:**
 - Создать: `data/repository/src/main/java/com/sidr/launcher/data/repository/intent/UsageRecordingActionExecutor.kt` —
@@ -155,7 +155,7 @@ nowMs())`; ошибка записи и любое исключение кром
 - [ ] **Шаг 2: RED → реализовать → GREEN** (`--scoped :data:repository:testDebugUnitTest :feature:launcher:testDebugUnitTest :app:testDebugUnitTest`).
 - [ ] **Шаг 3: коммит** `fix(a4-tail/fix): запуск записывается одним декоратором — и командой, и касанием`.
 
-### Задача 3: чип будильника удалён (решение 3: б, Ф4)
+### Task 3: чип будильника удалён (решение 3: б, Ф4)
 
 **Файлы (удалить):** `domain/.../alarm/NextAlarm.kt`, `core/android/.../alarm/AndroidNextAlarmSource.kt` + его тест,
 `core/testing/.../FakeNextAlarmSource.kt`, `app/.../di/NextAlarmModule.kt`, `core/ui/.../component/SidrNextAlarmChip.kt` +
@@ -174,7 +174,7 @@ nowMs())`; ошибка записи и любое исключение кром
 - [ ] **Шаг 3: коммит** `revert(a4-tail/fix): чип будильника убран до A6 — слот следующего будильника занят чужими
   setAlarmClock` (в теле — sha коммита, который его ввёл, для A6).
 
-### Задача 4: равные кнопки и равные вкладки (Ф7)
+### Task 4: равные кнопки и равные вкладки (Ф7)
 
 **Файлы:** `core/ui/.../component/SidrActionSafety.kt` (`SidrSurfaceActions`: обе кнопки делят ширину всегда, когда
 есть обе; параметр `equalWidth` убрать вместе с его протяжкой через `SidrResultSurface` и местом
@@ -193,7 +193,7 @@ nowMs())`; ошибка записи и любое исключение кром
 > Толкование «по примеру «Добавить»» — обе вкладки одной ширины (по большей). Если владелец имел в виду иное (обе
 > короче, по «Добавить»), — правка на ревью плана.
 
-### Задача 5: долгое нажатие на иконку избранного → «Убрать с главного» (решение 6: а)
+### Task 5: долгое нажатие на иконку избранного → «Убрать с главного» (решение 6: а)
 
 **Файлы:** `core/ui/.../component/AppTile.kt` (`onLongClick: (() -> Unit)? = null`, `onLongClickLabel: String? =
 null` → `combinedClickable`; без них — как сейчас), новый `core/ui/.../component/SidrContextMenu.kt`
@@ -212,7 +212,7 @@ String, onClick: () -> Unit)`; Material3 `DropdownMenu` в цветах темы
 
 ## Группа 2 — имена приложений (решение 4: а, Ф1)
 
-### Задача 6: голая метка установленного приложения открывает его на устройстве (4: а, i)
+### Task 6: голая метка установленного приложения открывает его на устройстве (4: а, i)
 
 **Файлы:** `domain/.../ai/router/RouteCommandUseCase.kt` (шаг 1a: после алиаса — метка), параметр конструктора
 `folding: TextFolding = PlainTextFolding`; `app/.../di/BridgeProvidesModule.kt` — передать продакшн-`TextFolding`
@@ -233,7 +233,7 @@ String, onClick: () -> Unit)`; Material3 `DropdownMenu` в цветах темы
 - [ ] **Шаг 2: RED → реализовать → GREEN** (`--scoped :domain:jvmTest`, затем `:app:testDebugUnitTest` — граф).
 - [ ] **Шаг 3: коммит** `feat(a4-tail/fix): голое имя установленного приложения открывает его без модели`.
 
-### Задача 7: инструкция модели — обычное имя приложения и язык вопроса (4: а, ii)
+### Task 7: инструкция модели — обычное имя приложения и язык вопроса (4: а, ii)
 
 **Файлы:** `domain/.../ai/bridge/BridgeRendering.kt` (`INSTRUCTION`; метка аргумента `:235`),
 `data/repository/.../agent/AuthoredToolDescriptions.kt` (`THE_APP`), `consumer/jvm/.../bridge/SandboxToolDescriptions.kt`
@@ -256,7 +256,7 @@ String, onClick: () -> Unit)`; Material3 `DropdownMenu` в цветах темы
 - [ ] **Шаг 2: RED → реализовать → GREEN** (`--scoped :domain:jvmTest :data:repository:testDebugUnitTest :consumer:jvm:test`).
 - [ ] **Шаг 3: коммит** `feat(a4-tail/fix): модели велено писать обычное имя приложения и спрашивать на языке запроса`.
 
-### Задача 8: имя от модели находит приложение и по хвосту пакета (4: а, iii)
+### Task 8: имя от модели находит приложение и по хвосту пакета (4: а, iii)
 
 **Файлы:** `data/repository/.../agent/AppTargetResolver.kt` (`exactly`), тест `AppTargetResolverTest.kt`,
 `DeviceMentionBinderTest.kt`.
@@ -274,7 +274,7 @@ String, onClick: () -> Unit)`; Material3 `DropdownMenu` в цветах темы
 - [ ] **Шаг 2: RED → реализовать → GREEN** (`--scoped :data:repository:testDebugUnitTest`).
 - [ ] **Шаг 3: коммит** `feat(a4-tail/fix): имя приложения от модели находится и по хвосту имени пакета`.
 
-### Задача 9: удаление по имени от модели — одна карточка согласия (решение 2: а, Ф2)
+### Task 9: удаление по имени от модели — одна карточка согласия (решение 2: а, Ф2)
 
 **Файлы:** `data/repository/.../agent/DeviceMentionBinder.kt` (`bindMention`), KDoc `AppTargetResolver.forIrreversible`
 и класса `DeviceMentionBinder` («For an irreversible tool even an exact answer is a pick»), тест
@@ -298,7 +298,7 @@ String, onClick: () -> Unit)`; Material3 `DropdownMenu` в цветах темы
 
 ## Группа 3 — правило карточки (D3, третья поправка)
 
-### Задача 10: длительность и время, прочитанные устройством, — не текст модели (решение 5: а, Ф3)
+### Task 10: длительность и время, прочитанные устройством, — не текст модели (решение 5: а, Ф3)
 
 **Файлы:** `domain/.../sort/ArgSort.kt` (`ArgSorts.READ_ON_DEVICE = setOf(DURATION, CLOCK_TIME)` — сорта, чьи слова
 устройство превращает в число, а наружу уходит число; `URL` — **нет**: адрес уходит как есть),
@@ -318,7 +318,7 @@ String, onClick: () -> Unit)`; Material3 `DropdownMenu` в цветах темы
   пустое `readOnDevice` в `act()` → RED двух первых тестов.
 - [ ] **Шаг 4: коммит** `fix(a4-tail/fix): прочитанные устройством длительность и время — не текст модели (D3, третья поправка)`.
 
-### Задача 11: повтор выученной команды — без карточки, кроме выбора (решение «Без карточки», Ф6)
+### Task 11: повтор выученной команды — без карточки, кроме выбора (решение «Без карточки», Ф6)
 
 **Файлы:** `domain/.../ai/router/RouteCommandUseCase.kt` (`replayLearned`: карточка только при `replay.act.plan() ==
 null`, то есть при долге выбора; KDoc шага 2c и `needsCard` «One rule for two callers» → два правила),
@@ -341,7 +341,7 @@ null`, то есть при долге выбора; KDoc шага 2c и `needsC
 
 ## Закрытие
 
-### Задача 12: граничный гейт, ревью, ADR, повторная приёмка
+### Task 12: граничный гейт, ревью, ADR, повторная приёмка
 
 - [ ] `gradlew --stop`; разбивка по модулям **до** прогона (пол 2078 − 15 задачи 3 + добавленные — посчитать по
   задачам); `tools/gate.sh` → `GATE GREEN`; `:core:ui:verifyRoborazziDebug`; `:app:assembleRelease` (подпись задачи 1

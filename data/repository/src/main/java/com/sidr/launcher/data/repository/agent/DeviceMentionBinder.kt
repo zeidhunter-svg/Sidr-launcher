@@ -96,8 +96,10 @@ import javax.inject.Inject
  * re-resolved from the user's words the step kept in its `labelArg` (`launch_app`'s `query`,
  * `uninstall_app`'s `app_label`), through the SAME mention branch as [bind] — candidates, learned choices
  * for `launch_app` only, a pick with its own token (controller ruling E11-P4); a step that kept the package
- * only (`open_app_info`) is checked against the installed list instead. A package no longer installed is
- * [Binding.NotFound] («нет такого приложения»), never launched stale. Origins (controller ruling E11-P1):
+ * only (`open_app_info`) is checked against the installed list instead. Words that now answer nothing still bind
+ * the package the step kept when it is installed and the package step ([AppTargetResolver.exactly]) answers exactly
+ * it — a name the model wrote, bound by the package's tail («Maps» for «Карты»; A4′ tail fix round, task 8, review
+ * I1). A package no longer installed is [Binding.NotFound] («нет такого приложения»), never launched stale. Origins (controller ruling E11-P1):
  * the re-bound package is [ValueOrigin.Ours], its words [ValueOrigin.SaidBy] the user, as in [bind]; every
  * other literal — a value the model wrote, or one a finished step recorded — is [ValueOrigin.ModelGenerated],
  * so an `EXTERNAL` step shows it (over-shown, never under-shown). Effects are the CURRENT [registry]'s; a
@@ -191,7 +193,19 @@ class DeviceMentionBinder @Inject constructor(
         if (label != null && words != null) {
             val again = asProposed(literals - appArg - label + (AuthoredToolDescriptions.MENTION_ARG to words))
             // The kept words are read as the user's (E11-P4), as before amendment D1: the plan on disk keeps no origin.
-            return bindMention(index, again, again.args, modelWritten = false)
+            val first = bindMention(index, again, again.args, modelWritten = false)
+            // Task 8 fix round (review I1, controller ruling (a)): words the MODEL wrote may have bound by the package
+            // only («Maps» → `com.google.android.apps.maps`, label «Карты») — the user's words never read it. When they
+            // now answer nothing, the kept package is still installed and the package step answers exactly it, it binds
+            // again as before; anything else is the answer above.
+            val keptPackage = literals[appArg]
+            if (first is StepBinding.Refused && first.binding is Binding.NotFound && keptPackage != null &&
+                appTargets.stillInstalled(keptPackage) == true && appTargets.exactly(words).names(keptPackage)
+            ) {
+                val origins = kept.origins + (label to ValueOrigin.SaidBy(PrincipalId.USER)) + (appArg to ValueOrigin.Ours)
+                return step(index, kept, literals, origins, choice = null)
+            }
+            return first
         }
         val packageName = literals[appArg] ?: return step(index, kept, literals, kept.origins, choice = null)
         return when (appTargets.stillInstalled(packageName)) {
@@ -339,6 +353,13 @@ class DeviceMentionBinder @Inject constructor(
             val appWords: String? = null,
         ) : StepBinding
         data class Refused(val binding: Binding) : StepBinding
+    }
+
+    /** Whether this answer is exactly [packageName], alone or among several (the remainder's kept package, I1). */
+    private fun AppCandidates.names(packageName: String): Boolean = when (this) {
+        is AppCandidates.One -> app.packageName == packageName
+        is AppCandidates.Several -> apps.any { it.packageName == packageName }
+        else -> false
     }
 
     /** The plan's step through the domain's one conversion ([toPlanStep], controller ruling E9-P3). */

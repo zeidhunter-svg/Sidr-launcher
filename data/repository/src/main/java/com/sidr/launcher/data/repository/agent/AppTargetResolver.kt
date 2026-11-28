@@ -105,9 +105,9 @@ class AppTargetResolver @Inject constructor(
     /**
      * What a name the MODEL wrote can mean (amendment D1, ADR «2026-11-22 — D1, поправка: имя приложения,
      * исправленное моделью»; `DeviceMentionBinder`): [candidates] with the word forms taken away — an alias
-     * exactly, or a whole label exactly after the folding; a form of either ([AppCandidates.Confirm]) is
-     * [AppCandidates.None], since the forms exist to meet the USER's words («миравину» for «Миравин»), never the
-     * model's. One answer is never typed as the user typed it — the user did not type it at all — so it is
+     * exactly, or a whole label exactly after the folding; a form of either ([AppCandidates.Confirm]) is never
+     * offered — it falls through to the package step below, as no answer does — since the forms exist to meet the
+     * USER's words («миравину» for «Миравин»), never the model's. One answer is never typed as the user typed it — the user did not type it at all — so it is
      * [AppCandidates.One.foldedOnly], and an irreversible tool makes it a pick ([forIrreversible], owner decision
      * 2026-11-17), never a bind.
      *

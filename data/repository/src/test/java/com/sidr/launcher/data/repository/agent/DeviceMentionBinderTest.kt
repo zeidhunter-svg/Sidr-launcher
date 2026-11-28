@@ -848,4 +848,38 @@ class DeviceMentionBinderTest {
         assertEquals(Binding.NotFound("lumora"), binder(listOf(zantor)).rebind(goal, launch))
         assertEquals(Binding.NotFound("net.fixture.vemblic"), binder(listOf(zantor)).rebind(goal, info))
     }
+
+    /**
+     * Task 8 fix round (review I1, controller ruling (a)): a step bound by its package's tail kept the model's
+     * «Maps» and `com.google.android.apps.maps`; on resume those words are read as the user's, and no label is
+     * «Maps» (it is «Карты»). The kept package is still installed and the package step answers exactly it, so the
+     * remainder binds it again — not «нет такого приложения» for an app bound minutes earlier.
+     */
+    @Test
+    fun `a remainder bound by package tail is bound again, not reported missing`() = runTest {
+        val googleMaps = InstalledApp(packageName = "com.google.android.apps.maps", label = "Карты")
+        val remainder = ExecutionPlan(listOf(remainderStep(0, ToolIds.LAUNCH_APP, "app" to googleMaps.packageName, "query" to "Maps")))
+
+        val act = binder(listOf(googleMaps)).rebind(goal, remainder).act()
+
+        assertEquals(
+            mapOf("query" to ArgSource.Literal("Maps"), "app" to ArgSource.Literal("com.google.android.apps.maps")),
+            act.steps.single().invocation.args,
+        )
+        assertEquals(mapOf("query" to ValueOrigin.SaidBy(PrincipalId.USER), "app" to ValueOrigin.Ours), act.origins.getValue(0))
+        assertEquals(emptyList<PendingChoice>(), act.choices)
+    }
+
+    /** The pin beside it: the package the remainder kept is gone — still «not found», never launched stale. */
+    @Test
+    fun `a remainder whose kept package is gone is still not found`() = runTest {
+        val remainder = ExecutionPlan(listOf(remainderStep(0, ToolIds.LAUNCH_APP, "app" to "com.google.android.apps.maps", "query" to "Maps")))
+
+        assertEquals(Binding.NotFound("Maps"), binder(listOf(zantor)).rebind(goal, remainder))
+        assertEquals(
+            "another app ending in maps does not stand in for the one kept",
+            Binding.NotFound("Maps"),
+            binder(listOf(InstalledApp(packageName = "net.fixture.maps", label = "Карты"))).rebind(goal, remainder),
+        )
+    }
 }

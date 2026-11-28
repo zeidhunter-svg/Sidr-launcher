@@ -64,6 +64,20 @@ class AuthoredToolDescriptionsTest {
         assertEquals(3, descriptions.rows().values.sumOf { description -> description.args.count { it.sort == ArgSorts.APP } })
     }
 
+    /**
+     * Owner ruling 4: а, part ii (the A4′ tail's fix round, task 7): the model is asked for the app's usual name, so
+     * every app mention says so — «the app, in the user's own words» made it echo «плюс», «cloude», «клод», which the
+     * device could not bind. Read over the production rows.
+     */
+    @Test
+    fun `every app mention is described as the app's usual name`() {
+        val mentions = descriptions.rows().values.flatMap { description -> description.args.filter { it.sort == ArgSorts.APP } }
+
+        assertEquals(listOf("the app's usual name"), mentions.map { it.description }.distinct())
+        // The control: the three app mentions are all read, so one text is not "no text".
+        assertEquals(3, mentions.size)
+    }
+
     @Test
     fun `every other model argument is an argument the tool declares, with the same requiredness`() {
         val byId = authored.associateBy { it.id }

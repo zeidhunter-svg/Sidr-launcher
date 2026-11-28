@@ -157,6 +157,34 @@ class ConsoleHarnessTest {
         assertTrue("nothing else is touched", File(temp.root, "pallimer.md").exists())
     }
 
+    /**
+     * The A4′ tail's fix round, task 7 (owner ruling 4: а, part ii; review focus 5): the shared instruction now asks
+     * for an app's USUAL name, but a file is not an app — this consumer's file mentions are marked «words», the
+     * instruction tells the model to repeat the user's own words for those, and a «corrected» file name is still
+     * refused (`UNDERIVABLE_MENTION`), retried once with the note that names the same marker, and nothing runs.
+     */
+    @Test
+    fun `a file mention keeps the user's words rule`() = runTest {
+        temp.newFile("orvelle.txt")
+        // The user typed «orvele.txt»; the model «corrects» it to the file it guesses — words the user did not type.
+        val transport = ScriptedTransport(findThenDelete)
+
+        harness(mutableListOf("y", "y"), transport).run("ask find orvele.txt and delete it")
+
+        val system = transport.requests.first().system
+        assertTrue(system, system.contains("- find_file: Find one file in the sandbox folder by its name. args: name (words, required)"))
+        assertTrue(system, system.contains("path (words, required, ref)"))
+        assertFalse("no sandbox argument is marked app:\n$system", system.contains("(app"))
+        assertTrue(system, system.contains("An argument marked \"words\" must repeat the user's own words as they typed them."))
+        assertEquals("the refusal is retried once", 2, transport.requests.size)
+        assertEquals(
+            "Your previous reply was rejected: an argument marked \"words\" held words the user did not type. Copy the user's own words.",
+            transport.requests[1].retryNote,
+        )
+        assertTrue("nothing ran", File(temp.root, "orvelle.txt").exists())
+        assertFalse("no engine started", printed.contains("  PlanCreated(stepCount=2)"))
+    }
+
     /** The model's reading of «find <name> and delete it» for whatever file the command names. */
     private fun findThenDeleteOf(command: String) = TransportReply.Answer(
         RawAnswer(

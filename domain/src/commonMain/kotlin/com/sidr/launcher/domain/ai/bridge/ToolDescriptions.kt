@@ -14,12 +14,13 @@ enum class ToolNamespace { LAUNCHER, DEVICE, CONTENT }
 /**
  * One argument as the MODEL sees it — deliberately not `ActionArg` (spec §7.12.1). `uninstall_app`
  * declares `app` as "Package of the app to remove"; the model must never write a package, so its view
- * of the same argument is "the app, in the user's own words".
+ * of the same argument is "the app's usual name" (since the A4′ tail's fix round, task 7).
  *
  * [mention] marks an argument that names something in the user's world (an app on Android, a file on the
- * JVM sandbox). The model copies the user's words into it; `BridgeValidator` refuses words the user did not
- * type — unless the mention is of the app sort ([sort], amendment D1) — and the device binds them
- * (`MentionBinder`). The bit is what is rendered (the `app` marker); the sort is the validator's alone.
+ * JVM sandbox). The model writes an app's usual name into an app mention and copies the user's words into any
+ * other; `BridgeValidator` refuses words the user did not type — unless the mention is of the app sort ([sort],
+ * amendment D1) — and the device binds them (`MentionBinder`). The bit and the sort together pick the rendered
+ * marker (`BridgeRendering.MARK_APP` for an app mention, `BridgeRendering.MARK_WORDS` for any other).
  *
  * [acceptsRef] (A4′ phase 3b, B-18): the argument may hold, instead of words, a reference to an output of
  * an earlier step; a reference anywhere else is `BridgeError.SHAPE`. A mention that accepts one (a sandbox
@@ -29,8 +30,9 @@ enum class ToolNamespace { LAUNCHER, DEVICE, CONTENT }
  * исправленное моделью»): what a mention names, as our description declares it. Read by `BridgeValidator`
  * only: a mention of [ArgSorts.APP] the user did not type is admitted as the model's
  * ([ValueOrigin.ModelGenerated]) — the device binds such a name only to an exact label or alias — while a
- * mention of any other sort, or of none declared (`:consumer:jvm`'s file names), is refused as before. Never
- * rendered: the model is told nothing new.
+ * mention of any other sort, or of none declared (`:consumer:jvm`'s file names), is refused as before. Since the
+ * A4′ tail's fix round, task 7 (owner ruling 4: а, part ii), it is also rendered, through the marker: an app mention
+ * is marked «app» and the instruction asks for the app's usual name there, any other mention «words».
  */
 data class ModelArg(
     val name: String,

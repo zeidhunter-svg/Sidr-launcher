@@ -28,8 +28,10 @@ import com.sidr.launcher.domain.tool.ToolLevels
  *
  * Every tool is in [ToolNamespace.DEVICE] — the sandbox is this computer's own folder, not the web.
  * **A named limit, not this file's to change:** `BridgeRendering.INSTRUCTION` is Android's text — it tells
- * the model the request was typed into «Sidr, an Android home screen», and it marks every mention «app»;
- * both reach the JVM's prompt unchanged.
+ * the model the request was typed into «Sidr, an Android home screen», and that reaches the JVM's prompt
+ * unchanged. The file mentions here declare no sort, so they are marked «words» (not «app»: the A4′ tail's fix
+ * round, task 7) and the instruction tells the model to repeat the user's own words for them; a file name the model
+ * rewrites is refused (`UNDERIVABLE_MENTION`) as before.
  */
 class SandboxToolDescriptions : ToolDescriptions {
 

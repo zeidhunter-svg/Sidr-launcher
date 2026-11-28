@@ -3,6 +3,7 @@ package com.sidr.launcher.domain.ai.bridge
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.RuntimeBudget
 import com.sidr.launcher.domain.ai.OutboundContextPolicy
+import com.sidr.launcher.domain.sort.ArgSorts
 import com.sidr.launcher.domain.tool.ToolDescriptor
 import com.sidr.launcher.domain.tool.ToolDurability
 import com.sidr.launcher.domain.tool.ToolEffect
@@ -50,7 +51,7 @@ class BridgeRenderingTest {
                 ToolDescription(
                     ToolNamespace.LAUNCHER,
                     "Open a quill.",
-                    listOf(ModelArg("app", "the app, in the user's own words", required = true, mention = true)),
+                    listOf(ModelArg("app", "the app, in the user's own words", required = true, mention = true, sort = ArgSorts.APP)),
                 ),
             ),
             OfferedTool(
@@ -134,23 +135,112 @@ class BridgeRenderingTest {
     }
 
     /**
-     * Amendment D1, controller ruling T2-R1 (A4′ acceptance tail, task 2): the validator admits an app name the
-     * model corrected, so the instruction must let it write one — «открой клод» → «Claude» — and it would not while
-     * it demanded the user's words «exactly as they typed them». The app is still the user's words as typed, a
-     * misspelling or a transliteration of an app the model knows becomes that app's usual name, and never a
-     * package. Compared whole, as the one sentence it is; the old demand is gone.
+     * Amendment D1, controller ruling T2-R1 (A4′ acceptance tail, task 2), and owner ruling 4: а, part ii (the fix
+     * round's task 7): the validator admits an app name the model corrected, so the instruction asks for one — the
+     * app's usual name as it is published, whatever the user's spelling, transliteration or translation («плюс»,
+     * «cloude», «клод») — and the user's words only when the model knows no such app. Any other mention (a file on
+     * `:consumer:jvm`, marked «words») must still repeat the user's own words, and never a package. Compared whole, as
+     * the two sentences they are; the old «repeat the user's own words for the app» demand is gone.
      */
     @Test
-    fun `the instruction lets the model write the usual name of a misspelt or transliterated app, never a package`() {
+    fun `the instruction asks for an app's usual name and the user's own words for any other mention, never a package`() {
         assertTrue(
             BridgeRendering.INSTRUCTION.contains(
-                "An argument marked \"app\" must repeat the user's own words for the app as they typed them; if those " +
-                    "words misspell or transliterate the name of an app you know, write that app's usual name instead. " +
+                "An argument marked \"app\" names an app: write the app's usual name as it is published, correcting the " +
+                    "user's spelling, transliteration or translation; if you know no such app, repeat the user's words. " +
+                    "An argument marked \"words\" must repeat the user's own words as they typed them. " +
                     "Never write a package name.",
             ),
         )
+        assertFalse(BridgeRendering.INSTRUCTION.contains("for the app as they typed them"))
         assertFalse(BridgeRendering.INSTRUCTION.contains("exactly as they typed them"))
     }
+
+    /**
+     * Owner ruling 4: а, part ii: the model asked the owner a question in English about a Russian request. The
+     * sentence stands on its own line right after the `clarify` line, so it governs every question the answer
+     * carries.
+     */
+    @Test
+    fun `the instruction asks for the question in the request's language`() {
+        assertTrue(
+            BridgeRendering.INSTRUCTION.contains(
+                "\"clarify\": you must ask the user one short question first. question = that question; steps and " +
+                    "destination are null.\nWrite any question in the language of the request.\n\"decline\":",
+            ),
+        )
+    }
+
+    /**
+     * The marker follows the mention's sort: an app (`ArgSorts.APP`) is marked «app», any other mention — the JVM
+     * sandbox's file names, with the file sort or none declared — «words», which is what the instruction's two
+     * sentences key on. A non-mention carries neither.
+     */
+    @Test
+    fun `an app mention is marked app and a file mention is marked words`() {
+        val text = BridgeRendering.offeringText(markerOffering())
+
+        assertTrue(text, text.contains("- fixture_quill: Open a quill. args: app (app, required) — the app's usual name"))
+        assertTrue(
+            text,
+            text.contains(
+                "- fixture_folio: Find a folio. args: name (words, required) — the file name, in the user's own words, " +
+                    "path (words, optional) — the file, in the user's own words",
+            ),
+        )
+        assertTrue(text, text.contains("- fixture_ledger: Write the ledger. args: duration (required) — how long"))
+    }
+
+    /**
+     * The one retry note the validator's mention refusal sends (`BridgeValidator` refuses only a mention NOT of the app
+     * sort) names the marker such a mention is rendered with — read off the rendering, so the note and the offering
+     * cannot drift apart again (in task 2 the note said «marked "app"» for what the fix round marks «words»).
+     */
+    @Test
+    fun `the underivable-mention note names the marker a non-app mention is rendered with`() {
+        val note = BridgeRendering.retryNote(BridgeError.UNDERIVABLE_MENTION)
+        assertEquals(
+            "Your previous reply was rejected: an argument marked \"words\" held words the user did not type. " +
+                "Copy the user's own words.",
+            note,
+        )
+        val marker = Regex("name \\(([a-z]+), required\\)").find(BridgeRendering.offeringText(markerOffering()))!!.groupValues[1]
+        assertTrue("the note names «$marker»: $note", note.contains("an argument marked \"$marker\" held"))
+        assertFalse(note, note.contains("\"app\""))
+    }
+
+    /** An app mention, two file mentions (one of the file sort, one of none — the JVM's shape) and a plain argument. */
+    private fun markerOffering() = BridgeOffering(
+        listOf(
+            OfferedTool(
+                descriptor("fixture_quill", ToolLevels.IN_APP),
+                ToolDescription(
+                    ToolNamespace.LAUNCHER,
+                    "Open a quill.",
+                    listOf(ModelArg("app", "the app's usual name", required = true, mention = true, sort = ArgSorts.APP)),
+                ),
+            ),
+            OfferedTool(
+                descriptor("fixture_folio", ToolLevels.SANDBOX),
+                ToolDescription(
+                    ToolNamespace.DEVICE,
+                    "Find a folio.",
+                    listOf(
+                        ModelArg("name", "the file name, in the user's own words", required = true, mention = true, sort = ArgSorts.FILE),
+                        ModelArg("path", "the file, in the user's own words", required = false, mention = true),
+                    ),
+                ),
+            ),
+            OfferedTool(
+                descriptor("fixture_ledger", ToolLevels.SYSTEM_INTENT),
+                ToolDescription(
+                    ToolNamespace.DEVICE,
+                    "Write the ledger.",
+                    listOf(ModelArg("duration", "how long", required = true, mention = false)),
+                ),
+            ),
+        ),
+    )
 
     /** Strict-compatible (D2, b′): every object closes its properties and requires every one of them. */
     @Test
@@ -210,7 +300,7 @@ class BridgeRenderingTest {
                     ToolDescription(
                         ToolNamespace.LAUNCHER,
                         "Open a quill.",
-                        listOf(ModelArg("app", "the app, in the user's own words", required = true, mention = true)),
+                        listOf(ModelArg("app", "the app, in the user's own words", required = true, mention = true, sort = ArgSorts.APP)),
                     ),
                 ),
                 OfferedTool(

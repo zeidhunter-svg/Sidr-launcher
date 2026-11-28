@@ -16,10 +16,13 @@ import javax.inject.Inject
  *
  * **An app argument is a mention, not a package.** `uninstall_app` declares `app` as "Package of the app
  * to remove"; the model must never write a package, so every app-sort tool is described with one
- * argument, [MENTION_ARG], "the app, in the user's own words" — `BridgeValidator` checks those are the
- * user's words, or (amendment D1: the mention is of `ArgSorts.APP`) admits a name the model corrected as the
- * model's, and `DeviceMentionBinder` turns them into a package. Every other argument keeps the tool's
- * own name and requiredness (`AuthoredToolDescriptionsTest`).
+ * argument, [MENTION_ARG], "the app's usual name" (the A4′ tail's fix round, task 7, owner ruling 4: а, part ii —
+ * before it "the app, in the user's own words", which made the model echo «плюс», «cloude», «клод»). The mention is
+ * of `ArgSorts.APP`, so it is marked «app» and the instruction asks for the app's usual name as published;
+ * `BridgeValidator` takes the user's words as theirs and (amendment D1) admits a name the model corrected as the
+ * model's, and `DeviceMentionBinder` turns either into a package, a corrected name only by an exact label or alias.
+ * Nothing about the phone is in this text. Every other argument keeps the tool's own name and requiredness
+ * (`AuthoredToolDescriptionsTest`).
  *
  * The three `launcher_memory` tools have no row: they are never offered (spec §7.5), and a missing
  * description is a second reason they could not be (`BridgeFilter` offers only described tools).
@@ -40,7 +43,7 @@ class AuthoredToolDescriptions internal constructor(
         /** The model-facing name of every app mention; the binder reads exactly this name. */
         const val MENTION_ARG = "app"
 
-        private const val THE_APP = "the app, in the user's own words"
+        private const val THE_APP = "the app's usual name"
 
         // Of the app sort (amendment D1): `BridgeValidator` admits a name the model corrected only for such a mention,
         // and `DeviceMentionBinder` binds that name to an exact label or alias only.

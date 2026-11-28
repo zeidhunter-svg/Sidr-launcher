@@ -1,6 +1,7 @@
 package com.sidr.launcher.domain.ai.bridge
 
 import com.sidr.launcher.domain.agent.RuntimeBudget
+import com.sidr.launcher.domain.sort.ArgSorts
 
 /**
  * Everything the bridge says to the model, from ONE offering (spec §7.12.2): the instruction, the
@@ -38,14 +39,20 @@ object BridgeRendering {
      * retry notes. The answer form is `steps` since phase 3b Task 8 (fork 3b-B), from one to
      * [MAX_STEPS_OFFERED], each step `{"tool", "args"}` in an array (`steps = [{…}]`, controller ruling
      * E8-I1: under `PROMPT_ONLY` the model sees no schema); it never mentions references (B-8 — those are
-     * the offering's). 1 292 characters — `ToolSchemaWeightTest` (the cap's «1» → «8» in Task 9 is one
-     * character for one; since Task 9's fix round 1 the plan line defines a plan as one or more actions,
+     * the offering's). 1 426 characters since the tail's fix round, task 7 — `ToolSchemaWeightTest` (the cap's
+     * «1» → «8» in Task 9 is one character for one; since Task 9's fix round 1 the plan line defines a plan as one or more actions,
      * in order, one step per action — it no longer contradicts the cap sentence, finding I2). Since the A4′
-     * acceptance tail, task 2 (amendment D1, controller ruling T2-R1; 1 187 → 1 292), the app sentence lets the
-     * model write the usual name of an app the user misspelt or transliterated — the validator admits it as the
-     * model's (`ArgSorts.APP` mentions only) and the device binds it to an exact label or alias only; never a
-     * package. `:consumer:jvm` sends this text too: its file mentions carry no app sort, so a «corrected» file name
-     * is still refused (`UNDERIVABLE_MENTION`) and retried once — no binding follows from it.
+     * acceptance tail, task 2 (amendment D1, controller ruling T2-R1; 1 187 → 1 292), the app sentence let the
+     * model write the usual name of an app the user misspelt or transliterated. Since the tail's fix round, task 7
+     * (owner ruling 4: а, part ii; 1 292 → 1 426 characters) it is two sentences, one per marker ([markersOf]): an
+     * argument marked [MARK_APP] is the app's usual name as published, correcting the user's spelling,
+     * transliteration or translation (the user's words only when the model knows no such app) — the validator admits
+     * it as the model's (`ArgSorts.APP` mentions only) and the device binds it to an exact label or alias only, never
+     * a package; an argument marked [MARK_WORDS] repeats the user's own words. A line after the `clarify` line asks
+     * for any question in the language of the request (the model asked a Russian request's question in English).
+     * Nothing about the phone is in it. `:consumer:jvm` sends this text too: its file mentions carry no app sort, so
+     * they are marked [MARK_WORDS], a «corrected» file name is still refused (`UNDERIVABLE_MENTION`) and retried
+     * once with the note that names the same marker — no binding follows from it.
      */
     val INSTRUCTION: String =
         "You read one request typed into Sidr, an Android home screen, and say what it asks for. You see " +
@@ -61,11 +68,20 @@ object BridgeRendering {
             "null.\n" +
             "\"clarify\": you must ask the user one short question first. question = that question; steps and " +
             "destination are null.\n" +
+            "Write any question in the language of the request.\n" +
             "\"decline\": nothing listed fits. steps, question and destination are null.\n" +
-            "A plan has from one to $MAX_STEPS_OFFERED steps, in order. An argument marked \"app\" must repeat the " +
-            "user's own words for the app as they typed them; if those words misspell or transliterate the name of " +
-            "an app you know, write that app's usual name instead. Never write a package name. Never invent a tool, " +
+            "A plan has from one to $MAX_STEPS_OFFERED steps, in order. An argument marked \"$MARK_APP\" names an app: " +
+            "write the app's usual name as it is published, correcting the user's spelling, transliteration or " +
+            "translation; if you know no such app, repeat the user's words. An argument marked \"$MARK_WORDS\" must " +
+            "repeat the user's own words as they typed them. Never write a package name. Never invent a tool, " +
             "an argument or a destination."
+
+    /**
+     * The two mention markers the offering renders and the instruction keys on ([markersOf]): a mention of
+     * `ArgSorts.APP` is [MARK_APP], any other mention (`:consumer:jvm`'s file names) [MARK_WORDS].
+     */
+    const val MARK_APP = "app"
+    const val MARK_WORDS = "words"
 
     /**
      * What a reference looks like (phase 3b, B-8, B-18). It lives in the OFFERING text, right after the
@@ -214,7 +230,8 @@ object BridgeRendering {
         BridgeError.UNKNOWN_TOOL, BridgeError.NOT_OFFERED ->
             "Your previous reply was rejected: it named a tool that is not among the tool ids listed above. Use only those ids."
         BridgeError.UNDERIVABLE_MENTION ->
-            "Your previous reply was rejected: an argument marked \"app\" held words the user did not type. Copy the user's own words for the app."
+            // `BridgeValidator` raises it only for a mention NOT of the app sort — one marked [MARK_WORDS].
+            "Your previous reply was rejected: an argument marked \"$MARK_WORDS\" held words the user did not type. Copy the user's own words."
     }
 
     private fun ordered(offering: BridgeOffering): List<OfferedTool> =
@@ -229,10 +246,17 @@ object BridgeRendering {
         ToolNamespace.CONTENT -> "Content (the web and the app store):"
     }
 
-    /** `ref` only where references exist for this offering (B-8): with no output, an `acceptsRef` is silent. */
+    /**
+     * `ref` only where references exist for this offering (B-8): with no output, an `acceptsRef` is silent. A mention
+     * is marked by its sort (the tail's fix round, task 7): [MARK_APP] for `ArgSorts.APP`, [MARK_WORDS] for any other.
+     */
     private fun markersOf(arg: ModelArg, references: Boolean): String =
         listOfNotNull(
-            if (arg.mention) "app" else null,
+            when {
+                !arg.mention -> null
+                arg.sort == ArgSorts.APP -> MARK_APP
+                else -> MARK_WORDS
+            },
             if (arg.required) "required" else "optional",
             if (references && arg.acceptsRef) "ref" else null,
         ).joinToString(", ")

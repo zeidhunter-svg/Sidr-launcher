@@ -65,10 +65,6 @@
     <string name="launcher_favorites_hide">Remove from Home</string>
     <string name="launcher_favorites_edit_hint">Pinned apps come first; the other places are filled with what you open most.</string>
     <string name="launcher_favorites_edit_done">Done</string>
-    <!-- A4′ acceptance tail, task 8 (owner ruling 5: а): the next-alarm chip at the start of the date line.
-         The time is formatted by the device's 12/24-hour setting in LauncherScreen. -->
-    <string name="launcher_home_next_alarm">⏰ %1$s</string>
-    <string name="launcher_home_next_alarm_cd">Next alarm: %1$s</string>
 
     <!-- DS-4 route lane chips (SidrRouteChip). Not in spec Sec7.1's enumerated locked-vocabulary
          list (that list names specific tokens, e.g. "LOCAL CALC"/"LOCAL ONLY", not this one) - these

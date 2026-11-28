@@ -47,8 +47,6 @@
     <string name="launcher_favorites_hide">Ana ekrandan kaldır</string>
     <string name="launcher_favorites_edit_hint">Sabitlenen uygulamalar başta durur, kalan yerler en çok açtıklarınızla dolar.</string>
     <string name="launcher_favorites_edit_done">Bitti</string>
-    <string name="launcher_home_next_alarm">⏰ %1$s</string>
-    <string name="launcher_home_next_alarm_cd">Sonraki alarm: %1$s</string>
 
     <string name="launcher_route_app">UYGULAMA</string>
     <string name="launcher_route_web">WEB</string>

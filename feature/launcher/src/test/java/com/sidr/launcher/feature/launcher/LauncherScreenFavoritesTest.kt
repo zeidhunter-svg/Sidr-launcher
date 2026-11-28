@@ -26,7 +26,6 @@ import com.sidr.launcher.core.testing.FakeIntentMatcher
 import com.sidr.launcher.core.testing.FakeLearnedPlanStore
 import com.sidr.launcher.core.testing.FakeMentionBinder
 import com.sidr.launcher.core.testing.FakeModelPlanner
-import com.sidr.launcher.core.testing.FakeNextAlarmSource
 import com.sidr.launcher.core.testing.FakePrayerCalculator
 import com.sidr.launcher.core.testing.FakePrayerPreferencesRepository
 import com.sidr.launcher.core.testing.FakePrayerScheduleCache
@@ -93,7 +92,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * A4′ acceptance tail, task 12 (owner ruling 15; K13): Home's favourites header and the picker it opens, by semantics —
  * Home has no goldens and gets none. The real [LauncherScreen] over a real [LauncherViewModel] wired from
- * `:core:testing` fakes, as `LauncherScreenAlarmChipTest` builds it. The time is a fixed clock, so freshness is exact.
+ * `:core:testing` fakes, as `LauncherScreenPrayerStripTest` builds it. The time is a fixed clock, so freshness is exact.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -276,7 +275,6 @@ class LauncherScreenFavoritesTest {
             toolRegistry = agentRegistry,
             dynamicToolLabels = DynamicToolLabels { emptyMap() },
             modelAskedEvents = ModelAskedEvents(),
-            nextAlarmSource = FakeNextAlarmSource(),
             clock = Clock.fixed(Instant.ofEpochMilli(NOW), ZoneId.of("UTC")),
             ioDispatcher = dispatcher,
             applicationScope = CoroutineScope(dispatcher + SupervisorJob()),

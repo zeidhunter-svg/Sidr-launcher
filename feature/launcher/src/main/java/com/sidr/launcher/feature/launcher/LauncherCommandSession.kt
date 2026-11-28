@@ -382,9 +382,7 @@ internal class LauncherCommandSession(
      *    reachable during a wait: the strip hides while the field holds text, but «Продолжить» on a
      *    model-written plan re-routes its goal with the field empty;
      *  - a remainder card brought up from the agent surface — [showRemainder] (A4′ phase 3b, Task 11), held by
-     *    no test;
-     *  - the date line's next-alarm chip — [startAtOnce] (A4′ acceptance tail, task 8). Reachable during a wait as
-     *    the prayer strip's details are (the line hides while the field holds text); held by no test.
+     *    no test.
      * [submitSite] needs no call: it is a [submit], which supersedes on its own. [onChanged] and
      * [cancelThinking] keep their own lines, written out where they are.
      *
@@ -606,22 +604,6 @@ internal class LauncherCommandSession(
         val plan = target.bind(packageName) ?: return
         _targetPick.value = null
         start(target.goal, plan)
-    }
-
-    /**
-     * A Home gesture that names its own plan — the date line's next-alarm chip (A4′ acceptance tail, task 8; controller
-     * ruling K7): the plan starts at once through `startPlanned`, exactly as a 2b pick's does ([chooseTarget]) —
-     * validated against the registry, every step gated by the engine — and a command still waiting on the model is
-     * abandoned first, as for every Home gesture that takes the user elsewhere ([supersedeWaitingCommand]).
-     *
-     * **Named limit — the tap replaces the session on Home.** It starts a NEW session, and saving it replaces whatever
-     * session the store held (one session at rest, `StartAgentSessionUseCase.startPlanned`): a restored Paused card or a
-     * card awaiting consent is dropped without the user choosing on it. It fails safe — nothing of the dropped plan
-     * runs, a risky step included — and it is what a typed command that starts a session does too.
-     */
-    fun startAtOnce(goal: AgentGoal, plan: ExecutionPlan) {
-        supersedeWaitingCommand()
-        start(goal, plan)
     }
 
     /** [plan] through `startPlanned`; its session goes to the agent surface, or the failure to the feedback line. */

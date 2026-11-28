@@ -106,7 +106,7 @@ private const val TIER0_UNINSTALL_APP = "uninstall_app"
  * the real constants are `Tier0ToolIds.*` in `:data:repository`, and `:feature:launcher` has no edge
  * to that module. `DoctrineGuardTest` holds the two spellings together.
  */
-internal const val TIER0_SHOW_ALARMS = "show_alarms"
+private const val TIER0_SHOW_ALARMS = "show_alarms"
 private const val TIER0_OPEN_CAMERA = "open_camera"
 private const val TIER0_OPEN_WIFI_SETTINGS = "open_wifi_settings"
 private const val TIER0_OPEN_BLUETOOTH_SETTINGS = "open_bluetooth_settings"

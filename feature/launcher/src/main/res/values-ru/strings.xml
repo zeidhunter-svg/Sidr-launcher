@@ -47,8 +47,6 @@
     <string name="launcher_favorites_hide">Убрать с главного</string>
     <string name="launcher_favorites_edit_hint">Закреплённые стоят первыми, остальные места заполняются тем, что вы открываете чаще.</string>
     <string name="launcher_favorites_edit_done">Готово</string>
-    <string name="launcher_home_next_alarm">⏰ %1$s</string>
-    <string name="launcher_home_next_alarm_cd">Следующий будильник: %1$s</string>
 
     <string name="launcher_route_app">ПРИЛОЖЕНИЕ</string>
     <string name="launcher_route_web">ВЕБ</string>

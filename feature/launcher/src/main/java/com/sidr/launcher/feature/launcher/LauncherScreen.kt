@@ -9,7 +9,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import android.text.format.DateFormat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -49,10 +48,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -67,7 +64,6 @@ import com.sidr.launcher.core.ui.component.AppTile
 import com.sidr.launcher.core.ui.component.EmptyState
 import com.sidr.launcher.core.ui.component.ErrorState
 import com.sidr.launcher.core.ui.component.SidrErrorSurface
-import com.sidr.launcher.core.ui.component.SidrNextAlarmChip
 import com.sidr.launcher.core.ui.component.SidrSectionHeader
 import com.sidr.launcher.core.ui.component.SidrPrayerSummary
 import com.sidr.launcher.core.ui.component.SidrPrayerTimeUi
@@ -83,11 +79,9 @@ import com.sidr.launcher.core.ui.primitive.SidrTextRole
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Sizes
 import com.sidr.launcher.core.ui.theme.Spacing
-import com.sidr.launcher.domain.alarm.NextAlarm
 import com.sidr.launcher.domain.model.InstalledApp
 import com.sidr.launcher.domain.permission.PermissionFeature
 import com.sidr.launcher.domain.suggestions.Suggestion
-import java.util.Date
 import java.util.Locale
 
 /**
@@ -130,8 +124,6 @@ fun LauncherScreen(
     val agentRemainderOffered by viewModel.agentRemainderOffered.collectAsStateWithLifecycle()
     val agentLearnedCommand by viewModel.agentLearnedCommand.collectAsStateWithLifecycle()
     val agentProposedByModel by viewModel.agentProposedByModel.collectAsStateWithLifecycle()
-    // A4′ acceptance tail, task 8: the clock's next alarm, for the date line's chip (null — no chip).
-    val nextAlarm by viewModel.nextAlarm.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     // First-run nudge (Block X6): whether this launcher is already the system default HOME app.
@@ -190,11 +182,7 @@ fun LauncherScreen(
             // Shahada is the topmost element, then the date line (Hijri · Gregorian) directly beneath it
             // (owner layout). Both static — no prayer data — and hidden while typing so results overtake.
             HomeAnchorSlot(visible = !inputResults.active && !devConsoleOn)
-            HomeDateLine(
-                visible = !inputResults.active && !devConsoleOn,
-                nextAlarm = nextAlarm,
-                onAlarmTap = viewModel::onAlarmChipTapped,
-            )
+            HomeDateLine(visible = !inputResults.active && !devConsoleOn)
 
             // DS-6B Task 9: the opt-in prayer strip, immediately below the Shahada + date line. Same
             // visibility rule as the Shahada (hidden while typing/results overtake/dev console); renders
@@ -416,64 +404,27 @@ fun LauncherScreen(
 
 // ── DS-4 Home shell (sacred anchor, date line, bottom nav, brand/privacy) ────
 
-/** The date line's test tag (A4′ acceptance tail, task 8): `LauncherScreenAlarmChipTest` measures the chip against it. */
-internal const val HOME_DATE_LINE_TEST_TAG = "home_date_line"
-
 /**
  * Date line under the Shahada (owner layout): Hijri first, then Gregorian, on one centred row. Hidden
  * while typing. A real calendar conversion (`HijrahDate`) — NOT prayer data (DS-6B owns that).
- *
- * **The next-alarm chip** (A4′ acceptance tail, task 8; owner ruling 5: а) stands at the very START of this row when the
- * clock has an alarm set ([nextAlarm] non-null); the date stays centred on the whole row. The date is measured narrower
- * by the chip's width on BOTH sides — so it stays centred — and never runs under the chip (plan review M9: the long
- * Hijri · Gregorian string on a 720 px screen): a date too long for what is left wraps instead. The time is formatted
- * here, by the device's 12/24-hour setting (`DateFormat.getTimeFormat`); the words are `sidrString`'s. With an alarm
- * the row is as tall as the chip's 48 dp touch target, not the text — the one layout change on Home; without one it
- * is the row it always was. The chip hides with the row while typing.
  */
 @Composable
 private fun HomeDateLine(
     visible: Boolean,
-    nextAlarm: NextAlarm?,
-    onAlarmTap: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (!visible) return
-    val context = LocalContext.current
-    val alarmTime = nextAlarm?.let { alarm ->
-        remember(alarm, context) { DateFormat.getTimeFormat(context).format(Date(alarm.triggerEpochMs)) }
-    }
-    Layout(
-        content = {
-            SidrText(
-                text = "${currentHijriDate()} · ${currentGregorianDate()}",
-                role = SidrTextRole.SYSTEM,
-                color = SidrTheme.colors.dim,
-            )
-            if (alarmTime != null) {
-                SidrNextAlarmChip(
-                    text = sidrString(R.string.launcher_home_next_alarm, alarmTime),
-                    contentDescription = sidrString(R.string.launcher_home_next_alarm_cd, alarmTime),
-                    onClick = onAlarmTap,
-                )
-            }
-        },
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(bottom = Spacing.md)
-            .testTag(HOME_DATE_LINE_TEST_TAG),
-    ) { measurables, constraints ->
-        val loose = constraints.copy(minWidth = 0, minHeight = 0)
-        val chip = measurables.getOrNull(1)?.measure(loose)
-        val reserve = chip?.width ?: 0
-        val dateMax = if (constraints.hasBoundedWidth) (constraints.maxWidth - 2 * reserve).coerceAtLeast(0) else constraints.maxWidth
-        val date = measurables[0].measure(loose.copy(maxWidth = dateMax))
-        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else date.width + 2 * reserve
-        val height = maxOf(date.height, chip?.height ?: 0).coerceIn(constraints.minHeight, constraints.maxHeight)
-        layout(width, height) {
-            date.placeRelative((width - date.width) / 2, (height - date.height) / 2)
-            chip?.placeRelative(0, (height - chip.height) / 2)
-        }
+            .padding(bottom = Spacing.md),
+        contentAlignment = Alignment.Center,
+    ) {
+        SidrText(
+            text = "${currentHijriDate()} · ${currentGregorianDate()}",
+            role = SidrTextRole.SYSTEM,
+            color = SidrTheme.colors.dim,
+        )
     }
 }
 

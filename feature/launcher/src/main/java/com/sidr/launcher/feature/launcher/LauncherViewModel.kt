@@ -9,18 +9,7 @@ import com.sidr.launcher.core.common.di.ApplicationScope
 import com.sidr.launcher.core.common.di.IoDispatcher
 import com.sidr.launcher.core.common.navigation.NavigationEvent
 import com.sidr.launcher.core.common.navigation.Routes
-import com.sidr.launcher.domain.action.ActionRiskLevel
-import com.sidr.launcher.domain.agent.AgentGoal
-import com.sidr.launcher.domain.agent.ExecutionPlan
-import com.sidr.launcher.domain.agent.GoalShape
-import com.sidr.launcher.domain.agent.PlanStep
-import com.sidr.launcher.domain.agent.StepPrecondition
-import com.sidr.launcher.domain.agent.StepRationale
-import com.sidr.launcher.domain.tool.ToolInvocation
-import com.sidr.launcher.feature.launcher.agent.TIER0_SHOW_ALARMS
 import com.sidr.launcher.domain.agent.AgentSession
-import com.sidr.launcher.domain.alarm.NextAlarm
-import com.sidr.launcher.domain.alarm.NextAlarmSource
 import com.sidr.launcher.domain.agent.AgentSessionStore
 import com.sidr.launcher.domain.agent.CancelAgentSessionUseCase
 import com.sidr.launcher.domain.agent.ResolveConsentUseCase
@@ -148,7 +137,6 @@ class LauncherViewModel @Inject constructor(
     // it asks — the one thing the wait is shown on. A `@Singleton` of this module; `:app` binds the domain port the
     // route is built with to this same instance (`BridgeProvidesModule.provideModelAskedSignal`).
     private val modelAskedEvents: ModelAskedEvents,
-    private val nextAlarmSource: NextAlarmSource,
     // A4′ acceptance tail, task 12: the time favourites' freshness (14 days) is judged by. `:app` binds
     // `Clock.systemUTC()` (`ClockModule`); the default serves a Kotlin caller only — Hilt injects the binding.
     private val clock: Clock = Clock.systemUTC(),
@@ -186,21 +174,6 @@ class LauncherViewModel @Inject constructor(
     fun navigateBack() {
         _navigationEvents.trySend(NavigationEvent.NavigateBack)
     }
-
-    /**
-     * The next alarm the CLOCK set, for the date line's chip (A4′ acceptance tail, task 8; owner ruling 5: а), or `null`
-     * — no alarm, or one another app set (the port filters it). Cold and `WhileSubscribed`, like [prayerContext]: the
-     * source registers its receiver only while Home is on screen, and nothing reads the alarm on the startup path. A
-     * failing source is no chip, never a crash.
-     */
-    val nextAlarm: StateFlow<NextAlarm?> = nextAlarmSource.observe()
-        .catch { emit(null) }
-        .flowOn(ioDispatcher)
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = null,
-        )
 
     // ── App-list state ─────────────────────────────────────────────────────
     // Этап 4 / A0: extracted to LauncherSuggestions — see observeSuggestionFlag()'s old call site
@@ -555,18 +528,6 @@ class LauncherViewModel @Inject constructor(
         commandSession.dismissFeedback()
     }
 
-    /**
-     * A tap on the date line's next-alarm chip (A4′ acceptance tail, task 8; controller ruling K7): the clock's alarm
-     * list opens as a session of ONE `show_alarms` step through the engine — [LauncherCommandSession.startAtOnce], the
-     * `startPlanned` path a 2b pick takes — never a direct intent from here: `ToolExecutor` stays the only path to the
-     * world (`ToolExecutorCallSiteGuardTest`), and the web chip stays the launcher's one direct `LauncherAction`
-     * (`OneModelPathGuardTest`). The step is `SAFE` and acts with nothing to undo, so the session closes itself (owner
-     * answer I12) — Home is left as it was. The goal has no words: the user typed none, so none is stored.
-     */
-    fun onAlarmChipTapped() {
-        commandSession.startAtOnce(SHOW_ALARMS_GOAL, showAlarmsPlan())
-    }
-
     // ── Voice input (Block T) ──────────────────────────────────────────────
     // The mic affordance calls this once the RECORD_AUDIO permission is held (the screen gates it
     // via checkSelfPermission, routing to permission education otherwise). Partial hypotheses stream
@@ -732,28 +693,6 @@ class LauncherViewModel @Inject constructor(
         }
     }
 }
-
-// Positional, not `text = ""`: `HardcodedUiTextGuardTest` reads `"", shape = GoalShape.Free("` on such a line as one
-// literal with letters (a false positive — the goal's text is empty and never shown).
-/** The chip's goal (task 8): no words — the user typed none — and no recognised shape; the plan is built, not planned. */
-private val SHOW_ALARMS_GOAL = AgentGoal("", GoalShape.Free(""))
-
-/**
- * The chip's one step (task 8, K7): `show_alarms`, no argument, `SAFE` — what `Tier0IntentToolSource` declares; the
- * engine's gate takes the higher of this and the registry's risk (`AgentExecutor.effectiveRisk`). The id is
- * [TIER0_SHOW_ALARMS], the surface's spelling `DoctrineGuardTest` holds against the registry.
- */
-private fun showAlarmsPlan() = ExecutionPlan(
-    listOf(
-        PlanStep(
-            index = 0,
-            invocation = ToolInvocation(ToolId(TIER0_SHOW_ALARMS), emptyMap()),
-            risk = ActionRiskLevel.SAFE,
-            precondition = StepPrecondition.None,
-            rationale = StepRationale.GOAL_DIRECT,
-        ),
-    ),
-)
 
 // Task 2 / A0: moved out of LauncherViewModel's body (and widened from private to internal) so
 // LauncherSuggestions.resolveLabels() — extracted out of this class — can call it too. A member

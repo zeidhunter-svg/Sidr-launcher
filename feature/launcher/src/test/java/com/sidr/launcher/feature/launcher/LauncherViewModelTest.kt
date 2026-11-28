@@ -8,9 +8,6 @@ import com.sidr.launcher.core.testing.FakeActionCatalog
 import com.sidr.launcher.core.testing.FakeAgentSessionStore
 import com.sidr.launcher.core.testing.FakeToolExecutor
 import com.sidr.launcher.core.testing.FakeToolRegistry
-import com.sidr.launcher.core.testing.FakeNextAlarmSource
-import com.sidr.launcher.domain.alarm.NextAlarm
-import com.sidr.launcher.domain.alarm.NextAlarmSource
 import com.sidr.launcher.core.testing.FakeActionExecutor
 import com.sidr.launcher.core.testing.configuredProvider
 import com.sidr.launcher.core.testing.FakeAliasStore
@@ -162,7 +159,6 @@ import com.sidr.launcher.domain.trace.TraceEvent
 import com.sidr.launcher.feature.launcher.agent.DynamicToolLabels
 import com.sidr.launcher.feature.launcher.agent.StepProvenance
 import com.sidr.launcher.feature.launcher.agent.anyStepActed
-import com.sidr.launcher.feature.launcher.agent.TIER0_SHOW_ALARMS
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -351,12 +347,6 @@ class LauncherViewModelTest {
         // A4′ phase 3b, Task 12 review fix: how «Отменить» undoes a step, for the one test that reads the
         // undo review. Defaulted to `undoOver`'s own default, so every other caller is byte-for-byte unchanged.
         undoInverses: ToolInverses = noInverses,
-        // A4′ acceptance tail, task 8: the next alarm, and — for the chip's tap — a registry and a start over it that
-        // hold `show_alarms` (the shared [agentRegistry] does not). Defaulted to the shared fixtures, so every earlier
-        // caller is byte-for-byte unchanged.
-        nextAlarms: NextAlarmSource = FakeNextAlarmSource(),
-        registry: ToolRegistry = agentRegistry,
-        startAgent: StartAgentSessionUseCase = startAgentSession,
         // A4′ acceptance tail, task 12: the clock favourites' freshness is judged by — fixed at 5000 ms, so the
         // small `lastUsedEpochMs` the older tests use are all fresh.
         clock: Clock = Clock.fixed(Instant.ofEpochMilli(5_000L), ZoneOffset.UTC),
@@ -383,17 +373,16 @@ class LauncherViewModelTest {
         runAgentSession = runAgent,
         resolveAgentConsent = ResolveConsentUseCase(fakeAgentStore, runAgent),
         cancelAgentSession = CancelAgentSessionUseCase(fakeAgentStore),
-        resumeAgentSession = resumeOver(fakeAgentStore, runAgent, registry),
-        undoAgentSession = undoOver(fakeAgentStore, registry, undoInverses),
+        resumeAgentSession = resumeOver(fakeAgentStore, runAgent, agentRegistry),
+        undoAgentSession = undoOver(fakeAgentStore, agentRegistry, undoInverses),
         agentSessionStore = fakeAgentStore,
-        startAgentSession = startAgent,
+        startAgentSession = startAgentSession,
         mentionBinder = mentionBinder,
-        toolRegistry = registry,
+        toolRegistry = agentRegistry,
         // A1″ Task 8: no tool in this fixture has a data-authored name, so the map is empty
         // and every step line renders exactly as it did before the dynamic arm existed.
         dynamicToolLabels = DynamicToolLabels { emptyMap() },
         modelAskedEvents = modelAskedEvents,
-        nextAlarmSource = nextAlarms,
         clock = clock,
         ioDispatcher = testDispatcher,
         applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
@@ -470,7 +459,6 @@ class LauncherViewModelTest {
             // and every step line renders exactly as it did before the dynamic arm existed.
             dynamicToolLabels = DynamicToolLabels { emptyMap() },
             modelAskedEvents = modelAskedEvents,
-            nextAlarmSource = FakeNextAlarmSource(),
             ioDispatcher = testDispatcher,
             applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),
@@ -713,7 +701,6 @@ class LauncherViewModelTest {
             // and every step line renders exactly as it did before the dynamic arm existed.
             dynamicToolLabels = DynamicToolLabels { emptyMap() },
             modelAskedEvents = modelAskedEvents,
-            nextAlarmSource = FakeNextAlarmSource(),
             ioDispatcher = testDispatcher,
             applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),
@@ -980,7 +967,6 @@ class LauncherViewModelTest {
             // and every step line renders exactly as it did before the dynamic arm existed.
             dynamicToolLabels = DynamicToolLabels { emptyMap() },
             modelAskedEvents = modelAskedEvents,
-            nextAlarmSource = FakeNextAlarmSource(),
             ioDispatcher = testDispatcher,
             applicationScope = CoroutineScope(testDispatcher + SupervisorJob()),
             savedStateHandle = SavedStateHandle(),
@@ -4198,84 +4184,5 @@ class LauncherViewModelTest {
 
         assertFalse("the newer command's answer took its wait down", vm.thinking.value)
         assertEquals(CommandFeedback.LowConfidence, vm.commandFeedback.value)
-    }
-
-    // ── A4′ acceptance tail, task 8 (owner ruling 5: а; controller ruling K7): the next-alarm chip ─────────────────────
-
-    /** The chip reads the port: no alarm, no chip; the clock sets one, the chip has its time. */
-    @Test
-    fun `the next alarm follows its source`() = runTest(testDispatcher) {
-        val alarms = FakeNextAlarmSource()
-        val vm = buildViewModel(nextAlarms = alarms)
-        val collector = CoroutineScope(testDispatcher + Job()).also { scope -> scope.launch { vm.nextAlarm.collect {} } }
-        advanceUntilIdle()
-        assertNull("no alarm — no chip", vm.nextAlarm.value)
-
-        alarms.alarm = NextAlarm(ALARM_AT)
-        advanceUntilIdle()
-
-        assertEquals(NextAlarm(ALARM_AT), vm.nextAlarm.value)
-        collector.cancel()
-    }
-
-    /**
-     * K7: a tap on the chip is a session of ONE `show_alarms` step started through the engine — `startPlanned` over the
-     * registry, the step performed by the engine's executor (the [FakeToolExecutor] under [AgentExecutor]) — never a
-     * direct launch from the feature layer (nothing reaches [fakeExecutor], the `LauncherAction` path the web chip
-     * owns). The step is `SAFE` and acts, with nothing to undo, so the session closes itself (owner answer I12, task 4)
-     * and the store is empty at rest. The shared registry has no `show_alarms`; this one adds the production
-     * descriptor's shape (`Tier0IntentToolSource`).
-     */
-    @Test
-    fun `tapping the alarm chip starts show_alarms through the engine`() = runTest(testDispatcher) {
-        val showAlarms = ToolId(TIER0_SHOW_ALARMS)
-        val registry = withShowAlarms()
-        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
-        val vm = buildViewModel(
-            registry = registry,
-            startAgent = StartAgentSessionUseCase(TemplatePlanner(), fakeAgentStore, agentIds, registry),
-            runAgent = runOver(registry, tools),
-        )
-        advanceUntilIdle()
-
-        vm.onAlarmChipTapped()
-        advanceUntilIdle()
-
-        assertEquals("one step, through the engine", listOf(showAlarms), tools.invocations.map { it.id })
-        assertTrue("it carries no argument", tools.invocations.single().args.isEmpty())
-        assertTrue("nothing went around the engine", fakeExecutor.executedActions.isEmpty())
-        assertNull("the simple session closed itself (I12)", vm.agentSessionState.value)
-        assertNull("nothing is left in the store", (fakeAgentStore.active() as OperationResult.Success).value)
-        assertEquals(CommandFeedback.None, vm.commandFeedback.value)
-    }
-
-    /** The registry decides, as for every start: without `show_alarms` nothing runs, and the failure is said. */
-    @Test
-    fun `a chip tap with no show_alarms tool runs nothing`() = runTest(testDispatcher) {
-        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
-        val vm = buildViewModel(runAgent = runOver(agentRegistry, tools))
-        advanceUntilIdle()
-
-        vm.onAlarmChipTapped()
-        advanceUntilIdle()
-
-        assertTrue(tools.invocations.isEmpty())
-        assertTrue(fakeExecutor.executedActions.isEmpty())
-        assertNull(vm.agentSessionState.value)
-        assertEquals(CommandFeedback.Failure(CommandFailure.Generic), vm.commandFeedback.value)
-    }
-
-    private fun withShowAlarms() = FakeToolRegistry(
-        FakeToolRegistry.withA0Tools().all() + ToolDescriptor(
-            id = ToolId(TIER0_SHOW_ALARMS),
-            level = ToolLevels.SYSTEM_INTENT,
-            effect = ToolEffect.EXTERNAL,
-            risk = ActionRiskLevel.SAFE,
-            durability = ToolDurability.TRANSIENT,
-        ),
-    )
-
-    private companion object {
-        const val ALARM_AT = 1_790_000_000_000L
     }
 }

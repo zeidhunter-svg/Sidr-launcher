@@ -34,6 +34,10 @@ import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.domain.result.OperationResult
 import com.sidr.launcher.domain.sort.ArgSorts
+import com.sidr.launcher.domain.text.AppNameMatcher
+import com.sidr.launcher.domain.text.NameMatch
+import com.sidr.launcher.domain.text.PlainTextFolding
+import com.sidr.launcher.domain.text.TextFolding
 import com.sidr.launcher.domain.tool.ArgSource
 import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
@@ -76,15 +80,20 @@ import kotlinx.coroutines.flow.first
  *    only); the store plan is step 7's answer when the model cannot take the command (K1), names an app that is
  *    not here (K3) or gives a reading the device cannot bind (M-5), in the user's words. When the model is not reachable there is no yield, and FastPath answers
  *    byte for byte as before.
- * 1a. **The whole command is an alias ⇒ its app opens, on the device** (A4′ acceptance tail, task 3; owner decision 3,
- *    controller ruling K10 — «алиасы не спрашивать»). Only when FastPath did not decide — `isUndecided()` and nothing
- *    yielded (a yielded command is one FastPath decided, and without the model it never reaches here) — and above
+ * 1a. **The whole command is an alias — or one exact installed label — ⇒ its app opens, on the device** (A4′
+ *    acceptance tail, task 3; owner decision 3, controller ruling K10 — «алиасы не спрашивать»). Only when FastPath
+ *    did not decide — `isUndecided()` and nothing yielded (a yielded command is one FastPath decided, and without the model it never reaches here) — and above
  *    2b: the alias is the user's explicit memory, so «камера» made an alias opens its app, and the tool trigger 2b
  *    would have matched (`open_camera`) is not planned. One `launch_app` pinned to the alias's package, started as a
  *    2b plan is ([aliasLaunch]); no alias, its app gone, a failed read or start — the chain goes on unchanged. A
  *    DECIDED outcome is never shadowed («помощь» stays FastPath's help though «помощь» be an alias), and «открой tg»
  *    is not this step's: FastPath's own launch reads the alias (`IntentActionResolver`), so there is no «нет такого
- *    приложения» to yield. In every state — the owner accepted aliases in local-only.
+ *    приложения» to yield. In every state — the owner accepted aliases in local-only. **No alias answered ⇒ an exact
+ *    installed label** (A4′ tail fix round, task 6; owner ruling 4: а, part i): the whole command is the exact label of
+ *    ONE installed app ([AppNameMatcher.matchWhole] by the device's folding) — «карты» opens the app labelled «Карты»,
+ *    «plus» the app labelled «Plus» — by the same pinned launch ([labelLaunch]); a word form of a label («карт»), two
+ *    apps of that label, no label — the chain goes on unchanged. Same place, same states, as the alias: it reads only
+ *    the on-device app list, so it runs in local-only too.
  * 2. **A goal FastPath DECIDED but did not ACHIEVE ⇒ the agent** ([StartAgentSessionUseCase], A0
  *    Task 11). Exactly one outcome qualifies: [CommandMessage.NoAppFound] — FastPath understood
  *    "open X" and found no such app. Not "any Message", not "anything that did not execute";
@@ -172,14 +181,18 @@ import kotlinx.coroutines.flow.first
  * **Step 1a sits above step 3, and that is `DOC-ADL-3` applied, not bent** (A4′ acceptance tail, task 3; no
  * amendment). The rule's parity is two claims — the model planner is not consulted, and nothing leaves the device —
  * and since the 2026-08-22 amendment the deterministic local path may change an outcome FastPath did not decide.
- * Step 1a is that path: it reads the on-device alias store and app list, consults no model (it has no port to one),
- * transmits nothing, and its launch acts only through the engine, as a 2b plan's does. In local-only mode it answers
- * the alias instead of the local-only line — the user's own memory doing its job. Its exits are a started session or
- * a fall-through that changes nothing, so it can neither produce one of the three understanding-unavailable messages
- * nor suppress another branch's: they stay mutually exclusive for step 2b's reason (below). Online it takes the alias's
- * words away from step 7 — principle 2 («whatever can run on the device runs there»). Should 1a ever reach a model, it
- * moves below step 3; it is not excused. Held by `a bare alias starts its launch on the device and the model is never
- * asked`, `the words of an alias never reach the model` and `a bare alias never shadows a decided FastPath outcome`.
+ * Step 1a is that path — an alias or one exact installed label: it reads the on-device alias store and app list,
+ * consults no model (it has no port to one), transmits nothing, and its launch acts only through the engine, as a 2b
+ * plan's does. In local-only mode it answers the alias, or opens the app the user named by its exact label, instead of
+ * the local-only line — the user's own memory and the device's own list doing their job. Its exits are a started
+ * session or a fall-through that changes nothing, so it can neither produce one of the three understanding-unavailable
+ * messages nor suppress another branch's: they stay mutually exclusive for step 2b's reason (below). Online it takes
+ * the alias's (or label's) words away from step 7 — principle 2 («whatever can run on the device runs there»). Should 1a ever
+ * reach a model, it moves below step 3; it is not excused. Held by `a bare alias starts its launch on the device and
+ * the model is never asked`, `the words of an alias never reach the model` and `a bare alias never shadows a decided
+ * FastPath outcome`, and for the label by `a bare installed label opens its app on the device and the model is never
+ * asked`, `the words of a bare label never reach the model`, `a bare label never shadows a decided FastPath outcome`
+ * and `in local-only mode a bare label still opens`.
  *
  * **Step 2c sits above step 3, and that is `DOC-ADL-3` applied, not bent** (plan §0.2 B-6; no amendment).
  * The rule's parity is two claims — the model planner is not consulted, and nothing leaves the device — and
@@ -234,7 +247,7 @@ import kotlinx.coroutines.flow.first
  * undecided text, then step 7 — and the store plan is step 7's fallback. Step 2c is inside 2b's `NoPlan` arm, so
  * it is disjoint from both the same way: a 2b plan whose start failed falls through to step 3, not to 2c, and so
  * does K2's remembered target. Step 1a opens the same undecided block, above 2b: disjoint from step 2 the same way,
- * and a started alias session reaches neither 2b nor 2c; a 1a that answers `null` leaves them exactly as before.
+ * and a started alias or label session reaches neither 2b nor 2c; a 1a that answers `null` leaves them exactly as before.
  *
  * **What the ordering DOES break, stated rather than glossed.** `DOC-ADL-3` used to read "…and
  * every outcome FastPath **decided** is returned byte-for-byte". `NoAppFound` is an outcome FastPath
@@ -278,6 +291,11 @@ class RouteCommandUseCase(
     // construction site that predates it routes exactly as before; the production provider passes the launcher's own
     // events (`BridgeProvidesModule.provideRouteCommandUseCase`, held by `ModelAskedSignalBindingGuardTest`).
     private val modelAsked: ModelAskedSignal = ModelAskedSignal.NONE,
+    // A4′ tail fix round, task 6 (owner ruling 4: а, i): how step 1a compares the command with an installed label —
+    // the device's one folding. `PlainTextFolding` by default, so every construction site that predates it routes
+    // exactly as before; the production provider passes the one binding (`BridgeProvidesModule.provideTextFolding`,
+    // held by `TextFoldingBindingGuardTest`).
+    private val folding: TextFolding = PlainTextFolding,
 ) {
 
     suspend fun route(rawInput: String): CommandOutcome {
@@ -333,7 +351,9 @@ class RouteCommandUseCase(
             // app opens through the engine, on the device, in every state; nothing below reads it, the model least of
             // all. Only a command FastPath did not decide: a yielded one (1′, 1″) FastPath DID decide, and without the
             // model the same command never gets here, so with the model it does not either.
-            if (fastPath.yielded == null) aliasLaunch(rawInput)?.let { return it }
+            // A4′ tail fix round, task 6 (owner ruling 4: а, i): no alias answered — the whole command is the exact label of
+            // ONE installed app, and that app opens the same way, on the device.
+            if (fastPath.yielded == null) (aliasLaunch(rawInput) ?: labelLaunch(rawInput))?.let { return it }
 
             val trimmed = rawInput.trim()
             val goal = AgentGoal(text = trimmed, shape = GoalShape.Free(trimmed))
@@ -535,7 +555,32 @@ class RouteCommandUseCase(
         val pkg = alias.target.appPackageOrNull() ?: return null
         val installed = (apps.getInstalledApps() as? OperationResult.Success)?.value ?: return null
         if (installed.none { it.packageName == pkg }) return null
+        return pinnedLaunch(words, pkg)
+    }
 
+    /**
+     * Step 1a's second reader (A4′ tail fix round, task 6; owner ruling 4: а, part i), asked only when no alias answered:
+     * the WHOLE command — normalized as [aliasLaunch] normalizes it — is the exact label of exactly ONE installed app
+     * ([AppNameMatcher.matchWhole] answers [NameMatch.Exact] with one app, compared by [folding]), so that app opens by
+     * the same pinned launch ([pinnedLaunch]). `null` — an [NameMatch.Edge] (a word FORM of a label, «карт» for «Карты»,
+     * is only ever offered, never bound: B-2), no label, two or more apps of that label (the device never picks one), no
+     * app list wired, a read that failed, a start that failed — and the chain goes on exactly as before.
+     */
+    private suspend fun labelLaunch(raw: String): CommandOutcome? {
+        val apps = installedApps ?: return null
+        val words = raw.trim()
+        val installed = (apps.getInstalledApps() as? OperationResult.Success)?.value ?: return null
+        val match = AppNameMatcher.matchWhole(CommandNormalizer.normalize(words), installed, folding)
+        val app = (match as? NameMatch.Exact)?.apps?.singleOrNull() ?: return null
+        return pinnedLaunch(words, app.packageName)
+    }
+
+    /**
+     * Step 1a's one plan, for an alias and a label alike: one `launch_app` pinned to [pkg], the user's [words] beside it,
+     * started through [StartAgentSessionUseCase.startPlanned] as a 2b plan is — validated against the registry, and the
+     * engine's gate reads the registry's risk, not this plan's. `null` when the start fails.
+     */
+    private suspend fun pinnedLaunch(words: String, pkg: String): CommandOutcome? {
         val goal = AgentGoal(text = words, shape = GoalShape.Free(words))
         val launch = PlanStep(
             index = 0,
@@ -650,7 +695,7 @@ class RouteCommandUseCase(
          * `launch_app`'s two arguments, spelled in `:data:repository` (`SystemIntentToolSource`: the catalog's `query`,
          * and `PIN_ARG`), which `:domain` has no edge to. A drift fails closed: `startPlanned` validates the step
          * against the registry, an undeclared argument is not runnable, and step 1a answers `null` — and then, online,
-         * the alias's words would go on to the model. So the drift is held, not only failed closed:
+         * the alias's (or label's) words would go on to the model. So the drift is held, not only failed closed:
          * `AliasBindingGuardTest` (`:app`) starts step 1a's plan against the PRODUCTION registry.
          */
         const val LAUNCH_QUERY_ARG = "query"

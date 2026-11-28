@@ -27,6 +27,7 @@ import com.sidr.launcher.domain.memory.plan.LearnedPlans
 import com.sidr.launcher.domain.preferences.FeatureFlagRepository
 import com.sidr.launcher.domain.repository.InstalledAppsRepository
 import com.sidr.launcher.domain.security.SecureSecretStore
+import com.sidr.launcher.domain.text.PlainTextFolding
 import com.sidr.launcher.domain.text.TextFolding
 import com.sidr.launcher.domain.tool.ToolRegistry
 import com.sidr.launcher.feature.launcher.ModelAskedEvents
@@ -141,6 +142,8 @@ object BridgeProvidesModule {
      * `BridgePayloadGuardTest` only: Hilt passes every parameter and ignores a Kotlin default, so the graph always
      * builds the route with the device's store and list. So does [modelAsked] (task 6, K9): the graph passes the
      * launcher's events ([provideModelAskedSignal]); `ModelAskedSignalBindingGuardTest` holds that this body hands them on.
+     * So does [folding] (A4′ tail fix round, task 6 — step 1a's exact installed label): the graph passes the one
+     * [provideTextFolding] binding; `TextFoldingBindingGuardTest` holds that this body hands it on.
      */
     @Provides
     @Singleton
@@ -156,6 +159,7 @@ object BridgeProvidesModule {
         aliases: AliasStore = AliasStore.NONE,
         installedApps: InstalledAppsRepository? = null,
         modelAsked: ModelAskedSignal = ModelAskedSignal.NONE,
+        folding: TextFolding = PlainTextFolding,
     ): RouteCommandUseCase = RouteCommandUseCase(
         handleUserCommand = handleUserCommand,
         modelPlanner = modelPlanner,
@@ -168,5 +172,6 @@ object BridgeProvidesModule {
         aliases = aliases,
         installedApps = installedApps,
         modelAsked = modelAsked,
+        folding = folding,
     )
 }

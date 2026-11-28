@@ -2401,6 +2401,128 @@ class RouteCommandUseCaseTest {
         assertEquals(listOf(ExecutableAction.OpenSearchAction("tg", SearchTarget.WEB)), executor.executedActions)
     }
 
+    // --- A4′ tail fix round, task 6 — owner ruling 4: а (i): a bare installed label opens its app on the device ---------
+    // The phone: the bare «карты» (Google Maps, labelled «Карты» on a Russian phone) was `UNKNOWN`, went to the model,
+    // came back renamed «Maps», and the device could not find it. Step 1a, after the alias: the WHOLE command is the
+    // exact label of ONE installed app ⇒ the same pinned launch the alias starts; anything else ⇒ the chain goes on.
+
+    private val maps = InstalledApp("com.google.android.apps.maps", "Карты")
+
+    /**
+     * The bare label «карты» starts the one pinned launch of the app labelled «Карты» — online, where step 7 WOULD ask
+     * the model (scripted to answer, so asking it would change the outcome). The model is never asked.
+     */
+    @Test
+    fun `a bare installed label opens its app on the device and the model is never asked`() = runTest {
+        driveUnknown()
+        appsRepo.appsToReturn = listOf(telegramPlus, maps)
+        planner.answer = ModelPlanning.Navigate(SidrDestination.APP_GRID)
+
+        val outcome = useCase().route("карты")
+
+        assertEquals("the model is never asked", 0, planner.planCallCount)
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), outcome)
+        assertEquals(listOf(freeGoal("карты")), agentStore.saved.map { it.goal })
+        assertEquals(listOf(aliasLaunch("карты", maps.packageName)), agentStore.saved.map { it.plan })
+        assertTrue("nothing is executed by the route", executor.executedActions.isEmpty())
+    }
+
+    /** The folding lowercases both sides, so «plus» is the exact label «Plus»; the user's words are kept as typed. */
+    @Test
+    fun `a bare label differing only in case opens it`() = runTest {
+        driveUnknown()
+        val orvane = InstalledApp("net.fixture.orvane", "Plus")
+        appsRepo.appsToReturn = listOf(telegramPlus, orvane)
+        planner.answer = ModelPlanning.Navigate(SidrDestination.APP_GRID)
+
+        val outcome = useCase().route("plus")
+
+        assertEquals("the model is never asked", 0, planner.planCallCount)
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), outcome)
+        assertEquals(listOf(aliasLaunch("plus", orvane.packageName)), agentStore.saved.map { it.plan })
+    }
+
+    /** Two apps labelled «Карты»: the device does not pick one, so step 1a answers `null` and the model is asked. */
+    @Test
+    fun `two apps with the same label - the chain goes on`() = runTest {
+        driveUnknown()
+        appsRepo.appsToReturn = listOf(maps, InstalledApp("net.fixture.kartograf", "Карты"))
+        planner.answer = ModelPlanning.Navigate(SidrDestination.APP_GRID)
+
+        val outcome = useCase().route("карты")
+
+        assertTrue("no plan of step 1a is started: ${agentStore.saved}", agentStore.saved.isEmpty())
+        assertEquals("online the model is asked, as for any undecided text", 1, planner.planCallCount)
+        assertEquals(CommandOutcome.Interpreted(Interpretation.Navigate(SidrDestination.APP_GRID)), outcome)
+    }
+
+    /**
+     * «карт» is a FORM of «Карты» (an `Edge` match), not the label: a form of a label is only ever offered, never bound
+     * (B-2), so step 1a answers `null` and the chain goes on — online, to the model.
+     */
+    @Test
+    fun `a word form of a label is not this step's`() = runTest {
+        driveUnknown()
+        appsRepo.appsToReturn = listOf(maps)
+        planner.answer = ModelPlanning.Navigate(SidrDestination.APP_GRID)
+
+        val outcome = useCase().route("карт")
+
+        assertTrue("no plan of step 1a is started: ${agentStore.saved}", agentStore.saved.isEmpty())
+        assertEquals("online the model is asked, as for any undecided text", 1, planner.planCallCount)
+        assertEquals(CommandOutcome.Interpreted(Interpretation.Navigate(SidrDestination.APP_GRID)), outcome)
+    }
+
+    /** «помощь» is FastPath's `Help`, answered byte for byte, though an installed app is labelled «Помощь». */
+    @Test
+    fun `a bare label never shadows a decided FastPath outcome`() = runTest {
+        matcher.intentToReturn = LauncherIntent.SimpleCommandIntent(SimpleCommand.HELP)
+        matcher.confidenceToReturn = 0.99f
+        appsRepo.appsToReturn = listOf(InstalledApp("net.fixture.pomoshch", "Помощь"))
+
+        val outcome = useCase().route("помощь")
+
+        assertTrue("no session is started for a decided outcome", agentStore.saved.isEmpty())
+        assertEquals(CommandOutcome.Message(CommandMessage.Help), outcome)
+    }
+
+    /** As an alias does (decision 3): the label step reads only the on-device app list, so it runs in local-only too. */
+    @Test
+    fun `in local-only mode a bare label still opens`() = runTest {
+        driveUnknown()
+        appsRepo.appsToReturn = listOf(maps)
+
+        val outcome = useCase(localOnly = true).route(" карты ")
+
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), outcome)
+        assertEquals(listOf(aliasLaunch("карты", maps.packageName)), agentStore.saved.map { it.plan })
+        assertEquals("the model is never asked", 0, planner.planCallCount)
+    }
+
+    /**
+     * Principle 2: the words of a bare label are answered on the phone. The real bridge planner over a counted
+     * transport, online, with a provider: not one body is sent for «карты». The control — the same route with no app
+     * of that label — does send, so the empty request list is the label step's doing, not a transport never wired.
+     */
+    @Test
+    fun `the words of a bare label never reach the model`() = runTest {
+        driveUnknown()
+        appsRepo.appsToReturn = listOf(maps)
+        val model = BridgeModel()
+
+        val outcome = useCase(modelPlanner = model.planner).route("карты")
+
+        assertTrue("nothing is transmitted: ${model.transport.requests}", model.transport.requests.isEmpty())
+        assertEquals("the model is never asked", 0, model.asked)
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1")), outcome)
+
+        appsRepo.appsToReturn = listOf(telegramPlus)
+        val control = BridgeModel()
+        useCase(modelPlanner = control.planner).route("карты")
+        assertEquals("control: with no such label the command is sent", 1, control.asked)
+        assertTrue("control: a body is transmitted", control.transport.requests.isNotEmpty())
+    }
+
     // --- A4′ acceptance tail, task 6 (K9): «Разбираю команду…» — only while the model is asked -------------------------
 
     /**

@@ -1,9 +1,15 @@
 package com.sidr.launcher.core.ui.component
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
@@ -13,6 +19,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.sidr.launcher.core.ui.theme.SidrTheme
 import com.sidr.launcher.core.ui.theme.Spacing
@@ -106,6 +113,33 @@ class ControlsScreenshotTest {
             }
         }
         compose.onRoot().captureRoboImage("src/test/screenshots/controls_rtl.png")
+    }
+
+    /**
+     * The context menu's rows, one item. Material3's `DropdownMenu` is a `Popup` window and Roborazzi's capture of it
+     * came out as an empty dark rectangle (tried: `onNode(isPopup())`), so the rows ([SidrContextMenuItems], the same
+     * composable the menu uses) are drawn inside a plain surface with the menu's shape and tone instead.
+     */
+    @Test fun context_menu() {
+        compose.setContent {
+            SidrTheme(darkTheme = true) {
+                Box(Modifier.background(SidrTheme.colors.ground).padding(Spacing.lg)) {
+                    Surface(
+                        shape = MaterialTheme.shapes.extraSmall,
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        shadowElevation = 3.dp,
+                    ) {
+                        Column(Modifier.width(IntrinsicSize.Max).padding(vertical = 8.dp)) {
+                            SidrContextMenuItems(
+                                items = listOf(SidrMenuItem(label = "Remove from Home", onClick = {})),
+                                onDismiss = {},
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        compose.onRoot().captureRoboImage("src/test/screenshots/context_menu.png")
     }
 
     @Composable

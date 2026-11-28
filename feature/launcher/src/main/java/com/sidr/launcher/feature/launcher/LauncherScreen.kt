@@ -63,7 +63,9 @@ import com.sidr.launcher.core.common.navigation.Routes
 import com.sidr.launcher.core.ui.component.AppTile
 import com.sidr.launcher.core.ui.component.EmptyState
 import com.sidr.launcher.core.ui.component.ErrorState
+import com.sidr.launcher.core.ui.component.SidrContextMenu
 import com.sidr.launcher.core.ui.component.SidrErrorSurface
+import com.sidr.launcher.core.ui.component.SidrMenuItem
 import com.sidr.launcher.core.ui.component.SidrSectionHeader
 import com.sidr.launcher.core.ui.component.SidrPrayerSummary
 import com.sidr.launcher.core.ui.component.SidrPrayerTimeUi
@@ -581,7 +583,7 @@ private fun HomeContent(
                 .minimumInteractiveComponentSize(),
         )
         if (state.favorites.isNotEmpty()) {
-            FavoritesGrid(favorites = state.favorites, onAppClick = onAppClick)
+            FavoritesGrid(favorites = state.favorites, onAppClick = onAppClick, onHide = onHideFavorite)
         }
         if (pickerOpen) {
             FavoritesPicker(
@@ -652,6 +654,7 @@ private fun SetupNudge(
 private fun FavoritesGrid(
     favorites: List<InstalledApp>,
     onAppClick: (InstalledApp) -> Unit,
+    onHide: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -667,10 +670,20 @@ private fun FavoritesGrid(
             ) {
                 rowApps.forEach { app ->
                     Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        // A long press offers the one thing a tap cannot: take the app off Home (usage history stays).
+                        var menuOpen by remember { mutableStateOf(false) }
+                        val hideLabel = sidrString(R.string.launcher_favorites_hide)
                         AppTile(
                             label = app.label,
                             onClick = { onAppClick(app) },
+                            onLongClick = { menuOpen = true },
+                            onLongClickLabel = hideLabel,
                             icon = { AppTileIcon(app) },
+                        )
+                        SidrContextMenu(
+                            expanded = menuOpen,
+                            onDismiss = { menuOpen = false },
+                            items = listOf(SidrMenuItem(label = hideLabel, onClick = { onHide(app.packageName) })),
                         )
                     }
                 }

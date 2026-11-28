@@ -1,7 +1,9 @@
 package com.sidr.launcher.core.ui.component
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,19 +35,37 @@ import com.sidr.launcher.core.ui.theme.Spacing
  * belongs to a feature module) stays out of `core/ui` — this keeps the design system free of any
  * `domain`/`data` dependency. The whole tile is one clickable target labelled with [label]; the
  * icon slot is decorative.
+ *
+ * A long press is opt-in: with [onLongClick] null the tile is exactly the plain `clickable` it was; with it, the
+ * tile also answers a long press ([onLongClickLabel] is what an accessibility service announces for it).
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AppTile(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+    onLongClickLabel: String? = null,
     icon: @Composable () -> Unit,
 ) {
     Column(
         modifier = modifier
             .width(Sizes.appTile)
             .clip(MaterialTheme.shapes.medium)
-            .clickable(onClickLabel = label, role = Role.Button, onClick = onClick)
+            .then(
+                if (onLongClick == null) {
+                    Modifier.clickable(onClickLabel = label, role = Role.Button, onClick = onClick)
+                } else {
+                    Modifier.combinedClickable(
+                        onClickLabel = label,
+                        role = Role.Button,
+                        onLongClickLabel = onLongClickLabel,
+                        onLongClick = onLongClick,
+                        onClick = onClick,
+                    )
+                },
+            )
             .clearAndSetSemantics { contentDescription = label }
             .padding(vertical = Spacing.sm, horizontal = Spacing.xs),
         horizontalAlignment = Alignment.CenterHorizontally,

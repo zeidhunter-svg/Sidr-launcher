@@ -10,8 +10,11 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.lifecycle.SavedStateHandle
@@ -81,6 +84,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -195,13 +199,52 @@ class LauncherScreenFavoritesTest {
         assertEquals(listOf("com.gamma"), favoritesOf(vm))
     }
 
+    /** The one app Home places by use in the long-press tests below: Alpha, used a moment ago. */
+    private val usedAlpha = listOf(AppUsageRecord("com.alpha", lastUsedEpochMs = NOW - 1, launchCount = 3))
+
+    @Test
+    fun `a long press on a favourite offers to remove it from Home`() {
+        val prefsRepo = FakeUserPreferencesRepository()
+        val vm = buildViewModel(apps, usedAlpha, prefsRepo)
+        show(vm)
+        assertEquals(listOf("com.alpha"), favoritesOf(vm))
+
+        // Nothing is offered until the press.
+        compose.onAllNodesWithText("Remove from Home").assertCountEquals(0)
+        compose.onNodeWithContentDescription("Alpha").performScrollTo().performTouchInput { longClick() }
+        compose.waitForIdle()
+
+        compose.onNodeWithText("Remove from Home").assertIsDisplayed().performClick()
+        compose.waitForIdle()
+
+        assertEquals(setOf("com.alpha"), runBlocking { prefsRepo.getPreferences().first().hiddenFavorites })
+        assertEquals(emptyList<String>(), favoritesOf(vm))
+        compose.onAllNodesWithText("Remove from Home").assertCountEquals(0)
+        // The long press never launched the app.
+        assertEquals(0, lastExecutor.callCount)
+    }
+
+    @Test
+    fun `a tap on a favourite still launches it and offers nothing`() {
+        val vm = buildViewModel(apps, usedAlpha, FakeUserPreferencesRepository())
+        show(vm)
+
+        compose.onNodeWithContentDescription("Alpha").performScrollTo().performClick()
+        compose.waitForIdle()
+
+        assertTrue("a tap launches the app", lastExecutor.callCount >= 1)
+        compose.onAllNodesWithText("Remove from Home").assertCountEquals(0)
+    }
+
+    private lateinit var lastExecutor: FakeActionExecutor
+
     private fun buildViewModel(
         apps: List<InstalledApp>,
         records: List<AppUsageRecord>,
         prefsRepo: FakeUserPreferencesRepository,
     ): LauncherViewModel {
         val fakeRepo = FakeInstalledAppsRepository().apply { appsToReturn = apps }
-        val fakeExecutor = FakeActionExecutor()
+        val fakeExecutor = FakeActionExecutor().also { lastExecutor = it }
         val useCase = HandleUserCommandUseCase(
             matcher = FakeIntentMatcher(),
             resolver = IntentActionResolver(fakeRepo),

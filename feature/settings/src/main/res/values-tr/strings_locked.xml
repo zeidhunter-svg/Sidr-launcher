@@ -10,7 +10,10 @@
   retyped) out of this module's ordinary values-tr/strings.xml - no copy change.
 -->
 <!--
-  OWNER-REVIEWED 2026-11-21 sha256:b3bdfacebde439da - the owner has read and approved this file's
+  OWNER-REVIEWED 2026-11-28 sha256:47e82f4b1a1b93b0 - re-signed after the A4′ tail acceptance (2026-11-28): the
+  owner judged settings_local_only_description in its batch-1 text on the phone and marked it accepted (checklist
+  2026-11-28-a4-tail-acceptance.md, part E); this token was typed by the agent on that instruction.
+  Superseded signature, kept for provenance: 2026-11-21 sha256:b3bdfacebde439da - the owner has read and approved this file's
   Russian/Turkish text against docs/superpowers/specs/2026-08-11-i18n-1-owner-review.md (Class B,
   spec §7.2). Provenance, recorded deliberately: the review was performed by the owner; this token
   was typed by the agent on the owner's explicit instruction. The gate cannot tell the two apart,

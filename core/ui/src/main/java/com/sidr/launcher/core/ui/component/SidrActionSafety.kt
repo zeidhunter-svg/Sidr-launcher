@@ -178,7 +178,6 @@ fun SidrResultSurface(
     provenance: (@Composable (() -> Unit))? = null,
     primaryAction: SidrSurfaceAction? = null,
     secondaryAction: SidrSurfaceAction? = null,
-    equalWidth: Boolean = false,
 ) {
     val surfaceTone = if (tone == SidrResultTone.Failed) SidrSurfaceTone.RISK else SidrSurfaceTone.SURFACE
     SidrSurface(tone = surfaceTone, modifier = modifier.fillMaxWidth(), shape = SidrShapes.medium) {
@@ -196,7 +195,7 @@ fun SidrResultSurface(
             body?.let { SidrText(text = it, role = SidrTextRole.HUMAN_BODY) }
             provenance?.invoke()
             if (primaryAction != null || secondaryAction != null) {
-                SidrSurfaceActions(primary = primaryAction, secondary = secondaryAction, equalWidth = equalWidth)
+                SidrSurfaceActions(primary = primaryAction, secondary = secondaryAction)
             }
         }
     }
@@ -309,7 +308,6 @@ internal fun SidrSurfaceActions(
     modifier: Modifier = Modifier,
     primaryLoading: Boolean = false,
     enabled: Boolean = true,
-    equalWidth: Boolean = false,
 ) {
     val stacked = LocalDensity.current.fontScale >= 1.7f
     if (stacked) {
@@ -336,8 +334,8 @@ internal fun SidrSurfaceActions(
             }
         }
     } else {
-        // K5 (task 9): equal width only when there are two buttons — a lone one keeps its natural size.
-        val shareWidth = equalWidth && primary != null && secondary != null
+        // Fix round, task 4: two buttons always share the width; a lone one keeps its natural size.
+        val shareWidth = primary != null && secondary != null
         Row(
             modifier = modifier.fillMaxWidth().padding(top = Spacing.sm),
             // The gap sits between the two weighted slots, not inside the primary's, so the buttons stay equal.

@@ -128,7 +128,7 @@ class AgentSessionSurfaceUndoTest {
      * Owner ruling 7 (K5): the finished-plan card's close and undo buttons are one size. At the default font scale
      * both short labels sit on the button's minimum width (58dp), so the proof needs labels that outgrow it: under
      * `ru` — the owner's language, «Закрыть» and «Отменить» differ in length — at font scale 1.5 their natural
-     * widths differ, so equal widths prove `equalWidth = true` is passed (verified red without it).
+     * widths differ, so equal widths prove the two buttons share the width.
      */
     @Test
     @Config(qualifiers = "ru")

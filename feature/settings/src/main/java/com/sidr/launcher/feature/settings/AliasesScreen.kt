@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
@@ -240,19 +242,22 @@ private fun AliasTabs(
     onSelect: (AliasTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Both tabs are the width of the wider one — `IntrinsicSize.Max` caps the row at its widest chip, not the screen.
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.width(IntrinsicSize.Max),
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
         SidrFilterChip(
             label = sidrString(R.string.settings_aliases_tab_mine),
             selected = selected == AliasTab.Mine,
             onClick = { onSelect(AliasTab.Mine) },
+            modifier = Modifier.weight(1f),
         )
         SidrFilterChip(
             label = sidrString(R.string.settings_aliases_tab_add),
             selected = selected == AliasTab.Add,
             onClick = { onSelect(AliasTab.Add) },
+            modifier = Modifier.weight(1f),
         )
     }
 }

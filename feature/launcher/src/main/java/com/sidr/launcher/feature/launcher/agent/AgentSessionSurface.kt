@@ -283,7 +283,6 @@ private fun AgentSessionCard(
                 },
                 primaryAction = dismiss,
                 secondaryAction = undo,
-                equalWidth = true,
             )
         }
 

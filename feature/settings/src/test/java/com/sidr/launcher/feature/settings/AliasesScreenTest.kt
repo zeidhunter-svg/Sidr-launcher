@@ -3,6 +3,7 @@ package com.sidr.launcher.feature.settings
 import android.content.Context
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onFirst
@@ -106,5 +107,14 @@ class AliasesScreenTest {
         compose.onAllNodesWithText("Forget").onFirst().performClick()
         compose.waitForIdle()
         assertEquals(listOf("zametki"), deleted)
+    }
+
+    /** Fix round, task 4: the two tabs are one width — that of the wider («Мои алиасы» / "My aliases"), not stretched. */
+    @Test fun `the alias tabs are the same width`() {
+        show(listOf(notes))
+
+        val mine = compose.onNodeWithText(str(R.string.settings_aliases_tab_mine)).getUnclippedBoundsInRoot()
+        val add = compose.onNodeWithText(str(R.string.settings_aliases_tab_add)).getUnclippedBoundsInRoot()
+        assertEquals((mine.right - mine.left).value, (add.right - add.left).value, 1f)
     }
 }

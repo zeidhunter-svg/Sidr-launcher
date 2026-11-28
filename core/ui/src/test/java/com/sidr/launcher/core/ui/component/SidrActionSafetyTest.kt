@@ -1,10 +1,14 @@
 package com.sidr.launcher.core.ui.component
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.sidr.launcher.core.ui.primitive.SidrStatus
@@ -189,38 +193,50 @@ class SidrActionSafetyTest {
         compose.onNodeWithText("App launch still works.").assertIsDisplayed()
     }
 
-    /** K5 (owner ruling 7): with `equalWidth` the two buttons take the same width whatever their labels; without it
-     *  (every other card) each keeps its natural width, so a long and a short label differ. */
-    @Test fun surface_actions_equal_width_makes_both_buttons_the_same_width() {
-        fun widthsOf(equalWidth: Boolean): Pair<Float, Float> {
-            compose.setContent {
+    /**
+     * Fix round, task 4 (owner, phone 2026-11-28; K5 widened): wherever a card has two buttons they are one width —
+     * the consent card, the interpretation card and the result card — whatever their labels. A long confirm label
+     * beside the short «Cancel» would give two natural widths, so equal widths prove the sharing.
+     */
+    @Test fun `every two-button surface gives both buttons the same width`() {
+        // «Cancel» is on two cards, in the order they are drawn: the consent card, then the interpretation card.
+        fun assertEqualWidths(first: String, second: String, secondIndex: Int = 0) {
+            val a = compose.onNodeWithText(first).getUnclippedBoundsInRoot()
+            val b = compose.onAllNodesWithText(second)[secondIndex].getUnclippedBoundsInRoot()
+            assertEquals("$first / $second", (a.right - a.left).value, (b.right - b.left).value, 0.5f)
+        }
+        // Font scale 1.5 (below the stacking threshold) lifts the labels over the buttons' minimum width, so the natural
+        // widths of «Cancel» and the long label really differ.
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(density = 1f, fontScale = 1.5f)) {
                 SidrTheme(darkTheme = true) {
-                    SidrSurfaceActions(
-                        primary = SidrSurfaceAction("Close") {},
-                        secondary = SidrSurfaceAction("Cancel the whole plan") {},
-                        equalWidth = equalWidth,
-                    )
+                    androidx.compose.foundation.layout.Column {
+                        SidrActionGate(
+                            type = SidrActionGateType.Confirmation,
+                            title = "Gate",
+                            consequence = "It happens.",
+                            confirmLabel = "Confirm the whole plan",
+                            onConfirm = {},
+                            onCancel = {},
+                        )
+                        SidrActionProposal(
+                            title = "Proposal",
+                            onExecute = {},
+                            onCancel = {},
+                            executeLabel = "Execute the whole plan",
+                        )
+                        SidrResultSurface(
+                            tone = SidrResultTone.Completed,
+                            title = "Result",
+                            primaryAction = SidrSurfaceAction("Close") {},
+                            secondaryAction = SidrSurfaceAction("Undo the whole plan") {},
+                        )
+                    }
                 }
             }
-            val a = compose.onNodeWithText("Close").getUnclippedBoundsInRoot()
-            val b = compose.onNodeWithText("Cancel the whole plan").getUnclippedBoundsInRoot()
-            return (a.right - a.left).value to (b.right - b.left).value
         }
-        val (closeEqual, cancelEqual) = widthsOf(equalWidth = true)
-        assertEquals(closeEqual, cancelEqual, 1f)
-    }
-
-    @Test fun surface_actions_keep_natural_widths_by_default() {
-        compose.setContent {
-            SidrTheme(darkTheme = true) {
-                SidrSurfaceActions(
-                    primary = SidrSurfaceAction("Close") {},
-                    secondary = SidrSurfaceAction("Cancel the whole plan") {},
-                )
-            }
-        }
-        val a = compose.onNodeWithText("Close").getUnclippedBoundsInRoot()
-        val b = compose.onNodeWithText("Cancel the whole plan").getUnclippedBoundsInRoot()
-        assertNotEquals((a.right - a.left).value, (b.right - b.left).value)
+        assertEqualWidths("Confirm the whole plan", "Cancel")
+        assertEqualWidths("Execute the whole plan", "Cancel", secondIndex = 1)
+        assertEqualWidths("Close", "Undo the whole plan")
     }
 }

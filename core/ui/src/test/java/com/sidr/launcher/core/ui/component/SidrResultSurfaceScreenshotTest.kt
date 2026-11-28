@@ -19,7 +19,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * A4′ acceptance tail, task 9 (K5, owner ruling 7): the finished-plan card's two buttons are one size. ONE new golden,
  * `result_surface_equal_actions` (dark, on the theme's ground) — a short «Close» beside a longer «Undo» label; no other
- * golden moves, because `equalWidth` is off everywhere else.
+ * golden of that card moves with the fix round's task 4, which makes every two-button card equal-width.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -36,7 +36,6 @@ class SidrResultSurfaceScreenshotTest {
                         title = "Plan finished",
                         primaryAction = SidrSurfaceAction("Close") {},
                         secondaryAction = SidrSurfaceAction("Undo all") {},
-                        equalWidth = true,
                     )
                 }
             }

@@ -49,8 +49,10 @@ import javax.inject.Inject
  * **A name the MODEL wrote** (amendment D1, ADR «2026-11-22 — D1, поправка: имя приложения, исправленное
  * моделью») — the mention `BridgeValidator` admitted as [ValueOrigin.ModelGenerated] because the user's words
  * do not contain it («Claude» for «открой клод») — binds only to an installed label that is exactly it after the
- * folding, or to an alias exactly ([AppTargetResolver.exactly]): one such app binds, several are the user's
- * pick, none is [Binding.NotFound]. No word form is read for the model's word. The words the tool shows keep the
+ * folding, or to an alias exactly, or — when neither answers — to an installed app whose package name carries it
+ * («Maps» or «Google Maps» → `com.google.android.apps.maps` where the label is «Карты»; A4′ tail fix round, task 8,
+ * owner ruling 4: а, iii; compared on the device, after the answer, nothing sent) ([AppTargetResolver.exactly]): one
+ * such app binds, several are the user's pick, none is [Binding.NotFound]. No word form is read for the model's word. The words the tool shows keep the
  * model's mark, and are recorded as the step's app words ([Interpretation.Act.appWords]; controller ruling T2-R2, A4′
  * acceptance tail task 4): they name the app this binding turns into a package, and the package — not the words —
  * reaches the world, so `needsCard()` and the card's model values do not count them («открой клод» → «Claude» starts
@@ -203,9 +205,9 @@ class DeviceMentionBinder @Inject constructor(
      * The mention branch — the ONE place an app mention becomes a package, a pick, «not found» or
      * «unavailable», for [bind] and [rebind] alike: [args] are the step's model-facing arguments, its app
      * (if it has one) under [AuthoredToolDescriptions.MENTION_ARG] — in the user's words, or, when
-     * [modelWritten] (amendment D1), in the MODEL's: then only an exact label or alias answers
-     * ([AppTargetResolver.exactly] — no word forms of the model's word), and the words the tool shows are
-     * marked the model's.
+     * [modelWritten] (amendment D1), in the MODEL's: then only an exact label or alias answers, or failing both the
+     * package's name ([AppTargetResolver.exactly] — no word forms of the model's word), and the words the tool shows
+     * are marked the model's.
      */
     private suspend fun bindMention(index: Int, proposed: ProposedStep, args: Map<String, String>, modelWritten: Boolean): StepBinding {
         val sort = sorts.appArgOf(proposed.tool)

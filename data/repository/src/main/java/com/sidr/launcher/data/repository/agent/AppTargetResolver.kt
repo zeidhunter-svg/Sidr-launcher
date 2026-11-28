@@ -57,7 +57,8 @@ fun ToolDurability?.isIrreversible(): Boolean = this != ToolDurability.TRANSIENT
  * A name becomes a package, or nothing happens. Task 6 (A1″ Phase 3a) — this feeds `uninstall_app`,
  * the track's first `CONFIRM` tool over an irreversible act, so [resolve]'s `null` is not "no answer
  * yet"; it is the resolver's own considered refusal, and every caller must treat it as such. Never
- * guesses: only an EXACT name binds (an alias, or a whole label under [AppNameMatcher]; for an irreversible
+ * guesses: only an EXACT name binds (an alias, or a whole label under [AppNameMatcher] — and for a name the MODEL
+ * wrote, failing both, the package's name ([exactly], task 8 of the tail fix round); for an irreversible
  * tool, exact as typed — but THIS class does not know the tool: its callers apply [forIrreversible], owner
  * decision 2026-11-17); two apps
  * answering exactly are the user's choice; a word form (phase 3b, B-2 — «миравину» for «Миравин») is
@@ -109,11 +110,44 @@ class AppTargetResolver @Inject constructor(
      * model's. One answer is never typed as the user typed it — the user did not type it at all — so it is
      * [AppCandidates.One.foldedOnly], and an irreversible tool makes it a pick ([forIrreversible], owner decision
      * 2026-11-17), never a bind.
+     *
+     * **When no alias and no label answers, the package does** (A4′ tail fix round, task 8, owner ruling 4: а, iii):
+     * the cloud model cannot see the phone — it writes «Maps» where the Russian label is «Карты» — and the package
+     * name is the stable bridge ([byPackage]). One app → [AppCandidates.One] (fold-only), several → [AppCandidates.Several],
+     * none → [AppCandidates.None]. The comparison runs here, on the device, after the model answered: no package is
+     * sent to the model or shown to it. [candidates] — the USER's words — never reads the package.
      */
     suspend fun exactly(name: String): AppCandidates = when (val found = candidates(name)) {
-        is AppCandidates.Confirm -> AppCandidates.None
+        is AppCandidates.Confirm, AppCandidates.None -> byPackage(name)
         is AppCandidates.One -> found.copy(foldedOnly = true)
         else -> found
+    }
+
+    /**
+     * The installed apps whose package name answers [name] (task 8 and the controller's ruling on it), compared
+     * folded ([TextFolding.fold]) and segment by segment (the pieces between `.`). Either clause suffices:
+     *  1. the folded name with spaces, `-` and `_` removed is the package's LAST segment («Maps» →
+     *     `com.google.android.apps.maps`, «WhatsApp» → `com.whatsapp`, «Claude» → `com.anthropic.claude`);
+     *  2. every word of the name ([TextFolding.words]) is a segment of the package, and its last word is the
+     *     package's last segment («Google Maps» → `com.google.android.apps.maps`; «Yandex Maps» is not that app).
+     * A middle segment alone never answers («Telegram» ↛ `org.telegram.messenger`). One entry per package: what
+     * binds is the package.
+     */
+    private suspend fun byPackage(name: String): AppCandidates {
+        val compact = folding.fold(name).filterNot { it == ' ' || it == '-' || it == '_' }
+        val words = folding.words(name)
+        if (compact.isBlank() || words.isEmpty()) return AppCandidates.None
+        val installed = installedOrNull() ?: return AppCandidates.Unavailable
+        val matched = installed.filter { app ->
+            val segments = app.packageName.split('.').map { folding.fold(it) }
+            val last = segments.last()
+            compact == last || (words.last() == last && words.all { it in segments })
+        }.distinctBy { it.packageName }
+        return when (matched.size) {
+            0 -> AppCandidates.None
+            1 -> AppCandidates.One(matched.single(), foldedOnly = true)
+            else -> AppCandidates.Several(matched)
+        }
     }
 
     /**

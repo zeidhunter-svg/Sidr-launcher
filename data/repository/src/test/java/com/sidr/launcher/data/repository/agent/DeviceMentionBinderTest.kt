@@ -683,6 +683,25 @@ class DeviceMentionBinderTest {
     }
 
     /**
+     * A4′ tail fix round, task 8 (owner ruling 4: а, iii): the user said «карты», the model read it as «Maps», and the
+     * Russian label of Google Maps is «Карты» — no label is «Maps». The package `com.google.android.apps.maps` answers
+     * on the device, after the model answered: the launch binds it and needs no card.
+     */
+    @Test
+    fun `«карты» read as Maps binds Google Maps`() = runTest {
+        val googleMaps = InstalledApp(packageName = "com.google.android.apps.maps", label = "Карты")
+
+        val act = binder(listOf(googleMaps)).bind(goal, listOf(modelWritten(ToolIds.LAUNCH_APP, "Maps"))).act()
+
+        assertEquals(
+            mapOf("query" to ArgSource.Literal("Maps"), "app" to ArgSource.Literal("com.google.android.apps.maps")),
+            act.steps.single().invocation.args,
+        )
+        assertEquals(emptyList<PendingChoice>(), act.choices)
+        assertFalse(act.needsCard())
+    }
+
+    /**
      * Controller ruling T2-R2 (A4′ acceptance tail, task 4), the binder's half: the words the MODEL wrote to name an
      * app are recorded as the step's app words ([Interpretation.Act.appWords]) — the label argument beside the app,
      * `query` for `launch_app`, `app_label` for `uninstall_app` — so `needsCard()` does not count them: the package

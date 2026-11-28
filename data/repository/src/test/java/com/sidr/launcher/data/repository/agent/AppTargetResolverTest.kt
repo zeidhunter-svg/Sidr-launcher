@@ -222,4 +222,81 @@ class AppTargetResolverTest {
         assertEquals(AppCandidates.One(zantor), resolver.windows("кварцелот"))
         assertEquals(AppCandidates.Confirm(listOf(zantor, other)), resolver.windows("кварцелота"))
     }
+
+    // --- A4′ tail fix round, task 8 (owner ruling 4: а, iii): a name the MODEL wrote, by its package -------------
+
+    private val maps = app("Карты", "com.google.android.apps.maps")
+
+    /**
+     * The cloud model cannot see the phone: it writes «Maps» where the Russian label is «Карты». The package is the
+     * stable bridge — compared here, on the device, after the model answered. When no alias and no label answers
+     * [AppTargetResolver.exactly], an installed app whose package's LAST segment is the folded name (spaces, `-` and
+     * `_` removed) answers, marked fold-only. A label still answers first (the control).
+     */
+    @Test
+    fun `a model name matching no label binds by the package's last segment`() = runTest {
+        val whatsApp = app("Ватсап", "com.whatsapp")
+        val claude = app("Клод", "com.anthropic.claude")
+        val resolver = AppTargetResolver(FakeApps(listOf(maps, whatsApp, claude)), EmptyAliases, PlainTextFolding)
+
+        assertEquals(AppCandidates.One(maps, foldedOnly = true), resolver.exactly("Maps"))
+        assertEquals(AppCandidates.One(whatsApp, foldedOnly = true), resolver.exactly("WhatsApp"))
+        assertEquals(AppCandidates.One(whatsApp, foldedOnly = true), resolver.exactly("Whats-App"))
+        assertEquals(AppCandidates.One(claude, foldedOnly = true), resolver.exactly("Claude"))
+
+        val labelled = app("Maps", "net.fixture.orvane")
+        assertEquals(
+            "a label answers before any package",
+            AppCandidates.One(labelled, foldedOnly = true),
+            AppTargetResolver(FakeApps(listOf(maps, labelled)), EmptyAliases, PlainTextFolding).exactly("Maps"),
+        )
+    }
+
+    /** Two installed packages end in the same segment: the user picks, nothing is guessed. */
+    @Test
+    fun `two packages with the same last segment are a pick`() = runTest {
+        val one = app("Альфа", "com.a.app")
+        val two = app("Бета", "com.b.app")
+        val resolver = AppTargetResolver(FakeApps(listOf(one, two)), EmptyAliases, PlainTextFolding)
+
+        assertEquals(AppCandidates.Several(listOf(one, two)), resolver.exactly("App"))
+    }
+
+    /** Only the last segment answers a one-word name: «Telegram» is a middle segment of `org.telegram.messenger`. */
+    @Test
+    fun `a middle segment does not match`() = runTest {
+        val resolver = AppTargetResolver(FakeApps(listOf(app("Телеграм", "org.telegram.messenger"))), EmptyAliases, PlainTextFolding)
+
+        assertEquals(AppCandidates.None, resolver.exactly("Telegram"))
+    }
+
+    /** The package is read for the MODEL's name only: the user's own «Maps» is answered by labels and aliases alone. */
+    @Test
+    fun `the user's own words never match by package`() = runTest {
+        val resolver = AppTargetResolver(FakeApps(listOf(maps)), EmptyAliases, PlainTextFolding)
+
+        assertEquals(AppCandidates.None, resolver.candidates("Maps"))
+        assertEquals(AppCandidates.None, resolver.windows("Maps"))
+        assertNull(resolver.resolve("Maps"))
+    }
+
+    /**
+     * Controller ruling (task 8): the model is told to write the app's usual published name, so «Google Maps» rather
+     * than «Maps» — every word of it a segment of the package, and its last word the package's last segment.
+     */
+    @Test
+    fun `a published name with the vendor binds by package segments`() = runTest {
+        val resolver = AppTargetResolver(FakeApps(listOf(maps)), EmptyAliases, PlainTextFolding)
+
+        assertEquals(AppCandidates.One(maps, foldedOnly = true), resolver.exactly("Google Maps"))
+    }
+
+    /** «Yandex Maps» ends in `maps`, but `yandex` is no segment of Google's package: not that app. */
+    @Test
+    fun `a vendor the package does not carry does not match`() = runTest {
+        val resolver = AppTargetResolver(FakeApps(listOf(maps)), EmptyAliases, PlainTextFolding)
+
+        assertEquals(AppCandidates.None, resolver.exactly("Yandex Maps"))
+        assertEquals("the vendor must not stand last either", AppCandidates.None, resolver.exactly("Maps Google"))
+    }
 }

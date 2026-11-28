@@ -231,7 +231,8 @@ class AppTargetResolverTest {
      * The cloud model cannot see the phone: it writes «Maps» where the Russian label is «Карты». The package is the
      * stable bridge — compared here, on the device, after the model answered. When no alias and no label answers
      * [AppTargetResolver.exactly], an installed app whose package's LAST segment is the folded name (spaces, `-` and
-     * `_` removed) answers, marked fold-only. A label still answers first (the control).
+     * `_` removed) answers, marked fold-only and [AppCandidates.One.byPackage] — the provenance task 9 reads to keep
+     * an irreversible tool's pick for it. A label still answers first, not marked so (the control).
      */
     @Test
     fun `a model name matching no label binds by the package's last segment`() = runTest {
@@ -239,15 +240,15 @@ class AppTargetResolverTest {
         val claude = app("Клод", "com.anthropic.claude")
         val resolver = AppTargetResolver(FakeApps(listOf(maps, whatsApp, claude)), EmptyAliases, PlainTextFolding)
 
-        assertEquals(AppCandidates.One(maps, foldedOnly = true), resolver.exactly("Maps"))
-        assertEquals(AppCandidates.One(whatsApp, foldedOnly = true), resolver.exactly("WhatsApp"))
-        assertEquals(AppCandidates.One(whatsApp, foldedOnly = true), resolver.exactly("Whats-App"))
-        assertEquals(AppCandidates.One(claude, foldedOnly = true), resolver.exactly("Claude"))
+        assertEquals(AppCandidates.One(maps, foldedOnly = true, byPackage = true), resolver.exactly("Maps"))
+        assertEquals(AppCandidates.One(whatsApp, foldedOnly = true, byPackage = true), resolver.exactly("WhatsApp"))
+        assertEquals(AppCandidates.One(whatsApp, foldedOnly = true, byPackage = true), resolver.exactly("Whats-App"))
+        assertEquals(AppCandidates.One(claude, foldedOnly = true, byPackage = true), resolver.exactly("Claude"))
 
         val labelled = app("Maps", "net.fixture.orvane")
         assertEquals(
-            "a label answers before any package",
-            AppCandidates.One(labelled, foldedOnly = true),
+            "a label answers before any package — and is not marked as bound by it (task 9)",
+            AppCandidates.One(labelled, foldedOnly = true, byPackage = false),
             AppTargetResolver(FakeApps(listOf(maps, labelled)), EmptyAliases, PlainTextFolding).exactly("Maps"),
         )
     }
@@ -288,7 +289,7 @@ class AppTargetResolverTest {
     fun `a published name with the vendor binds by package segments`() = runTest {
         val resolver = AppTargetResolver(FakeApps(listOf(maps)), EmptyAliases, PlainTextFolding)
 
-        assertEquals(AppCandidates.One(maps, foldedOnly = true), resolver.exactly("Google Maps"))
+        assertEquals(AppCandidates.One(maps, foldedOnly = true, byPackage = true), resolver.exactly("Google Maps"))
     }
 
     /** «Yandex Maps» ends in `maps`, but `yandex` is no segment of Google's package: not that app. */

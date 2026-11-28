@@ -28,9 +28,14 @@ sealed interface AppCandidates {
     /**
      * One app answers exactly. [foldedOnly] — exact only AFTER the text folding (`TextFolding`, B-1), not as
      * the words were typed (`CommandNormalizer` forms differ: «lumora» for «Lumora+»). Owner decision
-     * 2026-11-17: for an irreversible tool such an answer is a pick, never a bind ([forIrreversible]).
+     * 2026-11-17: for an irreversible tool such an answer in the USER's words is a pick, never a bind ([forIrreversible]).
+     * [byPackage] — the answer came from the package step of [AppTargetResolver.exactly] (a name the MODEL wrote that
+     * no label and no alias answers, «Maps» for «Карты»; A4′ tail fix round, task 8), set there and nowhere else. It is
+     * what `DeviceMentionBinder` reads (task 9, owner ruling 2: а): a model-written exact label or alias binds an
+     * irreversible tool once, and the engine's consent card names label and package; a package-tail answer is still
+     * confirmed ([forIrreversible]), because no label on the phone is the model's word.
      */
-    data class One(val app: InstalledApp, val foldedOnly: Boolean = false) : AppCandidates
+    data class One(val app: InstalledApp, val foldedOnly: Boolean = false, val byPackage: Boolean = false) : AppCandidates
     data class Several(val apps: List<InstalledApp>) : AppCandidates
     data class Confirm(val apps: List<InstalledApp>) : AppCandidates
     data object Unavailable : AppCandidates
@@ -42,7 +47,12 @@ sealed interface AppCandidates {
  * one), a name that is exact only after folding is OFFERED as a one-app confirmation (`confirm = true` on
  * step 2b, `AppChoice.confirm` on the bridge's card) and bound only by the user's tap; an answer exact as
  * typed binds as before. Every other tool keeps the folded exact bind. Read at both binding sites —
- * `ToolMatchPlanner` (2b) and `DeviceMentionBinder` (the bridge) — so the two cannot disagree.
+ * `ToolMatchPlanner` (2b) and `DeviceMentionBinder` (the bridge) — so the two cannot disagree, for the USER's words.
+ *
+ * **A name the MODEL wrote** (A4′ tail fix round, task 9, owner ruling 2: а): `DeviceMentionBinder` does NOT apply
+ * this to a model-written exact label or alias ([AppCandidates.One.byPackage] `false`) — that one app is bound, and
+ * the engine's consent card, which names the label and the package, is the one card. A model-written name that only
+ * the package's tail answers ([AppCandidates.One.byPackage] `true`) still goes through here and is confirmed.
  */
 fun AppCandidates.forIrreversible(irreversible: Boolean): AppCandidates =
     if (irreversible && this is AppCandidates.One && foldedOnly) AppCandidates.Confirm(listOf(app)) else this
@@ -60,7 +70,7 @@ fun ToolDurability?.isIrreversible(): Boolean = this != ToolDurability.TRANSIENT
  * guesses: only an EXACT name binds (an alias, or a whole label under [AppNameMatcher] — and for a name the MODEL
  * wrote, failing both, the package's name ([exactly], task 8 of the tail fix round); for an irreversible
  * tool, exact as typed — but THIS class does not know the tool: its callers apply [forIrreversible], owner
- * decision 2026-11-17); two apps
+ * decision 2026-11-17, except to a model-written exact label or alias, task 9); two apps
  * answering exactly are the user's choice; a word form (phase 3b, B-2 — «миравину» for «Миравин») is
  * only offered ([AppCandidates.Confirm]); no match, a blank query and a read failure decline — and
  * [resolve] declines all of these the same way, silently, never by throwing.
@@ -108,12 +118,14 @@ class AppTargetResolver @Inject constructor(
      * exactly, or a whole label exactly after the folding; a form of either ([AppCandidates.Confirm]) is never
      * offered — it falls through to the package step below, as no answer does — since the forms exist to meet the
      * USER's words («миравину» for «Миравин»), never the model's. One answer is never typed as the user typed it — the user did not type it at all — so it is
-     * [AppCandidates.One.foldedOnly], and an irreversible tool makes it a pick ([forIrreversible], owner decision
-     * 2026-11-17), never a bind.
+     * [AppCandidates.One.foldedOnly]; a label or alias answer is not [AppCandidates.One.byPackage]. `DeviceMentionBinder`
+     * binds such an answer once even for an irreversible tool — the engine's consent card names label and package (A4′
+     * tail fix round, task 9, owner ruling 2: а; until then it was a pick, owner decision 2026-11-17).
      *
      * **When no alias and no label answers, the package does** (A4′ tail fix round, task 8, owner ruling 4: а, iii):
      * the cloud model cannot see the phone — it writes «Maps» where the Russian label is «Карты» — and the package
-     * name is the stable bridge ([byPackage]). One app → [AppCandidates.One] (fold-only), several → [AppCandidates.Several],
+     * name is the stable bridge ([byPackage]). One app → [AppCandidates.One] (fold-only and [AppCandidates.One.byPackage]
+     * — the only place that mark is set; an irreversible tool still confirms it, [forIrreversible]), several → [AppCandidates.Several],
      * none → [AppCandidates.None]. The comparison runs here, on the device, after the model answered: no package is
      * sent to the model or shown to it. [candidates] — the USER's words — never reads the package.
      */
@@ -145,7 +157,7 @@ class AppTargetResolver @Inject constructor(
         }.distinctBy { it.packageName }
         return when (matched.size) {
             0 -> AppCandidates.None
-            1 -> AppCandidates.One(matched.single(), foldedOnly = true)
+            1 -> AppCandidates.One(matched.single(), foldedOnly = true, byPackage = true)
             else -> AppCandidates.Several(matched)
         }
     }

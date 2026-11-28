@@ -11,19 +11,25 @@ import com.sidr.launcher.core.testing.FakeIntentMatcher
 import com.sidr.launcher.core.testing.FakeLearnedPlanStore
 import com.sidr.launcher.core.testing.FakeMentionBinder
 import com.sidr.launcher.core.testing.FakeModelPlanner
+import com.sidr.launcher.core.testing.FakeToolExecutor
 import com.sidr.launcher.core.testing.FakeToolRegistry
 import com.sidr.launcher.core.testing.configuredProvider
 import com.sidr.launcher.domain.action.ActionArg
 import com.sidr.launcher.domain.action.ActionRiskLevel
 import com.sidr.launcher.domain.agent.AgentGoal
+import com.sidr.launcher.domain.agent.AgentExecutor
 import com.sidr.launcher.domain.agent.AgentSessionId
 import com.sidr.launcher.domain.agent.AgentSessionIdFactory
+import com.sidr.launcher.domain.agent.ConsentReason
 import com.sidr.launcher.domain.agent.ExecutionPlan
+import com.sidr.launcher.domain.agent.ExecutionState
 import com.sidr.launcher.domain.agent.GoalShape
 import com.sidr.launcher.domain.agent.PlanStep
 import com.sidr.launcher.domain.agent.Planner
 import com.sidr.launcher.domain.agent.PlanningRequest
 import com.sidr.launcher.domain.agent.PlanningResult
+import com.sidr.launcher.domain.agent.RunAgentSessionUseCase
+import com.sidr.launcher.domain.agent.RuntimeBudget
 import com.sidr.launcher.domain.agent.StartAgentSessionUseCase
 import com.sidr.launcher.domain.agent.StepPrecondition
 import com.sidr.launcher.domain.agent.StepRationale
@@ -86,6 +92,8 @@ import com.sidr.launcher.domain.tool.ToolIds
 import com.sidr.launcher.domain.tool.ToolInvocation
 import com.sidr.launcher.domain.tool.ToolLevels
 import com.sidr.launcher.domain.tool.ToolRegistry
+import com.sidr.launcher.domain.tool.ToolResult
+import com.sidr.launcher.domain.trace.TraceEvent
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -2095,6 +2103,57 @@ class RouteCommandUseCaseTest {
         assertEquals("the model is asked once", 1, planner.planCallCount)
         assertEquals("удали приложение клод", planner.lastCommand)
         assertTrue("nothing starts before «Выполнить»", agentStore.saved.isEmpty())
+    }
+
+    /**
+     * A4′ tail fix round, task 9 (owner ruling 2: а), the route half: «удали приложение клод» goes to the model (K2),
+     * the model writes «Claude», and the device binds it ONCE to the one installed «Claude» — no «Вы имели в виду
+     * Claude?» (the binder's half: `DeviceMentionBinderTest > uninstall by a name the model corrected binds once and
+     * leaves the asking to consent`). The bound reading owes no pick and sends no model text out (the model's word is
+     * the step's app words), so ONE session starts at once, marked as the model's — and the engine stops it at its
+     * consent card (`requiresConsent(risk)`, `DOC-ADL-1`) with the tool never invoked: that card, naming label and
+     * package, is the one card the user sees.
+     */
+    @Test
+    fun `online «удали приложение клод» read as Claude starts one session that stops at consent`() = runTest {
+        driveUnknown()
+        val target = removeTarget("удали приложение клод", words = "клод", candidates = emptyList())
+        val removal = modelRemoval("Claude")
+        planner.answer = ModelPlanning.Proposed(listOf(removal))
+        binder.binding = { goal, _ ->
+            Binding.Bound(
+                Interpretation.Act(
+                    goal = goal,
+                    steps = listOf(removal.toPlanStep(0, mapOf("app" to "net.fixture.qandril", "app_label" to "Claude"))),
+                    origins = mapOf(0 to mapOf("app" to ValueOrigin.Ours, "app_label" to ValueOrigin.ModelGenerated)),
+                    effects = mapOf(0 to ToolEffect.EXTERNAL),
+                    choices = emptyList(),
+                    appWords = mapOf(0 to "app_label"),
+                ),
+            )
+        }
+
+        val outcome = useCase(agentPlanner = claims(target), agentRegistry = removeRegistry).route("удали приложение клод")
+
+        assertEquals(CommandOutcome.AgentSessionStarted(AgentSessionId("s1"), proposedByModel = true), outcome)
+        assertEquals("one session", 1, agentStore.saved.map { it.id }.distinct().size)
+        assertEquals(1, binder.bindCallCount)
+        val tools = FakeToolExecutor(listOf(ToolResult.Effected()))
+        val run = RunAgentSessionUseCase(AgentExecutor(removeRegistry, tools, RuntimeBudget.Default), agentStore)
+        val session = checkNotNull((run.run(agentStore.active) as OperationResult.Success).value)
+
+        assertEquals(ExecutionState.AwaitingConsent, session.state)
+        assertEquals("nothing reached the world before consent", 0, tools.invocations.size)
+        assertEquals(
+            listOf(TraceEvent.ConsentRequested(0, setOf(ConsentReason.RISK_LEVEL, ConsentReason.DURABLE_EFFECT))),
+            session.trace.events.filterIsInstance<TraceEvent.ConsentRequested>(),
+        )
+        assertEquals(
+            "the consent card's step names the label and the package",
+            mapOf("app" to ArgSource.Literal("net.fixture.qandril"), "app_label" to ArgSource.Literal("Claude")),
+            session.plan.steps.single().invocation.args,
+        )
+        assertTrue("the route itself executes nothing", executor.executedActions.isEmpty())
     }
 
     /**

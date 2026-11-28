@@ -43,8 +43,8 @@ import javax.inject.Inject
  * row's argument once known, the user's words into its `labelArg`. [AppTargetResolver.candidates] answers —
  * it never guesses and consults aliases; two candidates are a choice for the USER before any card, and a
  * word FORM of a name (phase 3b, fork 3b-G: «миравину» for «Миравин») is a pick of that one app marked
- * [AppChoice.confirm] — «Вы имели в виду…?» — never a bind. So is a name exact only after folding when the
- * tool's act cannot be undone (`uninstall_app`; owner decision 2026-11-17, [forIrreversible]).
+ * [AppChoice.confirm] — «Вы имели в виду…?» — never a bind. So is a name the user typed exact only after folding
+ * when the tool's act cannot be undone (`uninstall_app`; owner decision 2026-11-17, [forIrreversible]).
  *
  * **A name the MODEL wrote** (amendment D1, ADR «2026-11-22 — D1, поправка: имя приложения, исправленное
  * моделью») — the mention `BridgeValidator` admitted as [ValueOrigin.ModelGenerated] because the user's words
@@ -56,8 +56,12 @@ import javax.inject.Inject
  * model's mark, and are recorded as the step's app words ([Interpretation.Act.appWords]; controller ruling T2-R2, A4′
  * acceptance tail task 4): they name the app this binding turns into a package, and the package — not the words —
  * reaches the world, so `needsCard()` and the card's model values do not count them («открой клод» → «Claude» starts
- * at once, the owner's C1). For an irreversible tool even an exact answer is a pick to confirm (the user did not type
- * the name). [rebind] reads a remainder's kept words as the user's, as before: the plan on disk keeps no origin.
+ * at once, the owner's C1). For an irreversible tool (A4′ tail fix round, task 9, owner ruling 2: а) a model-written
+ * exact label or alias binds ONCE — no «Вы имели в виду…?»: the engine's consent card, which names the label and the
+ * package (`launcher_agent_step_uninstall`), is the one card, asked every time (`requiresConsent(risk)`, `DOC-ADL-1`);
+ * a model-written name only the package's tail answers ([AppCandidates.One.byPackage]) matches no label on the phone,
+ * so it is still a pick to confirm ([forIrreversible]), which shows the installed label. [rebind] reads a remainder's
+ * kept words as the user's, as before: the plan on disk keeps no origin.
  *
  * **Learned choices answer for `launch_app` only**, with FastPath's policy — a confident one binds
  * without asking, a weak one is offered first — and for a confirmation exactly as for a choice between
@@ -241,12 +245,15 @@ class DeviceMentionBinder @Inject constructor(
         // mark: they are theirs, and never counted.
         val appWords = sorted.labelArg?.takeIf { modelWritten }
 
-        // Owner decision 2026-11-17: an irreversible tool binds only a name exact as typed (`forIrreversible`);
-        // a tool the registry does not know is treated as irreversible — the stricter reading. A name the model
-        // wrote was not typed at all, so for such a tool it is a pick even when it is exact (`exactly`).
+        // Owner decision 2026-11-17: an irreversible tool binds only a name the USER typed exact as typed
+        // (`forIrreversible`); a tool the registry does not know is treated as irreversible — the stricter reading.
+        // Task 9 of the A4′ tail fix round (owner ruling 2: а): a name the MODEL wrote that is exactly a label or an
+        // alias binds once — the engine's consent card names label and package, the one card; only a model name the
+        // package's tail answered (`byPackage`, no label is its word) still goes through `forIrreversible`.
         val irreversible = registry.find(proposed.tool)?.durability.isIrreversible()
         val candidates = if (modelWritten) appTargets.exactly(mention) else appTargets.candidates(mention)
-        return when (val found = candidates.forIrreversible(irreversible)) {
+        val exactModelName = modelWritten && candidates is AppCandidates.One && !candidates.byPackage
+        return when (val found = if (exactModelName) candidates else candidates.forIrreversible(irreversible)) {
             AppCandidates.None -> StepBinding.Refused(Binding.NotFound(mention))
             AppCandidates.Unavailable -> StepBinding.Refused(Binding.Unavailable)
             is AppCandidates.One ->

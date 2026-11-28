@@ -664,22 +664,94 @@ class DeviceMentionBinderTest {
     }
 
     /**
-     * Owner decision 2026-11-17 kept under amendment D1: a tool whose act cannot be undone binds only a name exact
-     * AS THE USER TYPED IT, and a name the model wrote was not typed at all — so for `uninstall_app` even an exact
-     * label is a one-app pick marked to confirm, never a bind. The control: the same name for `open_app_info`
-     * (transient) binds.
+     * A4′ tail fix round, task 9 (owner ruling 2: а): «удали приложение клод», the model writes «Claude», and one
+     * installed label is exactly «Claude» — the uninstall binds ONCE, with no «Вы имели в виду Claude?» before it:
+     * the engine's consent card, which names the label and the package (`launcher_agent_step_uninstall`), is the one
+     * card, and it is asked every time (`requiresConsent(risk)`, `DOC-ADL-1`). The same holds for an exact alias. The
+     * model's word stays marked the model's, as the step's app words, so the reading owes no interpretation card.
+     * The owner decision 2026-11-17 for the USER's typed fold-only name is untouched (`uninstall by a name the user
+     * typed exact only after folding is still confirmed`), and so is a name bound by the package's tail only
+     * (`uninstall by a model name bound only by its package is still confirmed`).
      */
     @Test
-    fun `a model-written app name for an irreversible tool is a pick to confirm, never a bind`() = runTest {
+    fun `uninstall by a name the model corrected binds once and leaves the asking to consent`() = runTest {
         val uninstall = binder(listOf(claude))
             .bind(goal, listOf(modelWritten(Tier0ToolIds.UNINSTALL_APP, "Claude", risk = ActionRiskLevel.CONFIRM))).act()
 
-        assertEquals(listOf(claude), uninstall.choices.single().choice.candidates)
-        assertTrue(uninstall.choices.single().choice.confirm)
-        assertNull(uninstall.steps.single().invocation.args["app"])
+        assertEquals(
+            mapOf("app" to ArgSource.Literal("net.fixture.qandril"), "app_label" to ArgSource.Literal("Claude")),
+            uninstall.steps.single().invocation.args,
+        )
+        assertEquals(ActionRiskLevel.CONFIRM, uninstall.steps.single().risk)
+        assertEquals(mapOf("app" to ValueOrigin.Ours, "app_label" to ValueOrigin.ModelGenerated), uninstall.origins.getValue(0))
+        assertEquals("no «did you mean» before the consent card", emptyList<PendingChoice>(), uninstall.choices)
+        assertEquals(mapOf(0 to "app_label"), uninstall.appWords)
+        assertFalse("the engine's consent card is the one card", uninstall.needsCard())
+
+        val byAlias = binder(listOf(zantor))
+            .bind(goal, listOf(modelWritten(Tier0ToolIds.UNINSTALL_APP, "телега", risk = ActionRiskLevel.CONFIRM))).act()
+        assertEquals(
+            "an exact alias binds the uninstall once too",
+            mapOf("app" to ArgSource.Literal("net.fixture.zantor"), "app_label" to ArgSource.Literal("телега")),
+            byAlias.steps.single().invocation.args,
+        )
+        assertEquals(emptyList<PendingChoice>(), byAlias.choices)
 
         val info = binder(listOf(claude)).bind(goal, listOf(modelWritten(Tier0ToolIds.OPEN_APP_INFO, "Claude"))).act()
         assertEquals(mapOf("app" to ArgSource.Literal("net.fixture.qandril")), info.steps.single().invocation.args)
+    }
+
+    /**
+     * Owner decision 2026-11-17, unchanged by task 9: the USER's own «lumora» names «Lumora+» only after folding, and
+     * `uninstall_app` cannot be undone — a one-app pick marked to confirm, nothing bound.
+     */
+    @Test
+    fun `uninstall by a name the user typed exact only after folding is still confirmed`() = runTest {
+        val lumoraPlus = InstalledApp(packageName = "net.fixture.qelvarn", label = "Lumora+")
+
+        val uninstall = binder(listOf(lumoraPlus))
+            .bind(goal, listOf(proposed(Tier0ToolIds.UNINSTALL_APP, "app" to "lumora", risk = ActionRiskLevel.CONFIRM))).act()
+
+        assertEquals(
+            listOf(PendingChoice(0, AppChoice("app", "lumora", listOf(lumoraPlus), learning = null, confirm = true))),
+            uninstall.choices,
+        )
+        assertNull(uninstall.steps.single().invocation.args["app"])
+    }
+
+    /**
+     * The controller's ruling on task 9: a name the model wrote that only the package's tail answers («Maps» →
+     * `com.google.android.apps.maps`, label «Карты»; task 8) matches no label on the phone, and the consent card would
+     * lead with the model's word, not the installed label — so for `uninstall_app` it stays a one-app pick to
+     * confirm, which shows the installed label. Nothing is bound yet.
+     */
+    @Test
+    fun `uninstall by a model name bound only by its package is still confirmed`() = runTest {
+        val googleMaps = InstalledApp(packageName = "com.google.android.apps.maps", label = "Карты")
+
+        val uninstall = binder(listOf(googleMaps))
+            .bind(goal, listOf(modelWritten(Tier0ToolIds.UNINSTALL_APP, "Maps", risk = ActionRiskLevel.CONFIRM))).act()
+
+        assertEquals(
+            listOf(PendingChoice(0, AppChoice("app", "Maps", listOf(googleMaps), learning = null, confirm = true))),
+            uninstall.choices,
+        )
+        assertNull(uninstall.steps.single().invocation.args["app"])
+    }
+
+    /** Task 9 changes nothing for a reversible tool: a launch by a model name the package's tail answers binds at once. */
+    @Test
+    fun `launch by a model name bound by its package binds at once`() = runTest {
+        val googleMaps = InstalledApp(packageName = "com.google.android.apps.maps", label = "Карты")
+
+        val launch = binder(listOf(googleMaps)).bind(goal, listOf(modelWritten(ToolIds.LAUNCH_APP, "Maps"))).act()
+
+        assertEquals(
+            mapOf("query" to ArgSource.Literal("Maps"), "app" to ArgSource.Literal("com.google.android.apps.maps")),
+            launch.steps.single().invocation.args,
+        )
+        assertEquals(emptyList<PendingChoice>(), launch.choices)
+        assertFalse(launch.needsCard())
     }
 
     /**
@@ -734,7 +806,8 @@ class DeviceMentionBinderTest {
         val uninstall = binder(listOf(claude))
             .bind(goal, listOf(modelWritten(Tier0ToolIds.UNINSTALL_APP, "Claude", risk = ActionRiskLevel.CONFIRM))).act()
         assertEquals(mapOf(0 to "app_label"), uninstall.appWords)
-        assertTrue("an irreversible tool still owes its pick to confirm", uninstall.needsCard())
+        // Task 9 (owner ruling 2: а): an exact label binds the irreversible tool once — the engine's consent card is the one card.
+        assertFalse("an irreversible tool bound once owes no interpretation card", uninstall.needsCard())
 
         val users = binder(listOf(claude)).bind(goal, listOf(proposed(ToolIds.LAUNCH_APP, "app" to "Claude"))).act()
         assertEquals("the user's own words are theirs: no mark", emptyMap<Int, String>(), users.appWords)
